@@ -65,6 +65,15 @@ it('connects keyboard highlight to the searchbox active descendant', () => {
   const id = input.getAttribute('aria-activedescendant');
   expect(id).toBeTruthy(); expect(document.getElementById(id!)?.textContent).toBe('Alpha');
 });
+it('shows the native-style disclosure cue without bolding the selected option', () => {
+  const root = fixture(); const button = trigger(root);
+  const icon = button.querySelector<SVGSVGElement>('[part="chevron"]');
+  expect(icon?.getAttribute('aria-hidden')).toBe('true');
+  expect(icon?.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
+  button.click();
+  const selected = option(root, 'Alpha'); const idle = option(root, 'Beta');
+  expect(getComputedStyle(selected).fontWeight).toBe(getComputedStyle(idle).fontWeight);
+});
 it('normalizes malformed options and keeps typed duplicate values separate', () => {
   const root = fixture(); root.setAttribute('options', 'null'); root.options = null as never;
   trigger(root).click(); expect(root.querySelectorAll('[role=option]')).toHaveLength(0);

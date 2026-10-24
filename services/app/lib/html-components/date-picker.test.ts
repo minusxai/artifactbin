@@ -30,6 +30,38 @@ it('renders the authored visible label and a decorative calendar icon without ch
  root.removeAttribute('label');
  expect(root.querySelector('.af-date-label')).toBeNull();
 });
+it('matches the original popup width, left anchor, weekday labels and default navigation',()=>{
+ const root=fixture('label="Due date" default-value="2024-06-15" min="2024-06-01" max="2024-06-30"');
+ root.clock=()=>new Date(2026,9,25);
+ const trigger=root.querySelector<HTMLButtonElement>('.af-date-trigger')!;
+ const popup=root.querySelector<HTMLElement>('.af-date-popup')!;
+ trigger.getBoundingClientRect=()=>({left:24,right:184,top:40,bottom:76,width:160,height:36,x:24,y:40,toJSON(){}});
+ popup.getBoundingClientRect=()=>({left:0,right:256,top:0,bottom:300,width:256,height:300,x:0,y:0,toJSON(){}});
+ trigger.click();
+ expect(getComputedStyle(popup).width).toBe('256px');
+ expect(popup.dataset.align).toBe('start');
+ expect(popup.style.left).toBe('24px');
+ expect(Array.from(popup.querySelectorAll('abbr')).map(day=>day.textContent)).toEqual(['S','M','T','W','T','F','S']);
+ expect(popup.querySelector('[aria-label="Previous month"]')).not.toBeNull();
+ expect(popup.querySelector('[aria-label="Next month"]')).not.toBeNull();
+ expect(popup.querySelector('[aria-label="Previous year"]')).toBeNull();
+ expect(popup.querySelector('[aria-label="Next year"]')).toBeNull();
+ expect(popup.querySelector('[aria-label="Today"]')).toBeNull();
+ expect(popup.querySelector('[aria-label="Clear date"]')).toBeNull();
+ const day=popup.querySelector<HTMLButtonElement>('[data-date="2024-06-15"]')!;
+ expect(getComputedStyle(day).width).toBe('32px'); expect(getComputedStyle(day).height).toBe('32px');
+});
+it('keeps extra calendar actions available through explicit attributes and properties',()=>{
+ const root=fixture('default-value="2024-06-15" show-year-navigation show-clear'); root.clock=()=>new Date(2024,5,15);
+ expect(root.showYearNavigation).toBe(true); expect(root.showClear).toBe(true);
+ root.showYearNavigation=false; root.showYearNavigation=true; root.showClear=false; root.showClear=true;
+ expect(root.hasAttribute('show-year-navigation')).toBe(true); expect(root.hasAttribute('show-clear')).toBe(true);
+ root.querySelector<HTMLButtonElement>('.af-date-trigger')!.click();
+ expect(root.querySelector('[aria-label="Previous year"]')).not.toBeNull();
+ expect(root.querySelector('[aria-label="Next year"]')).not.toBeNull();
+ expect(root.querySelector('[aria-label="Today"]')).not.toBeNull();
+ expect(root.querySelector('[aria-label="Clear date"]')).not.toBeNull();
+});
 it('reports cancelable composed intent and waits for controlled reflection',()=>{
  const root=fixture('value="2024-02-29"'); let event:CustomEvent<AfDatePickerChangeDetail>|undefined;
  root.addEventListener('af-change',e=>{event=e as CustomEvent<AfDatePickerChangeDetail>; e.preventDefault();});
@@ -55,7 +87,7 @@ it('moves keyboard focus across leap day and years and dismisses outside',()=>{
  document.body.dispatchEvent(new Event('pointerdown',{bubbles:true})); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
 });
 it('clears to null, prevents read-only intent and cleans up on reconnect',()=>{
- const root=fixture('default-value="2024-02-29"'); let count=0;
+ const root=fixture('default-value="2024-02-29" show-clear'); let count=0;
  root.addEventListener('af-change',()=>count++); root.querySelector<HTMLButtonElement>('button')!.click(); root.querySelector<HTMLButtonElement>('[aria-label="Clear date"]')!.click();
  expect(root.value).toBe(null); expect(count).toBe(1);
  root.remove(); document.body.append(root); root.setAttribute('read-only',''); root.querySelector<HTMLButtonElement>('button')!.click(); expect(count).toBe(1);
@@ -68,7 +100,7 @@ it('keeps one roving day and focused date during author updates, supports Home a
  root.setAttribute('dir','rtl'); document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-02-26');
 });
 it('injects today, cancels nullable intent and closes when readonly changes',()=>{
- const root=fixture('default-value="2024-02-29"'); root.clock=()=>new Date(2024,1,29,23); root.querySelector<HTMLButtonElement>('button')!.click();
+ const root=fixture('default-value="2024-02-29" show-clear'); root.clock=()=>new Date(2024,1,29,23); root.querySelector<HTMLButtonElement>('button')!.click();
  expect(root.querySelector('[aria-current=date]')?.getAttribute('data-date')).toBe('2024-02-29');
  root.addEventListener('af-change',event=>event.preventDefault()); root.querySelector<HTMLButtonElement>('[aria-label="Clear date"]')!.click(); expect(root.value).toBe('2024-02-29');
  root.querySelector<HTMLButtonElement>('button')!.click(); root.setAttribute('readonly',''); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
@@ -80,7 +112,7 @@ it('clamps keyboard movement inclusively and preserves day through month navigat
  root.querySelector<HTMLButtonElement>('[data-date][tabindex="0"]')!.focus(); document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-03-29');
 });
 it('disables year boundary overflow and reconnects without duplicate change listeners',()=>{
- const root=fixture('default-value="9999-12-31"'); root.querySelector<HTMLButtonElement>('button')!.click();
+ const root=fixture('default-value="9999-12-31" show-clear'); root.querySelector<HTMLButtonElement>('button')!.click();
  for(const day of root.querySelectorAll<HTMLButtonElement>('[data-date^="10000"]')) expect(day.disabled).toBe(true);
  root.setAttribute('disabled',''); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
  root.removeAttribute('disabled'); root.remove(); document.body.append(root); let count=0; root.addEventListener('af-change',()=>count++);

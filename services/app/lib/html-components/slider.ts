@@ -118,11 +118,11 @@ export class AfSlider extends HTMLElement implements SliderContract {
 }
 
 const sliderStyles = `
-af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:12rem;font:inherit;color:inherit}
+af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:11rem;font:inherit;color:inherit}
 af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem}
 af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;color:var(--muted-foreground,#555)}
-af-slider>input[type=range]{width:100%;accent-color:var(--primary,currentColor)}
-af-slider>input[type=range]:disabled{opacity:.55}
+af-slider>input[type=range]{box-sizing:border-box;width:100%;height:6px;margin:0;accent-color:var(--primary,currentColor)}
+af-slider>input[type=range]:disabled{opacity:.5}
 af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:.875rem}
 `;
 

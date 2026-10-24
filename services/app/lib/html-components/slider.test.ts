@@ -30,6 +30,9 @@ describe('af-slider', () => {
     expect(getComputedStyle(header!).justifyContent).toBe('space-between');
     expect(header!.textContent).toContain('Level');
     expect(header!.textContent).toContain('40%');
+    expect(getComputedStyle(root).minWidth).toBe('176px');
+    expect(getComputedStyle(input).height).toBe('6px');
+    expect(getComputedStyle(input).margin).toBe('0px');
   });
   it('uses default-value for uncontrolled state and emits accepted native changes', () => {
     const {root,input,readout} = fixture('default-value="25" label="Volume" min="10" max="40" step="5" prefix="$" suffix=" USD" format=".1f"');
@@ -56,7 +59,7 @@ describe('af-slider', () => {
   it('does not emit for same-value property or attribute reflection and honors disabled and readonly', () => {
     const {root,input} = fixture('value="5" disabled readonly'); let changes = 0;
     root.addEventListener('af-change', () => changes++); root.value = 5; root.setAttribute('value','5');
-    expect(input.disabled).toBe(true); expect(input.readOnly).toBe(true); expect(changes).toBe(0);
+    expect(input.disabled).toBe(true); expect(input.readOnly).toBe(true); expect(getComputedStyle(input).opacity).toBe('0.5'); expect(changes).toBe(0);
   });
   it('formats numbers and falls back to raw values for invalid format strings', () => {
     const {readout,root} = fixture('default-value="1234" format=",.0f" prefix="≈"');
