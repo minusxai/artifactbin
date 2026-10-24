@@ -97,7 +97,7 @@ Remote data is never silently copied into persisted local state. Keep temporary 
 
 ## Offline and downloaded pages
 
-Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. Linked downloads auto-connect to their original document. Initial queries wait at most 15 seconds; Stay offline/private preview return immediately. Platform controls own sign-in/account approval. Mutations never queue or replay. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads separately.
+Linked downloads read permitted public data/comments; private resources stay unavailable. Local state works offline. `remoteReadOnly` from `@afbin/apollo` stays true for portable remote access, offline or connected. False hosted/local-preview datasets never promises write access. Disable shared writes when true. Open original for sign-in, comments or shared changes. Initial queries wait at most 15s; Stay offline/private preview return immediately. Mutations never queue or replay. Files carry no tokens. Test downloads.
 
 A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.
 

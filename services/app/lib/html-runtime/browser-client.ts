@@ -4,7 +4,7 @@ import {createClient,gql,readStateFragment} from './apollo/client';
 import {createViewerState} from './viewer-state';
 import type {StoreReceipt} from './apollo/apollo-contracts';
 import {config,remote} from './browser-reader';
-export {startFrameBridge,onBackendChange} from './browser-reader';
+export {startFrameBridge,onBackendChange,remoteReadOnly} from './browser-reader';
 export {gql};
 // A raw authored file may place its state block after the blocking core script.
 // Read defaults only when the author first imports the client, after that block is parsed.

@@ -43,3 +43,6 @@ it('renews only live compatible leases for the original actor and never revives 
  now=40;const changed=await registry.grant(identity);now=49;actor='bob';await expect(registry.status(changed.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});actor='alice';await expect(registry.status(changed.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
  now=60;const source=await registry.grant(identity);now=69;revision='3';expect((await registry.status(source.capability,identity.artifactId)).compatible).toBe(false);await expect(registry.authorize(source.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
 });
+it('revokes a previously account-bound lease when anonymous-only admission replaces its actor',async()=>{
+ let legacy=true;const registry=createConnectionRegistry({random:()=> 'legacy',inspect:async input=>({identity:input,actor:legacy?'account':'guest',authenticated:legacy,role:legacy?'owner':'viewer'})});await registry.grant(identity);legacy=false;await expect(registry.authorize('legacy',identity.artifactId)).rejects.toMatchObject({code:'revoked'});await expect(registry.status('legacy',identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+});

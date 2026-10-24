@@ -47,6 +47,8 @@ export interface DocumentChromeProps {
   canFork: boolean;
   /** A local shell has no remote actions until its scoped connection is approved. */
   remoteAvailable?: boolean;
+  /** Preserve comment reading but send all account actions to the hosted original. */
+  onOpenOriginal?: () => void;
   owner: boolean;
   install?: boolean;
   visibility?: Visibility;
@@ -111,12 +113,12 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
 
   const actions = <>
     <Show when={reading()}>
-      <Tooltip content={like().liked ? 'Unlike' : 'Like'}>
+      <Show when={!props.onOpenOriginal}><Tooltip content={like().liked ? 'Unlike' : 'Like'}>
         <Button variant="ghost" size="sm" icon class="relative min-w-9" aria-label={like().liked ? 'Unlike' : 'Like'} aria-pressed={like().liked} onClick={() => void toggleLike()}>
           <Heart size={18} stroke-width={1.5} fill={like().liked ? 'currentColor' : 'none'} />
           <Show when={like().count > 0}><span class="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 font-mono text-micro leading-4 text-action-ink">{like().count}</span></Show>
         </Button>
-      </Tooltip>
+      </Tooltip></Show>
       <DocumentCommentAction count={props.comments()} onClick={props.onComment} />
       <Show when={props.canFork}>
         <span class="hidden sm:contents"><Tooltip content="Fork artifact"><Button variant="ghost" size="sm" icon aria-label="Fork artifact" onClick={() => props.onFork()}><GitFork size={18} stroke-width={1.5} /></Button></Tooltip></span>
@@ -136,10 +138,10 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
 
   const compactActions = () => <>
     <Show when={reading()}><DocumentCommentAction count={props.comments()} onClick={props.onComment} /></Show>
-    <Show when={props.remoteAvailable !== false}><Suspense fallback={<Button variant="ghost" size="bar" icon disabled aria-label="Loading artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>}><CompactMenu page={props} like={like} follow={follow} onLike={toggleLike} onFollow={toggleFollow} /></Suspense></Show>
+    <Show when={props.remoteAvailable !== false && !props.onOpenOriginal}><Suspense fallback={<Button variant="ghost" size="bar" icon disabled aria-label="Loading artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>}><CompactMenu page={props} like={like} follow={follow} onLike={toggleLike} onFollow={toggleFollow} /></Suspense></Show>
   </>;
 
   return <PageChrome compactContext={<Show when={props.archived}>{at =>
     <span class="shrink-0 font-mono text-micro text-muted" aria-label={archivedBanner(at().version, at().head)}>v{at().version}</span>}</Show>} compactActions={compactActions} label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
-    panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star />;
+    panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star={!props.onOpenOriginal} onOpenOriginal={props.onOpenOriginal} />;
 }

@@ -55,7 +55,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
  };
  win.addEventListener('message',receive);
  const connection:LocalDocumentConnection={
-  retry(){if(!options.privatePreview)begin();},signIn(){if(!options.privatePreview)state('signin-required');},
+  retry(){if(!options.privatePreview)begin();},
   disconnect(){stopped=true;cleanup();state('offline');},
   dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);disposed=true;},
   post(message){if(connected)port?.postMessage({kind:'bridge',message});},

@@ -7,7 +7,7 @@ describe('local file connection',()=>{
   for(const mode of [{privatePreview:true},{stayOffline:true}]){
    const states:string[]=[];const connection=connectLocalDocument({win:window,identity,...mode,onState:s=>states.push(s)});
    expect(document.querySelector('iframe')).toBeNull();expect(states).toEqual(['offline']);
-   if('privatePreview' in mode){connection.retry();connection.signIn();expect(document.querySelector('iframe')).toBeNull();}
+   if('privatePreview' in mode){connection.retry();expect(document.querySelector('iframe')).toBeNull();}
    connection.dispose();
   }
  });

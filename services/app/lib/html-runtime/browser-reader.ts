@@ -11,6 +11,8 @@ import type {HtmlRuntimeConfig} from './contract';
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
+/** Portable remote access stays read-only regardless of connection state; local preview datasets are separate. */
+export const remoteReadOnly=config.offline===true&&!config.localPreview;
 function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>}{
  const names:string[]=[],bindings:Record<string,string>={};
  for(const link of document.querySelectorAll('link[data-af-name]')){

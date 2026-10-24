@@ -37,6 +37,10 @@ describe('AnnotationLayer', () => {
     expect(view.runtime.posts().filter(post => post.type === 'mx:annotations').at(-1)).toMatchObject({canComment:false});
   });
 
+  it('keeps downloaded comment conversations readable without sign-in or write controls',async()=>{
+    const view=layer({railOpen:true,canCreateComment:false,canDeleteAny:true});await screen.findByText('is this right?');await fireEvent.click(view.container.querySelector('[data-thread-id="ann_1"] button[aria-label="Open annotation thread"]')!);await screen.findByText('one more thought');expect(screen.queryByRole('button',{name:'Sign in to comment'})).toBeNull();expect(screen.queryByLabelText('Reply to annotation')).toBeNull();expect(screen.queryByRole('button',{name:'Resolve annotation'})).toBeNull();expect(screen.queryByRole('menuitem',{name:'Delete thread'})).toBeNull();expect(screen.queryByRole('menuitem',{name:'Edit comment'})).toBeNull();expect(fetchCalls.some(call=>call.init?.method&&call.init.method!=='GET')).toBe(false);
+  });
+
   it('removes comment tools when an existing commenter loses mutation permission', async () => {
     const view = layer({ railOpen: true, canCreateComment: true });
     await screen.findByRole('button', { name: 'Select' });
