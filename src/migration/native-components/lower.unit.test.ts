@@ -110,3 +110,11 @@ test('identity admission uses exact recovered source spans even when retained pa
  const stale=structuredClone(source);stale.identityBindings[0]!.sourceSha256='c'.repeat(64);
  assert.ok(lowerNativeComponents(stale).blockers.some(b=>b.code==='identity-proof-required'));
 });
+test('admitted expression and condition targets emit exact slots and inert templates',()=>{
+ const expression:RetainedJsxNode={type:'expression',graphKey:'expr',start:0,end:0,source:'$open',value:{static:false,exprType:'Identifier',source:'$open'}};
+ const branch=element('__mx_condition',{},[expression]);if(branch.type!=='element')throw Error();branch.control={kind:'and',test:{kind:'signal',name:'open'}};
+ const source=input([branch]);source.identityBindings=[branch,expression].map((node,i)=>({sourceNode:node.graphKey,sourceStart:0,sourceEnd:1,sourceSha256:digest,afId:`adapter-${i}`,analysisSha256:digest,proofSha256:proof}));
+ source.admittedBindings=[{...source.identityBindings[0]!,kind:'condition',templateId:'template-branch'},{...source.identityBindings[1]!,kind:'text'}];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/data-af-id="adapter-0"/);assert.match(result.html!,/<template id="template-branch"><span[^>]*data-af-id="adapter-1"/);
+ const stale=structuredClone(source);stale.admittedBindings![0]!.analysisSha256='f'.repeat(64);assert.equal(lowerNativeComponents(stale).status,'blocked');
+});

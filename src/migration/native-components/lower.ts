@@ -2,6 +2,7 @@
  * by owners; no source fetch, compiler execution, destination write or evaluation. */
 import {format as d3format} from 'd3-format';
 import { NATIVE_COMPONENT_TARGET, NATIVE_SEMANTIC_CSS, nativeComponentRule, type NativeAttributeKind } from './component-map.ts';
+import type { NativeBindingTarget } from './bindings-contracts.ts';
 import type { NativeJson, NativeTypedAnalysis, RetainedJsxNode } from './analyze-contracts.ts';
 import type { NativeLowerIdentityBinding } from './identity-contracts.ts';
 export type { NativeLowerIdentityBinding } from './identity-contracts.ts';
@@ -27,6 +28,9 @@ export interface NativeCellFormatInput {
 export type NativeCellFormatOutput={status:'formatted';text:string}|{status:'requires-locale';detail:string};
 export interface NativeLowerInput {
   analysis: NativeTypedAnalysis;
+  emitTextIdentities?: boolean;
+  admittedBindings?: readonly NativeBindingTarget[];
+  admittedDeclarations?: readonly {kind:string;name:string;analysisSha256:string}[];
   targetRevision: string;
   identityBindings: readonly NativeLowerIdentityBinding[];
   reservedIdentities?: readonly { afId: string; sourceNode: string }[];
@@ -140,7 +144,7 @@ function validProperty(tag:string,name:string,value:NativeJson):boolean {
 }
 export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutput {
  const blockers: NativeLowerBlocker[]=[],requirements: NativeLowerRequirement[]=[],assignments: Array<{afId:string;property:string;value:NativeJson}>=[],identities: Array<{sourceNode:string;afId?:string;kind:'element'|'text'|'nonvisual'}>=[];
- const head:string[]=[];
+ const head:string[]=[],templates:string[]=[];
  const layouts=new Map<string,string>();
  const modules=new Map<string,{name:string;register:string;targetRevision:string}>();
  const usedAf=new Map<string,string>(),usedDom=new Set<string>(),usedBindings=new Set<NativeLowerIdentityBinding>();
@@ -149,8 +153,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
  const require=(kind:NativeLowerRequirementKind,node:RetainedJsxNode,detail:string,attribute?:string)=>requirements.push({kind,sourceNode:node.graphKey,tag:node.type==='element'?node.tag:undefined,attribute,detail,node});
  if(input.targetRevision!==NATIVE_COMPONENT_TARGET)blockers.push({code:'target-contract-mismatch',sourceNode:'$root',detail:'Native interfaces must match the reviewed target revision'});
  if(!digest(input.analysis.analysisSha256)||!digest(input.analysis.compilerSourceSha256))blockers.push({code:'analysis-proof-required',sourceNode:'$root',detail:'Typed analysis/compiler digests are required'});
- for(const [collection,kind] of [['imports','import'],['values','value'],['queries','query'],['mutations','mutation'],['notifications','notification']] as const)for(const declaration of input.analysis.flow[collection]??[])requirements.push({kind,sourceNode:'$flow',detail:'Typed declaration requires its admitted operation adapter',declaration});
- const binding=(node:RetainedJsxNode):NativeLowerIdentityBinding|undefined=>{
+ for(const [collection,kind] of [['imports','import'],['values','value'],['queries','query'],['mutations','mutation'],['notifications','notification']] as const)for(const declaration of input.analysis.flow[collection]??[])if(!input.admittedDeclarations?.some(receipt=>receipt.kind===kind&&receipt.name===declaration.name&&receipt.analysisSha256===input.analysis.analysisSha256))requirements.push({kind,sourceNode:'$flow',detail:'Typed declaration requires its admitted operation adapter',declaration});
+ const binding=(node:RetainedJsxNode,kind:'element'|'text'|'nonvisual'='element'):NativeLowerIdentityBinding|undefined=>{
   const candidates=input.identityBindings.filter(value=>value.sourceNode===node.graphKey);
   const value=candidates[0];
   const exactSpans=input.analysis.sourceSpans.filter(span=>span.sourceNode===node.graphKey);
@@ -159,18 +163,23 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(usedBindings.has(value)){block('ambiguous-source-identity',node,'A proved identity cannot name multiple emitted nodes');return;}
   usedBindings.add(value);
   if(usedAf.has(value.afId)||input.reservedIdentities?.some(old=>old.afId===value.afId&&old.sourceNode!==node.graphKey)){block('identity-reuse',node,'Annotation identity collides with another or historical owner');return;}
-  usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind:'element'});return value;
+  usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind});return value;
+ };
+ const admittedTarget=(node:RetainedJsxNode,kind:NativeBindingTarget['kind'],attribute?:string):NativeBindingTarget|undefined=>{
+  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||t.kind==='property'&&t.attribute===attribute))??[];
+  if(!targets.length)return;
+  const t=targets[0],proof=input.identityBindings.find(b=>b.sourceNode===node.graphKey);
+  if(targets.length!==1||!t||!proof||t.afId!==proof.afId||t.analysisSha256!==proof.analysisSha256||t.sourceSha256!==proof.sourceSha256||t.sourceStart!==proof.sourceStart||t.sourceEnd!==proof.sourceEnd||t.proofSha256!==proof.proofSha256){block('adapter-identity-mismatch',node,'Adapter target must match the exact graph identity receipt');return;}
+  return t;
  };
  const walk=(node:RetainedJsxNode,ancestors:readonly string[]=[],depth=0):string=>{
   if(depth>128){block('tree-depth-limit',node,'Typed tree exceeds the bounded lowering depth');return '';}
   if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
-  if(node.type==='text'){identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
+  if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
   if(node.type==='expression'){
-   identities.push({sourceNode:node.graphKey,kind:'nonvisual'});
-   if(!node.value.static){require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
+   if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
    const value=node.value.json;
-   if(value===null||typeof value==='boolean')return '';
-   if(typeof value==='string'||typeof value==='number')return escape(value);
+   if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${text}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
    block('unsupported-expression-literal',node,'Array/object expression children require explicit semantic admission');return '';
   }
   if(node.control){
@@ -178,11 +187,24 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(control&&typeof control==='object'&&!Array.isArray(control)&&control.kind==='fragment'){
     identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return node.children.map(child=>walk(child,ancestors,depth+1)).join('');
    }
+   const admitted=admittedTarget(node,'condition');
+   if(admitted?.kind==='condition'&&node.tag==='__mx_condition'&&node.attributes.length===0&&control&&typeof control==='object'&&!Array.isArray(control)&&control.kind==='and'){
+    const proof=binding(node);templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,ancestors,depth+1)).join('')}</template>`);
+    return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';
+   }
    require('condition',node,'Preserve the complete typed conditional and keyed branch identity plan');return '';
   }
-  if(declarationTags[node.tag]){require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
+  if(declarationTags[node.tag]){const kind=declarationTags[node.tag]!,name=node.attributes.find(a=>a.name==='name')?.value;if(name?.static&&typeof name.json==='string'&&input.admittedDeclarations?.some(r=>r.kind===kind&&r.name===name.json&&r.analysisSha256===input.analysis.analysisSha256))return '';require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
   if(node.tag==='Helmet'){identities.push({sourceNode:node.graphKey,kind:'nonvisual'});for(const child of node.children)head.push(walk(child,ancestors,depth+1));return '';}
   const operation: Readonly<Record<string,NativeLowerRequirementKind>>={For:'loop',Question:'chart',Chart:'chart',Column:'table-column',Script:'script',script:'script',Iframe:'iframe',iframe:'iframe',SignIn:'auth'};
+  if(node.tag==='For'){
+   const admitted=admittedTarget(node,'loop');
+   if(admitted?.kind==='loop'){
+    if(ancestors.includes('For')){block('nested-loop-unsupported',node,'Nested loop identities require a separately admitted composition');return '';}
+    const proof=binding(node);templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,[...ancestors,'For'],depth+1)).join('')}</template>`);
+    return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';
+   }
+  }
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
   const rule=nativeComponentRule(node.tag);
   if(!rule&&!htmlTags.has(node.tag)){block('unsupported-component',node,'No reviewed semantic/native mapping exists for this tag');return '';}
@@ -191,7 +213,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
   for(const attribute of node.attributes){
    if(seen.has(attribute.name)){block('duplicate-attribute',node,'Repeated source attributes are ambiguous',attribute.name);continue;}seen.add(attribute.name);
-   if(!attribute.value.static){require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
+   if(!attribute.value.static){if(admittedTarget(node,'property',attribute.name))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
    values[attribute.name]=attribute.value.json;
   }
   const attrs: Record<string,string>=Object.create(null),styles: string[]=[];
@@ -235,9 +257,9 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   for(const [name,value]of Object.entries(values)){
    if(name==='data-af-id'){if(!proof||value!==proof.afId)block('annotation-identity-mismatch',node,'Authored annotation ID must agree with its proof',name);continue;}
    if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
-   if(name==='run'||name==='set'||name==='args'){require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
+   if(name==='run'||name==='set'||name==='args'){if(name!=='args'&&admittedTarget(node,'action'))continue;require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
    if(node.tag==='User'&&name==='userId'){require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
-   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
+   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
    if((node.tag==='Number'||node.tag==='Cell')&&['data','format','prefix','suffix','col','agg'].includes(name)){
     if(name!=='data'&&typeof value!=='string'&&value!==null)block('unsupported-cell-property',node,'Retained Cell formatting properties require literal strings',name);
     if(name==='agg'&&typeof value==='string'&&!['first','last','sum','avg','median','min','max','count'].includes(value))block('unsupported-cell-property',node,'Unknown aggregate is not silently normalized',name);
@@ -290,7 +312,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
   return `<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
  };
- const html=input.analysis.nodes.map(node=>walk(node)).join('');
+ const body=input.analysis.nodes.map(node=>walk(node)).join('');
+ const html=body+templates.join('');
  const status=blockers.length?'blocked':requirements.length?'requires-adapter':'complete';
  return {status,html:status==='complete'?html:null,headHtml:status==='complete'?head.join(''):null,css:modules.size||html?NATIVE_SEMANTIC_CSS:'',modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name)),assignments,identities,requirements,blockers};
 }
