@@ -8,11 +8,11 @@ it('bounds initial waits and never dispatches a timed-out or canceled query unde
  ready.update(false,undefined,true);const pending=ready.wait();ready.update(true,sender);const bound=(await pending)!;ready.update(false);ready.update(true,sender);await expect(bound({query:'{ count }',variables:{},operation:'query'})).rejects.toThrow();expect(sends).toBe(0);ready.dispose();
 });
 it('never waits offline and deduplicates availability transitions while preserving a real reconnect',async()=>{
- const ready=createQueryReadiness({pending:false});const sender=async()=>({data:{count:9}});
+ const ready=createQueryReadiness({pending:false,...timers()});const sender=async()=>({data:{count:9}});
  expect(await ready.wait()).toBeNull();expect(ready.update(true,sender)).toBe(true);expect(ready.update(true,sender)).toBe(false);
  ready.update(false,undefined,true);expect(ready.online()).toBe(false);const pending=ready.wait();ready.update(false);expect(await pending).toBeNull();expect(ready.update(true,sender)).toBe(true);ready.dispose();expect(await ready.wait()).toBeNull();
 });
 it('releases every pending reader on disposal and invalidates a sender on account replacement',async()=>{
  const clock=timers(),ready=createQueryReadiness({pending:true,...clock});const first=ready.wait(),second=ready.wait();ready.dispose();expect(await first).toBeNull();expect(await second).toBeNull();expect(clock.size()).toBe(0);
- const account=createQueryReadiness({pending:true});let calls=0;const old=async()=>{calls++;return {data:{count:1}};};account.update(true,old);const bound=(await account.wait())!;account.update(true,async()=>({data:{count:2}}));await expect(bound({query:'{ count }',variables:{},operation:'query'})).rejects.toThrow();expect(calls).toBe(0);account.dispose();
+ const account=createQueryReadiness({pending:true,...timers()});let calls=0;const old=async()=>{calls++;return {data:{count:1}};};account.update(true,old);const bound=(await account.wait())!;account.update(true,async()=>({data:{count:2}}));await expect(bound({query:'{ count }',variables:{},operation:'query'})).rejects.toThrow();expect(calls).toBe(0);account.dispose();
 });

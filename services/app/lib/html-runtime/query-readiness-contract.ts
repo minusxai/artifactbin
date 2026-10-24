@@ -2,8 +2,8 @@ import type {RemotePort} from './apollo/apollo-contracts';
 export interface QueryReadinessOptions {
  pending:boolean;
  timeoutMs?:number;
- schedule?:(callback:()=>void,delay:number)=>unknown;
- cancel?:(handle:unknown)=>void;
+ schedule:(callback:()=>void,delay:number)=>unknown;
+ cancel:(handle:unknown)=>void;
 }
 export interface QueryReadiness {
  online():boolean;

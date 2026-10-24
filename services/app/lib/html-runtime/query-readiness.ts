@@ -2,7 +2,7 @@ import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
 import type {QueryReadiness,QueryReadinessOptions} from './query-readiness-contract';
 /** Wait only for the current attempt; cancellation invalidates even already resolved senders. */
 export function createQueryReadiness(options:QueryReadinessOptions):QueryReadiness{
- const schedule=options.schedule??((callback,delay)=>setTimeout(callback,delay)),cancel=options.cancel??(handle=>clearTimeout(handle as ReturnType<typeof setTimeout>));
+ const {schedule,cancel}=options;
  let phase:'pending'|'offline'|'online'=options.pending?'pending':'offline',generation=0,disposed=false,timer:unknown,sender:RemotePort['execute']|undefined;
  const waiters=new Set<(sender:RemotePort['execute']|null)=>void>();
  const bound=(execute:RemotePort['execute']):RemotePort['execute']=>{const epoch=generation;return async request=>{if(disposed||phase!=='online'||generation!==epoch||sender!==execute)throw new RemoteUnreachable();return execute(request);};};

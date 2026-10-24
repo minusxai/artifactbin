@@ -26,7 +26,7 @@ function pendingPortableConnection():boolean {
  if(!config.offline||document.documentElement.hasAttribute('data-af-private-preview'))return false;
  try{const identity=JSON.parse(document.querySelector('script[data-af="portable"]')?.textContent??'{}').identity;if(!identity)return false;try{return localStorage.getItem(`af:offline:${identity.platformOrigin}:${identity.artifactId}`)!=='true';}catch{return true;}}catch{return false;}
 }
-const portableReadiness=createQueryReadiness({pending:pendingPortableConnection()});
+const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
   online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
