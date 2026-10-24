@@ -17,3 +17,12 @@ test('raw ref table retains original unavailable-data semantics without synthesi
  const analysis=fixture('table'),node=analysis.nodes[0]!;if(node.type!=='element')throw Error();node.attributes.find(a=>a.name==='data')!.value={static:true,json:'ref:asset'};analysis.sourceSpans=[{sourceNode:'chart',sourceStart:0,sourceEnd:1}];const {lowerNativeComponents}=await import('./lower.ts'),{NATIVE_COMPONENT_TARGET}=await import('./component-map.ts');const result=lowerNativeComponents({analysis,targetRevision:NATIVE_COMPONENT_TARGET,identityBindings:[{sourceNode:'chart',afId:'chart-node',sourceStart:0,sourceEnd:1,sourceSha256:sha,analysisSha256:sha,proofSha256:sha}],chartMappings:mapNativeCharts(analysis).mappings});assert.equal(result.status,'complete');assert.equal(result.requirements.length,0);assert.equal(result.modules.length,0);
 });
 test('charts inside repeated or conditional templates require per-instance mount ownership',()=>{for(const control of [undefined,{kind:'and',test:{kind:'signal',name:'open'}}]){const analysis=fixture(),chart=analysis.nodes[0]!;analysis.nodes=[{type:'element',tag:control?'__mx_condition':'For',isComponent:true,graphKey:'wrapper',start:0,end:1,selfClosing:false,attributes:[],children:[chart],control}];const result=mapNativeCharts(analysis);assert.equal(result.mappings.length,0);assert.ok(result.blockers.some(b=>b.code==='chart-template-instance-runtime-required'));}});
+test('single-value retains exact config, query source and bare sizing without a Vega specification',()=>{
+ const a=fixture('single_value'),node=a.nodes[0]!;if(node.type!=='element')throw Error();
+ const recipe={kind:'single_value',yCols:['amount'],singleValueConfig:{label:'Total',prefix:'$',suffix:' net',format:',.0f'}};
+ node.attributes.find(x=>x.name==='viz')!.value={static:true,json:recipe};
+ node.attributes=node.attributes.filter(x=>x.name!=='height');
+ let result=mapNativeCharts(a);assert.deepEqual(result.blockers,[]);let mapping=result.mappings[0]!;assert.equal(mapping.kind,'single_value');assert.equal(mapping.height,120);assert.deepEqual(mapping.props.viz,recipe);assert.equal(verifyNativeChartMapping(a,mapping),true);
+ node.attributes.push({name:'height',start:0,end:1,value:{static:true,json:'10px'}});result=mapNativeCharts(a);assert.equal(result.mappings[0]!.height,48);
+ node.attributes.find(x=>x.name==='height')!.value={static:true,json:'160px'};assert.equal(mapNativeCharts(a).mappings[0]!.height,160);
+});
