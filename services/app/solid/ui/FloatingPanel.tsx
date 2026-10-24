@@ -10,7 +10,7 @@ import { splitProps, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { LAYER } from './layers';
-import { appearanceOf, createPlacedAppearance } from './theme';
+import { createPlacedAppearance } from './theme';
 
 export function FloatingPanel(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'class' | 'style' | 'role'> & {
   label: string;
@@ -25,12 +25,11 @@ export function FloatingPanel(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, 'c
   children: JSX.Element;
 }): JSX.Element {
   const [own, rest] = splitProps(props, ['label', 'position', 'width', 'onClose', 'anchor', 'ref', 'class', 'children']);
-  const placed = createPlacedAppearance();
-  const appearance = () => (own.anchor ? appearanceOf(own.anchor) : placed.appearance());
+  const placed = createPlacedAppearance(() => own.anchor);
   return <>
     <span ref={placed.marker} hidden />
     <Portal mount={trustedPortalOf(document) ?? document.body}>
-      <div {...rest} ref={own.ref} role="dialog" aria-label={own.label} data-app-appearance={appearance()}
+      <div {...rest} ref={own.ref} role="dialog" aria-label={own.label} data-app-appearance={placed.appearance()}
         onKeyDown={(event) => { if (event.key === 'Escape' && own.onClose && !event.defaultPrevented) { event.preventDefault(); own.onClose(); } }}
         style={{ position: 'fixed', left: `${own.position.left}px`, top: `${own.position.top}px`, width: own.width ? `${own.width}px` : undefined, 'z-index': LAYER.popover }}
         class={`rounded-panel border border-edge bg-surface font-sans text-fg shadow-lg ${own.class ?? ''}`}>
