@@ -85,8 +85,9 @@ export function candidateCaptureIssues(captures) {
     if(capture.errors.length)issues.push(`${capture.fixture}: reader page errors`);
     if(state.overflow>1)issues.push(`${capture.fixture}: horizontal overflow`);
     const includes=text=>state.text.includes(text);
-    const required={button:['Continue','Secondary','Outline','Unavailable'],tabs:[capture.state==='second'||capture.state==='arrow-right'?'Second panel':'First panel'],select:['Person','Ada'],'file-upload':['Screenshots'],'data-table':['Ada','Grace','Linus']}[capture.fixture]||[];
+    const required={button:['Continue','Secondary','Outline','Unavailable'],tabs:[capture.state==='second'||capture.state==='arrow-right'?'Second panel':'First panel'],select:['Ada'],'file-upload':['Screenshots'],'data-table':['Ada','Grace','Linus']}[capture.fixture]||[];
     for(const text of required)if(!includes(text))issues.push(`${capture.fixture}/${capture.state}: missing ${text}`);
+    if(capture.fixture==='select'&&!state.controls.some(control=>control.name==='Person'&&control.role==='button'))issues.push('select: missing named Person control');
     if(capture.fixture==='dialog'&&capture.state==='open'&&!includes('Review changes'))issues.push('dialog: did not open');
     if(capture.fixture==='dialog'&&capture.state==='escape'&&state.controls.some(control=>control.role==='dialog'))issues.push('dialog: did not close on Escape');
     if(capture.fixture==='data-table'&&state.rows.length!==4)issues.push('data-table: expected header and three rows');

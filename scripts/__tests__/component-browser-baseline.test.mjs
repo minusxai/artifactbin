@@ -37,6 +37,9 @@ describe('paired real reader evidence comparison',()=>{
 });
 
 describe('default candidate reader gate',()=>{
+  it('uses the accessible select name when the theme uppercases its visible label',()=>{
+    expect(candidateCaptureIssues([{fixture:'select',state:'initial',errors:[],semantics:{text:'PERSON Ada',controls:[{role:'button',name:'Person'}],rows:[],overflow:0}}])).toEqual([]);
+  });
   it('fails when the real reader does not open a dialog or render table rows',()=>{
     const empty={text:'',controls:[],rows:[],overflow:0};
     expect(candidateCaptureIssues([{fixture:'dialog',state:'open',semantics:empty,errors:[]}])).toContain('dialog: did not open');
