@@ -1014,24 +1014,258 @@ for (const [tag, event] of [
   });
 
 test("repeat eviction disposes listeners, pending actions and cached row state", async () => {
-  const loop = el("loop", "For", {id:"loop",keyBy:"id"});
-  if(loop.type!=="element")throw Error();
-  loop.attributes.push({name:"each",start:0,end:1,value:{static:false,exprType:"Identifier",source:"$rows",reactive:{kind:"signal",name:"rows"}}});
-  const source=input([loop,el("save","Button",{run:"$save"})],[{kind:"loop",sourceNode:"loop",afId:"loop",templateId:"rows",identity:{owner:"loop",keyBy:"id",templateIds:["save"],encoding:"archived-instance-v1"}},{kind:"action",sourceNode:"save",afId:"save"}]);
-  source.queries=[query];source.analysis.flow.queries=[{name:"rows",sql:"",start:0,end:1}];
-  source.analysis.flow.mutations=[{name:"save",start:0,end:1}];
-  source.mutations=[{name:"save",namespace:"records",document:"mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",values:[{name:"filter",type:"string"}],outcomePath:["records","run"],reset:["filter"]}];
-  const result=emitNativeBindings(source);assert.equal(result.status,"complete");if(result.status!=="complete")return;
-  const doc=new Doc(),host=new Element("div",{"data-af-id":"loop"});doc.body.append(host);doc.template("rows",[new Element("button",{"data-af-id":"save"})]);
-  const port=client({open:false,filter:"keep"});let calls=0,release:()=>void=()=>{};
-  port.mutate=async(options:any)=>{calls++;await new Promise<void>(resolve=>{release=resolve;});return {data:{records:{run:{requestId:options.variables.requestId,outcome:"committed",reset:["filter"]}}}};};
-  const runtime=await execute(result.authorJs,port,doc);
-  try{
-    port.remotes[0]!.next(answer("A"));const old=host.children[0]!.children[0]!;const pendingClick=old.click();
-    port.remotes[0]!.next(answer("B"));assert.equal(old.listeners.get("click")?.length,0);
-    release();await pendingClick;assert.equal(port.state.filter,"keep");await old.click();assert.equal(calls,1);
-    for(let i=0;i<1000;i++){const previous=host.children[0]!.children[0]!;port.remotes[0]!.next(answer(String(i)));assert.equal(previous.listeners.get("click")?.length,0);}
-    port.remotes[0]!.next(answer("A"));assert.notEqual(host.children[0]!.children[0],old);
-    const current=host.children[0]!.children[0]!;runtime.module.dispose();assert.equal(current.listeners.get("click")?.length,0);
-  }finally{await runtime.close();}
+  const loop = el("loop", "For", { id: "loop", keyBy: "id" });
+  if (loop.type !== "element") throw Error();
+  loop.attributes.push({
+    name: "each",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$rows",
+      reactive: { kind: "signal", name: "rows" },
+    },
+  });
+  const source = input(
+    [loop, el("save", "Button", { run: "$save" })],
+    [
+      {
+        kind: "loop",
+        sourceNode: "loop",
+        afId: "loop",
+        templateId: "rows",
+        identity: {
+          owner: "loop",
+          keyBy: "id",
+          templateIds: ["save"],
+          encoding: "archived-instance-v1",
+        },
+      },
+      { kind: "action", sourceNode: "save", afId: "save" },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", sql: "", start: 0, end: 1 }];
+  source.analysis.flow.mutations = [{ name: "save", start: 0, end: 1 }];
+  source.mutations = [
+    {
+      name: "save",
+      namespace: "records",
+      document:
+        "mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",
+      values: [{ name: "filter", type: "string" }],
+      outcomePath: ["records", "run"],
+      reset: ["filter"],
+    },
+  ];
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("div", { "data-af-id": "loop" });
+  doc.body.append(host);
+  doc.template("rows", [new Element("button", { "data-af-id": "save" })]);
+  const port = client({ open: false, filter: "keep" });
+  let calls = 0,
+    release: () => void = () => {};
+  port.mutate = async (options: any) => {
+    calls++;
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {
+      data: {
+        records: {
+          run: {
+            requestId: options.variables.requestId,
+            outcome: "committed",
+            reset: ["filter"],
+          },
+        },
+      },
+    };
+  };
+  const runtime = await execute(result.authorJs, port, doc);
+  try {
+    port.remotes[0]!.next(answer("A"));
+    const old = host.children[0]!.children[0]!;
+    const pendingClick = old.click();
+    port.remotes[0]!.next(answer("B"));
+    assert.equal(old.listeners.get("click")?.length, 0);
+    release();
+    await pendingClick;
+    assert.equal(port.state.filter, "keep");
+    await old.click();
+    assert.equal(calls, 1);
+    for (let i = 0; i < 1000; i++) {
+      const previous = host.children[0]!.children[0]!;
+      port.remotes[0]!.next(answer(String(i)));
+      assert.equal(previous.listeners.get("click")?.length, 0);
+    }
+    port.remotes[0]!.next(answer("A"));
+    assert.notEqual(host.children[0]!.children[0], old);
+    const current = host.children[0]!.children[0]!;
+    runtime.module.dispose();
+    assert.equal(current.listeners.get("click")?.length, 0);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("top-level buttons share an operation busy lock before awaiting local writes", async () => {
+  const source = input(
+    [el("a", "Button", { run: "$save" }), el("b", "Button", { run: "$save" })],
+    [
+      { kind: "action", sourceNode: "a", afId: "a" },
+      { kind: "action", sourceNode: "b", afId: "b" },
+    ],
+  );
+  source.analysis.flow.mutations = [{ name: "save", start: 0, end: 1 }];
+  source.mutations = [
+    {
+      name: "save",
+      namespace: "records",
+      document:
+        "mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",
+      values: [],
+      outcomePath: ["records", "run"],
+      reset: [],
+    },
+  ];
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    a = new Element("button", { "data-af-id": "a" }),
+    b = new Element("button", { "data-af-id": "b" });
+  doc.body.append(a, b);
+  const port = client({ open: false, filter: null });
+  let calls = 0,
+    release: () => void = () => {};
+  port.mutate = async (options: any) => {
+    calls++;
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {
+      data: {
+        records: {
+          run: {
+            requestId: options.variables.requestId,
+            outcome: "committed",
+            reset: [],
+          },
+        },
+      },
+    };
+  };
+  const runtime = await execute(result.authorJs, port, doc);
+  try {
+    const first = a.click();
+    assert.equal(b.disabled, true);
+    await b.click();
+    assert.equal(calls, 1);
+    release();
+    await first;
+    assert.equal(b.disabled, false);
+    const next = b.click();
+    assert.equal(calls, 2);
+    release();
+    await next;
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("same mutation remains independently runnable in different stable rows", async () => {
+  const loop = el("loop", "For", { id: "loop", keyBy: "id" });
+  if (loop.type !== "element") throw Error();
+  loop.attributes.push({
+    name: "each",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$rows",
+      reactive: { kind: "signal", name: "rows" },
+    },
+  });
+  const source = input(
+    [loop, el("save", "Button", { run: "$save" })],
+    [
+      {
+        kind: "loop",
+        sourceNode: "loop",
+        afId: "loop",
+        templateId: "rows",
+        identity: {
+          owner: "loop",
+          keyBy: "id",
+          templateIds: ["save"],
+          encoding: "archived-instance-v1",
+        },
+      },
+      { kind: "action", sourceNode: "save", afId: "save" },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", sql: "", start: 0, end: 1 }];
+  source.analysis.flow.mutations = [{ name: "save", start: 0, end: 1 }];
+  source.mutations = [
+    {
+      name: "save",
+      namespace: "records",
+      document:
+        "mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",
+      values: [],
+      outcomePath: ["records", "run"],
+      reset: [],
+    },
+  ];
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("div", { "data-af-id": "loop" });
+  doc.body.append(host);
+  doc.template("rows", [new Element("button", { "data-af-id": "save" })]);
+  const port = client({ open: false, filter: null }),
+    releases: (() => void)[] = [],
+    requests: any[] = [];
+  port.mutate = async (options: any) => {
+    requests.push(options.variables);
+    await new Promise<void>((resolve) => releases.push(resolve));
+    return {
+      data: {
+        records: {
+          run: {
+            requestId: options.variables.requestId,
+            outcome: "committed",
+            reset: [],
+          },
+        },
+      },
+    };
+  };
+  const runtime = await execute(result.authorJs, port, doc);
+  try {
+    const data = answer("A");
+    data.data.records.evaluate.tables[0]!.rows.push(
+      answer("B").data.records.evaluate.tables[0]!.rows[0]!,
+    );
+    port.remotes[0]!.next(data);
+    const a = host.children[0]!.children[0]!,
+      b = host.children[1]!.children[0]!;
+    const first = a.click(),
+      second = b.click();
+    await a.click();
+    assert.equal(requests.length, 2);
+    assert.notEqual(requests[0].requestId, requests[1].requestId);
+    for (const release of releases) release();
+    await Promise.all([first, second]);
+  } finally {
+    await runtime.close();
+  }
 });

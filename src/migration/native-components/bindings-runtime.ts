@@ -2,7 +2,8 @@
  * runtime extension, source evaluation, network authority or shared-state cache. */
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp){
  let disposed=false,values={},tables={},localSub,failed=false;
- const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap();
+ const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
+ const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
  const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
@@ -69,8 +70,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
 
    }
    if(target.kind==='action'){
-    const existing=actions.get(host);if(existing){existing.row=row;continue;}const action={row};actions.set(host,action);
-    const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy)return;action.busy=true;host.disabled=true;try{
+    const existing=actions.get(host);if(existing){existing.row=row;if(!context&&target.run&&operationLocks.has(target.run))host.disabled=true;continue;}const action={row,host,run:target.run};actions.set(host,action);if(!context&&target.run)topActions.add(action);
+    const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy||!context&&target.run&&operationLocks.has(target.run))return;action.busy=true;if(!context&&target.run)operationBusy(target.run,true);host.disabled=true;try{
      if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,...patch}));}
      if(disposed||!scope.active)return;
      if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(!request){const snapshot={};for(const field of mutation.values)snapshot[field.name]=own(values,field.name);request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});if(disposed||!scope.active)return;
@@ -80,8 +81,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
       if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.active)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
      }
-    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!disposed&&scope.active)render();}};
-    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);});
+    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
+    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);topActions.delete(action);});
    }
   }
  }
