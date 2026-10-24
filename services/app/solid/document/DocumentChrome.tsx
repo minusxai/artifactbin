@@ -163,6 +163,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       <Button {...attrs} variant="ghost" size="bar" icon aria-label="More artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>} />
   </>;
 
-  return <PageChrome compactActions={compactActions} label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
+  return <PageChrome compactContext={<Show when={props.archived}>{at =>
+    <span class="shrink-0 font-mono text-micro text-muted" aria-label={archivedBanner(at().version, at().head)}>v{at().version}</span>}</Show>} compactActions={compactActions} label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
     panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star />;
 }

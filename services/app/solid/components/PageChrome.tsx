@@ -60,6 +60,8 @@ interface PageChromeProps {
   actions?: JSX.Element;
   /** Below the wide navigation breakpoint, retain secondary actions in the page's compact surface. */
   compactActions?: () => JSX.Element;
+  /** Persistent compact title context, such as the archived revision being read. */
+  compactContext?: JSX.Element;
   controls?: (close: () => void) => JSX.Element;
   byline?: JSX.Element;
   panel?: Accessor<Panel>;
@@ -110,7 +112,7 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   return <>
     <PageBar logo={<img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : crumbs().at(-1)?.label}
-      compactNavigation={Boolean(props.compactActions)} navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
+      compactContext={props.compactContext} compactNavigation={Boolean(props.compactActions)} navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
         <Show when={props.byline} fallback={<>
           <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
           <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span aria-current="page" class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>

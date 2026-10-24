@@ -77,3 +77,12 @@ it('keeps reading actions while excluding unavailable owner and install capabili
     expect(within(menu).queryByRole('menuitem', { name })).toBeNull();
   }
 });
+
+it.each([390, 700])('shows historical version context beside the compact title before opening actions at %ipx', (width) => {
+  vi.stubGlobal('innerWidth', width);
+  mount({ archived: { version: 1, head: 2 } });
+  const version = screen.getByLabelText('Version 1 of 2 · read-only');
+  expect(version).toHaveTextContent('v1');
+  expect(version.parentElement).toHaveTextContent('A readable artifact title');
+  expect(screen.queryByRole('menu')).toBeNull();
+});
