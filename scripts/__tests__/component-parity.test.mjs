@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionCases } from '../lib/component-parity.mjs';
+import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionCases, componentBrowserFixtures, contrastRatio } from '../lib/component-parity.mjs';
 const oracle = JSON.parse(readFileSync(new URL('../../services/app/lib/islands/__tests__/fixtures/react-oracle.json', import.meta.url),'utf8'));
 const snapshot = html => semanticSnapshot(new JSDOM(html).window.document);
 describe('component semantic parity', () => {
@@ -32,5 +32,25 @@ describe('component semantic parity', () => {
   });
   it('resolves authored panel labels without requiring generated IDs to match', () => {
     expect(snapshot('<button id="x" role="tab" aria-selected="true">One</button><section role="tabpanel" aria-labelledby="x" hidden></section>')[1]).toMatchObject({name:'One',hidden:true});
+  });
+});
+
+
+describe('browser fixture acceptance contracts', () => {
+  it('covers the retained native families with named HTML controls', () => {
+    expect(componentBrowserFixtures.map(fixture=>fixture.family)).toEqual(['button','switch','progress','collapsible','dialog','slider','text-controls']);
+    expect(new Set(componentBrowserFixtures.map(fixture=>fixture.family)).size).toBe(7);
+    for (const fixture of componentBrowserFixtures) {
+      const doc = new JSDOM(fixture.html).window.document;
+      expect(doc.querySelector(fixture.subject)).not.toBeNull();
+      expect(fixture.evidence).toBe('candidate-browser-contract');
+    }
+  });
+  it('measures readable contrast rather than mere color inequality', () => {
+    expect(contrastRatio([0,0,0],[255,255,255])).toBe(21);
+    expect(contrastRatio([255,255,255],[0,0,0])).toBe(21);
+    expect(contrastRatio([120,120,120],[120,120,120])).toBe(1);
+    expect(contrastRatio([255,255,255],[37,99,235])).toBeGreaterThan(4.5);
+    expect(contrastRatio([170,170,170],[255,255,255])).toBeLessThan(4.5);
   });
 });
