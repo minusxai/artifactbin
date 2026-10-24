@@ -77,13 +77,24 @@ describe('actual fixture publication payloads',()=>{
     await publishBaselineFixtures({implementation:'html',repo,serverOrigin:'https://example.test',themeCss:()=>css,publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
-      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^components\/[a-z0-9-]+\.js$/);expect(Buffer.from(file.base64,'base64')).toEqual(await readFile(path.join(repo,'services/app/skills/artifactbin',file.path)));}
+      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64')).toEqual(await readFile(path.join(repo,'services/app/skills/artifactbin',file.path)));}
+      expect(body.publicationBundle.files.some(file=>file.path==='design-systems/almanac.css')).toBe(true);expect(body.html).toContain('href="./design-systems/almanac.css"');
       bodies.push(body);return {id:'Page123'};
     }});
     expect(keys.size).toBe(browserParityFixtures.length*parityThemes.length);
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
+  it('stages real font bytes beside linked skill CSS and lets the normal helper discover them',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs'),{planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
+    const repo=path.resolve(import.meta.dirname,'../..'),fixtureRepo=await mkdtemp(path.join(tmpdir(),'font-component-publisher-'));try{
+      const target=path.join(fixtureRepo,'services/app/skills/artifactbin');await mkdir(path.join(target,'components'),{recursive:true});await mkdir(path.join(target,'fonts'));
+      const modules=path.join(repo,'services/app/skills/artifactbin/components');for(const name of await readdir(modules))if(name.endsWith('.js'))await copyFile(path.join(modules,name),path.join(target,'components',name));
+      const manifest=JSON.parse(await readFile(path.join(repo,'services/app/lib/data/story/story-font-manifest.json'),'utf8')),face=manifest.systems['DM Sans'].find(face=>face.style==='normal'),name=path.basename(face.url),bytes=await readFile(path.join(repo,'services/app/public',face.url));await writeFile(path.join(target,'fonts',name),bytes);
+      let verified=false;
+      await expect(publishBaselineFixtures({implementation:'html',repo:fixtureRepo,serverOrigin:'https://example.test',themeCss:()=>`@font-face{font-family:"DM Sans";font-style:${face.style};font-weight:${face.weight};src:url("../fonts/${name}") format("woff2");unicode-range:${face.unicodeRange}}`,publish:async body=>{const plan=planPublicationBundle(body.html,body.publicationBundle),font=plan.dependencies.find(file=>file.path==='fonts/'+name);expect(Buffer.from(font.bytes)).toEqual(bytes);expect(body.html).not.toContain('fonts.gstatic');verified=true;throw Error('font graph verified');}})).rejects.toThrow('font graph verified');expect(verified).toBe(true);
+    }finally{await rm(fixtureRepo,{recursive:true,force:true});}
+  });
   it('publishes original JSX in an isolated old tree with no candidate helper or packages',async()=>{
     const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
       const fixtureDir=path.join(root,'scripts/fixtures/component-baseline');await mkdir(fixtureDir,{recursive:true});

@@ -16,9 +16,11 @@ export async function publishBaselineFixtures({implementation,publish,repo,theme
     // Intentional engine boundary: pinned original JSX checkouts do not contain
     // the candidate HTML helper and must publish without importing its source.
     ({prepareBundle}=await import('../../../services/app/skills/artifactbin/scripts/publication-bundle.mjs'));
-    staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));await mkdir(path.join(staging,'components'));
+    staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));await mkdir(path.join(staging,'components'));await mkdir(path.join(staging,'design-systems'));await mkdir(path.join(staging,'fonts'));
     const installed=path.join(repo,'services/app/skills/artifactbin/components');
     for(const name of await readdir(installed))if(name.endsWith('.js'))await copyFile(path.join(installed,name),path.join(staging,'components',name));
+    const fonts=path.join(repo,'services/app/skills/artifactbin/fonts');
+    for(const name of await readdir(fonts).catch(error=>{if(error.code==='ENOENT')return [];throw error;}))if(name.endsWith('.woff2'))await copyFile(path.join(fonts,name),path.join(staging,'fonts',name));
   }
   for(const fixture of browserParityFixtures)for(const theme of parityThemes){
     const started=performance.now();let body,request;
@@ -32,7 +34,9 @@ export async function publishBaselineFixtures({implementation,publish,repo,theme
     }else if(implementation==='html'){
       if(typeof themeCss!=='function')throw Error('Candidate must supply the same actual almanac theme CSS as the original reader');
       const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
-      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${await themeCss(theme)}\nbody{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${source}</script></body></html>`;
+      await writeFile(path.join(staging,'design-systems/almanac.css'),await themeCss(theme));
+      const code=source.replace(/<\/script/gi,'<\\/script');
+      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);
       const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');
