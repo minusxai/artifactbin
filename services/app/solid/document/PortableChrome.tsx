@@ -24,7 +24,7 @@ const NOTICE = {
   connected: 'Remote access is connected. Save HTML keeps a local copy.',
   'signin-required': 'Sign in to connect, or stay offline.',
   'permission-required': 'Approve access to connect, or stay offline.',
-  blocked: 'Connection was blocked. You can still save your HTML.',
+  blocked: 'Connection was blocked. Retry the connection or open the original. Your HTML stays here.',
   stale: 'The original has changed. Your local file is preserved.',
   unavailable: 'The original is unavailable. You can still save your HTML.',
   'unknown-outcome': 'The last remote action was not confirmed. Check the original before trying again.',
@@ -71,6 +71,7 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
       { separator: true },
       { label: 'Light mode', text: 'Light', checked: mode() === 'light', onSelect: () => props.onMode?.('light') },
       { label: 'Dark mode', text: 'Dark', checked: mode() === 'dark', onSelect: () => props.onMode?.('dark') }];
+    if (kind() === 'linked' && identity() && props.current.state !== 'connected' && props.current.state !== 'connecting') entries.push({ label: 'Retry connection', text: 'Retry connection', onSelect: props.onConnect });
     if (kind() === 'linked' && identity()) entries.push({ label: 'Open original', text: 'Open original', onSelect: props.onOpenHosted });
     if (props.current.state === 'connected') entries.push({ label: 'Disconnect', text: 'Disconnect', onSelect: props.onDisconnect });
     else if (props.current.state !== 'offline') entries.push({ label: 'Stay offline', text: 'Stay offline', onSelect: props.onStayOffline });

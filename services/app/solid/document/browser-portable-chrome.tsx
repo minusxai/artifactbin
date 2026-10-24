@@ -23,6 +23,7 @@ export function mountPortableChrome(options: PortableChromeOptions): PortableChr
   };
   const unmount = render(() => <PortableChrome {...options} current={current()} onMode={pickMode} />, boundary.content);
   return {
+    setVisible(visible) { if (disposed) return; if (visible) boundary.show(); else boundary.hide(); },
     update(next) {
       if (disposed) return;
       if (next.mode) options.win.document.documentElement.toggleAttribute('data-af-dark', next.mode === 'dark');

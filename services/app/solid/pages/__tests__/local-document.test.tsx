@@ -87,3 +87,6 @@ it('offers sign-in to a connected signed-out public guest',async()=>{
  mount();ready();fireEvent.click(await screen.findByRole('button',{name:'Sign in'}));
  expect(broker.signIn).toHaveBeenCalledOnce();expect(broker.authorize).not.toHaveBeenCalled();
 });
+it('opens trusted recovery after idle blocking without implicitly approving an account',async()=>{
+ account.signedIn=true;mount();ready();fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();captured.options!.onState('blocked');fireEvent.click(await screen.findByRole('button',{name:'Retry'}));expect(broker.retry).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'Open hosted'})).toBeTruthy();expect(broker.authorize).not.toHaveBeenCalled();expect(broker.signIn).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'Use my account'})).toBeNull();
+});

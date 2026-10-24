@@ -158,3 +158,12 @@ it('keeps the disk change visible when local dataset edits conflict too', () => 
   expect(ui.getByRole('status')).toHaveTextContent('File changed on disk. Local dataset edits conflict with this file; review them before reloading.');
   expect(ui.getByRole('button', { name: 'Reload file' })).toBeEnabled();
 });
+
+it('actually hides the inner top-layer overlay and restores the same viewer choices',()=>{
+ const show=vi.fn(),hide=vi.fn();Object.defineProperty(HTMLElement.prototype,'showPopover',{configurable:true,value:show});Object.defineProperty(HTMLElement.prototype,'hidePopover',{configurable:true,value:hide});
+ try{const {chrome,root,options}=mount();const inner=root.querySelector<HTMLElement>('[data-trusted-ui-root]')!;expect(show).toHaveBeenCalled();chrome.setVisible(false);expect(hide).toHaveBeenCalled();expect(inner.style.getPropertyValue('display')).toBe('none');expect(inner.style.getPropertyPriority('display')).toBe('important');chrome.setVisible(true);expect(show).toHaveBeenCalledTimes(2);expect(inner.style.getPropertyValue('display')).toBe('');fireEvent.click(root.querySelector<HTMLButtonElement>('button[aria-label="Save HTML"]')!);expect(options.onSave).toHaveBeenCalledOnce();}
+ finally{delete (HTMLElement.prototype as Partial<HTMLElement>).showPopover;delete (HTMLElement.prototype as Partial<HTMLElement>).hidePopover;}
+});
+it('offers explicit retry in blocked fallback actions without pretending to own account controls',()=>{
+ const {chrome,ui,options}=mount();chrome.update({state:'blocked'});fireEvent.click(ui.getByRole('button',{name:'Local file actions'}));fireEvent.click(ui.getByRole('menuitem',{name:'Retry connection'}));expect(options.onConnect).toHaveBeenCalledOnce();expect(ui.queryByRole('menuitem',{name:'Use my account'})).toBeNull();expect(options.onPublish).not.toHaveBeenCalled();
+});

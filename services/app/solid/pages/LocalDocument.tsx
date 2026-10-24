@@ -62,7 +62,7 @@ export function LocalDocumentPage(){
   onCleanup(()=>{runtimeRef.current?.dispose();runtimeRef.current=null;broker?.dispose();});
  });
  createEffect(on([nonce,pick],([signed,mode])=>{if(signed&&mode)runtimeRef.current?.send({type:STORY_READER_MODE_MESSAGE,mode});}));
- createEffect(()=>{if(state()==='permission-required'||state()==='signin-required')setPanel('controls');});
+ createEffect(()=>{if(state()==='permission-required'||state()==='signin-required'||state()==='blocked')setPanel('controls');});
  createEffect(()=>{broker?.resize(panel()||rail()?window.innerHeight:76);});
  const disconnect=()=>{broker?.disconnect();setState('offline');};
  return <>

@@ -41,6 +41,8 @@ export interface PortableChromeOptions {
   onOpenHosted: () => void;
 }
 export interface PortableChromeHandle {
+  /** Hide the actual overlay, including top-layer paint and interaction; retain viewer choices. */
+  setVisible(visible: boolean): void;
   update(next: PortableChromeUpdate): void;
   dispose(): void;
 }
