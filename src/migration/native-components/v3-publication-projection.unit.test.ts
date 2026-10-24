@@ -794,3 +794,27 @@ test("preflight defaults to complete history and rejects unknown scope before ta
  assert.throws(()=>preflightNativeV3Publication(f.input),/native_v3_revision_scope/);
  assert.equal(f.events.length,0);
 });
+
+test("catalog source survives publication host preparation and is fenced by program provenance", () => {
+  const {input,host}=fixture();
+  for(const receipt of input.assemblies){
+    const program=receipt.programs[0]!;
+    if(program.kind!=="query")throw Error("query fixture");
+    program.program.queries[0]!.source="MappedCatalog";
+    program.programSha256=nativeDigest(program.program);
+    const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);
+  }
+  let prepared=0;
+  projectNativeV3Publication(input,{...host,prepareQuery(page,receipt){
+    assert.equal(receipt.program.queries[0]!.source,"MappedCatalog");
+    assert.equal(receipt.program.queries[0]!.sql,"SELECT 1 AS value");
+    assert.deepEqual(receipt.program.queries[0]!.dependencies,[]);
+    prepared++;return host.prepareQuery(page,receipt);
+  }});
+  assert.equal(prepared,2);
+  const receipt=input.assemblies[0]!,program=receipt.programs[0]!;
+  if(program.kind!=="query")throw Error("query fixture");
+  program.program.queries[0]!.source="ChangedCatalog";
+  const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);
+  assert.throws(()=>projectNativeV3Publication(input,host),/program_provenance/);
+});

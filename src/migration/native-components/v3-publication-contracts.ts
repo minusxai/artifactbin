@@ -25,6 +25,8 @@ export interface NativeV3QueryProgram {
   queries: readonly {
     name: string;
     sql: string;
+    /** Explicit mapped dataset catalog; omitted queries use the local engine. */
+    source?: string;
     dependencies: readonly string[];
   }[];
   imports: readonly { alias: string; binding: string; table: string }[];
