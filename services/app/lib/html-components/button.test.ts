@@ -6,6 +6,11 @@ const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-button type="submit" variant="ghost"><span id="kept">Save</span></af-button>';
 const preUpgrade = preUpgradeHost.firstElementChild as AfButton;
 Object.defineProperty(preUpgrade, 'disabled', { value: true, writable: true, configurable: true });
+Object.defineProperty(preUpgrade, 'busy', { value: true, writable: true, configurable: true });
+Object.defineProperty(preUpgrade, 'type', { value: 'reset', writable: true, configurable: true });
+Object.defineProperty(preUpgrade, 'variant', { value: 'secondary', writable: true, configurable: true });
+Object.defineProperty(preUpgrade, 'size', { value: 'lg', writable: true, configurable: true });
+Object.defineProperty(preUpgrade, 'label', { value: 'Saving', writable: true, configurable: true });
 registerButton();
 afterEach(() => document.body.replaceChildren());
 
@@ -39,6 +44,14 @@ describe('native af-button', () => {
       host.remove();
     }
     expect(getComputedStyle(fixture().button).display).toBe('inline-flex');
+  });
+
+  it('keeps the host measurable and preserves authored classes and layout styles', () => {
+    const { host, button } = fixture('class="author-layout" style="margin: 4px"');
+    expect(getComputedStyle(host).display).toBe('inline-flex');
+    expect(host.classList.contains('author-layout')).toBe(true);
+    expect(host.style.margin).toBe('4px');
+    expect(button.parentElement).toBe(host);
   });
 
   it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {
@@ -81,7 +94,14 @@ describe('native af-button', () => {
     const input = button.querySelector('input')!;
     input.dispatchEvent(new MouseEvent('click', { bubbles: true })); expect(clicks).toBe(1);
     host.remove(); document.body.append(preUpgradeHost);
-    expect(preUpgrade.disabled).toBe(true); expect(preUpgrade.querySelector('button')?.type).toBe('submit');
+    expect(preUpgrade.disabled).toBe(true); expect(preUpgrade.busy).toBe(true);
+    expect(preUpgrade.type).toBe('reset'); expect(preUpgrade.variant).toBe('secondary');
+    expect(preUpgrade.size).toBe('lg'); expect(preUpgrade.label).toBe('Saving');
+    expect(preUpgrade.querySelector('button')?.type).toBe('reset');
+    expect(preUpgrade.querySelector('button')?.disabled).toBe(true);
+    expect(preUpgrade.querySelector('button')?.dataset.variant).toBe('secondary');
+    expect(preUpgrade.querySelector('button')?.dataset.size).toBe('lg');
+    expect(preUpgrade.querySelector('button')?.getAttribute('aria-label')).toBe('Saving');
     expect(preUpgrade.querySelector('#kept')?.textContent).toBe('Save');
   });
 

@@ -29,8 +29,13 @@ export class AfButton extends HTMLElement implements ButtonContract {
   set label(value: string | undefined) { if (value === undefined) this.removeAttribute('label'); else this.setAttribute('label', value); }
 
   connectedCallback(): void {
-    if (Object.prototype.hasOwnProperty.call(this, 'disabled')) {
-      const disabled = this.disabled; delete (this as {disabled?: boolean}).disabled; this.disabled = disabled;
+    const properties = this as unknown as Record<string, unknown>;
+    for (const property of ['type', 'disabled', 'busy', 'variant', 'size', 'label'] as const) {
+      if (Object.prototype.hasOwnProperty.call(this, property)) {
+        const value = properties[property];
+        delete properties[property];
+        properties[property] = value;
+      }
     }
     if (!this.nativeButton) {
       const button = this.ownerDocument.createElement('button');
@@ -78,7 +83,7 @@ function isSize(value: string | null): value is ButtonSize {
 
 /** Semantic-token styling for the recipes supported by the author contract. */
 const buttonStyles = `
-af-button{display:contents}
+af-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
 af-button>button{box-sizing:border-box;display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;gap:.5rem;border:1px solid transparent;border-radius:var(--radius-md,.375rem);font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;white-space:nowrap;cursor:pointer;transition:all .15s;outline:none;color:var(--primary-foreground,#fff);background:var(--primary,#171717)}
 af-button>button:focus-visible{border-color:var(--ring,#737373);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring,#737373) 50%,transparent)}
 af-button>button:disabled{pointer-events:none;opacity:.5;cursor:default}
@@ -101,7 +106,7 @@ af-button>button[data-size=icon-xs]{width:1.5rem;height:1.5rem;padding:0;border-
 af-button>button[data-size=icon-sm]{width:2rem;height:2rem;padding:0}
 af-button>button[data-size=icon-lg]{width:2.5rem;height:2.5rem;padding:0}
 af-button>button>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
-`;
+ `;
 
 export function registerButton(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
   if (!document.querySelector('style[data-af-button-styles]')) {
