@@ -240,7 +240,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         const request=context?relayedFileUpload(id,options.editId(),context.readOnly,payload):null;
         if(!request||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
         pendingUploads++;
-        void (async()=>{try{const response=await appFetch(request.path,request.init);post({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{post({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;}})();return;
+        const uploadKey=key;const reply=(answer:FrameBridgeParentPayload)=>{if(key===uploadKey)post(answer);};
+        void (async()=>{try{const response=await appFetch(request.path,request.init);reply({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;}})();return;
       }
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;
