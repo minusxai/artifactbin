@@ -46,3 +46,12 @@ it('serves every actual immutable runtime asset after relocating the server bund
  for(const [resource,source] of [['/af/v1/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]){const response=await fetch(new URL(resource,preview.url));expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);}
 
 });
+
+it('compiles the installed parser from deployed package cwd after actual server bundling relocates it',async()=>{
+ const {createRequire}=await import('node:module');const directory=await mkdtemp(path.join(tmpdir(),'preview-parser-server-bundle-'));cleanup.push(()=>rm(directory,{recursive:true,force:true}));
+ const outfile=path.join(directory,'server.mjs'),engine=createRequire(import.meta.url).resolve('esbuild');
+ await build({entryPoints:[path.resolve('lib/skills/preview-assets.server.ts')],outfile,bundle:true,platform:'node',format:'esm',target:'node22',plugins:[{name:'external-installed-build-engine',setup(builder){builder.onResolve({filter:/^esbuild$/},()=>({path:engine,external:true}));}}]});
+ const relocated=await import(pathToFileURL(outfile).href),source=await readFile(path.resolve('skills/artifactbin/scripts/preview-html.mjs'),'utf8');
+ const parser=await relocated.buildPreviewParser(source);await writeFile(path.join(directory,'parser.mjs'),parser);const installed=await import(pathToFileURL(path.join(directory,'parser.mjs')).href);
+ const packed=await installed.packPreviewExport({html:'<script type="module" src="./main.js"></script>',pathname:'/index.html',load:async()=>({contentType:'text/javascript',bytes:Buffer.from('export const value=42;')})});expect(packed).toContain('data:text/javascript;base64,');
+});

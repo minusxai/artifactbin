@@ -19,7 +19,7 @@ export function prebuiltHtmlCore(root,compile=()=>compileCore(root)){
 function compilePreviewAssets(root){
  const entry=pathToFileURL(path.resolve(root,'services/app/lib/skills/preview-assets.server.ts')).href;
  const parserFile=path.resolve(root,'services/app/skills/artifactbin/scripts/preview-html.mjs');
- return JSON.parse(execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`import {readFileSync} from 'node:fs';const {buildPreviewParser,buildPreviewDatasets}=await import(${JSON.stringify(entry)});const parserSource=readFileSync(${JSON.stringify(parserFile)},'utf8');process.stdout.write(JSON.stringify({parserSource,parser:await buildPreviewParser(parserSource),datasets:await buildPreviewDatasets()}));`],{cwd:root,encoding:'utf8',maxBuffer:16*1024*1024}));
+ return JSON.parse(execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`import {readFileSync} from 'node:fs';const {buildPreviewParser,buildPreviewDatasets}=await import(${JSON.stringify(entry)});const parserSource=readFileSync(${JSON.stringify(parserFile)},'utf8');process.stdout.write(JSON.stringify({parserSource,parser:await buildPreviewParser(parserSource),datasets:await buildPreviewDatasets()}));`],{cwd:path.join(root,'services/app'),encoding:'utf8',maxBuffer:16*1024*1024}));
 }
 /** Prebuild Node-only skill helpers before the production server is relocated. */
 export function prebuiltPreviewAssets(root,compile=()=>compilePreviewAssets(root)){
