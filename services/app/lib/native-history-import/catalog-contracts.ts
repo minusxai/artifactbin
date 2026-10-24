@@ -46,6 +46,7 @@ export interface NativeCatalogDataset {
     visibility: "public" | "unlisted" | "private";
     linkRole: "viewer" | "commenter" | "editor";
     access: "read" | "readwrite";
+    /** External PostgreSQL catalogs require exact null; stored datasets retain policy validation. */
     datasetPolicy: unknown;
     sharingRevision: number;
     policyRevision: number;

@@ -171,10 +171,16 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
       p.externalConnections?.filter(receipt=>receipt.datasetSourceId===dataset.sourceId&&validHash(receipt.sourceSecretSha256)).length!==1
     )
       throw Error("native_catalog_external_connection_projection_required");
-    validateDatasetPolicyForRow(
-      { format: "dataset", meta: current.meta },
-      a.datasetPolicy,
-    );
+    if (record(current.meta.catalog) && current.meta.catalog.kind === "postgres") {
+      // External connections retain their source read/network policy; stored row
+      // governance is inapplicable and must never be silently accepted or dropped.
+      if (a.datasetPolicy !== null) throw Error("native_catalog_external_policy");
+    } else {
+      validateDatasetPolicyForRow(
+        { format: "dataset", meta: current.meta },
+        a.datasetPolicy,
+      );
+    }
   }
 }
 const receipt = (
