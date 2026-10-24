@@ -21,10 +21,11 @@ export async function captureSignedOutUpload({browser,entries,origin,output,impl
    const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});
    const button=frame.locator('button[aria-label="Choose Attachments"]');await button.waitFor();
    // Retained viewer data is asynchronous; wait for its actual settled helper.
-   await frame.getByText(implementation==='jsx'?'Sign in to upload files.':'Or drop files here.',{exact:true}).waitFor();
+   await frame.getByText('Sign in to upload files.',{exact:true}).waitFor();
    Object.assign(proof,await input.evaluate(input=>({inputDisabled:input.disabled,inputHidden:input.hidden})),{buttonDisabled:await button.isDisabled(),text:await frame.locator('body').innerText()});
    await frame.evaluate(()=>document.fonts.ready);
    await element.screenshot({path:path.join(output,`signed-out-${theme}-${width}-initial.png`),animations:'disabled',caret:'hide'});
+   assert.equal(proof.inputDisabled,true,'Anonymous chooser must be disabled');assert.equal(proof.buttonDisabled,true,'Anonymous chooser button must be disabled');
    if(!proof.inputDisabled){
     await input.setInputFiles({name:'anonymous.txt',mimeType:'text/plain',buffer:Buffer.from('anonymous upload must be denied')});
     await frame.getByRole('button',{name:'Retry anonymous.txt',exact:true}).waitFor();
