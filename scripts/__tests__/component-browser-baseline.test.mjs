@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
-import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues } from '../lib/component-browser-baseline.mjs';
+import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -104,7 +104,7 @@ describe('reader screenshot contract',()=>{
   it('captures the configured page viewport rather than cropping the html element',async()=>{
     const directory=await setup();const calls=[];
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:undefined,locator:()=>{throw Error('Element screenshot would clip native top-layer UI');}};
+    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]},locator:()=>{throw Error('Element screenshot would clip native top-layer UI');}};
     const browser={newContext:async options=>({newPage:async()=>({on:()=>{},screenshot:async screenshotOptions=>{calls.push({viewport:options.viewport,...screenshotOptions});return bytes;}}),close:async()=>{}})};
     const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'dialog',states:[{id:'open',actions:[]}]}]});
     expect(calls).toEqual(expect.arrayContaining([{viewport:{width:800,height:600},fullPage:false,animations:'disabled',caret:'hide'},{viewport:{width:390,height:844},fullPage:false,animations:'disabled',caret:'hide'}]));
@@ -145,7 +145,7 @@ describe('browser semantic collection',()=>{
     Object.assign(globalThis,{document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),innerWidth:800});
     try {
       const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-      const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?fn():undefined};
+      const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?fn():{faces:[],used:[],errors:[]}};
       const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
       const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'controls',states:[{id:'initial',actions:[]}]}]});
       expect(captures[0].semantics.controls).toEqual(expect.arrayContaining([expect.objectContaining({role:'checkbox',name:'Accept terms',checked:'true'}),expect.objectContaining({role:'switch',name:'Notifications',checked:'true'}),expect.objectContaining({role:'button',name:'Later',pressed:'true'}),expect.objectContaining({role:'file-input',name:'Attachment'})]));
@@ -158,7 +158,7 @@ describe('bounded independent reader capture',()=>{
     const directory=await setup();let active=0,peak=0,sequence=0;const completed=[];
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);return bytes;}}),close:async()=>{active--;}};}};
-    const mount=async({page})=>{if(page.id===0)await new Promise(resolve=>setTimeout(resolve,20));return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:undefined}};};
+    const mount=async({page})=>{if(page.id===0)await new Promise(resolve=>setTimeout(resolve,20));return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
     const captures=await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount,implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]});
     expect(peak).toBe(2);expect(active).toBe(0);expect(completed[0]).toBe(1);expect(captures.map(capture=>capture.semantics.text)).toEqual(['0','1','2','3']);
   });
@@ -167,5 +167,33 @@ describe('bounded independent reader capture',()=>{
     const browser={newContext:async()=>{const id=started++;return {newPage:async()=>({id,on:()=>{}}),close:async()=>{await new Promise(resolve=>setTimeout(resolve,5));closed++;}};}};
     await expect(captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount:async()=>{throw Error('mount failed');},implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('mount failed');
     expect(started).toBe(2);expect(closed).toBe(started);
+  });
+});
+
+
+describe('used font evidence',()=>{
+  it('accepts variable weight matching while leaving unused italic faces unloaded',async()=>{
+    const dom=new JSDOM('<style>@font-face{font-family:"DM Sans";font-style:normal;font-weight:400;src:url(/fonts/body.woff2)}@font-face{font-family:"DM Sans";font-style:italic;font-weight:400;src:url(/fonts/italic.woff2)}</style><p style="font-family:DM Sans;font-weight:500">Actual text</p>',{url:'http://localhost/reader'});
+    for(const rule of dom.window.document.styleSheets[0].cssRules){const get=rule.style.getPropertyValue.bind(rule.style);rule.style.getPropertyValue=key=>key==='font-weight'?'100 1000':key==='src'?`url(/fonts/${get('font-style')==='italic'?'italic':'body'}.woff2)`:get(key);}
+    const original=globalThis.document;
+    const normal={family:'DM Sans',style:'normal',weight:'100 1000',status:'loaded',unicodeRange:'U+0-10FFFF'};
+    const italic={...normal,style:'italic',status:'unloaded'};
+    const fonts=[normal,italic];fonts.ready=Promise.resolve();fonts.load=async query=>{expect(query).toContain('500');return [normal];};
+    Object.defineProperty(dom.window.document,'fonts',{value:fonts});
+    dom.window.HTMLElement.prototype.getClientRects=()=>[{}];
+    globalThis.document=dom.window.document;
+    try{
+      const evidence=await fontLoadingEvidence();expect(evidence.errors).toEqual([]);
+      expect(evidence.used).toMatchObject([{family:'DM Sans',loaded:true,sources:['http://localhost/fonts/body.woff2']}]);
+      fonts.load=async()=>{throw Error('network unavailable');};
+      expect((await fontLoadingEvidence()).errors[0]).toContain('network unavailable');
+    }finally{globalThis.document=original;dom.window.close();}
+  });
+  it('compares actual used bytes independently of asset URLs and ignores unused resources',()=>{
+    const face={family:'DM Sans',style:'normal',weight:'500',declared:true,sources:['http://localhost/body.woff2']};
+    const evidence={used:[face],resources:[{url:face.sources[0],status:200,sha256:'a'.repeat(64)},{url:'http://localhost/unused.woff2',status:404,sha256:'b'.repeat(64)}]};
+    const proof=fontByteProof(evidence);expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['a'.repeat(64)]);
+    expect(fontByteProof({...evidence,used:[{...face,sources:['http://localhost/missing.woff2']}]}).errors[0]).toContain('no verified response bytes');
+    expect(fontByteProof({used:[{declared:false}],resources:[]}).errors).toEqual([]);
   });
 });

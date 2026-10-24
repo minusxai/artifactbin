@@ -46,4 +46,5 @@ export interface BrowserParityCapture {
   semantics: unknown;
   errors: string[];
   assertionErrors: string[];
+  fontEvidence: { faces: unknown[]; used: unknown[]; resources: unknown[]; errors: string[] };
 }

@@ -28,6 +28,57 @@ function browserState() {
   };
 }
 
+/** Browser-side proof for actually used declared fonts. Unused styles/subsets
+ * remain legitimately unloaded; FontFaceSet.load resolves real matching ranges. */
+export function fontLoadingEvidence() {
+  return (async()=>{
+    const clean=value=>String(value||'').trim().replace(/^['"]|['"]$/g,'');
+    const ruleFaces=[];
+    const rules=(list,base)=>{for(const rule of list||[]){
+      if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
+      else if(rule.cssRules)rules(rule.cssRules,base);
+    }};
+    for(const sheet of document.styleSheets){try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
+    const requested=new Map();
+    const add=(element,text)=>{
+      if(!text.trim()||!element.getClientRects().length)return;
+      const css=document.defaultView.getComputedStyle(element);if(css.visibility==='hidden')return;
+      const family=clean(css.fontFamily.split(',')[0]);const key=[family,css.fontStyle,css.fontWeight].join('|');
+      const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
+    };
+    const walk=document.createTreeWalker(document.body,document.defaultView.NodeFilter.SHOW_TEXT);
+    for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'');
+    for(const input of document.querySelectorAll('input,textarea'))if(input.value)add(input,input.value);
+    const themeFamilies=['--font-body','--font-display','--font-mono'].map(key=>clean(document.defaultView.getComputedStyle(document.documentElement).getPropertyValue(key).split(',')[0])).filter(Boolean);
+    const errors=[],used=[];
+    for(const request of requested.values()){
+      const declared=[...document.fonts].filter(face=>clean(face.family)===request.family);
+      if(!declared.length){if(themeFamilies.includes(request.family))errors.push(`Used theme font ${request.family} has no declared font face`);used.push({...request,declared:false,sources:[]});continue;}
+      try{
+        const loaded=await document.fonts.load(`${request.style} ${request.weight} 16px ${JSON.stringify(request.family)}`,request.text);
+        const sources=[...new Set(loaded.flatMap(face=>ruleFaces.filter(rule=>rule.family===clean(face.family)&&rule.style===face.style&&rule.unicodeRange.replace(/\s/g,'').toUpperCase()===(face.unicodeRange||'U+0-10FFFF').replace(/\s/g,'').toUpperCase()&&(rule.weight===face.weight||rule.weight==='normal'&&face.weight==='400')).flatMap(rule=>rule.sources)))];
+        if(!loaded.length||loaded.some(face=>face.status!=='loaded'))errors.push(`Used declared font ${request.family} ${request.style} ${request.weight} did not load`);
+        if(loaded.length&&!sources.length)errors.push(`Used declared font ${request.family} has no inspectable source URL`);
+        used.push({...request,declared:true,loaded:loaded.length>0&&loaded.every(face=>face.status==='loaded'),sources});
+      }catch(error){errors.push(`Used declared font ${request.family} ${request.style} ${request.weight} failed: ${error.message}`);used.push({...request,declared:true,loaded:false,sources:[]});}
+    }
+    await document.fonts.ready;
+    return {faces:[...document.fonts].map(face=>({family:clean(face.family),style:face.style,weight:face.weight,unicodeRange:face.unicodeRange,status:face.status})),used,errors};
+  })();
+}
+
+/** URL-independent proof: only resources used by matching authored faces count. */
+export function fontByteProof(evidence) {
+  if(!evidence)return {used:[],errors:['Missing font loading evidence']};
+  const errors=[];
+  const used=(evidence.used||[]).filter(face=>face.declared).map(face=>{
+    const hashes=[...new Set((evidence.resources||[]).filter(resource=>face.sources.includes(resource.url)&&resource.status===200&&/^[a-f0-9]{64}$/.test(resource.sha256)).map(resource=>resource.sha256))].sort();
+    if(!hashes.length)errors.push(`Used declared font ${face.family} ${face.style} ${face.weight} has no verified response bytes`);
+    return {family:face.family,style:face.style,weight:face.weight,hashes};
+  }).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return {used,errors};
+}
+
 /** mount({fixture,theme,viewport,state,page}) returns {frame,ready?}; must navigate to
  * a real local reader. Source revisions are supplied independently, never inferred. */
 export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,workerBrowsers=[browser]}) {
@@ -41,7 +92,12 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
     try {
       const page=await context.newPage();
-      const errors=[];page.on('pageerror',error=>errors.push(error.message));
+      const errors=[],fontResources=[],fontPending=[],resourceErrors=[];
+      page.on('pageerror',error=>errors.push(error.message));
+      const local=value=>{const url=new URL(value);return ['data:','blob:'].includes(url.protocol)||['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)||url.hostname.endsWith('.lvh.me');};
+      await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
+      page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
+      page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
       const {frame,ready,afterAction}=await mount({fixture,theme,viewport,state,page});
       const url=new URL(frame.url());
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
@@ -53,12 +109,19 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
         await afterAction?.(action);
       }
       await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const fontEvidence=await frame.evaluate(fontLoadingEvidence);
+      await Promise.all(fontPending);
+      fontEvidence.resources=fontResources;
+      const usedSources=new Set(fontEvidence.used.flatMap(face=>face.sources||[]));
+      fontEvidence.errors.push(...resourceErrors.filter(failure=>usedSources.has(failure.url)).map(failure=>failure.error));
+      fontEvidence.errors.push(...fontByteProof(fontEvidence).errors);
+      await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const semantics=await frame.evaluate(browserState);
       const name=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}.png`;
       // Capture the document viewport itself, excluding platform chrome.
       const screenshot=await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
       await writeFile(path.join(output,name),screenshot);
-      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } finally {await context.close();}
   }
   let next=0,failed=false;
@@ -88,7 +151,7 @@ export async function compareBrowserBaselines({baseline,candidate,baselineDirect
     let changedPixels=null,diff;
     if(sizeEqual){changedPixels=0;diff=Buffer.alloc(left.data.length);for(let i=0;i<left.data.length;i+=4){const changed=[0,1,2,3].some(channel=>left.data[i+channel]!==right.data[i+channel]);if(changed)changedPixels++;diff[i]=changed?255:Math.round(left.data[i]*.25);diff[i+1]=changed?0:Math.round(left.data[i+1]*.25);diff[i+2]=changed?128:Math.round(left.data[i+2]*.25);diff[i+3]=255;}
       await sharp(diff,{raw:{width:left.info.width,height:left.info.height,channels:4}}).png().toFile(path.join(output,`${key(old).replaceAll('/','-')}-diff.png`));}
-    results.push({key:key(old),sizeEqual,changedPixels,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[])]});
+    results.push({key:key(old),sizeEqual,changedPixels,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[])]});
   }
   for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
   await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
@@ -100,7 +163,7 @@ export function candidateCaptureIssues(captures) {
   const issues=[];
   for(const capture of captures) {
     const state=capture.semantics;
-    issues.push(...(capture.assertionErrors||[]));
+    issues.push(...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]));
     if(capture.errors.length)issues.push(`${capture.fixture}: reader page errors`);
     if(state.overflow>1)issues.push(`${capture.fixture}: horizontal overflow`);
     const includes=text=>state.text.includes(text);
