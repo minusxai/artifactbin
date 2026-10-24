@@ -2,22 +2,30 @@ export type AvatarSize = 'sm' | 'default' | 'lg';
 export type AvatarStatus = 'idle' | 'loading' | 'loaded' | 'error';
 export interface AvatarContract { size: AvatarSize; status: AvatarStatus }
 export interface AvatarImageContract { src: string | null; alt: string }
-interface AvatarFallbackContract {}
-interface AvatarBadgeContract {}
-interface AvatarGroupContract {}
-interface AvatarGroupCountContract {}
 
 interface AvatarImageStatusDetail { status: AvatarStatus; generation: number }
+
+function replayPreUpgradeProperties(element: HTMLElement, names: readonly string[]): void {
+  const properties = element as unknown as Record<string, unknown>;
+  for (const name of names) {
+    if (!Object.prototype.hasOwnProperty.call(element, name)) continue;
+    const value = properties[name];
+    delete properties[name];
+    properties[name] = value;
+  }
+}
 
 export class AfAvatar extends HTMLElement implements AvatarContract {
   static observedAttributes = ['size'];
   private currentStatus: AvatarStatus = 'idle';
+  private primaryImage: AfAvatarImage | null = null;
   private observer = new MutationObserver(() => this.syncParts());
   get size(): AvatarSize { const size = this.getAttribute('size'); return size === 'sm' || size === 'lg' ? size : 'default'; }
   set size(value: AvatarSize) { this.setAttribute('size', value); }
   get status(): AvatarStatus { return this.currentStatus; }
 
   connectedCallback(): void {
+    replayPreUpgradeProperties(this, ['size']);
     this.addEventListener('af-avatar-status', this.onStatus as EventListener);
     this.observer.observe(this, { childList: true, subtree: true });
     const image = this.images()[0];
@@ -36,15 +44,25 @@ export class AfAvatar extends HTMLElement implements AvatarContract {
   private images(): AfAvatarImage[] { return [...this.querySelectorAll<AfAvatarImage>('af-avatar-image')].filter(image => image.closest('af-avatar') === this); }
   private fallbacks(): AfAvatarFallback[] { return [...this.querySelectorAll<AfAvatarFallback>('af-avatar-fallback')].filter(part => part.closest('af-avatar') === this); }
   private onStatus = (event: CustomEvent<AvatarImageStatusDetail>): void => {
-    if (event.target !== this.images()[0]) return;
+    const image = this.images()[0] ?? null;
+    if (event.target !== image) return;
+    this.primaryImage = image;
     this.currentStatus = event.detail.status;
     this.syncParts();
   };
   private syncParts(): void {
     if (!this.isConnected) return;
+    const image = this.images()[0] ?? null;
+    if (image !== this.primaryImage) {
+      this.primaryImage = image;
+      const state = image?.dataset.state;
+      this.currentStatus = image
+        ? state === 'loading' || state === 'loaded' || state === 'error' ? state : image.hasAttribute('src') ? 'loading' : 'error'
+        : 'idle';
+    }
     this.dataset.size = this.size;
     this.dataset.state = this.currentStatus;
-    for (const image of this.images()) image.hidden = this.currentStatus !== 'loaded';
+    for (const part of this.images()) part.hidden = this.currentStatus !== 'loaded';
     for (const fallback of this.fallbacks()) fallback.hidden = this.currentStatus === 'loaded';
   }
 }
@@ -53,6 +71,7 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
   static observedAttributes = ['src', 'alt'];
   private nativeImage: HTMLImageElement | undefined;
   private generation = 0;
+  private replayingProperties = false;
   private onLoad: (() => void) | undefined;
   private onError: (() => void) | undefined;
   get src(): string | null { return this.getAttribute('src'); }
@@ -61,12 +80,15 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
   set alt(value: string) { this.setAttribute('alt', value); }
 
   connectedCallback(): void {
+    this.replayingProperties = true;
+    try { replayPreUpgradeProperties(this, ['src', 'alt']); }
+    finally { this.replayingProperties = false; }
     this.ensureSlot();
     this.loadSource(false);
   }
   disconnectedCallback(): void { this.unbind(); this.generation++; }
   attributeChangedCallback(name: string): void {
-    if (!this.isConnected) return;
+    if (!this.isConnected || this.replayingProperties) return;
     if (name === 'src') this.loadSource(true);
     else if (this.nativeImage) this.nativeImage.alt = this.alt;
   }
@@ -111,16 +133,16 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
   }
 }
 
-class AfAvatarFallback extends HTMLElement implements AvatarFallbackContract {
+class AfAvatarFallback extends HTMLElement {
   connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-fallback'); }
 }
-class AfAvatarBadge extends HTMLElement implements AvatarBadgeContract {
+class AfAvatarBadge extends HTMLElement {
   connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-badge'); }
 }
-class AfAvatarGroup extends HTMLElement implements AvatarGroupContract {
+class AfAvatarGroup extends HTMLElement {
   connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-group'); }
 }
-class AfAvatarGroupCount extends HTMLElement implements AvatarGroupCountContract {
+class AfAvatarGroupCount extends HTMLElement {
   connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-group-count'); }
 }
 

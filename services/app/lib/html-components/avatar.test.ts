@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AfAvatar, AfAvatarImage, registerAvatar } from './avatar';
 import type { AvatarStatus } from './avatar';
 
+const preUpgradeHost = document.createElement('div');
+preUpgradeHost.innerHTML = '<af-avatar size="sm"><af-avatar-image></af-avatar-image><af-avatar-fallback>PL</af-avatar-fallback></af-avatar>';
+const preUpgradeAvatar = preUpgradeHost.firstElementChild as AfAvatar;
+const preUpgradeImage = preUpgradeAvatar.querySelector('af-avatar-image') as AfAvatarImage;
+Object.defineProperty(preUpgradeAvatar, 'size', { value: 'lg', writable: true, configurable: true });
+Object.defineProperty(preUpgradeImage, 'src', { value: '/pre-upgrade.png', writable: true, configurable: true });
+Object.defineProperty(preUpgradeImage, 'alt', { value: 'Pre-upgrade portrait', writable: true, configurable: true });
 registerAvatar();
 afterEach(() => document.body.replaceChildren());
 
@@ -26,6 +33,7 @@ describe('native light-DOM avatars', () => {
     const authoredFallback = avatar.querySelector('[data-af-id="fallback"]');
     const img = image.querySelector('img')!;
     expect(state(avatar)).toBe('loading'); expect(fallback.hidden).toBe(false);
+    expect(img).toBeInstanceOf(HTMLImageElement);
     expect(img.getAttribute('src')).toBe('/person.png'); expect(img.alt).toBe('Ada Lovelace');
     naturalSize(img); img.dispatchEvent(new Event('load'));
     expect(state(avatar)).toBe('loaded'); expect(fallback.hidden).toBe(true);
@@ -99,6 +107,42 @@ describe('native light-DOM avatars', () => {
     naturalSize(oldImage); oldImage.dispatchEvent(new Event('load'));
     naturalSize(current); current.dispatchEvent(new Event('load'));
     expect(state(avatar)).toBe('loaded'); expect(changes).toBe(1);
+  });
+
+  it('resets fallback and status when the primary image is removed or replaced', async () => {
+    const { avatar, image, fallback } = fixture();
+    const oldImage = image.querySelector('img')!;
+    naturalSize(oldImage); oldImage.dispatchEvent(new Event('load'));
+    expect(state(avatar)).toBe('loaded'); expect(fallback.hidden).toBe(true);
+    image.remove(); await Promise.resolve(); await Promise.resolve();
+    expect(state(avatar)).toBe('idle'); expect(fallback.hidden).toBe(false);
+    const replacement = document.createElement('af-avatar-image') as AfAvatarImage;
+    replacement.src = '/replacement.png'; replacement.alt = 'Replacement';
+    avatar.insertBefore(replacement, fallback);
+    expect(state(avatar)).toBe('loading'); expect(fallback.hidden).toBe(false);
+    naturalSize(oldImage); oldImage.dispatchEvent(new Event('error'));
+    expect(state(avatar)).toBe('loading');
+    const current = replacement.querySelector('img')!;
+    naturalSize(current); current.dispatchEvent(new Event('load'));
+    expect(state(avatar)).toBe('loaded'); expect(fallback.hidden).toBe(true);
+  });
+
+  it('replays pre-upgrade size, src, and alt properties and isolates nested avatar state', () => {
+    document.body.append(preUpgradeHost);
+    expect(preUpgradeAvatar.size).toBe('lg');
+    expect(preUpgradeAvatar.dataset.size).toBe('lg');
+    expect(preUpgradeImage.src).toBe('/pre-upgrade.png');
+    expect(preUpgradeImage.alt).toBe('Pre-upgrade portrait');
+    expect(preUpgradeImage.querySelector('img')?.alt).toBe('Pre-upgrade portrait');
+
+    const outer = document.createElement('af-avatar') as AfAvatar;
+    outer.innerHTML = '<af-avatar-fallback>Outer</af-avatar-fallback><af-avatar><af-avatar-image src="/inner.png" alt="Inner"></af-avatar-image><af-avatar-fallback>Inner</af-avatar-fallback></af-avatar>';
+    document.body.append(outer);
+    const inner = outer.querySelector('af-avatar') as AfAvatar;
+    expect(state(outer)).toBe('idle'); expect(state(inner)).toBe('loading');
+    const innerImg = inner.querySelector('img')!;
+    naturalSize(innerImg); innerImg.dispatchEvent(new Event('load'));
+    expect(state(inner)).toBe('loaded'); expect(state(outer)).toBe('idle');
   });
 
   it('registers all avatar parts and styles idempotently', () => {
