@@ -74,6 +74,18 @@ it('shows the native-style disclosure cue without bolding the selected option', 
   const selected = option(root, 'Alpha'); const idle = option(root, 'Beta');
   expect(getComputedStyle(selected).fontWeight).toBe(getComputedStyle(idle).fontWeight);
 });
+it('shows a visible selected-option checkmark and moves it with selection', () => {
+  const root = document.createElement('af-select') as AfSelect;
+  root.options = ['Alpha', 'Beta']; root.defaultValue = 'Alpha'; document.body.append(root);
+  trigger(root).click();
+  const marker = (text: string) => option(root, text).querySelector<SVGSVGElement>('[data-selected-indicator]');
+  expect(marker('Alpha')).not.toBeNull();
+  expect(marker('Alpha')?.getAttribute('aria-hidden')).toBe('true');
+  expect(marker('Beta')).toBeNull();
+  option(root, 'Beta').click(); trigger(root).click();
+  expect(marker('Alpha')).toBeNull();
+  expect(marker('Beta')).not.toBeNull();
+});
 it('normalizes malformed options and keeps typed duplicate values separate', () => {
   const root = fixture(); root.setAttribute('options', 'null'); root.options = null as never;
   trigger(root).click(); expect(root.querySelectorAll('[role=option]')).toHaveLength(0);
