@@ -1,3 +1,5 @@
+import {provisionNativeIdentityAuthCompanion} from './auth-companions';
+export {provisionNativeIdentityAuthCompanion} from './auth-companions';
 import type { Queryable } from "@artifactbin/contracts";
 import type {
   NativeIdentityImport,
@@ -101,6 +103,7 @@ export async function writeNativeIdentities(
         ? proof.targets.get(mapping.targetId)!
         : input.plan.createUsers.find((u) => u.sourceId === mapping.sourceId)!;
     const expectedSha = nativeIdentityDigest(storedUser(expected));
+    const authCompanion=mapping.action==='create-preserved'&&expected.kind==='account'&&expected.email?{id:mapping.targetId,email:expected.email,name:expected.name??null,provisionedAt:input.revokedAt}:undefined;
     if (prior) {
       verifyLedger(prior, mapping);
       if (
@@ -109,6 +112,7 @@ export async function writeNativeIdentities(
         nativeIdentityDigest(storedUser(plain(current))) !== expectedSha
       )
         throw Error("native_identity_replay_changed");
+      if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,'verify-existing');
       result.replayed++;
       continue;
     }
@@ -150,6 +154,7 @@ export async function writeNativeIdentities(
         throw Error("native_identity_create_verification_failed");
       result.createdUsers++;
     }
+    if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion);
     await save("user", mapping, expectedSha, {
       sourceUser: storedUser(proof.users.get(mapping.sourceId)!),
     });

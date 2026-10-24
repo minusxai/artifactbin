@@ -77,3 +77,11 @@ export interface NativeIdentityImportResult {
 export interface NativeIdentityImportDb {
   transaction<T>(work: (tx: Queryable) => Promise<T>): Promise<T>;
 }
+
+/** Trusted, reviewed account identity only. Normal OTP must still verify the address. */
+export interface NativeIdentityAuthCompanion {
+ id:string;
+ email:string;
+ name:string|null;
+ provisionedAt:string;
+}

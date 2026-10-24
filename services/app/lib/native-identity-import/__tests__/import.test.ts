@@ -1,4 +1,6 @@
-import { it, expect } from "vitest";
+import { it, expect, beforeAll, beforeEach } from "vitest";
+import {createHumanAuth,type HumanAuth} from "@artifactbin/auth";
+import {syncProfile} from "@/lib/accounts/profiles";
 import { createHash } from "node:crypto";
 import { useAppHarness } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
@@ -9,8 +11,11 @@ import type {
   NativeIdentityToken,
   NativeIdentityPlan,
 } from "../contracts";
-import { importNativeIdentities, writeNativeIdentities } from "../index";
+import { importNativeIdentities, writeNativeIdentities,provisionNativeIdentityAuthCompanion } from "../index";
 useAppHarness();
+let human:HumanAuth,otp='';
+beforeAll(async()=>{const db=await getDb(),raw=db.raw();if(raw.kind!=='pglite')throw Error('pglite required');human=await createHumanAuth({pglite:raw.instance,secret:'synthetic-native-identity-auth'.padEnd(32,'0'),baseURL:'http://localhost:3000',mail:{send:async message=>{otp=message.otp??'';}}});});
+beforeEach(async()=>{const db=await getDb();for(const table of ['session','account','verification','user'])await db.query('DELETE FROM auth."'+table+'"');otp='';});
 function digest(v: unknown): string {
   const canonical = (x: unknown): unknown =>
     Array.isArray(x)
@@ -153,6 +158,7 @@ it("rejects forged approved/source proofs and unrelated source-ID collisions wit
     "INSERT INTO users(id,email,kind)VALUES('source_account','other@example.test','account')",
   );
   await expect(importNativeIdentities(db, fixture())).rejects.toThrow();
+  expect((await db.query('SELECT * FROM auth."user"')).rows).toHaveLength(0);
   expect(
     (await db.query("SELECT * FROM native_identity_imports")).rows,
   ).toHaveLength(0);
@@ -209,6 +215,7 @@ it("rolls back newly created accounts if token collision appears and rejects act
   );
   await expect(importNativeIdentities(db, fixture())).rejects.toThrow();
   expect((await db.query("SELECT * FROM users")).rows).toHaveLength(0);
+  expect((await db.query('SELECT * FROM auth."user"')).rows).toHaveLength(0);
   await db.query("DELETE FROM tokens WHERE id='source_token'");
   await db.transaction((tx) => writeNativeIdentities(tx, fixture()));
   await db.query("UPDATE tokens SET deleted_at=NULL WHERE id='source_token'");
@@ -317,4 +324,36 @@ it("retains parent and merged references when the referenced account sorts later
     parent_user_id: "z_parent",
     merged_into_user_id: "z_parent",
   });
+});
+
+it('keeps the imported account ID through real first OTP login without a second profile or imported credential',async()=>{
+ const db=await getDb(),input=fixture();await importNativeIdentities(db,input);
+ const before=(await db.query('SELECT "emailVerified" FROM auth."user" WHERE id=$1',[sourceUser.id])).rows;
+ expect((await db.query('SELECT * FROM auth.session')).rows).toHaveLength(0);
+ const post=(route:string,body:unknown)=>human.handler(new Request('http://localhost:3000/api/auth'+route,{method:'POST',headers:{origin:'http://localhost:3000','content-type':'application/json'},body:JSON.stringify(body)}));
+ expect((await post('/email-otp/send-verification-otp',{email:sourceUser.email,type:'sign-in'})).status).toBe(200);expect(otp).toBeTruthy();
+ const login=await post('/sign-in/email-otp',{email:sourceUser.email,otp});expect(login.status).toBe(200);
+ const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; '),session=await human.sessions.resolve(new Request('http://localhost:3000',{headers:{cookie}}));
+ expect(session?.userId).toBe(sourceUser.id);expect(before).toEqual([{emailVerified:false}]);
+ await syncProfile({userId:session!.userId,email:sourceUser.email!});
+ expect((await db.query('SELECT id FROM users WHERE email=$1',[sourceUser.email])).rows).toEqual([{id:sourceUser.id}]);
+ expect((await db.query('SELECT id,"emailVerified" FROM auth."user"')).rows).toEqual([{id:sourceUser.id,emailVerified:true}]);
+ expect((await db.query('SELECT * FROM auth.account')).rows).toHaveLength(0);
+});
+
+it('rejects auth ID/email collisions atomically and never restores a deleted companion on replay',async()=>{
+ const db=await getDb(),input=fixture(),account={id:sourceUser.id,email:sourceUser.email!,name:sourceUser.name!,provisionedAt:input.revokedAt};
+ await db.transaction(tx=>provisionNativeIdentityAuthCompanion(tx,{...account,id:'other_identity'}));
+ await expect(importNativeIdentities(db,input)).rejects.toThrow('native_identity_auth_collision');
+ expect((await db.query('SELECT * FROM users')).rows).toHaveLength(0);expect((await db.query('SELECT * FROM native_identity_imports')).rows).toHaveLength(0);
+ await db.query('DELETE FROM auth."user"');
+ await db.transaction(tx=>provisionNativeIdentityAuthCompanion(tx,{...account,email:'different@example.test'}));
+ await expect(importNativeIdentities(db,input)).rejects.toThrow('native_identity_auth_collision');
+ await db.query('DELETE FROM auth."user"');await importNativeIdentities(db,input);
+ await db.query('UPDATE auth."user" SET "emailVerified"=true,name=$1 WHERE id=$2',['Actual updated auth profile',sourceUser.id]);
+ await importNativeIdentities(db,input);
+ expect((await db.query('SELECT "emailVerified",name FROM auth."user"')).rows).toEqual([{emailVerified:true,name:'Actual updated auth profile'}]);
+ await db.query('DELETE FROM auth."user"');
+ await expect(importNativeIdentities(db,input)).rejects.toThrow('native_identity_auth_missing');
+ expect((await db.query('SELECT * FROM auth."user"')).rows).toHaveLength(0);
 });
