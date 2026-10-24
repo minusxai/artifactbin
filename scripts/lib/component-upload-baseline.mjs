@@ -6,6 +6,7 @@ import {baselineLocalOrigin,createBaselineSession,validateBaselineAccount} from 
 import {publishBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
 import {uploadBrowserParityFixtures} from '../fixtures/component-baseline/upload.mjs';
 import {captureBrowserBaseline} from './component-browser-baseline.mjs';
+import {observeUploadRequests} from './component-upload-route.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 /** Real HTTP publication, verified OTP session, actual frame upload port. No injected adapter, synthetic receipt, or credential in page code. */
 export async function runUploadBaseline({base,implementation,browser,sourceRevision,output,connectAgent,signInAccount,account:providedAccount}){
@@ -23,13 +24,8 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  await mkdir(output,{recursive:true});
  let captures,complete=false;try{captures=await captureBrowserBaseline({browser,implementation,sourceRevision,output,fixtures:uploadBrowserParityFixtures,screenshotMode:'document-frame',mount:async({fixture,theme,viewport,page})=>{
   await session.mount(page);const entry=entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);assert.ok(entry);
-  const records=[];let dropped=false;const proof={fixture:fixture.id,theme,viewport:viewport.width,requests:0,statuses:[],requestIds:[],refs:[]};proofs.push(proof);
-  await page.context().route('**/a/*/datasets/*/files',async route=>{
-   const request=route.request();if(request.method()!=='POST'){await route.continue();return;}
-   const response=await route.fetch();const body=await response.body();let receipt;try{receipt=JSON.parse(body.toString());}catch{}
-   records.push({status:response.status(),requestId:request.headers()['idempotency-key'],receipt});proof.requests=records.length;proof.statuses.push(response.status());proof.requestIds.push(request.headers()['idempotency-key']);if(receipt?.ref)proof.refs.push(receipt.ref);
-   if(fixture.uploadScenario==='lost-response-retry'&&!dropped&&response.status()===201){dropped=true;await route.abort('failed');}else await route.fulfill({response});
-  });
+  const proof={fixture:fixture.id,theme,viewport:viewport.width,requests:0,statuses:[],requestIds:[],refs:[]};proofs.push(proof);
+  const records=await observeUploadRequests({page,origin,proof,discardFirstSuccess:fixture.uploadScenario==='lost-response-retry'});
   await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'networkidle'});
   const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);
   return {frame,screenshot:()=>element.screenshot({animations:'disabled',caret:'hide'}),ready:async()=>{
