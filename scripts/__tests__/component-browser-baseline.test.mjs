@@ -277,6 +277,65 @@ describe('used font evidence',()=>{
     expect(fontByteProof({...evidence,used:[{...face,sources:['http://localhost/missing.woff2']}]}).errors[0]).toContain('no verified response bytes');
     expect(fontByteProof({used:[{declared:false}],resources:[]}).errors).toEqual([]);
   });
+  it('joins a used shadow-root face to the exact reader asset response URL',async()=>{
+    const face={family:'DM Sans',style:'normal',weight:'100 1000',status:'loaded',unicodeRange:'U+0-10FFFF'};
+    const requestUrl='http://localhost/a/reader/assets?dependency=06Cd7K&revision=1';
+    const values={'font-family':'DM Sans','font-style':'normal','font-weight':'100 1000','unicode-range':'U+0-10FFFF','src':'url("/a/reader/assets?dependency=06Cd7K&revision=1")'};
+    const declaration={getPropertyValue:name=>values[name]||''};
+    const shadowSheet={href:null,cssRules:[{type:5,style:declaration}]};
+    const shadowStyle={sheet:shadowSheet};
+    const shadowParagraph={getClientRects:()=>[{}],tagName:'P'};
+    const shadowRoot={querySelectorAll:selector=>selector==='style, link[rel~="stylesheet"]'?[shadowStyle]:selector==='*'?[shadowParagraph]:[],styleSheets:[]};
+    const host={shadowRoot};
+    const original=globalThis.document;
+    const fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];
+    const text={parentElement:shadowParagraph,textContent:'Actual text'};
+    globalThis.document={baseURI:'http://localhost/a/reader/page',body:{querySelectorAll:selector=>selector==='*'?[host]:[]},documentElement:{},fonts,styleSheets:[],querySelectorAll:selector=>selector==='*'?[host]:[],createTreeWalker:root=>{let read=false;return {nextNode:()=>root===shadowRoot&&!read?(read=true,text):null};},defaultView:{NodeFilter:{SHOW_TEXT:4},getComputedStyle:()=>({fontFamily:'DM Sans',fontStyle:'normal',fontWeight:'500',visibility:'visible',getPropertyValue:()=>''})}};
+    try{
+      const evidence=await fontLoadingEvidence();
+      expect(evidence.errors).toEqual([]);
+      expect(evidence.used).toMatchObject([{family:'DM Sans',weight:'500',loaded:true,sources:[requestUrl]}]);
+      const proof=fontByteProof({...evidence,resources:[{url:requestUrl,status:200,sha256:'a'.repeat(64)}]});
+      expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['a'.repeat(64)]);
+      expect(fontByteProof({...evidence,resources:[{url:'http://localhost/unrelated.woff2',status:200,sha256:'a'.repeat(64)}]}).errors).toContain('Used declared font DM Sans normal 500 has no verified response bytes');
+    }finally{globalThis.document=original;}
+  });
+  it('resolves imported font URLs against the imported stylesheet URL and rejects wrong bytes',async()=>{
+    const face={family:'Pilot Font',style:'normal',weight:'400',status:'loaded',unicodeRange:'U+0-10FFFF'};
+    const values={'font-family':'Pilot Font','font-style':'normal','font-weight':'400','unicode-range':'U+0-10FFFF','src':'url("fonts/pilot.woff2")'};
+    const imported={href:null,cssRules:[{type:5,style:{getPropertyValue:name=>values[name]||''}}]};
+    const originalDocument=globalThis.document;
+    const fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];
+    const css={fontFamily:'Pilot Font',fontStyle:'normal',fontWeight:'400',visibility:'visible',getPropertyValue:()=>''};
+    const text={parentElement:{getClientRects:()=>[{}]},textContent:'Actual font sample'};
+    globalThis.document={baseURI:'http://localhost/reader',body:{},documentElement:{},fonts,styleSheets:[{href:'http://localhost/a/design/main.css',cssRules:[{type:3,href:'../shared/fonts.css',styleSheet:imported}]}],querySelectorAll:()=>[],createTreeWalker:()=>{let read=false;return {nextNode:()=>read?null:(read=true,text)};},defaultView:{NodeFilter:{SHOW_TEXT:4},getComputedStyle:()=>css}};
+    try{
+      const evidence=await fontLoadingEvidence();
+      expect(evidence.used[0].sources).toEqual(['http://localhost/a/shared/fonts/pilot.woff2']);
+      const proof=fontByteProof({...evidence,resources:[{url:evidence.used[0].sources[0],status:200,sha256:'b'.repeat(64)}]});
+      expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['b'.repeat(64)]);
+      expect(proof.used[0].hashes).not.toEqual(['a'.repeat(64)]);
+      const directory=await setup(),source=evidence.used[0].sources[0];
+      const oldCapture=await capture(directory,'jsx','white',{fontEvidence:{used:evidence.used,resources:[{url:source,status:200,sha256:'a'.repeat(64)}]}});
+      const newCapture=await capture(directory,'html','white',{fontEvidence:{used:evidence.used,resources:[{url:source,status:200,sha256:'b'.repeat(64)}]}});
+      const [comparison]=await compareBrowserBaselines({baseline:[oldCapture],candidate:[newCapture],baselineDirectory:directory,candidateDirectory:directory,output:directory});
+      expect(comparison.fontBytesEqual).toBe(false);
+    }finally{globalThis.document=originalDocument;}
+  });
+  it('does not count a declared and already-loaded face as used without rendered text using it',async()=>{
+    const face={family:'Unused Font',style:'normal',weight:'400',status:'loaded',unicodeRange:'U+0-10FFFF'};
+    const original=globalThis.document,fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];
+    const element={getClientRects:()=>[{}],tagName:'P'};
+    const text={parentElement:element,textContent:'Rendered in system Arial'};
+    const css={fontFamily:'Arial, sans-serif',fontStyle:'normal',fontWeight:'400',visibility:'visible',getPropertyValue:()=>''};
+    globalThis.document={baseURI:'http://localhost/reader',body:{},documentElement:{},fonts,styleSheets:[],querySelectorAll:()=>[],createTreeWalker:()=>{let read=false;return {nextNode:()=>read?null:(read=true,text)};},defaultView:{NodeFilter:{SHOW_TEXT:4},getComputedStyle:()=>css}};
+    try{
+      const evidence=await fontLoadingEvidence();
+      expect(evidence.faces).toContainEqual(expect.objectContaining({family:'Unused Font',status:'loaded'}));
+      expect(evidence.used).toMatchObject([{family:'Arial',declared:false,sources:[]}]);
+      expect(fontByteProof({...evidence,resources:[{url:'http://localhost/unused.woff2',status:200,sha256:'c'.repeat(64)}]}).used).toEqual([]);
+    }finally{globalThis.document=original;}
+  });
 });
 
 

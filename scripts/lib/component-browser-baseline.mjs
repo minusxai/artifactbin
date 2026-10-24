@@ -42,10 +42,17 @@ export function fontLoadingEvidence() {
     const ruleFaces=[],seenSheets=new Set();
     const rules=(list,base)=>{for(const rule of list||[]){
       if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
-      else if(rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||base);}}catch{ /* Cross-origin imports cannot prove font response bytes. */ }}
+      else if(rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||(rule.href?new URL(rule.href,base).href:base));}}catch{ /* Cross-origin imports cannot prove font response bytes. */ }}
       else if(rule.cssRules)rules(rule.cssRules,base);
     }};
-    for(const sheet of document.styleSheets){try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
+    const stylesheetRoots=[document],seenRoots=new Set();
+    for(let index=0;index<stylesheetRoots.length;index++){
+      const root=stylesheetRoots[index];if(!root||seenRoots.has(root))continue;seenRoots.add(root);
+      const sheets=[...(root.styleSheets||[]),...(root.adoptedStyleSheets||[])];
+      try{for(const element of root.querySelectorAll?.('style, link[rel~="stylesheet"]')||[])if(element.sheet)sheets.push(element.sheet);}catch{}
+      for(const sheet of sheets){if(seenSheets.has(sheet))continue;seenSheets.add(sheet);try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
+      try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)stylesheetRoots.push(element.shadowRoot);}catch{}
+    }
     const requested=new Map();
     const add=(element,text)=>{
       if(!text.trim()||!element.getClientRects().length)return;
@@ -53,9 +60,14 @@ export function fontLoadingEvidence() {
       const family=clean(css.fontFamily.split(',')[0]);const key=[family,css.fontStyle,css.fontWeight].join('|');
       const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
     };
-    const walk=document.createTreeWalker(document.body,document.defaultView.NodeFilter.SHOW_TEXT);
-    for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'');
-    for(const input of document.querySelectorAll('input,textarea'))if(input.value)add(input,input.value);
+    const textRoots=[document.body],seenTextRoots=new Set();
+    for(let index=0;index<textRoots.length;index++){
+      const root=textRoots[index];if(!root||seenTextRoots.has(root))continue;seenTextRoots.add(root);
+      const walk=document.createTreeWalker(root,document.defaultView.NodeFilter.SHOW_TEXT);
+      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'');
+      try{for(const input of root.querySelectorAll?.('input,textarea')||[])if(input.value)add(input,input.value);}catch{}
+      try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)textRoots.push(element.shadowRoot);}catch{}
+    }
     const themeFamilies=['--font-body','--font-display','--font-mono'].map(key=>clean(document.defaultView.getComputedStyle(document.documentElement).getPropertyValue(key).split(',')[0])).filter(Boolean);
     const errors=[],used=[];
     for(const request of requested.values()){
