@@ -1,0 +1,73 @@
+import type { NativeJson, NativeTypedAnalysis } from "./analyze-contracts.ts";
+export interface NativeBindingQuery {
+  name: string;
+  document: string;
+  namespace: string;
+  values: readonly { name: string; type: string }[];
+  tableName: string;
+  responsePath: readonly string[];
+  decode: "registered-page-table-cells-v1";
+}
+/** Supplied by a registered operation owner; author output never contains SQL. */
+export interface NativeBindingMutation {
+  name: string;
+  document: string;
+  namespace: string;
+  values: readonly { name: string; type: string; nullable?: boolean }[];
+  /** Registered operation outcome object; only outcome=committed may reset. */
+  outcomePath: readonly string[];
+  reset: readonly string[];
+}
+export interface NativeBindingIdentity {
+  sourceNode: string;
+  afId: string;
+  sourceStart?: number;
+  sourceEnd?: number;
+  sourceSha256?: string;
+  analysisSha256?: string;
+  proofSha256?: string;
+}
+export type NativeBindingTarget = NativeBindingIdentity &
+  (
+    | { kind: "text" }
+    | {
+        kind: "property";
+        property: "disabled" | "value" | "checked";
+        attribute: string;
+      }
+    | { kind: "condition"; templateId: string }
+    | {
+        kind: "loop";
+        templateId: string;
+        identity: {
+          owner: string;
+          keyBy: string;
+          templateIds: readonly string[];
+          encoding: "archived-instance-v1";
+        };
+      }
+    | { kind: "action" }
+  );
+export interface NativeBindingsInput {
+  analysis: NativeTypedAnalysis;
+  targets: readonly NativeBindingTarget[];
+  queries: readonly NativeBindingQuery[];
+  mutations: readonly NativeBindingMutation[];
+}
+export interface NativeBindingBlocker {
+  sourceNode: string;
+  code: string;
+}
+export type NativeBindingsResult =
+  | {
+      status: "complete";
+      authorJs: string;
+      localDefaults: Readonly<Record<string, NativeJson>>;
+      blockers: readonly [];
+    }
+  | {
+      status: "blocked";
+      authorJs: null;
+      localDefaults: null;
+      blockers: readonly NativeBindingBlocker[];
+    };
