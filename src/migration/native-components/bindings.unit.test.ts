@@ -1478,13 +1478,13 @@ test('person binding follows exact typed row ID and clears stale, missing and er
  const doc=new Doc(),list=new Element('div',{'data-af-id':'loop'});doc.body.append(list);doc.template('items',[new Element('af-user',{'data-af-id':'person'})]);
  const port=client({});const module=await execute(result.authorJs,port,doc);
  const publish=(rows:unknown[])=>port.remotes[0]!.next({data:{registered:{evaluate:{tables:[{name:'rows',error:null,columns:[{name:'id',type:'string'},{name:'owner',type:'user'}],rows:rows.map(row=>({cells:(row as string[]).map(text=>({isNull:false,text}))}))}]}}}});
- publish([['r','usr_one']]);const host=list.children[0]!.children[0]! as any;
- assert.deepEqual(port.remotes[1]!.variables,{ids:['usr_one']});assert.equal(host.loading,true);
+ publish([['r','usr_one']]);await Promise.resolve();const host=list.children[0]!.children[0]! as any;
+ assert.deepEqual(port.remotes[1]!.variables,{ids0:['usr_one']});assert.equal(host.loading,true);
  port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Actual profile',handle:null,image:null}]}}});assert.equal(host.person.name,'Actual profile');
- publish([['r','usr_two']]);assert.equal(port.remotes[1]!.stopped,true);assert.equal(host.person,null);
+ publish([['r','usr_two']]);await Promise.resolve();assert.equal(port.remotes[1]!.stopped,true);assert.equal(host.person,null);
  port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Stale profile',handle:null,image:null}]}}});assert.equal(host.person,null);
  port.remotes[2]!.next({data:{peopleData:{people:[]}}});assert.equal(host.identityState,'missing');assert.equal(host.person,null);
- publish([['r','usr_three']]);port.remotes[3]!.next({errors:[{message:'forbidden'}]});assert.equal(host.error,'Person unavailable');assert.equal(host.person,null);
+ publish([['r','usr_three']]);await Promise.resolve();port.remotes[3]!.next({errors:[{message:'forbidden'}]});assert.equal(host.error,'Person unavailable');assert.equal(host.person,null);
  publish([]);assert.equal(port.remotes[3]!.stopped,true);await module.close();
 });
 
@@ -1495,7 +1495,7 @@ test('person viewer binding waits for authenticated identity and clears cards du
  const result=emitNativeBindings(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status!=='complete')return;
  const doc=new Doc(),host=new Element('af-user',{'data-af-id':'person'}) as any;doc.body.append(host);const port=client({}),running=await execute(result.authorJs,port,doc);
  assert.equal(port.remotes.length,1);assert.equal(host.hidden,true);
- port.remotes[0]!.next({data:{identity:{viewer:{id:'usr_one'}}}});assert.equal(host.hidden,false);assert.deepEqual(port.remotes[1]!.variables,{ids:['usr_one']});
+ port.remotes[0]!.next({data:{identity:{viewer:{id:'usr_one'}}}});await Promise.resolve();assert.equal(host.hidden,false);assert.deepEqual(port.remotes[1]!.variables,{ids0:['usr_one']});
  port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Actual profile',handle:null,image:null}]}}});assert.equal(host.person.name,'Actual profile');
  port.remotes[0]!.next({loading:true});assert.equal(host.person,null);assert.equal(host.hidden,true);assert.equal(port.remotes[1]!.stopped,true);
  port.remotes[0]!.next({data:{identity:{viewer:{id:null}}}});assert.equal(host.person,null);assert.equal(host.hidden,false);await running.close();

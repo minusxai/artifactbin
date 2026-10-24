@@ -7,25 +7,48 @@ export function nativePersonProjection(id:string,people:unknown):{id:string;name
  return {id:card.id,name:card.name,handle:card.handle,image:card.image};
 }
 export const NATIVE_PERSON_RUNTIME=String.raw`function installPerson(client,doc,at,plan,project){
- const states=new WeakMap();
+ const states=new WeakMap(),active=new Set();
+ let subscription=null,signature='',generation=0,queued=false,replay=null;
+ const clear=state=>{state.host.person=null;state.host.loading=false;state.host.error=null;state.host.identityState='unknown';};
+ const schedule=()=>{if(queued)return;queued=true;queueMicrotask(flush);};
+ const fail=()=>{for(const state of active){clear(state);state.host.error='Person unavailable';}};
+ function flush(){
+  queued=false;
+  const ids=[...new Set([...active].map(state=>state.id))].sort(),nextSignature=JSON.stringify(ids);
+  if(nextSignature===signature){replay?.();return;}
+  signature=nextSignature;replay=null;const current=++generation;subscription?.unsubscribe();subscription=null;
+  for(const state of active){clear(state);state.host.loading=true;}
+  if(!ids.length)return;
+  if(ids.length>10000){fail();return;}
+  const batches=[];for(let offset=0;offset<ids.length;offset+=100)batches.push(ids.slice(offset,offset+100));
+  const variables={},definitions=[],fields=[];
+  for(let index=0;index<batches.length;index++){const key='ids'+index;variables[key]=batches[index];definitions.push('$'+key+':[ID!]!');fields.push((batches.length===1?'people':'batch'+index+':people')+'(ids:$'+key+'){id name handle image}');}
+  const query='query NativePeople('+definitions.join(',')+'){'+plan.people.namespace+'{'+fields.join(' ')+'}}';
+  try{subscription=client.watchQuery({query:doc(query),variables,clearOnRefresh:true}).subscribe(result=>{
+   if(current!==generation)return;
+   const apply=()=>{
+   for(const state of active){clear(state);state.host.loading=!!result.loading;}
+   if(result.errors?.length){fail();return;}
+   if(result.loading)return;
+   try{
+    const cards=new Map();
+    for(let index=0;index<batches.length;index++){
+     const answer=at(result.data,[plan.people.namespace,batches.length===1?'people':'batch'+index]);
+     if(!Array.isArray(answer)||answer.length>batches[index].length)throw Error('Invalid person response');
+     for(const value of answer){if(!value||!batches[index].includes(value.id)||cards.has(value.id))throw Error('Invalid person response');cards.set(value.id,project(value.id,[value]));}
+    }
+    for(const state of active){state.host.person=cards.get(state.id)??null;state.host.identityState=state.host.person?'unknown':'missing';}
+   }catch{fail();}
+   };replay=apply;apply();
+  });}catch{fail();}
+ }
  return function renderPerson(host,id,scope){
-  let state=states.get(host);
-  if(state?.id===id&&state.scope===scope)return;
-  state?.stop();
-  host.person=null;host.error=null;host.loading=false;host.identityState='unknown';
-  const next={id,scope,active:true,sub:null,stop:()=>{next.active=false;next.sub?.unsubscribe();scope.cleanups.delete(next.stop);host.person=null;host.loading=false;host.error=null;host.identityState='unknown';}};
-  states.set(host,next);scope.cleanups.add(next.stop);
+  const previous=states.get(host);if(previous?.id===id&&previous.scope===scope)return;
+  previous?.stop();
+  const state={host,id,scope,stop:()=>{active.delete(state);scope.cleanups.delete(state.stop);clear(state);if(!active.size){generation++;subscription?.unsubscribe();subscription=null;signature='';}schedule();}};
+  states.set(host,state);clear(state);scope.cleanups.add(state.stop);
   if(id===null||id===undefined||id==='')return;
   if(typeof id!=='string'||!/^usr_[A-Za-z0-9]+$/.test(id)){host.error='Person unavailable';return;}
-  host.loading=true;
-  const unavailable=()=>{if(!next.active||!scope.active)return;host.person=null;host.loading=false;host.error='Person unavailable';};
-  try{next.sub=client.watchQuery({query:doc('query NativePerson($ids:[ID!]!){'+plan.people.namespace+'{people(ids:$ids){id name handle image}}}'),variables:{ids:[id]},clearOnRefresh:true}).subscribe(result=>{
-   if(!next.active||!scope.active)return;
-   host.person=null;host.error=null;host.loading=!!result.loading;host.identityState='unknown';
-   if(result.errors?.length){unavailable();return;}
-   const cards=at(result.data,[plan.people.namespace,'people']);
-   if(result.loading)return;
-   try{host.person=project(id,cards);host.loading=false;host.identityState=host.person?'unknown':'missing';}catch{unavailable();}
-  });}catch{unavailable();}
+  active.add(state);host.loading=true;schedule();
  };
 }`;

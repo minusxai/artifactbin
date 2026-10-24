@@ -170,7 +170,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(receipts.length===1&&receipts[0]?.analysisSha256===input.analysis.analysisSha256&&receipts[0].destination==='platform-topbar-sign-in'&&receipts[0].behavior==='platform-sign-in-replaces-embedded-auth'&&safe&&node.children.every(child=>child.type==='text')){
     const proof=binding(node),attrs:Record<string,string>={};
     for(const attribute of node.attributes){if(!attribute.value.static)continue;const name=attribute.name==='className'?'class':attribute.name,value=String(attribute.value.json);if(name==='class'&&!digest(input.authoredStyleSha256))require('style',node,'Delegated sign-in classes require the exact CSS closure',name);if(name==='id'){if(usedDom.has(value))block('duplicate-dom-id',node,'Delegated sign-in DOM ID collides',name);usedDom.add(value);}attrs[name]=value;}
-    return proof?`<span data-af-id="${escape(proof.afId)}" data-native-auth-delegation="platform-topbar-sign-in"${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}>${node.children.map(child=>walk(child,ancestors,depth+1)).join('')} — use Sign in in the page menu.</span>`:'';
+    return proof?`<span data-af-id="${escape(proof.afId)}" data-native-auth-delegation="platform-topbar-sign-in"${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}>${node.children.map(child=>walk(child,ancestors,depth+1)).join('')} — use Login in the page menu.</span>`:'';
    }
   }
   const operation: Readonly<Record<string,NativeLowerRequirementKind>>={For:'loop',Question:'chart',Chart:'chart',Column:'table-column',Script:'script',script:'script',Iframe:'iframe',iframe:'iframe',SignIn:'auth'};

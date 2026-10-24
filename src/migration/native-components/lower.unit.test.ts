@@ -138,7 +138,7 @@ test('removed SignIn delegates explicitly to platform menu preserving source lab
  source.authoredStyleSha256=digest;source.emitTextIdentities=true;
  source.identityBindings=[...source.identityBindings,{sourceNode:signIn.type==='element'?signIn.children[0]!.graphKey:'',sourceStart:0,sourceEnd:1,sourceSha256:digest,afId:'stable-label',analysisSha256:digest,proofSha256:proof}];
  source.authDelegations=[{sourceNode:signIn.graphKey,analysisSha256:digest,destination:'platform-topbar-sign-in',behavior:'platform-sign-in-replaces-embedded-auth'}];
- const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));assert.match(result.html!,/data-native-auth-delegation="platform-topbar-sign-in"/);assert.match(result.html!,/data-af-id="stable-label">Sign in to continue/);assert.match(result.html!,/use Sign in in the page menu/);assert.doesNotMatch(result.html!,/<button|<form|AuthSignIn/);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));assert.match(result.html!,/data-native-auth-delegation="platform-topbar-sign-in"/);assert.match(result.html!,/data-af-id="stable-label">Sign in to continue/);assert.match(result.html!,/use Login in the page menu/);assert.doesNotMatch(result.html!,/<button|<form|AuthSignIn/);
  source.authDelegations[0]!.analysisSha256='0'.repeat(64);assert.equal(lowerNativeComponents(source).status,'requires-adapter');
 });
 test('User exact person adapter consumes userId binding without leaking ID as native text',()=>{
