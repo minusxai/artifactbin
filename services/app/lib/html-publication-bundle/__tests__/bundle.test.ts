@@ -36,7 +36,7 @@ it('pins parent versions once and preserves fragments in HTML, CSS and modules',
  expect(pinPublicationAssetUrls(`import "${url}"`,'PAGE12',2,'text/javascript')).toContain('revision=1&version=2#icon');
 });
 it('keeps core-provided author runtime imports in self-contained native pages',()=>{
- const html='<script type="module">import {client,gql} from "@afbin/apollo"; console.log(client,gql);</script>';
+ const html='<script type="module">import {client,gql} from "@afbin/apollo"; import "@afbin/reader"; import "@afbin/chrome"; console.log(client,gql);</script>';
  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
 });
 it('resolves local backend TypeScript into the native atomic backend source contract',()=>{
