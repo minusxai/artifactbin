@@ -7,6 +7,8 @@ export interface NativeMigrationPilotInput {
  /** Standalone private harness module, never page code. Bound in bundleFiles. */
  probe?:{path:string;sha256:string};
  harnessSha256:string;
+ /** Product-owned gate inventory may differ; verify and report its exact bytes per run. */
+ gateManifestSha256:string;
  originalRevision:string;
  candidateRevision:string;
  canonicalSha256:string;

@@ -21,13 +21,16 @@ export async function pilotHarnessFiles(root){
  if(files.some(file=>path.isAbsolute(file)||file.startsWith('../')))throw Error('pilot-harness-path');
  return files;
 }
-export async function pilotHarnessSha256(root){return digest(await Promise.all((await pilotHarnessFiles(root)).map(async file=>[file,sha(await readFile(path.join(root,file)))])));}
+export async function pilotHarnessSha256(root){return digest(await Promise.all((await pilotHarnessFiles(root)).filter(file=>file!=='scripts/gates.manifest.mjs').map(async file=>[file,sha(await readFile(path.join(root,file)))])));}
+export async function pilotGateManifestSha256(root){return sha(await readFile(path.join(root,'scripts/gates.manifest.mjs')));}
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 /** Pure admission boundary, independently testable without a browser or server.
  * @param {import('./native-migration-pilot-contract').NativeMigrationPilotInput} input */
 export function validatePilotInputs(input,canonicalBytes,recoveryBytes){
  if(input.format!=='native-migration-pilot-v1'||!['jsx','html'].includes(input.implementation)||!['light','dark'].includes(input.theme)||!['originalRevision','candidateRevision'].every(k=>/^[a-f0-9]{40}$/.test(input[k])))throw Error('pilot-contract');
  if(!hash(input.harnessSha256))throw Error('pilot-harness-proof');
+ if(!hash(input.gateManifestSha256))throw Error('pilot-gate-manifest-proof');
+ if(input.preparedStore&&!input.probe)throw Error('pilot-imported-probe-required');
  if(sha(canonicalBytes)!==input.canonicalSha256)throw Error('pilot-canonical-digest');
  if(sha(recoveryBytes)!==input.recoverySha256)throw Error('pilot-recovery-digest');
  const canonical=JSON.parse(canonicalBytes.toString()),recovery=JSON.parse(recoveryBytes.toString());
@@ -72,6 +75,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
  const server=localBase(base);
  const input=JSON.parse(await readFile(paths.input,'utf8'));
  if(await pilotHarnessSha256(path.resolve(import.meta.dirname,'../..'))!==input.harnessSha256)throw Error('pilot-harness-digest');
+ if(await pilotGateManifestSha256(path.resolve(import.meta.dirname,'../..'))!==input.gateManifestSha256)throw Error('pilot-gate-manifest-digest');
  const source=validatePilotInputs(input,await readFile(paths.canonical),await readFile(paths.recovery));
  for(const file of input.bundleFiles)if(sha(await readFile(path.join(paths.bundle,file.path)))!==file.sha256)throw Error('pilot-bundle-file-digest');
  await mkdir(paths.output,{recursive:true,mode:0o700});
@@ -103,7 +107,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
   if(input.implementation==='html'){
    const regressionDirectory=path.join(paths.output,'regression');const regression=await capture(true,regressionDirectory);control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});if(!control.detected)issues.push('styling-regression-control-not-detected');
   }
-  const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),skillSha256,control,issues};
+  const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,gateManifestSha256:input.gateManifestSha256,implementation:input.implementation,sourceRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),skillSha256,control,issues};
   await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});
   if(issues.length)throw Error(`native-migration-pilot-incomplete:${issues.length}`);
   return receipt;
@@ -114,10 +118,10 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
 export async function compareNativeMigrationPilot({baselineDirectory,candidateDirectory,output}){
  const read=async(directory,name)=>JSON.parse(await readFile(path.join(directory,name),'utf8'));
  const [baselineProof,candidateProof,baseline,candidate]=await Promise.all([read(baselineDirectory,'migration-pilot.json'),read(candidateDirectory,'migration-pilot.json'),read(baselineDirectory,'jsx-captures.json'),read(candidateDirectory,'html-captures.json')]);
- if(baselineProof.format!=='native-migration-pilot-capture-v1'||candidateProof.format!==baselineProof.format||baselineProof.implementation!=='jsx'||candidateProof.implementation!=='html'||['harnessSha256','sourceSha256','documentSha256','canonicalSha256','bundleManifestSha256','theme','viewports','states'].some(key=>baselineProof[key]===undefined||candidateProof[key]===undefined||digest(baselineProof[key])!==digest(candidateProof[key])))throw Error('pilot-unmatched-evidence');
+ if(baselineProof.format!=='native-migration-pilot-capture-v1'||candidateProof.format!==baselineProof.format||baselineProof.implementation!=='jsx'||candidateProof.implementation!=='html'||!hash(baselineProof.gateManifestSha256)||!hash(candidateProof.gateManifestSha256)||['harnessSha256','sourceSha256','documentSha256','canonicalSha256','bundleManifestSha256','theme','viewports','states'].some(key=>baselineProof[key]===undefined||candidateProof[key]===undefined||digest(baselineProof[key])!==digest(candidateProof[key])))throw Error('pilot-unmatched-evidence');
  const results=await compareBrowserBaselines({baseline,candidate,baselineDirectory,candidateDirectory,output});
  const issues=[...baselineProof.issues,...candidateProof.issues,...pilotComparisonIssues(results,candidateProof.control)];
- const report={format:'native-migration-pilot-comparison-v1',baselineRevision:baselineProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,pairedStates:results.length,passed:issues.length===0,control:candidateProof.control,issues,results};
+ const report={format:'native-migration-pilot-comparison-v1',baselineRevision:baselineProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,baselineGateManifestSha256:baselineProof.gateManifestSha256,candidateGateManifestSha256:candidateProof.gateManifestSha256,pairedStates:results.length,passed:issues.length===0,control:candidateProof.control,issues,results};
  await writeFile(path.join(output,'migration-pilot-comparison.json'),JSON.stringify(report,null,2),{mode:0o600});
  return report;
 }
@@ -144,13 +148,13 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
  try{
  const captures=await capture(false,paths.output),regressionDirectory=path.join(paths.output,'regression'),regression=await capture(true,regressionDirectory),control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});
  const issues=captures.flatMap(c=>[...c.errors,...(c.assertionErrors??[]),...(c.fontEvidence?.errors??[]),...(c.resourceEvidence?.errors??[])]);if(!control.detected)issues.push('styling-regression-control-not-detected');
- const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
+ const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,gateManifestSha256:input.gateManifestSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
  await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});if(issues.length)throw Error('native-imported-pilot-incomplete:'+issues.length);return receipt;
  }finally{await rm(probeScratch,{recursive:true,force:true});}
 }
 
-/** Each actual reader owns its readiness marker; private probes then await shared data. */
+/** Reader shell presence only. The required source-bound imported probe owns async completion. */
 export async function waitForImportedPilotReady(frame,implementation){
  if(!['html','jsx'].includes(implementation))throw Error('pilot-reader-implementation');
- await frame.locator(implementation==='html'?'html[data-af-ready="yes"]':'[data-mx-story-root],[data-mx-inline-story]').first().waitFor();
+ await frame.locator(implementation==='html'?'body':'[data-mx-story-root],[data-mx-inline-story]').first().waitFor();
 }

@@ -1,4 +1,4 @@
-import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,mkdir,rm,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import sharp from 'sharp';
@@ -6,7 +6,7 @@ import {prepareBundle} from '../../services/app/skills/artifactbin/scripts/publi
 import {planPublicationBundle} from '../../services/app/lib/html-publication-bundle/plan';
 import {describe,it,expect} from 'vitest';
 import {createHash} from 'node:crypto';
-import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot,prepareNativePilotSnapshot,pilotHarnessFiles,waitForImportedPilotReady} from '../lib/native-migration-pilot.mjs';
+import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot,prepareNativePilotSnapshot,pilotHarnessFiles,waitForImportedPilotReady,pilotGateManifestSha256} from '../lib/native-migration-pilot.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const canonical=value=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v);
 const digest=value=>sha(canonical(value));
@@ -14,7 +14,7 @@ function input(){
  const row={version:3,document:{kind:'graph',nodes:{}},title:'Synthetic',meta:{theme:'almanac',colorMode:'light'}};
  const page=Buffer.from(JSON.stringify({heads:[row],versions:[]}));
  const recovery=Buffer.from(JSON.stringify({key:{sourceNamespace:'synthetic',sourceId:'source',version:3},documentSha256:digest(row.document),sourceSha256:sha('<p>Actual</p>'),source:'<p>Actual</p>'}));
- const manifest={format:'native-migration-pilot-v1',harnessSha256:'c'.repeat(64),implementation:'jsx',originalRevision:'a'.repeat(40),candidateRevision:'b'.repeat(40),canonicalSha256:sha(page),recoverySha256:sha(recovery),key:{sourceNamespace:'synthetic',sourceId:'source',version:3},rowSha256:digest(row),documentSha256:digest(row.document),sourceSha256:sha('<p>Actual</p>'),bundleFiles:[{path:'index.html',sha256:sha('native')}],theme:'light',viewports:[{width:1280,height:900}],states:[{id:'initial',actions:[]}]};
+ const manifest={format:'native-migration-pilot-v1',harnessSha256:'c'.repeat(64),gateManifestSha256:'d'.repeat(64),implementation:'jsx',originalRevision:'a'.repeat(40),candidateRevision:'b'.repeat(40),canonicalSha256:sha(page),recoverySha256:sha(recovery),key:{sourceNamespace:'synthetic',sourceId:'source',version:3},rowSha256:digest(row),documentSha256:digest(row.document),sourceSha256:sha('<p>Actual</p>'),bundleFiles:[{path:'index.html',sha256:sha('native')}],theme:'light',viewports:[{width:1280,height:900}],states:[{id:'initial',actions:[]}]};
  return {manifest,page,recovery};
 }
 describe('private native migration pilot admission',()=>{
@@ -70,7 +70,7 @@ it('normal publication helper receives the complete declared inline stylesheet c
 
 it('waits on the original reader marker without requiring a fabricated native marker',async()=>{
  const reader=markers=>({locator:selector=>({first:()=>({waitFor:async()=>{if(!selector.split(',').some(marker=>markers.has(marker)))throw Error('reader-not-ready');}})})});
- const original=reader(new Set(['[data-mx-inline-story]'])),native=reader(new Set(['html[data-af-ready="yes"]']));
+ const original=reader(new Set(['[data-mx-inline-story]'])),native=reader(new Set(['body']));
  await waitForImportedPilotReady(original,'jsx');await waitForImportedPilotReady(native,'html');await waitForImportedPilotReady(reader(new Set(['[data-mx-story-root]','[data-mx-inline-story]'])),'jsx');
  await expect(waitForImportedPilotReady(original,'html')).rejects.toThrow('reader-not-ready');
  await expect(waitForImportedPilotReady(native,'jsx')).rejects.toThrow('reader-not-ready');
@@ -83,5 +83,18 @@ it('compares the exact native artifact closure while binding each private probe 
  expect(pilotFixture(left)).toEqual(pilotFixture(right));
  expect(pilotFixture({...right,bundleFiles:[...right.bundleFiles,{path:'changed.css',sha256:'3'.repeat(64)}]})).not.toEqual(pilotFixture(left));
  expect(()=>validatePilotInputs({...left,preparedStore:undefined},a.page,a.recovery)).toThrow('probe-manifest');
+ expect(()=>validatePilotInputs({...left,probe:undefined},a.page,a.recovery)).toThrow('imported-probe-required');
  expect(()=>validatePilotInputs({...left,probe:{...first,sha256:'4'.repeat(64)}},a.page,a.recovery)).toThrow('probe-manifest');
+});
+
+it('requires an independently bound product gate inventory instead of silently ignoring bootstrap differences',()=>{const x=input();expect(()=>validatePilotInputs({...x.manifest,gateManifestSha256:undefined},x.page,x.recovery)).toThrow('gate-manifest');});
+
+it('isolates only the product gate inventory while keeping every shared verifier byte in the camera digest',async()=>{
+ const root=path.resolve(import.meta.dirname,'../..'),copy=await mkdtemp(path.join(tmpdir(),'pilot-shared-harness-'));
+ try{for(const file of await pilotHarnessFiles(root)){await mkdir(path.dirname(path.join(copy,file)),{recursive:true});await writeFile(path.join(copy,file),await readFile(path.join(root,file)));}
+ const shared=await pilotHarnessSha256(copy),manifest=await pilotGateManifestSha256(copy);
+ await writeFile(path.join(copy,'scripts/gates.manifest.mjs'),(await readFile(path.join(copy,'scripts/gates.manifest.mjs'),'utf8'))+'\n// product inventory adaptation\n');
+ expect(await pilotHarnessSha256(copy)).toBe(shared);expect(await pilotGateManifestSha256(copy)).not.toBe(manifest);
+ const verifier='scripts/lib/native-migration-pilot.mjs';await writeFile(path.join(copy,verifier),(await readFile(path.join(copy,verifier),'utf8'))+'\n// changed verifier\n');expect(await pilotHarnessSha256(copy)).not.toBe(shared);
+ }finally{await rm(copy,{recursive:true,force:true});}
 });
