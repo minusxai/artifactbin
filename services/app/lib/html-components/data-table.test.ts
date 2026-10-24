@@ -94,6 +94,48 @@ it("keeps the bar overlay out of table-cell layout", () => {
   expect(getComputedStyle(cell).position).not.toBe("absolute");
   expect(getComputedStyle(bar).position).toBe("absolute");
 });
+it("sorts from the whole header and its accessible button exactly once", () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.data = {
+    columns: [
+      { name: "name", type: "string" },
+      { name: "score", type: "number" },
+    ],
+    rows: [
+      { name: "Ada", score: 92 },
+      { name: "Grace", score: 98 },
+      { name: "Linus", score: 85 },
+    ],
+  };
+  document.body.append(el);
+
+  const button = el.querySelector<HTMLButtonElement>(
+    'button[aria-label="Sort by score"]',
+  )!;
+  const header = button.closest("th")!;
+  const changes: unknown[] = [];
+  el.addEventListener("af-sort-change", (event) => {
+    changes.push((event as CustomEvent).detail);
+  });
+
+  header.click();
+  expect(el.sort).toEqual({ col: "score", dir: "asc" });
+  expect(header.getAttribute("aria-sort")).toBe("ascending");
+  expect(changes).toEqual([{ col: "score", dir: "asc" }]);
+
+  button.focus();
+  button.click();
+  expect(el.sort).toEqual({ col: "score", dir: "desc" });
+  expect(header.getAttribute("aria-sort")).toBe("descending");
+  expect(changes).toEqual([
+    { col: "score", dir: "asc" },
+    { col: "score", dir: "desc" },
+  ]);
+  expect(document.activeElement).toBe(button);
+  expect(button.type).toBe("button");
+  expect(button.getAttribute("aria-label")).toBe("Sort by score");
+  expect(header.scope).toBe("col");
+});
 it("bounds large loaded results and recovers stable identities after scrolling", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
