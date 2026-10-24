@@ -41,12 +41,14 @@ export interface NativeOperationCompilation {
 }
 export type NativeOperationRoute =
   | "registered-sqlite-query"
+  | "registered-catalog-query"
   | "registered-dataset-mutation"
   | "apollo-local-mutation"
   | "native-vega"
   | "historical-readonly";
 export type NativeOperationGuarantee =
   | "typed-null-parameters"
+  | "catalog-source-authority"
   | "full-source-results"
   | "dependency-order"
   | "actor-clock-bindings"
@@ -65,6 +67,15 @@ export interface NativeDatasetOperationBinding {
   /** Bare legacy refs resolve current datasets even from archived page revisions. */
   selection: "live-current" | "pinned-version";
 }
+/** Exact current catalog receipt, kept independent of imports for direct-source SQL. */
+export interface NativeCatalogOperationBinding {
+ sourceRef:string;
+ targetDatasetId:string;
+ version:number;
+ catalogSha256:string;
+ policySha256:string;
+ selection:"live-current";
+}
 /** Produced/verified by a separate trusted registration step; no registration or execution happens here. */
 export interface NativeOperationAdmission {
   kind: "query" | "mutation" | "visualization";
@@ -74,6 +85,7 @@ export interface NativeOperationAdmission {
   route: NativeOperationRoute;
   guarantees: readonly NativeOperationGuarantee[];
   datasets: readonly NativeDatasetOperationBinding[];
+  source?:NativeCatalogOperationBinding;
 }
 export interface NativeOperationAnalysisInput {
   analysis: NativeTypedAnalysis;

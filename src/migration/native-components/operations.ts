@@ -106,6 +106,7 @@ export function analyzeNativeOperations(
     reads: NativeOperationReads,
     route: NativeOperationRoute,
     requiredGuarantees: NativeOperationGuarantee[],
+    catalogSource?:string,
   ): void {
     const operationSha256 = digest({
       key: analysis.key,
@@ -154,6 +155,10 @@ export function analyzeNativeOperations(
       block("operation-registration-mismatch", name, sourceNode);
       return;
     }
+    if(catalogSource!==undefined){
+      const bound=admission.source;
+      if(!bound||bound.sourceRef!==catalogSource||typeof bound.targetDatasetId!=='string'||!bound.targetDatasetId||bound.targetDatasetId.length>512||bound.targetDatasetId.startsWith('ref:')||!Number.isSafeInteger(bound.version)||bound.version<1||!validDigest(bound.catalogSha256)||!validDigest(bound.policySha256)||bound.selection!=='live-current')block('catalog-source-binding-missing',name,sourceNode);
+    }else if(admission.source!==undefined)block('catalog-source-binding-extraneous',name,sourceNode);
     for (const guarantee of requiredGuarantees)
       if (!admission.guarantees.includes(guarantee))
         block(`guarantee-${guarantee}-missing`, name, sourceNode);
@@ -191,21 +196,24 @@ export function analyzeNativeOperations(
   ];
   for (const query of compilation.queries) {
     const node = source("query", query.name);
-    if (query.engine !== "sqlite" || query.source)
-      block("query-engine-adapter-missing", query.name, node);
+    const direct=query.source!==undefined;
+    if(direct?(query.engine!=="postgres"||typeof query.source!=="string"||!query.source||query.source.length>512):query.engine!=="sqlite")block("query-engine-adapter-missing",query.name,node);
+    if(direct&&(query.reads.imports.length||query.reads.queries.length))block("catalog-source-dependencies-unsupported",query.name,node);
     add(
       "query",
       query.name,
       node,
       query,
       query.reads,
-      "registered-sqlite-query",
+      direct?"registered-catalog-query":"registered-sqlite-query",
       [
         ...readGuarantees,
+        ...(direct?["catalog-source-authority" as const]:[]),
         ...(query.reads.builtins.length
           ? ["actor-clock-bindings" as const]
           : []),
       ],
+      direct?query.source:undefined,
     );
   }
   for (const mutation of compilation.mutations) {

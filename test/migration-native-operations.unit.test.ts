@@ -312,3 +312,15 @@ test("analyzer is pure and a registered consumer cannot hide an uncovered upstre
     ),
   );
 });
+
+test('direct PostgreSQL source has an explicit catalog route and exact source admission',()=>{
+ const i=input(),query=i.compilation.queries[0]!;query.engine='postgres';query.source='source_dataset';
+ const initial=analyzeNativeOperations(i);assert.equal(initial.operations[0]!.route,'registered-catalog-query');
+ i.admissions=admit(i);i.admissions[0]!.source={sourceRef:'source_dataset',targetDatasetId:'target_dataset',version:3,catalogSha256:sha,policySha256:sha,selection:'live-current'};
+ assert.equal(analyzeNativeOperations(i).operations[0]!.status,'attested-plan');assert.deepEqual(analyzeNativeOperations(i).blockers,[]);
+ i.admissions[0]!.source.sourceRef='different_source';assert.ok(analyzeNativeOperations(i).blockers.some(b=>b.code==='catalog-source-binding-missing'));
+});
+test('catalog route rejects unknown engines, source dependencies, missing catalog receipt and source namespace confusion',()=>{
+ for(const engine of ['postgres','unknown']){const i=input();i.compilation.queries[0]!.engine=engine;i.compilation.queries[0]!.source='source_dataset';i.admissions=admit(i);const answer=analyzeNativeOperations(i);assert.ok(answer.blockers.some(b=>b.code===(engine==='postgres'?'catalog-source-binding-missing':'query-engine-adapter-missing')));}
+ const i=input(),query=i.compilation.queries[0]!;query.engine='postgres';query.source='source_dataset';query.reads.imports=['absent_namespace'];i.admissions=admit(i);assert.ok(analyzeNativeOperations(i).blockers.some(b=>b.code==='catalog-source-dependencies-unsupported'));
+});

@@ -179,3 +179,12 @@ test('person lookup links the exact retained dataset import and refuses namespac
  source.people.datasetRef='ref:other_dataset';assert.ok(assembleNativePage(source).blockers.some(b=>b.code==='people-source-import'));
  source.people.datasetRef='ref:source_dataset';source.backends=[{namespace:'peopleData',url:'https://example.test/api.js',descriptorsSha256:'a'.repeat(64),planSha256:'b'.repeat(64),operations:[]}];assert.ok(assembleNativePage(source).blockers.some(b=>b.code==='people-namespace-collision'));
 });
+
+test('catalog query route assembles only through its exact registered backend namespace',()=>{
+ const input=fixture();input.analysis.flow.queries=[{name:'catalogRows',start:0,end:1}];
+ input.queries=[{name:'catalogRows',namespace:'catalogOps',document:'query {catalogOps{evaluate{tables{name error}}}}',values:[],tableName:'catalogRows',responsePath:['catalogOps','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ input.operationCoverage={sourceSha256:input.analysis.sourceSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:'a'.repeat(64),queryOrder:['catalogRows'],blockers:[],operations:[{kind:'query',name:'catalogRows',sourceNode:'$flow',operationSha256:'b'.repeat(64),route:'registered-catalog-query',dependencies:[],requiredGuarantees:['catalog-source-authority'],status:'attested-plan'}]};
+ input.backends=[{namespace:'catalogOps',url:'https://example.test/backend',descriptorsSha256:nativeDigest({queries:input.queries,mutations:[]}),planSha256:'c'.repeat(64),operations:[{kind:'query',name:'catalogRows',operationSha256:'b'.repeat(64)}]}];
+ const result=assembleNativePage(input);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status==='complete')assert.match(result.html,/data-af-name="catalogOps"/);
+ input.backends=[];assert.ok(assembleNativePage(input).blockers.some(blocker=>blocker.code==='registered-descriptor-admission'));
+});
