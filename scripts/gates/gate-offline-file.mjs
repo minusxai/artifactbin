@@ -10,6 +10,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { firefox, webkit } from 'playwright';
 import { expect } from 'playwright/test';
 import sharp from 'sharp';
+import {createHash} from 'node:crypto';
+import {datavizExamples,nativeDatavizFixture} from '../fixtures/native-dataviz.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { lane } from './lib/lane.mjs';
 import { launchChromium, launchWebKit, PAGES_HOST } from './lib/browser.mjs';
@@ -56,6 +58,17 @@ const html = await response.text();
 check(!html.includes(token), 'download contains no account credential');
 check(!html.includes('afbin-file') && !html.includes('afbin-compiled-code'), 'download is native HTML, without a legacy app archive');
 const file = path.join(work, 'native.html'); writeFileSync(file, html);
+const chartId=await publish({html:nativeDatavizFixture(datavizExamples(readFileSync(path.join(ROOT,'services/app/skills/artifactbin/references/dataviz.md'),'utf8')),BASE),visibility:'unlisted'});
+const chartResponse=await fetch(`${BASE}/a/${chartId}/download`,{headers});
+if(chartResponse.status!==200)throw Error(`dataviz download -> ${chartResponse.status}: ${await chartResponse.text()}`);
+const chartHtml=await chartResponse.text(),chartFile=path.join(work,'native-dataviz.html');writeFileSync(chartFile,chartHtml);
+check(!chartHtml.includes(token),'dataviz download contains no account credential');
+for(const library of ['vega-6.3.1','vega-lite-6.4.3']){
+ const response=await fetch(`${BASE}/libraries/${library}/index.js`);if(response.status!==200)throw Error(`registered ${library} -> ${response.status}`);
+ const bytes=Buffer.from(await response.arrayBuffer());
+ check(chartHtml.includes(bytes.toString('base64')),`download packs actual registered ${library} ESM bytes (${createHash('sha256').update(bytes).digest('hex')})`);
+}
+
 async function reading(engineName, browser) {
   const { step, must, run } = lane(check, `${engineName} native offline HTML`);
   await run(async () => {
@@ -90,6 +103,62 @@ async function reading(engineName, browser) {
       must(errors.length === 0, `no page errors: ${JSON.stringify(errors)}`);
     } finally { await context.close(); }
   });
+}
+
+/** Real registered modules in hosted HTML and the product's saved offline file. */
+async function datavizReading(engineName,browser){
+ const {step,must,run}=lane(check,`${engineName} native Vega and Vega-Lite`);
+ await run(async()=>{
+  for(const mode of ['hosted','offline']){
+   const context=await browser.newContext({viewport:{width:900,height:1000},reducedMotion:'reduce'});
+   try{
+    const outside=[],errors=[];
+    await context.route(/^https?:/,route=>{
+     if(mode==='offline'||new URL(route.request().url()).origin!==new URL(BASE).origin){return route.abort('internetdisconnected');}
+     return route.continue();
+    });
+    if(mode==='offline'&&engineName!=='webkit')await context.setOffline(true);
+    const page=await context.newPage();page.on('request',request=>{if(/^https?:/.test(request.url())&&(mode==='offline'||new URL(request.url()).origin!==new URL(BASE).origin))outside.push(request.url());});page.on('pageerror',error=>errors.push(error.message));
+    page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+    await page.addInitScript(()=>document.addEventListener('securitypolicyviolation',event=>console.error(`CSP ${event.violatedDirective} ${event.blockedURI}`)));
+    const response=await page.goto(mode==='hosted'?`${BASE}/a/${chartId}/raw`:pathToFileURL(chartFile).href,{waitUntil:'domcontentloaded'});
+    if(mode==='hosted'){const policy=response.headers()['content-security-policy']||'';must(response.status()===200&&policy.includes('script-src')&&!policy.includes("'unsafe-eval'"),'hosted response has an actual no-eval CSP');}
+    const authoredPolicy=await page.locator('meta[http-equiv="Content-Security-Policy"]').first().getAttribute('content');
+    must(authoredPolicy.includes('script-src')&&!authoredPolicy.includes("'unsafe-eval'"),`${mode}: authored no-eval CSP survives publication/download`);
+    if(mode==='offline'&&engineName==='webkit')await context.setOffline(true);
+    await step(`${mode}: actual SVG marks, labels and accessible exact-value tables`,async()=>{
+     for(const id of ['lite-chart','vega-chart']){
+      await expect(page.locator(`#${id} svg`)).toHaveCount(1);
+      await expect(page.locator(`#${id} .mark-rect path, #${id} .mark-rect rect`)).toHaveCount(2);
+      await expect(page.locator(`#${id} svg`)).toContainText('A');await expect(page.locator(`#${id} svg`)).toContainText('B');
+     }
+     await expect(page.getByRole('table',{name:'Vega-Lite exact values'})).toContainText('18');
+     await expect(page.getByRole('table',{name:'Vega exact values'})).toContainText('12');
+     must(await page.locator('#chart-layout svg').evaluateAll(nodes=>nodes.every(svg=>svg.getBoundingClientRect().width>0&&svg.getBoundingClientRect().height>0&&!/NaN|Infinity/.test(svg.outerHTML))),'SVG geometry is finite and nonempty');
+    });
+    const wide=await page.locator('#chart-layout svg').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().width));
+    await step(`${mode}: authored theme refresh and responsive dimensions`,async()=>{
+     for(const [dark,color]of [[false,'rgb(87, 96, 106)'],[true,'rgb(201, 209, 217)']]){
+      await page.evaluate(dark=>document.documentElement.setAttribute('data-af-dark',String(dark)),dark);
+      for(const id of ['lite-chart','vega-chart'])await expect.poll(()=>page.locator(`#${id} svg text`).evaluateAll((nodes,color)=>nodes.some(node=>getComputedStyle(node).fill===color),color)).toBe(true);
+     }
+     await page.setViewportSize({width:360,height:1000});
+     await expect.poll(()=>page.locator('#chart-layout svg').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().width)).then(widths=>widths.length===2&&widths.every((width,index)=>width<wide[index]-100&&width>0))).toBe(true);
+    });
+    await step(`${mode}: native data update and cleanup without zombie renders`,async()=>{
+     await page.getByRole('button',{name:'Update native data',exact:true}).click();
+     await expect(page.locator('#vega-chart svg')).toContainText('Updated');await expect(page.getByRole('table',{name:'Vega exact values'})).toContainText('7');
+     await page.getByRole('button',{name:'Remove charts',exact:true}).click();await expect(page.locator('#chart-layout svg')).toHaveCount(0);
+     await page.evaluate(()=>document.documentElement.setAttribute('data-af-dark','false'));await page.setViewportSize({width:700,height:1000});
+     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+     await expect(page.locator('#chart-layout svg')).toHaveCount(0);await expect(page.getByRole('button',{name:'Update native data',exact:true})).toBeDisabled();
+    });
+    must(outside.length===0,`${mode}: no external/offline HTTP requests: ${JSON.stringify(outside)}`);
+    must(errors.length===0,`${mode}: no page, console or CSP errors: ${JSON.stringify(errors)}`);
+    check.note(`${engineName} ${mode}: actual Vega/Vega-Lite SVG, theme, resize, native data and teardown verified`);
+   }finally{await context.close();}
+  }
+ });
 }
 
 const input = await sharp({ create: { width: 200, height: 100, channels: 3, background: { r: 220, g: 30, b: 30 } } }).png().toBuffer();
@@ -227,9 +296,9 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
 
 
 const SCREENSHOT_CASES = { chromium: [[1, 200, 100], [2.2, 235, 235]], firefox: [[1, 200, 100]], webkit: [[1, 200, 100]] };
-await Promise.all(ENGINES.map(async ([name, engine]) => {
+for(const [name,engine]of ENGINES){
   const browser = await engine.launch();
-  try { await reading(name, browser); } finally { await browser.close(); }
+  try { await reading(name, browser); await datavizReading(name,browser); } finally { await browser.close(); }
   for (const [dpr, width, height] of SCREENSHOT_CASES[name]) await screenshotComment(name, dpr, width, height);
-}));
+}
 check.done();
