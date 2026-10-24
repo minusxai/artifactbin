@@ -90,9 +90,9 @@ describe('installable shared skill folder',()=>{
    const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});
    try {
     expect(await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json()).toEqual(assets);
-    for(const [resource,source] of [['/af/v1/core.js',assets.core],[assets.apolloPath,assets.apollo],[assets.readerPath,assets.reader]]){
+    for(const [resource,source] of [['/af/v1/core.js',assets.core],...Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([key,path])=>[path,assets[key.slice(0,-4)]])]){
      const response=await fetch(new URL(resource,preview.url));
-     expect(response.status).toBe(200);expect(await response.text()).toBe(source);
+     expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);
     }
    } finally {await preview.close();}
    const project=path.join(dir,'project');mkdirSync(project);

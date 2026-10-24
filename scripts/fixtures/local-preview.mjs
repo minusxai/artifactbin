@@ -10,7 +10,7 @@ import {buildHtmlAssets} from '../../services/app/lib/html-runtime/build.server.
 const dir=await mkdtemp(join(tmpdir(),'local-preview-browser-'));let session,browser;
 try {
  const skill=join(dir,'skill'),root=join(dir,'project');await mkdir(skill);await mkdir(root);
- for(const name of ['preview.mjs','preview-changes.mjs','preview-files.mjs','preview-sessions.mjs'])await writeFile(join(skill,name),await readFile(new URL('../../services/app/skills/artifactbin/scripts/'+name,import.meta.url)));
+ for(const name of ['preview.mjs','preview-changes.mjs','preview-files.mjs','preview-sessions.mjs','preview-runtime-assets.mjs'])await writeFile(join(skill,name),await readFile(new URL('../../services/app/skills/artifactbin/scripts/'+name,import.meta.url)));
  await writeFile(join(skill,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('../../services/app/skills/artifactbin/scripts/preview-html.mjs',import.meta.url),'utf8')));
  await writeFile(join(skill,'preview-datasets.mjs'),await buildPreviewDatasets());
  await writeFile(join(skill,'preview-runtime.mjs'),'export default '+JSON.stringify(await buildHtmlAssets())+';');

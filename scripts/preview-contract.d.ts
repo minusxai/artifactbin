@@ -28,3 +28,5 @@ export declare function createRevisionSource(root: string, options?: { now?: () 
  * Mutations affect memory only; export is an explicit JSON download.
  */
 export interface PreviewLocalDatasetConfig { endpoint: string; schema: unknown }
+/** Exact code-only runtime admission, validated against each content-addressed path. */
+export declare function runtimeAssetManifest(assets: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string>;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {runtimeAssetManifest} from './preview-runtime-assets.mjs';
 import {createServer} from 'node:http';
 import {realpath,stat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
@@ -20,6 +21,7 @@ export async function startPreview({root,port=0,runtimeDir,revisionIntervalMs=10
  // Generated only in the downloadable archive; optional in a source checkout.
  const runtimeModule=new URL('./preview-runtime.mjs',import.meta.url).href;
  let bundled;try{bundled=(await import(runtimeModule)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}
+ const runtimeAssets=bundled?runtimeAssetManifest(bundled):new Map();
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
@@ -58,7 +60,7 @@ export async function startPreview({root,port=0,runtimeDir,revisionIntervalMs=10
     const file=resolve(base,requested==='/'?'index.html':requested.slice(1));const html=(await readPreviewFile(base,file)).toString('utf8');res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,pathname:requested}));
    }
    if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
-   const source=bundled&&(pathname==='/af/v1/core.js'?bundled.core:pathname===bundled.readerPath?bundled.reader:pathname===bundled.apolloPath?bundled.apollo:undefined);
+   const source=runtimeAssets.get(pathname);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
    const isRuntime=runtime&&pathname.startsWith('/af/v1/');const selected=isRuntime?runtime:base;

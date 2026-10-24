@@ -126,3 +126,13 @@ test('local operations bound concurrency and pass a real abort signal',async()=>
   const timeout=await f.execute(endpoint,'timeout');assert.equal(timeout.status,400);assert.match((await timeout.json()).error,/timed out/);
  }finally{await f.close();}
 });
+
+
+test('runtime admission verifies all split modules against immutable source paths',async()=>{
+ const {runtimeAssetManifest}=await import('../../services/app/skills/artifactbin/scripts/preview-runtime-assets.mjs');const {createHash}=await import('node:crypto');
+ const source='export const splitModule=true;',path='/af/v1/reader/'+createHash('sha256').update(source).digest('hex');
+ const manifest=runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:path});assert.equal(manifest.get(path),source);assert.equal(manifest.get('/af/v1/core.js'),'core()');
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:'changed',portableEnginePath:path}),/immutable source/);
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'https://example.invalid/runtime'}),/immutable source/);
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEnginePath:path}),/immutable source/);
+});

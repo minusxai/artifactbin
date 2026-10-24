@@ -5,6 +5,8 @@ import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {buildHtmlAssets as compileActualRuntime} from '../../services/app/lib/html-runtime/build.server.ts';
+import {createHash} from 'node:crypto';
 import {prebuiltHtmlCore} from '../build/html-core.mjs';
 const cleanup=[];afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();});
 it('a relocated bundled HTTP server serves the exact native core without the source TypeScript tree',async()=>{
@@ -27,4 +29,13 @@ it('relocates installed preview helpers and rejects skill-source/build drift',as
  await rm(path.join(root,'services'),{recursive:true,force:true});const helpers=await import(pathToFileURL(output).href);
  expect(await helpers.buildPreviewParser(expected.parserSource)).toBe(expected.parser);expect(await helpers.buildPreviewDatasets()).toBe(expected.datasets);
  await expect(helpers.buildPreviewParser('different source')).rejects.toThrow('source differs');
+});
+
+it('retains every actual immutable runtime asset after relocating the server bundle',async()=>{
+ const assets=await compileActualRuntime(),root=await mkdtemp(path.join(tmpdir(),'af-actual-runtime-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));
+ const source=path.join(root,'services/app/lib/html-runtime/build.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'throw Error("source tree must not execute")');
+ const output=path.join(root,'relocated/server.mjs');await build({entryPoints:[source],bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltHtmlCore(root,()=>assets)]});
+ await rm(path.join(root,'services'),{recursive:true,force:true});const {buildHtmlAssets}=await import(pathToFileURL(output).href);const relocated=await buildHtmlAssets();
+ expect(relocated).toEqual(assets);expect(relocated.portableEnginePath).toBe('/af/v1/reader/'+createHash('sha256').update(relocated.portableEngine).digest('hex'));
+ for(const [key,assetPath] of Object.entries(relocated))if(key.endsWith('Path'))expect(assetPath).toMatch(new RegExp('/'+createHash('sha256').update(relocated[key.slice(0,-4)]).digest('hex')+'$'));
 });
