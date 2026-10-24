@@ -3,5 +3,18 @@
     "package": "three",
     "version": "0.185.1",
     "entry": "three.js"
+  },
+  "vega": {
+    "package": "vega",
+    "version": "6.3.1",
+    "entry": "vega.js"
+  },
+  "vega-lite": {
+    "package": "vega-lite",
+    "version": "6.4.3",
+    "entry": "vega-lite.js",
+    "aliases": {
+      "vega": { "package": "vega-util", "version": "2.1.3" }
+    }
   }
 }

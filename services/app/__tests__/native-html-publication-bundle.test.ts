@@ -4,6 +4,23 @@ import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
 const file=(path:string,source:string,contentType:string)=>({path,contentType,base64:Buffer.from(source).toString('base64')});
+it('serves reused immutable module dependencies through only their new admitted parent',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const actor=await mintAccountToken('bundle-reused-module');
+ const files=[file('main.js','import "./nested.js";','text/javascript'),file('nested.js','export const ready=true;','text/javascript')];
+ const publish=async(key:string,mappings?:Record<string,unknown>)=>{const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':key},json:{html:'<script type="module" src="./main.js"></script>',publicationBundle:{entryPath:'index.html',files,...(mappings?{mappings}:{})}}}));expect(response.status).toBe(201);return response.json();};
+ const first=await publish('bundle_reused_module_first');
+ const second=await publish('bundle_reused_module_second',Object.fromEntries(first.dependencyReceipts.map(({path,...entry}:{path:string})=>[path,entry])));
+ expect(second.dependencyReceipts).toEqual(first.dependencyReceipts);
+ const main=second.dependencyReceipts.find((entry:{path:string})=>entry.path==='main.js');
+ const nested=second.dependencyReceipts.find((entry:{path:string})=>entry.path==='nested.js');
+ const read=(id:string,dependency:string)=>assetGet(request(`/a/${id}/assets?dependency=${dependency}&revision=1&version=1`,{token:actor.token}),{params:Promise.resolve({id})});
+ const served=await read(second.id,main.id);expect(served.status).toBe(200);
+ const source=await served.text();expect(source).toContain(`/a/${second.id}/assets?dependency=${nested.id}&revision=1&version=1`);expect(source).not.toContain(`/a/${first.id}/assets`);
+ expect((await read(second.id,nested.id)).status).toBe(200);
+ expect((await read(second.id,'Other12')).status).toBe(404);
+ const original=await read(first.id,main.id);expect(await original.text()).toContain(`/a/${first.id}/assets?dependency=${nested.id}`);
+});
 it('rejects missing dependencies before creating anything',async()=>{
  const actor=await mintAccountToken('bundle-missing');
  const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:'<img src="./assets/missing.svg">'}}));
@@ -165,4 +182,40 @@ it('retains the complete dataset update wire reply including affected dependents
  const first=await send();const receipt=await first.json();expect(first.status,JSON.stringify(receipt)).toBe(200);expect(receipt.affected_dependents).toEqual([{id:dependent.id,title:dependent.title}]);
  const retry=await send();expect(retry.status).toBe(first.status);expect(await retry.json()).toEqual(receipt);
  const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);
+});
+
+it('serves admitted module and font bytes to opaque runners without granting private or unrelated assets',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const owner=await mintAccountToken('bundle-opaque-cors'),stranger=await mintAccountToken('bundle-opaque-stranger');
+ const publish=async(visibility:'unlisted'|'private',key:string)=>{
+  const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':key},json:{visibility,html:'<script type="module" src="./main.js"></script><link rel="stylesheet" href="./main.css">',publicationBundle:{entryPath:'index.html',files:[file('main.js','export const ready=true;','text/javascript'),file('main.css','@font-face{font-family:Fixture;src:url(./face.woff2)}','text/css'),file('face.woff2','wOF2fixture','font/woff2')]}}}));
+  const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);return saved;
+ };
+ const publicPage=await publish('unlisted','bundle_opaque_public_01'),privatePage=await publish('private','bundle_opaque_private_01');
+ const load=(page:{id:string},receipt:{id:string;revision:string},origin:string,token?:string)=>assetGet(request(`/a/${page.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`,{token,headers:{Origin:origin}}),{params:Promise.resolve({id:page.id})});
+ for(const receipt of publicPage.dependencyReceipts){
+  const response=await load(publicPage,receipt,'null');expect(response.status).toBe(200);expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.has('access-control-allow-credentials')).toBe(false);
+  expect(response.headers.get('cache-control')).toBe('no-store');expect(response.headers.get('x-content-type-options')).toBe('nosniff');expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+  if(receipt.path==='main.js'){expect(response.headers.get('content-type')).toBe('text/javascript');expect(await response.text()).toBe('export const ready=true;');}
+  if(receipt.path==='face.woff2'){expect(response.headers.get('content-type')).toBe('font/woff2');expect(await response.text()).toBe('wOF2fixture');}
+ }
+ for(const receipt of privatePage.dependencyReceipts){
+  for(const token of [undefined,stranger.token]){const denied=await load(privatePage,receipt,'https://foreign.example',token);expect(denied.status).toBe(404);expect(denied.headers.has('access-control-allow-origin')).toBe(false);}
+  const ownerResponse=await load(privatePage,receipt,'null',owner.token);expect(ownerResponse.status).toBe(200);expect(ownerResponse.headers.get('access-control-allow-origin')).toBe('*');
+  const unrelated=await load(publicPage,receipt,'null',owner.token);expect(unrelated.status).toBe(404);expect(unrelated.headers.has('access-control-allow-origin')).toBe(false);
+ }
+});
+
+
+it('admits linked CSS only through this native raw page asset endpoint',async()=>{
+ const {GET:rawGet}=await import('@/app/a/[id]/raw/route');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const owner=await mintAccountToken('bundle-linked-style');
+ const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'bundle_linked_style_01'},json:{visibility:'unlisted',html:'<link rel="stylesheet" href="./theme.css"><h1>Styled</h1>',publicationBundle:{entryPath:'index.html',files:[file('theme.css','body{background:#f2e7d6}@font-face{font-family:Fixture;src:url(./face.woff2)}','text/css'),file('face.woff2','wOF2fixture','font/woff2')]}}}));
+ const saved=await created.json();expect(created.status).toBe(201);const params={params:Promise.resolve({id:saved.id})};
+ const rawRequest=request(`/a/${saved.id}/raw`),raw=await rawGet(rawRequest,params);expect(raw.status).toBe(200);
+ const style=raw.headers.get('content-security-policy')!.split('; ').find(value=>value.startsWith('style-src '))!;
+ const endpoint=new URL(rawRequest.url).origin+`/a/${saved.id}/assets`;expect(style.split(' ')).toContain(endpoint);expect(style.split(' ')).not.toContain("'self'");expect(style).not.toContain('/a/OtherPage/assets');expect(style.split(' ')).not.toContain(new URL(rawRequest.url).origin);
+ const html=await raw.text();expect(html).toContain('rel="stylesheet"');expect(html).toContain(`/a/${saved.id}/assets?dependency=`);
+ const css=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='theme.css');
+ const served=await assetGet(request(`/a/${saved.id}/assets?dependency=${css.id}&revision=1&version=1`,{headers:{Origin:'null'}}),params);expect(served.status).toBe(200);expect(served.headers.get('content-type')).toBe('text/css');expect(served.headers.get('access-control-allow-origin')).toBe('*');expect(await served.text()).toContain(`/a/${saved.id}/assets?dependency=`);
 });

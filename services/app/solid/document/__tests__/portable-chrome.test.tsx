@@ -116,13 +116,28 @@ it.each(['unpublished', 'linked'] as const)('provides local Light and Dark choic
   fireEvent.click(ui.getByRole('button', { name: 'Local file actions' }));
   expect(ui.getByRole('menuitemcheckbox', { name: 'Light mode' })).toHaveAttribute('aria-checked', 'true');
   fireEvent.click(ui.getByRole('menuitemcheckbox', { name: 'Dark mode' }));
-  expect(document.documentElement).toHaveAttribute('data-af-dark');
+  expect(document.documentElement.getAttribute('data-af-dark')).toBe('true');
   expect(onMode).toHaveBeenLastCalledWith('dark');
   fireEvent.click(ui.getByRole('button', { name: 'Local file actions' }));
   expect(ui.getByRole('menuitemcheckbox', { name: 'Dark mode' })).toHaveAttribute('aria-checked', 'true');
   fireEvent.click(ui.getByRole('menuitemcheckbox', { name: 'Light mode' }));
-  expect(document.documentElement).not.toHaveAttribute('data-af-dark');
+  expect(document.documentElement.getAttribute('data-af-dark')).toBe('false');
   expect(onMode).toHaveBeenLastCalledWith('light');
+});
+
+it.each([
+  ['false', 'light'],
+  ['true', 'dark'],
+  [null, 'light'],
+] as const)('reads exact source theme %s and writes a canonical %s mode', (sourceTheme, expectedMode) => {
+  if (sourceTheme !== null) document.documentElement.setAttribute('data-af-dark', sourceTheme);
+  const { ui, chrome } = mount({ mode: undefined });
+  fireEvent.click(ui.getByRole('button', { name: 'Local file actions' }));
+  expect(ui.getByRole('menuitemcheckbox', { name: 'Dark mode' })).toHaveAttribute('aria-checked', expectedMode === 'dark' ? 'true' : 'false');
+  expect(ui.getByRole('menuitemcheckbox', { name: 'Light mode' })).toHaveAttribute('aria-checked', expectedMode === 'light' ? 'true' : 'false');
+  expect(document.documentElement.getAttribute('data-af-dark')).toBe(expectedMode === 'dark' ? 'true' : 'false');
+  chrome.update({ state: 'offline', mode: 'dark' }); expect(document.documentElement.getAttribute('data-af-dark')).toBe('true');
+  chrome.update({ state: 'offline', mode: 'light' }); expect(document.documentElement.getAttribute('data-af-dark')).toBe('false');
 });
 
 it.each([

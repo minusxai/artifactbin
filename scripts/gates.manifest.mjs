@@ -22,6 +22,7 @@
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
  * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
  * @property {number} seconds         measured CI duration under two-server load — the shard weight
+ * @property {1|2} [attempts]        total allowed attempts; default2 permits one contention retry
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
 
@@ -31,6 +32,14 @@
 // attempt excluded (data-journey and offline-file each passed a first attempt once). The comments on
 // the rows below record where each gate's timeout was measured; the `seconds` are these CI numbers.
 export const GATE_SPECS = Object.freeze([
+  // Candidate actual-reader suite; paired original evidence is an explicit run mode.
+  { name: 'component-baseline', needsMail: false, seconds: 30, timeoutMs: 300_000, attempts: 1 },
+  // Local container measurement: 28s; CI scheduling weight pending first run.
+  { name: 'html-components', needsMail: false, seconds: 28, timeoutMs: 60_000 },
+  // Real Mermaid/WebGL engines: 8s in the local container.
+  { name: 'html-rich-components', needsMail: false, seconds: 8, timeoutMs: 180_000 },
+  // Actual installed archive/private Save: 20s in the local container.
+  { name: 'private-preview-save', needsMail: false, seconds: 20, timeoutMs: 120_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
@@ -96,6 +105,7 @@ export function gateNamesOnDisk(fileNames) {
  * @param {readonly GateSpec[]} specs
  */
 export function checkManifest(diskNames, specs) {
+  for(const spec of specs)if(spec.attempts!==undefined&&![1,2].includes(spec.attempts))throw Error(`Invalid attempts for gate ${spec.name}: expected1 or2`);
   const disk = new Set(diskNames);
   const manifest = new Set(specs.map((spec) => spec.name));
   const missing = [...disk].filter((name) => !manifest.has(name)).sort();
@@ -162,3 +172,9 @@ export function shardWeight(name) {
   const spec = specFor(name);
   return spec.seconds + (browsersFor([name]).some(browser => browser !== 'chromium') ? CROSS_BROWSER_SETUP_SECONDS : 0);
 }
+
+/** A contention retry is optional per gate; defaults preserve existing runner behavior.
+ * @param {Pick<GateSpec,'attempts'>} spec
+ * @param {number} workerCount
+ */
+export function shouldRetryAlone(spec,workerCount){return workerCount>1&&(spec.attempts??2)>1;}

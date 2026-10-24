@@ -16,9 +16,25 @@ For an existing page, read its canonical `html`, `version` and `state`, preserve
 
 1. Read [native HTML publication](references/html-authoring.md). Create with `POST /api/artifacts` and `{"html":"<complete HTML>","visibility":"unlisted"}`. Updates use `PUT /api/artifacts/ID` with `html`, the observed `expectedVersion` and `expectedState`. Send one durable `Idempotency-Key` per intended write; retry an uncertain request with the same body and key.
 2. Read [state and JavaScript](references/html-runtime.md), including explicit field declarations for saved comment views. All page state goes through `client` from `@afbin/apollo`. Top-level local state is private to each viewer’s browser. Shared data lives behind declared dataset/backend namespaces. Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files.
-3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Inline its CSS in `<style data-af="design-system">`; preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; no kit components or utility compiler is assumed.
+3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Keep `design-systems/` and the packaged `fonts/` inside the project root; link `./design-systems/NAME.css` from root-level HTML (adjust for subfolders). Preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; optional native components below need explicit registration.
 4. For a CSV/dashboard read [datasets](references/html-datasets.md). For a shared app read [backend files](references/html-backends.md) before modeling identity or writes. A readable page grants no dataset write access. Use authenticated account identity, never a name typed into a form, to authorize actions.
 5. Verify the actual published page at desktop and 390px. Exercise changed controls and inspect errors. Check values, comparisons and charts against returned data; label sample or assumed data. Share what passed and anything still unverified. Publication accepts source; it does not prove appearance.
+
+## Optional HTML components
+
+Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. These are 25 roots plus `af-slide`, not automatic platform tags.
+
+| Purpose | Retained elements |
+|---|---|
+| [Controls](references/html-components.md#controls-and-composition) | `af-button`, `af-input`, `af-textarea`, `af-slider`, `af-switch`, `af-select`, `af-segmented`, `af-date-picker` |
+| [Navigation/disclosure](references/html-components.md#controls-and-composition) | `af-tabs`, `af-accordion`, `af-collapsible` |
+| [Overlays](references/html-components.md#controls-and-composition) | `af-dialog`, `af-popover`, `af-tooltip` |
+| [Identity/status](references/html-components.md#content-and-data) | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
+| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-mermaid`, `af-isometric` |
+| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload`, `af-deck-gl` |
+| [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
+
+Native HTML pages can author charts directly with the separately shipped Vega and Vega-Lite modules; see [Data visualization](references/dataviz.md). No HTML `Chart` custom element is shipped. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
 ## Preserve the document
 
@@ -33,6 +49,8 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
+- [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
+- [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
 - [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
 - [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.

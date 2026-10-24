@@ -101,3 +101,19 @@ describe('reviewed CSS parser dispatch', () => {
     expect(auditFastSource('iterators[node.type](node, context, walkNode, walkReducer)', 'services/app/walker.ts')).not.toEqual([]);
   });
 });
+
+describe('reviewed query request port', () => {
+  const file='services/app/lib/html-runtime/apollo/watch-query.ts';
+  it('admits only the no-argument request callback injected into the pure watch model', () => {
+    for(const path of [file,file.replaceAll('/', '\\')]) {
+      expect(auditFastSource('options.remote!.fetch()',path)).toEqual([]);
+      expect(auditFastSource('options.remote.fetch()',path)).toEqual([]);
+    }
+  });
+  it('continues rejecting ambient transport and other capability receivers', () => {
+    for(const source of ['fetch(url)','globalThis.fetch(url)','options.fetch()','other.remote.fetch()','options.other.fetch()','options.remote!.fetch(url)','options.remote![method]()','new options.remote!.fetch()','options.remote!.fetch(fetch(url))']) {
+      expect(auditFastSource(source,file)).not.toEqual([]);
+    }
+    expect(auditFastSource('options.remote!.fetch()','services/app/unreviewed.ts')).not.toEqual([]);
+  });
+});

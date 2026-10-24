@@ -113,6 +113,15 @@ export function parseDatasetDnsServers(value:string|undefined):readonly string[]
 }
 /** Optional resolver list used only for remote dataset PostgreSQL hosts. */
 export const DATASET_DNS_SERVERS=parseDatasetDnsServers(env('DATASET','DNS_SERVERS'));
+/** Exact reviewed connection fingerprints; permits only RFC1918/ULA, never loopback or metadata. */
+export function parseDatasetPrivateTargetHashes(value:string|undefined):readonly string[]{
+ if(!value?.trim())return [];
+ const hashes=value.split(',').map(hash=>hash.trim());
+ if(hashes.length>32||hashes.some(hash=>!/^[a-f0-9]{64}$/.test(hash))||new Set(hashes).size!==hashes.length)throw Error('DATASET__PRIVATE_TARGET_HASHES must contain at most 32 unique SHA256 fingerprints.');
+ return Object.freeze(hashes);
+}
+export const DATASET_PRIVATE_TARGET_HASHES=parseDatasetPrivateTargetHashes(env('DATASET','PRIVATE_TARGET_HASHES'));
+
 
 /**
  * Per-token artifact cap — creation answers

@@ -4,9 +4,9 @@ import {sha256Hex} from '@artifactbin/utils/sha256';
 import {startPortableSession} from '../portable-session';
 import type {PortableChromeOptions} from '../portable-chrome-contract';
 const identity={platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)};
-afterEach(()=>{document.documentElement.removeAttribute('data-af-private-preview');document.head.innerHTML='';localStorage.clear();});
-function session(linked=false){
- if(linked)document.head.innerHTML=`<script type="application/json" data-af="portable">${JSON.stringify({version:1,source:'<p>source</p>',identity})}</script>`;
+afterEach(()=>{document.documentElement.removeAttribute('data-af-private-preview');document.documentElement.removeAttribute('data-af-dark');document.head.innerHTML='';localStorage.clear();});
+function session(linked=false,source='<p>source</p>'){
+ if(linked)document.head.innerHTML=`<script type="application/json" data-af="portable">${JSON.stringify({version:1,source,identity})}</script>`;
  let controls!:PortableChromeOptions;
  const chrome={update:vi.fn(),setVisible:vi.fn(),dispose:vi.fn()};
  const connection={retry:vi.fn(),signIn:vi.fn(),disconnect:vi.fn(),dispose:vi.fn(),post:vi.fn(),request:vi.fn(),reportSource:vi.fn()};
@@ -35,6 +35,22 @@ it('delegates preview reload and persists only an explicit viewer appearance cho
  const reload=vi.fn();window.addEventListener('af:preview-reload',reload);const page=session();await Promise.resolve();
  page.controls.onReloadPreview?.();expect(reload).toHaveBeenCalledOnce();expect(localStorage.getItem('af:local-color-mode')).toBeNull();
  page.controls.onMode?.('dark');expect(localStorage.getItem('af:local-color-mode')).toBe('dark');page.dispose();window.removeEventListener('af:preview-reload',reload);
+});
+it.each([
+ ['false','light'],['true','dark'],[null,'light'],
+] as const)('derives portable chrome mode from exact source theme %s',async(theme,expected)=>{
+ if(theme!==null)document.documentElement.setAttribute('data-af-dark',theme);
+ const source='<html data-af-dark="false"><head></head><body>source page</body></html>';
+ const page=session(true,source);await Promise.resolve();
+ expect(page.controls.mode).toBe(expected);page.dispose();
+});
+it('keeps the author source theme unchanged when the local viewer switches modes',async()=>{
+ const source='<html data-af-dark="false"><head></head><body>authored source</body></html>';
+ const page=session(true,source);await Promise.resolve();
+ page.controls.onMode?.('dark');page.controls.onMode?.('light');
+ const portable=JSON.parse(document.querySelector('script[data-af="portable"]')!.textContent??'{}') as {source:string};
+ expect(portable.source).toBe(source);expect(localStorage.getItem('af:local-color-mode')).toBe('light');
+ page.dispose();
 });
 it('starts linked autoconnection before chrome or DOMContentLoaded and accepts synchronous transport callbacks once',async()=>{
  document.head.innerHTML=`<script data-af="portable">${JSON.stringify({version:1,source:'<p>source</p>',identity})}</script>`;

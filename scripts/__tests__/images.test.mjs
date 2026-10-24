@@ -51,12 +51,15 @@ describe('runtime dependency closure', () => {
   const pkg = (p) => JSON.parse(read(p));
 
   describe('the app declares as runtime only what it imports at runtime', () => {
-    it('hosted browser libraries are pinned build dependencies, excluded from runtime installs', () => {
+    it('hosted libraries use exact declared pins, with server-rendered Vega retaining runtime dependencies', () => {
       const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
       const registry = JSON.parse(read('services/app/lib/libraries/registry.json'));
       for (const spec of Object.values(registry)) {
-        expect(dependencies).not.toHaveProperty(spec.package);
-        expect(devDependencies[spec.package]).toBe(spec.version);
+        if (['vega','vega-lite'].includes(spec.package)) expect(dependencies[spec.package]).toBe(spec.version);
+        else {
+          expect(dependencies).not.toHaveProperty(spec.package);
+          expect(devDependencies[spec.package]).toBe(spec.version);
+        }
       }
     });
     /*

@@ -10,7 +10,7 @@
 **SLOW — once at completion before merge, never mid-task/per edit:** gate containers, PR CI push, bare `npm test`.
 
 - **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
-- **Gates belong to PR CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
+- **Full gates belong to main PR and post-merge CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
 - **PRs into `main`: ONLY use squash and merge** (`gh pr merge --squash`). NEVER land all
@@ -21,11 +21,19 @@
 
 ## CI speed contract
 
-Measure the required-check chain from `run_started_at` through final rollup, including runner setup,
-dependency waits and uploads. Aim below **3 minutes**; normal maximum below **4 minutes**. CI fails above **8 minutes** on PRs and main. Job times,
-parallel sums and workflow durations differ. Per-job durations above four
-minutes produce diagnostics, not timing failures; the complete chain owns the hard eight-minute limit. Report optional cache warming and downstream release
-notification tails separately; they are outside the chain.
+For PRs targeting **`artifactbinv3`**, the required `v3 fast checks` workflow must finish below
+**2 minutes**. It runs a full pinned install, `npm run validate`, JavaScript syntax checks and the
+explicit capability-audited module test list. Its clock checks elapsed time from `run_started_at`
+before final GitHub post steps, and the job has a two-minute execution timeout. Measure the completed
+workflow too; prior-run timing does not prove a new revision's duration. Full service/browser suites
+are not part of this required fast PR lane: retain exact-revision selected checks and user-scenario evidence.
+
+For the **full post-merge chain** and PRs targeting **`main`**, measure from `run_started_at` through
+final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal
+maximum below **4 minutes**. The full chain fails above **8 minutes**. Job times, parallel sums and
+workflow durations differ; per-job durations above four minutes produce diagnostics rather than
+replacing the complete-chain limit. Report optional cache warming and downstream release notification
+tails separately; they are outside that chain.
 Investigate the critical path and repetition; never raise budgets, skip coverage, subtract queues
 or rerun unchanged code to hide slowness. Report cold and warm timings separately.
 

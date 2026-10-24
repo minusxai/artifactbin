@@ -20,14 +20,15 @@
  * the SPA never mounts and every gate times out. A base URL means DRIVE THAT
  * SERVER; each booted host uses isolated application storage.
  */
+import {prepareImportedPilotStore} from './lib/native-prepared-pilot-store.mjs';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { PAGES_HOST } from './gates/lib/browser.mjs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
-import { runGateProcess } from './gates.process.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight, shouldRetryAlone } from './gates.manifest.mjs';
+import { runGateProcess, flushGateOutput } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -121,7 +122,8 @@ async function bootServer(index, mailOutbox, authSecret) {
   }
   const port = await claimFreePort();
   const base = `http://app.${PAGES_HOST}:${port}`;
-  const objects = path.join(scratch, `objects-${index}`);
+  const prepared = process.env.NATIVE_MIGRATION_PILOT__INPUT ? await prepareImportedPilotStore({inputPath:process.env.NATIVE_MIGRATION_PILOT__INPUT,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,scratch:path.join(scratch,`imported-${index}`)}) : undefined;
+  const objects = prepared?.objects ?? path.join(scratch, `objects-${index}`);
   mkdirSync(objects, { recursive: true });
   const child = spawn(process.execPath, [BUNDLE], {
     cwd: path.join(ROOT, 'services/app'),
@@ -140,8 +142,8 @@ async function bootServer(index, mailOutbox, authSecret) {
       APP__ASSETS_ORIGIN: `http://assets.${PAGES_HOST}:${port}`,
       // Production mode refuses to boot without it; CI hands its gates job one per run and so do we
       // (scripts/gates.servers.mjs runSecret). Every server in the run shares the one value.
-      AUTH__SECRET: authSecret,
-      DATABASE_URL: 'pglite://memory',
+      AUTH__SECRET: prepared?.authSecret ?? authSecret,
+      DATABASE_URL: prepared?.databaseUrl ?? 'pglite://memory',
       // A seeded worktree names standalone service ports in .env. Throwaway
       // gate servers deliberately use the full bundle's local implementations —
       // and EVENTS is the same story with a quieter failure: left set, every
@@ -286,9 +288,10 @@ async function runSet(gates, workers) {
    * both directions — no red for a lost race, no green that quietly swallowed
    * a genuine flake.
    */
-  if (setFailed.length > 0 && workers.length > 1) {
-    console.log(`\n──────── retrying ${setFailed.length} gate(s) alone ────────`);
-    for (const name of [...setFailed]) {
+  const retryable=setFailed.filter(name=>shouldRetryAlone(specFor(name), workers.length));
+  if (retryable.length > 0) {
+    console.log(`\n──────── retrying ${retryable.length} gate(s) alone ────────`);
+    for (const name of retryable) {
       const gate = gates.find((g) => g.name === name);
       const spec = specFor(gate.name);
       const { ok, output, seconds } = await run(gate, workers[0], spec.timeoutMs);
@@ -319,7 +322,9 @@ if (failed.length) {
   console.log(`FAILED: ${failed.join(', ')}`);
   // Named individually so a re-run of just the broken ones is a copy-paste.
   console.log(`re-run: node scripts/gates.mjs ${bases[0] ?? ''} --only=${failed.join(',')}`.replace(/\s+/g, ' '));
+  await flushGateOutput();
   process.exit(1);
 }
 console.log('all gates passed');
+await flushGateOutput();
 process.exit(0);

@@ -1,3 +1,8 @@
+import {createUploadContext,bindUploadControl} from './upload-context';
+import type {UploadContext} from '@artifactbin/contracts';
+import type {PlatformUploadControl} from './upload-contract';
+import {createFileUploader} from './upload';
+import {createUploadRelay} from './upload-relay';
 import {createQueryReadiness} from './query-readiness';
 import { createLocalDatasetTransport } from './browser-local-datasets';
 import { createHtmlSelectionActions } from './selection-actions';
@@ -30,12 +35,13 @@ function pendingPortableConnection():boolean {
 }
 const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
+  subscribe(listener){const subscription=onBackendChange(()=>listener());return()=>subscription.unsubscribe();},
   online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[]) => void>();
-/** An invalidation contains names, never rows. Authors explicitly query again; watchQuery stays local-only. */
+/** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
 export function onBackendChange(listener: (names: readonly string[]) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
@@ -45,6 +51,30 @@ import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
+const uploadContext=createUploadContext(config.offline===true);
+export const watchUploadContext=uploadContext.watch;
+let uploads:ReturnType<typeof createUploadRelay>|undefined;
+const uploader=createFileUploader({readOnly:()=>config.offline===true,datasetId:name=>config.bindings?.[name],send:(request,signal)=>{if(!uploads)return Promise.reject(Error('Page connection unavailable; reload and retry'));if(uploadContext.read().state!=='signed-in')return Promise.reject(Error('Uploads unavailable for this session'));return uploads.send(request,signal).then(result=>({...result,url:new URL(result.url,config.appOrigin).href}));}});
+export async function uploadFile(file:File,options:import('./upload-contract').FileUploadOptions){
+ if(!uploads)throw Error('Page connection unavailable; reload and retry');
+ const initial=uploadContext.read();if(initial.state!=='signed-in')throw Error('Uploads unavailable for this session');
+ const controller=new AbortController();
+ const cancel=()=>controller.abort(options.signal?.reason);
+ if(options.signal?.aborted)cancel();else options.signal?.addEventListener('abort',cancel,{once:true});
+ const subscription=watchUploadContext(next=>{if(next.scope!==initial.scope||next.state!==initial.state)controller.abort(Error('Upload session changed; retry the same File to recover its outcome'));});
+ try{return await uploader.upload(file,{...options,signal:controller.signal});}
+ finally{subscription.unsubscribe();options.signal?.removeEventListener('abort',cancel);}
+}
+/** Installs the real platform port and session availability; dataset grants are still checked by the server. */
+export function bindFileUpload(control:PlatformUploadControl,options:{disabled?:boolean;helperText?:string}={}){
+ return bindUploadControl(control,{upload:uploadFile,fileUrl(file,dataset){
+  const id=config.bindings?.[dataset],match=/^dfile:([a-z0-9]+)$/.exec(file.ref);
+  if(!id||!match||!config.appOrigin)throw Error('File URL unavailable');
+  return new URL(`/a/${encodeURIComponent(config.pageId)}/datasets/${encodeURIComponent(id)}/files/${match[1]}`,config.appOrigin).href;
+ }},watchUploadContext,options);
+}
+export type {FileUploadOptions} from './upload-contract';
+let connectedBefore=false;
 remote.execute = async (request) => {
   if(portableReadiness.online())return portableReadiness.execute(request);
   if(preview?.online())return preview.execute(request);
@@ -58,10 +88,18 @@ remote.execute = async (request) => {
 };
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
-export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameBridgeSession {
+export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
   const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
   let call = 0;
+  let uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;
+  const updateUploadContext=(context:UploadContext)=>{
+    if(uploads!==uploadSession)return;
+    const old=uploadContext.read();
+    if(old.scope!==context.scope||old.state!==context.state){uploadSession.dispose();uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;}
+    uploadContext.update(context);
+  };
+  updateUploadContext(attach?.uploadContext??{state:'unavailable',scope:nonce});
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
   const painter = createHtmlAnnotationPainter(win.document);
@@ -87,6 +125,9 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
   });
   for (const ready of [...relayWaiters]) ready();
+  const attachedRelay=relay;
+  if(connectedBefore)void Promise.resolve().then(()=>{if(relay===attachedRelay)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent subscriptions. */}});
+  connectedBefore=true;
   const selection = () => {
     if (pick === 'area' || !win.getSelection()?.toString().trim()) return;
     post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
@@ -123,7 +164,9 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   post({ kind: 'ready', nonce });
   return {
     receive(payload) {
+      if(payload.kind==='upload-context'){updateUploadContext(payload.context);return;}
       if (payload.kind === 'restored') post({ kind: 'restored', call: payload.call, ok: true });
+      if (uploadSession.receive(payload))return;
       if (payload.kind === 'fetch-result') {
         const current = pending.get(payload.call);
         if (!current) return;
@@ -144,6 +187,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     },
     dispose() {
       stopLinks();
+      uploadSession.dispose();if(uploads===uploadSession){uploads=undefined;uploadContext.update({state:'unavailable',scope:nonce+':closed'});}
       relay = null;
       observation.dispose();
       painter.dispose();

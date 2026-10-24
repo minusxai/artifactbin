@@ -1,3 +1,9 @@
+import {registeredMutationPlan,registeredMutationInvoker,createRetainedRegisteredMutation} from '@/lib/registered-page-mutations';
+import type {HtmlBackendVersionRecord} from '@/lib/html-backends';
+import type {HtmlBackendLink} from '@artifactbin/contracts';
+import {registeredPlan} from '@/lib/registered-page-queries/registry';
+import {registeredQueryInvoker} from '@/lib/registered-page-queries/namespace';
+import {createRetainedRegisteredQueries} from '@/lib/registered-page-queries/retained';
 import type {AccessActor} from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
@@ -10,21 +16,36 @@ import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
 import {services} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
 import {requestOrSessionActor,refusesCrossSite} from '@/lib/accounts';
+/** Reserved host programs are validated before discovery or invocation; unknown kinds never reach the runner. */
+function registeredPrograms(page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord){
+ const query=registeredPlan(page,link,backend),mutation=registeredMutationPlan(page,link,backend);
+ if(!query&&!mutation&&backend.compiled.startsWith('!registered-page-'))throw Error('registered_program_unsupported');
+ return {query,mutation};
+}
 async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly PageNamespaceSource[]>{
  const backends=await Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
   const backend=await getHtmlBackendVersion(link.backendId,link.version);
   if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
+  registeredPrograms(page,link,backend);
   return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
  }));
  return [...backends,...datasetNamespaceSources(page.links.filter(link=>link.kind==='dataset'))];
 }
-function operations(actor:AccessActor,page:HtmlPageVersion,retainReadFence?:(verify:()=>Promise<void>)=>void){
+function operations(actor:AccessActor,page:HtmlPageVersion,revalidateActor:()=>Promise<AccessActor>,retainReadFence?:(verify:()=>Promise<void>)=>void){
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
  const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
- return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:call=>{
+ return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
-  return link.kind==='backend'?backend(call):dataset(call);
+  if(link.kind==='backend'){
+   const record=await getHtmlBackendVersion(link.backendId,link.version);
+   if(!record)throw Error('backend_link_mismatch');
+   const {query:plan,mutation}=registeredPrograms(page,link,record);
+   if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
+   if(mutation){const adapter=createRetainedRegisteredMutation(actor,page,link,record,revalidateActor);return registeredMutationInvoker(adapter.context,adapter.plan,(_context,_plan,args,signal)=>adapter.execute(args,signal))(call);}
+   return backend(call);
+  }
+  return dataset(call);
  }});
 }
 /** Original request identity and ACLs guard both SDL and executions. */
@@ -44,7 +65,7 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   if(request.method==='GET'){
    const revision=new URL(request.url).searchParams.get('revision')??undefined;
    const page=await readHtmlPage(actor,pageId,revision);
-   const sdl=await operations(actor,page).schema(actor,pageId,page.revision);
+   const sdl=await operations(actor,page,()=>requestOrSessionActor(request,{revalidate:true})).schema(actor,pageId,page.revision);
    await verifyPage(page.revision);
    return json({sdl,revision:page.revision},200,readHeaders);
   }
@@ -58,7 +79,7 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
   // Mutations conserve their durable receipts; this final fence only withholds read results.
   const readFences:Array<()=>Promise<void>>=[];
-  const result=await operations(actor,page,operationKind==='query'?verify=>{readFences.push(verify);}:undefined).execute(actor,operation,request.signal);
+  const result=await operations(actor,page,()=>requestOrSessionActor(request,{revalidate:true}),operationKind==='query'?verify=>{readFences.push(verify);}:undefined).execute(actor,operation,request.signal);
   if(operationKind==='query'){
    for(const verify of readFences)await verify();
    await verifyPage(page.revision);

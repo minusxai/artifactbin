@@ -32,6 +32,48 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.native_identity_imports (
+  source_namespace TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  source_sha256 TEXT NOT NULL,
+  target_sha256 TEXT NOT NULL,
+  projection_sha256 TEXT NOT NULL,
+  source_inventory_sha256 TEXT NOT NULL,
+  target_inventory_sha256 TEXT NOT NULL,
+  original_state JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (source_namespace, kind, source_id)
+);
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_namespace TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_id TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS projection_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_inventory_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_inventory_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS original_state JSONB NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_native_identity_imports_target ON app.native_identity_imports (kind, target_id);
+
 CREATE TABLE IF NOT EXISTS app.html_backend_secrets (
   owner_id TEXT NOT NULL,
   backend_id TEXT NOT NULL,

@@ -46,7 +46,12 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
 export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS):string {
-  if (!pages)return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined),extensions);
+  if (!pages){
+    // The opaque raw reader may load only this page's admission-checked linked
+    // stylesheets; do not grant the application's other paths as style sources.
+    const assets=new URL(`/a/${id}/assets`,base).href;
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets}`),extensions);
+  }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
 /** Stored metadata wins; native head text supplies the same first-paint name for older heads. */

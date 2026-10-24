@@ -99,3 +99,16 @@ caps rule as the server pool. It is the only engine: the app, the CLI and the of
   columns are the ones whose DEFAULT it did not take; an effect outside the operation (REPLACE, a moved rowid) is
   refused. `policyPreview` runs the statement on the (empty) table and stops after admission and column checks.
   Row values arrive as ordinary named parameters.
+
+
+## Owned remote reads
+
+`SqlService.startRead`, when present, returns `{result, cancelAndDrain}`. The host pool releases the worker before resolving either successful completion or cancellation. Queued cancellation removes only that read; running cancellation terminates its worker and waits for exit. Retiring workers still count against capacity.
+
+The private authenticated SQL shell exposes POST `/read-jobs/open`, `/read-jobs/submit`, `/read-jobs/status`, and `/read-jobs/cancel`. Open returns a process incarnation and server time. Each subsequent request binds a random ID, that incarnation, and an absolute server lease deadline; submission additionally carries the immutable `RunInput`. Repeated submission must match the original input digest. Cancellation before submission leaves a tombstone, preventing delayed packets from admitting work.
+
+Only a matching terminal receipt with `drained: true` attests release. Unknown receipts and responses from another incarnation never do. The client reconciles lost responses with the same key and requests cancellation after abort or lease expiry. A network partition that prevents confirmation fails with `sql_read_drain_unconfirmed`; it is never reported as completed or drained. Server leases cancel disconnected work independently of the client. Shell shutdown cancels and drains owned reads before closing transport.
+
+Admission bounds are 8 active reads, 1,024 receipts, a 20-second server lease, 64 queries, 8 MiB input/result per read, and 32 MiB total retained results. Terminal receipts remain through the later of their lease or completion plus 60 seconds. Capacity refusal never evicts active work or silently truncates output. Pool-owned read queues additionally cap at 64; existing method signatures and result behavior are unchanged. SQL shell errors log only a generic reason, never request bodies or SQL exception details.
+
+Registered page queries use owned execution for both source windows and final query batches. Their separate page/source authorization fences and public result limits remain enforced. This protocol is internal infrastructure, not a public SQL or generic job API.

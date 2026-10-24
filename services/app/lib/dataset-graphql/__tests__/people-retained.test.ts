@@ -1,0 +1,27 @@
+import {expect,it} from 'vitest';
+import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
+import {POST as create} from '@/app/api/artifacts/route';
+import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
+import {getDb} from '@/lib/platform';
+import {createUser,setUsername} from '@/lib/accounts';
+import {nativeHtml} from '@/__tests__/native-html-fixture';
+useAppHarness();
+it('returns actual cards only for linked typed user references and refuses revoked dataset access over HTTP',async()=>{
+ const user=await createUser({email:'mxmx_test_people_http@example.com',name:'Actual profile'});
+ await setUsername(user.id,'mxmx_test_people_http');
+ const outsider=await createUser({email:'mxmx_test_people_outside@example.com',name:'Outside'});
+ const owner=await mintAccountToken('people_http',user.id);
+ const published=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{booked_by:user.id,note:outsider.id}],columns:[{name:'booked_by',type:'user',constraints:{self:true}}],visibility:'public'}}));
+ expect(published.status,await published.clone().text()).toBe(201);
+ const dataset=await published.json();
+ const pageResponse=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeHtml('<h1>People</h1>').replace('</head>',`<link rel="af-dataset" data-af-name="bookings" href="ref:${dataset.id}" data-af-mode="live"></head>`),visibility:'public'}}));
+ expect(pageResponse.status,await pageResponse.clone().text()).toBe(201);
+ const page=await pageResponse.json();
+ const query=async()=>graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',json:{revision:'1',query:'query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}',variables:{ids:[user.id,outsider.id,'usr_missing']}}}),{params:Promise.resolve({id:page.id})});
+ const response=await query();expect(response.status,await response.clone().text()).toBe(200);
+ expect(await response.json()).toMatchObject({data:{bookings:{people:[{id:user.id,name:'Actual profile',handle:'mxmx_test_people_http',image:null}]}}});
+ await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[dataset.id]);
+ const refused=await query();const body=await refused.json();
+ expect(JSON.stringify(body)).not.toContain('Actual profile');
+ expect(body.errors||body.error).toBeTruthy();
+});

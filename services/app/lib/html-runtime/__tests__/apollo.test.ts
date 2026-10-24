@@ -51,7 +51,7 @@ describe('HTML page client', () => {
     expect(sends).toBe(1);
   });
 
-  it('watchers follow local fields and reject backend subscriptions', async () => {
+  it('watchers follow local fields and settle unavailable backend subscriptions', async () => {
     const client = createClient({ backends: ['inventory'], state: createLocalStore({ count: 0 }) });
     const values: unknown[] = [];
     const subscription = client.watchQuery({ query: gql`{ count }` }).subscribe((result) => values.push(result.data));
@@ -59,7 +59,9 @@ describe('HTML page client', () => {
     subscription.unsubscribe();
     await client.updateQuery({ query: gql`{ count }` }, () => ({ count: 2 }));
     expect(values).toEqual([{ count: 0 }, { count: 1 }]);
-    expect(() => client.watchQuery({ query: gql`{ inventory { count } }` })).toThrow();
+    const remoteResults:any[]=[];const watch=client.watchQuery({query:gql`{inventory{count}}`}).subscribe(result=>remoteResults.push(result));
+    for(let i=0;i<6;i++)await Promise.resolve();
+    expect(remoteResults.at(-1)).toMatchObject({data:{inventory:null},loading:false,errors:[{message:expect.any(String)}]});watch.unsubscribe();
   });
 });
 

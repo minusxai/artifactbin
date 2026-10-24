@@ -32,6 +32,10 @@ const bare = (selector: string) => `:where([data-mx-story-root]) :where(${select
 
 /** The story root of a document none of whose elements carries a class (STORY_STYLED_ATTR absent). */
 const unstyledRoot = ':where([data-mx-story-root]:not([data-mx-styled]))';
+// These registered hosts own their page-column geometry (Markdown body and
+// SlideDeck's content column beside its rail). Keep the automatic bare-page
+// gutter on ordinary unstyled HTML, including a plain article.
+const rootGutterExclusion = ':not(af-markdown):not(af-slide-deck)';
 
 export const STORY_BARE_TYPOGRAPHY_CSS = [
   // A measure and rhythm, so a bare document reads as a document.
@@ -59,9 +63,9 @@ export const STORY_BARE_TYPOGRAPHY_CSS = [
   // decided once from the HTML it wraps — never a `:has([class])` test. That selector made EVERY class change anywhere
   // in the document re-match the root, a whole-page style pass per change (123 ms on a 28-table page), and in edit
   // mode the editor's own classes flipped it.
-  `${unstyledRoot}>*{padding-inline:clamp(1rem,5vw,3rem)}`,
-  `${unstyledRoot}>*:first-child{padding-block-start:2.5rem}`,
-  `${unstyledRoot}>*:last-child{padding-block-end:3rem}`,
+  `${unstyledRoot}>*${rootGutterExclusion}{padding-inline:clamp(1rem,5vw,3rem)}`,
+  `${unstyledRoot}>*:first-child${rootGutterExclusion}{padding-block-start:2.5rem}`,
+  `${unstyledRoot}>*:last-child${rootGutterExclusion}{padding-block-end:3rem}`,
   // On a phone the display sizes step down: a 2.5rem h1 is a headline on a
   // laptop and a wall on a 390px screen. Bare elements only, like everything
   // here — a styled document chose its own sizes and keeps them.

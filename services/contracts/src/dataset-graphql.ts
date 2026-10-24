@@ -1,3 +1,4 @@
+import type {PersonCard} from './sql';
 import type { HtmlDatasetLink } from './html-page';
 import type { PageMutationOutcome } from './page-operation';
 export type DatasetCellType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON';
@@ -33,13 +34,17 @@ export interface DatasetReadResult {
 export type DatasetRowChange = {kind:'INSERT';cells:readonly DatasetCell[]}|{kind:'UPDATE';rowId:string;cells:readonly DatasetCell[]}|{kind:'DELETE';rowId:string};
 export interface DatasetWriteRequest { tableId:string; expectedRevision:string; requestId:string; changes:readonly DatasetRowChange[] }
 export interface DatasetWriteReceipt { requestId:string; revision:string|null; outcome:Exclude<PageMutationOutcome,'offline'>; rowIds:readonly string[] }
+/** Actual cards for ids present in typed user columns of the authorized linked dataset. */
+export interface DatasetPerson extends PersonCard {id:string}
 /** Implement with original dataset policies/grants; page readability is insufficient authorization. */
 export interface DatasetGraphql<A> {
+  people(actor:A,binding:HtmlDatasetLink,ids:readonly string[],signal:AbortSignal):Promise<readonly DatasetPerson[]>;
   schema(actor:A,binding:HtmlDatasetLink,signal:AbortSignal):Promise<DatasetSchemaResult>;
   query(actor:A,binding:HtmlDatasetLink,request:DatasetQueryRequest,signal:AbortSignal):Promise<DatasetReadResult>;
   read(actor:A,binding:HtmlDatasetLink,request:DatasetReadRequest,signal:AbortSignal):Promise<DatasetReadResult>;
   write(actor:A,binding:HtmlDatasetLink,request:DatasetWriteRequest,signal:AbortSignal):Promise<DatasetWriteReceipt>;
 }
+export const DATASET_GRAPHQL_MAX_PEOPLE=100;
 export const DATASET_GRAPHQL_MAX_PAGE=100;
 export const DATASET_GRAPHQL_MAX_CHANGES=100;
 /** Constant schema for every dataset. JSON payloads never replace stable column/row identities. */
@@ -70,7 +75,8 @@ input RowChange { kind: RowChangeKind! rowId: ID cells: [CellInput!] }
 type WriteReceipt { requestId: ID! revision: String outcome: WriteOutcome! rowIds: [ID!]! }
 type DatasetTable { id: ID! label: String! columns: [Column!]! source: DatasetSourceInfo! }
 type DatasetSchema { revision: String! tables: [DatasetTable!]! }
-type Query { schema: DatasetSchema! query(tableId: ID!, columnIds: [ID!], filters: [QueryFilter!], parameters: [QueryParameter!], groupBy: [ID!], aggregates: [Aggregate!], order: [Order!], first: Int! = 20, after: String): Rows! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
+type Person { id: ID! name: String! handle: String image: String }
+type Query { people(ids: [ID!]!): [Person!]! schema: DatasetSchema! query(tableId: ID!, columnIds: [ID!], filters: [QueryFilter!], parameters: [QueryParameter!], groupBy: [ID!], aggregates: [Aggregate!], order: [Order!], first: Int! = 20, after: String): Rows! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
 type Mutation { writeRows(tableId: ID!, expectedRevision: String!, requestId: ID!, changes: [RowChange!]!): WriteReceipt! }
 `;
 /** Pure preflight only. Runtime must still validate schema/IDs/cells and repeat policy inside its transaction. */

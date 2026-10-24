@@ -172,3 +172,11 @@ describe('a system reference pastes only what its runtime serves', () => {
     for (const slug of ROSTER) for (const role of classes.filter((c) => c.startsWith('t-'))) expect(rolesServed(slug).has(role), `${slug} lacks ${role}`).toBe(true);
   });
 });
+
+it('keeps native theme font delivery and linked-CSS guides generated from the installed manifest',async()=>{
+ const {nativeSystemCss,nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
+ for(const name of ROSTER){
+  expect(readFileSync(path.join(REPO,'services/app/skills/artifactbin/design-systems',name+'.css'),'utf8')).toBe(nativeSystemCss(name));
+  expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
+ }
+});

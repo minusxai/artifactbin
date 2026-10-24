@@ -1,6 +1,15 @@
 import {describe,it,expect} from 'vitest';
 import {planPublicationBundle} from '../plan';
 const file=(path:string,text:string,contentType='text/plain')=>({path,contentType,base64:Buffer.from(text).toString('base64')});
+it('rebases only exact admitted immutable dependencies from reused module and CSS bytes',async()=>{
+ const {pinPublicationAssetUrls}=await import('../plan');
+ const source='import "/a/OLD123/assets?dependency=CHILD1&revision=2#export";import "/a/OLD123/assets?dependency=CHILD1&revision=3";const literal="/a/OLD123/assets?dependency=CHILD1&revision=2";';
+ const result=pinPublicationAssetUrls(source,'NEW123',4,'text/javascript',[{id:'CHILD1',revision:'2'}]);
+ expect(result).toContain('import "/a/NEW123/assets?dependency=CHILD1&revision=2&version=4#export"');
+ expect(result).toContain('import "/a/OLD123/assets?dependency=CHILD1&revision=3"');
+ expect(result).toContain('const literal="/a/OLD123/assets?dependency=CHILD1&revision=2"');
+ expect(pinPublicationAssetUrls('a{src:url(/a/OLD123/assets?dependency=CHILD1&revision=2)}','NEW123',4,'text/css',[{id:'CHILD1',revision:'2'}])).toContain('/a/NEW123/assets?dependency=CHILD1&revision=2&version=4');
+});
 describe('dependency publication plan',()=>{
  it('finds nested CSS assets once and keeps remote datasets',()=>{
  const html='<link rel="stylesheet" href="./css/main.css"><img src="./img/a.svg"><link rel="af-dataset" data-af-name="tasks" href="./data/tasks.csv"><link rel="af-dataset" data-af-name="other" href="ref:ABC123">';
@@ -54,4 +63,13 @@ it('accepts atomically supplied backend namespaces but still rejects missing loc
 it('preserves literal native bindings without admitting arbitrary dynamic asset paths',()=>{
  for(const value of ['$pick','{$pick}'])expect(planPublicationBundle(`<DataTable data="$current"/><img src="${value}">`,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
  for(const html of ['<object data="./missing.pdf">','<img src="$pick/image.svg">','<img src="./missing.svg">'])expect(()=>planPublicationBundle(html,{entryPath:'index.html',files:[]})).toThrow('Unresolved local dependencies');
+});
+it('accepts a multi-megabyte asset inside the unchanged file limit without recursive base64 validation',()=>{
+ const text='x'.repeat(3_900_000),html='<script type="module" src="./engine.js"></script>';
+ const plan=planPublicationBundle(html,{entryPath:'index.html',files:[file('engine.js',text,'text/javascript')]});
+ expect(plan.dependencies[0]?.bytes.byteLength).toBe(3_900_000);
+});
+it('keeps rejecting invalid base64 characters, padding and noncanonical encodings',()=>{
+ for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow();
+ for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
 });

@@ -7,7 +7,7 @@ import path from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url));
 function serverOrigin(value){const url=new URL(value);if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Select an HTTP server origin without a path or credentials.');return url.origin;}
 export async function prepareSample(name,server,datasetId){
- const origin=serverOrigin(server),idempotencyKey=randomUUID();
+ const origin=serverOrigin(server);
  let body;
  if(name==='repairs-data')body={dataset:await readFile(path.join(root,'examples/repairs.csv'),'utf8'),title:'Repair bench sample',visibility:'unlisted',access:'readwrite'};
  else {
@@ -17,10 +17,16 @@ export async function prepareSample(name,server,datasetId){
    if(!/^[A-Za-z0-9]{6,}$/.test(datasetId??''))throw Error('The CSV dashboard requires the real returned dataset ID.');
    html=html.replace('ref:DATASET_ID',`ref:${datasetId}`);
   }
-  body={html,title:{report:'A cooler walk home','csv-dashboard':'Repair bench capacity','shared-app':'Saturday garden jobs'}[name],visibility:'unlisted'};
-  if(name==='shared-app')body.backendSources={garden:await readFile(path.join(root,'examples/garden.ts'),'utf8')};
+  const {prepareBundle}=await import('./publication-bundle.mjs');
+  const snapshot=await prepareBundle({root,entry:`examples/${name}.html`,server:origin,entryHtml:html});
+  body={...snapshot.body,title:{report:'A cooler walk home','csv-dashboard':'Repair bench capacity','shared-app':'Saturday garden jobs'}[name],visibility:'unlisted'};
+  if(name==='shared-app'){
+   const backend=snapshot.body.publicationBundle.files.find(file=>file.path==='examples/garden.ts');
+   if(!backend)throw Error('Sample backend is missing from its publication snapshot.');
+   body.backendSources={garden:Buffer.from(backend.base64,'base64').toString('utf8')};
+  }
  }
- return {server:origin,method:'POST',idempotencyKey,body};
+ return {server:origin,method:'POST',idempotencyKey:randomUUID(),body};
 }
 export async function sendPublication(saved,env=process.env,fetcher=fetch){
  const origin=serverOrigin(saved.server);

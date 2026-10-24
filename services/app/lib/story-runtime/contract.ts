@@ -1,3 +1,4 @@
+import type {UploadContext} from '@artifactbin/contracts';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
@@ -517,6 +518,7 @@ export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
 /** What the page tells the frame when it attaches: the controller's inputs (createIslandController). */
 export interface FrameBridgeAttach {
   kind: 'attach';
+  uploadContext?: UploadContext;
   id: string;
   /** The version's SOURCE nodes, which comments and selections are classified against. */
   nodes: JsxNode[];
@@ -527,6 +529,7 @@ export interface FrameBridgeAttach {
 /** Page → frame. */
 export type FrameBridgeParentPayload =
   | FrameBridgeAttach
+  | {kind:'upload-context';context:UploadContext}
   /** The live inputs the controller reads (`editId()`, `initialSource()`), when the page learns newer ones. */
   | { kind: 'context'; editId: string; source: string | null }
   /**
@@ -563,6 +566,7 @@ export type FrameBridgeFramePayload =
   | { kind: 'restored'; call: number; ok: true }
   | { kind: 'restored'; call: number; ok: false; error: string }
   /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */
+  | { kind: 'upload-file'; call:number; datasetId:string; filename:string; contentType:string; requestId:string; bytes:Uint8Array }
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }

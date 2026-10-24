@@ -8,7 +8,7 @@ import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
-interface Link {start:number;end:number;value:string;kind:'asset'|'dataset'}
+interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true}
 function normalized(value:string):string{
  if(!value||value.includes('\\')||value.includes('\0')||value.startsWith('/')||value.split('/').includes('..'))throw Error('Invalid bundle path: '+value);
  const result=path.posix.normalize(value);if(result==='.'||result.startsWith('../'))throw Error('Invalid bundle path: '+value);return result;
@@ -61,18 +61,18 @@ function links(source:string,css:boolean,js=false):Link[]{
     const raw=written.slice(equals+1),leading=raw.search(/\S/),quote=raw[leading];const start=loc.startOffset+equals+1+leading+(quote==='"'||quote==="'"?1:0);
     const end=quote==='"'||quote==="'"?source.indexOf(quote,start):loc.endOffset;
     if(attr.name==='style'){
-     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end});
+     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end,htmlAttribute:true});
     }else if(attr.name==='srcset'){
      const value=source.slice(start,end);let cursor=0;
      while(cursor<value.length){
       while(/[\s,]/.test(value[cursor]??'')&&cursor<value.length)cursor++;
       const begin=cursor;while(cursor<value.length&&!/\s/.test(value[cursor]!))cursor++;
       let stop=cursor;while(value[stop-1]===',')stop--;
-      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset'});
+      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset',htmlAttribute:true});
       if(stop<cursor)continue;
       while(cursor<value.length&&value[cursor]!==',')cursor++;
      }
-    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset'});
+    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true});
    }
    if(node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   }
@@ -86,7 +86,9 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  const entryPath=normalized(bundle.entryPath),files=new Map<string,{bytes:Buffer;contentType:string}>();let total=0;
  for(const file of bundle.files){
   const name=normalized(file.path);if(files.has(name))throw Error('Duplicate bundle path: '+name);
-  if(typeof file.base64!=='string'||file.base64.length>Math.ceil(MAX_FILE/3)*4||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.base64))throw Error('Invalid bundle base64');
+  // A repeated captured quartet over multi-megabyte assets overflows the regex VM stack.
+  // Check the alphabet/padding linearly; the decode/re-encode below enforces canonical bits.
+  if(typeof file.base64!=='string'||file.base64.length>Math.ceil(MAX_FILE/3)*4||file.base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(file.base64))throw Error('Invalid bundle base64');
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
@@ -125,7 +127,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const edits=dependencies(source,owner,files.get(owner)?.contentType==='text/css');let result=source;
-  for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=owner===entryPath?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
+  for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
@@ -134,15 +136,19 @@ export function inspectPublicationBundle(html:string,bundle:PublicationBundle){
  return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
-export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html'):string{
+export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html',admittedAssets:readonly {id:string;revision:string}[]=[]):string{
  const matches=links(source,contentType==='text/css',/^(?:text|application)\/javascript$/.test(contentType));let result=source;
  for(const link of matches.sort((a,b)=>b.start-a.start)){
-  if(!link.value.startsWith(`/a/${pageId}/assets?`))continue;
+  if(!/^\/a\/[A-Za-z0-9]+\/assets\?/.test(link.value))continue;
   const url=new URL(link.value,'https://bundle.invalid');
-  if(url.pathname!==`/a/${pageId}/assets`||url.searchParams.getAll('dependency').length!==1)continue;
+  if(url.searchParams.getAll('dependency').length!==1)continue;
+  if(url.pathname!==`/a/${pageId}/assets`){
+   if(url.searchParams.getAll('revision').length!==1||!admittedAssets.some(asset=>asset.id===url.searchParams.get('dependency')&&asset.revision===url.searchParams.get('revision')))continue;
+   url.pathname=`/a/${pageId}/assets`;
+  }
   url.searchParams.set('version',String(version));
   const address=url.pathname+url.search+url.hash;
-  const escaped=contentType==='text/html'?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
+  const escaped=link.htmlAttribute?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
   result=result.slice(0,link.start)+escaped+result.slice(link.end);
  }
  return result;

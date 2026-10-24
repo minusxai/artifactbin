@@ -255,6 +255,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     });
     setCurrent(bridge);
     if (inset) bridge.setTopInset(inset);
+    if(options.htmlContext)createEffect(()=>{options.htmlContext!();bridge.refreshUploadContext();});
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
     // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
     let forwarded: string | null = null;

@@ -417,9 +417,10 @@ jobs:
             services/app/lib/build-assets
             services/app/public/islands
             services/app/public/libraries
+            services/app/skills/artifactbin/components
             services/app/server/routes.generated.ts
             services/cli/dist
-          key: app-build-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-${{ needs.plan.outputs.cli }}-pack-${{ needs.plan.outputs.cli-pack }}
+          key: app-build-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-${{ needs.plan.outputs.cli }}-pack-${{ needs.plan.outputs.cli-pack }}
       # The island and server-reader builds inside `npm run build` take `--cache` (build-prep.mjs):
       # restoring the test shards' builds turns the ~27s island build into a marker check.
       - if: steps.build-cache.outputs.cache-hit != 'true'
@@ -590,9 +591,10 @@ jobs:
             services/app/lib/build-assets
             services/app/public/islands
             services/app/public/libraries
+            services/app/skills/artifactbin/components
             services/app/server/routes.generated.ts
             services/cli/dist
-          key: app-build-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-${{ needs.plan.outputs.cli }}-pack-${{ needs.plan.outputs.cli-pack }}
+          key: app-build-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-${{ needs.plan.outputs.cli }}-pack-${{ needs.plan.outputs.cli-pack }}
       # The islands and server reader with their content markers (see the api job): the build below
       # takes `--cache`, so a restore that matches this tree turns the ~27s island build into a check.
       - if: steps.build-cache.outputs.cache-hit != 'true'
@@ -778,9 +780,10 @@ jobs:
             services/app/lib/build-assets
             services/app/public/islands
             services/app/public/libraries
+            services/app/skills/artifactbin/components
             services/app/server/routes.generated.ts
             services/cli/dist
-          key: app-build-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-false-pack-false
+          key: app-build-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.build-key.outputs.key }}-npm-false-pack-false
       - if: steps.build-cache.outputs.cache-hit != 'true'
         run: npm run build -w services/cli
       - if: steps.build-cache.outputs.cache-hit != 'true'
@@ -1159,7 +1162,7 @@ jobs:
         run: |
           tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
             services/cli/dist services/app/dist services/app/lib/build-assets \
-            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
+            services/app/public/islands services/app/public/libraries services/app/skills/artifactbin/components services/app/server/routes.generated.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: needs.plan.outputs.reference-compatibility == 'true'
         with:

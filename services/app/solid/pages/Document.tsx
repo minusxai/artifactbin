@@ -91,7 +91,7 @@ interface DocumentAnswer {
 export function DocumentPage(): JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session } = useSession();
+  const { session, sessionError } = useSession();
   const page = takeBootstrap<DocumentAnswer>(location.pathname, 'artifact');
   const rawId = page?.surface?.id ?? /^\/a\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
   const id = rawId && ARTIFACT_ID_PATTERN.test(rawId) ? rawId : null;
@@ -266,6 +266,7 @@ export function DocumentPage(): JSX.Element {
       htmlContext: page.surface?.format === 'html' ? () => ({
         revision: String(page.archived?.version ?? page.surface?.version ?? 1),
         readOnly: !!page.archived,
+        uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
       }) : undefined,
       version: live, reading: () => true,
       onPressed: askTreeOnPress,

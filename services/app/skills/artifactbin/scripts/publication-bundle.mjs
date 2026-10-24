@@ -4,10 +4,15 @@ import path from 'node:path';
 import {realpathSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {sendPublication} from './publish.mjs';
+import {publicationLocalReferences} from './preview-html.mjs';
 import {fileURLToPath} from 'node:url';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
-export async function prepareBundle({root,entry,server,manifest=[],mappings={}}){
+/** @typedef {{root:string,entry:string,server:string,entryHtml?:string,manifest?:string[],mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings']}} BundlePreparationOptions */
+/** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot limits/discovery.
+ * @param {BundlePreparationOptions} options */
+export async function prepareBundle({root,entry,server,entryHtml,manifest=[],mappings={}}){
  const origin=new URL(server);if(!['http:','https:'].includes(origin.protocol)||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)throw Error('Select a server origin');
+ if(entryHtml!==undefined&&typeof entryHtml!=='string')throw Error('Entry HTML override must be a string');
  const project=await realpath(root),files=new Map();let size=0;
  async function load(name){
   if(typeof name!=='string'||!name||name.includes('\\')||path.isAbsolute(name))throw Error('Invalid project path');
@@ -15,13 +20,12 @@ export async function prepareBundle({root,entry,server,manifest=[],mappings={}})
   const full=path.join(project,name),parts=name.split('/');let parent=project;
   for(const part of parts){parent=path.join(parent,part);if((await lstat(parent)).isSymbolicLink())throw Error('Symlink dependencies are refused: '+name);}
   const canonical=await realpath(full);if(!canonical.startsWith(project+path.sep))throw Error('Dependency escapes project root');
-  if(files.has(name))return;const bytes=await readFile(canonical);if(bytes.length>4_000_000||(size+=bytes.length)>16_000_000||files.size>=100)throw Error('Publication bundle limit exceeded');
+  if(files.has(name))return;if(name===entry&&entryHtml!==undefined&&!(await lstat(canonical)).isFile())throw Error('Entry must be a regular file');const bytes=name===entry&&entryHtml!==undefined?Buffer.from(entryHtml):await readFile(canonical);if(bytes.length>4_000_000||(size+=bytes.length)>16_000_000||files.size>=100)throw Error('Publication bundle limit exceeded');
   const contentType=types[path.extname(name).toLowerCase()]??'application/octet-stream';files.set(name,{path:name,contentType,base64:bytes.toString('base64')});
-  if(name===entry||contentType==='text/css'){
-   const source=contentType==='text/css'?bytes.toString('utf8'):bytes.toString('utf8').replace(/<!--[\s\S]*?-->/g,'').replace(/(<script\b[^>]*>)[\s\S]*?<\/script\s*>/gi,'$1</script>');
-   // Only static markup/CSS URLs are discovered. Dynamic script dependencies belong in manifest.
-   const pattern=contentType==='text/css'?/\/\*[\s\S]*?\*\/|url\(\s*["']?([^"'\s)]+)|@import\s+["']([^"']+)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/gi:/<(?:img|script|link|source|video|audio|iframe|object|embed|image|use)\b[^>]*?\b(?:src|href|poster)\s*=\s*["']([^"']+)["']/gi;
-   for(const match of source.matchAll(pattern)){const url=match[1]??match[2];if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(/[?#]/)[0])));if(!mappings[dep])await load(dep);}
+  if(name===entry||contentType==='text/css'||contentType==='text/javascript'){
+   const source=bytes.toString('utf8');
+   const urls=publicationLocalReferences(source,contentType);
+   for(const url of urls){if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(/[?#]/)[0])));if(!mappings[dep])await load(dep);}
   }
  }
  entry=path.posix.normalize(entry);await load(entry);for(const name of manifest)await load(name);

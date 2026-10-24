@@ -1,3 +1,4 @@
+import {verifyRegisteredHtmlMutation} from '@/lib/artifacts';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { grantsOf, assertGrantCommit, getArtifactById, type GrantDocument } from '@/lib/artifacts';
@@ -232,6 +233,11 @@ export async function mutateDataset(
     const commit=async(tx:Queryable)=>{
      const notificationInput=guard.notificationJob;
      if(notificationInput)await lockNotificationExecution(tx,notificationInput);
+     if(guard.document?.registeredHtml){
+      // Same transaction/row lock as the dataset CAS: no page/source change can race it.
+      await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([current.id,guard.document.id])]]);
+      if(!await verifyRegisteredHtmlMutation(guard.document,tx))throw new DatasetError('Registered page action changed',403);
+     }
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
@@ -297,7 +303,7 @@ export async function mutateDataset(
      return result;
     };
     let updated;
-    try { updated=jobs||v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { updated=jobs||v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) {
      if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};

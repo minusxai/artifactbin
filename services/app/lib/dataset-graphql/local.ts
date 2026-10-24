@@ -69,6 +69,7 @@ export function createLocalDataset(namespace:string,input:readonly LocalDatasetT
  return {revision,source:source(table),columns:aggregate?.columns??descriptors(table).filter(c=>base!.columns.some(p=>columnIdentity(request.tableId,p.name)===c.id)),rows:visible,pageInfo:{hasNextPage:values.length>offset+visible.length,endCursor:visible.length?Buffer.from(JSON.stringify([identity,offset+visible.length])).toString('base64url'):null}};
  }
  return {
+ async people(){throw Error('dataset_people_unavailable_offline');},
  export:()=>structuredClone({revision,tables}),
  async schema(_actor,_binding,signal){signal.throwIfAborted();return {revision,tables:tables.map(t=>({id:tableIdentity(t),label:t.name,columns:descriptors(t),source:source(t)}))};},
  query,read:(actor,binding,request:DatasetReadRequest,signal)=>query(actor,binding,request,signal),

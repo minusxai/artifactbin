@@ -129,3 +129,33 @@ describe('dockerRunArgs', () => {
   });
 
 });
+
+describe('private migration pilot mounts',()=>{
+ it('passes only complete explicit private inputs read-only and the isolated evidence directory writable',()=>{
+  const env={NATIVE_MIGRATION_PILOT__INPUT:'/private/input.json',NATIVE_MIGRATION_PILOT__CANONICAL:'/private/canonical.json',NATIVE_MIGRATION_PILOT__RECOVERY:'/private/recovery.json',NATIVE_MIGRATION_PILOT__BUNDLE:'/private/bundle',NATIVE_MIGRATION_PILOT__OUTPUT:'/private/evidence'};
+  const args=dockerRunArgs({name:'pilot',image:'image',volume:'deps',buildKey:'a'.repeat(32),worktree:'/tree',cpus:4,memory:'8g',servers:1,gates:['component-baseline'],env});
+  const mounts=args.filter((_,i)=>args[i-1]==='-v');expect(mounts).toContain('/private/input.json:/pilot/input.json:ro');expect(mounts).toContain('/private/bundle:/pilot/bundle:ro');expect(mounts).toContain('/private/evidence:/pilot/output:rw');
+  expect(args).toContain('NATIVE_MIGRATION_PILOT__INPUT=/pilot/input.json');
+  expect(()=>dockerRunArgs({env:{NATIVE_MIGRATION_PILOT__INPUT:'/private/input.json'}})).toThrow('complete');
+ });
+});
+
+describe('private paired component evidence mount',()=>{
+ const base={name:'identity',image:'image',volume:'deps',buildKey:'a'.repeat(32),worktree:'/tree',cpus:4,memory:'8g',servers:1,gates:['component-baseline']};
+ it('mounts only an explicitly supplied absolute capture input read-only',()=>{
+  const args=dockerRunArgs({...base,env:{COMPONENT_BASELINE__INPUT:'/private/capture.json'}});
+  expect(args).toContain('/private/capture.json:/component-input.json:ro');
+  expect(args).toContain('COMPONENT_BASELINE__INPUT=/component-input.json');
+  expect(dockerRunArgs(base).join(' ')).not.toContain('/component-input.json');
+  for(const input of ['relative','/private/input:rw','/private/input\nother'])expect(()=>dockerRunArgs({...base,env:{COMPONENT_BASELINE__INPUT:input}})).toThrow('absolute');
+ });
+ it('persists only the explicitly selected evidence directory without exposing credentials',()=>{
+  const args=dockerRunArgs({...base,env:{COMPONENT_BASELINE__OUTPUT:'/private/identity-evidence'}});
+  expect(args).toContain('/private/identity-evidence:/component-evidence:rw');
+  expect(args).toContain('COMPONENT_BASELINE__OUTPUT=/component-evidence');
+  expect(args.join(' ')).not.toContain('AUTH__SECRET');
+ });
+ it('rejects relative and mount-delimiter paths before starting a container',()=>{
+  for(const output of ['relative','/private/evidence:ro','/private/evidence\nother'])expect(()=>dockerRunArgs({...base,env:{COMPONENT_BASELINE__OUTPUT:output}})).toThrow('absolute');
+ });
+});

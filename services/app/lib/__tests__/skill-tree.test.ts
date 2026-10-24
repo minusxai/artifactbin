@@ -12,6 +12,12 @@
  * hostname cannot move a byte count.
  */
 import { describe, it, expect } from 'vitest';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {loadSkillSources} from '../skills/tree';
+import {loadSkillAssets} from '../skills/assets';
+import {skillPackageFiles,skillZip} from '../skills/package';
 import { buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES } from '../skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { STORY_THEMES } from '../data/story/story-themes';
@@ -324,4 +330,24 @@ describe('each topic is taught by exactly its owner', () => {
   it('a template one-liner lives on the templates index and its own page, nowhere else', () => {
     for (const t of STORY_TEMPLATES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/templates-${t.name}.md`, `${R}/templates.md`]);
   });
+});
+
+
+it('keeps component sources out of Markdown teaching while including them in the installed package',()=>{
+ const root=mkdtempSync(path.join(tmpdir(),'skill-component-package-'));
+ try{
+  const skill=path.join(root,'artifactbin');mkdirSync(path.join(skill,'components'),{recursive:true});mkdirSync(path.join(skill,'references'));
+  const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/html-runtime.md':ok('html-runtime')};
+  for(const [name,text] of Object.entries(docs))writeFileSync(path.join(root,name),text);
+  const components={'components/button.ts':'export interface ButtonProps {}','components/button.js':'export const register=()=>{};'};
+  for(const [name,text] of Object.entries(components))writeFileSync(path.join(skill,name),text);
+  writeFileSync(path.join(skill,'components/button.test.ts'),'test-only');
+  writeFileSync(path.join(skill,'components/button.fixture.ts'),'fixture-only');
+  const sources=loadSkillSources(root);expect(sources).toEqual(docs);
+  const assets=loadSkillAssets(skill);expect(assets).toEqual(components);
+  const installed=skillPackageFiles(buildSkillTree(sources),BASE,assets);
+  expect(installed).toMatchObject(components);expect(installed['SKILL.md']).toContain('name: artifactbin');
+  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.js','components/button.ts','references/html-runtime.md']);
+  expect(skillZip(installed).byteLength).toBeGreaterThan(0);
+ }finally{rmSync(root,{recursive:true,force:true});}
 });

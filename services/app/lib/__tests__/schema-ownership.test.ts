@@ -132,3 +132,11 @@ it('the hot-path indexes are declared, created at boot only when missing, and pa
  expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_invitations_email ON app.group_invitations (group_id, email)');
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_group_invitations_by_email ON app.group_invitations (email)');
 });
+
+it('native identity provenance belongs to the app and preserves multiple verified aliases',()=>{
+ expect(declared()['app.native_identity_imports']).toBe('app');
+ const sql=renderedSchema().schema;
+ expect(sql).toContain('PRIMARY KEY (source_namespace, kind, source_id)');
+ expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_native_identity_imports_target');
+ expect(sql).not.toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_native_identity_imports_target');
+});

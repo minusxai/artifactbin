@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import {runtimeAssetManifest} from './preview-runtime-assets.mjs';
+import {libraryAssetManifest} from './preview-library-assets.mjs';
 import {createServer} from 'node:http';
-import {realpath,stat} from 'node:fs/promises';
+import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
-import {previewHtml} from './preview-html.mjs';
+import {previewHtml,packPreviewExport} from './preview-html.mjs';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {pathToFileURL} from 'node:url';
 
@@ -15,13 +16,16 @@ export const PRIVATE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline
 const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff','.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!tail.startsWith('..'+sep)&&tail!=='..'&&!tail.startsWith(sep));};
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts. */
-export async function startPreview({root,port=0,runtimeDir,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000}) {
+export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000}) {
  if(!Number.isInteger(port)||port<0||port>65535)throw Error('Port must be an integer from 0 to 65535');
  const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error('Root must be a directory');
  // Generated only in the downloadable archive; optional in a source checkout.
  const runtimeModule=new URL('./preview-runtime.mjs',import.meta.url).href;
  let bundled;try{bundled=(await import(runtimeModule)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}
  const runtimeAssets=bundled?runtimeAssetManifest(bundled):new Map();
+ let libraries=libraryAssets;
+ if(!libraries){try{libraries=(await import(new URL('./preview-libraries.mjs',import.meta.url).href)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}}
+ const publicLibraries=libraryAssetManifest(libraries??{});
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
@@ -54,13 +58,27 @@ export async function startPreview({root,port=0,runtimeDir,revisionIntervalMs=10
    const pathname=decodeURIComponent((req.url||'/').split('?')[0]);
    if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))return end(404,'Not found');
    if(pathname==='/__af_preview/export-runtime'){res.setHeader('Content-Type','application/json');return end(bundled?200:503,JSON.stringify(bundled??{error:'Use the downloaded HTTP author skill for bundled runtime export.'}));}
+   if(pathname==='/__af_preview/export-source'){
+    const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
+    if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
+    const selected=requested==='/'?'/index.html':requested;
+    const load=async name=>{
+     if(publicLibraries.has(name))return {contentType:'text/javascript',bytes:Buffer.from(publicLibraries.get(name))};
+     const decoded=decodeURIComponent(name);if(!decoded.startsWith('/')||decoded.includes('\\')||decoded.includes('\0')||decoded.split('/').some(part=>part.startsWith('.')))throw Error('Invalid local export path');
+     try{let target=base;for(const part of decoded.slice(1).split('/')){target=resolve(target,part);if(!inside(base,target)||(await lstat(target)).isSymbolicLink())throw Error('Symlink or escaping local export dependency refused: '+name);}
+      return {contentType:types[extname(target).toLowerCase()]??'application/octet-stream',bytes:await readPreviewFile(base,target)};
+     }catch(error){if(error.code==='ENOENT')throw Error('Missing local dependency: '+name);throw error;}
+    };
+    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html,pathname:selected,load});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
+    catch(error){res.setHeader('Content-Type','application/json');return end(error.code==='PREVIEW_LIMIT'?413:422,JSON.stringify({error:'Local export failed: '+(error.code==='ENOENT'?'a project dependency is missing':error.message)}));}
+   }
    if(pathname==='/__af_preview/source'){
     const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
     if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
     const file=resolve(base,requested==='/'?'index.html':requested.slice(1));const html=(await readPreviewFile(base,file)).toString('utf8');res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,pathname:requested}));
    }
    if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
-   const source=runtimeAssets.get(pathname);
+   const source=runtimeAssets.get(pathname)??publicLibraries.get(pathname);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
    const isRuntime=runtime&&pathname.startsWith('/af/v1/');const selected=isRuntime?runtime:base;

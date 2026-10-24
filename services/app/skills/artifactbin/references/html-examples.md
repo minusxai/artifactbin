@@ -23,7 +23,7 @@ node scripts/publish.mjs --prepare report --server https://example.test --output
 node scripts/publish.mjs --send report-request.json
 ```
 
-Use the actual selected origin in place of `https://example.test`. Preparation refuses to overwrite a saved request and stores a durable idempotency key with its complete body. It makes no network call. Sending reuses the exact saved body/key; a timeout keeps the request for replay.
+Use the actual selected origin in place of `https://example.test`. Preparation includes the selected example’s linked stylesheet and pinned local fonts as a bounded publication bundle, without copying unrelated files. It refuses to overwrite a saved request and stores a durable idempotency key with its complete body. It makes no network call. Sending reuses the exact saved body/key; a timeout keeps the request for replay.
 
 Prepare CSV data with `--prepare repairs-data`, send it and save the returned dataset ID. Then prepare `--prepare csv-dashboard --dataset-id RETURNED_ID`. `--prepare shared-app` includes the paired backend source automatically. Helpers prepare new artifacts; edits follow [conditional replacement](html-authoring.md).
 

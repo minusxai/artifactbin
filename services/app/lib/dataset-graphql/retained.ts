@@ -4,6 +4,9 @@ import {artifactState,durableMutation,type ArtifactRow} from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {getDb} from '@/lib/platform';
+import {people} from '@/lib/datasets/user-fields';
+import {readDatasetPeople} from './people';
 import {objectStore} from '@/lib/object-store';
 import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '@/lib/document-data';
 import type {DatasetGraphqlPort} from './types';
@@ -16,6 +19,11 @@ interface RetainedReadOptions { retainReadFence?:(verify:()=>Promise<void>)=>voi
 const authorityIdentity=(row:ArtifactRow)=>JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision,catalogOf(row)]);
 export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):DatasetGraphqlPort {
  return {
+  async people(actor,snapshot,ids,signal){
+   const verify=async()=>{signal.throwIfAborted();if(authorityIdentity(await authorizedDataset(actor,snapshot.id))!==snapshot.policyIdentity)throw Error('dataset_changed');};
+   options.retainReadFence?.(verify);
+   return readDatasetPeople(snapshot,ids,{verify,rows:async table=>{if(!table.objectKey)throw unavailable();return loadDatasetRows({meta:{objectKey:table.objectKey}});},cards:async ids=>people(await getDb(),ids)},signal);
+  },
   async snapshot(actor,binding,signal){
    signal.throwIfAborted();
    const admitted=await authorizedDataset(actor,binding.datasetId),policyIdentity=authorityIdentity(admitted);

@@ -65,6 +65,8 @@ describe('installable shared skill folder',()=>{
   expect(expected['scripts/publish.mjs']).toContain('sendPublication');
   expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
   expect(expected['references/html-datasets.md']).toContain('dataset');
+  expect(expected['references/html-uploads.md']).toContain('uploadFile');
+  expect(publicGuideText('html-uploads',origin)).toContain('uploadFile');
   expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
@@ -79,6 +81,9 @@ describe('installable shared skill folder',()=>{
    const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');
    expect(runtime).toContain('export default ');
    const assets=JSON.parse(runtime.slice('export default '.length).trim().replace(/;$/, ''));
+   const libraryModule=readFileSync(path.join(dir,'artifactbin/scripts/preview-libraries.mjs'),'utf8');
+   const libraries=JSON.parse(libraryModule.slice('export default '.length).trim().replace(/;$/, ''));
+   expect(Object.keys(libraries)).toContain('/libraries/vega-6.3.1/index.js');expect(Object.keys(libraries)).toContain('/libraries/vega-lite-6.4.3/index.js');
    expect(assets.core).toContain('@afbin/apollo');
    expect(assets.reader).toContain('offline');
    expect(assets.apolloPath).toBe('/af/v1/apollo/'+createHash('sha256').update(assets.apollo).digest('hex'));
@@ -89,6 +94,7 @@ describe('installable shared skill folder',()=>{
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
    const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});
    try {
+    for(const [url,source] of Object.entries(libraries)){const response=await fetch(new URL(url,preview.url));expect(response.status).toBe(200);expect(await response.text()).toBe(source);}
     expect(await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json()).toEqual(assets);
     for(const [resource,source] of [['/af/v1/core.js',assets.core],...Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([key,path])=>[path,assets[key.slice(0,-4)]])]){
      const response=await fetch(new URL(resource,preview.url));

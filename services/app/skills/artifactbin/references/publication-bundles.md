@@ -21,11 +21,13 @@ node scripts/publication-bundle.mjs --send REQUEST.json
 ```
 
 Supply the selected server origin. The helper confines reads to the project root,
-refuses symlinks, and discovers static HTML URLs and CSS `url()` / `@import` paths.
+refuses symlinks, and discovers static HTML URLs, CSS `url()` / `@import` paths,
+and static or literal dynamic module imports, including inline module scripts.
 An optional fifth argument names a JSON file containing `manifest` (additional
 relative file paths) and `mappings` (previous returned dependency receipts keyed
-by path). Include JavaScript module dependencies in that explicit manifest; the
-server parses and rewrites literal module imports. Computed imports are refused.
+by path). List other runtime-loaded files in that explicit manifest. The server
+parses and rewrites literal module imports. Computed imports and cyclic dependency
+graphs are refused.
 The snapshot is bounded to 99 files, 4 MB per file and 16 MB total decoded bytes.
 Remote URLs, absolute server paths and `ref:` dataset links remain unchanged.
 The server validates existing dataset permissions as usual.
@@ -37,7 +39,7 @@ contains `kind` (`asset` or `dataset`), `id`, observed `revision`, and the retur
 checks ownership, kind and current revision and derives its own URL. Mappings reuse unchanged content. Changed local files update the same resource ID
 conditionally against the mapping revision and state; datasets keep their own
 revision. A concurrent remote change returns a conflict instead of overwriting it.
-Keep returned path receipts, including state and revision, for the next update.
+Keep returned path receipts, including state and revision, for the next update. Unchanged dependency receipts may also be supplied when creating other pages on the same server with the same authorized account; verify local byte digests and the full dependency closure before reusing them.
 
 The send helper saves `REQUEST.json.receipt.json` with the returned path mapping,
 including partial-success receipts. Keep the saved request and idempotency key. Dependencies use actor-owned reserved
