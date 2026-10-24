@@ -5,10 +5,12 @@ import {execFileSync} from 'node:child_process';
 import {describe,it,expect} from 'vitest';
 import {skillTree,renderSkill,SKILL_FILE_MAX_BYTES} from '@/lib/skills';
 import {isPublicSkillTopic} from '@/lib/skills/public-surface';
-import {skillPackageFiles,skillZip} from '@/lib/skills/package';
+import {skillPackageFiles} from '@/lib/skills/package';
 import {publicGuideText,llmsText} from '@/lib/serving/agent-references.server';
 import {htmlPwaSettings} from '@/lib/html-page';
 import {packOfflineHtmlImages} from '@/lib/export/native-html-media';
+import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
+import {planPublicationBundle} from '@/lib/html-publication-bundle/plan';
 const BASE='https://example.test';
 describe('one installable native HTML author skill',()=>{
  it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
@@ -45,18 +47,25 @@ describe('one installable native HTML author skill',()=>{
   for(const sample of ['report.html','csv-dashboard.html','shared-app.html','repairs.csv','garden.ts'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
- it('unpacks into a fresh harness directory and prepares a request using only the installed files',()=>{
-  const files=skillPackageFiles(skillTree(),BASE),dir=mkdtempSync(path.join(tmpdir(),'native-skill-install-'));
+ it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
+  const dir=mkdtempSync(path.join(tmpdir(),'native-skill-install-'));
   try{
-   const zip=path.join(dir,'skill.zip');writeFileSync(zip,skillZip(files));
+   const zip=path.join(dir,'skill.zip');writeFileSync(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));
    execFileSync('unzip',['-q',zip,'-d',dir]);
-   const installed=path.join(dir,'artifactbin'),request=path.join(dir,'request.json');
+   const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare','shared-app','--server',BASE,'--output',request],{cwd:installed});
-   const saved=JSON.parse(readFileSync(request,'utf8'));
-   expect(saved.body.html).toContain('data-af-name="garden"');
-   expect(saved.body.backendSources.garden).toContain('@auth(role:EDITOR)');
-   expect(saved).not.toHaveProperty('token');
+   for(const sample of ['report','csv-dashboard','shared-app']){
+    const request=path.join(dir,sample+'.json'),source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
+    execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample==='csv-dashboard'?['--dataset-id','REALDATA123']:[])],{cwd:installed});
+    const saved=JSON.parse(readFileSync(request,'utf8'));
+    expect(saved).not.toHaveProperty('token');expect(saved.body.publicationBundle).toBeDefined();
+    const plan=planPublicationBundle(saved.body.html,saved.body.publicationBundle);
+    expect(plan.dependencies.some(dep=>dep.contentType==='font/woff2'),sample).toBe(true);
+    expect(plan.dependencies.length,sample).toBeLessThan(99);
+    expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
+    if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
+    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(role:EDITOR)');}
+   }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
 });

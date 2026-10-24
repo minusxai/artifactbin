@@ -24,7 +24,7 @@ Choose one system for the subject and the content’s shape. Read only its nativ
 
 ## Binding
 
-Download the author skill ZIP to obtain the generated `design-systems/NAME.css` assets. Inline the chosen file in a `<style data-af="design-system">` block and set `data-af-design-system="NAME"` plus `data-af-dark="false"` or `"true"` on `<html>`. This is ordinary source CSS, not a claimed runtime stylesheet URL. Read the native guide for exact tokens and classes.
+Download the author skill ZIP to obtain the generated `design-systems/NAME.css` assets. Keep the installed `design-systems/` and `fonts/` folders together inside the project root. Link the chosen stylesheet with `<link data-af="design-system" rel="stylesheet" href="./design-systems/NAME.css">` and set `data-af-design-system="NAME"` plus `data-af-dark="false"` or `"true"` on `<html>`. Adjust the link for pages in subfolders. The CSS references its included pinned WOFF2 files with `../fonts/` URLs; preserve that layout. Normal publication bundles follow these dependencies, and offline Save embeds them. No external font service is required. Inlining CSS changes its URL base: rewrite font URLs relative to the HTML file before doing so. Read the native guide for exact tokens and classes.
 
 The stylesheet carries light/dark variables, font faces and typography. Use semantic HTML, ordinary `class` and authored CSS for responsive composition. The original kit components, Tailwind utility compilation and page-type recipes are not part of the native HTML contract. Preserve the system’s color/type choices; adapt its composition to the actual task.
 
