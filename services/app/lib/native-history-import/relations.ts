@@ -260,6 +260,7 @@ export function prepareNativeHistoryRelations(
   }
   return {
     sourceSha256,
+    headMetadata: {nativeRelationContext: archive},
     async apply(tx, pageId) {
       if (pageId !== history.pageId) fail();
       await verifyHistory(tx, pageId);

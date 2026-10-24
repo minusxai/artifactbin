@@ -42,6 +42,9 @@ export async function writeNativeHistory(
     new Set(revisions.map((r) => r.page.version)).size !== revisions.length
   )
     throw fail();
+  if (relations?.headMetadata !== undefined &&
+      (Object.keys(relations.headMetadata).length !== 1 ||
+       !Object.hasOwn(relations.headMetadata, "nativeRelationContext"))) throw fail();
   const allocated = new Set<string>();
   let next = 1;
   const identities = new Map<string, { source_id: string; provenance: string; first_version: number; retired_version: number | null }>();
@@ -166,14 +169,14 @@ export async function writeNativeHistory(
     creator_user_id: string; user_id: string; token_id: string; visibility: string; link_role: string;
     deleted_at: Date | string | null; group_id: string | null;
   }
-  const matchesRevision = (row: StoredRevision, r: (typeof revisions)[number]) =>
+  const matchesRevision = (row: StoredRevision, r: (typeof revisions)[number], meta = revisionMeta(r)) =>
     row.version === r.page.version && row.source === r.page.html &&
     row.title === r.title && row.description === r.description && row.format === "html" && row.document === null &&
     row.actor_user_id === r.actorUserId && row.actor_token_id === r.actorTokenId &&
-    isDeepStrictEqual(row.meta, revisionMeta(r));
+    isDeepStrictEqual(row.meta, meta);
   const verifyProjection = async () => {
     const row = (await tx.query<StoredHead>("SELECT * FROM artifacts WHERE id=$1", [input.pageId])).rows[0];
-    if (!row || !matchesRevision(row, head) || row.user_id !== input.owner.userId ||
+    if (!row || !matchesRevision(row, head, {...revisionMeta(head), ...relations?.headMetadata}) || row.user_id !== input.owner.userId ||
         row.token_id !== input.owner.tokenId || row.visibility !== input.visibility ||
         row.link_role !== input.linkRole || row.creator_user_id !== input.owner.userId || row.deleted_at !== null || row.group_id !== null)
       throw Error("native_import_collision");

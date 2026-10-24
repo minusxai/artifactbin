@@ -15,6 +15,8 @@ import {
   registeredMutationPlan,
 } from "@/lib/registered-page-mutations";
 import type { NativeHistoryImport, NativeHistoryRevision } from "../contracts";
+import { listAnnotationsFor } from "@/lib/annotations/store";
+import { prepareNativeHistoryRelations } from "../relations";
 import { importNativeHistory, writeNativeHistory } from "../index";
 useAppHarness();
 async function fixture() {
@@ -336,4 +338,26 @@ it("retains exact per-version publication receipts and rejects changed receipts"
   expect(await importNativeHistory(db, projected)).toBe("unchanged");
   await db.query("UPDATE artifact_versions SET meta=jsonb_set(meta,'{htmlPublicationDependencies}','[]') WHERE version=1");
   await expect(importNativeHistory(db, projected)).rejects.toThrow("native_import_collision");
+});
+
+it("composes historical metadata and real retained annotation context without admitting unknown metadata", async () => {
+  const {db, input, actor} = await fixture();
+  const context = {status: "available", originalRevision: "1"};
+  const relations = prepareNativeHistoryRelations({history: input,
+    bindings: [{version: 1, htmlSha256: input.revisions[0]!.sourceSha256, sourceNamespace: "graph", sourceNodeId: "original", nodeId: "stable"}],
+    annotations: [{id: "retained", revision: 1, rootId: null, body: "Retained comment", authorKind: "human", authorTokenId: input.owner.tokenId,
+      authorUserId: input.owner.userId, authorLabel: "Original author", authorTransport: "browser", status: "open", resolvedAt: null,
+      createdAt: input.revisions[0]!.createdAt, editedAt: null, deletedAt: null, changeSeq: null, authorRemote: null,
+      snippet: "Version", quote: "Version", range: null, viewState: {v: 2, state: {$: {filter: "saved"}}}, retainedContext: context,
+      anchor: {version: 1, sourceNamespace: "graph", sourceNodeId: "original", quote: "Version"}}], members: [], images: []});
+  const projected = {...input, relationSha256: relations.sourceSha256};
+  expect(await importNativeHistory(db, projected, relations)).toBe("created");
+  expect(await importNativeHistory(db, projected, relations)).toBe("unchanged");
+  expect((await listAnnotationsFor(actor, input.pageId, {status: "all"}))?.[0]).toMatchObject({id: "retained", anchor_version: 1, anchor: {kind: "html-node", revision: "1", nodeId: "stable"}, view_state: {v: 2, state: {$: {filter: "saved"}}}});
+  for (const revision of input.revisions) expect(await readHtmlPage(actor, input.pageId, String(revision.page.version))).toEqual(revision.page);
+  await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{unexpected}', 'true')");
+  await expect(importNativeHistory(db, projected, relations)).rejects.toThrow("native_import_collision");
+  await db.query("UPDATE artifacts SET meta=meta-'unexpected'");
+  await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{nativeRelationContext}', '[]')");
+  await expect(importNativeHistory(db, projected, relations)).rejects.toThrow();
 });

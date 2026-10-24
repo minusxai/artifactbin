@@ -40,6 +40,8 @@ export interface NativeHistoryImport {
  * Supply before enabling comments/assets/dataset imports. This writer does not fabricate those projections. */
 export interface NativeImportRelations {
   sourceSha256: string;
+  /** Exact head-only metadata owned and verified by the relation adapter; writer keys cannot be overridden. */
+  headMetadata?: { readonly nativeRelationContext: unknown };
   apply(tx: Queryable, pageId: string): Promise<void>;
   verify(tx: Queryable, pageId: string): Promise<void>;
 }
