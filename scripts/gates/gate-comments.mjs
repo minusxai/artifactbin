@@ -78,8 +78,7 @@ async function openRail(page) {
       .catch(() => false)
   )
     return;
-  await openArtifactControls(page);
-  await page.getByLabel('Toggle comments', { exact: true }).click();
+  await page.locator('header[aria-label="Page bar"] [aria-label="Comment"]').click();
   await page.getByLabel('Annotation sidebar', { exact: true }).waitFor();
 }
 async function comment(page, frame, selector, body) {
@@ -757,6 +756,7 @@ async function ownerLeg(browser, seed) {
     try {
       await guest.goto(`${BASE}/a/${seed.id}`);
       await documentLocator(guest).locator('#figure').waitFor();
+      await expect(guest.locator('[aria-label^="Open annotation conversation by"]')).not.toHaveCount(0);
       await openRail(guest);
       await expect(guest.getByText('A second comment', {exact:true})).toBeVisible();
       await expect(guest.getByRole('button', {name:'Sign in to comment', exact:true})).toBeVisible();
@@ -1069,7 +1069,7 @@ async function savedViewLeg(browser,seed) {
   await page.getByRole('button',{name:'Light mode',exact:true}).click();
   await expect.poll(color).toBe(light);
   check(true,'an already-open comment composer updates its computed palette when appearance changes');
-  await page.getByRole('button',{name:'Close page controls',exact:true}).click();
+  await page.getByRole('button',{name:'Close artifact controls',exact:true}).click();
   await page.getByLabel('Save annotation',{exact:true}).click();
   const wire=await until(()=>api(seed,'/annotations'),value=>value.annotations?.length===1);
   check(wire.annotations[0].view_state?.state?.$html?.fields?.screen==='detail' && !('draft' in wire.annotations[0].view_state.state.$html.fields),'saved comment captures only its declared view projection');
