@@ -39,3 +39,16 @@ it('seeds a profile image through the session-only HTTP API and reads actual acc
  expect(calls[1].options.body).toBe(bytes);
  expect(JSON.stringify(identity)).not.toContain('session');
 });
+
+it('publishes the same scoped real-identity fixture inputs with server-specific substitutions',async()=>{
+ const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
+ const {identityBrowserParityFixtures}=await import('../fixtures/component-baseline/identity.mjs');
+ const before=JSON.stringify(identityBrowserParityFixtures),bodies=[];
+ const entries=await publishBaselineFixtures({implementation:'jsx',fixtures:identityBrowserParityFixtures,substitutions:{identityId:'usr_actual',identityDataset:'DatasetActual',identityImage:'http://localhost:3030/api/users/usr_actual/avatar'},publish:async body=>{bodies.push(body);return {id:'PageActual'};}});
+ expect(entries).toHaveLength(6);
+ expect(bodies[0].markup).toContain('userId="usr_actual"');
+ expect(bodies[0].markup).toContain('src="ref:DatasetActual"');
+ expect(bodies.at(-1).markup).toContain('http://localhost:3030/api/users/usr_actual/avatar');
+ expect(bodies.every(body=>!body.markup.includes('{{identity'))).toBe(true);
+ expect(JSON.stringify(identityBrowserParityFixtures)).toBe(before);
+});

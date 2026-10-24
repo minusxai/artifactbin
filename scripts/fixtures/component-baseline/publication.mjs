@@ -60,8 +60,9 @@ export function dependencyReceiptCache(localReferences){
   };
 }
 /** Candidate snapshots use the installed component bytes and normal agent helper. */
-export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive}) {
+export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive,fixtures=browserParityFixtures,substitutions={}}) {
   const entries=[];
+  const substitute=value=>Object.entries(substitutions).reduce((source,[name,replacement])=>source.replaceAll('{{'+name+'}}',replacement),value);
   let uploadDataset,staging,prepareBundle,reuse;
   try{
   if(implementation==='html'){
@@ -72,22 +73,22 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs')).href));
     const {publicationLocalReferences}=await import(pathToFileURL(path.join(staging,'scripts/preview-html.mjs')).href);reuse=dependencyReceiptCache(publicationLocalReferences);
   }
-  for(const fixture of browserParityFixtures)for(const theme of parityThemes){
+  for(const fixture of fixtures)for(const theme of parityThemes){
     const started=performance.now();let body,request;
     try{
     if(implementation==='jsx'){
       if(fixture.oldJsx.includes('{{uploadDataset}}')&&!uploadDataset)uploadDataset=(await publish({title:'Upload baseline backing data',dataset:[{fixture:'upload-baseline'}]})).id;
-      const oldJsx=fixture.oldJsx.replaceAll('{{uploadDataset}}',uploadDataset||'');
+      const oldJsx=substitute(fixture.oldJsx).replaceAll('{{uploadDataset}}',uploadDataset||'');
       const helmet=oldJsx.match(/<Helmet>[\s\S]*?<\/Helmet>/)?.[0]||'';
       const content=oldJsx.replace(helmet,'');
       body={title:`Component baseline ${fixture.id}`,theme:'almanac',colorMode:theme,markup:`${helmet}<div data-design="tw" className="p-6">${content}</div>`};
     }else if(implementation==='html'){
-      const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
+      const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+substitute(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
       const code=source.replace(/<\/script/gi,'<\\/script');
       // A root SlideDeck owns the page column beside its rail; don't wrap the
       // whole host in the generic page inset that ordinary HTML fixtures get.
       const bodyPadding=htmlBodyPadding(fixture);
-      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`;
+      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${substitute(fixture.newHtml)}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);
       const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;body.publicationBundle.mappings=reuse.mappings(body.publicationBundle);request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');
@@ -96,7 +97,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     if(!document.id)throw Error('Publication returned no document id');
     if(implementation==='html')reuse.record(body.publicationBundle,document);
     entries.push({fixture:fixture.id,theme,id:document.id});
-    console.log(`Component fixture ${entries.length}/${browserParityFixtures.length*parityThemes.length} ${fixture.id} ${theme}: snapshot ${snapshotMs}ms, publish ${Math.round(performance.now()-publishing)}ms`);
+    console.log(`Component fixture ${entries.length}/${fixtures.length*parityThemes.length} ${fixture.id} ${theme}: snapshot ${snapshotMs}ms, publish ${Math.round(performance.now()-publishing)}ms`);
     }catch(error){throw Error(`Component fixture ${fixture.id} ${theme} failed: ${error.message}`,{cause:error});}
   }
   return entries;

@@ -139,3 +139,16 @@ describe('private migration pilot mounts',()=>{
   expect(()=>dockerRunArgs({env:{NATIVE_MIGRATION_PILOT__INPUT:'/private/input.json'}})).toThrow('complete');
  });
 });
+
+describe('private paired component evidence mount',()=>{
+ const base={name:'identity',image:'image',volume:'deps',buildKey:'a'.repeat(32),worktree:'/tree',cpus:4,memory:'8g',servers:1,gates:['component-baseline']};
+ it('persists only the explicitly selected evidence directory without exposing credentials',()=>{
+  const args=dockerRunArgs({...base,env:{COMPONENT_BASELINE__OUTPUT:'/private/identity-evidence'}});
+  expect(args).toContain('/private/identity-evidence:/component-evidence:rw');
+  expect(args).toContain('COMPONENT_BASELINE__OUTPUT=/component-evidence');
+  expect(args.join(' ')).not.toContain('AUTH__SECRET');
+ });
+ it('rejects relative and mount-delimiter paths before starting a container',()=>{
+  for(const output of ['relative','/private/evidence:ro','/private/evidence\nother'])expect(()=>dockerRunArgs({...base,env:{COMPONENT_BASELINE__OUTPUT:output}})).toThrow('absolute');
+ });
+});

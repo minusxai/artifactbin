@@ -165,6 +165,9 @@ function migrationPilotMounts(env={}) {
 
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
   const pilotArgs=migrationPilotMounts(env);
+  const output=env.COMPONENT_BASELINE__OUTPUT;
+  if(output!==undefined&&(typeof output!=='string'||!output.startsWith('/')||/[:\\\n\r]/.test(output)))throw Error('Component evidence requires an explicit absolute private path');
+  const componentArgs=output?['-v',`${output}:/component-evidence:rw`,'-e','COMPONENT_BASELINE__OUTPUT=/component-evidence']:[];
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
@@ -178,6 +181,7 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
     '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
     ...pilotArgs,
+    ...componentArgs,
     '-w', INSIDE.src,
     image,
     'node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', String(servers), '--build-key', buildKey, ...gates,

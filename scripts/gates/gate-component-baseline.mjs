@@ -12,6 +12,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
 import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
+import {identityBrowserParityFixtures,identityBaselineReadiness} from '../fixtures/component-baseline/identity.mjs';
 import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
 import {withComponentBaselineEvidence} from '../lib/component-baseline-evidence.mjs';
 import { launchChromium } from './lib/browser.mjs';
@@ -38,6 +39,7 @@ catch(error) {
   input=await publishReaderManifest({implementation:'html',base:process.argv[2]||'http://localhost:3030',source:repo,sourceRevision:'candidate-source-sha256:'+sourceHash.digest('hex'),output:path.join(output,'candidate-readers.json')});
   input.defaultCandidateValidation=true;
 }
+if(process.env.COMPONENT_BASELINE__OUTPUT)input.output=process.env.COMPONENT_BASELINE__OUTPUT;
 if(input.mode==='publish') {
   await publishReaderManifest(input);
   process.exit(0);
@@ -63,7 +65,7 @@ try {
   for(let worker=0;worker<2;worker++)browsers.push(await launchChromium({args:['--enable-unsafe-swiftshader']}));
   const browser=browsers[0];
   const session=input.account?await createBaselineSession({base:new URL(input.entries[0].url).origin,account:input.account,signIn:signInAccount}):null;
-  const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,mount:async({fixture,theme,page})=>{
+  const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,...(input.fixtureSet==='identity'?{fixtures:identityBrowserParityFixtures}:{}),mount:async({fixture,theme,page})=>{
     const entry=input.entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);
     if(!entry)throw Error(`Missing real reader URL for ${fixture.id}/${theme}`);
     const url=new URL(entry.url);
@@ -74,6 +76,7 @@ try {
     return {frame:page.mainFrame(),ready:async()=>{
       if(input.implementation==='html')await page.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');
       else await page.waitForFunction(()=>document.querySelector('[data-mx-inline-story]'));
+      if(input.fixtureSet==='identity')await page.waitForFunction(identityBaselineReadiness[fixture.id],undefined,{timeout:30_000});
       const engineReady=richBaselineReadiness[fixture.id]?.[input.implementation];
       if(engineReady)await page.waitForFunction(engineReady,undefined,{timeout:30_000});
     },afterAction:async action=>{
