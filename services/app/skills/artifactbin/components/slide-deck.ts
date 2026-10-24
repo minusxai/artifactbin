@@ -177,10 +177,12 @@ export class AfSlideDeck extends HTMLElement implements SlideDeckContract {
   private async toggleFullscreen():Promise<void> {
     if(this.pendingPresentation)return;
     const connection=this.connection;
+    // A native disabled button can blur immediately; save the opener while it is still focusable.
+    if(this.ownerDocument.fullscreenElement!==this)this.focusBeforePresentation=this.ownerDocument.activeElement as HTMLElement|null;
     this.pendingPresentation=true;this.present!.disabled=true;this.status!.textContent='';
     try {
       if(this.ownerDocument.fullscreenElement===this)await this.ownerDocument.exitFullscreen();
-      else {this.focusBeforePresentation=this.ownerDocument.activeElement as HTMLElement|null;if(!this.requestFullscreen)throw new Error('unavailable');await this.requestFullscreen();}
+      else {if(!this.requestFullscreen)throw new Error('unavailable');await this.requestFullscreen();}
       if(connection!==this.connection && this.ownerDocument.fullscreenElement===this)await this.ownerDocument.exitFullscreen();
     } catch {if(this.isConnected)this.status!.textContent='Presentation unavailable';}
     finally {this.pendingPresentation=false;if(this.isConnected){this.present!.disabled=this.slides().length===0;this.paintPresentation();if(this.ownerDocument.fullscreenElement!==this)this.restoreFocus();}}
