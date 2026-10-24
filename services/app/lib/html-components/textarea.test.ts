@@ -36,4 +36,15 @@ describe('af-textarea', () => {
     native.value = 'hello'; native.setSelectionRange(3, 3); root.setAttribute('placeholder', 'more');
     expect(root.querySelector('textarea')).toBe(native); expect(native.value).toBe('hello'); expect(native.selectionStart).toBe(3);
   });
+  it('does not overwrite a composing draft during external updates and emits one final intent', async () => {
+    const root = textarea('<af-textarea value="start"></af-textarea>'); const native = root.querySelector('textarea')!;
+    const events: unknown[] = []; root.addEventListener('af-change', event => events.push((event as CustomEvent).detail));
+    native.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+    native.value = 'draft'; native.dispatchEvent(new Event('input', {bubbles:true}));
+    root.setAttribute('value', 'server');
+    expect(native.value).toBe('draft');
+    native.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    await Promise.resolve(); await Promise.resolve();
+    expect(events).toEqual([{value:'draft'}]); expect(native.value).toBe('server');
+  });
 });
