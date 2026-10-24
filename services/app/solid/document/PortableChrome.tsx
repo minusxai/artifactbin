@@ -57,6 +57,8 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
     if (saveError()) return 'Could not save HTML. Try again.';
     const preview: PortablePreviewStatus | undefined = props.current.previewStatus;
     if (preview?.error) return preview.error;
+    if (preview?.changed && preview.conflict) return 'File changed on disk. Local dataset edits conflict with this file; review them before reloading.';
+    if (preview?.changed && preview.dirty) return 'File changed on disk. Local dataset edits are unsaved; review them before reloading.';
     if (preview?.conflict) return 'Local dataset edits conflict with the file on disk. Reload to review.';
     if (preview?.dirty) return 'Local dataset edits are unsaved. Review them before reloading.';
     if (preview?.changed) return 'File changed on disk. Reload to view it.';

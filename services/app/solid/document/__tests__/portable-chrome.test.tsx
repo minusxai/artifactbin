@@ -144,3 +144,17 @@ it('shows the exact actionable preview error as text', () => {
   expect(ui.getByRole('status')).toHaveTextContent(error);
   expect(ui.getByRole('status').querySelector('strong')).toBeNull();
 });
+
+it('keeps both the disk change and unsaved dataset edits visible together', () => {
+  const { chrome, ui } = mount({ onReloadPreview: vi.fn() });
+  chrome.update({ state: 'offline', previewStatus: { changed: true, dirty: true, connected: true } });
+  expect(ui.getByRole('status')).toHaveTextContent('File changed on disk. Local dataset edits are unsaved; review them before reloading.');
+  expect(ui.getByRole('button', { name: 'Reload file' })).toBeEnabled();
+});
+
+it('keeps the disk change visible when local dataset edits conflict too', () => {
+  const { chrome, ui } = mount({ onReloadPreview: vi.fn() });
+  chrome.update({ state: 'offline', previewStatus: { changed: true, dirty: true, conflict: true, connected: true } });
+  expect(ui.getByRole('status')).toHaveTextContent('File changed on disk. Local dataset edits conflict with this file; review them before reloading.');
+  expect(ui.getByRole('button', { name: 'Reload file' })).toBeEnabled();
+});
