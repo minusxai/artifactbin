@@ -4,3 +4,6 @@ export interface PublicationBundleMapping { kind:'asset'|'dataset'; id:string; r
 export interface PublicationBundle { entryPath:string; files:readonly PublicationBundleFile[]; mappings?:Readonly<Record<string,PublicationBundleMapping>> }
 export interface BundleDependency { path:string; kind:'asset'|'dataset'; contentType:string; bytes:Uint8Array; dependencies:readonly string[] }
 export interface BundlePlan { backendSources:Readonly<Record<string,string>>; backends:readonly {name:string;path:string;bytes:number}[]; html:string; entryPath:string; dependencies:readonly BundleDependency[]; rewrite(source:string,containingPath:string,addresses:ReadonlyMap<string,string>):string }
+
+/** Backend namespaces already supplied atomically or retained from trusted page metadata. */
+export interface BundleResolutionContext { resolvedBackendNames?:readonly string[] }

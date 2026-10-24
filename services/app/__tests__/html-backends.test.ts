@@ -25,6 +25,10 @@ it('commits immutable backend version pointers together with the owning page and
  const updated=await PUT(request(`/api/artifacts/${created.id}`,{method:'PUT',token:actor.token,json:{html:head.html,backendSources:{db:'second'},expectedVersion:head.version,expectedState:head.state}}),params(created.id));expect(updated.status).toBe(200);
  const next=await readHtmlPage(identity,created.id);const second=next.links[0];expect(second?.kind).toBe('backend');if(second?.kind!=='backend')throw Error('missing backend');
  expect(second.backendId).toBe(link.backendId);expect(second.version).not.toBe(link.version);
+ const retainedHead=await (await GET(request(`/api/artifacts/${created.id}`,{token:actor.token}),params(created.id))).json();
+ const retained=await PUT(request(`/api/artifacts/${created.id}`,{method:'PUT',token:actor.token,json:{html:retainedHead.html,expectedVersion:retainedHead.version,expectedState:retainedHead.state}}),params(created.id));
+ expect(retained.status).toBe(200);expect((await readHtmlPage(identity,created.id)).links).toEqual(next.links);
+
  expect((await readHtmlPage(identity,created.id,'1')).links).toEqual(first.links);
  expect((await getHtmlBackendVersion(link.backendId,link.version))?.source).toBe('first');expect(await getHtmlBackendStore(link.backendId)).toEqual({value:{count:1},version:1});
 });

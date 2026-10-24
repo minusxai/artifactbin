@@ -36,14 +36,14 @@ describe('generic file artifacts', () => {
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(bytes);
   });
 
-  it.each(['page.html', 'script.js', 'program.exe', 'archive.tar', 'clip.mp4.exe', 'README', '.mp3', 'song.mp3.'])('rejects unsupported raw upload %s before storing it', async filename => {
+  it.each(['page.html', 'program.exe', 'archive.tar', 'clip.mp4.exe', 'README', '.mp3', 'song.mp3.'])('rejects unsupported raw upload %s before storing it', async filename => {
     const { response, token } = await upload('', 'application/octet-stream', bytes, filename);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'unsupported_file_type', allowed: expect.arrayContaining(['mp4', 'mp3', 'mov', 'glb']) });
     expect(await assetBytesForToken(token.id)).toBe(0);
   });
 
-  it.each([['clip.MP4', 'video/mp4'], ['song.mp3', 'audio/mpeg'], ['clip.mov', 'video/quicktime'], ['model.GLB', 'model/gltf-binary'], ['archive.zip', 'application/zip']])('accepts %s with a canonical MIME type', async (filename, contentType) => {
+  it.each([['script.js', 'text/javascript'], ['module.mjs', 'text/javascript'], ['style.css', 'text/css'], ['clip.MP4', 'video/mp4'], ['song.mp3', 'audio/mpeg'], ['clip.mov', 'video/quicktime'], ['model.GLB', 'model/gltf-binary'], ['archive.zip', 'application/zip']])('accepts %s with a canonical MIME type', async (filename, contentType) => {
     const { response } = await upload('', 'application/octet-stream', bytes, filename);
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ filename, contentType });
