@@ -57,7 +57,7 @@ it('uses the retained rounded-sm/md/lg scale when a theme supplies only --radius
  expect(declaration('af-segmented .af-segmented-options>button[data-segment-option]','border-radius')).toBe('5px');
 });
 it('keeps control captions and select typography consistent with retained controls in every theme',()=>{
- for(const selector of ['af-input>label[data-af-control-label]','af-textarea>label[data-af-control-label]','af-segmented .af-segmented-label','af-select .af-select-label','af-switch .af-switch-label','af-slider>label']){
+ for(const selector of ['af-input>label[data-af-control-label]','af-textarea>label[data-af-control-label]','af-segmented .af-segmented-label','af-select .af-select-label','af-switch .af-switch-label','af-slider>[part=header]>label']){
   expect(declaration(selector,'font-size'),selector).toBe('11px');expect(declaration(selector,'font-weight'),selector).toBe('500');expect(declaration(selector,'text-transform'),selector).toBe('uppercase');expect(parseFloat(declaration(selector,'letter-spacing')),selector).toBe(.05);
  }
  expect(parseFloat(declaration('af-select button','font-size'))).toBe(.875);
