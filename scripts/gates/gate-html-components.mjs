@@ -45,7 +45,7 @@ try {
     const differences=semanticDifferences(expected,await page.evaluate(semanticSnapshot,await page.locator('body').elementHandle()));
     check(differences.length===0,`${fixture.id} recorded React SSR roles/name/selection (${differences.join('; ') || 'equal'})`);
   }
-  for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:375,height:667}]) {
+  for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:390,height:844}]) {
     for (const fixtureCase of tabsInteractionCases) {
       await mount(tabsInteractionHtml,theme,viewport);
       for (const action of fixtureCase.actions) {
@@ -69,6 +69,9 @@ try {
     await page.getByRole('tab',{name:'Two',exact:true}).click(); await page.getByRole('tab',{name:'One',exact:true}).click();
     check(await page.getByLabel('Retained input').inputValue()==='Edited',`candidate panel keeps input ${theme} ${viewport.width}px`);
     await page.getByRole('tab',{name:'One',exact:true}).focus(); await page.keyboard.press('ArrowRight');
+    // Assert the settled CSS state, not an intermediate frame of the focus/selection transition.
+    const expectedColor=theme==='dark'?'rgb(96, 165, 250)':'rgb(37, 99, 235)';
+    await page.waitForFunction(expected=>{const tab=document.querySelector('af-tabs-trigger[data-state=active]');return tab && getComputedStyle(tab).backgroundColor===expected;},expectedColor,{timeout:2000});
     await page.screenshot({path:path.join(screenshots,`candidate-tabs-${theme}-${viewport.width}.png`)});
     check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate((node,expected)=>getComputedStyle(node).backgroundColor===expected,theme==='dark'?'rgb(96, 165, 250)':'rgb(37, 99, 235)'),`candidate selected theme token ${theme} ${viewport.width}px`);
     check(await page.evaluate(()=>[...document.querySelectorAll('[aria-controls],[aria-labelledby]')].every(node=>['aria-controls','aria-labelledby'].every(attr=>(node.getAttribute(attr)??'').split(/\s+/).filter(Boolean).every(id=>document.getElementById(id))))),`candidate ID references resolve ${theme} ${viewport.width}px`);
