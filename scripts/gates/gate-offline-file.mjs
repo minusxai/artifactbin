@@ -10,6 +10,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { firefox, webkit } from 'playwright';
 import { expect } from 'playwright/test';
 import sharp from 'sharp';
+import {build,transform} from 'esbuild';
+import {JSDOM} from 'jsdom';
 import {createHash} from 'node:crypto';
 import {datavizExamples,nativeDatavizFixture} from '../fixtures/native-dataviz.mjs';
 import { createChecker } from './lib/assert.mjs';
@@ -58,16 +60,27 @@ const html = await response.text();
 check(!html.includes(token), 'download contains no account credential');
 check(!html.includes('afbin-file') && !html.includes('afbin-compiled-code'), 'download is native HTML, without a legacy app archive');
 const file = path.join(work, 'native.html'); writeFileSync(file, html);
-const chartId=await publish({html:nativeDatavizFixture(datavizExamples(readFileSync(path.join(ROOT,'services/app/skills/artifactbin/references/dataviz.md'),'utf8')),BASE),visibility:'unlisted'});
+const chartSource=nativeDatavizFixture(datavizExamples(readFileSync(path.join(ROOT,'services/app/skills/artifactbin/references/dataviz.md'),'utf8')),BASE);
+const chartId=await publish({html:chartSource,visibility:'unlisted'});
 const chartResponse=await fetch(`${BASE}/a/${chartId}/download`,{headers});
 if(chartResponse.status!==200)throw Error(`dataviz download -> ${chartResponse.status}: ${await chartResponse.text()}`);
 const chartHtml=await chartResponse.text(),chartFile=path.join(work,'native-dataviz.html');writeFileSync(chartFile,chartHtml);
 check(!chartHtml.includes(token),'dataviz download contains no account credential');
+const registered=new Map();
 for(const library of ['vega-6.3.1','vega-lite-6.4.3']){
- const response=await fetch(`${BASE}/libraries/${library}/index.js`);if(response.status!==200)throw Error(`registered ${library} -> ${response.status}`);
- const bytes=Buffer.from(await response.arrayBuffer());
- check(chartHtml.includes(bytes.toString('base64')),`download packs actual registered ${library} ESM bytes (${createHash('sha256').update(bytes).digest('hex')})`);
+ const url=`${BASE}/libraries/${library}/index.js`,response=await fetch(url);if(response.status!==200)throw Error(`Registered library ${library}: ${response.status}`);
+ const bytes=Buffer.from(await response.arrayBuffer());registered.set(url,bytes);check.note(`registered ${library} SHA256 ${createHash('sha256').update(bytes).digest('hex')}`);
 }
+const authorDocument=new JSDOM(chartSource),authorModule=authorDocument.window.document.querySelector('script[type="module"]').textContent;authorDocument.window.close();
+const expected=await build({stdin:{contents:authorModule,sourcefile:`${BASE}/a/${chartId}/raw`,loader:'js'},bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',legalComments:'none',logLevel:'silent',outdir:'/offline',plugins:[{name:'exact-registered-inputs',setup(builder){
+ builder.onResolve({filter:/.*/},args=>{const url=new URL(args.path,args.importer||BASE).href;if(!registered.has(url))throw Error(`Unregistered chart dependency: ${url}`);return {path:url,namespace:'registered'};});
+ builder.onLoad({filter:/.*/,namespace:'registered'},args=>({contents:registered.get(args.path),loader:'js'}));
+}}]});
+const canonical=async source=>(await transform(source,{loader:'js',minify:true,target:'es2022',legalComments:'none'})).code;
+const expectedCode=await canonical(expected.outputFiles.find(file=>file.path.endsWith('.js')).text),downloadDocument=new JSDOM(chartHtml);
+const downloadedModules=await Promise.all([...downloadDocument.window.document.querySelectorAll('script[type="module"]')].filter(script=>!script.src).map(script=>canonical(script.textContent)));
+downloadDocument.window.close();
+check(downloadedModules.includes(expectedCode),`download executable matches exact registered-input transform (SHA256 ${createHash('sha256').update(expectedCode).digest('hex')})`);
 
 async function reading(engineName, browser) {
   const { step, must, run } = lane(check, `${engineName} native offline HTML`);
@@ -148,6 +161,9 @@ async function datavizReading(engineName,browser){
     await step(`${mode}: native data update and cleanup without zombie renders`,async()=>{
      await page.getByRole('button',{name:'Update native data',exact:true}).click();
      await expect(page.locator('#vega-chart svg')).toContainText('Updated');await expect(page.getByRole('table',{name:'Vega exact values'})).toContainText('7');
+     await page.locator('html').evaluate(node=>node.setAttribute('data-af-dark','false'));await page.setViewportSize({width:480,height:1000});
+     await expect.poll(()=>page.locator('#vega-chart svg text').evaluateAll(nodes=>nodes.some(node=>getComputedStyle(node).fill==='rgb(87, 96, 106)'))).toBe(true);
+     await expect(page.locator('#vega-chart svg')).toContainText('Updated');await expect(page.getByRole('table',{name:'Vega exact values'})).toContainText('Updated7');
      await page.getByRole('button',{name:'Remove charts',exact:true}).click();await expect(page.locator('#chart-layout svg')).toHaveCount(0);
      await page.evaluate(()=>document.documentElement.setAttribute('data-af-dark','false'));await page.setViewportSize({width:700,height:1000});
      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
