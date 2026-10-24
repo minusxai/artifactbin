@@ -116,7 +116,8 @@ export class AfSlideDeck extends HTMLElement implements SlideDeckContract {
       let row=this.rows.get(slide);
       if(!row){row=this.ownerDocument.createElement('button');row.type='button';row.dataset.afDeckRow='';this.rows.set(slide,row);}
       row.dataset.index=String(i);row.setAttribute('aria-label',`Go to slide ${i+1}: ${this.slideTitle(slide,i)}`);row.setAttribute('aria-controls',slide.id);row.setAttribute('aria-current',String(i===index));
-      const label=this.ownerDocument.createElement('span');label.dataset.afDeckLabel='';label.textContent=`${i+1}  ${this.slideTitle(slide,i)}`;
+      const label=this.ownerDocument.createElement('span');label.dataset.afDeckLabel='';const number=this.ownerDocument.createElement('span');number.dataset.afDeckIndex='';number.textContent=String(i+1);
+      const title=this.ownerDocument.createElement('span');title.dataset.afDeckTitle='';title.textContent=this.slideTitle(slide,i);label.append(number,title);
       const preview=this.ownerDocument.createElement('span');preview.dataset.afDeckPreview='';preview.setAttribute('inert','');preview.setAttribute('aria-hidden','true');
       const miniature=this.ownerDocument.createElement('div');miniature.append(previewNode(slide,this.ownerDocument));preview.append(miniature);
       row.replaceChildren(label,preview);keep.add(row);const at=this.rail!.children[i];if(at!==row)this.rail!.insertBefore(row,at??null);
@@ -222,16 +223,18 @@ af-slide-deck [data-af-preview-slide] :is(h1,h2,h3,h4,h5,h6):not([class]){margin
 af-slide-deck [data-af-preview-slide] h1:not([class]){margin-block-start:0}
 af-slide-deck [data-af-preview-slide] :is(p,ul,ol,blockquote,table,pre):not([class]){margin-block:.75em;max-width:68ch;line-height:1.65}
 af-slide-deck>af-slide{grid-column:2}
-af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;height:100vh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas)}
+af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;height:100vh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas);font-family:ui-sans-serif,system-ui,sans-serif}
 af-slide-deck [data-af-deck-row]{display:block;width:100%;text-align:left;cursor:pointer;margin:0 0 8px;padding:6px;border:1px solid transparent;border-radius:6px;background:none;color:inherit;font:inherit}
 af-slide-deck [data-af-deck-row][aria-current=true]{border-color:var(--border,#8888);background:color-mix(in srgb,var(--foreground,gray) 12%,transparent)}
-af-slide-deck [data-af-deck-label]{display:block;font:11px/1.3 ui-sans-serif,system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-af-slide-deck [data-af-deck-preview]{display:block;position:relative;width:100%;aspect-ratio:16/10;margin-top:4px;overflow:hidden;border:1px solid var(--border,#8884);border-radius:4px;background:var(--background,Canvas);pointer-events:none}
+af-slide-deck [data-af-deck-label]{display:flex;gap:6px;align-items:baseline;font-size:11px;line-height:1.3}
+af-slide-deck [data-af-deck-index]{color:var(--muted-foreground,gray);font-variant-numeric:tabular-nums}
+af-slide-deck [data-af-deck-title]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+af-slide-deck [data-af-deck-preview]{display:block;position:relative;box-sizing:border-box;width:100%;aspect-ratio:16/10;margin-top:4px;overflow:hidden;border:1px solid var(--border,#8884);border-radius:4px;background:var(--background,Canvas);pointer-events:none}
 af-slide-deck [data-af-deck-preview]>div{position:absolute;top:0;left:0;width:1280px;height:800px;transform:scale(.128);transform-origin:top left}
-af-slide-deck>[data-af-deck-chrome=toolbar]{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;z-index:1000;padding:5px 8px;border:1px solid var(--border,#8886);border-radius:999px;background:color-mix(in srgb,var(--background,Canvas) 88%,transparent);color:inherit;backdrop-filter:blur(6px);font:12px ui-sans-serif,system-ui,sans-serif}
+af-slide-deck>[data-af-deck-chrome=toolbar]{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;z-index:1000;padding:5px 8px;border:1px solid var(--border,#8886);border-radius:999px;background:color-mix(in srgb,var(--background,Canvas) 88%,transparent);color:inherit;backdrop-filter:blur(6px);font:12px/1.5 ui-sans-serif,system-ui,sans-serif}
 af-slide-deck>[data-af-deck-chrome=toolbar][hidden]{display:none}
 af-slide-deck>[data-af-deck-chrome=toolbar]>button{cursor:pointer;border:0;border-radius:999px;background:none;color:inherit;font:inherit;padding:2px 8px;line-height:1.4}
-af-slide-deck>[data-af-deck-chrome=toolbar]>output{font-variant-numeric:tabular-nums;color:var(--muted-foreground,gray)}
+af-slide-deck>[data-af-deck-chrome=toolbar]>output{font-variant-numeric:tabular-nums;color:var(--muted-foreground,gray);padding:0 2px}
 af-slide-deck>[data-af-deck-chrome=toolbar]>button:disabled{opacity:.5;cursor:default}
 af-slide-deck [data-af-deck-row]:hover,af-slide-deck>[data-af-deck-chrome=toolbar]>button:enabled:hover{background:color-mix(in srgb,var(--foreground,gray) 14%,transparent)}
 af-slide-deck [data-af-deck-row]:focus-visible,af-slide-deck>[data-af-deck-chrome=toolbar]>button:focus-visible,af-slide-deck:focus-visible{outline:2px solid var(--ring,Highlight);outline-offset:2px}

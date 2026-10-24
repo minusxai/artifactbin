@@ -42,6 +42,14 @@ describe('native slide deck',()=>{
     expect(getComputedStyle(slides[0]!).paddingTop).toBe('8px');
     expect(rail.parentElement).toBe(deck);
   });
+  it('keeps rail numbering separate from its title and reserves border-box previews and count padding',()=>{
+    const {deck}=fixture();const label=deck.querySelector<HTMLElement>('[data-af-deck-label]')!;
+    expect([...label.children].map(child=>child.textContent)).toEqual(['1','Opening']);
+    expect(getComputedStyle(label).display).toBe('flex');expect(getComputedStyle(label).gap).toBe('6px');
+    expect(getComputedStyle(deck.querySelector('[data-af-deck-preview]')!).boxSizing).toBe('border-box');
+    expect(getComputedStyle(deck.querySelector('[data-af-deck-count]')!).padding).toBe('0px 2px');
+    expect(getComputedStyle(deck.querySelector('[data-af-deck-chrome=toolbar]')!).lineHeight).toBe('1.5');
+  });
   it('keeps authored slides mounted with stable identities and accessible rail/count/chrome',()=>{
     const {deck,slides,next}=fixture();const input=slides[0]!.querySelector('input');
     expect(deck.index).toBe(0);expect(deck.querySelector('[data-af-deck-count]')?.textContent).toBe('1 / 2');
