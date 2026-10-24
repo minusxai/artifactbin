@@ -1500,3 +1500,28 @@ test('person viewer binding waits for authenticated identity and clears cards du
  port.remotes[0]!.next({loading:true});assert.equal(host.person,null);assert.equal(host.hidden,true);assert.equal(port.remotes[1]!.stopped,true);
  port.remotes[0]!.next({data:{identity:{viewer:{id:null}}}});assert.equal(host.person,null);assert.equal(host.hidden,false);await running.close();
 });
+
+test('read-only binding observers batch updates without extra watches and fence stale query results',async()=>{
+ const source=input([],[]);source.analysis.flow.queries=[{name:'rows',start:0,end:1}];
+ source.queries=[{name:'rows',namespace:'ops',document:'query($values:String){ops{evaluate(values:$values){tables{name}}}}',values:[{name:'filter',type:'string'}],tableName:'rows',responsePath:['ops','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status!=='complete')return;
+ const port=client({open:false,filter:null}),runtime=await execute(result.authorJs,port,new Doc()),seen:any[]=[];
+ const stop=runtime.module.dispose.observe((snapshot:any)=>seen.push(snapshot));assert.equal(port.remotes.length,1);assert.equal(seen[0].queries.rows.loading,true);
+ const response=(value:number)=>({data:{ops:{evaluate:{tables:[{name:'rows',error:null,columns:[{name:'n',type:'number'}],rows:[{cells:[{isNull:false,number:value}]}]}]}}}});
+ port.remotes[0]!.next(response(1));port.remotes[0]!.next(response(2));await Promise.resolve();assert.equal(seen.length,2);assert.deepEqual(seen[1].queries.rows.rows,[{n:2}]);assert.equal(Object.isFrozen(seen[1].queries.rows.rows[0]),true);
+ await port.updateQuery({},value=>({...value,filter:'new'}));await Promise.resolve();assert.equal(port.remotes.length,2);assert.equal(seen.at(-1).queries.rows.loading,true);
+ port.remotes[0]!.next(response(9));await Promise.resolve();assert.equal(seen.at(-1).queries.rows.rows,null);
+ port.remotes[1]!.next({errors:[{message:'revoked'}]});await Promise.resolve();assert.equal(seen.at(-1).queries.rows.error,'Query unavailable');assert.equal(seen.at(-1).queries.rows.loading,false);
+ const before=seen.length;stop();port.remotes[1]!.next(response(3));await Promise.resolve();assert.equal(seen.length,before);assert.equal(port.remotes.length,2);
+ const disposed:any[]=[];runtime.module.dispose.observe((snapshot:any)=>disposed.push(snapshot));runtime.module.dispose();assert.equal(disposed.at(-1).active,false);port.remotes[1]!.next(response(4));await Promise.resolve();assert.equal(disposed.at(-1).active,false);await runtime.close();
+});
+
+test('Select query options preserve retained first-column value and second-column labels without extra reads',async()=>{
+ const source=input([el('select','Select',{value:'$filter',options:'$choices'})],[{kind:'property',sourceNode:'select',afId:'select',property:'value',attribute:'value'},{kind:'property',sourceNode:'select',afId:'select',property:'options',attribute:'options'}]);
+ source.analysis.flow.queries=[{name:'choices',start:0,end:1}];source.queries=[{name:'choices',namespace:'ops',document:'query {ops{evaluate{tables{name}}}}',values:[],tableName:'choices',responsePath:['ops','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('af-select',{'data-af-id':'select'}) as any;doc.body.append(host);const port=client({filter:null,open:false}),runtime=await execute(result.authorJs,port,doc);
+ assert.deepEqual(host.options,[]);assert.equal(port.remotes.length,1);
+ port.remotes[0]!.next({data:{ops:{evaluate:{tables:[{name:'choices',error:null,columns:[{name:'key',type:'number'},{name:'label',type:'string'}],rows:[{cells:[{isNull:false,number:7},{isNull:false,text:'Seven'}]},{cells:[{isNull:true},{isNull:true}]}]}]}}}});assert.deepEqual(host.options,[{value:'7',label:'Seven'},{value:'',label:''}]);
+ port.remotes[0]!.next({errors:[{message:'revoked'}]});assert.deepEqual(host.options,[]);assert.equal(port.state.filter,null);assert.equal(port.remotes.length,1);await runtime.close();
+});

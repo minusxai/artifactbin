@@ -318,7 +318,7 @@ export function emitNativeBindings(
         (attr) => attr.name === target.attribute,
       );
       if (
-        !["disabled", "checked", "value", "open", "data"].includes(
+        !["disabled", "checked", "value", "open", "data", "options"].includes(
           target.property,
         )
       )
@@ -345,6 +345,7 @@ export function emitNativeBindings(
           !queryNames.has(result.expression.name))
       )
         block(node.graphKey, "data-target-needs-declared-query");
+      if(target.property==="options"&&(node.tag!=="Select"||target.attribute!=="options"||result.expression?.kind!=="signal"||!queryNames.has(result.expression.name)))block(node.graphKey,"options-target-needs-declared-query");
       const custom = {
         Input: "value",
         Textarea: "value",

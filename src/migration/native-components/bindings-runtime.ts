@@ -4,7 +4,7 @@ import {NATIVE_PERSON_RUNTIME} from './person-runtime.ts';
 import { NATIVE_TABLE_RUNTIME } from './table-runtime.ts';
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell,projectPerson){
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
- let disposed=false,values={},tables={},tableData={},tablePending={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
+ let disposed=false,values={},tables={},tableData={},tablePending={},tableErrors={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
  const cells=new WeakMap();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
@@ -15,6 +15,10 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
+ const observers=new Set();let observerQueued=false;
+ const observerSnapshot=()=>Object.freeze({active:!disposed,values:Object.freeze({...values}),queries:Object.freeze(Object.fromEntries(plan.queries.map(query=>[query.name,Object.freeze({rows:tables[query.name]?Object.freeze(tables[query.name].map(row=>Object.freeze({...row}))):null,loading:!!tablePending[query.name],error:tableErrors[query.name]??null})])))});
+ const notifyObservers=()=>{if(disposed||observerQueued)return;observerQueued=true;queueMicrotask(()=>{observerQueued=false;if(disposed)return;const snapshot=observerSnapshot();for(const listener of [...observers])listener(snapshot);});};
+ const observe=listener=>{if(disposed){listener({active:false,values:{},queries:{}});return()=>{};}observers.add(listener);listener(observerSnapshot());return()=>observers.delete(listener);};
  const renderPerson=(${NATIVE_PERSON_RUNTIME})(client,doc,at,plan,projectPerson);
  const error=message=>{if(disposed)return;const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);};
  const read=(expr,row)=>evaluate(expr,{values:{...values,...tables,...(viewerReady?{'_me.id':viewerId}:{})},row});
@@ -57,6 +61,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
    if(target.kind==='property'){
     const binding=target.writeback;let projection=target.property==='data'?tableData[target.expression.name]??null:read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
+    if(target.property==='options'){const table=tableData[target.expression.name],columns=table?.columns??[],value=columns[0]?.name,label=columns[1]?.name;projection=table&&value?table.rows.map(row=>({value:String(row[value]??''),label:label?String(row[label]??row[value]??''):String(row[value]??'')})):[];}
     host[target.property]=projection;
     if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
      const change=async event=>{if(disposed||failed||!scope.active||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;
@@ -107,18 +112,20 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);if(disposed)pending.delete(host);topActions.delete(action);actions.delete(host);});
    }
   }
+  notifyObservers();
  }
  function refresh(){
   if(disposed)return;
   try{
    for(const query of plan.queries){const selected={};for(const field of query.values)selected[field.name]=own(values,field.name);const variables={...(query.values.length?{values:selected}:{}),only:[query.tableName]},signature=JSON.stringify(variables),prior=subscriptions.get(query.name);if(prior?.signature===signature)continue;
-    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=true;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
-    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;tablePending[query.name]=!!result.loading;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;}else {const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=false;render();error(cause.message);}});
+    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=true;tableErrors[query.name]=null;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
+    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;tablePending[query.name]=!!result.loading;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;tableErrors[query.name]=result.loading?null:'Query unavailable';}else {tableErrors[query.name]=null;const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=false;tableErrors[query.name]='Query unavailable';render();error(cause.message);}});
    }
    render();
   }catch(cause){failed=true;stopQueries();error(cause.message);}
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
  if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true}).subscribe(result=>{if(disposed)return;viewerReady=false;try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');viewerId=id;viewerReady=true;render();}catch(cause){render();error(cause.message);}});
- return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
+ const dispose=()=>{if(disposed)return;disposed=true;for(const listener of [...observers])listener({active:false,values:{},queries:{}});observers.clear();localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
+ return Object.assign(dispose,{observe});
 }`;

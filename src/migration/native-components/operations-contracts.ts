@@ -45,6 +45,7 @@ export type NativeOperationRoute =
   | "registered-dataset-mutation"
   | "apollo-local-mutation"
   | "native-vega"
+  | "native-single-value"
   | "historical-readonly";
 export type NativeOperationGuarantee =
   | "typed-null-parameters"
@@ -57,7 +58,8 @@ export type NativeOperationGuarantee =
   | "expected-affected"
   | "commit-only-reset"
   | "outcome-no-retry"
-  | "vega-spec-signals";
+  | "vega-spec-signals"
+  | "single-value-dom";
 export interface NativeDatasetOperationBinding {
   name: string;
   ref: string;

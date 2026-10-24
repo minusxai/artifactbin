@@ -86,6 +86,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   }
   const cellData=literal(node,'data');if((node.tag==='Cell'||node.tag==='Number')&&cellData&&(!cellData.static||typeof cellData.json==='string'&&cellData.json.startsWith('$')))targets.push({...proof,kind:'cell',attribute:'data'});
   if(node.tag==='DataTable'&&literal(node,'data')!==undefined&&!node.children.some(child=>child.type==='element'&&child.tag==='Column'))targets.push({...proof,kind:'property',property:'data',attribute:'data'});
+  if(node.tag==='Select'){const options=literal(node,'options');if(options&&(!options.static||typeof options.json==='string'&&options.json.startsWith('$')))targets.push({...proof,kind:'property',property:'options',attribute:'options'});}
   if(node.tag==='User'&&literal(node,'userId')!==undefined)targets.push({...proof,kind:'person',attribute:'userId'});
   if(node.tag==='Button'&&node.attributes.some(a=>['set','run'].includes(a.name)))targets.push({...proof,kind:'action'});
   for(const chart of input.chartMappings?.filter(chart=>chart.sourceNode===node.graphKey)??[]){if(!verifyNativeChartMapping(input.analysis,chart)){block('chart-mapping-proof',node.graphKey);continue;}if(chart.data.kind==='table')targets.push({...proof,kind:'property',property:'data',attribute:'data'});}

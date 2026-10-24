@@ -324,3 +324,8 @@ test('catalog route rejects unknown engines, source dependencies, missing catalo
  for(const engine of ['postgres','unknown']){const i=input();i.compilation.queries[0]!.engine=engine;i.compilation.queries[0]!.source='source_dataset';i.admissions=admit(i);const answer=analyzeNativeOperations(i);assert.ok(answer.blockers.some(b=>b.code===(engine==='postgres'?'catalog-source-binding-missing':'query-engine-adapter-missing')));}
  const i=input(),query=i.compilation.queries[0]!;query.engine='postgres';query.source='source_dataset';query.reads.imports=['absent_namespace'];i.admissions=admit(i);assert.ok(analyzeNativeOperations(i).blockers.some(b=>b.code==='catalog-source-dependencies-unsupported'));
 });
+
+test('single-value visualizations attest DOM chart behavior without claiming Vega execution',()=>{
+ const i=input();i.analysis.nodes.push({type:'element',graphKey:'single',tag:'Chart',isComponent:true,selfClosing:true,start:0,end:1,attributes:[{name:'data',value:{static:true,json:'$summary'},start:0,end:1},{name:'viz',value:{static:true,json:{kind:'single_value'}},start:0,end:1}],children:[]});
+ const proof=analyzeNativeOperations(i).operations.find(operation=>operation.kind==='visualization')!;assert.equal(proof.route,'native-single-value');assert.ok(proof.requiredGuarantees.includes('single-value-dom'));assert.ok(!proof.requiredGuarantees.includes('vega-spec-signals'));
+});

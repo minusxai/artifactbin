@@ -294,8 +294,8 @@ export function analyzeNativeOperations(
         values: [],
         builtins: [],
       },
-      "native-vega",
-      ["vega-spec-signals", "cancel-stale-results"],
+      viz&&typeof viz==='object'&&!Array.isArray(viz)&&viz.kind==='single_value'?"native-single-value":"native-vega",
+      [viz&&typeof viz==='object'&&!Array.isArray(viz)&&viz.kind==='single_value'?"single-value-dom":"vega-spec-signals", "cancel-stale-results"],
     );
   }
   // A registered downstream operation cannot conceal an uncovered prerequisite.

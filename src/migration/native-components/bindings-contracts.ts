@@ -62,7 +62,7 @@ export type NativeBindingTarget = NativeBindingIdentity &
     | {kind:"cell";attribute:"data"}
     | {
         kind: "property";
-        property: "disabled" | "value" | "checked" | "open" | "data";
+        property: "disabled" | "value" | "checked" | "open" | "data" | "options";
         attribute: string;
       }
     | { kind: "condition"; templateId: string }

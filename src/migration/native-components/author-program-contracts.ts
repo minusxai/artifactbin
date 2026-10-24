@@ -5,7 +5,7 @@ import type { NativeAssemblyPresentation } from './assemble-contracts.ts';
 export interface NativeAuthorProgramAdmission {
  key:NativeTypedAnalysis['key']; sourceSha256:string; analysisSha256:string; compilerSourceSha256:string;
  sourceNode:string; nodeSha256:string; scriptSha256:string;
- profile:'ordinary-dom-script'|'bookshelf-local-state'|'ordinary-srcdoc';
+ profile:'ordinary-dom-script'|'bookshelf-local-state'|'ordinary-srcdoc'|'native-query-observer';
  /** The exact source recipe: earlier versions include status/favorites filtering. */
  filter:'search'|'search-and-status';
 }
