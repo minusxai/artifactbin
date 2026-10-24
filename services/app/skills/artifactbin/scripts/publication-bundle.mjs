@@ -7,7 +7,7 @@ import {sendPublication} from './publish.mjs';
 import {publicationLocalReferences} from './preview-html.mjs';
 import {fileURLToPath} from 'node:url';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
-/** @typedef {{root:string,entry:string,server:string,entryHtml?:string,manifest?:string[],mappings?:object}} BundlePreparationOptions */
+/** @typedef {{root:string,entry:string,server:string,entryHtml?:string,manifest?:string[],mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings']}} BundlePreparationOptions */
 /** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot limits/discovery.
  * @param {BundlePreparationOptions} options */
 export async function prepareBundle({root,entry,server,entryHtml,manifest=[],mappings={}}){
