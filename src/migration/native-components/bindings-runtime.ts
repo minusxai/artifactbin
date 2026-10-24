@@ -7,6 +7,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
  const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
+ const childScope=parent=>{const child={active:true,cleanups:new Set()},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
+ const clearCondition=host=>{const branch=conditions.get(host);if(branch?.scope){disposeScope(branch.scope);branch.scope=null;}host.replaceChildren();};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
@@ -15,7 +17,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const bindingId=node=>node.getAttribute?.('data-native-binding-id')||node.getAttribute?.('data-af-id');
  const all=root=>[...(bindingId(root)?[root]:[]),...(root.querySelectorAll?.('[data-af-id],[data-native-binding-id]')??[])];
  const lookup=(root,id)=>{const found=all(root).filter(node=>bindingId(node)===id);if(found.length>1)throw Error('Duplicate binding identity');return found[0];};
- const remap=(roots,context)=>{if(!context)return roots;const {ids,domIds,domBindings,durable}=context;
+ const remap=(roots,context)=>{if(!context?.ids)return roots;const {ids,domIds,domBindings,durable}=context;
   for(const root of roots)for(const node of all(root)){const id=node.getAttribute('data-af-id');if(!Object.hasOwn(ids,id))throw Error('Unplanned repeated identity');const domId=node.getAttribute('id');if(domId){if(!Object.hasOwn(domIds,domId))throw Error('Missing repeated DOM identity mapping');if(domBindings[domId]!==id)throw Error('Repeated DOM identity mapping mismatch');node.setAttribute('id',domIds[domId]);}if(durable)node.setAttribute('data-af-id',ids[id]);else{node.removeAttribute('data-af-id');node.setAttribute('data-native-binding-id',ids[id]);}
    for(const attr of ['for','aria-labelledby','aria-describedby','aria-controls','aria-owns','aria-details','aria-activedescendant','aria-errormessage','headers','list','form']){const value=node.getAttribute(attr);if(value)node.setAttribute(attr,value.split(/\s+/).map(id=>Object.hasOwn(domIds,id)?domIds[id]:id).join(' '));}
    for(const attr of ['href','xlink:href']){const value=node.getAttribute(attr);if(value?.startsWith('#')&&Object.hasOwn(domIds,value.slice(1)))node.setAttribute(attr,'#'+domIds[value.slice(1)]);}
@@ -36,7 +38,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   const ids=context?.ids??{},scope=context?.scope??rootScope;
   if(disposed||failed||!scope.active)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
-   if(target.viewerIdentity){if(!viewerReady){if(target.kind==='condition')host.replaceChildren();else host.hidden=true;continue;}host.hidden=false;}
+   if(target.viewerIdentity){if(!viewerReady){if(target.kind==='condition')clearCondition(host);else host.hidden=true;continue;}host.hidden=false;}
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
    if(target.kind==='cell'){
     let state=cells.get(host);if(!state){const child=document.createElement('span');host.replaceChildren(child);state={child,rows:null};cells.set(host,state);}
@@ -65,25 +67,25 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
        if(!scalar(value)||value!==null&&typeof value!==plan.valueTypes[binding.valueName])throw Error('Invalid control value');
        await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,[binding.valueName]:value}));
       }catch(cause){event.preventDefault?.();error(cause.message);}
-     };host.addEventListener(binding.event,change);scope.cleanups.add(()=>host.removeEventListener(binding.event,change));
+     };host.addEventListener(binding.event,change);scope.cleanups.add(()=>{host.removeEventListener(binding.event,change);bound.delete(target.property);});
     }}
    }
    if(target.kind==='condition'){
-    let branch=conditions.get(host);if(!branch){branch=clone(target.templateId,context);conditions.set(host,branch);}
-    const yes=!!read(target.expression,row);if(yes){if(!host.childNodes.length)host.append(...branch);render(host,row,context,target.sourceNode);}else host.replaceChildren();
+    let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}
+    const yes=!!read(target.expression,row);if(yes){if(!branch.scope?.active)branch.scope=childScope(scope);if(!host.childNodes.length)host.append(...branch.nodes);render(host,row,{...context,scope:branch.scope},target.sourceNode);}else clearCondition(host);
    }
    if(target.kind==='loop'){
     const rows=read(target.expression,row)??[],durable=target.identity.keyBy!==null;if(!Array.isArray(rows)||rows.length>10000)throw Error('Repeat source must be bounded rows');
-    let state=loops.get(host);if(!state){state=new Map();loops.set(host,state);}const keys=new Set(),desired=[];
+    let state=loops.get(host);if(!state){state=new Map();loops.set(host,state);scope.cleanups.add(()=>{for(const item of state.values()){disposeScope(item.context.scope);item.host.remove();}state.clear();loops.delete(host);});}const keys=new Set(),desired=[];
     for(const [index,entry]of rows.entries()){const key=durable?own(entry,target.identity.keyBy):index;if(!(typeof key==='number'&&Number.isFinite(key)||typeof key==='string'&&key.length<=256&&!/[\u0000-\u001f]/.test(key)))throw Error('Missing stable row key');const encoded=JSON.stringify([typeof key,key]);if(keys.has(encoded))throw Error('Duplicate stable row key');keys.add(encoded);desired.push({entry,key,encoded});}
     for(const [key,item]of state)if(!keys.has(key)){disposeScope(item.context.scope);item.host.remove();state.delete(key);}
-    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope={active:true,cleanups:new Set()};scopes.add(rowScope);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
+    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope=childScope(scope);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
 
    }
    if(target.kind==='action'){
     if(target.run&&plan.mutations.find(item=>item.name===target.run)?.mode==='historical-readonly'){host.disabled=true;host.setAttribute('aria-disabled','true');continue;}
-    const existing=actions.get(host);if(existing){existing.row=row;if(!context&&target.run&&operationLocks.has(target.run))host.disabled=true;continue;}const action={row,host,run:target.run};actions.set(host,action);if(!context&&target.run)topActions.add(action);
-    const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy||!context&&target.run&&operationLocks.has(target.run))return;action.busy=true;if(!context&&target.run)operationBusy(target.run,true);host.disabled=true;try{
+    const existing=actions.get(host);if(existing){existing.row=row;if(!context?.ids&&target.run&&operationLocks.has(target.run))host.disabled=true;continue;}const action={row,host,run:target.run};actions.set(host,action);if(!context?.ids&&target.run)topActions.add(action);
+    const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy||!context?.ids&&target.run&&operationLocks.has(target.run))return;action.busy=true;if(!context?.ids&&target.run)operationBusy(target.run,true);host.disabled=true;try{
      if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,...patch}));}
      if(disposed||!scope.active)return;
      if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(!request){const snapshot={};for(const field of mutation.values){const value=field.source?.kind==='row'?own(action.row,field.source.field):own(values,field.name);if(!scalar(value)||value===null&&field.nullable===false||value!==null&&typeof value!==({date:'string',timestamp:'string',user:'string'}[field.type]||field.type))throw Error('Invalid mutation argument');snapshot[field.name]=value;}request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});if(disposed||!scope.active)return;
@@ -93,8 +95,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
       if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.active)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
      }
-    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
-    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);topActions.delete(action);});
+    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context?.ids&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
+    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);topActions.delete(action);actions.delete(host);});
    }
   }
  }

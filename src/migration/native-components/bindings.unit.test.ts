@@ -1431,3 +1431,20 @@ test("explicit remote viewer identity controls conditions without being persiste
  running.module.dispose();viewer.next({data:{queries:{viewer:{id:null}}}});assert.equal(branch.children.length,1);assert.equal(viewer.stopped,true);
  }finally{await running.close();}
 });
+
+test('viewer pending and signout dispose cached branch actions, then restore the same subtree safely',async()=>{
+ const branch=el('branch','div',{}, {kind:'and',test:{kind:'signal',name:'_me.id'}}),action=el('action','Button',{set:{open:true}});
+ if(branch.type!=='element')throw Error();branch.children=[action];
+ const source=input([branch],[{kind:'condition',sourceNode:'branch',afId:'branch',templateId:'signed-in'},{kind:'action',sourceNode:'action',afId:'action'}]);
+ source.viewer={namespace:'queries',identity:'target-subject-v1',document:'query NativeViewer{queries{viewer{id}}}',responsePath:['queries','viewer','id']};
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('div',{'data-af-id':'branch'});doc.body.append(host);doc.template('signed-in',[new Element('button',{'data-af-id':'action'})]);
+ const port=client({open:false,filter:null}),running=await execute(result.authorJs,port,doc),viewer=port.remotes[0]!;
+ try{
+ viewer.next({data:{queries:{viewer:{id:'target-user'}}}});const cached=host.children[0]!;assert.ok(cached);
+ viewer.next({data:{queries:null}});assert.equal(host.children.length,0);await cached.click();assert.equal(port.state.open,false);
+ viewer.next({data:{queries:{viewer:{id:'target-user'}}}});assert.equal(host.children[0],cached);await cached.click();assert.equal(port.state.open,true);
+ await port.updateQuery({},v=>({...v,open:false}));viewer.next({data:{queries:{viewer:{id:null}}}});await cached.click();assert.equal(port.state.open,false);
+ viewer.next({data:{queries:{viewer:{id:'target-user'}}}});assert.equal(host.children[0],cached);const before=port.writes.length;await cached.click();assert.equal(port.state.open,true);assert.equal(port.writes.length,before+1);
+ }finally{await running.close();}
+});
