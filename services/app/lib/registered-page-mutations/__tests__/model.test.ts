@@ -13,3 +13,13 @@ describe('registered immutable page mutations',()=>{
  it('scopes request identities by credential and operation, not only public request IDs',async()=>{const h=harness(),run=createRegisteredMutationService(h.ports),input={requestId:'request_1234567890',values:{body:'x'}},signal=new AbortController().signal;await run(context,plan,input,signal);await run({...context,callerKey:'other-credential'},plan,input,signal);await run(context,{...plan,name:'other'},input,signal);expect(h.commits()).toBe(3);});
  it('reports exact supported pilot shapes and refuses unsupported registration rather than silently omitting',()=>{expect(()=>validateMutationProgram(plan)).not.toThrow();expect(()=>validateMutationProgram({...plan,expectedAffected:2} as unknown as RegisteredMutationPlan)).toThrow();expect(()=>validateMutationProgram({...plan,kind:'update'} as unknown as RegisteredMutationPlan)).toThrow();});
 });
+
+it('retains compiler SQL parameter identifiers for row arguments and server actor/clock bindings',async()=>{
+ const h=harness(),registered:RegisteredMutationPlan={...plan,sql:'INSERT INTO forms.rows(body) SELECT $_row__id WHERE $_me__id IS NOT NULL AND $_now IS NOT NULL',values:{row_id:{type:'string',nullable:false,parameter:'_row__id'}},builtins:[{name:'_me.id',parameter:'_me__id'},{name:'_now',parameter:'_now'}],reset:[]};
+ let observed:unknown;
+ h.ports.commit=async(_context,_plan,params)=>{observed=params;return {outcome:'committed',revision:'2',affected:1};};
+ await createRegisteredMutationService(h.ports)(context,registered,{requestId:'request_compiler_1234',values:{row_id:'retained-row'}},new AbortController().signal);
+ expect(observed).toEqual({_row__id:'retained-row',_me__id:'server-user',_now:'2026-01-01T00:00:00.000Z'});
+ expect(()=>validateMutationProgram({...registered,name:'_hidden'})).toThrow('unsupported_registered_mutation');
+ expect(()=>validateMutationProgram({...registered,values:{row_id:{type:'string',nullable:false,parameter:'_row.id'}}})).toThrow('unsupported_registered_mutation');
+});
