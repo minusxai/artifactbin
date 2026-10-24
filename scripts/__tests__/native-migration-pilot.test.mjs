@@ -76,3 +76,12 @@ it('waits on the original reader marker without requiring a fabricated native ma
  await expect(waitForImportedPilotReady(native,'jsx')).rejects.toThrow('reader-not-ready');
  const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/gates.mjs');expect(closure).toContain('scripts/lib/native-prepared-pilot-store.mjs');
 });
+
+it('compares the exact native artifact closure while binding each private probe separately',()=>{
+ const a=input(),first={path:'first-probe.mjs',sha256:'1'.repeat(64)},second={path:'second-probe.mjs',sha256:'2'.repeat(64)};
+ const left={...a.manifest,preparedStore:{},probe:first,bundleFiles:[...a.manifest.bundleFiles,first]},right={...a.manifest,preparedStore:{},probe:second,bundleFiles:[...a.manifest.bundleFiles,second]};
+ expect(pilotFixture(left)).toEqual(pilotFixture(right));
+ expect(pilotFixture({...right,bundleFiles:[...right.bundleFiles,{path:'changed.css',sha256:'3'.repeat(64)}]})).not.toEqual(pilotFixture(left));
+ expect(()=>validatePilotInputs({...left,preparedStore:undefined},a.page,a.recovery)).toThrow('probe-manifest');
+ expect(()=>validatePilotInputs({...left,probe:{...first,sha256:'4'.repeat(64)}},a.page,a.recovery)).toThrow('probe-manifest');
+});

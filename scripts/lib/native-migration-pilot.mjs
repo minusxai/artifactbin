@@ -38,11 +38,13 @@ export function validatePilotInputs(input,canonicalBytes,recoveryBytes){
  const row=selected[0];
  if(digest(row.document)!==input.documentSha256||recovery.documentSha256!==input.documentSha256||digest(recovery.key)!==digest(input.key)||recovery.sourceSha256!==input.sourceSha256||typeof recovery.source!=='string'||sha(recovery.source)!==input.sourceSha256)throw Error('pilot-source-proof');
  if(!input.bundleFiles?.length||input.bundleFiles.some(file=>!hash(file.sha256)||!file.path||file.path.startsWith('/')||file.path.split('/').some(p=>!p||p==='.'||p==='..'))||new Set(input.bundleFiles.map(file=>file.path)).size!==input.bundleFiles.length||input.bundleFiles.filter(file=>file.path==='index.html').length!==1)throw Error('pilot-bundle-manifest');
+ if(input.probe&&(!input.preparedStore||!input.probe.path?.endsWith('.mjs')||!hash(input.probe.sha256)||input.bundleFiles.filter(f=>f.path===input.probe.path&&f.sha256===input.probe.sha256).length!==1))throw Error('pilot-probe-manifest');
  if(!input.viewports?.length||input.viewports.some(v=>!Number.isSafeInteger(v.width)||!Number.isSafeInteger(v.height)||v.width<200||v.height<200)||!input.states?.length||new Set(input.states.map(s=>s.id)).size!==input.states.length||input.states.some(s=>!Array.isArray(s.actions)||!/^[a-z0-9-]+$/.test(s.id)||s.actions.some(a=>!['click','focus','press','scroll'].includes(a.action)||typeof a.role!=='string'||typeof a.name!=='string'||a.authoredId!==undefined&&(typeof a.authoredId!=='string'||!a.authoredId)||a.action==='press'&&typeof a.key!=='string')))throw Error('pilot-capture-plan');
  if(row.meta?.colorMode&&row.meta.colorMode!=='auto'&&row.meta.colorMode!==input.theme)throw Error('pilot-retained-theme');
  return {row,markup:recovery.source};
 }
-export function pilotFixture(input){return {id:'native-migration-head',family:'NativeMigrationPilot',oldJsx:'',newHtml:'',modules:[],setup:JSON.stringify({key:input.key,documentSha256:input.documentSha256,sourceSha256:input.sourceSha256,bundleFiles:input.bundleFiles}),states:input.states};}
+const artifactBundleFiles=input=>input.bundleFiles.filter(file=>file.path!==input.probe?.path);
+export function pilotFixture(input){return {id:'native-migration-head',family:'NativeMigrationPilot',oldJsx:'',newHtml:'',modules:[],setup:JSON.stringify({key:input.key,documentSha256:input.documentSha256,sourceSha256:input.sourceSha256,bundleFiles:artifactBundleFiles(input)}),states:input.states};}
 export function pilotComparisonIssues(results,control){
  const issues=[];
  if(!results.length)issues.push('missing-paired-states');
@@ -101,7 +103,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
   if(input.implementation==='html'){
    const regressionDirectory=path.join(paths.output,'regression');const regression=await capture(true,regressionDirectory);control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});if(!control.detected)issues.push('styling-regression-control-not-detected');
   }
-  const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(input.bundleFiles),theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),skillSha256,control,issues};
+  const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),skillSha256,control,issues};
   await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});
   if(issues.length)throw Error(`native-migration-pilot-incomplete:${issues.length}`);
   return receipt;
@@ -142,7 +144,7 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
  try{
  const captures=await capture(false,paths.output),regressionDirectory=path.join(paths.output,'regression'),regression=await capture(true,regressionDirectory),control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});
  const issues=captures.flatMap(c=>[...c.errors,...(c.assertionErrors??[]),...(c.fontEvidence?.errors??[]),...(c.resourceEvidence?.errors??[])]);if(!control.detected)issues.push('styling-regression-control-not-detected');
- const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(input.bundleFiles),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
+ const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(artifactBundleFiles(input)),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
  await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});if(issues.length)throw Error('native-imported-pilot-incomplete:'+issues.length);return receipt;
  }finally{await rm(probeScratch,{recursive:true,force:true});}
 }
