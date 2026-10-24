@@ -719,3 +719,18 @@ it('reacts to a linked thread added on the same document route without login',as
  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
  expect(loginHref).not.toHaveBeenCalled();
 });
+
+it('starts original block picking when Select arrives before an empty reader discussion layer exists',async()=>{
+ mockRole='owner';mockSelectionBridge=true;mount();await vi.dynamicImportSettled();
+ expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
+ selectionReceive?.({type:'mx:selection-action',nonce:'guest-selection-nonce',action:'select',selection:{kind:'text',path:'0',nodeId:'target',tag:'p',rect:{x:0,y:0,width:1,height:1},className:'',style:'',ancestors:[]}});
+ expect(await trusted(1).findByRole('status',{name:'Select tool active'})).toBeInTheDocument();
+ expect(trusted(1).queryByRole('dialog',{name:'Annotation composer'})).toBeNull();expect(loginHref).not.toHaveBeenCalled();
+});
+
+it('does not turn a guest Select action into mutation tools or a forced sign-in',async()=>{
+ mockKind='anon';mockRole='viewer';mockSelectionBridge=true;mount();await vi.dynamicImportSettled();
+ selectionReceive?.({type:'mx:selection-action',nonce:'guest-selection-nonce',action:'select',selection:{kind:'text',path:'0',nodeId:'target',tag:'p',rect:{x:0,y:0,width:1,height:1},className:'',style:'',ancestors:[]}});
+ await vi.dynamicImportSettled();expect(trusted(1).queryByRole('status',{name:'Select tool active'})).toBeNull();expect(loginHref).not.toHaveBeenCalled();
+ expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
+});

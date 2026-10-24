@@ -6,6 +6,8 @@ import { isEditFrameMessage, type StoryEditSelection, type StorySelectionActions
 interface SelectionActionsProps {
   runtimeRef: DocumentRuntimeRef; nonce: string | null; canAnnotate: boolean;
   onAnnotate: (selection: StoryEditSelection) => void;
+  /** Start the original block-picking UI, including while its lazy layer is absent. */
+  onSelect: () => void;
 }
 /** The page grants and rechecks selection actions; the document runtime is never an authority. */
 export function SelectionActions(props: SelectionActionsProps): JSX.Element {
@@ -17,7 +19,9 @@ export function SelectionActions(props: SelectionActionsProps): JSX.Element {
   onMount(() => {
     const unsubscribe = subscribeDocument({ runtimeRef: props.runtimeRef }, event => {
       if (!props.nonce || !isEditFrameMessage(event.data, props.nonce) || event.data.type !== 'mx:selection-action') return;
-      if (event.data.action === 'annotate' && capabilities().annotate) props.onAnnotate(event.data.selection);
+      if (!capabilities().annotate) return;
+      if (event.data.action === 'annotate') props.onAnnotate(event.data.selection);
+      else if (event.data.action === 'select') props.onSelect();
     });
     onCleanup(unsubscribe);
   });
