@@ -14,9 +14,9 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  const source=params.get('popup')==='1'?win.opener:win.parent;
  let port:MessagePort|undefined,identity:LinkedDocument|undefined,capability:string|undefined,disposed=false,connected=false,generation=0,authorized=false;
  const credentials=():RequestCredentials=>authorized||params.get('popup')==='1'?'same-origin':'omit';
- const controllers=new Set<AbortController>(),calls=new Set<number>();
+ const controllers=new Set<AbortController>(),calls=new Set<number>(),seen=new Set<number>();
  const state=(value:LocalConnectionState,role?:string)=>{if(disposed)return;connected=value==='connected';options.onState(value);port?.postMessage({kind:'state',state:value,...(role?{role}:{})});};
- const revoke=()=>{const cap=capability;capability=undefined;connected=false;generation++;for(const controller of controllers)controller.abort();controllers.clear();calls.clear();if(cap)void win.fetch('/api/local-connection',{method:'DELETE',credentials:credentials(),headers:{'Content-Type':'application/json','X-Af-Local-Capability':cap},keepalive:true}).catch(()=>{});};
+ const revoke=()=>{const cap=capability;capability=undefined;authorized=false;connected=false;generation++;for(const controller of controllers)controller.abort();controllers.clear();calls.clear();if(cap)void win.fetch('/api/local-connection',{method:'DELETE',credentials:credentials(),headers:{'Content-Type':'application/json','X-Af-Local-Capability':cap},keepalive:true}).catch(()=>{});};
  const receive=async(event:MessageEvent)=>{
   if(disposed||!nonce||nonce.length>128||event.source!==source||port||!event.data||event.data.kind!=='af:local-bind'||event.data.nonce!==nonce||event.ports.length!==1)return;
   // file:// is opaque. For HTTP local callers require loopback, not arbitrary websites.
@@ -27,13 +27,15 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
    const data=message.data;if(!data||typeof data!=='object')return;
    if(data.kind==='disconnect'){revoke();state('offline');port?.close();return;}
    if(data.kind==='bridge'){if(connected)options.onMessage?.(data.message);return;}
-   if(data.kind!=='operation'||!connected||!capability||!identity||!Number.isSafeInteger(data.call)||data.call<1||calls.has(data.call))return;
+   if(data.kind!=='operation'||!connected||!capability||!identity||!Number.isSafeInteger(data.call)||data.call<1||seen.has(data.call))return;
+   if(calls.size>=16||seen.size>=4096){port?.postMessage({kind:'result',call:data.call,error:'connection_busy'});return;}
    const operation=data.operation;
-   if(!operation||typeof operation.query!=='string'||operation.query.length>1_000_000){port?.postMessage({kind:'result',call:data.call,error:'invalid_operation'});return;}
-   calls.add(data.call);const epoch=generation,controller=new AbortController();controllers.add(controller);
+   if(!operation||typeof operation.query!=='string'||JSON.stringify(operation).length>1_000_000){port?.postMessage({kind:'result',call:data.call,error:'invalid_operation'});return;}
+   seen.add(data.call);calls.add(data.call);const epoch=generation,controller=new AbortController();controllers.add(controller);
    try{
     const response=await win.fetch(`/api/local-connection/${encodeURIComponent(identity.artifactId)}/graphql`,{method:'POST',credentials:credentials(),signal:controller.signal,headers:{'Content-Type':'application/json','X-Af-Local-Capability':capability},body:JSON.stringify({...operation,revision:identity.baseRevision})});
-    const value=await response.json();if(disposed||epoch!==generation)return;
+    const text=await response.text();if(text.length>4_000_000)throw Error('response_too_large');
+    const value=JSON.parse(text);if(disposed||epoch!==generation)return;
     if(!response.ok){if(response.status===401||response.status===403||response.status===409||response.status===410){revoke();state(response.status===409?'stale':'signin-required');}port?.postMessage({kind:'result',call:data.call,error:value.error??'operation_unavailable'});return;}
     port?.postMessage({kind:'result',call:data.call,value});
    }catch{if(!disposed&&epoch===generation){state('unknown-outcome');port?.postMessage({kind:'result',call:data.call,error:'Operation outcome is unknown; do not automatically retry'});}}
@@ -56,5 +58,5 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  const ready=setInterval(announce,250);announce();
  const dispose=()=>{if(disposed)return;revoke();disposed=true;clearInterval(ready);port?.close();win.removeEventListener('message',receive);win.removeEventListener('pagehide',dispose);};
  win.addEventListener('pagehide',dispose);
- return {retry(){void connect();},signIn(){port?.postMessage({kind:'signin'});},disconnect(){revoke();state('offline');},resize(height){if(Number.isFinite(height))port?.postMessage({kind:'chrome-size',height:Math.max(40,Math.min(1000,height))});},authorize(){if(!disposed&&identity){authorized=true;void connect();}},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
+ return {retry(){void connect();},signIn(){port?.postMessage({kind:'signin'});},disconnect(){revoke();state('offline');},resize(height){if(Number.isFinite(height))port?.postMessage({kind:'chrome-size',height:Math.max(40,Math.min(1000,height))});},authorize(){if(!disposed&&identity){revoke();authorized=true;void connect();}},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
 }

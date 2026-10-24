@@ -28,7 +28,7 @@ const refusal=(error:unknown):Response=>{
 /** These are browser same-origin doors, never a cross-origin capability minting API. */
 function sameOrigin(request:Request):boolean{
  if(isCrossSiteRequest(request))return false;
- const origin=request.headers.get('origin');if(origin&&origin!==new URL(request.url).origin)return false;
+ const origin=request.headers.get('origin');if(origin&&origin!==baseUrl(request))return false;
  const site=request.headers.get('sec-fetch-site');return !site||site==='same-origin'||site==='none';
 }
 export async function grantLocalConnection(request:Request):Promise<Response>{
@@ -51,7 +51,8 @@ export async function localConnectionGraphql(request:Request,artifactId:string):
   const admission=await registry.authorize(capability,artifactId);
   const payload=await request.clone().json() as {revision?:unknown;query?:unknown;operationName?:unknown};
   if(payload.revision!==admission.identity.baseRevision)return json({error:'stale'},409);
-  const execution=admission.authenticated?request:attachActor(new Request(request),{credential:'none'});
+  const guestHeaders=new Headers(request.headers);guestHeaders.delete('authorization');guestHeaders.delete('cookie');
+  const execution=admission.authenticated?request:attachActor(new Request(request,{headers:guestHeaders}),{credential:'none'});
   const response=await runWithRequest(execution,()=>pageGraphql(execution,artifactId));
   // Existing page operation authority owns commit checks and durable mutation receipts.
   // Reads get another live connection fence; no response/transport failure is replayed.

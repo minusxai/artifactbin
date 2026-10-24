@@ -25,6 +25,14 @@ describe('the app CSP', () => {
       expect(APP_CSP.split('; ').find(d => d.startsWith(directive))).not.toContain('buttons.github.io');
     }
   });
+  it('admits only file and loopback ancestors for the dedicated local connection shell', async () => {
+    const response=await app.request('/local/connect');
+    expect(response.status).toBe(200);
+    const policy=response.headers.get('content-security-policy')!;
+    expect(policy.split('; ').find(rule=>rule.startsWith('frame-ancestors'))).toBe('frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*');
+    expect(policy.replace('frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*',"frame-ancestors 'self'")).toBe(appPagePolicy(pagesSite()));
+    expect((await app.request('/login')).headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
+  });
   it('locks framing and plugins on the app pages', async () => {
     expect(APP_CSP).toContain("default-src 'none'");
     expect(APP_CSP).toContain("script-src 'self'");

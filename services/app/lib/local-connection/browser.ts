@@ -52,7 +52,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
    iframe.style.cssText='position:fixed;left:0;top:0;width:100%;height:56px;border:0;z-index:2147483646';
    win.document.documentElement.append(iframe);remote=iframe.contentWindow;
   }
-  timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??15_000);
+  timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??(signIn?300_000:15_000));
  };
  win.addEventListener('message',receive);
  const connection:LocalDocumentConnection={
@@ -64,7 +64,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
    if(!connected||!port)return Promise.reject(Error('Document is disconnected'));
    const id=++call;
    return new Promise((resolve,reject)=>{
-    const deadline=setTimeout(()=>{pending.delete(id);state('unknown-outcome');reject(Error('Operation outcome is unknown; check the remote result before retrying'));},options.timeoutMs??30_000);
+    const deadline=setTimeout(()=>{pending.delete(id);cleanup();state('unknown-outcome');reject(Error('Operation outcome is unknown; check the remote result before retrying'));},options.timeoutMs??30_000);
     pending.set(id,{resolve,reject,timer:deadline});port!.postMessage({kind:'operation',call:id,operation});
    });
   },

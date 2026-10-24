@@ -27,3 +27,14 @@ it('rejects cross-origin grants and mismatched or stale source identity',async()
  const owner=await mintAccountToken('local-stale');const created=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head></head><body>Current</body></html>'}}));const {id}=await created.json();
  const stale=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{authorizePrivate:true,identity:{platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:'1',sourceDigest:'0'.repeat(64)}}}));expect(stale.status).toBe(409);
 });
+it('never lets an ambient bearer elevate guest reads of a linked private dataset',async()=>{
+ const owner=await mintAccountToken('local-private-data');
+ const dataset=await (await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{secret:'private value'}],visibility:'private'}}))).json();
+ const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset.id}"></head><body>Public</body></html>`}}));expect(made.status).toBe(201);const {id}=await made.json();
+ const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);
+ const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
+ const open=async(authorizePrivate:boolean)=>{const response=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate}}));expect(response.status).toBe(200);return (await response.json()).capability;};
+ const run=async(cap:string)=>{const req=request(`/api/local-connection/${id}/graphql`,{method:'POST',token:owner.token,json:{revision:page.revision,query:'{ data { schema { tables { id } } } }'}});req.headers.set('X-Af-Local-Capability',cap);const response=await execute(req,{params:Promise.resolve({id})});return response.json();};
+ const guest=await run(await open(false));expect(guest.errors).toHaveLength(1);expect(JSON.stringify(guest)).not.toContain(dataset.id);
+ const account=await run(await open(true));expect(account.errors).toBeUndefined();expect(account.data.data.schema.tables.length).toBeGreaterThan(0);
+});
