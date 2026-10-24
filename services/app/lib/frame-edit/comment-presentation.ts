@@ -1,35 +1,10 @@
+import { COMMENT_ACTIONS_CSS } from './comment-actions-presentation';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 
 /** Shared inert comment chrome for markup and opaque managed frames.
  * The bootstrap serializes this data; no parent DOM or executable author capability crosses realms. */
 export const COMMENT_PRESENTATION = {
-  actionsCss: `
-[data-mx-selection-actions] {
-  all: initial; box-sizing: border-box; position: fixed; z-index: 2147483646;
-  display: flex; align-items: center; overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, .48); border-radius: 7px;
-  background: #fff; color: #344054;
-  box-shadow: 0 7px 20px rgba(15, 23, 42, .16);
-  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  white-space: nowrap; animation: mx-selection-actions-in 90ms ease-out;
-}
-[data-mx-selection-actions][hidden] { display: none !important; }
-:root.dark [data-mx-selection-actions] {
-  border-color: rgba(148, 163, 184, .34); background: #17191d; color: #e5e7eb;
-  box-shadow: 0 7px 22px rgba(0, 0, 0, .42);
-}
-[data-mx-selection-actions] button {
-  all: unset; box-sizing: border-box; display: inline-flex; align-items: center;
-  gap: 5px; min-height: 28px; padding: 0 9px; cursor: pointer; color: inherit;
-}
-[data-mx-selection-actions] button.mx-selection-action--coarse { min-height: 44px; padding: 0 14px; gap: 7px; }
-[data-mx-selection-actions] svg { display: block; width: 13px; height: 13px; flex: none; }
-[data-mx-selection-actions] button + button { border-left: 1px solid rgba(148, 163, 184, .32); }
-[data-mx-selection-actions] button:hover,
-[data-mx-selection-actions] button:focus-visible { background: rgba(34, 197, 94, .11); color: #16a34a; outline: none; }
-@keyframes mx-selection-actions-in { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { [data-mx-selection-actions] { animation: none; } }
-`,
+  actionsCss: COMMENT_ACTIONS_CSS,
   icons: {select: ['M5 3a2 2 0 0 0-2 2', 'M19 3a2 2 0 0 1 2 2', 'M21 9V7', 'M3 9V7', 'M3 13v2', 'M3 19a2 2 0 0 0 2 2', 'M7 3h2', 'M13 3h2', 'M7 21h2', 'm12 12 4 10 1.7-4.3L22 16Z'], edit: [
           'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
           'm15 5 4 4',

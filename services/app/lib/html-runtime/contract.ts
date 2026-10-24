@@ -18,9 +18,11 @@ export interface HtmlAssemblyInput {
   core: string;
   /** Author module carried only by portable exports; hosted pages fetch its immutable asset on import. */
   apollo?: string;
+  /** Reader module embedded only in self-contained portable exports. */
+  reader?: string;
   /** Explicit download mode disables all remote ports. */
   offline?: boolean;
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string }

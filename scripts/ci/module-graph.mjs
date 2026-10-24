@@ -178,7 +178,7 @@ export const DEEP_MODULES = {
   'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
   // The frame's four lazy edit chunks, one door each and no index on purpose: an index would merge the chunks.
   // Inert shared comment chrome is also consumed by the native HTML reader.
-  'lib/frame-edit': { entries: ['annotate', 'comment-presentation', 'dom-mounter', 'selection-actions', 'session'] },
+  'lib/frame-edit': { entries: ['annotate', 'comment-actions-presentation', 'dom-mounter', 'selection-actions', 'session'] },
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },

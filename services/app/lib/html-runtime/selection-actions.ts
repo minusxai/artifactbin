@@ -1,4 +1,4 @@
-import { COMMENT_PRESENTATION } from "../frame-edit/comment-presentation";
+import { COMMENT_ACTIONS_CSS } from "../frame-edit/comment-actions-presentation";
 import type { StoryEditSelection } from "../edit-protocol";
 
 /** Native reader chrome only offers actions explicitly granted by the parent. */
@@ -19,7 +19,7 @@ export function createHtmlSelectionActions({
 }: HtmlSelectionActionsOptions): HtmlSelectionActions {
   const doc = win.document;
   const style = doc.createElement("style");
-  style.textContent = COMMENT_PRESENTATION.actionsCss;
+  style.textContent = COMMENT_ACTIONS_CSS;
   const toolbar = doc.createElement("div");
   toolbar.setAttribute("data-mx-selection-actions", "");
   toolbar.setAttribute("role", "toolbar");

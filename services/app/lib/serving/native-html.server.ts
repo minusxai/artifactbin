@@ -37,7 +37,7 @@ function htmlCore(): Promise<string> {
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
   const config:HtmlRuntimeConfig={pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{})};
-  const assembly={html:input.offline?input.row.source??'':await nativeHtmlAssets(input.row),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo}:{})};
+  const assembly={html:input.offline?input.row.source??'':await nativeHtmlAssets(input.row),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
@@ -85,3 +85,6 @@ export async function nativeHtmlApolloResponse(request:Request,digest:string):Pr
  if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
  return new Response(request.method==='HEAD'?null:source,{headers});
 }
+
+/** Same public, digest-verified code store and cache policy as the author engine. */
+export async function nativeHtmlReaderResponse(request:Request,digest:string):Promise<Response>{return nativeHtmlApolloResponse(request,digest);}

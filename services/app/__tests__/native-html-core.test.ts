@@ -41,3 +41,18 @@ it('serves retained prior-release author bytes and refuses a corrupt stored cont
  await retainedRuntimeAssets.put(corrupt,'different bytes');
  expect((await apollo(req,{params:Promise.resolve({digest:corrupt})})).status).toBe(404);
 });
+
+import {GET as reader,HEAD as readerHead} from '@/app/af/v1/reader/[digest]/route';
+it('serves retained immutable reader code on the exact public runner path for GET and HEAD',async()=>{
+ const assets=await buildHtmlAssets(),digest=assets.readerPath.split('/').at(-1)!;
+ const request=new Request('https://app.example.test'+assets.readerPath,{headers:{cookie:'ignored=test'}});
+ const response=await reader(request,{params:Promise.resolve({digest})});
+ expect(response.status).toBe(200);expect(await response.text()).toBe(assets.reader);
+ expect(response.headers.get('cache-control')).toContain('immutable');expect(response.headers.get('set-cookie')).toBeNull();
+ const head=await readerHead(new Request(request,{method:'HEAD'}),{params:Promise.resolve({digest})});expect(await head.text()).toBe('');expect(head.headers.get('etag')).toBe(response.headers.get('etag'));
+ expect((await reader(new Request(request,{headers:{'if-none-match':response.headers.get('etag')!}}),{params:Promise.resolve({digest})})).status).toBe(304);
+ const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/v1/reader/:digest',c=>reader(c.req.raw,{params:Promise.resolve({digest:c.req.param('digest')})}));
+ expect((await app.request(origin+assets.readerPath)).status).toBe(200);expect((await app.request(origin+'/af/v1/reader/private')).status).toBe(404);
+ const previous='export const priorReader=true;',oldDigest=createHash('sha256').update(previous).digest('hex');await retainedRuntimeAssets.put(oldDigest,previous);
+ expect(await (await reader(request,{params:Promise.resolve({digest:oldDigest})})).text()).toBe(previous);
+});

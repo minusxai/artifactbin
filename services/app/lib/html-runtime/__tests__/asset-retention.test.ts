@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {createRuntimeAssetRetention} from '../asset-retention';
 import type {RuntimeAssetStore} from '../asset-retention-contract';
 const hash=(source:string)=>createHash('sha256').update(source).digest('hex');
-const assets=(apollo:string)=>({core:`reader for ${hash(apollo)}`,apollo,apolloPath:`/af/v1/apollo/${hash(apollo)}`});
+const assets=(apollo:string)=>({core:`reader for ${hash(apollo)}`,apollo,apolloPath:`/af/v1/apollo/${hash(apollo)}`,reader:`reader:${apollo}`,readerPath:`/af/v1/reader/${hash(`reader:${apollo}`)}`});
 function memory(){const values=new Map<string,string>();return {values,store:{get:async digest=>values.get(digest)??null,put:async(digest,source)=>{values.set(digest,source);}} satisfies RuntimeAssetStore};}
 it('a second release serves exact retained bytes referenced by an already-open reader',async()=>{
  const {store}=memory(),first=assets('export const release=1'),second=assets('export const release=2');
@@ -20,12 +20,22 @@ it('never serves missing, malformed or tampered objects as executable code',asyn
  await expect(createRuntimeAssetRetention(invalid,store,hash).expose()).rejects.toThrow();
  expect(values.has(hash(current.apollo))).toBe(false);
 });
-it('does not expose a path before durable write and retries failed writes without marking them persisted',async()=>{
- const current=assets('current');let writes=0,release:()=>void=()=>{};
- const store:RuntimeAssetStore={get:async()=>null,put:async()=>{writes++;if(writes===1)throw Error('unavailable');await new Promise<void>(resolve=>{release=resolve;});}};
+it('does not expose either module before durable writes and retries failures',async()=>{
+ const current=assets('current');let fail=true;
+ const releases:Array<()=>void>=[],stored=new Set<string>();
+ const store:RuntimeAssetStore={get:async()=>null,put:async(digest)=>{if(fail)throw Error('unavailable');await new Promise<void>(resolve=>{releases.push(resolve);});stored.add(digest);}};
  const retention=createRuntimeAssetRetention(current,store,hash);
- await expect(retention.expose()).rejects.toThrow('unavailable');
+ await expect(retention.expose()).rejects.toThrow('unavailable');fail=false;
  let exposed=false;const a=retention.expose().then(()=>{exposed=true;}),b=retention.expose();await Promise.resolve();
- expect(exposed).toBe(false);expect(writes).toBe(2);release();await Promise.all([a,b]);
- expect(await retention.expose()).toEqual(current);expect(writes).toBe(2);
+ expect(exposed).toBe(false);releases[0]!();await Promise.resolve();expect(exposed).toBe(false);
+ releases[1]!();await Promise.all([a,b]);
+ expect(stored).toEqual(new Set([hash(current.apollo),hash(current.reader)]));
+ expect(await retention.expose()).toEqual(current);
+});
+it('retains reader bytes across releases with exact digest validation',async()=>{
+ const {store}=memory(),first=assets('first'),second=assets('second');
+ await createRuntimeAssetRetention(first,store,hash).expose();
+ const release=createRuntimeAssetRetention(second,store,hash);await release.expose();
+ expect(await release.read(hash(first.reader))).toBe(first.reader);
+ expect(await release.read(hash(second.reader))).toBe(second.reader);
 });
