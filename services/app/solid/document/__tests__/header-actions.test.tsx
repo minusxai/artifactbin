@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { afterEach, expect, it, vi } from 'vitest';
 import { Route, Router } from '@solidjs/router';
-import { screen, within } from '@testing-library/dom';
+import { screen, within, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import type { ComponentProps } from 'solid-js';
 import { DocumentChrome } from '../DocumentChrome';
@@ -85,4 +85,10 @@ it.each([390, 700])('shows historical version context beside the compact title b
   expect(version).toHaveTextContent('v1');
   expect(version.parentElement).toHaveTextContent('A readable artifact title');
   expect(screen.queryByRole('menu')).toBeNull();
+});
+
+it('keeps the owner Share action usable while its visibility glyph loads',async()=>{
+ vi.stubGlobal('innerWidth',1280);const actions=mount();
+ const share=screen.getByRole('button',{name:'Share'});fireEvent.click(share);expect(actions.share).toHaveBeenCalledOnce();
+ await waitFor(()=>expect(share.querySelector('svg[aria-hidden="true"]')).not.toBeNull());
 });

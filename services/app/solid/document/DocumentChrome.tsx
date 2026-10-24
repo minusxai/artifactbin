@@ -19,12 +19,12 @@ import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
-import { sharingIconFor, VISIBILITY_ICON_NODES } from '@/lib/workspace/visibility-icons';
 import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 // Compact-only actions must not make the wide reader import menu positioning and its UI chunk.
+const SharingGlyph = lazy(() => import('./DocumentSharingGlyph').then(module => ({ default: module.DocumentSharingGlyph })));
 const CompactMenu = lazy(() => import('./DocumentCompactMenu').then(module => ({ default: module.DocumentCompactMenu })));
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction } from './DocumentBarActions';
@@ -61,12 +61,6 @@ export interface DocumentChromeProps {
   controls: (close: () => void) => JSX.Element;
 }
 
-
-function SharingGlyph(props: { visibility: Visibility; invited: boolean }): JSX.Element {
-  const nodes = () => VISIBILITY_ICON_NODES[sharingIconFor({ visibility: props.visibility, hasInvitedUsers: props.invited })];
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-    innerHTML={nodes().map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).filter(([name]) => name !== 'key').map(([name, value]) => `${name}="${value}"`).join(' ')}/>`).join('')} />;
-}
 
 export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const [like, setLike] = createSignal(props.like);
@@ -132,7 +126,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
     <Show when={props.owner && !props.archived}>
       <Tooltip content="Share">
         <Button variant="secondary" size="sm" aria-label="Share" onClick={() => props.onShare()}>
-          <SharingGlyph visibility={props.visibility ?? 'private'} invited={props.hasInvitedUsers ?? false} /><span class="hidden sm:inline">Share</span>
+          <Suspense fallback={<span aria-hidden="true" style={{width:'18px',height:'18px'}} />}><SharingGlyph visibility={props.visibility ?? 'private'} invited={props.hasInvitedUsers ?? false} /></Suspense><span class="hidden sm:inline">Share</span>
         </Button>
       </Tooltip>
     </Show>
