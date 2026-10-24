@@ -246,6 +246,7 @@ async function execute(source: string, clientPort: unknown, document: Doc,files:
       path.join(pkg, "index.js"),
       `export const client=globalThis[${JSON.stringify(key)}];export const gql=strings=>strings.join('');`,
     );
+    await writeFile(path.join(root, "package.json"), JSON.stringify({type:"module"}));
     for(const file of files){await mkdir(path.dirname(path.join(root,file.path)),{recursive:true});await writeFile(path.join(root,file.path),file.bytes);}
     await writeFile(path.join(root, "page.mjs"), source);
     const module = await import(
