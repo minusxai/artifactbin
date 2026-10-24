@@ -29,3 +29,9 @@ it('uploads duplicate bytes once while retaining every local path receipt',async
  let calls=0;const result=await publishBundleDependencies(plan,'duplicate_bytes_test_01',{reuse:async()=>'',create:async()=>{calls++;return {id:'ASSET1',revision:'1',address:'/a/ASSET1/raw?v=1'};}});
  expect(calls).toBe(1);expect(result.receipts.map(r=>r.id)).toEqual(['ASSET1','ASSET1']);
 });
+it('pins parent versions once and preserves fragments in HTML, CSS and modules',async()=>{
+ const {pinPublicationAssetUrls}=await import('../plan');const url='/a/PAGE12/assets?dependency=ASSET1&revision=1&version=9#icon';
+ expect(pinPublicationAssetUrls(`<img src="${url}">`,'PAGE12',2)).toBe('<img src="/a/PAGE12/assets?dependency=ASSET1&amp;revision=1&amp;version=2#icon">');
+ expect(pinPublicationAssetUrls(`body{background:url("${url}")}`,'PAGE12',2,'text/css')).toContain('revision=1&version=2#icon');
+ expect(pinPublicationAssetUrls(`import "${url}"`,'PAGE12',2,'text/javascript')).toContain('revision=1&version=2#icon');
+});

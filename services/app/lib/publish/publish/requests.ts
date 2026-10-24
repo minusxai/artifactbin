@@ -103,6 +103,7 @@ export async function replaceArtifactWithBody(
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
   let bundleReceipts:unknown[]=[];
+  const bundleSupplied=body.publicationBundle!==undefined;
   if(typeof body.html==='string'){
     if(expected.expectedVersion!==undefined&&expected.expectedVersion!==current.version||expected.expectedState!==undefined&&expected.expectedState!==artifactState(current))return json({error:'version_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
     if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
@@ -203,7 +204,7 @@ export async function replaceArtifactWithBody(
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    meta:{...parsed.meta,...(bundleReceipts.length?{htmlPublicationDependencies:bundleReceipts}:current.meta.htmlPublicationDependencies?{htmlPublicationDependencies:current.meta.htmlPublicationDependencies}:{})},
+    meta:{...parsed.meta,...(bundleSupplied?{htmlPublicationDependencies:bundleReceipts}:current.meta.htmlPublicationDependencies?{htmlPublicationDependencies:current.meta.htmlPublicationDependencies}:{})},
     ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),

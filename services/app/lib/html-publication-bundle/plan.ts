@@ -1,7 +1,8 @@
 import path from 'node:path';
 import {fileContentType} from '@artifactbin/contracts';
 import {initSync,parse as parseImports} from 'es-module-lexer';
-import {parse as parseCss,walk as walkCss} from 'css-tree';
+import parseCss from 'css-tree/parser';
+import walkCss from 'css-tree/walker';
 initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency} from './contracts';
@@ -108,4 +109,18 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle):Bund
 export function inspectPublicationBundle(html:string,bundle:PublicationBundle){
  const plan=planPublicationBundle(html,bundle);
  return {entryPath:plan.entryPath,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
+}
+/** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
+export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html'):string{
+ const matches=links(source,contentType==='text/css',/^(?:text|application)\/javascript$/.test(contentType));let result=source;
+ for(const link of matches.sort((a,b)=>b.start-a.start)){
+  if(!link.value.startsWith(`/a/${pageId}/assets?`))continue;
+  const url=new URL(link.value,'https://bundle.invalid');
+  if(url.pathname!==`/a/${pageId}/assets`||url.searchParams.getAll('dependency').length!==1)continue;
+  url.searchParams.set('version',String(version));
+  const address=url.pathname+url.search+url.hash;
+  const escaped=contentType==='text/html'?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
+  result=result.slice(0,link.start)+escaped+result.slice(link.end);
+ }
+ return result;
 }

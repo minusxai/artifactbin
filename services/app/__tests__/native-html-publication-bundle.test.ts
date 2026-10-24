@@ -89,3 +89,28 @@ it('describes a readonly dependency plan without reserving or creating resources
  const plan=inspectPublicationBundle('<img src="./a.svg">',{entryPath:'index.html',files:[file('a.svg','<svg/>','image/svg+xml')]});expect(plan.dependencies).toMatchObject([{path:'a.svg',kind:'asset',bytes:6}]);
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(0);
 });
+it('keeps historical hosted dependencies after the latest page removes them, with exact bytes and current ACLs',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {nativeHtmlAssets}=await import('@/lib/serving/native-html-assets.server');
+ const actor=await mintAccountToken('bundle-historical');
+ const html='<link rel="stylesheet" href="./main.css"><img src="./logo.svg">';
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_history_create_01'},json:{html,publicationBundle:{entryPath:'index.html',files:[file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>old</svg>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status).toBe(201);
+ const params={params:Promise.resolve({id:saved.id})};const head=await (await GET(request('/api/artifacts/'+saved.id,{token:actor.token}),params)).json();
+ const updated=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_history_update_01'},json:{html:'<h1>No dependencies</h1>',expectedVersion:head.version,expectedState:head.state,publicationBundle:{entryPath:'index.html',files:[]}}}),params);expect(updated.status).toBe(200);
+ const db=await harness.db();const archived=(await db.query<{source:string;meta:Record<string,unknown>}>('SELECT source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=1',[saved.id])).rows[0]!;
+ const rendered=await nativeHtmlAssets({id:saved.id,version:1,source:archived.source,meta:archived.meta});expect(rendered).toContain('version=1');
+ const css=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='main.css');const image=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='logo.svg');
+ const address=(id:string)=>`/a/${saved.id}/assets?dependency=${id}&revision=1`;
+ expect((await assetGet(request(address(css.id),{token:actor.token}),params)).status).toBe(404);
+ const historical=await assetGet(request(address(css.id)+'&version=1',{token:actor.token}),params);expect(historical.status).toBe(200);expect(await historical.text()).toContain('version=1');
+ const bytes=await assetGet(request(address(image.id)+'&version=1',{token:actor.token}),params);expect(await bytes.text()).toBe('<svg>old</svg>');
+ const stranger=await mintAccountToken('bundle-history-stranger');expect((await assetGet(request(address(css.id)+'&version=1',{token:stranger.token}),params)).status).toBe(404);
+});
+it('serves existing actor-owned image and PDF mappings through admitted dependency URLs',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const actor=await mintAccountToken('bundle-media-mapping');
+ const image='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1"/></svg>').toString('base64');const pdf='data:application/pdf;base64,'+Buffer.from('%PDF-1.7\nopaque retained bytes').toString('base64');
+ const imageReply=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{image}}));const imageAsset=await imageReply.json();expect(imageReply.status,JSON.stringify(imageAsset)).toBe(201);
+ const pdfReply=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{pdf}}));const pdfAsset=await pdfReply.json();expect(pdfReply.status).toBe(201);
+ const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_media_mappings_01'},json:{html:'<img src="./image.svg"><object data="./paper.pdf"></object>',publicationBundle:{entryPath:'index.html',files:[],mappings:{'image.svg':{kind:'asset',id:imageAsset.id,revision:'1'},'paper.pdf':{kind:'asset',id:pdfAsset.id,revision:'1'}}}}}));const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);
+ const params={params:Promise.resolve({id:saved.id})};
+ for(const id of [imageAsset.id,pdfAsset.id]){const bytes=await assetGet(request(`/a/${saved.id}/assets?dependency=${id}&revision=1`,{token:actor.token}),params);expect(bytes.status).toBe(200);expect(bytes.headers.get('x-content-type-options')).toBe('nosniff');expect((await bytes.arrayBuffer()).byteLength).toBeGreaterThan(0);}
+});
