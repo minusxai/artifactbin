@@ -83,10 +83,12 @@ function release(repo,source,event='workflow_run',requestedRun='42'){
  try{
   const state=join(fixture,'state.json');writeFileSync(state,JSON.stringify({releases:{},runs:{},published:{},calls:[],assets:{},...repo}));mkdirSync(join(fixture,'bin'));for(const [name,code]of [['gh',GH],['npm',NPM]]){const file=join(fixture,'bin',name);writeFileSync(file,code);chmodSync(file,0o755);}
   mkdirSync(join(fixture,'scripts/ci'),{recursive:true});for(const file of ['npm-provenance.mjs','npm-driver.mjs'])cpSync(join(root,'scripts/ci',file),join(fixture,'scripts/ci',file));
+  // Node/npm installation is an external tool boundary, like setup-node above.
+  writeFileSync(join(fixture,'scripts/ci/prepare-npm.mjs'), '// Fixture toolchain is installed below.\n');
   transitionTree(fixture,repo.checkout??'0.4.0');
-  // Mock only npm's official crypto boundary. Real carrier/source checks and shell run below.
+  // Mock npm's official crypto boundary. Real carrier/source checks and shell run below.
   const fakeNpm=join(fixture,'fixture-npm');mkdirSync(join(fakeNpm,'bin'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/libnpmpublish/lib'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/sigstore'),{recursive:true});
-  writeFileSync(join(fakeNpm,'package.json'),JSON.stringify({version:'11.19.1'}));writeFileSync(join(fakeNpm,'bin/npm-cli.js'),'');
+  writeFileSync(join(fakeNpm,'package.json'),JSON.stringify({version:'11.19.1'}));for(const [name,version] of [['sigstore','4.1.1'],['@sigstore/core','3.2.1'],['libnpmpublish','11.2.0'],['brace-expansion','5.0.12'],['ip-address','10.7.4'],['postcss-selector-parser','7.1.6'],['undici','6.29.1']]){mkdirSync(join(fakeNpm,'node_modules',name),{recursive:true});writeFileSync(join(fakeNpm,'node_modules',name,'package.json'),JSON.stringify({version}));}writeFileSync(join(fakeNpm,'bin/npm-cli.js'),'');
   writeFileSync(join(fakeNpm,'node_modules/libnpmpublish/lib/provenance.js'),`exports.verifyProvenance=async(subject,file)=>{const bundle=JSON.parse(require('node:fs').readFileSync(file));if(bundle.dsseEnvelope.signatures[0].sig!=='fixture-signature')throw Error('Untrusted fixture signature');return bundle;};`);
   writeFileSync(join(fakeNpm,'node_modules/sigstore/index.js'),`exports.verify=async(bundle,options)=>{if(options.certificateIssuer!=='https://token.actions.githubusercontent.com'||options.certificateIdentityURI!=='https://github.com/minusxai/artifactbin/.github/workflows/ci.yml@refs/pull/12/merge')throw Error('Wrong certificate identity policy');};`);
   writeFileSync(join(fixture,'scripts/ci/npm-driver.mjs'),`export function npmDriver(){return new URL('../../fixture-npm/bin/npm-cli.js',import.meta.url).pathname;}`);

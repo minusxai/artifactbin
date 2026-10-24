@@ -1,8 +1,9 @@
 # Source this file in bash/zsh: it prepares Node and updates this terminal's PATH.
 # No afbin package, updater or credential is installed by this helper.
 afbin_ensure_node() {
+  # npm 11 preserves the CLI consumer lock; npm 12 removes shrinkwrap support.
   afbin_node_ready() {
-    command -v node >/dev/null 2>&1 && node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||a===22&&b>=13?0:1)' >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 && npm --version >/dev/null 2>&1 && command -v npx >/dev/null 2>&1 && npx --version >/dev/null 2>&1
+    command -v node >/dev/null 2>&1 && node -e 'const [a,b,c]=process.versions.node.split(".").map(Number);process.exit(a===22&&(b>23||b===23&&c>=4)||a===24&&(b>22||b===22&&c>=1)||a===26&&(b>12||b===12&&c>=1)||a>26?0:1)' >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 && node -e 'const v=process.argv[1];const [a,b,c]=v.split(".").map(Number);let ok=/^\d+\.\d+\.\d+$/.test(v)&&(a===11&&(b>19||b===19&&c>=1));if(ok&&v==="11.19.1"){try{const fs=require("node:fs"),p=require("node:path"),bin=fs.realpathSync(process.argv[2]),root=process.platform==="win32"?p.join(p.dirname(bin),"node_modules/npm"):p.dirname(p.dirname(bin));ok=[["brace-expansion","5.0.12"],["ip-address","10.7.4"],["postcss-selector-parser","7.1.6"],["undici","6.29.1"]].every(([name,version])=>JSON.parse(fs.readFileSync(p.join(root,"node_modules",name,"package.json"))).version===version)}catch{ok=false}}process.exit(ok?0:1)' "$(npm --version 2>/dev/null)" "$(command -v npm)" >/dev/null 2>&1 && command -v npx >/dev/null 2>&1 && npx --version >/dev/null 2>&1
   }
   if afbin_node_ready; then printf '%s\n' 'Node and npm/npx are ready.'; return 0; fi
   local afbin_node_version=24.22.1 afbin_node_os afbin_node_arch afbin_node_file afbin_node_stage afbin_node_dir afbin_node_hash afbin_node_actual afbin_node_export afbin_node_rc
@@ -31,6 +32,14 @@ afbin_ensure_node() {
     rm -rf "$afbin_node_stage"
     PATH="$afbin_node_dir/bin:$PATH"; export PATH
     hash -r 2>/dev/null || true
+    npm install --global --prefix "$afbin_node_dir" --no-audit --no-fund npm@11.19.1 || { printf '%s\n' 'npm update failed. Install Node LTS: https://nodejs.org/en/download' >&2; return 1; }
+    afbin_node_stage=$(mktemp -d) || return 1
+    if ! npm install --prefix "$afbin_node_stage" --ignore-scripts --no-package-lock --no-audit --no-fund brace-expansion@5.0.12 ip-address@10.7.4 postcss-selector-parser@7.1.6 undici@6.29.1; then rm -rf "$afbin_node_stage"; return 1; fi
+    for afbin_node_file in brace-expansion ip-address postcss-selector-parser undici; do
+      rm -rf "$afbin_node_dir/lib/node_modules/npm/node_modules/$afbin_node_file"
+      cp -R "$afbin_node_stage/node_modules/$afbin_node_file" "$afbin_node_dir/lib/node_modules/npm/node_modules/$afbin_node_file" || { rm -rf "$afbin_node_stage"; return 1; }
+    done
+    rm -rf "$afbin_node_stage"
     afbin_node_ready || { printf '%s\n' 'Node installed but npm/npx could not run. Install Node LTS: https://nodejs.org/en/download' >&2; return 1; }
   fi
   # HOME-relative declaration remains valid if a home directory contains spaces.

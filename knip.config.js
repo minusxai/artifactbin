@@ -21,6 +21,7 @@ export default {
         'server.ts',
         // CI.smtp.Dockerfile starts this private SMTP sink by path.
         'deploy/company/ci-smtp-fixture.mjs',
+        'deploy/company/patch-npm.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests, the offline gate's preview build, the backfill and the author-script audit.

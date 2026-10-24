@@ -40,6 +40,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       - run: npm ci
       - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       - run: docker build -t runner-design-worker docs/proposals/runner-validation

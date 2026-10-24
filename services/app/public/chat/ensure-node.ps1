@@ -15,16 +15,24 @@ function Resolve-AfbinApplication([string]$Name) {
   }
   throw "Missing $Name on PATH."
 }
+# npm 11 preserves the CLI consumer lock; npm 12 removes shrinkwrap support.
 function Test-AfbinNode {
   try {
     $node = Resolve-AfbinApplication 'node.exe'
-    & $node -e 'const [a,b]=process.versions.node.split(String.fromCharCode(46)).map(Number);process.exit(a>22||a===22&&b>=13?0:1)' 2>$null
+    & $node -e 'const [a,b,c]=process.versions.node.split(String.fromCharCode(46)).map(Number);process.exit(a===22&&(b>23||b===23&&c>=4)||a===24&&(b>22||b===22&&c>=1)||a===26&&(b>12||b===12&&c>=1)||a>26?0:1)' 2>$null
     if ($LASTEXITCODE -ne 0) { return $false }
     foreach ($name in @('npm.cmd','npx.cmd')) {
       $command = Resolve-AfbinApplication $name
       $null = & $command --version 2>$null
       if ($LASTEXITCODE -ne 0) { return $false }
     }
+    $npm = Resolve-AfbinApplication 'npm.cmd'
+    $npmVersion = & $npm --version
+    $npmCheck = @'
+const v=process.argv[2];const [a,b,c]=v.split(".").map(Number);let ok=/^\d+\.\d+\.\d+$/.test(v)&&(a===11&&(b>19||b===19&&c>=1));if(ok&&v==="11.19.1"){try{const fs=require("node:fs"),p=require("node:path"),bin=fs.realpathSync(process.argv[3]),root=process.platform==="win32"?p.join(p.dirname(bin),"node_modules/npm"):p.dirname(p.dirname(bin));ok=[["brace-expansion","5.0.12"],["ip-address","10.7.4"],["postcss-selector-parser","7.1.6"],["undici","6.29.1"]].every(([name,version])=>JSON.parse(fs.readFileSync(p.join(root,"node_modules",name,"package.json"))).version===version)}catch{ok=false}}process.exit(ok?0:1)
+'@
+    $npmCheck | & $node --input-type=commonjs - $npmVersion $npm 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
     return $true
   } catch { return $false }
 }
@@ -55,6 +63,16 @@ if (!(Test-AfbinNode)) {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     if ([IO.Directory]::Exists($destination)) { [IO.Directory]::Delete($destination,$true) }
     [IO.Directory]::Move($unpacked,$destination)
+    & (Join-Path $destination 'npm.cmd') install --global --prefix $destination --no-audit --no-fund npm@11.19.1
+    if ($LASTEXITCODE -ne 0) { throw 'npm update failed.' }
+    $patches = Join-Path $stage 'npm-patches'
+    & (Join-Path $destination 'npm.cmd') install --prefix $patches --ignore-scripts --no-package-lock --no-audit --no-fund brace-expansion@5.0.12 ip-address@10.7.4 postcss-selector-parser@7.1.6 undici@6.29.1
+    if ($LASTEXITCODE -ne 0) { throw 'npm dependency update failed.' }
+    foreach ($name in @('brace-expansion','ip-address','postcss-selector-parser','undici')) {
+      $target = Join-Path $destination "node_modules\npm\node_modules\$name"
+      if ([IO.Directory]::Exists($target)) { [IO.Directory]::Delete($target,$true) }
+      Copy-Item -Recurse (Join-Path $patches "node_modules\$name") $target
+    }
     if (!(Test-AfbinNode)) { throw 'Node installed but npm/npx could not run.' }
   } catch { throw "Node setup failed: $_ Install Node LTS: https://nodejs.org/en/download" }
   finally { if ([IO.Directory]::Exists($stage)) { [IO.Directory]::Delete($stage,$true) } }

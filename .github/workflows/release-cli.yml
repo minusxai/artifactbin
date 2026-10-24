@@ -37,6 +37,8 @@ jobs:
         with:
           node-version: 24.22.1
           registry-url: https://registry.npmjs.org
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       - name: Select the exact tested immutable npm artifact
         id: package
         shell: bash

@@ -113,6 +113,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
       # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
       # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
@@ -177,6 +179,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -222,6 +226,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -283,6 +289,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -337,6 +345,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -383,6 +393,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -477,6 +489,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -557,6 +571,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -721,6 +737,8 @@ jobs:
         with:
           node-version: 22.23.4
           cache: npm
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -1005,6 +1023,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.23.4
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # Share the same normalized, version-insensitive tooling cache as other Linux jobs.
       # Installed consumer trees stay isolated; only verified public download blobs are shared.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -1182,6 +1202,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.23.4
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # THE PINNED CADDY COMPILE (~85s of xcaddy) IS THE SAME EVERY RUN: its BuildKit cache is keyed on the
       # Dockerfile, the entrypoint, the smoke that names the DNS module, and the digests the two FROM tags resolve
       # to today (an upstream rebuild of the same tag is a new key, never a stale entry nothing can replace).
@@ -1291,6 +1313,9 @@ jobs:
         if: matrix.phase != 'native'
         with:
           node-version: 22.23.4
+      - name: Prepare patched npm
+        if: matrix.phase != 'native'
+        run: node scripts/ci/prepare-npm.mjs
       # Acceptance tooling has its own pinned lock: no app build or local execution engines.
       # Each phase's clock includes restoring or installing all its prerequisites.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -1307,6 +1332,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       # Windows installs are thousands of small-file writes: keep the consumer's fresh npm cache and prefix on the
       # runner's local work disk (D:, where the checkout lives) rather than the OS disk's %TEMP%. Same npm, same
       # Defender, same paths with spaces and non-ASCII names (test-npm-package.mjs); only the drive differs.
@@ -1452,6 +1479,8 @@ jobs:
           node-version: 22.23.4
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Prepare patched npm
+        run: node scripts/ci/prepare-npm.mjs
       - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install

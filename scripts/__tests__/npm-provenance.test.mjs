@@ -88,8 +88,8 @@ it('accepts the actual workflow publish arguments through npm CLI without confli
   const invoke=(extra,source=fixture)=>spawnSync(process.execPath,[npmDriver(),'publish',source,...extra,'--dry-run','--json','--offline','--registry','http://127.0.0.1:1','--userconfig',config],{cwd:fixture,encoding:'utf8',timeout:15000,env:{...process.env,npm_config_cache:join(fixture,'cache')}});
   // npm's real CLI rejects even false when both mutually exclusive config keys are present.
   const incompatible=invoke(['--access','public','--provenance=false','--provenance-file',provenance,'--ignore-scripts']);
-  expect(incompatible.status).not.toBe(0);expect(incompatible.stderr).toMatch(/provenance-file.*can not be provided when using --provenance/);
-  const actual=invoke(args);expect(actual.status,actual.stderr).toBe(0);expect(JSON.parse(actual.stdout).name).toBe('@afbin/cli-publish-argument-test');
+  expect(incompatible.status).not.toBe(0);expect(incompatible.stderr).toMatch(/provenance-file.*can ?not be provided when using --provenance/);
+  const actual=invoke(args);expect(actual.status,actual.stderr).toBe(0);const published=JSON.parse(actual.stdout);expect((published['@afbin/cli-publish-argument-test']??published).name).toBe('@afbin/cli-publish-argument-test');
   // Exercise the workflow's actual tarball argument: an unprefixed `package/file.tgz`
   // is parsed by npm as a GitHub shorthand instead of a local package.
   mkdirSync(join(fixture,'package'));
@@ -100,28 +100,29 @@ it('accepts the actual workflow publish arguments through npm CLI without confli
   const packed=spawnSync('tar',['-czf',join(fixture,source),'-C',join(fixture,'contents'),'package'],{encoding:'utf8'});
   expect(packed.status,packed.stderr).toBe(0);
   const tarball=invoke(args,source);expect(tarball.status,tarball.stderr).toBe(0);
-  expect(JSON.parse(tarball.stdout).name).toBe('@afbin/cli-publish-argument-test');
+  const publishedTarball=JSON.parse(tarball.stdout);expect((publishedTarball['@afbin/cli-publish-argument-test']??publishedTarball).name).toBe('@afbin/cli-publish-argument-test');
  }finally{rmSync(fixture,{recursive:true,force:true});}
 });
 
 it('recovers the original signed entry through the pinned official witness and restores its factory', async () => {
- const original = () => ({ witnesses: [{ tlog: { fetchOnConflict: false, rekor: { getEntry: async uuid => ({ uuid }) } } }] });
+ const original = () => ({ witnesses: [{ majorApiVersion: 1, tlogV1: { fetchOnConflict: false, rekor: { getEntry: async uuid => ({ uuid }) } } }] });
  const config = { createBundleBuilder: original };
  const result = await withRekorConflictRecovery(config, async () => {
   const builder = config.createBundleBuilder('dsseEnvelope', {});
-  expect(builder.witnesses[0].tlog.fetchOnConflict).toBe(true);
-  return builder.witnesses[0].tlog.rekor.getEntry('a'.repeat(80));
+  expect(builder.witnesses[0].tlogV1.fetchOnConflict).toBe(true);
+  return builder.witnesses[0].tlogV1.rekor.getEntry('a'.repeat(80));
  });
  expect(result).toEqual({ uuid: 'a'.repeat(80) });
  expect(config.createBundleBuilder).toBe(original);
- await expect(withRekorConflictRecovery(config, async () => config.createBundleBuilder('dsseEnvelope', {}).witnesses[0].tlog.rekor.getEntry('https://evil.invalid/entry'))).rejects.toThrow('Invalid Rekor entry identity');
+ await expect(withRekorConflictRecovery(config, async () => config.createBundleBuilder('dsseEnvelope', {}).witnesses[0].tlogV1.rekor.getEntry('https://evil.invalid/entry'))).rejects.toThrow('Invalid Rekor entry identity');
  expect(config.createBundleBuilder).toBe(original);
  await expect(withRekorConflictRecovery(config, async () => { throw Error('signing failed'); })).rejects.toThrow('signing failed');
  expect(config.createBundleBuilder).toBe(original);
 });
 it('fails visibly if the pinned witness boundary changes', async () => {
- const original = () => ({ witnesses: [] });
- const config = { createBundleBuilder: original };
- await expect(withRekorConflictRecovery(config, async () => config.createBundleBuilder('dsseEnvelope', {}))).rejects.toThrow('Pinned Rekor witness changed');
- expect(config.createBundleBuilder).toBe(original);
+ for(const witnesses of [[],[{majorApiVersion:2,tlogV1:{fetchOnConflict:false,rekor:{getEntry(){}}}}]]){
+  const original=()=>({witnesses}),config={createBundleBuilder:original};
+  await expect(withRekorConflictRecovery(config,async()=>config.createBundleBuilder('dsseEnvelope',{}))).rejects.toThrow('Pinned Rekor witness changed');
+  expect(config.createBundleBuilder).toBe(original);
+ }
 });

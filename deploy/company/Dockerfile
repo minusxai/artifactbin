@@ -1,4 +1,6 @@
 FROM node:22.23.4-bookworm-slim
+COPY patch-npm.mjs /tmp/patch-npm.mjs
+RUN apt-get update && apt-get upgrade -y && npm install --global --no-audit --no-fund npm@11.19.1 && node /tmp/patch-npm.mjs && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/patch-npm.mjs
 ARG AFBIN_VERSION=0.5.56
 ARG AFBIN_PACKAGE=@afbin/cli@0.5.56
 ENV ARTIFACTBIN_SKILLS=off CLI__AUTO_UPDATE=0 ARTIFACTBIN_HOME=/data/client PLAYWRIGHT_BROWSERS_PATH=/data/chromium

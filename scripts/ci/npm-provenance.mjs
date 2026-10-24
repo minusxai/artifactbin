@@ -24,7 +24,7 @@ export function inspectBundle(bundle,version,bytes,expected){
  if(!new RegExp(`^https://github\\.com/${repository}/actions/runs/${expected.run}/attempts/[0-9]+$`).test(invocation??''))throw Error('Provenance does not identify the selected build run');
  return subject;
 }
-/** Pinned npm10/sigstore3 builder adaptation: keep the ORIGINAL signed envelope
+/** Pinned npm11/sigstore4 builder adaptation: keep the ORIGINAL signed envelope
  * alive while the official Rekor witness recovers a receipt lost after POST.
  * This CI-only npm-internal exception leaves provenance generation and verification
  * with npm; no untrusted location URL is fetched, only a checked UUID on its client. */
@@ -32,9 +32,9 @@ export async function withRekorConflictRecovery(config,generate){
  const original=config.createBundleBuilder;
  config.createBundleBuilder=(...args)=>{
   const builder=original(...args);
-  const witnesses=builder?.witnesses?.filter(witness=>witness.tlog);
-  if(witnesses?.length!==1)throw Error('Pinned Rekor witness changed');
-  const tlog=witnesses[0].tlog,rekor=tlog.rekor;
+  const witnesses=builder?.witnesses?.filter(witness=>witness.tlogV1);
+  if(witnesses?.length!==1||witnesses[0].majorApiVersion!==1)throw Error('Pinned Rekor witness changed');
+  const tlog=witnesses[0].tlogV1,rekor=tlog.rekor;
   if(tlog.fetchOnConflict!==false||typeof rekor?.getEntry!=='function')throw Error('Pinned Rekor witness changed');
   const fetchEntry=rekor.getEntry;
   rekor.getEntry=uuid=>{
@@ -46,15 +46,16 @@ export async function withRekorConflictRecovery(config,generate){
  };
  try{return await generate();}finally{config.createBundleBuilder=original;}
 }
-function officialSigner(signing=true){
- // setup-node 22.23.4 bundles npm 10.9.9. This deliberate npm-internal boundary is pinned;
+function officialSigner(){
+ // CI installs npm 11.19.1 explicitly. This deliberate npm-internal boundary is pinned;
  // fail visibly if that toolchain changes instead of silently generating a different format.
  const npmRequire=createRequire(npmDriver());
- if(!(signing?['10.9.9']:['10.9.9','11.19.1']).includes(npmRequire('../package.json').version))throw Error('Provenance requires the pinned npm10.9.9 build or npm11.19.1 release toolchain');
+ if(npmRequire('../package.json').version!=='11.19.1')throw Error('Provenance requires the pinned npm11.19.1 toolchain');
+ for(const [name,version] of [['sigstore','4.1.1'],['@sigstore/core','3.2.1'],['libnpmpublish','11.2.0'],['brace-expansion','5.0.12'],['ip-address','10.7.4'],['postcss-selector-parser','7.1.6'],['undici','6.29.1']])if(npmRequire('../node_modules/'+name+'/package.json').version!==version)throw Error('Provenance toolchain dependency changed: '+name);
  const official=npmRequire('../node_modules/libnpmpublish/lib/provenance.js');
  const sigstore=npmRequire('../node_modules/sigstore');
  return {generateProvenance:async(subjects,options)=>{
-  if(npmRequire('../node_modules/sigstore/package.json').version!=='3.1.0')throw Error('Signing requires pinned sigstore3.1.0');
+  if(npmRequire('../node_modules/sigstore/package.json').version!=='4.1.1')throw Error('Signing requires pinned sigstore4.1.1');
   const config=npmRequire('../node_modules/sigstore/dist/config.js');
   return withRekorConflictRecovery(config,()=>official.generateProvenance(subjects,options));
  },verifyProvenance:async(subject,file)=>{
@@ -93,7 +94,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
  }
  else if(command==='verify'){
   const subject=inspectBundle(JSON.parse(readFileSync(file+'.sigstore','utf8')),version,readFileSync(file),{sha,run});
-  await officialSigner(false).verifyProvenance(subject,file+'.sigstore');
+  await officialSigner().verifyProvenance(subject,file+'.sigstore');
  }
  else throw Error('Usage: npm-provenance.mjs sign <tarball> <version> | verify <tarball> <version> <build-sha> <build-run>');
 }

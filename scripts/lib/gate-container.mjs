@@ -3,6 +3,7 @@
  * `docker run` line — so each can be tested without a container engine.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 /** What a container asks for unless told otherwise: the shape of one CI gate runner (4 vCPUs). */
 export const DEFAULT_CPUS = 4;
@@ -104,8 +105,13 @@ export function dockerfile(playwrightVersion) {
     'RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \\',
     ' && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \\',
     ' && apt-get update \\',
+    ' && apt-get upgrade -y \\',
+    ' && npm install --global --no-audit --no-fund npm@11.19.1 \\',
     ' && apt-get install -y --no-install-recommends bubblewrap python3 make g++ \\',
     ' && rm -rf /var/lib/apt/lists/*',
+    "RUN node --input-type=module <<'AFBIN_NPM_PATCH'",
+    readFileSync(new URL('../../deploy/company/patch-npm.mjs', import.meta.url), 'utf8'),
+    'AFBIN_NPM_PATCH',
     '',
   ].join('\n');
 }

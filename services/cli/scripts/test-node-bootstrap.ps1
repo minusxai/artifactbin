@@ -104,7 +104,12 @@ Write-Host ('Native timing: repeat bootstrap '+$clock.Elapsed.TotalSeconds.ToStr
 if((Get-ExecutionPolicy -Scope CurrentUser) -ne 'Restricted' -or (Get-ExecutionPolicy) -ne 'Restricted'){throw 'Execution policy changed'}
 $version=& node.exe --version
 if($version -ne 'v24.22.1'){throw 'Wrong Node'}
-$null=& npm.cmd --version;if($LASTEXITCODE -ne 0){throw 'npm failed'}
+$npmVersion=& npm.cmd --version;if($LASTEXITCODE -ne 0 -or $npmVersion -ne '11.19.1'){throw 'Wrong patched npm'}
+$npmRoot=Join-Path (Split-Path (Resolve-AfbinApplication 'node.exe')) 'node_modules\npm\node_modules'
+foreach($entry in @(@('brace-expansion','5.0.12'),@('ip-address','10.7.4'),@('postcss-selector-parser','7.1.6'),@('undici','6.29.1'))){
+  $manifest=Get-Content (Join-Path $npmRoot ($entry[0]+'\package.json')) -Raw | ConvertFrom-Json
+  if($manifest.version -ne $entry[1]){throw 'Wrong npm dependency patch'}
+}
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'npx failed'}
 # Repair a broken npm/npx command earlier on PATH without replacing valid cached Node.
 $broken=Join-Path '__ROOT__' 'broken-bin';[IO.Directory]::CreateDirectory($broken) | Out-Null
