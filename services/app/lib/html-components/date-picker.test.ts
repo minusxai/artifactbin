@@ -49,7 +49,16 @@ it('matches the original popup width, left anchor, weekday labels and default na
  expect(popup.querySelector('[aria-label="Today"]')).toBeNull();
  expect(popup.querySelector('[aria-label="Clear date"]')).toBeNull();
  const day=popup.querySelector<HTMLButtonElement>('[data-date="2024-06-15"]')!;
+ const ordinaryDay=popup.querySelector<HTMLButtonElement>('[data-date="2024-06-14"]')!;
  expect(getComputedStyle(day).width).toBe('32px'); expect(getComputedStyle(day).height).toBe('32px');
+ expect(getComputedStyle(ordinaryDay).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+ const styles=document.querySelector<HTMLStyleElement>('style[data-af-date-picker-styles]')?.textContent ?? '';
+ expect(styles).toContain('af-date-picker .af-date-grid [data-date]{background:transparent}');
+ expect(styles).toContain('af-date-picker .af-date-grid [data-date][aria-pressed=true]{background:var(--primary,#222)');
+ const header=popup.querySelector<HTMLElement>('.af-date-header')!;
+ expect(header.firstElementChild?.textContent).toBe('June 2024');
+ expect(header.lastElementChild?.querySelector('[aria-label="Previous month"]')).not.toBeNull();
+ expect(header.lastElementChild?.querySelector('[aria-label="Next month"]')).not.toBeNull();
 });
 it('keeps extra calendar actions available through explicit attributes and properties',()=>{
  const root=fixture('default-value="2024-06-15" show-year-navigation show-clear'); root.clock=()=>new Date(2024,5,15);
