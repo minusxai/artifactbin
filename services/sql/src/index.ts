@@ -1,3 +1,5 @@
+import {createReadJobs} from './read-jobs';
+import {SQL_READ_JOB_ROUTES} from '@artifactbin/contracts';
 /**
  * THE SQL SERVICE, from the outside: the contract (re-exported from
  * @artifactbin/contracts), an HTTP client that speaks it, and the server
@@ -28,12 +30,18 @@ const HEALTH = '/health';
  * put it on a private network. The plumbing is utils' `jsonServer`, with this shell's health probe and secret.
  */
 export function serveSql(svc: SqlService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
+  const jobs=createReadJobs(svc.startRead?.bind(svc));
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {
+    [SQL_READ_JOB_ROUTES.open]:()=>jobs.open(),
+    [SQL_READ_JOB_ROUTES.submit]:b=>jobs.submit(b as Parameters<typeof jobs.submit>[0]),
+    [SQL_READ_JOB_ROUTES.status]:b=>jobs.status(b as Parameters<typeof jobs.status>[0]),
+    [SQL_READ_JOB_ROUTES.cancel]:b=>jobs.cancel(b as Parameters<typeof jobs.cancel>[0]),
     [SQL_ROUTES.run]: async (b) => ({ results: await svc.run(b as Parameters<SqlService['run']>[0]) }),
     [SQL_ROUTES.runMany]: async (b) => ({ results: await svc.runMany(b as Parameters<SqlService['runMany']>[0]) }),
     [SQL_ROUTES.mutate]: async (b) => ({ result: await svc.mutate(b as Parameters<SqlService['mutate']>[0]) }),
     [SQL_ROUTES.dryRun]: (b) => svc.dryRun(b as Parameters<SqlService['dryRun']>[0]),
     [SQL_ROUTES.dryRunMutations]: (b) => svc.dryRunMutations(b as Parameters<SqlService['dryRunMutations']>[0]),
   };
-  return jsonServer(routes, { maxBody: opts.maxBody ?? 64 * 1024 * 1024, health: HEALTH, serviceSecret: opts.serviceSecret, label: 'sql-shell' });
+  const server=jsonServer(routes, { maxBody: opts.maxBody ?? 64 * 1024 * 1024, health: HEALTH, serviceSecret: opts.serviceSecret, label: 'sql-shell',redactErrors:true });
+  return {listen:server.listen,close:async()=>{await jobs.close();await server.close();}};
 }

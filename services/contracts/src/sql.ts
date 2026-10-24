@@ -164,7 +164,30 @@ export interface DryRunMutationsInput {
 }
 export interface DryRunMutationsResult { errors: Array<{ name: string; error: string }> }
 
+/** Owned read execution. Completion means no worker still owns this call. */
+export interface SqlReadExecution {
+ result:Promise<Record<string,QueryOutcome>>;
+ cancelAndDrain():Promise<void>;
+}
+export interface SqlReadJobKey {id:string;deadline:number;serverId:string}
+export interface SqlReadJobSubmission extends SqlReadJobKey {input:RunInput}
+export type SqlReadJobReceipt = SqlReadJobKey & (
+ | {state:'running';drained:false}
+ | {state:'completed';drained:true;results:Record<string,QueryOutcome>}
+ | {state:'cancelled'|'rejected'|'failed';drained:true;code:string}
+ | {state:'unknown';drained:false}
+);
+export interface SqlReadJobs {
+ open():Promise<{serverId:string;now:number}>;
+ submit(request:SqlReadJobSubmission):Promise<SqlReadJobReceipt>;
+ status(request:SqlReadJobKey):Promise<SqlReadJobReceipt>;
+ cancel(request:SqlReadJobKey):Promise<SqlReadJobReceipt>;
+}
+export const SQL_READ_JOB_ROUTES={open:'/read-jobs/open',submit:'/read-jobs/submit',status:'/read-jobs/status',cancel:'/read-jobs/cancel'} as const;
+
 export interface SqlService {
+  /** Optional owned read protocol; unlike a transport timeout, this can attest release. */
+  startRead?(input:RunInput):SqlReadExecution;
   run(input: RunInput): Promise<Record<string, QueryOutcome>>;
   runMany(input: RunManyInput): Promise<Array<Record<string, QueryOutcome>>>;
   mutate(input: MutationInput): Promise<MutationOutcome>;

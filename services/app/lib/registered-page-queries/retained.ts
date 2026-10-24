@@ -72,6 +72,41 @@ export function createRetainedRegisteredQueries(
     now: () => new Date(),
     ...overrides,
   };
+  const owned = (input: RunInput) => {
+    const sql = services().sql;
+    if (!overrides.execute && sql.startRead) return sql.startRead(input);
+    if (SQL_SERVICE_URL && !overrides.execute)
+      throw Error("registered_query_owned_sql_unavailable");
+    const result = ports.execute(input);
+    return {
+      result,
+      cancelAndDrain: async () => {
+        await result.then(
+          () => {},
+          () => {},
+        );
+      },
+    };
+  };
+  const runOwned = async (input: RunInput, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    const handle = owned(input);
+    let drain: Promise<void> | undefined;
+    const cancel = () => {
+      drain ??= handle.cancelAndDrain();
+      drain.catch(() => {});
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+    try {
+      const result = await handle.result;
+      signal.throwIfAborted();
+      return result;
+    } finally {
+      signal.removeEventListener("abort", cancel);
+      if (drain) await drain;
+    }
+  };
   let admittedDocument: ArtifactRow | null = null,
     documentStamp: string | null = null;
   const document = async (signal: AbortSignal) => {
@@ -187,6 +222,7 @@ export function createRetainedRegisteredQueries(
               datasetId: resolved.artifact.id,
               signal: active,
               authorize: () => verify(active),
+              execute: (input) => runOwned(input, active),
             },
           );
           await verify(active);
@@ -203,16 +239,7 @@ export function createRetainedRegisteredQueries(
     },
     execute: (input, signal) => {
       signal.throwIfAborted();
-      const result = ports.execute(input);
-      return {
-        result,
-        cancelAndDrain: async () => {
-          await result.then(
-            () => {},
-            () => {},
-          );
-        },
-      };
+      return owned(input);
     },
   });
   return {
@@ -221,10 +248,6 @@ export function createRetainedRegisteredQueries(
       args: unknown,
       signal: AbortSignal,
     ) => {
-      // HTTP timeout is not proof that a remote SQL job stopped. The initial adapter
-      // requires the local host pool's completion; a future transport needs a real drain receipt.
-      if (SQL_SERVICE_URL && !overrides.execute)
-        throw Error("registered_query_remote_drain_unavailable");
       if (
         context.pageId !== page.pageId ||
         context.pageVersion !== page.version ||

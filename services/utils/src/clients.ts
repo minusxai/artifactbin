@@ -1,3 +1,5 @@
+import {sqlReadExecution} from './sql-read-jobs';
+import {SQL_READ_JOB_ROUTES,type SqlReadJobs} from '@artifactbin/contracts';
 import type {
   BrowserService,
   BrowserSessionResult,
@@ -27,7 +29,10 @@ const failure = (e: unknown): QueryFailure => ({ error: (e as Error)?.message ??
 /** An HTTP client for the SQL service, with a deadline on every call. */
 export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecret?: string } = {}): SqlService {
   const client = httpClient(url, { deadlineMs: opts.deadlineMs ?? SQL_DEFAULT_TIMEOUT_MS * 4, ...(opts.serviceSecret ? { headers: { [SERVICE_AUTH_HEADER]: opts.serviceSecret } } : {}) });
+  const jobClient=httpClient(url,{deadlineMs:Math.min(opts.deadlineMs??1000,1000),...(opts.serviceSecret?{headers:{[SERVICE_AUTH_HEADER]:opts.serviceSecret}}:{})});
+  const jobs:SqlReadJobs={open:()=>jobClient.post(SQL_READ_JOB_ROUTES.open,{}),submit:request=>jobClient.post(SQL_READ_JOB_ROUTES.submit,request),status:request=>jobClient.post(SQL_READ_JOB_ROUTES.status,request),cancel:request=>jobClient.post(SQL_READ_JOB_ROUTES.cancel,request)};
   return {
+    startRead:input=>sqlReadExecution(jobs,input),
     async run(input) {
       try { return (await client.post<{ results: Record<string, QueryOutcome> }>(SQL_ROUTES.run, input)).results; }
       catch (e) { return Object.fromEntries(input.queries.map((q) => [q.name, failure(e)])); }

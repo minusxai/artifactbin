@@ -1,4 +1,3 @@
-import { overrideConfig, resetConfigOverrides } from "@/lib/platform/config";
 import { it, expect } from "vitest";
 import { createSqliteSql } from "@artifactbin/sql/sqlite";
 import { composePageSchema, executePageOperation } from "@/lib/page-operations";
@@ -268,29 +267,4 @@ it("emits a portable public descriptor with no SQL, binding IDs or platform over
     registeredQueryDescriptor("queries", { ...program, scalars: {} }, "sum")
       .document,
   ).not.toContain("$values");
-});
-
-it("refuses remote SQL transport without pretending an HTTP timeout proves engine drain", async () => {
-  overrideConfig({ sqlServiceUrl: "http://sql.invalid" });
-  try {
-    await expect(
-      createRetainedRegisteredQueries(
-        { userId: null, tokenId: null, email: null, documentEditor: false },
-        saved,
-      ).execute(
-        {
-          pageId: saved.pageId,
-          pageVersion: saved.version,
-          backendId: "backend",
-          backendVersion: "one",
-          sourceSha256: "a".repeat(64),
-          subject: null,
-        },
-        { values: {}, only: ["sum"] },
-        new AbortController().signal,
-      ),
-    ).rejects.toThrow("registered_query_remote_drain_unavailable");
-  } finally {
-    resetConfigOverrides();
-  }
 });

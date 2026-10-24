@@ -83,3 +83,5 @@ it('loads the source engine in a plain development Node process', () => {
   `], { encoding: 'utf8', timeout: 20_000 });
   expect(JSON.parse(output)).toMatchObject({ q: { rows: [{ n: 1 }] } });
 });
+
+it('owned reads cancel a queued call without disturbing the active call, then await worker exit',async()=>{const pool=createSql({timeoutMs:10000},{workers:1,maxReadQueue:1});try{const first=pool.startRead!(ENDLESS);let firstDone=false;void first.result.then(()=>{firstDone=true});const second=pool.startRead!({tables:{},params:{},queries:[{name:'q',sql:'select 2'}]});const rejected=pool.startRead!({tables:{},params:{},queries:[{name:'q',sql:'select 3'}]});expect(await rejected.result).toMatchObject({q:{error:'sql_read_busy'}});await second.cancelAndDrain();expect(firstDone).toBe(false);expect(await second.result).toMatchObject({q:{error:'sql_read_cancelled'}});await first.cancelAndDrain();expect(firstDone).toBe(true);expect(await pool.run({tables:{},params:{},queries:[{name:'q',sql:'select 4 as n'}]})).toMatchObject({q:{rows:[{n:4}]}});}finally{await pool.close();}});
