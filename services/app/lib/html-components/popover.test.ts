@@ -50,3 +50,14 @@ it('moves semantics when a native trigger is added after initial connection', as
  wrapper.append(trigger); await tick(); expect(wrapper.hasAttribute('tabindex')).toBe(false); expect(wrapper.hasAttribute('role')).toBe(false);
  root.remove();
 });
+it('dismisses on Tab focus leaving, preserves outside focus, and focuses replacement content', async () => {
+ const {root,trigger,content} = fixture(); trigger.click();
+ const outside = document.createElement('button'); document.body.append(outside); outside.focus(); expect(root.open).toBe(false); expect(document.activeElement).toBe(outside);
+ trigger.click(); const next = document.createElement('af-popover-content'); next.innerHTML = '<input aria-label="Replacement">'; content.replaceWith(next); await tick();
+ expect(next.contains(document.activeElement)).toBe(true); expect(root.open).toBe(true);
+});
+it('requests dismissal when the trigger becomes disabled, while controlled visibility waits for the author', async () => {
+ const a = fixture(); a.trigger.click(); a.trigger.disabled = true; await tick(); expect(a.root.open).toBe(false);
+ const b = fixture('open'); const intents: boolean[] = []; b.root.addEventListener('af-change',e => intents.push((e as CustomEvent).detail.value));
+ b.trigger.disabled = true; await tick(); expect(intents).toEqual([false]); expect(b.root.open).toBe(true);
+});

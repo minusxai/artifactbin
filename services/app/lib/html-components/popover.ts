@@ -15,12 +15,15 @@ export class AfPopover extends HTMLElement implements PopoverContract {
  private labels = new WeakMap<HTMLElement,Set<string>>();
  private disabledChildren = new Map<HTMLElement,{disabled:string|null;tab:string|null}>();
  private wrapperAttributes = new WeakMap<HTMLElement,{role:string|null;tab:string|null}>();
+ private wasDisabled = false;
+ private leavingFocus = false;
  get open(): boolean { return this.supplied ?? (this.hasAttribute('open') || this.local); }
  set open(value: boolean | undefined) { if (value === undefined) this.local = this.open; this.supplied = value; this.sync(); }
  connectedCallback(): void {
   if (Object.prototype.hasOwnProperty.call(this,'open')) { const value = this.open; delete (this as {open?:boolean}).open; this.open = value; }
   if (!this.initialized) { this.local = this.hasAttribute('default-open'); this.initialized = true; }
   this.addEventListener('click',this.onClick); this.addEventListener('keydown',this.onControlKey);
+  this.addEventListener('focusout',this.onFocusout);
   this.ownerDocument.addEventListener('pointerdown',this.outside); this.ownerDocument.addEventListener('keydown',this.escape);
   this.ownerDocument.addEventListener('af-floating-activated',this.other);
   this.ownerDocument.defaultView?.addEventListener('resize',this.position); this.ownerDocument.addEventListener('scroll',this.position,true);
@@ -30,6 +33,7 @@ export class AfPopover extends HTMLElement implements PopoverContract {
  disconnectedCallback(): void {
   this.observer.disconnect(); this.resizeObserver?.disconnect(); this.resizeObserver = undefined;
   this.removeEventListener('click',this.onClick); this.removeEventListener('keydown',this.onControlKey);
+  this.removeEventListener('focusout',this.onFocusout);
   this.ownerDocument.removeEventListener('pointerdown',this.outside); this.ownerDocument.removeEventListener('keydown',this.escape);
   this.ownerDocument.removeEventListener('af-floating-activated',this.other);
   this.ownerDocument.defaultView?.removeEventListener('resize',this.position); this.ownerDocument.removeEventListener('scroll',this.position,true);
@@ -55,6 +59,10 @@ export class AfPopover extends HTMLElement implements PopoverContract {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.trigger()?.click(); }
  };
  private outside = (event: Event): void => { if (this.open && topFloating(this) && !event.defaultPrevented && !event.composedPath().includes(this)) this.request(false); };
+ private onFocusout = (event: FocusEvent): void => {
+  if(!this.open || event.defaultPrevented || (event.relatedTarget instanceof Node && this.contains(event.relatedTarget))) return;
+  this.leavingFocus = true; try { this.request(false); } finally { this.leavingFocus = false; }
+ };
  private escape = (event: KeyboardEvent): void => { if (this.open && topFloating(this) && event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); this.request(false,true); } };
  private other = (event: Event): void => { const node = (event as CustomEvent<HTMLElement>).detail; if(this.open && node instanceof HTMLElement && node.localName === this.localName && node !== this && !this.contains(node) && !node.contains(this)) this.request(false); };
  private position = (): void => { const anchor = this.own('af-popover-anchor')[0] ?? this.trigger(); if (this.open && anchor && this.panel) positionFloating(anchor,this.panel,'bottom',4); };
@@ -64,6 +72,7 @@ export class AfPopover extends HTMLElement implements PopoverContract {
   const panel = this.own('af-popover-content')[0];
   if (this.panel !== panel) {
    this.hidePanel(); if(this.visible && this.opener?.isConnected) this.opener.focus(); this.resizeObserver?.disconnect(); this.panel = panel;
+   this.visible = false; floatingVisibility(this,false);
    if (typeof ResizeObserver !== 'undefined') { this.resizeObserver = new ResizeObserver(this.position); if(panel) this.resizeObserver.observe(panel); const trigger = this.trigger(); if(trigger) this.resizeObserver.observe(trigger); }
   }
   const trigger = this.trigger(); const wrapper = this.own('af-popover-trigger')[0];
@@ -88,6 +97,8 @@ export class AfPopover extends HTMLElement implements PopoverContract {
    trigger.setAttribute('aria-haspopup','dialog'); trigger.setAttribute('aria-expanded',String(this.open));
    if (panel) { identifyFloating(panel); trigger.setAttribute('aria-controls',panel.id); } else trigger.removeAttribute('aria-controls');
   }
+  const disabled = this.disabled(); const becameDisabled = disabled && !this.wasDisabled; this.wasDisabled = disabled;
+  if(becameDisabled && this.open) this.request(false);
   if (panel) {
    identifyFloating(panel); panel.setAttribute('role','dialog'); panel.tabIndex = -1;
    let managed = this.labels.get(panel); if(!managed) { managed = new Set(); this.labels.set(panel,managed); }
@@ -106,7 +117,7 @@ export class AfPopover extends HTMLElement implements PopoverContract {
   if (visible !== this.visible) {
    this.visible = visible; floatingVisibility(this,this.visible);
    if (this.visible && panel) { this.opener = trigger ?? null; this.position(); (panel.querySelector<HTMLElement>('[autofocus],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]') ?? panel).focus(); }
-   else if(panel?.contains(this.ownerDocument.activeElement) && this.opener?.isConnected) this.opener.focus();
+   else if(!this.leavingFocus && panel?.contains(this.ownerDocument.activeElement) && this.opener?.isConnected && !this.opener.matches(':disabled')) this.opener.focus();
   }
   this.position();
  }

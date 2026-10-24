@@ -4,7 +4,7 @@ import {AfTooltip,registerTooltip} from './tooltip';
 registerTooltip();
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); });
 function fixture(attrs = '') {
- const host = document.createElement('div'); host.innerHTML = `<af-tooltip ${attrs}><af-tooltip-trigger><button aria-describedby="existing">Help</button></af-tooltip-trigger><af-tooltip-content data-af-id="tip">Helpful text</af-tooltip-content></af-tooltip>`; document.body.append(host);
+ const host = document.createElement('af-tooltip-provider'); host.innerHTML = `<af-tooltip ${attrs}><af-tooltip-trigger><button aria-describedby="existing">Help</button></af-tooltip-trigger><af-tooltip-content data-af-id="tip">Helpful text</af-tooltip-content></af-tooltip>`; document.body.append(host);
  return {root:host.firstElementChild as AfTooltip,trigger:host.querySelector('button')!,content:host.querySelector<HTMLElement>('af-tooltip-content')!};
 }
 it('delays hover, cancels pending work on leave and opens immediately on focus', () => {
@@ -36,4 +36,25 @@ it('dismisses sibling tooltips through cancelable intent and keeps attribute con
  const first = fixture('default-open'); const second = fixture('open'); expect(first.root.open).toBe(false);
  second.trigger.dispatchEvent(new FocusEvent('focusout',{bubbles:true})); expect(second.root.open).toBe(true);
  second.root.removeAttribute('open'); expect(second.root.open).toBe(false);
+});
+it('inherits the nearest provider delay, overrides it locally, and shares only that provider warm interval', () => {
+ vi.useFakeTimers(); vi.setSystemTime(1000);
+ const provider = document.createElement('af-tooltip-provider'); provider.setAttribute('delay-duration','600'); provider.setAttribute('skip-delay-duration','200'); document.body.append(provider);
+ const first = fixture(); const second = fixture(); provider.append(first.root,second.root);
+ first.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(599); expect(first.root.open).toBe(false); vi.advanceTimersByTime(1); expect(first.root.open).toBe(true);
+ first.trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(100);
+ second.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); expect(second.root.open).toBe(true);
+ second.trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(301);
+ first.root.setAttribute('delay-duration','20'); first.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(19); expect(first.root.open).toBe(false); vi.advanceTimersByTime(1); expect(first.root.open).toBe(true);
+ const isolated = fixture(); isolated.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); expect(isolated.root.open).toBe(false);
+});
+it('keeps focused tooltips open through hover leave and cancels a close when hovered again', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture(); trigger.focus(); trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(200); expect(root.open).toBe(true);
+ trigger.blur(); trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(300); expect(root.open).toBe(true);
+ trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(50); content.dispatchEvent(new MouseEvent('pointerover',{bubbles:true,relatedTarget:trigger})); vi.advanceTimersByTime(100); expect(root.open).toBe(true);
+});
+it('keeps hovered content visible when trigger focus leaves until both hover and focus leave', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture(); trigger.focus();
+ content.dispatchEvent(new MouseEvent('pointerover',{bubbles:true,relatedTarget:trigger})); trigger.blur(); expect(root.open).toBe(true);
+ content.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(100); expect(root.open).toBe(false);
 });
