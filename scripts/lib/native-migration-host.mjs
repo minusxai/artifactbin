@@ -53,6 +53,10 @@ export function createNativeMigrationHost({ports}){
      const shared=['key','rowSha256','sourceSha256','documentSha256','canonicalSha256','recoverySha256','harnessSha256','originalRevision','theme','viewports','states'];
      const artifacts=input=>input.bundleFiles?.filter(file=>file.path!==input.probe?.path);
      if(shared.some(key=>oldInput[key]===undefined||!isDeepStrictEqual(oldInput[key],newInput[key]))||['sourceSha256','documentSha256','canonicalSha256'].some(key=>!hash(newInput[key])||baseline[key]!==oldInput[key]||candidate[key]!==newInput[key])||newInput.canonicalSha256!==recipe.inputs.sourceHead.sha256||oldInput.originalRevision!==recipe.sourceRevision||newInput.candidateRevision!==recipe.targetRevision||digest(artifacts(oldInput))!==report.previousProposalSha256||digest(artifacts(newInput))!==report.newProposalSha256)fail('reuse-binding');
+     const extra=reuse.additionalCandidateAssertions;
+     if(extra!==undefined||report.originalProbeSha256!==undefined||report.candidateProbeSha256!==undefined||report.additionalCandidateAssertions!==undefined){
+      if(!hash(report.originalProbeSha256)||!hash(report.candidateProbeSha256)||report.originalProbeSha256!==oldInput.probe?.sha256||report.candidateProbeSha256!==newInput.probe?.sha256||baseline.probeSha256!==report.originalProbeSha256||candidate.probeSha256!==report.candidateProbeSha256||!isDeepStrictEqual(report.additionalCandidateAssertions,extra?.ids??[])||extra&&(!hash(extra.probeSha256)||extra.probeSha256!==report.candidateProbeSha256||!Array.isArray(extra.ids)||!extra.ids.length||new Set(extra.ids).size!==extra.ids.length||extra.ids.some(id=>typeof id!=='string'||!id.trim())))fail('reuse-assertions');
+     }
      if(!isDeepStrictEqual(oldInput.key,recipe.key)||!isDeepStrictEqual(newInput.key,recipe.key)||newInput.bundleFiles?.find(file=>file.path==='index.html')?.sha256!==context.assembly.result.htmlSha256||report.baselineRevision!==baseline.sourceRevision||report.candidateRevision!==candidate.sourceRevision)fail('reuse-binding');
     }
    }
