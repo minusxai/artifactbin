@@ -65,7 +65,8 @@ it('runs actual adapters for two unrelated reviewed source identities, verifies 
 it('one shared bootstrap imports and snapshots two source recipes through the same actual product modules',async()=>{
  const root=await mkdtemp(path.join(tmpdir(),'native-bootstrap-'));
  try{
-  const db=await getDb();
+  const db=await getDb(),recipes=new Map();
+  const host=createNativeProductMigrationHost({db,objectsDirectory:path.join(root,'sink'),publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,actor:recipe.history.owner,origin:'http://localhost:3000',visibility:recipe.history.visibility,shares:recipe.history.shares});expect(runtime.prepareBundle(context.assembly,recipe.history.pageId).assemblySha256).toBe(context.assembly.sha256);return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
   for(const prefix of ['BootstrapFirst','BootstrapSecond']){
    const publicationRecipe=await fixture(prefix,root),key={sourceNamespace:prefix,sourceId:publicationRecipe.history.sourceId,version:3};
    const html=publicationRecipe.history.revisions[0].page.html,assembly={key,sha256:sha(prefix+'assembly'),result:{status:'complete',html,htmlSha256:sha(html),files:[]}};
@@ -78,7 +79,7 @@ it('one shared bootstrap imports and snapshots two source recipes through the sa
    const inputs={};for(const name of ['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments']){const content=name==='compiledHtml'?html:name==='sourceHead'?canonical:bytes(name);const relative=prefix+name;await writeFile(path.join(root,relative),content);inputs[name]={path:relative,sha256:sha(content)};}
    const reviewed={format:'native-migration-host-v1',revisionScope:'latest',key,assemblySha256:assembly.sha256,sourceRevision:'a'.repeat(40),targetRevision:'b'.repeat(40),inputs,authority:{appSchema:'public',authSchema:'auth',capabilities:['reviewed-migration']}};
    const authorityRecipePath=path.join(root,prefix+'authority.json');await writeFile(authorityRecipePath,JSON.stringify(reviewed));
-   const host=createNativeProductMigrationHost({db,objectsDirectory:publicationRecipe.catalog.sinkDirectory,publication:async({prepareRuntime,publicationModules})=>{expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([assembly],{pageId:publicationRecipe.history.pageId,actor:{userId:prefix+'user',tokenId:prefix+'token'},origin:'http://localhost:3000',visibility:'private',shares:[]});expect(runtime.prepareBundle(assembly,publicationRecipe.history.pageId).assemblySha256).toBe(assembly.sha256);return publicationRecipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
+   recipes.set(key.sourceId,publicationRecipe);
    const imported=await host.importAndPrepare({revision:{key},assembly,receiptRoot:root,outputDirectory:path.join(root,prefix+'output'),authorityRecipePath,candidateRecipePath:cameraPath});
    expect(imported).toMatchObject({key,stage:'imported',assemblySha256:assembly.sha256});
    const input=JSON.parse(await readFile(imported.pilotInputPath,'utf8'));expect(input.preparedStore.reader.pageId).toBe(publicationRecipe.history.pageId);expect(input.bundleFiles).toEqual([{path:'index.html',sha256:sha(html)},template.probe]);
