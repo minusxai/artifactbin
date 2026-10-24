@@ -69,7 +69,7 @@ try {
   const files=await readdir(input.output);
   const evidence=await Promise.all(files.filter(file=>file.endsWith('.png')||file.endsWith('-captures.json')).map(async name=>({name,base64:(await readFile(path.join(input.output,name))).toString('base64')})));
   console.log('COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64 '+gzipSync(Buffer.from(JSON.stringify({format:'component-baseline-files-v1',files:evidence}))).toString('base64'));
-  const issues=input.defaultCandidateValidation?candidateCaptureIssues(captures):captures.flatMap(capture=>[...capture.errors,...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[])]);
+  const issues=input.defaultCandidateValidation?candidateCaptureIssues(captures):captures.flatMap(capture=>[...capture.errors,...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]),...(capture.resourceEvidence?.errors||[])]);
   assert.equal(issues.length,0,'Reader capture failures: '+issues.join('; '));
   console.log(`Captured ${captures.length} actual ${input.implementation} reader states; no visual parity claim made.`);
 } finally {await Promise.allSettled(browsers.map(browser=>browser.close()));}

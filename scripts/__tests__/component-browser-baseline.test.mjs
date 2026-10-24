@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -276,5 +276,22 @@ describe('used font evidence',()=>{
     const proof=fontByteProof(evidence);expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['a'.repeat(64)]);
     expect(fontByteProof({...evidence,used:[{...face,sources:['http://localhost/missing.woff2']}]}).errors[0]).toContain('no verified response bytes');
     expect(fontByteProof({used:[{declared:false}],resources:[]}).errors).toEqual([]);
+  });
+});
+
+
+describe('component gate resource acceptance',()=>{
+  it('rejects missing stylesheets in explicit input and default candidate validation',async()=>{
+    const output=await setup(),config=path.join(output,'run.json'),prior=process.env.COMPONENT_BASELINE__INPUT;
+    const broken={fixture:'theme',state:'initial',errors:[],assertionErrors:[],fontEvidence:{errors:[]},resourceEvidence:{errors:['Stylesheet did not load: /theme.css']},semantics:{text:'Ready',controls:[],overflow:0}};
+    vi.doMock('../gates/lib/browser.mjs',()=>({launchChromium:async()=>({close:async()=>{}})}));
+    vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],compareBrowserBaselines,candidateCaptureIssues}));
+    process.env.COMPONENT_BASELINE__INPUT=config;
+    try{
+      for(const defaultCandidateValidation of [false,true]){
+        await writeFile(config,JSON.stringify({implementation:'html',sourceRevision:'a'.repeat(40),output,entries:[],defaultCandidateValidation}));
+        await expect(import('../gates/gate-component-baseline.mjs?resource-acceptance='+defaultCandidateValidation)).rejects.toThrow('Reader capture failures: Stylesheet did not load: /theme.css');
+      }
+    }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
   });
 });
