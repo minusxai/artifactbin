@@ -16,18 +16,24 @@ it('refuses unsafe links and unsupported HTML through the existing vocabulary',(
 it('preserves authored nodes outside its generated output',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown; const note=document.createElement('aside'); note.setAttribute('data-af-id','note'); el.append(note); document.body.append(el); el.source='# Heading'; expect(el.querySelector('aside')).toBe(note);
 });
-it('uses reader typography, intrinsic tables, and themed copy controls',()=>{
+it('uses reader typography and themed copy controls without overriding shared table geometry',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown;el.source='# Heading\n\n| Name | Value |\n| --- | --- |\n| short | 1 |\n\n```js\nconst value = 1\n```';document.body.append(el);
  expect(MARKDOWN_CSS).toContain('font-family: var(--font-display, inherit)');
  expect(MARKDOWN_CSS).toContain('font-family: var(--font-mono, monospace)');
  expect(MARKDOWN_CSS).toContain('.dark .mx-markdown');
  expect(getComputedStyle(el.querySelector('h1')!).fontFamily).toContain('--font-display');
- expect(getComputedStyle(el.querySelector('table')!).width).toBe('fit-content');
+ expect(getComputedStyle(el.querySelector('h1')!).marginBlockStart).toBe('0px');
+ expect(getComputedStyle(el.querySelector('table')!).width).toBe('100%');
  expect(getComputedStyle(el.querySelector('th')!).textAlign).toBe('start');
  expect(getComputedStyle(el.querySelector('button')!).color).toContain('--foreground');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('background:var(--background,Canvas)');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('border:1px solid var(--border');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('outline:2px solid var(--ring,Highlight)');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('min-width: 6em');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('padding: .5em .75em');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('width:fit-content');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('af-markdown .mx-markdown > :first-child{margin-block-start:0}');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('padding:1rem;background:var(--muted');
  expect(el.querySelector('table')?.parentElement?.classList.contains('mx-md-table-scroll')).toBe(true);
  expect(el.querySelector('th')?.textContent).toBe('Name');
  expect(el.querySelector('button')?.textContent).toBe('Copy code');
