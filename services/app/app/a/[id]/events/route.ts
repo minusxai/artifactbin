@@ -19,7 +19,7 @@ import { getDb } from '@/lib/platform/db';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { authorHandle, sessionActor } from '@/lib/accounts';
+import { authorHandle, sessionActor, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
@@ -44,7 +44,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // (sessionActor uses the proxy-attached actor first, then direct compatibility
   // and the agent cookie). Resolving it any other way drops an anonymous
   // owner's live stream the moment their document goes private.
-  const actor = await sessionActor(request);
+  const actor = new URL(request.url).searchParams.get('anonymous')==='1'?ANONYMOUS_ACTOR:await sessionActor(request);
   if (!(await canReadArtifact(initial, actor))) return new Response('not found', { status: 404 });
   const artifactId = initial.id;
   // Connect only — never in the wakeup loop, which fires per remote edit.

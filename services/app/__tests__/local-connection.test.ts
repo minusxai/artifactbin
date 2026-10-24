@@ -4,7 +4,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as grant,DELETE as revoke} from '@/app/api/local-connection/route';
 import {POST as execute} from '@/app/api/local-connection/[id]/graphql/route';
 import {readHtmlPage} from '@/lib/html-publication';
-import {request,useAppHarness,mintAccountToken} from './harness';
+import {request,useAppHarness,mintAccountToken,setSession} from './harness';
 const harness=useAppHarness();
 it('keeps local grants anonymous read-only and refuses account upgrades',async()=>{
  const owner=await mintAccountToken('local-connection');
@@ -83,4 +83,7 @@ it('never accepts the local capability as authentication at comment or source wr
  const {POST:comment}=await import('@/app/api/my/artifacts/[id]/annotations/route');const {PUT:replace}=await import('@/app/api/artifacts/[id]/route');
  for(const [path,method,handler] of [[`/api/my/artifacts/${id}/annotations`,'POST',comment],[`/api/artifacts/${id}`,'PUT',replace]] as const){const req=request(path,{method,json:{body:'No write',html:'<html><body>Changed</body></html>'}});req.headers.set('X-Af-Local-Capability',cap);const response=await handler(req,{params:Promise.resolve({id})});expect([401,403]).toContain(response.status);}
  expect((await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id)).html).toBe(page.html);
+});
+it('never borrows an ambient account for the anonymous local event stream',async()=>{
+ const {GET:events}=await import('@/app/a/[id]/events/route');const owner=await mintAccountToken('local-live-guest');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'private',html:'<html><body>Private</body></html>'}}));const {id}=await made.json();setSession({user:{id:owner.userId!,email:owner.email??''}});const response=await events(request(`/a/${id}/events?anonymous=1`,{token:owner.token}),{params:Promise.resolve({id})});expect(response.status).toBe(404);await response.body?.cancel();
 });

@@ -6,13 +6,15 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import type {LocalBrokerOptions} from '@/lib/local-connection/broker';
 import {STORY_READER_MODE_MESSAGE} from '@/lib/story-runtime/contract';
 import {LocalDocumentPage} from '../LocalDocument';
-const broker=vi.hoisted(()=>({authorize:vi.fn(),signIn:vi.fn(),resize:vi.fn(),post:vi.fn(),disconnect:vi.fn(),retry:vi.fn(),dispose:vi.fn()}));
+const broker=vi.hoisted(()=>({sourceChanged:vi.fn(),authorize:vi.fn(),signIn:vi.fn(),resize:vi.fn(),post:vi.fn(),disconnect:vi.fn(),retry:vi.fn(),dispose:vi.fn()}));
 const account=vi.hoisted(()=>({signedIn:false}));
 vi.mock('../../lib/session',()=>({useSession:()=>({session:()=>({kind:account.signedIn?'account':'none'})})}));
-const annotation=vi.hoisted(()=>({canCreate:false,onSignIn:undefined as (()=>void)|undefined}));
+const annotation=vi.hoisted(()=>({canCreate:false,live:null as unknown,onSignIn:undefined as (()=>void)|undefined}));
+const live=vi.hoisted(()=>({options:null as Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]|null}));
+vi.mock('../../editor/create-live-artifact',()=>({createLiveArtifact(options:Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]){live.options=options;return ()=>null;}}));
 const captured=vi.hoisted(()=>({options:null as LocalBrokerOptions|null}));
 vi.mock('@/lib/local-connection/broker',()=>({installLocalConnectionBroker(options:LocalBrokerOptions){captured.options=options;options.onIdentity?.({platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)});options.onState('permission-required');return broker;}}));
-vi.mock('../../document/AnnotationLayer',()=>({AnnotationLayer:(props:{canCreateComment:boolean;onSignIn?:()=>void})=>{Object.defineProperty(annotation,'onSignIn',{get:()=>props.onSignIn,configurable:true});Object.defineProperty(annotation,'canCreate',{get:()=>props.canCreateComment,configurable:true});return null;}}));
+vi.mock('../../document/AnnotationLayer',()=>({AnnotationLayer:(props:{canCreateComment:boolean;onSignIn?:()=>void;liveAnnotations?:unknown})=>{Object.defineProperty(annotation,'live',{get:()=>props.liveAnnotations,configurable:true});Object.defineProperty(annotation,'onSignIn',{get:()=>props.onSignIn,configurable:true});Object.defineProperty(annotation,'canCreate',{get:()=>props.canCreateComment,configurable:true});return null;}}));
 beforeEach(()=>{vi.clearAllMocks();account.signedIn=false;localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));});
 afterEach(async()=>{cleanup();await vi.dynamicImportSettled();localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.unstubAllGlobals();});
 const mount=()=>render(()=><MemoryRouter><Route path="/" component={LocalDocumentPage}/></MemoryRouter>);
@@ -34,7 +36,7 @@ it('shows the app appearance while preserving the author mode until the reader c
  ready();
  const dark=await screen.findByRole('button',{name:'Dark mode'});
  expect(dark).toHaveAttribute('aria-pressed','true');
- expect(broker.post).not.toHaveBeenCalled();
+ expect(broker.post.mock.calls.filter(call=>call[0]?.payload?.command?.type===STORY_READER_MODE_MESSAGE)).toHaveLength(0);
  expect(localStorage.getItem('mx_theme')).toBeNull();
 });
 
@@ -60,18 +62,22 @@ it('sends standard Light and Dark commands and updates the already-open controls
 it('sends an existing reader choice when the reader becomes ready and again for a new nonce',async()=>{
  localStorage.setItem('mx_theme','dark');document.documentElement.dataset.theme='dark';
  mount();
- expect(broker.post).not.toHaveBeenCalled();
+ expect(broker.post.mock.calls.filter(call=>call[0]?.payload?.command?.type===STORY_READER_MODE_MESSAGE)).toHaveLength(0);
  ready('first-nonce');
  await waitFor(()=>expect(broker.post).toHaveBeenLastCalledWith(command('dark')));
  broker.post.mockClear();
  captured.options!.onMessage?.({kind:'frame',payload:{kind:'ready',nonce:'second-nonce'}});
- await waitFor(()=>expect(broker.post).toHaveBeenCalledOnce());
- expect(broker.post).toHaveBeenLastCalledWith(command('dark'));
+ await waitFor(()=>expect(broker.post.mock.calls.filter(call=>call[0]?.payload?.command?.type===STORY_READER_MODE_MESSAGE)).toHaveLength(1));
+ expect(broker.post.mock.calls.filter(call=>call[0]?.payload?.command?.type===STORY_READER_MODE_MESSAGE).at(-1)).toEqual([command('dark')]);
 });
 
 it('never offers account upgrade or comment creation even with an ambient owner session',async()=>{
  account.signedIn=true;mount();ready();await waitFor(()=>expect(annotation.canCreate).toBe(false));expect(annotation.onSignIn).toBeUndefined();expect(screen.queryByRole('button',{name:'Use my account'})).toBeNull();expect(screen.queryByRole('button',{name:'Sign in'})).toBeNull();expect(broker.authorize).not.toHaveBeenCalled();
 });
 it('opens trusted recovery after idle blocking without implicitly approving an account',async()=>{
- account.signedIn=true;mount();ready();fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();captured.options!.onState('blocked');fireEvent.click(await screen.findByRole('button',{name:'Retry'}));expect(broker.retry).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'Open original'})).toBeTruthy();expect(broker.authorize).not.toHaveBeenCalled();expect(broker.signIn).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'Use my account'})).toBeNull();
+ account.signedIn=true;mount();ready();fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();captured.options!.onState('blocked');fireEvent.click(await screen.findByRole('button',{name:'Retry'}));expect(broker.retry).toHaveBeenCalledOnce();expect(screen.getByRole('button',{name:'Open original'})).toBeTruthy();expect(broker.authorize).not.toHaveBeenCalled();expect(broker.signIn).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'Use my account'})).toBeNull();ready('reconnected-nonce');await screen.findByRole('button',{name:'Readers · 0'});expect(annotation.canCreate).toBe(false);
+});
+
+it('connects anonymous live comments and presence only while the local transport is ready',async()=>{
+ vi.stubGlobal('EventSource',class{});mount();ready();await waitFor(()=>expect(live.options?.enabled).toBe(true));expect(live.options?.backend.unavailable('live')).toBeNull();const comments:never[]=[];live.options?.onAnnotations?.(comments);await waitFor(()=>expect(annotation.live).toBe(comments));expect(await screen.findByRole('button',{name:'Readers · 0'})).toBeTruthy();live.options?.onPresence?.([{id:'peer',label:'Guest',revision:'1',seen:Date.now(),cursor:null,selection:null}]);await screen.findByRole('button',{name:'Readers · 1'});live.options?.onData?.({datasets:['counter'],version:1});expect(broker.post).toHaveBeenCalledWith({kind:'frame',payload:{kind:'send',command:{type:'mx:data',datasets:['counter']}}});live.options?.onPublication?.(2);expect(broker.sourceChanged).toHaveBeenCalledOnce();captured.options!.onState('unavailable');await waitFor(()=>expect(live.options?.enabled).toBe(false));expect(captured.options).toBeTruthy();
 });
