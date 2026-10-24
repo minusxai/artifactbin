@@ -22,6 +22,9 @@ function sources(dir: string): string[] {
 }
 
 describe('browser code outside a secure context', () => {
+  it('fails clearly without Web Crypto and never substitutes weak randomness',()=>{
+    expect(()=>runtimeId(null)).toThrow('Web Crypto required');
+  });
   it('keeps runtime UUID byte grouping and v4 bits', () => {
     const random = vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation((array) => {
       const bytes = array as Uint8Array;

@@ -134,7 +134,13 @@ await section('native web images and viewer-local choice',async()=>{
  const downloadPromise=page.waitForEvent('download');await page.getByLabel('Download for offline',{exact:true}).click();const download=await downloadPromise;
  check(download.suggestedFilename().endsWith('.html'),'original reader downloads an actual HTML file');
  const downloaded=await readFile(await download.path(),'utf8');
- check(!downloaded.includes(owner.token)&&!downloaded.includes(`ref:${reference.id}`),'download packs admitted image bytes without a bearer or unresolved reference');
+ const {rendered,canonicalSource}=await page.evaluate(html=>{
+  const parsed=new DOMParser().parseFromString(html,'text/html'),portable=parsed.querySelector('script[data-af="portable"]');
+  const canonicalSource=portable?JSON.parse(portable.textContent).source:undefined;portable?.remove();
+  return {rendered:parsed.documentElement.outerHTML,canonicalSource};
+ },downloaded);
+ check(!downloaded.includes(owner.token)&&!rendered.includes(`ref:${reference.id}`),'download packs admitted image bytes without a bearer or unresolved rendered reference');
+ check(typeof canonicalSource==='string'&&canonicalSource.includes(`ref:${reference.id}`),'portable provenance preserves the original author image reference');
  const offline=await browser.newContext();await offline.setOffline(true);const offlinePage=await offline.newPage();await offlinePage.setContent(downloaded,{waitUntil:'load'});
  await offlinePage.locator('#stored').evaluate(image=>image.decode());
  check(await offlinePage.locator('#stored').evaluate(image=>image.complete&&image.naturalWidth===48),'downloaded referenced image paints with the browser offline');
