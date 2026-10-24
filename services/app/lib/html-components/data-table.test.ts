@@ -79,6 +79,21 @@ it("renders bars, tint, custom cells and scoped edit intents", () => {
   (el.querySelector("tbody button") as HTMLButtonElement).click();
   expect(detail).toMatchObject({ key: "a", column: "n", value: 4 });
 });
+it("keeps the bar overlay out of table-cell layout", () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.columns = [{ col: "n", bar: true }];
+  el.data = {
+    columns: [{ name: "n", type: "number" }],
+    rows: [{ n: 2 }],
+  };
+  document.body.append(el);
+
+  const cell = el.querySelector("tbody td")!;
+  const bar = cell.querySelector("[data-bar]")!;
+  expect(cell.hasAttribute("data-bar")).toBe(false);
+  expect(getComputedStyle(cell).position).not.toBe("absolute");
+  expect(getComputedStyle(bar).position).toBe("absolute");
+});
 it("bounds large loaded results and recovers stable identities after scrolling", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";

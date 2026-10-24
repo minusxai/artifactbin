@@ -637,7 +637,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
             const text = formatCell(row[column.col], column);
             if (
               td.dataset.text !== text ||
-              td.dataset.bar !== String(barFraction(row[column.col], column))
+              td.dataset.barValue !==
+                String(barFraction(row[column.col], column))
             ) {
               td.replaceChildren();
               const fraction = barFraction(row[column.col], column);
@@ -680,7 +681,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
               }
               td.append(content);
               td.dataset.text = text;
-              td.dataset.bar = String(fraction);
+              td.dataset.barValue = String(fraction);
             }
           }
         }
