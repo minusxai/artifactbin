@@ -181,7 +181,7 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
 }
 
 export const segmentedStyles = `
-af-segmented{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,.375rem);padding:.125rem;background:color-mix(in srgb,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
+af-segmented{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.125rem;background:color-mix(in srgb,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
 af-segmented[data-orientation=vertical]{flex-direction:column;align-items:stretch}
 af-segmented>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;transition:background-color .15s,color .15s}
 af-segmented>button[data-segment-option][data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}

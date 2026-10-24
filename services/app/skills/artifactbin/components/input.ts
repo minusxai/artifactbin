@@ -20,10 +20,10 @@ class AfInput extends HTMLElement implements TextControlContract {
 
 const inputStyles = `
 af-input{display:inline-flex;min-width:12rem;flex-direction:column;gap:.375rem;vertical-align:top}
-af-input>label[data-af-control-label]{font-family:inherit;font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground,#666)}
+af-input>label[data-af-control-label]{font-family:inherit;font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
 af-input>label[hidden]{display:none}
 af-input>label.af-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-af-input>.af-text-control{box-sizing:border-box;width:100%;min-width:12rem;height:36px;border:1px solid var(--input,#d1d5db);border-radius:var(--radius-md,.375rem);background:var(--background,#fff);padding:0 12px;color:var(--foreground,#111);font-family:inherit;font-size:14px;line-height:20px;box-shadow:0 1px 2px #0000000d;outline:none;transition:color .15s,box-shadow .15s}
+af-input>.af-text-control{box-sizing:border-box;width:100%;min-width:12rem;height:36px;border:1px solid var(--input,#d1d5db);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:var(--background,#fff);padding:0 12px;color:var(--foreground,#111);font-family:inherit;font-size:14px;line-height:20px;box-shadow:0 1px 2px #0000000d;outline:none;transition:color .15s,box-shadow .15s}
 af-input>.af-text-control::placeholder{color:var(--muted-foreground,#737373)}
 af-input>.af-text-control:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--ring,#777) 50%,transparent)}
 af-input>.af-text-control:disabled{cursor:not-allowed;opacity:.5}
