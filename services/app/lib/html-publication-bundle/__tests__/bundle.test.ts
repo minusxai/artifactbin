@@ -55,3 +55,12 @@ it('preserves literal native bindings without admitting arbitrary dynamic asset 
  for(const value of ['$pick','{$pick}'])expect(planPublicationBundle(`<DataTable data="$current"/><img src="${value}">`,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
  for(const html of ['<object data="./missing.pdf">','<img src="$pick/image.svg">','<img src="./missing.svg">'])expect(()=>planPublicationBundle(html,{entryPath:'index.html',files:[]})).toThrow('Unresolved local dependencies');
 });
+it('accepts a multi-megabyte asset inside the unchanged file limit without recursive base64 validation',()=>{
+ const text='x'.repeat(3_900_000),html='<script type="module" src="./engine.js"></script>';
+ const plan=planPublicationBundle(html,{entryPath:'index.html',files:[file('engine.js',text,'text/javascript')]});
+ expect(plan.dependencies[0]?.bytes.byteLength).toBe(3_900_000);
+});
+it('keeps rejecting invalid base64 characters, padding and noncanonical encodings',()=>{
+ for(const base64 of ['???','A===','AAAA=','AA=A','AA','AA==\n','AB==','AAB='])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).toThrow();
+ for(const base64 of ['', 'AA==','AAA=','AAAA'])expect(()=>planPublicationBundle('',{entryPath:'index.html',files:[{path:'asset.bin',contentType:'application/octet-stream',base64}]})).not.toThrow();
+});

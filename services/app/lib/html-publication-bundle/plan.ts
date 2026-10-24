@@ -86,7 +86,9 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  const entryPath=normalized(bundle.entryPath),files=new Map<string,{bytes:Buffer;contentType:string}>();let total=0;
  for(const file of bundle.files){
   const name=normalized(file.path);if(files.has(name))throw Error('Duplicate bundle path: '+name);
-  if(typeof file.base64!=='string'||file.base64.length>Math.ceil(MAX_FILE/3)*4||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.base64))throw Error('Invalid bundle base64');
+  // A repeated captured quartet over multi-megabyte assets overflows the regex VM stack.
+  // Check the alphabet/padding linearly; the decode/re-encode below enforces canonical bits.
+  if(typeof file.base64!=='string'||file.base64.length>Math.ceil(MAX_FILE/3)*4||file.base64.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(file.base64))throw Error('Invalid bundle base64');
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }

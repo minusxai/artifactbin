@@ -1,8 +1,9 @@
 import {mkdtemp, mkdir, writeFile, readFile, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {afterEach, expect, it} from 'vitest';
+import {build} from 'esbuild';
 import {buildComponentAssets} from '../lib/html-components-build.mjs';
 
 const roots=[];
@@ -14,15 +15,13 @@ async function fixture(){
 afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 // Follow emitted static and dynamic import edges, rather than inspecting only the entry.
 async function closure(outputDir, entry){
+ const graph=await build({entryPoints:[path.join(outputDir,entry)],bundle:true,write:false,metafile:true,format:'esm',platform:'browser',logLevel:'silent'});
  const files=new Map();
- async function visit(name){
-  if(files.has(name)) return;
-  expect(name).toMatch(/^[a-z][a-z0-9-]*\.js$/);
-  const text=await readFile(path.join(outputDir,name),'utf8'); files.set(name,text);
-  const imports=[...text.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["']([^"']+)["']/g)].map(match=>match[1]);
-  for(const specifier of imports){ expect(specifier).toMatch(/^\.\/[a-z][a-z0-9-]*\.js$/); await visit(specifier.slice(2)); }
+ for(const input of Object.keys(graph.metafile.inputs)) {
+  const name=path.basename(input); expect(name).toMatch(/^[a-z][a-z0-9-]*\.js$/);
+  files.set(name,await readFile(path.resolve(input),'utf8'));
  }
- await visit(entry); return files;
+ return files;
 }
 it('ships readable source and a closed browser ESM graph excluding tests and fixtures',async()=>{
  const dirs=await fixture();
@@ -76,3 +75,18 @@ it('accepts the build wrapper trailing output separator without staging inside t
  await writeFile(path.join(dirs.sourceDir,'tabs.ts'),'export const = ;'); await expect(buildComponentAssets(options)).rejects.toThrow();
  expect(await readFile(path.join(dirs.outputDir,'tabs.js'),'utf8')).toBe(installed); expect((await readdir(dirs.outputDir)).some(name=>name.includes('stage-'))).toBe(false);
 });
+it('fits actual Mermaid, DeckGL and controls under publication limits with lazy engines retained',async()=>{
+ const dirs=await fixture();
+ const appDir=fileURLToPath(new URL('../../services/app/',import.meta.url));
+ await buildComponentAssets({sourceDir:path.join(appDir,'lib/html-components'),outputDir:dirs.outputDir,appDir});
+ const files=new Map();for(const entry of ['mermaid.js','deck-gl.js','button.js','slider.js','tabs.js'])for(const [name,text] of await closure(dirs.outputDir,entry))files.set(name,text);
+ expect(files.size).toBeLessThanOrEqual(99);expect([...files.values()].reduce((total,text)=>total+Buffer.byteLength(text),0)).toBeLessThan(16_000_000);
+ expect(Math.max(...[...files.values()].map(text=>Buffer.byteLength(text)))).toBeLessThanOrEqual(4_000_000);
+ expect(files.has('engine-mermaid-elk.js')).toBe(true);
+ expect(files.get('mermaid.js')).toMatch(/import\("\.\/chunk-[a-z0-9]+\.js"\)/);expect(files.get('deck-gl.js')).toMatch(/import\("\.\/deck-gl-engine\.js"\)/);
+ expect(Buffer.byteLength(files.get('mermaid.js'))).toBeLessThan(30_000);expect(Buffer.byteLength(files.get('deck-gl.js'))).toBeLessThan(30_000);
+ const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan');
+ const html='<html><head><script type="module">import "./mermaid.js";import "./deck-gl.js";import "./button.js";import "./slider.js";import "./tabs.js";</script></head><body><af-mermaid></af-mermaid><af-deck-gl></af-deck-gl></body></html>';
+ const bundle={entryPath:'index.html',files:[{path:'index.html',base64:Buffer.from(html).toString('base64'),contentType:'text/html'},...[...files].map(([name,text])=>({path:name,base64:Buffer.from(text).toString('base64'),contentType:'text/javascript'}))]};
+ expect(()=>planPublicationBundle(html,bundle)).not.toThrow();
+},30000);
