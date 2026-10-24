@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import {cleanup,render,screen,fireEvent,waitFor} from '@solidjs/testing-library';
+import {cleanup,render,screen,fireEvent,waitFor,within} from '@solidjs/testing-library';
 import {MemoryRouter,Route} from '@solidjs/router';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import type {LocalBrokerOptions} from '@/lib/local-connection/broker';
@@ -121,4 +121,20 @@ it('renders advisory actual-source comparison in the connected trusted status st
  expect(await screen.findByText(/Remote source is newer\. Local file preserved/)).toBeTruthy();
  options.onState('unavailable');expect(await screen.findByText(/Current remote source is unavailable/)).toBeTruthy();
  expect(annotation.canCreate).toBe(false);expect(broker.authorize).not.toHaveBeenCalled();
+});
+
+it('keeps a concise collapsed source summary and exposes its complete explanation in existing controls',async()=>{
+ mount();ready();const options=captured.options!;options.onSourceObservation?.({remoteDigest:'a'.repeat(64),remoteRevision:'1'});
+ fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));
+ const row=screen.getByRole('status',{name:'Local source status'});
+ expect(row).toHaveTextContent('File not checked');expect(row).not.toHaveTextContent('Current file bytes');
+ options.onLocalSourceEvidence?.('b'.repeat(64));expect(within(row).getByText('Local edits')).toBeTruthy();
+ options.onSourceObservation?.({remoteDigest:'c'.repeat(64),remoteRevision:'2'});expect(row).toHaveTextContent('Both changed');
+ options.onLocalSourceEvidence?.('c'.repeat(64));expect(row).toHaveTextContent('Copies match');
+ expect(screen.queryByText('Local and remote source match a newer revision.')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Open artifact controls'}));
+ expect(await screen.findByText('Local and remote source match a newer revision.')).toBeVisible();
+ expect(screen.getByText(/File changed remotely\. Open original to review/)).toBeVisible();
+ expect(broker.resize).toHaveBeenLastCalledWith({mode:'viewport'});
+ fireEvent.click(screen.getByRole('button',{name:'Close artifact controls'}));await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith(76));
 });
