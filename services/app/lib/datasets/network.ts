@@ -93,6 +93,8 @@ function permittedAddress(address: string, allowPrivate: boolean, reviewedTarget
   // dotted mapped tails to hex. Judge the embedded IPv4 in ALL spellings;
   // the shared web guard alone recognizes only the dotted mapped spelling.
   const canonical = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  // AWS IPv6 IMDS occupies ULA space; neither private-network policy may admit it.
+  if(canonical==='fd00:ec2::254')return false;
   const mapped = /^::ffff:([\da-f]+):([\da-f]+)$/.exec(canonical);
   if (mapped) {
     const high = Number.parseInt(mapped[1], 16);
