@@ -1,0 +1,217 @@
+import {
+  equalAccordionValue,
+  normalizeAccordionValue,
+  toggleAccordionValue,
+  type AccordionChangeDetail,
+  type AccordionContract,
+  type AccordionType,
+  type AccordionValue,
+} from './accordion-model';
+
+let nextId = 0;
+function typeOf(value: string | null): AccordionType { return value === 'multiple' ? 'multiple' : 'single'; }
+function parseAttribute(raw: string, type: AccordionType): AccordionValue {
+  if (type === 'multiple' && raw.trim().startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.every(value => typeof value === 'string')) return normalizeAccordionValue(type,parsed as string[]);
+    } catch { /* A plain string remains a valid one-item default. */ }
+  }
+  return normalizeAccordionValue(type,raw);
+}
+
+export class AfAccordion extends HTMLElement implements AccordionContract {
+  static observedAttributes = ['type','value','default-value','collapsible','disabled','orientation'];
+  private selection: AccordionValue = '';
+  private initialized = false;
+  private propertyControlled = false;
+  private propertyValue: AccordionValue = '';
+  private triggerSemantics = new WeakMap<AfAccordionTrigger,{role:string | null; tabindex:string | null}>();
+  private nativeButtonDisabled = new WeakMap<HTMLButtonElement,boolean>();
+  private disabledNativeButtons = new WeakSet<HTMLButtonElement>();
+  private observer = new MutationObserver(() => this.sync());
+
+  get value(): AccordionValue {
+    const type = this.type;
+    if (this.propertyControlled) return normalizeAccordionValue(type,this.propertyValue);
+    if (this.hasAttribute('value')) return parseAttribute(this.getAttribute('value') ?? '',type);
+    return normalizeAccordionValue(type,this.selection);
+  }
+  set value(value: AccordionValue) {
+    this.propertyControlled = true;
+    this.propertyValue = value;
+    this.sync();
+  }
+  get type(): AccordionType { return typeOf(this.getAttribute('type')); }
+
+  connectedCallback(): void {
+    if (Object.prototype.hasOwnProperty.call(this,'value')) {
+      const value = this.value;
+      delete (this as {value?: AccordionValue}).value;
+      this.value = value;
+    }
+    if (!this.initialized) {
+      this.selection = this.hasAttribute('default-value') ? parseAttribute(this.getAttribute('default-value') ?? '',this.type) : (this.type === 'multiple' ? [] : '');
+      this.initialized = true;
+    }
+    this.addEventListener('click',this.onClick);
+    this.addEventListener('keydown',this.onKeydown);
+    this.observer.observe(this,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','value','id']});
+    this.sync();
+  }
+
+  disconnectedCallback(): void {
+    this.observer.disconnect();
+    this.removeEventListener('click',this.onClick);
+    this.removeEventListener('keydown',this.onKeydown);
+  }
+
+  attributeChangedCallback(): void { this.sync(); }
+
+  private items(): AfAccordionItem[] {
+    return [...this.querySelectorAll<AfAccordionItem>('af-accordion-item')].filter(item => item.closest('af-accordion') === this);
+  }
+  private ownParts<T extends HTMLElement>(item: AfAccordionItem,selector: string): T[] {
+    return [...item.querySelectorAll<T>(selector)].filter(node => node.closest('af-accordion-item') === item && node.closest('af-accordion') === this);
+  }
+  private triggers(item: AfAccordionItem): AfAccordionTrigger[] { return this.ownParts(item,'af-accordion-trigger'); }
+  private contents(item: AfAccordionItem): AfAccordionContent[] { return this.ownParts(item,'af-accordion-content'); }
+  private itemForTrigger(trigger: AfAccordionTrigger): AfAccordionItem | undefined {
+    const item = trigger.closest<AfAccordionItem>('af-accordion-item');
+    return item?.closest('af-accordion') === this ? item : undefined;
+  }
+  private focusControl(trigger: AfAccordionTrigger): HTMLElement {
+    const item = trigger.closest<AfAccordionItem>('af-accordion-item');
+    if (!item) return trigger;
+    return this.ownParts<HTMLButtonElement>(item,'af-accordion-trigger button').find(button => button.closest('af-accordion-trigger') === trigger) ?? trigger;
+  }
+  private isDisabled(item: AfAccordionItem, trigger?: AfAccordionTrigger): boolean {
+    const buttons = trigger ? [...trigger.querySelectorAll<HTMLButtonElement>('button')] : [];
+    const nativeDisabled = buttons.length > 0 && buttons.every(button => button.disabled);
+    return this.hasAttribute('disabled') || item.hasAttribute('disabled') || Boolean(trigger?.hasAttribute('disabled')) || nativeDisabled;
+  }
+
+  private onClick = (event: Event): void => {
+    const target = event.target instanceof Element ? event.target.closest<AfAccordionTrigger>('af-accordion-trigger') : null;
+    if (!target || target.closest('af-accordion') !== this || event.defaultPrevented) return;
+    const item = this.itemForTrigger(target); const value = item?.getAttribute('value');
+    const nativeButton = event.target instanceof Element ? event.target.closest('button') : null;
+    if (!item || value == null || value === '' || this.isDisabled(item,target) || nativeButton?.disabled) return;
+    this.request(value);
+  };
+
+  private onKeydown = (event: KeyboardEvent): void => {
+    const target = event.target instanceof Element ? event.target.closest<AfAccordionTrigger>('af-accordion-trigger') : null;
+    if (!target || target.closest('af-accordion') !== this || event.defaultPrevented) return;
+    const item = this.itemForTrigger(target);
+    const nativeButton = event.target instanceof Element ? event.target.closest('button') : null;
+    if (!item || this.isDisabled(item,target) || nativeButton?.disabled) return;
+    if ((event.key === 'Enter' || event.key === ' ') && event.target === target && !target.querySelector('button')) {
+      event.preventDefault(); this.request(item.getAttribute('value') ?? ''); return;
+    }
+    const orientation = this.getAttribute('orientation') === 'horizontal' ? 'horizontal' : 'vertical';
+    const forward = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
+    const backward = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+    const enabled = this.items().flatMap(candidate => this.triggers(candidate).filter(trigger => !this.isDisabled(candidate,trigger)).map(trigger => ({item:candidate,trigger})));
+    let index = enabled.findIndex(entry => entry.trigger === target);
+    if (event.key === 'Home') index = 0;
+    else if (event.key === 'End') index = enabled.length - 1;
+    else if (event.key === forward || event.key === backward) index = (index + (event.key === forward ? 1 : -1) + enabled.length) % enabled.length;
+    else return;
+    const next = enabled[index];
+    if (!next) return;
+    event.preventDefault(); this.focusControl(next.trigger).focus();
+  };
+
+  private request(itemValue: string): void {
+    if (this.hasAttribute('disabled')) return;
+    const next = toggleAccordionValue(this.type,this.value,itemValue,this.type === 'single' && this.hasAttribute('collapsible'));
+    if (equalAccordionValue(this.type,next,this.value)) return;
+    const event = new CustomEvent<AccordionChangeDetail>('af-change',{detail:{value:Array.isArray(next) ? [...next] : next},bubbles:true,composed:true,cancelable:true});
+    if (this.dispatchEvent(event) && !this.propertyControlled && !this.hasAttribute('value')) this.selection = next;
+    this.sync();
+  }
+
+  private identify(node: HTMLElement,kind: string): void {
+    if (node.id) return;
+    let id: string;
+    do { id = `af-accordion-${kind}-${++nextId}`; } while (this.ownerDocument.getElementById(id));
+    node.id = id;
+  }
+
+  private sync(): void {
+    if (!this.isConnected) return;
+    const type = this.type; const value = this.value; const orientation = this.getAttribute('orientation') === 'horizontal' ? 'horizontal' : 'vertical';
+    for (const item of this.items()) {
+      const itemValue = item.getAttribute('value') ?? '';
+      const open = type === 'single' ? value === itemValue : (value as string[]).includes(itemValue);
+      const disabled = this.isDisabled(item);
+      item.dataset.state = open ? 'open' : 'closed'; item.dataset.orientation = orientation;
+      const triggers = this.triggers(item); const content = this.contents(item)[0];
+      if (content) this.identify(content,'content');
+      for (const trigger of triggers) {
+        this.identify(trigger,'trigger');
+        if (!this.triggerSemantics.has(trigger)) this.triggerSemantics.set(trigger,{role:trigger.getAttribute('role'),tabindex:trigger.getAttribute('tabindex')});
+        const buttons = [...trigger.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.closest('af-accordion-item') === item && button.closest('af-accordion') === this);
+        const triggerDisabled = disabled || trigger.hasAttribute('disabled');
+        if (buttons.length) {
+          trigger.removeAttribute('role'); trigger.removeAttribute('tabindex');
+          trigger.removeAttribute('aria-expanded'); trigger.removeAttribute('aria-controls'); trigger.removeAttribute('aria-disabled');
+          for (const button of buttons) {
+            if (triggerDisabled) {
+              if (!this.disabledNativeButtons.has(button)) this.nativeButtonDisabled.set(button,button.hasAttribute('disabled'));
+              if (!button.hasAttribute('disabled')) button.setAttribute('disabled','');
+              this.disabledNativeButtons.add(button);
+            } else if (this.disabledNativeButtons.has(button)) {
+              if (this.nativeButtonDisabled.get(button)) { if (!button.hasAttribute('disabled')) button.setAttribute('disabled',''); }
+              else if (button.hasAttribute('disabled')) button.removeAttribute('disabled');
+              this.disabledNativeButtons.delete(button); this.nativeButtonDisabled.delete(button);
+            }
+            button.setAttribute('aria-expanded',String(open));
+            button.setAttribute('aria-disabled',String(triggerDisabled || button.disabled));
+            if (content) button.setAttribute('aria-controls',content.id); else button.removeAttribute('aria-controls');
+          }
+        } else {
+          const semantics = this.triggerSemantics.get(trigger);
+          trigger.setAttribute('role','button'); trigger.setAttribute('aria-expanded',String(open));
+          trigger.setAttribute('aria-disabled',String(triggerDisabled));
+          if (content) trigger.setAttribute('aria-controls',content.id); else trigger.removeAttribute('aria-controls');
+          if (triggerDisabled) trigger.tabIndex = -1;
+          else if (semantics?.tabindex === null) trigger.tabIndex = 0;
+          else if (semantics?.tabindex !== undefined) trigger.setAttribute('tabindex',semantics.tabindex);
+        }
+        trigger.dataset.state = open ? 'open' : 'closed'; trigger.dataset.orientation = orientation;
+        const control = buttons[0] ?? trigger;
+        if (control === trigger) this.identify(trigger,'trigger'); else this.identify(control,'trigger-control');
+        if (content) content.setAttribute('aria-labelledby',control.id);
+      }
+      if (content) {
+        content.setAttribute('role','region'); content.hidden = !open; content.toggleAttribute('inert',!open);
+        content.dataset.state = open ? 'open' : 'closed'; content.dataset.orientation = orientation;
+      }
+    }
+  }
+}
+
+export class AfAccordionItem extends HTMLElement {}
+export class AfAccordionTrigger extends HTMLElement {}
+export class AfAccordionContent extends HTMLElement {}
+
+export const accordionStyles = `
+af-accordion{display:block}
+af-accordion-item{display:block;border-bottom:1px solid var(--border,#ddd)}
+af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;color:inherit;cursor:pointer}
+af-accordion-trigger:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-accordion-trigger[aria-disabled=true]{opacity:.5;cursor:default}
+af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.875rem}
+af-accordion-content[hidden]{display:none!important}
+`;
+
+export function registerAccordion(registry: CustomElementRegistry = customElements,document: Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-accordion-styles]')) {
+    const style=document.createElement('style'); style.setAttribute('data-af-accordion-styles',''); style.textContent=accordionStyles; document.head.append(style);
+  }
+  for (const [name,ctor] of Object.entries({'af-accordion':AfAccordion,'af-accordion-item':AfAccordionItem,'af-accordion-trigger':AfAccordionTrigger,'af-accordion-content':AfAccordionContent})) {
+    if (!registry.get(name)) registry.define(name,ctor);
+  }
+}
