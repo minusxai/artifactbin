@@ -57,7 +57,7 @@ export default {
         // Native HTML core bundles this module by URL; its exports are the author ABI.
         'lib/html-runtime/{browser-client,build.server,index}.ts',
         // Public custom-element API, bundled by build-html-components.
-        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented}.ts',
+        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user}.ts',
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/runner/runtime.ts',
@@ -66,7 +66,8 @@ export default {
         'skills/**/*.jsx',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
         'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv},design-systems/*.css}',
-        'skills/artifactbin/components/*.{ts,js}',
+        // Generated source mirrors are reading material; canonical lib/html-components is checked above.
+        'skills/artifactbin/components/*.js',
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
@@ -75,7 +76,7 @@ export default {
         // Test fixtures run as their own tsx processes by the tests beside them.
         'lib/islands/__tests__/fixtures/*.{ts,tsx}',
       ],
-      project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**'],
+      project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**', '!skills/artifactbin/components/*.ts'],
       ignoreDependencies: [
         // Installed font binaries copied by path (scripts/copy-assets.mjs, scripts/system-font-packages.mjs).
         /^@fontsource(-variable)?\//,

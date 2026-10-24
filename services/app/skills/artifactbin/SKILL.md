@@ -50,6 +50,7 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
 - [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
+- [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
 - [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
 - [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.

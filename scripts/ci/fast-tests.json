@@ -1,5 +1,11 @@
 [
   "services/app/lib/html-components/tab-navigation.test.ts",
+  "services/app/lib/html-components/slide-navigation.test.ts",
+  "services/app/lib/html-components/accordion-model.test.ts",
+  "services/app/lib/html-components/date-calendar.test.ts",
+  "services/app/lib/html-components/floating-geometry.test.ts",
+  "services/app/lib/html-components/file-upload-model.test.ts",
+  "services/app/lib/html-components/select-model.test.ts",
   "scripts/__tests__/artifact-file-payload.test.mjs",
   "scripts/__tests__/conformance-account.test.mjs",
   "scripts/__tests__/edit-chart-observation.test.mjs",

@@ -71,7 +71,7 @@ Registrations follow PascalCase: `registerDatePicker`, `registerDataTable`, `reg
 | `markdown` | `af-markdown.source` or literal text; GFM, code highlighting/copy. Property overrides source attribute, then initial text. Unsafe/unsupported content is rejected. |
 | `mermaid` | `af-mermaid.code`, `title`, `colorMode` (auto/light/dark), optional `storedImage={src,type,width,height}`; `retry()`. Bundled renderer with visible errors and image fallback. |
 | `data-table` | `af-data-table.data={rows,columns}`; columns are schema `{name,type}` records. Display `columns=[{col,title,fmt}]`, `rowKey`, `sort`, `height`, `sticky`, `transpose`; `cellRenderers`/`templates`. |
-| `file-upload` | `af-file-upload.value` is file metadata `{ref,name,contentType?,size?}[]`; set `dataset`, `adapter`, limits/accept. Emits `af-change` with value and reason upload/remove. |
+| `file-upload` | `af-file-upload.value` is file metadata `{ref,name,contentType?,size?}[]`; set `datasetName` (or `dataset` attribute), `adapter`, limits/accept. Emits `af-change` with value and reason upload/remove. |
 | `slide-deck` | `af-slide-deck` contains authored `af-slide` children; zero-based `index`; presentation/print. |
 | `deck-gl` | `af-deck-gl.options={data,layers,...}`; `boundaries`, `basemap`, `initialViewState`, tooltip/legend. Needs WebGL. |
 | `isometric` | `af-isometric.options={title,parts,...}`; keyed geometry, spread/angle/flow, motion. |
