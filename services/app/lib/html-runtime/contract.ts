@@ -27,6 +27,7 @@ export interface HtmlAssemblyInput {
   reader?: string;
   /** Shared offline chrome, with the same platform components and compiled stylesheet. */
   chrome?: string;
+  portableEngine?: string;
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */
@@ -34,4 +35,4 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; chrome?:string; chromePath?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string }

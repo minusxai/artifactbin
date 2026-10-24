@@ -64,8 +64,10 @@ it('ships shared offline chrome within explicit code and style byte budgets',asy
  const assets=await buildHtmlAssets();
  expect(assets.chrome).toContain('data-af-local-chrome');
  expect(gzipSync(assets.core).byteLength).toBeLessThan(10*1024);
- expect(gzipSync(assets.reader).byteLength).toBeLessThan(80*1024);
+ expect(gzipSync(assets.reader).byteLength).toBeLessThan(20*1024);
  expect(gzipSync(assets.chrome!).byteLength).toBeLessThan(180*1024);
  const html=downloadableHtml({html:'<html><body>Offline</body></html>',...assets,config:{pageId:'local',revision:'local',backends:[]}});
  expect(JSON.parse(/data-af="chrome">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.chrome);
+ expect(JSON.parse(/data-af="portable-engine">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.portableEngine);
+ expect(assets.core).toContain('@afbin/portable');
 });

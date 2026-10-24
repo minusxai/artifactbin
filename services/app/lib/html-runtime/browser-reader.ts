@@ -1,5 +1,4 @@
 import { createLocalDatasetTransport } from './browser-local-datasets';
-import { startPortableSession } from './portable-session';
 import { createHtmlSelectionActions } from './selection-actions';
 import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
 import type {HtmlCommentViewCommand} from '../html-bridge/comment-view-contract';
@@ -155,7 +154,8 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
 }
 
 /** Downloads attach only a credential-free document transport; no source upload occurs. */
-export function startPortableDocument(win:Window=window,publishOrigin?:string):()=>void {
+export async function startPortableDocument(win:Window=window,publishOrigin?:string):Promise<()=>void> {
+ const name='@afbin/portable';const {startPortableSession}=await import(name) as typeof import('./portable-session');
  let connected=false;
  let execute:Parameters<Parameters<typeof startPortableSession>[0]['online']>[1];
  const originalOnline=remote.online,originalExecute=remote.execute;

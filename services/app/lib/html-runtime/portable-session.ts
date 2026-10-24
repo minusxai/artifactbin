@@ -79,7 +79,9 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
   const name='@afbin/chrome';
   const module=options.loadChrome?await options.loadChrome():await import(name) as {stylesheet:string;mountPortableChrome(options:import('./portable-chrome-contract').PortableChromeOptions):PortableChromeHandle};
   if(disposed)return;
-  chrome=module.mountPortableChrome({win,stylesheet:module.stylesheet,title:win.document.title||'Local file',kind:identity?'linked':'unpublished',identity,state,publishOrigin:options.publishOrigin,onConnect:connect,onDisconnect:()=>disconnect(),onStayOffline:()=>disconnect(true),onSave:request=>save(request.includePrivateState),onPublish:request=>void publish(request.platformOrigin),onOpenHosted(){if(identity)win.open(`${identity.platformOrigin}/a/${encodeURIComponent(identity.artifactId)}`,'_blank','noopener');}});
+  let mode:'light'|'dark'=win.document.documentElement.hasAttribute('data-af-dark')?'dark':'light';
+  try{const stored=win.localStorage.getItem('af:local-color-mode');if(stored==='light'||stored==='dark')mode=stored;}catch{/* Optional viewer preference. */}
+  chrome=module.mountPortableChrome({mode,onMode(next){try{win.localStorage.setItem('af:local-color-mode',next);}catch{/* Optional viewer preference. */}},onReloadPreview(){win.dispatchEvent(new Event('af:preview-reload'));},win,stylesheet:module.stylesheet,title:win.document.title||'Local file',kind:identity?'linked':'unpublished',identity,state,publishOrigin:options.publishOrigin,onConnect:connect,onDisconnect:()=>disconnect(),onStayOffline:()=>disconnect(true),onSave:request=>save(request.includePrivateState),onPublish:request=>void publish(request.platformOrigin),onOpenHosted(){if(identity)win.open(`${identity.platformOrigin}/a/${encodeURIComponent(identity.artifactId)}`,'_blank','noopener');}});
   win.document.body.style.paddingTop=`calc(${win.getComputedStyle(win.document.body).paddingTop} + 76px)`;
   win.document.documentElement.setAttribute('data-af-local-chrome-ready','true');
   update();

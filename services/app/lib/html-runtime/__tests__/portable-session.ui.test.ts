@@ -28,3 +28,9 @@ it('auto-attempts the original identity and retains local controls after disconn
  page.controls.onStayOffline();expect(page.connection.dispose).toHaveBeenCalledOnce();expect(page.chrome.dispose).not.toHaveBeenCalled();page.dispose();
  const reopened=session(true);await Promise.resolve();expect(reopened.connect).not.toHaveBeenCalled();reopened.controls.onConnect();expect(reopened.connect).toHaveBeenCalledOnce();reopened.dispose();
 });
+
+it('delegates preview reload and persists only an explicit viewer appearance choice',async()=>{
+ const reload=vi.fn();window.addEventListener('af:preview-reload',reload);const page=session();await Promise.resolve();
+ page.controls.onReloadPreview?.();expect(reload).toHaveBeenCalledOnce();expect(localStorage.getItem('af:local-color-mode')).toBeNull();
+ page.controls.onMode?.('dark');expect(localStorage.getItem('af:local-color-mode')).toBe('dark');page.dispose();window.removeEventListener('af:preview-reload',reload);
+});

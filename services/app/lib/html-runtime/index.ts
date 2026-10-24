@@ -47,7 +47,8 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const portableReader=input.offline&&input.reader?`<script type="application/json" data-af="reader">${JSON.stringify(input.reader).replace(/</g,'\\u003c')}</script>`:'';
   const canonical=input.offline?portableScript(input.portable?{...input.portable,renderedDigest:portableRenderedDigest(input.html)}:{version:1,source:input.html}):'';
   const chrome=input.offline&&input.chrome?`<script type="application/json" data-af="chrome">${JSON.stringify(input.chrome).replace(/</g,'\\u003c')}</script>`:'';
-  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}<script data-af="core">${safeCore}</script>`);
+  const engine=input.offline&&input.portableEngine?`<script type="application/json" data-af="portable-engine">${JSON.stringify(input.portableEngine).replace(/</g,'\\u003c')}</script>`:'';
+  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}${engine}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });

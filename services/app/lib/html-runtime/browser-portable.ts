@@ -24,9 +24,9 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const block=parser.parseFromString(portableScript(envelope),'text/html').querySelector('script')!;
  for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/v1/core.js"]')) old.remove();
  const fragments:Node[]=[];
- for(const name of ['runtime','apollo','reader','chrome','core']) {
+ for(const name of ['runtime','apollo','reader','chrome','portable-engine','core']) {
   const source=live.querySelector(`script[data-af="${name}"]`);
-  if(!source&&name==='chrome')continue;
+  if(!source&&(name==='chrome'||name==='portable-engine'))continue;
   if(!source) throw new Error(`Portable HTML is missing its ${name} module`);
   const copy=target.importNode(source,true);
   if(name==='runtime') {

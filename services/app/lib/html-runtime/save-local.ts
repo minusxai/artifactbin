@@ -26,7 +26,7 @@ export async function saveLocalDocument(options:SaveLocalDocumentOptions):Promis
   sourceBytes=selected.html;name=decodeURIComponent(win.location.pathname.split('/').pop()||'page.html');
   assetDocument=new DOMParser().parseFromString('<html><head></head><body></body></html>','text/html');
   const runtime=win.document.querySelector('script[data-af="runtime"]')?.textContent??JSON.stringify({pageId:'local:'+win.location.pathname,revision:'local',backends:[],offline:true});
-  for(const key of ['runtime','apollo','reader','chrome','core']){const value=key==='runtime'?runtime:assets[key];if(typeof value!=='string'){if(key==='chrome')continue;throw Error('Local runtime unavailable');}const script=assetDocument.createElement('script');script.setAttribute('data-af',key);if(key!=='core')script.type='application/json';script.textContent=key==='core'||key==='runtime'?value:JSON.stringify(value);assetDocument.head.append(script);}
+  for(const key of ['runtime','apollo','reader','chrome','portable-engine','core']){const value=key==='runtime'?runtime:assets[key==='portable-engine'?'portableEngine':key];if(typeof value!=='string'){if((key==='chrome'||key==='portable-engine'))continue;throw Error('Local runtime unavailable');}const script=assetDocument.createElement('script');script.setAttribute('data-af',key);if(key!=='core')script.type='application/json';script.textContent=key==='core'||key==='runtime'?value:JSON.stringify(value);assetDocument.head.append(script);}
  }
  if(sourceBytes===undefined){
   const file=await new Promise<File|null>(resolve=>{
