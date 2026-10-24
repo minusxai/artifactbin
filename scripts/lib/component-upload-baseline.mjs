@@ -9,10 +9,10 @@ import {uploadBrowserParityFixtures} from '../fixtures/component-baseline/upload
 import {captureBrowserBaseline} from './component-browser-baseline.mjs';
 import {observeUploadRequests,requireUploadResponse} from './component-upload-route.mjs';
 import {captureSignedOutUpload} from './component-upload-signed-out.mjs';
-import {joinUploadFixtures} from './component-upload-membership.mjs';
+import {uploadFixtureParticipation} from './component-upload-membership.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 /** Real HTTP publication, verified OTP session, actual frame upload port. No injected adapter, synthetic receipt, or credential in page code. */
-export async function runUploadBaseline({base,implementation,browser,sourceRevision,output,connectAgent,signInAccount,account:providedAccount}){
+export async function runUploadBaseline({base,implementation,browser,sourceRevision,output,connectAgent,signInAccount,account:providedAccount,participation='automatic-owner',canaryOnly=false}){
  const origin=baselineLocalOrigin(base),account=validateBaselineAccount(providedAccount??{email:`mxmx_test_upload_${randomUUID()}@example.com`});
  const {token}=await connectAgent(origin,account);
  const publish=async(body,options={})=>{const response=await fetch(origin+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});if(response.status!==201)throw Error(`Actual upload fixture publication failed (${response.status}): ${await response.text()}`);return response.json();};
@@ -22,7 +22,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  let skillArchive,componentAssets;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());componentAssets=await verifyComponentAssetArchive({root:path.resolve(import.meta.dirname,'../..'),files:installedFiles(skillArchive)});}
  const entries=[];
  for(const fixture of uploadBrowserParityFixtures)entries.push(...await publishBaselineFixtures({implementation,publish,serverOrigin:origin,skillArchive,fixtures:[fixture],substitutions:{uploadDataset:fixture.uploadScenario==='permission'?denied.id:allowed.id,platformOrigin:origin}}));
- const membershipReceipts=await joinUploadFixtures({origin,entries,token});
+ const membershipReceipts=await uploadFixtureParticipation({origin,entries,token,mode:participation});
  /** @type {import('../fixtures/component-baseline/upload-contract').UploadBackendProof[]} */
  const proofs=[];
  const session=await createBaselineSession({base:origin,account,signIn:signInAccount});
@@ -57,7 +57,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
    }
   }};
  };
- let captures,complete=false;try{
+ let captures=[],complete=false;try{
   // Same genuine port and response assertions as the matrix, one state at a
   // time: stop the entire workflow before the matrix on the first refusal.
   for(const scenario of ['lost-response-retry','permission']){
@@ -67,8 +67,8 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
   }
   await captureSignedOutUpload({browser,entries,origin,output,implementation});
   phase='matrix';
-  captures=await captureBrowserBaseline({browser,implementation,sourceRevision,output,fixtures:uploadBrowserParityFixtures,screenshotMode:'document-frame',mount});
+  if(!canaryOnly)captures=await captureBrowserBaseline({browser,implementation,sourceRevision,output,fixtures:uploadBrowserParityFixtures,screenshotMode:'document-frame',mount});
   complete=true;
- }finally{await writeFile(path.join(output,'upload-backend-proof.json'),JSON.stringify({complete,implementation,sourceRevision,componentAssets,membershipReceipts,account,proofs},null,2));}
+ }finally{await writeFile(path.join(output,'upload-backend-proof.json'),JSON.stringify({complete,coverage:canaryOnly?'canary-only':'matrix',participation,implementation,sourceRevision,componentAssets,membershipReceipts,account,proofs},null,2));}
  const issues=captures.flatMap(c=>[...c.errors,...c.assertionErrors,...c.fontEvidence.errors,...c.resourceEvidence.errors]);assert.deepEqual(issues,[],'Real upload capture issues');return {captures,proofs};
 }
