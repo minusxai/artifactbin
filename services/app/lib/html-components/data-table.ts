@@ -262,17 +262,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       });
       if (!result) return;
       const rows = replace ? result.rows : [...this.data.rows, ...result.rows];
-      this.showRowCount = replace
-        ? Boolean(
-            this.showRowCount ||
-              result.truncated ||
-              (result.totalRows ?? 0) > rows.length,
-          )
-        : Boolean(
-            this.showRowCount ||
-              result.truncated ||
-              (result.totalRows ?? 0) > rows.length,
-          );
+      this.showRowCount = Boolean(
+        this.showRowCount || result.truncated || (result.totalRows ?? 0) > rows.length,
+      );
       this.value = {
         ...result,
         rows,
