@@ -130,9 +130,22 @@ it('rechecks the insert grant after storing the object and before committing the
   expect(await imageCount(dataset.id)).toBe(0);
 });
 
-it('does not inherit an insert grant from the page that names the dataset',async()=>{
- const {ownerActor,dataset,document,filePost}=await world();
- await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},1);
- const put=vi.spyOn(objectStore(),'put');try {const response=await filePost();expect(response.status).toBe(403);expect(put).not.toHaveBeenCalled();}finally{put.mockRestore();}
- expect(await imageCount(dataset.id)).toBe(0);
+it('requires an explicit artifact grant and rechecks accepted participation on replay, including the normal owner',async()=>{
+ const {ownerActor,reporter,ownerSession,dataset,document,filePost}=await world();
+ await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},1);
+ const put=vi.spyOn(objectStore(),'put');
+ try {
+  // A real link plus accepted participation is provenance, not an insert grant.
+  expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(0);
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},2);
+  const member=await filePost();expect(member.status,await member.clone().text()).toBe(201);const stored=await member.json();
+  expect((await (await filePost()).json()).ref).toBe(stored.ref);expect(await imageCount(dataset.id)).toBe(1);
+  const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();
+  const ownerPost=()=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:ownerSession,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'owner-normal-upload'},body:new Uint8Array(bytes)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  expect((await ownerPost()).status).toBe(201);expect(await imageCount(dataset.id)).toBe(2);
+  await changeMembership(identityForUser(reporter.id,null),document.id,{action:'leave'});put.mockClear();
+  expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();
+  await changeMembership(ownerActor,document.id,{action:'leave'});
+  expect((await ownerPost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(2);
+ }finally{put.mockRestore();}
 });

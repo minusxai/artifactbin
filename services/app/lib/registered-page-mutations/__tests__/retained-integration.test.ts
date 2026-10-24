@@ -12,7 +12,7 @@ import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {prepareRegisteredMutationBackend,commitRegisteredMutationBackend} from '../registry';
 import {createRetainedRegisteredMutation} from '../retained';
 import type {MutationProgram} from '../contracts';
-useAppHarness();afterEach(()=>vi.restoreAllMocks());
+useAppHarness();afterEach(()=>{vi.restoreAllMocks();});
 const signal=()=>new AbortController().signal;
 async function fixture(kind:'insert'|'delete'='insert'){
  const owner=await mintAccountToken('mxmx_test_registered_mutation_acceptance'),actor=identityForUser(owner.userId,owner.id);

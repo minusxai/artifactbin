@@ -73,8 +73,9 @@ async function datasetUploads() {
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
   await changeMembership(identityForUser(reporter.id,null),document.id,{action:'join'});
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},0);
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},0);
   const pageActor: Actor = { credential: 'session', userId: reporter.id, email: reporter.email!, emailVerified: true };
+  // A declared link and accepted membership alone never grant dataset writes.
   const deniedBytes=new Uint8Array(await png(40,24));
   const denied=await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'membership-not-authority'},body:deniedBytes}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   expect(denied.status).toBe(403);

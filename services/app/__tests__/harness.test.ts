@@ -3,7 +3,7 @@
  * FK-safe order derived from the schema; the rate limiter reset; a named session cleared; nothing hand-listed. These pins are what let route
  * tests that would each boot their own PGLite share one boot without order dependence.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
@@ -79,4 +79,11 @@ describe('a shared fixture starts empty and keeps its rows for its own describe 
   it('the next test outside starts empty again', async () => {
     for (const table of ['artifacts', 'tokens', 'users']) expect(await count(await h.db(), table), table).toBe('0');
   });
+});
+
+// Auth is a co-hosted service schema; the app harness owns its fixture cleanup too.
+beforeAll(async()=>{const db=await h.db();await db.query('CREATE SCHEMA IF NOT EXISTS auth');await db.query('CREATE TABLE auth.harness_parent(id text PRIMARY KEY)');await db.query('CREATE TABLE auth.harness_child(parent_id text REFERENCES auth.harness_parent(id))');});
+it.each(['first','second'])('clears dynamically discovered auth tables including foreign keys: %s',async()=>{
+ const db=await h.db();expect((await db.query('SELECT * FROM auth.harness_parent')).rows).toEqual([]);expect((await db.query('SELECT * FROM auth.harness_child')).rows).toEqual([]);
+ await db.query("INSERT INTO auth.harness_parent VALUES ('parent')");await db.query("INSERT INTO auth.harness_child VALUES ('parent')");
 });

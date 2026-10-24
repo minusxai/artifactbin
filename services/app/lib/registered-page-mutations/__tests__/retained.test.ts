@@ -12,7 +12,7 @@ vi.mock('@/lib/document-data',()=>({canWriteDataset:async()=>null,isMutationRefu
 import {prepareRegisteredMutationBackend} from '../registry';
 import {createRetainedRegisteredMutation} from '../retained';
 import type {MutationProgram} from '../contracts';
-const actor={userId:null,tokenId:null,email:null,documentEditor:false},digest='a'.repeat(64),program:MutationProgram={name:'save',kind:'insert',sql:'INSERT INTO form.rows(body) VALUES ($body)',target:{datasetId:'data',schema:'form',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
+const actor={userId:'account',tokenId:null,email:null,documentEditor:false},digest='a'.repeat(64),program:MutationProgram={name:'save',kind:'insert',sql:'INSERT INTO form.rows(body) VALUES ($body)',target:{datasetId:'data',schema:'form',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
 beforeEach(()=>{state.commits=0;state.change=false;state.calls=[];state.dataset={id:'data'};const page:HtmlPageVersion={pageId:'page',version:1,revision:'1',html:'<p>Example</p>',links:[],nextNodeId:1};const prepared=prepareRegisteredMutationBackend('actions','backend',page,program,{compilerSha256:digest,sourceSha256:digest});state.page={...page,links:[prepared.link]};state.backend={...prepared.backend,...prepared.link,pageId:'page',ownerId:'owner'};state.doc={id:'page',format:'html',version:1,edit_id:'edit',user_id:'owner',source:page.html};});
 it('retained adapter forwards expectedAffected rollback and document proof to original transaction port',async()=>{
  const service=createRetainedRegisteredMutation(actor,state.page,state.page.links[0] as Parameters<typeof createRetainedRegisteredMutation>[2],state.backend as unknown as Parameters<typeof createRetainedRegisteredMutation>[3],async()=>actor);
@@ -21,4 +21,9 @@ it('retained adapter forwards expectedAffected rollback and document proof to or
 it('source changed during SQL refuses at transaction fence and never reports committed/reset',async()=>{
  const service=createRetainedRegisteredMutation(actor,state.page,state.page.links[0] as Parameters<typeof createRetainedRegisteredMutation>[2],state.backend as unknown as Parameters<typeof createRetainedRegisteredMutation>[3],async()=>actor);state.change=true;
  await expect(service.execute({requestId:'request_1234567890',values:{body:'x'}},new AbortController().signal)).rejects.toThrow('registered_mutation_unavailable');expect(state.commits).toBe(0);
+});
+
+it('rejects anonymous and token-only callers before creating a retained mutation service',()=>{
+ for(const anonymous of [{...actor,userId:null},{...actor,userId:null,tokenId:'legacy-token'}])expect(()=>createRetainedRegisteredMutation(anonymous,state.page,state.page.links[0] as Parameters<typeof createRetainedRegisteredMutation>[2],state.backend as unknown as Parameters<typeof createRetainedRegisteredMutation>[3],async()=>anonymous)).toThrow('registered_mutation_account_required');
+ expect(state.commits).toBe(0);
 });
