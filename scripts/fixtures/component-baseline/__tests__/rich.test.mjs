@@ -10,7 +10,7 @@ describe('actual original/new rich reader fixture inputs',()=>{
  it('names all eleven public families and pins evidence sources without pretending captures exist',()=>{
   expect(richBrowserParityFixtures.map(f=>f.family)).toEqual(['Markdown','Mermaid','Isometric','DeckGL','SlideDeck','User','Avatar','Icon','Progress','DatePicker','Tooltip']);
   expect(new Set(richBrowserParityFixtures.map(f=>f.id)).size).toBe(richBrowserParityFixtures.length);
-  for(const fixture of richBrowserParityFixtures){expect(fixture.provenance.revision).toBe(richBaselineRevision);expect(fixture.provenance.sources.length).toBeGreaterThan(1);for(const name of fixture.provenance.publicNames)expect(JSX_STORY_COMPONENT_NAMES).toContain(name);expect(fixture.limitations.length).toBeGreaterThan(0);expect(fixture.states[0]).toEqual({id:'initial',actions:[]});}
+  for(const fixture of richBrowserParityFixtures){expect(fixture.provenance.revision).toBe(richBaselineRevision);expect(fixture.provenance.sources.length).toBeGreaterThan(1);for(const name of fixture.provenance.publicNames)expect(JSX_STORY_COMPONENT_NAMES).toContain(name);expect(fixture.limitations.length).toBeGreaterThan(0);expect(fixture.states[0]).toMatchObject({id:'initial',actions:[]});for(const state of fixture.states)expect(Object.keys(state.expected).length).toBeGreaterThan(0);}
  });
  for(const fixture of richBrowserParityFixtures)it(`${fixture.id} parses and validates as actual old JSX and has syntactically valid native setup`,()=>{
   const parsed=parseJsx(fixture.oldJsx);expect(parsed.ok,parsed.error).toBe(true);if(!parsed.ok)return;
