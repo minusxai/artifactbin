@@ -13,9 +13,9 @@ try{
  }
  const helper=resolve('services/app/public/chat/ensure-node.sh');
  const output=execFileSync('/bin/bash',['-c',`command -v node && exit 99; . "$1" && . "$1" && node --version && npm --version && npx --version`,'bash',helper],{env:{...process.env,BASH_ENV:'',ENV:'',HOME:home,PATH:tools},encoding:'utf8',timeout:300000});
- assert.match(output,/v24\.21\.0/);
+ assert.match(output,/v24\.22\.1/);
  for(const file of ['.profile','.bashrc','.bash_profile','.zshrc'])assert.equal((await readFile(join(home,file),'utf8')).match(/# artifactbin Node/g)?.length,1);
  // A fresh shell must obtain npm/npx through durable PATH preparation.
- const fresh=execFileSync('/bin/bash',['-c','. "$HOME/.profile" && node --version && npm --version && npx --version'],{env:{...process.env,BASH_ENV:'',ENV:'',HOME:home,PATH:tools},encoding:'utf8'});assert.match(fresh,/v24\.21\.0/);
+ const fresh=execFileSync('/bin/bash',['-c','. "$HOME/.profile" && node --version && npm --version && npx --version'],{env:{...process.env,BASH_ENV:'',ENV:'',HOME:home,PATH:tools},encoding:'utf8'});assert.match(fresh,/v24\.22\.1/);
  console.log('PASS official absent-Node bootstrap, repeat, current and future PATH');
 }finally{await rm(home,{recursive:true,force:true});}
