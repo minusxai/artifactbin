@@ -96,6 +96,7 @@ it("persists immutable query registration atomically and serves anonymous result
       {
         scalars: { minimum: { type: "number", default: null } },
         queries: [
+          {name:'connected',sql:'select count(*) as amount from public.rows where amount >= $minimum',source:dataset.id,dependencies:[]},
           {
             name: "spin",
             sql: "with recursive c(n) as (select 1 union all select n+1 from c) select count(*) as n from c",
@@ -241,6 +242,19 @@ it("persists immutable query registration atomically and serves anonymous result
     expect(connectedReads).toBe(1);
     await expect(connectedRun(true)).rejects.toThrow('query_input_limit');
     await expect(connectedRun(false,true)).rejects.toThrow('dataset_changed');
+    credentialRotated=false;
+    const directRun=(revoke=false)=>createRetainedRegisteredQueries(ANONYMOUS_ACTOR,page,{
+      sourceStats:async()=>{throw Error('large_catalog_must_not_materialize');},
+      resolveConnection:async()=>({host:'database.invalid',port:5432,database:'fixture',username:'reader',ssl:true,password:'fixture-password'}),
+      readWindow:async(saved,sql,params,options)=>{
+        expect(saved).toEqual(connected);expect(sql).toBe('select count(*) as amount from public.rows where amount >= $minimum');expect(params?.minimum).toBe(3);expect(options).toMatchObject({datasetId:dataset.id,limit:10000,offset:0,paramTypes:{minimum:'number'}});
+        await options?.authorize?.();if(revoke)await db.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[dataset.id]);
+        return {columns:connected.tables[0]!.columns,rows:[{amount:250000}],truncated:false,refreshedAt:new Date().toISOString()};
+      },
+    }).execute({...plan.registration,subject:null},{values:{minimum:3},only:['connected']},new AbortController().signal);
+    expect(await directRun()).toMatchObject({connected:{rows:[{amount:250000}]}});
+    await expect(directRun(true)).rejects.toThrow('dataset_changed');
+
     // Restoring the current v2 private read audience must deny the same anonymous result.
     await db.query(
       "UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1",

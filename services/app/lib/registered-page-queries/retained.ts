@@ -160,6 +160,27 @@ export function createRetainedRegisteredQueries(
       now: ports.now().toISOString(),
       tz: "UTC",
     }),
+    catalog: async (_context,binding,signal)=>{
+      const doc=await document(signal),resolved=await ports.resolveImport(doc,binding,actor);
+      signal.throwIfAborted();
+      if(resolved.artifact.meta.truncated===true||!['stored','postgres'].includes(resolved.catalog.kind))throw Error('query_source_unsupported');
+      const identity=stamp(resolved.artifact);
+      const connectionIdentity=async()=>createHash('sha256').update(JSON.stringify(await ports.resolveConnection(resolved.catalog.connection!,actor,resolved.artifact.id))).digest('hex');
+      const credential=resolved.catalog.kind==='postgres'?await connectionIdentity():null;
+      const verify=async(active:AbortSignal)=>{
+        const current=await ports.resolveImport(await document(active),binding,actor);
+        active.throwIfAborted();
+        if(stamp(current.artifact)!==identity||JSON.stringify(current.catalog)!==JSON.stringify(resolved.catalog))throw Error('dataset_changed');
+        if(credential!==null&&await connectionIdentity()!==credential)throw Error('dataset_changed');
+        active.throwIfAborted();
+      };
+      ports.retainReadFence?.(()=>verify(ports.fenceSignal??new AbortController().signal));
+      return {verify,execute:async(sql,params,paramTypes,active)=>{
+        await verify(active);
+        const result=await ports.readWindow(resolved.catalog,sql,params,{limit:limits.rows,offset:0,paramTypes,timeoutMs:5000,actor,datasetId:resolved.artifact.id,signal:active,authorize:()=>verify(active),execute:input=>runOwned(input,active)});
+        await verify(active);return result;
+      }};
+    },
     source: async (_context, binding, signal) => {
       const doc = await document(signal),
         resolved = await ports.resolveImport(doc, binding.binding, actor);

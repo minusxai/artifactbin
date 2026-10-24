@@ -112,3 +112,16 @@ describe('explicit self-host private network opt-in', () => {
     await expect(resolvePostgresHost('postgres', true)).rejects.toThrow(/not permitted/);
   });
 });
+describe('exact reviewed private target network scope',()=>{
+ it.each(['10.1.2.3','172.16.1.2','192.168.1.2','fc00::123','fd12:3456::1','::ffff:a00:1'])('admits only reviewed RFC1918 or ULA address %s and pins the answer',async address=>{
+  answers(address);await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).resolves.toBe(address);
+  answers(address);await expect(resolvePostgresHost('unreviewed.example.test',false,[],false)).rejects.toThrow(/not permitted/);
+ });
+ it.each(['127.0.0.1','::1','::ffff:7f00:1','169.254.169.254','169.254.1.2','fe80::1','100.64.0.1','198.18.0.1','ff02::1'])('never admits loopback, metadata, link-local or special address %s',async address=>{
+  answers('10.1.2.3',address);await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).rejects.toThrow(/not permitted/);
+ });
+ it('rechecks every DNS answer on every operation, including a rebinding to metadata',async()=>{
+  answers('10.1.2.3');expect(await resolvePostgresHost('reviewed.example.test',false,[],true)).toBe('10.1.2.3');
+  answers('169.254.169.254');await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).rejects.toThrow(/not permitted/);expect(lookupMock).toHaveBeenCalledTimes(2);
+ });
+});

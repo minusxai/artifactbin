@@ -81,12 +81,12 @@ function privateV4(address: string): boolean {
   return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
-function permittedAddress(address: string, allowPrivate: boolean): boolean {
+function permittedAddress(address: string, allowPrivate: boolean, reviewedTarget=false): boolean {
   // net.isIP accepts scoped IPv6; zone identifiers are outside this API's
   // host vocabulary and must not reach a local network interface.
   if (typeof address !== 'string' || address.includes('%')) return false;
   const family = isIP(address);
-  if (family === 4) return !isForbiddenIp(address) || (allowPrivate && privateV4(address));
+  if (family === 4) return !isForbiddenIp(address) || ((allowPrivate || (reviewedTarget&&!address.startsWith('127.'))) && privateV4(address));
   if (family !== 6) return false;
 
   // WHATWG canonicalization collapses expanded zero groups and converts
@@ -97,11 +97,11 @@ function permittedAddress(address: string, allowPrivate: boolean): boolean {
   if (mapped) {
     const high = Number.parseInt(mapped[1], 16);
     const low = Number.parseInt(mapped[2], 16);
-    return permittedAddress(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`, allowPrivate);
+    return permittedAddress(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`, allowPrivate,reviewedTarget);
   }
   const [first, second] = canonical.split(':');
   const head = Number.parseInt(first || '0', 16);
-  if (allowPrivate && (canonical === '::1' || (head & 0xfe00) === 0xfc00)) return true;
+  if ((allowPrivate&&canonical==='::1') || ((allowPrivate||reviewedTarget)&&(head & 0xfe00)===0xfc00)) return true;
 
   // Public IPv6 uses global unicast space. Exclude transition/special space
   // too: IPv4-compatible, NAT64, 6to4 and Teredo must not tunnel a private
@@ -136,9 +136,10 @@ export async function resolvePostgresHost(
   host: string,
   allowPrivate = false,
   dnsServers: readonly string[] = [],
+  reviewedPrivateTarget=false,
 ): Promise<string> {
   const name = socketHost(host);
-  const permitted = (address: string) => permittedAddress(address, allowPrivate === true);
+  const permitted = (address: string) => permittedAddress(address, allowPrivate === true,reviewedPrivateTarget===true);
   const forbidden = () => new Error('PostgreSQL host resolves to an address that is not permitted.');
   if (isIP(name)) {
     if (!permitted(name)) throw forbidden();
