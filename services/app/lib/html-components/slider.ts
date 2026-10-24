@@ -118,18 +118,16 @@ export class AfSlider extends HTMLElement implements SliderContract {
 }
 
 const sliderStyles = `
-af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:11rem;font:inherit;color:inherit}
-af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem}
-af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;color:var(--muted-foreground,#555)}
-af-slider>input[type=range]{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:100%;height:16px;margin:0;border:0;border-radius:0;background:transparent}
-af-slider>input[type=range]:focus-visible{outline:2px solid var(--accent,currentColor);outline-offset:2px}
-af-slider>input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:9999px;background:var(--border,#d4d4d4)}
-af-slider>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 2px rgb(0 0 0 / .1)}
+af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:11rem;vertical-align:top;font:inherit;color:inherit}
+af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;font-size:11px;font-weight:500;line-height:1.5}
+af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
+af-slider>input[type=range]{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:100%;height:6px;margin:0;padding:0;border:0;border-radius:9999px;background:var(--border,#d4d4d4);font:inherit}
+af-slider>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
 af-slider>input[type=range]::-moz-range-track{height:6px;border:0;border-radius:9999px;background:var(--border,#d4d4d4)}
 af-slider>input[type=range]::-moz-range-progress{height:6px;border-radius:9999px;background:var(--border,#d4d4d4)}
-af-slider>input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 2px rgb(0 0 0 / .1)}
+af-slider>input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
 af-slider>input[type=range]:disabled{opacity:.5}
-af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:.875rem}
+af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:11px}
 `;
 
 export function registerSlider(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
