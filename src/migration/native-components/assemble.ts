@@ -15,7 +15,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const block=(code:string,sourceNode='$root')=>blockers.push({code,sourceNode});
  const identity=input.identity;
  if(nativeDigest(identity.key)!==nativeDigest(input.analysis.key)||nativeDigest({key:identity.key,bindings:identity.bindings,reservedIdentities:identity.reservedIdentities})!==identity.proofSha256)block('identity-revision-proof');
- if(!safeUrl(input.coreUrl)||new URL(input.coreUrl).pathname!=='/af/v1/core.js')block('core-url');
+ if(input.coreUrl!=='/af/v1/core.js'&&(!safeUrl(input.coreUrl)||new URL(input.coreUrl).pathname!=='/af/v1/core.js'))block('core-url');
  if(input.style&&(hash(input.style.css)!==input.style.sha256||input.style.sourceSha256!==input.analysis.sourceSha256||/<\/style/i.test(input.style.css)))block('style-closure-proof');
  if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper)&&input.style.rootSha256!==nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
  const nodes:RetainedJsxNode[]=[];

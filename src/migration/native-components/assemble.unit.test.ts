@@ -62,3 +62,7 @@ test('exact theme root receipts and ordered stylesheet imports survive HTML asse
  const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status==='complete'){assert.match(result.html,/<html class="dark" data-theme="source-theme">/);assert.match(result.html,/<style>@import url\("\.\/assets\/theme.css"\);<\/style>/);assert.match(result.html,/<body><div id="source-story" data-story-root="">/);}
  input.style.htmlAttributes={class:'light'};assert.equal(assembleNativePage(input).status,'blocked');
 });
+test('documented root-relative core path supports normal page bundle preparation',()=>{
+ const input=fixture();input.coreUrl='/af/v1/core.js';const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status==='complete')assert.match(result.html,/<head><script src="\/af\/v1\/core.js"><\/script>/);
+ input.coreUrl='/other.js';assert.equal(assembleNativePage(input).status,'blocked');
+});
