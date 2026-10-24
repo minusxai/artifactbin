@@ -81,7 +81,7 @@ An HTML link declares one unique `data-af-name`. The published page version bind
 
 Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
 
-Use `onBackendChange` for named invalidation, including usable connection/reconnection and account upgrades; explicitly query again:
+Use `onBackendChange` for manual invalidation and reconnect handling:
 
 ```js
 import {onBackendChange} from '@afbin/apollo';
@@ -91,7 +91,7 @@ const changes=onBackendChange(names=>{
 // When removing this UI: changes.unsubscribe();
 ```
 
-Names identify changed linked namespaces. Re-query them; the notification is not a result or permission grant. `watchQuery` observes viewer-local state, not shared-data updates. The platform never retries a mutation automatically.
+Names identify changed namespaces, not results or grants. `watchQuery` observes local fields and backends; invalidation, reconnect and committed mutations refresh backend reads without persisting results. `loading` is true while pending, false on answer/error. `clearOnRefresh:true` clears remote fields before reads. Clear private UI on completed refusal; unsubscribe on removal. Mutations never retry automatically.
 
 Remote data is never silently copied into persisted local state. Keep temporary selections or filters local; read shared facts through their namespace. Query/mutation errors must reach the UI. An unknown write outcome requires recovery; never turn it into a success message or a second new mutation.
 

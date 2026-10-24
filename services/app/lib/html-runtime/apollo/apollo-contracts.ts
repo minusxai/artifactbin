@@ -16,6 +16,8 @@ import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject, PageMutationOu
 export type Variables = AfJsonObject;
 
 interface QueryOptions {
+  /** Clear remote fields before each read; loading distinguishes this from a completed null answer. */
+  clearOnRefresh?:boolean;
   query: DocumentNode;
   variables?: Variables;
 }
@@ -28,6 +30,8 @@ export interface ResultError {
   path?: (string | number)[];
 }
 export interface QueryResult<T = AfJsonObject> {
+  /** Backend watch lifecycle only. True while reading, false for an answer or error. */
+  loading?:boolean;
   data: T;
   errors?: ResultError[];
 }
@@ -42,7 +46,7 @@ interface Subscription {
 }
 export interface ObservableQuery<T = AfJsonObject> {
   /** Calls `next` straight away with the current data, then whenever a top-level field the query names changes. */
-  subscribe(next: (result: { data: T }) => void): Subscription;
+  subscribe(next: (result: QueryResult<T>) => void): Subscription;
 }
 
 /** Local named mutations: `(draft, args) => result`. The resolver changes `draft` (the whole local document) directly. */
@@ -71,7 +75,7 @@ export interface AfClient {
    * A local resolver that throws saves nothing; its error is in `errors`.
    */
   mutate<T = AfJsonObject>(options: MutationOptions): Promise<MutationResult<T>>;
-  /** Local fields only; a backend namespace in the query throws an Error. */
+  /** Watches local fields and backend namespaces. Backend invalidations/reconnects refresh results without persisting them. */
   watchQuery<T = AfJsonObject>(options: QueryOptions): ObservableQuery<T>;
   /**
    * Local fields only. Calls `fn` with the data in the query's shape and saves
@@ -125,6 +129,8 @@ export class RemoteUnreachable extends Error {
 }
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
+  /** Invalidation/reconnection signal only; never carries results or credentials. */
+  subscribe?(listener:()=>void):()=>void;
   online(): boolean;
   /** Queries alone may await a bounded, already pending connection. The returned sender rejects after cancellation. */
   whenReady?(): Promise<RemotePort["execute"] | null>;

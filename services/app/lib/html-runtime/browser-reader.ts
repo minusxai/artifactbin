@@ -30,12 +30,13 @@ function pendingPortableConnection():boolean {
 }
 const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
+  subscribe(listener){const subscription=onBackendChange(()=>listener());return()=>subscription.unsubscribe();},
   online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[]) => void>();
-/** An invalidation contains names, never rows. Authors explicitly query again; watchQuery stays local-only. */
+/** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
 export function onBackendChange(listener: (names: readonly string[]) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
@@ -45,6 +46,7 @@ import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
+let connectedBefore=false;
 remote.execute = async (request) => {
   if(portableReadiness.online())return portableReadiness.execute(request);
   if(preview?.online())return preview.execute(request);
@@ -87,6 +89,9 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
   });
   for (const ready of [...relayWaiters]) ready();
+  const attachedRelay=relay;
+  if(connectedBefore)void Promise.resolve().then(()=>{if(relay===attachedRelay)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent subscriptions. */}});
+  connectedBefore=true;
   const selection = () => {
     if (pick === 'area' || !win.getSelection()?.toString().trim()) return;
     post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });

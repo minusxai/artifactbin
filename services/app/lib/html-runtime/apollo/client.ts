@@ -1,3 +1,4 @@
+import {createQueryWatch} from './watch-query';
 /**
  * `@afbin/apollo`: one client per page over one JSON document of local state
  * (a StatePort) and the page's backend namespaces (a RemotePort). Pure: the
@@ -277,6 +278,7 @@ export function createClient(options: ClientOptions): AfClient {
   const maxAttempts = options.maxAttempts ?? DEFAULT_ATTEMPTS;
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
   const resolvers = new Map<string, LocalResolver>();
+  const invalidations=new Set<()=>void>();let remoteWatches=0;
   const isBackend = (field: FieldNode) => backends().has(field.name.value);
 
   function localOnly(document: DocumentNode, variables: Variables | undefined, what: string) {
@@ -443,35 +445,19 @@ export function createClient(options: ClientOptions): AfClient {
     const result: MutationResult<T> = { data: data as T };
     if (errors.length) result.errors = errors;
     if (anyRemote) result.extensions = { outcomes };
+    if(Object.values(outcomes).includes("committed"))for(const notify of [...invalidations])notify();
     return result;
   }
 
-  function watchQuery<T>({ query: document, variables }: { query: DocumentNode; variables?: Variables }): ObservableQuery<T> {
-    const { op, fields } = localOnly(document, variables, "watchQuery");
-    const names = [...new Set(fields.map((field) => field.name.value))];
-    read(fields, op, {});
-    const signature = (current: AfJsonObject) => names.map((name) => canonical(own(current, name))).join("\u0000");
-    return {
-      subscribe(next) {
-        let active = true;
-        const first = state.read();
-        let last = signature(first);
-        const stop = state.subscribe((current) => {
-          if (!active) return;
-          const key = signature(current);
-          if (key === last) return;
-          last = key;
-          next({ data: read(fields, op, current) as T });
-        });
-        next({ data: read(fields, op, first) as T });
-        return {
-          unsubscribe() {
-            active = false;
-            stop();
-          },
-        };
-      },
-    };
+  function watchQuery<T>({ query: document, variables,clearOnRefresh }: { query: DocumentNode; variables?: Variables;clearOnRefresh?:boolean }): ObservableQuery<T> {
+    const op=operation(document,variables);if(op.node.operation!=="query")throw new LocalError("watchQuery takes a query");
+    const fields=fieldsOf(op.node.selectionSet,op),localFields=fields.filter(field=>!isBackend(field)),remoteFields=fields.filter(isBackend);
+    const names=[...new Set(localFields.map(field=>field.name.value))];read(localFields,op,{});
+    return createQueryWatch<T>({clearOnRefresh,state,signature:current=>names.map(name=>canonical(own(current,name))).join("\u0000"),local:current=>read(localFields,op,current),empty:Object.fromEntries(remoteFields.map(field=>[responseKey(field),null])),...(remoteFields.length?{remote:{
+      acquire(){if(remoteWatches>=16)throw Error("Too many remote query subscriptions");remoteWatches++;return()=>{remoteWatches--;};},
+      subscribe(notify:()=>void){invalidations.add(notify);const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};},
+      async fetch(){const settled=await runRemote(remote,op,remoteFields,"query");return settled.errors.length?{data:settled.data,errors:settled.errors}:{data:settled.data};}
+    }}:{})});
   }
 
   function addResolvers(more: LocalResolvers): void {
