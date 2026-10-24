@@ -1,8 +1,10 @@
-import {provisionNativeIdentityAuthCompanion} from './auth-companions';
-export {provisionNativeIdentityAuthCompanion} from './auth-companions';
+import {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction,nativeIdentityMigrationScope} from './auth-companions';
+export {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction} from './auth-companions';
 import type { Queryable } from "@artifactbin/contracts";
 import type {
   NativeIdentityImport,
+  NativeIdentityMigrationAuthority,
+  NativeIdentityMigrationSchemas,
   NativeIdentityImportDb,
   NativeIdentityImportResult,
   NativeIdentityUser,
@@ -15,6 +17,8 @@ import {
 } from "./model";
 export type {
   NativeIdentityImport,
+  NativeIdentityMigrationAuthority,
+  NativeIdentityMigrationSchemas,
   NativeIdentityImportResult,
 } from "./contracts";
 const userColumns =
@@ -32,7 +36,9 @@ interface Ledger {
 export async function writeNativeIdentities(
   tx: Queryable,
   raw: NativeIdentityImport,
+  authority:NativeIdentityMigrationAuthority,
 ): Promise<NativeIdentityImportResult> {
+  await nativeIdentityMigrationScope(tx,authority);
   // Capture caller-owned input before the first await, so it cannot change during a transaction.
   const input = plain(raw),
     proof = verifyNativeIdentityInput(input),
@@ -112,7 +118,7 @@ export async function writeNativeIdentities(
         nativeIdentityDigest(storedUser(plain(current))) !== expectedSha
       )
         throw Error("native_identity_replay_changed");
-      if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,'verify-existing');
+      if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,authority,'verify-existing');
       result.replayed++;
       continue;
     }
@@ -154,7 +160,7 @@ export async function writeNativeIdentities(
         throw Error("native_identity_create_verification_failed");
       result.createdUsers++;
     }
-    if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,mapping.action==='reuse-verified-email'?'verify-existing':'create-or-preserve');
+    if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,authority,mapping.action==='reuse-verified-email'?'verify-existing':'create-or-preserve');
     await save("user", mapping, expectedSha, {
       sourceUser: storedUser(proof.users.get(mapping.sourceId)!),
     });
@@ -252,6 +258,7 @@ export async function writeNativeIdentities(
 export function importNativeIdentities(
   db: NativeIdentityImportDb,
   input: NativeIdentityImport,
+  schemas:NativeIdentityMigrationSchemas,
 ) {
-  return db.transaction((tx) => writeNativeIdentities(tx, input));
+  return db.transaction(async(tx) => writeNativeIdentities(tx, input,await authorizeNativeIdentityTransaction(tx,schemas)));
 }

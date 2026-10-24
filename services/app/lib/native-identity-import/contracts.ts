@@ -85,3 +85,9 @@ export interface NativeIdentityAuthCompanion {
  name:string|null;
  provisionedAt:string;
 }
+
+/** Host-selected operator scopes, never read from imported JSON or runtime defaults. */
+export interface NativeIdentityMigrationSchemas {appSchema:string;authSchema:string}
+declare const migrationAuthority:unique symbol;
+/** An opaque authority bound to one actual database transaction. */
+export interface NativeIdentityMigrationAuthority {readonly [migrationAuthority]:true}

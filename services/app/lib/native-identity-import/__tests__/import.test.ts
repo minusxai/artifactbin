@@ -7,11 +7,18 @@ import { getDb } from "@/lib/platform";
 import { resolveTokenById, resolveToken } from "@/lib/accounts/tokens";
 import type {
   NativeIdentityImport,
+  NativeIdentityImportDb,
+  NativeIdentityAuthCompanion,
   NativeIdentityUser,
   NativeIdentityToken,
   NativeIdentityPlan,
 } from "../contracts";
-import { importNativeIdentities, writeNativeIdentities,provisionNativeIdentityAuthCompanion } from "../index";
+import { importNativeIdentities as importWithSchemas, writeNativeIdentities as writeWithAuthority,provisionNativeIdentityAuthCompanion as provisionWithAuthority,authorizeNativeIdentityTransaction } from "../index";
+import type {Queryable} from '@artifactbin/contracts';
+const fixtureSchemas={appSchema:'public',authSchema:'auth'};
+const importNativeIdentities=(db:NativeIdentityImportDb,input:NativeIdentityImport)=>importWithSchemas(db,input,fixtureSchemas);
+const writeNativeIdentities=async(tx:Queryable,input:NativeIdentityImport)=>writeWithAuthority(tx,input,await authorizeNativeIdentityTransaction(tx,fixtureSchemas));
+const provisionNativeIdentityAuthCompanion=async(tx:Queryable,input:NativeIdentityAuthCompanion)=>provisionWithAuthority(tx,input,await authorizeNativeIdentityTransaction(tx,fixtureSchemas));
 useAppHarness();
 let human:HumanAuth,otp='';
 beforeAll(async()=>{const db=await getDb(),raw=db.raw();if(raw.kind!=='pglite')throw Error('pglite required');human=await createHumanAuth({pglite:raw.instance,secret:'synthetic-native-identity-auth'.padEnd(32,'0'),baseURL:'http://localhost:3000',mail:{send:async message=>{otp=message.otp??'';}}});});
@@ -368,4 +375,68 @@ it('rejects auth ID/email collisions atomically and never restores a deleted com
  await db.query('DELETE FROM auth."user"');
  await expect(importNativeIdentities(db,input)).rejects.toThrow('native_identity_auth_missing');
  expect((await db.query('SELECT * FROM auth."user"')).rows).toHaveLength(0);
+});
+
+it('provisions only the explicitly selected auth schema and leaves a decoy auth schema unchanged',async()=>{
+ const db=await getDb(),raw=db.raw();if(raw.kind!=='pglite')throw Error('pglite required');
+ await db.query('DROP SCHEMA IF EXISTS migration_target_auth CASCADE');
+ let scopedOtp='';const scopedHuman=await createHumanAuth({pglite:raw.instance,schema:'migration_target_auth',secret:'synthetic-scoped-auth'.padEnd(32,'0'),baseURL:'http://localhost:3000',mail:{send:async message=>{scopedOtp=message.otp??'';}}});
+ const before=(await db.query('SELECT * FROM auth."user"')).rows;
+ await db.query('DROP SCHEMA IF EXISTS migration_target_app CASCADE');await db.query('CREATE SCHEMA migration_target_app');
+ for(const table of ['users','tokens','native_identity_imports'])await db.query(`CREATE TABLE migration_target_app.${table} (LIKE public.${table} INCLUDING ALL)`);
+ await db.transaction(async tx=>{
+  await tx.query('SET LOCAL search_path = migration_target_app');
+  const authority=await authorizeNativeIdentityTransaction(tx,{appSchema:'migration_target_app',authSchema:'migration_target_auth'});
+  await writeWithAuthority(tx,fixture(),authority);
+ });
+ expect((await db.query('SELECT id FROM migration_target_app.users')).rows).toEqual([{id:sourceUser.id}]);
+ expect((await db.query('SELECT * FROM public.users')).rows).toEqual([]);
+ expect((await db.query('SELECT id,email FROM migration_target_auth."user"')).rows).toEqual([{id:sourceUser.id,email:sourceUser.email}]);
+ const post=(route:string,body:unknown)=>scopedHuman.handler(new Request('http://localhost:3000/api/auth'+route,{method:'POST',headers:{origin:'http://localhost:3000','content-type':'application/json'},body:JSON.stringify(body)}));
+ expect((await post('/email-otp/send-verification-otp',{email:sourceUser.email,type:'sign-in'})).status).toBe(200);expect(scopedOtp).toBeTruthy();
+ const login=await post('/sign-in/email-otp',{email:sourceUser.email,otp:scopedOtp});expect(login.status).toBe(200);
+ const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
+ expect((await scopedHuman.sessions.resolve(new Request('http://localhost:3000',{headers:{cookie}})))?.userId).toBe(sourceUser.id);
+ expect((await db.query('SELECT * FROM auth."user"')).rows).toEqual(before);
+ expect((await db.query('SELECT * FROM auth.session')).rows).toEqual([]);
+});
+
+it('fails missing or cross-transaction authority and rolls back earlier operator writes',async()=>{
+ const db=await getDb(),input=fixture();
+ await expect(db.transaction(async tx=>{
+  await tx.query("INSERT INTO users(id,kind) VALUES('unapproved_operator_write','account')");
+  await (writeWithAuthority as (...args:any[])=>Promise<unknown>)(tx,input,{appSchema:'public',authSchema:'auth'});
+ })).rejects.toThrow('native_identity_migration_authority_required');
+ expect((await db.query("SELECT id FROM users WHERE id='unapproved_operator_write'")).rows).toEqual([]);
+ expect((await db.query('SELECT * FROM native_identity_imports')).rows).toEqual([]);
+ const authority=await db.transaction(tx=>authorizeNativeIdentityTransaction(tx,fixtureSchemas));
+ await expect(db.transaction(tx=>writeWithAuthority(tx,input,authority))).rejects.toThrow('native_identity_migration_authority_required');
+ await expect((importWithSchemas as (...args:any[])=>Promise<unknown>)(db,input)).rejects.toThrow('native_identity_migration_scope_required');
+ await expect(importWithSchemas(db,input,{appSchema:'public',authSchema:'public'})).rejects.toThrow('native_identity_migration_scope_required');
+});
+it('an app-only database role cannot obtain auth authority or leave partial app identities',async()=>{
+ const db=await getDb();
+ await db.query('CREATE ROLE migration_app_only NOLOGIN');
+ await db.query('GRANT USAGE ON SCHEMA public TO migration_app_only');
+ await db.query('GRANT SELECT,INSERT,UPDATE ON public.users,public.tokens,public.native_identity_imports TO migration_app_only');
+ await expect(db.transaction(async tx=>{
+  await tx.query('SET LOCAL ROLE migration_app_only');
+  const authority=await authorizeNativeIdentityTransaction(tx,fixtureSchemas);
+  await writeWithAuthority(tx,fixture(),authority);
+ })).rejects.toThrow('native_identity_migration_authority_denied');
+ expect((await db.query('SELECT * FROM users')).rows).toEqual([]);
+ expect((await db.query('SELECT * FROM auth."user"')).rows).toEqual([]);
+ await expect(importWithSchemas(db,fixture(),{appSchema:'auth',authSchema:'public'})).rejects.toThrow();
+ expect((await db.query('SELECT * FROM native_identity_imports')).rows).toEqual([]);
+});
+it('refuses a changed app search path even with authority minted earlier in the same transaction',async()=>{
+ const db=await getDb();await db.query('CREATE SCHEMA migration_decoy_app');
+ for(const table of ['users','tokens','native_identity_imports'])await db.query(`CREATE TABLE migration_decoy_app.${table} (LIKE public.${table} INCLUDING ALL)`);
+ await expect(db.transaction(async tx=>{
+  const authority=await authorizeNativeIdentityTransaction(tx,fixtureSchemas);
+  await tx.query('SET LOCAL search_path = migration_decoy_app');
+  await writeWithAuthority(tx,fixture(),authority);
+ })).rejects.toThrow('native_identity_migration_scope_changed');
+ expect((await db.query('SELECT * FROM migration_decoy_app.users')).rows).toEqual([]);
+ expect((await db.query('SELECT * FROM auth."user"')).rows).toEqual([]);
 });
