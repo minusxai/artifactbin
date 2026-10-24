@@ -49,6 +49,20 @@ export class AfDialog extends HTMLElement implements DialogContract {
   };
   private keydown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented || !(event.target instanceof Element) || event.target.closest('af-dialog') !== this) return;
+    if (event.key === 'Tab' && this.native?.open && this.native.contains(event.target)) {
+      const stops = [...this.native.querySelectorAll<HTMLElement>('button,input,select,textarea,a[href],[tabindex]')].filter(node => {
+        if(node.tabIndex < 0 || node.matches(':disabled,[disabled],[aria-disabled="true"]') || node.closest('[hidden],[inert],fieldset[disabled]')) return false;
+        for(let ancestor: HTMLElement | null = node; ancestor && ancestor !== this.native; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor); if(style.display === 'none' || style.visibility === 'hidden') return false;
+        }
+        return true;
+      });
+      const first = stops[0]; const last = stops.at(-1); const active = this.ownerDocument.activeElement;
+      if(!stops.length || active === this.native || (event.shiftKey ? active === first : active === last)) {
+        event.preventDefault(); (event.shiftKey ? last : first)?.focus(); if(!stops.length) this.native.focus();
+      }
+      return;
+    }
     const control = event.target.closest<HTMLElement>('af-dialog-trigger,af-dialog-close');
     // Native controls generate their own keyboard click.
     if (control && event.target === control && !control.hasAttribute('disabled') && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); control.click(); }
@@ -127,7 +141,7 @@ export class AfDialogClose extends HTMLElement {}
 export const dialogStyles = `
 af-dialog{display:contents}
 dialog[data-af-dialog-native]{margin:auto;max-height:calc(100svh - 4rem);width:fit-content;max-width:min(32rem,calc(100vw - 2rem));overflow:auto;border-radius:var(--radius-lg,var(--radius,.5rem));border:1px solid var(--border);background:var(--background);padding:1.5rem;color:var(--foreground);box-shadow:var(--shadow-lg,0 10px 15px -3px color-mix(in srgb,var(--foreground) 10%,transparent),0 4px 6px -4px color-mix(in srgb,var(--foreground) 10%,transparent))}
-dialog[data-af-dialog-native]::backdrop{background:color-mix(in srgb,var(--foreground) 50%,transparent)}
+dialog[data-af-dialog-native]::backdrop{background:rgb(0 0 0 / 50%)}
 af-dialog-content{display:flex;flex-direction:column;gap:1rem}
 af-dialog-header{display:flex;flex-direction:column;gap:.5rem}
 af-dialog-footer{display:flex;justify-content:flex-end;gap:.5rem}

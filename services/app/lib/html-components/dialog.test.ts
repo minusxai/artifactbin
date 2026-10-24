@@ -86,3 +86,10 @@ it('disposes an open native modal on content removal and accepts replacement con
   const simultaneous = document.createElement('af-dialog-content'); replacement.replaceWith(simultaneous); await tick();
   expect(next.open).toBe(false); expect(next.isConnected).toBe(false); expect(root.querySelector('dialog')!.contains(simultaneous)).toBe(true);
 });
+it('wraps modal Tab navigation around authored controls and handles a modal without stops', () => {
+ const {trigger,close,native,root} = fixture(); trigger.click(); close.focus();
+ const tab = new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}); close.dispatchEvent(tab);
+ expect(tab.defaultPrevented).toBe(true); const input = root.querySelector('input')!; expect(document.activeElement).toBe(input);
+ input.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true})); expect(document.activeElement).toBe(close);
+ root.querySelector('input')!.disabled = true; close.setAttribute('disabled',''); native.focus(); native.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true})); expect(document.activeElement).toBe(native);
+});
