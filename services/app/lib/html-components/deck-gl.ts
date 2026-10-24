@@ -14,11 +14,15 @@ export class AfDeckGL extends HTMLElement {
   private themeObserver?: MutationObserver;
   private resolvedOptions(): DeckGLOptions | undefined {
     if (!this.config) return undefined;
+    // Author contract and generated design-system CSS use exact true/false values.
+    // A nearer explicit false overrides a dark ancestor.
     return {
       ...this.config,
       colorMode:
         this.config.colorMode ??
-        (this.closest("[data-af-dark]") ? "dark" : "light"),
+        (this.closest("[data-af-dark]")?.getAttribute("data-af-dark") === "true"
+          ? "dark"
+          : "light"),
     };
   }
   private clearStatus(): void {

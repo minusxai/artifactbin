@@ -105,3 +105,47 @@ it("owns one load status and clears it on retry success or options removal", asy
   element.options = undefined;
   expect(element.querySelectorAll("[role=status]")).toHaveLength(1);
 });
+it("uses exact authored true/false theme values and respects nearer light overrides", async () => {
+  const outer = document.createElement("section");
+  const inner = document.createElement("section");
+  const element = document.createElement("af-deck-gl") as AfDeckGL;
+  outer.append(inner);
+  inner.append(element);
+  element.options = { data: [], layers: [] };
+  document.body.append(outer);
+  await flush();
+  expect(mount).toHaveBeenLastCalledWith(element, {
+    ...element.options,
+    colorMode: "light",
+  });
+  outer.setAttribute("data-af-dark", "false");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "light",
+  });
+  outer.setAttribute("data-af-dark", "true");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "dark",
+  });
+  inner.setAttribute("data-af-dark", "false");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "light",
+  });
+  inner.removeAttribute("data-af-dark");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "dark",
+  });
+  outer.removeAttribute("data-af-dark");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "light",
+  });
+});
