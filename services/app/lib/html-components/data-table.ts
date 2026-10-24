@@ -772,6 +772,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     ) {
       const count = document.createElement("span");
       count.setAttribute("aria-label", "Row count");
+      count.dataset.slot = "row-count";
+      count.style.lineHeight = "1rem";
       const format = new Intl.NumberFormat();
       count.textContent = `${format.format(this.data.rows.length)} of ${format.format(this.data.totalRows ?? this.data.rows.length)} rows`;
       this.footer!.append(count);

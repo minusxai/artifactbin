@@ -190,6 +190,7 @@ it("keeps the grouped row count after the final page without more requests", asy
   expect(el.data.rows.at(-1)?.id).toBe(1001);
   expect(el.data.truncated).toBe(false);
   expect(rowCount?.textContent).toBe("1,001 of 1,001 rows");
+  expect(getComputedStyle(rowCount!).lineHeight).toBe("16px");
   expect(
     footer.querySelector('button[aria-label="Load more rows"]'),
   ).toBeNull();
