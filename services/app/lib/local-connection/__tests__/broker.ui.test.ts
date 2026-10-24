@@ -44,3 +44,13 @@ it('reports blocked after successful popup login when the iframe still has no ac
  broker.signIn();const login=new URL(open.mock.calls[0]![0] as string,location.origin),callback=new URL(login.searchParams.get('callbackUrl')!,location.origin),nonce=new URLSearchParams(callback.hash.slice(1)).get('nonce');
  window.dispatchEvent(new MessageEvent('message',{origin:location.origin,source:popup,data:{kind:'af:local-authenticated',nonce}}));await vi.waitFor(()=>expect(states.at(-1)).toBe('blocked'));expect(states).not.toContain('connected');expect(port.close).not.toHaveBeenCalled();broker.dispose();
 });
+it('does not replay duplicate mutation calls and revokes an unavailable connection',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');
+ const fetch=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({capability:'secret',role:'owner'})}).mockResolvedValueOnce({ok:true,text:async()=>'{"data":{"saved":true}}'}).mockResolvedValueOnce({ok:false,status:404,text:async()=>'{"error":"unavailable"}'}).mockResolvedValue({ok:true,json:async()=>({})});vi.stubGlobal('fetch',fetch);
+ const states:string[]=[];const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s)}),port=fakePort();
+ window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('connected'));
+ const operation={kind:'operation',call:1,operation:{query:'mutation { tasks { add } }',operation:'mutation'}};
+ await port.onmessage?.({data:operation} as MessageEvent);await port.onmessage?.({data:operation} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(2);
+ await port.onmessage?.({data:{...operation,call:2}} as MessageEvent);expect(states.at(-1)).toBe('unavailable');
+ await port.onmessage?.({data:{...operation,call:3}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(4);broker.dispose();
+});

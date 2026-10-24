@@ -41,7 +41,7 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
     const response=await win.fetch(`/api/local-connection/${encodeURIComponent(identity.artifactId)}/graphql`,{method:'POST',credentials:credentials(),signal:controller.signal,headers:{'Content-Type':'application/json','X-Af-Local-Capability':capability},body:JSON.stringify({...operation,revision:identity.baseRevision})});
     const text=await response.text();if(text.length>4_000_000)throw Error('response_too_large');
     const value=JSON.parse(text);if(disposed||epoch!==generation)return;
-    if(!response.ok){if(response.status===401||response.status===403||response.status===409||response.status===410){revoke();state(response.status===409?'stale':'signin-required');}port?.postMessage({kind:'result',call:data.call,error:value.error??'operation_unavailable'});return;}
+    if(!response.ok){if(response.status===401||response.status===403||response.status===404||response.status===409||response.status===410){revoke();state(response.status===409?'stale':response.status===404?'unavailable':'signin-required');}port?.postMessage({kind:'result',call:data.call,error:value.error??'operation_unavailable'});return;}
     port?.postMessage({kind:'result',call:data.call,value});
    }catch{if(!disposed&&epoch===generation){revoke();state('unknown-outcome');port?.postMessage({kind:'result',call:data.call,error:'Operation outcome is unknown; do not automatically retry'});}}
    finally{controllers.delete(controller);calls.delete(data.call);}
