@@ -54,6 +54,23 @@ describe('native af-button', () => {
     expect(button.parentElement).toBe(host);
   });
 
+  it('uses the design-system radius and the recipe spacing when SVG icons are direct children', () => {
+    const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
+    // The old kit uses rounded-md, whose generated --radius-md comes from --radius - 2px.
+    // Almanac sets --radius to 4px, so preserving the token chain yields its intended 2px radius.
+    expect(style.textContent).toContain('border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px))');
+    expect(style.textContent).toContain('data-size=default]:has(>svg){padding-inline:.75rem');
+    expect(style.textContent).toContain('data-size=sm]:has(>svg){padding-inline:.625rem');
+    expect(style.textContent).toContain('data-size=lg]:has(>svg){padding-inline:1rem');
+  });
+
+  it('matches outline border and dark surface recipe tokens', () => {
+    const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
+    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:var(--border,#d4d4d4)');
+    expect(style.textContent).toContain('html[data-af-dark="true"] af-button>button[data-variant=outline]');
+    expect(style.textContent).toContain('color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)');
+  });
+
   it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {
     for (const attrs of ['disabled', 'busy']) {
       const { host, button } = fixture(attrs);
