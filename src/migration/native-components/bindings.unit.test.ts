@@ -73,7 +73,7 @@ class Element {
   children: Element[] = [];
   parent: Element | null = null;
   content?: Element;
-  listeners = new Map<string, Array<() => unknown>>();
+  listeners = new Map<string, Array<(event?: any) => unknown>>();
   textContent = "";
   hidden = false;
   inert = false;
@@ -131,13 +131,25 @@ class Element {
       clone.append(...this.children.map((child) => child.cloneNode(true)));
     return clone;
   }
-  addEventListener(name: string, fn: () => unknown) {
+  addEventListener(name: string, fn: (event?: any) => unknown) {
     this.listeners.set(name, [...(this.listeners.get(name) ?? []), fn]);
   }
-  removeEventListener(name: string, fn: () => unknown) {
+  removeEventListener(name: string, fn: (event?: any) => unknown) {
     this.listeners.set(
       name,
       (this.listeners.get(name) ?? []).filter((item) => item !== fn),
+    );
+  }
+  async emit(name: string, value: unknown) {
+    await Promise.all(
+      (this.listeners.get(name) ?? []).map((fn) =>
+        fn({
+          target: this,
+          currentTarget: this,
+          detail: { value },
+          preventDefault() {},
+        }),
+      ),
     );
   }
   async click() {
@@ -875,6 +887,127 @@ for (const keyed of [true, false])
         doc.body.children.some((node) => node.getAttribute("role") === "alert"),
         false,
       );
+    } finally {
+      await runtime.close();
+    }
+  });
+
+for (const [tag, property, type, next, expected] of [
+  ["Input", "value", "string", "east", "east"],
+  ["Textarea", "value", "string", "note", "note"],
+  ["Select", "value", "number", "7", 7],
+  ["Slider", "value", "number", 4, 4],
+  ["Switch", "checked", "boolean", true, true],
+  ["Segmented", "value", "boolean", "true", true],
+  ["DatePicker", "value", "date", "2026-01-02", "2026-01-02"],
+] as const)
+  test(`${tag} typed af-change writes viewer state and refreshes query variables`, async () => {
+    const node = el("control", tag, { [property]: "$filter" });
+    const source = input(
+      [node],
+      [
+        {
+          kind: "property",
+          sourceNode: "control",
+          afId: "control",
+          property,
+          attribute: property,
+        },
+      ],
+    );
+    source.analysis.flow.values[1]!.type = type;
+    source.queries = [{ ...query, values: [{ name: "filter", type }] }];
+    source.analysis.flow.queries = [{ name: "rows", start: 0, end: 1 }];
+    const result = emitNativeBindings(source);
+    assert.equal(result.status, "complete");
+    if (result.status !== "complete") return;
+    const doc = new Doc(),
+      host = new Element("af-control", { "data-af-id": "control" });
+    doc.body.append(host);
+    const port = client({ open: false, filter: null }),
+      runtime = await execute(result.authorJs, port, doc);
+    try {
+      await host.emit("af-change", next);
+      assert.equal(port.state.filter, expected);
+      assert.equal(port.remotes[0]!.stopped, true);
+      assert.deepEqual(port.remotes.at(-1)!.variables, {
+        values: { filter: expected },
+        only: ["rows"],
+      });
+    } finally {
+      await runtime.close();
+    }
+  });
+test("dynamic control expressions must be assignable scalar declarations", () => {
+  const node = el("control", "Input");
+  if (node.type !== "element") throw Error();
+  node.attributes.push({
+    name: "value",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "UnaryExpression",
+      source: "!$open",
+      reactive: { kind: "not", value: { kind: "signal", name: "open" } },
+    },
+  });
+  const result = emitNativeBindings(
+    input(
+      [node],
+      [
+        {
+          kind: "property",
+          sourceNode: "control",
+          afId: "control",
+          property: "value",
+          attribute: "value",
+        },
+      ],
+    ),
+  );
+  assert.equal(result.status, "blocked");
+  if (result.status === "blocked")
+    assert.ok(
+      result.blockers.some(
+        (blocker) => blocker.code === "nonassignable-control-binding",
+      ),
+    );
+});
+
+for (const [tag, event] of [
+  ["input", "input"],
+  ["textarea", "input"],
+  ["select", "change"],
+] as const)
+  test(`native ${tag} writes on its actual ${event} event and empty input becomes null`, async () => {
+    const source = input(
+      [el("field", tag, { value: "$filter" })],
+      [
+        {
+          kind: "property",
+          sourceNode: "field",
+          afId: "field",
+          property: "value",
+          attribute: "value",
+        },
+      ],
+    );
+    const result = emitNativeBindings(source);
+    assert.equal(result.status, "complete");
+    if (result.status !== "complete") return;
+    const doc = new Doc(),
+      host = new Element(tag, { "data-af-id": "field" });
+    doc.body.append(host);
+    const port = client({ open: false, filter: null }),
+      runtime = await execute(result.authorJs, port, doc);
+    try {
+      (host as any).value = "typed";
+      await host.emit(event, undefined);
+      assert.equal(port.state.filter, "typed");
+      (host as any).value = "";
+      await host.emit(event, undefined);
+      assert.equal(port.state.filter, null);
     } finally {
       await runtime.close();
     }

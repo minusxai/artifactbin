@@ -18,6 +18,14 @@ export interface NativeBindingMutation {
   outcomePath: readonly string[];
   reset: readonly string[];
 }
+/** Actual native control event ABI; derived from retained assignable scalar binding. */
+export interface NativeControlWriteback {
+  event: "af-change" | "input" | "change";
+  source: "detail.value" | "target.value" | "target.checked";
+  valueName: string;
+  scalarType: string;
+  multiple: boolean;
+}
 export interface NativeBindingIdentity {
   sourceNode: string;
   afId: string;

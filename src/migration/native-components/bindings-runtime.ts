@@ -1,8 +1,8 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
-export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate){
+export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp){
  let disposed=false,values={},tables={},localSub,failed=false;
- const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),cleanups=[],pending=new Map();
+ const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),cleanups=[],pending=new Map(),controls=new WeakMap();
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
@@ -33,7 +33,27 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   if(disposed||failed)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
-   if(target.kind==='property')host[target.property]=read(target.expression,row);
+   if(target.kind==='property'){
+    const binding=target.writeback;let projection=read(target.expression,row);
+    if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
+    host[target.property]=projection;
+    if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
+     const change=async event=>{if(disposed||failed||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;
+      try{let raw=binding.source==='detail.value'?event.detail?.value:binding.source==='target.checked'?host.checked:host.value,value;
+       if(!binding.multiple&&!scalar(raw))throw Error('Invalid control value');
+       if(binding.multiple){if(!Array.isArray(raw)||raw.some(item=>!scalar(item)||item===null))throw Error('Invalid multiple selection');value=JSON.stringify(raw.map(String));}
+       else if(raw===null||raw==='')value=null;
+       else if(binding.source==='target.checked')value=raw===true;
+       else if(binding.scalarType==='number'){const number=Number(raw);value=Number.isFinite(number)?number:null;}
+       else if(binding.scalarType==='boolean')value=raw===true||raw==='true';
+       else if(binding.scalarType==='timestamp'){try{value=normalizeTimestamp(String(raw));}catch{value=null;}}
+       else{if(!scalar(raw))throw Error('Invalid control value');value=String(raw);}
+       if(!scalar(value)||value!==null&&typeof value!==plan.valueTypes[binding.valueName])throw Error('Invalid control value');
+       await client.updateQuery({query:doc(plan.localQuery)},data=>disposed?data:({...data,[binding.valueName]:value}));
+      }catch(cause){event.preventDefault?.();error(cause.message);}
+     };host.addEventListener(binding.event,change);cleanups.push(()=>host.removeEventListener(binding.event,change));
+    }}
+   }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch=clone(target.templateId,context);conditions.set(host,branch);}
     const yes=!!read(target.expression,row);if(yes){if(!host.childNodes.length)host.append(...branch);render(host,row,context,target.sourceNode);}else host.replaceChildren();

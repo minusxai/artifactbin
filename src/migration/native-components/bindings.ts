@@ -13,7 +13,9 @@ import type {
   NativeBindingsInput,
   NativeBindingsResult,
   NativeBindingBlocker,
+  NativeControlWriteback,
 } from "./bindings-contracts.ts";
+import { normalizeTimestamp } from "../../datasets/timestamp.ts";
 import { NATIVE_BINDINGS_RUNTIME } from "./bindings-runtime.ts";
 const name = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -289,6 +291,59 @@ export function emitNativeBindings(
             : null,
         node.graphKey,
       );
+      const custom = {
+        Input: "value",
+        Textarea: "value",
+        Select: "value",
+        Slider: "value",
+        Switch: "checked",
+        Segmented: "value",
+        DatePicker: "value",
+      } as Record<string, string>;
+      const isNative = ["input", "textarea", "select"].includes(node.tag);
+      const isControl =
+        custom[node.tag] === target.property ||
+        (isNative && ["value", "checked"].includes(target.property));
+      if (isControl) {
+        const read = result.expression as LocalReactiveExpression | null;
+        const declaration =
+          read?.kind === "signal"
+            ? input.analysis.flow.values.find(
+                (value) => value.name === read.name,
+              )
+            : undefined;
+        if (!declaration || read?.kind !== "signal")
+          block(node.graphKey, "nonassignable-control-binding");
+        else {
+          const multiple =
+            node.tag === "Select" &&
+            node.attributes.some(
+              (attr) =>
+                attr.name === "multiple" &&
+                attr.value.static &&
+                attr.value.json === true,
+            ) &&
+            declaration.type !== "user";
+          if (multiple && declaration.type !== "string")
+            block(node.graphKey, "multiple-control-needs-string-binding");
+          const writeback: NativeControlWriteback = {
+            event: isNative
+              ? node.tag === "select" || target.property === "checked"
+                ? "change"
+                : "input"
+              : "af-change",
+            source: isNative
+              ? target.property === "checked"
+                ? "target.checked"
+                : "target.value"
+              : "detail.value",
+            valueName: read.name,
+            scalarType: declaration.type as string,
+            multiple,
+          };
+          result.writeback = writeback;
+        }
+      }
     } else if (target.kind === "condition") {
       if (
         node.type !== "element" ||
@@ -485,7 +540,7 @@ export function emitNativeBindings(
     mutations: input.mutations,
   };
   const evaluator = evaluateLocalReactiveExpression.toString();
-  const authorJs = `import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}));\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
+  const authorJs = `import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nconst DatasetReadError=Error;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}),(${normalizeTimestamp.toString()}));\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
   return {
     status: "complete",
     authorJs,
