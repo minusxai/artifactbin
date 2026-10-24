@@ -19,3 +19,11 @@ it('keeps the shared local/hosted presence lifecycle in the existing reader comp
  expect(grouping([reader,local], [], '/repo/services/app/solid/document/create-reader-presence.ts')).toBe('reader');
  expect(grouping([reader,entry], [], '/repo/services/app/solid/document/create-reader-presence.ts')).toBeNull();
 });
+
+it('compresses the already-eager presence dependency cluster without a new preferences request',()=>{
+ for(const leaf of ['preferences','reader-session','model','contract']){
+  const target='/repo/services/app/lib/html-presence/'+leaf+'.ts';
+  expect(grouping([reader,local], [], target)).toBe('reader');
+  expect(grouping([reader,entry], [], target)).toBeNull();
+ }
+});
