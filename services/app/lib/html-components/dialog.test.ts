@@ -93,3 +93,35 @@ it('wraps modal Tab navigation around authored controls and handles a modal with
  input.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true})); expect(document.activeElement).toBe(close);
  root.querySelector('input')!.disabled = true; close.setAttribute('disabled',''); native.focus(); native.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true})); expect(document.activeElement).toBe(native);
 });
+it('projects authored accessible labels with native precedence and restores derived labels dynamically', async () => {
+  const { root, content, native, trigger } = fixture();
+  const title = root.querySelector('af-dialog-title')!;
+  const description = root.querySelector('af-dialog-description')!;
+  title.id = 'authored-title'; description.id = 'authored-description';
+  content.setAttribute('aria-label', 'Explicit name'); await tick();
+  expect(native.getAttribute('aria-label')).toBe('Explicit name');
+  expect(native.hasAttribute('aria-labelledby')).toBe(false);
+  content.setAttribute('aria-labelledby', 'external-title authored-title');
+  content.setAttribute('aria-describedby', 'external-description'); await tick();
+  expect(native.getAttribute('aria-labelledby')).toBe('external-title authored-title');
+  expect(native.getAttribute('aria-describedby')).toBe('external-description');
+  expect(native.getAttribute('aria-label')).toBe('Explicit name');
+  content.removeAttribute('aria-labelledby'); await tick(); expect(native.hasAttribute('aria-labelledby')).toBe(false);
+  content.removeAttribute('aria-label'); content.removeAttribute('aria-describedby'); await tick();
+  expect(native.hasAttribute('aria-label')).toBe(false);
+  expect(native.getAttribute('aria-labelledby')).toBe('authored-title');
+  expect(native.getAttribute('aria-describedby')).toBe('authored-description');
+  expect(title.id).toBe('authored-title'); expect(description.id).toBe('authored-description');
+  expect(content.dataset.afId).toBe('content'); trigger.click(); expect(native.open).toBe(true);
+  expect(native.localName).toBe('dialog'); expect(native.hasAttribute('role')).toBe(false);
+});
+it('keeps an authored name without title parts and does not manufacture missing ID targets', async () => {
+  const { root, content, native } = fixture();
+  root.querySelector('af-dialog-title')!.remove(); root.querySelector('af-dialog-description')!.remove();
+  content.setAttribute('aria-label', 'Fallback name'); await tick();
+  expect(native.getAttribute('aria-label')).toBe('Fallback name'); expect(native.hasAttribute('aria-labelledby')).toBe(false);
+  content.setAttribute('aria-labelledby', 'missing-authored-id'); await tick();
+  expect(native.getAttribute('aria-labelledby')).toBe('missing-authored-id');
+  expect(root.querySelector('#missing-authored-id')).toBeNull();
+  content.removeAttribute('aria-labelledby'); await tick(); expect(native.getAttribute('aria-label')).toBe('Fallback name');
+});
