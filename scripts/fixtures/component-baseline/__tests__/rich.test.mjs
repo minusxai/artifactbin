@@ -29,4 +29,9 @@ describe('actual original/new rich reader fixture inputs',()=>{
   expect(date.limitations.join(' ')).toContain('trigger name');
   const user=richBrowserParityFixtures.find(f=>f.family==='User');expect(user.oldJsx).toContain('userId=""');expect(user.oldJsx).toContain('Unassigned');expect(user.newHtml).toContain('Unassigned');expect(user.limitations.join(' ')).toContain('seeded person-card');
  });
+ it('pairs slide navigation through the shared reader rail while retaining focus evidence',()=>{
+  const slides=richBrowserParityFixtures.find(f=>f.id==='slides-two');
+  expect(slides.states[1]).toMatchObject({id:'details',actions:[{role:'button',name:'Go to slide 2: Details',action:'click'}],expected:{roles:[{role:'button',name:'Go to slide 2: Details',focused:true}],textIncludes:['Details','Second observation.']}});
+  expect(slides.limitations.join(' ')).toContain('fullscreen and print remain separate');
+ });
 });

@@ -10,6 +10,7 @@ import path from 'node:path';
 import {launchChromium} from './lib/browser.mjs';
 import {createChecker} from './lib/assert.mjs';
 import {richFamilies,richViewports,richFixtureHtml} from '../lib/html-rich-components-fixture.mjs';
+import {candidateMarkdownCopyCases} from '../fixtures/component-baseline/candidate-markdown-copy.mjs';
 const repo=path.resolve(import.meta.dirname,'../..'),componentDir=path.join(repo,'services/app/skills/artifactbin/components');
 const check=createChecker('html-rich-components'),artifacts=[];
 const files=new Map();for(const name of (await readdir(componentDir)).filter(name=>/^[a-z][a-z0-9-]*\.js$/.test(name)))files.set(name,await readFile(path.join(componentDir,name)));
@@ -37,6 +38,21 @@ try{
   const heading=await page.locator('#markdown h1').getAttribute('id');
   await page.evaluate(()=>{const node=document.querySelector('#markdown');node.source='[bad](javascript:alert(1))';});check(await page.locator('#markdown [role=alert]').count()===1,`${tag} Markdown rejects unsafe links`);
   await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});check(await page.locator('#markdown h1').getAttribute('id')===heading,`${tag} Markdown recovers with stable heading identity`);
+  for(const scenario of candidateMarkdownCopyCases){
+   if(scenario.clipboard==='real')await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});
+   else await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>Promise.reject(new Error('Simulated clipboard write rejection'))}}));
+   const code=await page.locator('#markdown pre code').first().textContent();
+   await page.getByRole('button',{name:'Copy code',exact:true}).click();
+   await page.waitForFunction(status=>document.querySelector('#markdown pre button')?.textContent===status,scenario.expectedStatus);
+   if(scenario.clipboard==='real'){
+    let copied='';try{copied=await page.evaluate(()=>navigator.clipboard.readText());}catch(error){check(false,`${tag} Markdown actual clipboard read (${error instanceof Error?error.message:String(error)})`);}
+    check(copied===code,`${tag} Markdown candidate-only copy success transfers the rendered code block`);
+   }else{
+    check(await page.locator('#markdown pre button').textContent()===scenario.expectedStatus,`${tag} Markdown candidate-only rejected copy announces unavailability`);
+    await page.evaluate(()=>delete navigator.clipboard);
+   }
+   await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});
+  }
   await page.getByLabel('Name 1',{exact:true}).fill('Draft retained');await page.evaluate(()=>{window.richFixture.input=document.querySelector('input[aria-label="Name 1"]');});
   await page.getByRole('button',{name:'Sort by score',exact:true}).click();
   check(await page.locator('#table tbody tr[data-row-key]').first().locator('td').first().textContent()==='2',`${tag} table ascending sort`);
@@ -75,7 +91,7 @@ try{
  const page=browser.contexts()[0]?.pages()[0];
  if(page)try{const bytes=await page.screenshot({path:path.join(output,'candidate-rich-failure.png'),fullPage:true});artifacts.push({name:'candidate-rich-failure.png',mediaType:'image/png',base64:bytes.toString('base64')});}catch{/* Preserve the original failure if the page itself closed. */}
 }finally{
- const report={kind:'candidate-rich-components',comparison:'no baseline pixel comparison claimed',graph,viewports:richViewports,themes:[false,true],browser:browser.version(),failures:check.failures};
+ const report={kind:'candidate-rich-components',comparison:'no baseline pixel comparison claimed',candidateOnlyEnhancements:candidateMarkdownCopyCases.map(({id,baselineCompatibility})=>({id,baselineCompatibility})),graph,viewports:richViewports,themes:[false,true],browser:browser.version(),failures:check.failures};
  await writeFile(path.join(output,'evidence.json'),JSON.stringify(report,null,2));artifacts.push({name:'evidence.json',mediaType:'application/json',base64:Buffer.from(JSON.stringify(report)).toString('base64')});
  console.log(`HTML_RICH_COMPONENT_EVIDENCE_GZIP_BASE64 ${gzipSync(Buffer.from(JSON.stringify({format:'component-parity-files-v1',files:artifacts}))).toString('base64')}`);
  await browser.close();await new Promise(resolve=>server.close(resolve));

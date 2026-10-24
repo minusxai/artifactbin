@@ -1,6 +1,6 @@
 # Rich actual-reader fixture integration
 
-`rich.mjs` adds eleven public families, seventeen state cases and 68 captures per implementation across the existing theme/viewport matrix. These are fixture preparations, not completed comparison evidence. Source provenance is pinned to `8eaac63810b66eb575b018be89bb63443e1b7aaf` and recorded on every pair. No original rendering, CSS, account record or browser screenshot is manufactured.
+`rich.mjs` adds eleven public families, eighteen state cases and 72 captures per implementation across the existing theme/viewport matrix. These are fixture preparations, not completed comparison evidence. Source provenance is pinned to `8eaac63810b66eb575b018be89bb63443e1b7aaf` and recorded on every pair. No original rendering, CSS, account record or browser screenshot is manufactured.
 
 The root-owned fixture index can append the array:
 
