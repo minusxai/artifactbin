@@ -1395,6 +1395,19 @@ test("registered mutation snapshots admitted row fields separately from viewer l
  try {await button.click();assert.deepEqual(request.values,{row_id:null,filter:'local'});assert.equal(Object.hasOwn(port.state,'row_id'),false);} finally {await running.close();}
 });
 
+test("HTTP preview mutations use cryptographic UUIDs and preserve unknown retry identity", async () => {
+ const source=input([el('save','Button',{run:'$save'})],[{kind:'action',sourceNode:'save',afId:'save'}]);
+ source.analysis.flow.mutations=[{name:'save',start:0,end:1}];
+ source.mutations=[{name:'save',namespace:'records',document:'mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}',values:[{name:'row_id',type:'string',nullable:true,source:{kind:'row',field:'id'}},{name:'filter',type:'string',nullable:true}],outcomePath:['records','run'],reset:[]}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),button=new Element('button',{'data-af-id':'save'});doc.body.append(button);
+ const port=client({open:false,filter:'local'});let request:any;const requests:any[]=[];
+ port.mutate=async(options:any)=>{request=options.variables;requests.push(request);return {data:{records:{run:{requestId:request.requestId,outcome:requests.length===1?'unknown':'committed',reset:[]}}}};};
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'crypto');let entropyCalls=0;Object.defineProperty(globalThis,'crypto',{configurable:true,value:{getRandomValues:(bytes:Uint8Array)=>{entropyCalls++;return bytes.fill(255);}}});
+ const running=await execute(result.authorJs,port,doc);
+ try {await button.click();await button.click();assert.equal(requests.length,2);assert.equal(entropyCalls,1);assert.match(request.requestId,/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);assert.equal(requests[0].requestId,requests[1].requestId);assert.deepEqual(request.values,{row_id:null,filter:'local'});} finally {await running.close();if(previous)Object.defineProperty(globalThis,'crypto',previous);else delete (globalThis as any).crypto;}
+});
+
 
 test('dynamic Cell updates from registered tables, retains figure only while explicitly pending, and clears unavailable answers',async()=>{
  const bundled=await buildNativeCellAdapter();
