@@ -16,3 +16,13 @@ export async function observeUploadRequests({page,origin,proof,discardFirstSucce
  });
  return records;
 }
+/** Read observed server results before waiting for presentation. In particular,
+ * an unexpected authorization denial must stop the canary, not cost every state
+ * a UI timeout. A missing transport response is independently bounded. */
+export async function requireUploadResponse(records,count,status) {
+ const deadline=Date.now()+10_000;
+ while(records.length<count){if(Date.now()>=deadline)throw Error('No upload response within 10 seconds');await new Promise(resolve=>setTimeout(resolve,25));}
+ const record=records[count-1];
+ if(record.status!==status)throw Error(`Upload response expected ${status}, received ${record.status}`);
+ return record;
+}

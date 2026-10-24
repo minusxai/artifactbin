@@ -15,3 +15,9 @@ it('uses the later page route so the capture guard cannot bypass real upload obs
  const replay=route(201);await handler(replay);expect(replay.fulfill).toHaveBeenCalledWith({response:replay.response});expect(replay.abort).not.toHaveBeenCalled();
  expect(records.map(record=>record.status)).toEqual([403,201,201]);expect(proof.requestIds).toEqual(['same-request','same-request','same-request']);
 });
+it('fails the canary immediately on a real unexpected status and bounds a missing response',async()=>{
+ const {requireUploadResponse}=await import('../lib/component-upload-route.mjs');
+ await expect(requireUploadResponse([{status:403}],1,201)).rejects.toThrow('expected 201, received 403');
+ await expect(requireUploadResponse([{status:201}],1,201)).resolves.toMatchObject({status:201});
+ vi.useFakeTimers();try{const pending=requireUploadResponse([],1,201),failure=expect(pending).rejects.toThrow('No upload response');await vi.advanceTimersByTimeAsync(10_000);await failure;}finally{vi.useRealTimers();}
+});
