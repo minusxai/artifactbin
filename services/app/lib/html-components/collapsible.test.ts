@@ -88,6 +88,41 @@ describe('native authored collapsible', () => {
     trigger.setAttribute('disabled',''); await tick(); expect(originalEnabled.disabled).toBe(true);
     trigger.removeAttribute('disabled'); await tick(); expect(originalEnabled.disabled).toBe(false);
   });
+  it('captures native disabled state at the moment the wrapper becomes disabled', async () => {
+    const {root,trigger} = fixture('', '<p>Body</p>');
+    const button = document.createElement('button'); trigger.append(button); await tick();
+    button.disabled = true; await tick();
+    root.setAttribute('disabled',''); expect(button.disabled).toBe(true);
+    root.removeAttribute('disabled'); expect(button.disabled).toBe(true);
+    button.disabled = false; await tick();
+    root.setAttribute('disabled',''); root.removeAttribute('disabled'); expect(button.disabled).toBe(false);
+  });
+  it('settles its disabled mutation observer for a native trigger button', async () => {
+    const NativeObserver = globalThis.MutationObserver;
+    const observerRuns: number[] = [];
+    class BoundedMutationObserver extends NativeObserver {
+      constructor(callback: MutationCallback) {
+        let runs = 0;
+        super((records, observer) => {
+          runs++;
+          observerRuns[0] = runs;
+          if (runs <= 4) callback(records,observer);
+          else observer.disconnect();
+        });
+      }
+    }
+    globalThis.MutationObserver = BoundedMutationObserver;
+    try {
+      const {root,trigger} = fixture('', '<p>Body</p>');
+      const button = document.createElement('button'); trigger.append(button); await tick();
+      observerRuns[0] = 0;
+      root.setAttribute('disabled',''); await tick(); await tick();
+      expect(observerRuns[0]).toBeLessThanOrEqual(2);
+    } finally {
+      globalThis.MutationObserver = NativeObserver;
+      document.body.replaceChildren();
+    }
+  });
   it('isolates nested roots, responds to external attributes and child changes, and reconnects cleanly', async () => {
     const {root,trigger,content} = fixture();
     const nested = document.createElement('af-collapsible'); nested.innerHTML='<af-collapsible-trigger>Nested</af-collapsible-trigger><af-collapsible-content>N</af-collapsible-content>';

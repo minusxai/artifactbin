@@ -10,7 +10,6 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
   private initialized = false;
   private propertyControlled = false;
   private propertyValue = false;
-  private triggerTabStops = new WeakMap<AfCollapsibleTrigger, string | null>();
   private triggerSemantics = new WeakMap<AfCollapsibleTrigger, {role:string | null; tabindex:string | null}>();
   private nativeButtonDisabled = new WeakMap<HTMLButtonElement, boolean>();
   private disabledNativeButtons = new WeakSet<HTMLButtonElement>();
@@ -95,7 +94,6 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
     if (content) this.identify(content, 'content');
     for (const trigger of triggers) {
       this.identify(trigger, 'trigger');
-      if (!this.triggerTabStops.has(trigger)) this.triggerTabStops.set(trigger, trigger.getAttribute('tabindex'));
       if (!this.triggerSemantics.has(trigger)) this.triggerSemantics.set(trigger, {role:trigger.getAttribute('role'), tabindex:trigger.getAttribute('tabindex')});
       const nativeButtons = [...trigger.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.closest('af-collapsible') === this);
       const triggerDisabled = disabled || trigger.hasAttribute('disabled');
@@ -106,14 +104,16 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
         trigger.removeAttribute('aria-controls');
         trigger.removeAttribute('aria-disabled');
         for (const button of nativeButtons) {
-          if (!this.nativeButtonDisabled.has(button)) this.nativeButtonDisabled.set(button, button.disabled);
           if (triggerDisabled) {
-            button.setAttribute('disabled','');
+            if (!this.disabledNativeButtons.has(button)) this.nativeButtonDisabled.set(button, button.hasAttribute('disabled'));
+            if (!button.hasAttribute('disabled')) button.setAttribute('disabled','');
             this.disabledNativeButtons.add(button);
           } else if (this.disabledNativeButtons.has(button)) {
-            if (this.nativeButtonDisabled.get(button)) button.setAttribute('disabled','');
-            else button.removeAttribute('disabled');
+            if (this.nativeButtonDisabled.get(button)) {
+              if (!button.hasAttribute('disabled')) button.setAttribute('disabled','');
+            } else if (button.hasAttribute('disabled')) button.removeAttribute('disabled');
             this.disabledNativeButtons.delete(button);
+            this.nativeButtonDisabled.delete(button);
           }
           button.setAttribute('aria-expanded',String(open));
           button.setAttribute('aria-disabled',String(triggerDisabled || button.disabled));
