@@ -75,3 +75,16 @@ it('snapshots every quoted font URL and escaped CSS import without admitting com
   expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies).toHaveLength(5);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+it('snapshots an admitted in-memory entry override before discovery without changing disk source',async()=>{
+ const {mkdtemp,writeFile,readFile,symlink,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
+ const root=await mkdtemp(join(tmpdir(),'bundle-entry-'));try{
+  const original='<script type="module" src="./old.js"></script>',html='<script type="module" src="./new.js"></script>';
+  await writeFile(join(root,'index.html'),original);for(const name of ['old.js','new.js'])await writeFile(join(root,name),'export const value=42;');
+  const prepared=await prepareBundle({root,entry:'index.html',entryHtml:html,server:'https://example.test'});
+  expect(prepared.body.html).toBe(html);expect(prepared.body.publicationBundle.files.map(file=>file.path)).toEqual(['new.js']);expect(await readFile(join(root,'index.html'),'utf8')).toBe(original);
+  for(const entry of ['missing.html','../escape.html'])await expect(prepareBundle({root,entry,entryHtml:html,server:'https://example.test'})).rejects.toThrow();
+  await symlink(join(root,'index.html'),join(root,'link.html'));await expect(prepareBundle({root,entry:'link.html',entryHtml:html,server:'https://example.test'})).rejects.toThrow(/Symlink/);
+  await expect(prepareBundle({root,entry:'index.html',entryHtml:'x'.repeat(4_000_001),server:'https://example.test'})).rejects.toThrow(/limit/);expect(await readFile(join(root,'index.html'),'utf8')).toBe(original);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
