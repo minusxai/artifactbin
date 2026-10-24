@@ -51,7 +51,7 @@ try{
   await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.getByRole('button',{name:'Reset view',exact:true}).click();
   check(await page.locator('#map [role=status]').count()===0,`${tag} bundled map controls operate without engine error`);
   await page.evaluate(()=>{const user=document.querySelector('#person');user.error='Synthetic unavailable';});check(await page.locator('#person').getAttribute('data-state')==='error',`${tag} user error state`);
-  await page.evaluate(()=>{document.querySelector('#person').error=null;});check(await page.locator('#person').getAttribute('data-state')==='person'&&await page.locator('#person').textContent().then(text=>text.includes('Alex Sample')),`${tag} user error recovery`);
+  await page.evaluate(()=>{document.querySelector('#person').error=null;});await page.waitForFunction(()=>document.querySelector('#person img')?.naturalWidth>0);check(await page.locator('#person').getAttribute('data-state')==='person'&&await page.getByRole('link',{name:'@alex',exact:true}).getAttribute('href')==='#person',`${tag} user recovers its handle profile link and loaded avatar`);
   // Actual Mermaid engine failure/recovery and a real attribute-driven theme redraw.
   await page.evaluate(()=>{document.querySelector('#diagram').code='flowchart LR\n A -->';});await page.locator('#diagram[data-state=error]').waitFor({timeout:20000});
   check(await page.locator('#diagram [role=alert]').count()>0,`${tag} Mermaid malformed syntax reports an error`);
@@ -60,13 +60,13 @@ try{
   await page.evaluate(value=>document.documentElement.setAttribute('data-af-dark',String(!value)),dark);await page.waitForFunction(previous=>document.querySelector('#diagram')?.dataset.state==='ready'&&document.querySelector('#diagram img')?.getAttribute('src')!==previous,image,{timeout:20000});
   check(await page.locator('#diagram img').evaluate(node=>node.complete&&node.naturalWidth>0),`${tag} Mermaid renders and redraws on live true/false theme change`);
   await page.evaluate(value=>document.documentElement.setAttribute('data-af-dark',String(value)),dark);await page.locator('#diagram[data-state=ready] img').waitFor({timeout:20000});
-  check(await page.evaluate(()=>window.richFixture.originalNotes.every(node=>node.isConnected)&&new Set([...document.querySelectorAll('[data-af-id]')].map(node=>node.getAttribute('data-af-id'))).size===12),`${tag} all authored nodes and identities retained`);
+  const identities=await page.evaluate(()=>window.richFixture.identityFacts(window.richFixture.authoredIdentities,document));check(identities.retained&&await page.evaluate(()=>window.richFixture.authoredIdentities.length===12),`${tag} every authored node retains its original annotation identity`);check(identities.unique,`${tag} all live authored and generated annotation identities are unique`);
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${tag} rich outputs fit viewport without page overflow`);
   check(await page.evaluate(()=>['#diagram img','#assembly svg','#map canvas'].every(selector=>{const box=document.querySelector(selector).getBoundingClientRect();return box.width>0&&box.height>0&&box.right<=innerWidth+1;})),`${tag} rich output boxes visible within layout`);
   await save(`candidate-rich-${tag}.png`);
   await page.evaluate(()=>{window.richFixture.oldCanvas=document.querySelector('#map canvas');for(const id of ['map','assembly','diagram']){const element=document.getElementById(id);window.richFixture[id]={element,parent:element.parentElement};element.remove();}});
   check(await page.evaluate(()=>!window.richFixture.oldCanvas.isConnected&&!window.richFixture.map.element.querySelector('canvas')),`${tag} disconnected map finalizes and removes its own canvas`);
-  await page.evaluate(()=>{window.richFixture.oldCanvas=document.querySelector('#map canvas');for(const id of ['map','assembly','diagram']){const {element,parent}=window.richFixture[id];parent.append(element);}});await page.locator('#map canvas').waitFor({timeout:12000});await page.locator('#diagram[data-state=ready] img').waitFor({timeout:20000});
+  await page.evaluate(()=>{for(const id of ['map','assembly','diagram']){const {element,parent}=window.richFixture[id];parent.append(element);}});await page.locator('#map canvas').waitFor({timeout:12000});await page.locator('#diagram[data-state=ready] img').waitFor({timeout:20000});
   check(await page.evaluate(()=>document.querySelector('#map canvas')!==window.richFixture.oldCanvas)&&await page.locator('#assembly [data-part=body]').count()===1&&await page.locator('#map [role=status]').count()===0,`${tag} rich engines reconnect without stale errors or duplicate geometry`);
  }
  check(errors.length===0,`no uncaught page errors (${errors.join('; ')||'none'})`);check(remote.length===0,`no external account, basemap or module requests (${remote.join('; ')||'none'})`);

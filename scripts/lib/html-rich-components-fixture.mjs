@@ -5,6 +5,12 @@ export const richFamilies = Object.freeze([
   ['Isometric','isometric','assembly'],['DeckGL','deck-gl','map'],['User','user','person'],
 ]);
 export const richViewports = Object.freeze([{width:800,height:900},{width:390,height:844}]);
+/** Authored identities must keep both the same Node and exact ID. Generated IDs
+ * may come and go as table windows change, but every live annotation stays unique. */
+export function richIdentityFacts(authored,root) {
+ const identities=[...root.querySelectorAll('[data-af-id]')].map(node=>node.getAttribute('data-af-id'));
+ return {retained:authored.every(({node,id})=>root.contains(node)&&node.getAttribute('data-af-id')===id),unique:identities.every(Boolean)&&new Set(identities).size===identities.length};
+}
 export function richFixtureHtml(dark=false) {
  const imports=richFamilies.map(([family,file])=>`import {register${family}} from '/components/${file}.js';register${family}();`).join('\n');
  const markdown='# Field notes\n\nA **rich** report with ~~retired~~ text.\n\n| Region | Count |\n| --- | --- |\n| North | 12 |\n\n```js\nconst count = 12;\n```';
@@ -13,6 +19,7 @@ export function richFixtureHtml(dark=false) {
  </style></head><body><main><h1>Rich component verification</h1>
  ${richFamilies.map(([family,file,id])=>`<section aria-label="${family} fixture"><h2>${family}</h2><af-${file} id="${id}" data-af-id="host-${id}"><aside class="author-note" data-af-id="note-${id}">Authored ${family} note</aside></af-${file}></section>`).join('')}
  </main><script type="module">${imports}
+ const authoredIdentities=[...document.querySelectorAll('[data-af-id^="host-"],[data-af-id^="note-"]')].map(node=>({node,id:node.getAttribute('data-af-id')}));
  const table=document.querySelector('#table');table.rowKey='id';table.height=220;
  table.cellRenderers={name(context,cell){if(!cell.querySelector('input')){const input=document.createElement('input');input.setAttribute('aria-label','Name '+context.key);input.value=String(context.row.name);input.addEventListener('change',()=>context.edit(input.value));cell.append(input);}}};
  const columns=[{name:'id',type:'number'},{name:'name',type:'string'},{name:'score',type:'number'}];
@@ -22,7 +29,7 @@ export function richFixtureHtml(dark=false) {
  const assembly=document.querySelector('#assembly');assembly.options={title:'Pump assembly',motion:'instant',parts:[{key:'body',kind:'slab',x:0,y:0,z:0,width:20,depth:12,height:4,separation:[0,0,15]},{key:'shaft',kind:'cylinder',x:10,y:6,z:4,radius:2,height:12,separation:[0,0,25]}]};
  document.querySelector('#map').options={title:'Bundled point map',data:[{longitude:10,latitude:20,value:12},{longitude:11,latitude:21,value:20}],layers:[{'@@type':'ScatterplotLayer',getPosition:'@@=[longitude, latitude]',getRadius:10000,getFillColor:[70,130,240]}],basemap:'none',height:240,tooltip:true,legend:true,initialViewState:{longitude:10,latitude:20,zoom:3}};
  const person=document.querySelector('#person');person.person={id:'synthetic-person',name:'Alex Sample',handle:'alex',image:'/person.svg',profileHref:'#person'};
- window.richFixture={markdownSource:document.querySelector('#markdown').source,columns,originalNotes:[...document.querySelectorAll('[data-af-id]')],tableRows:table.data.rows};
+ window.richFixture={markdownSource:document.querySelector('#markdown').source,columns,authoredIdentities,identityFacts:${richIdentityFacts.toString()},tableRows:table.data.rows};
  document.documentElement.dataset.fixtureReady='yes';
  </script></body></html>`;
 }

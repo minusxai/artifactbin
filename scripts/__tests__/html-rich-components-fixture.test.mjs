@@ -14,3 +14,12 @@ it('covers all six public shipped-module contracts with unique authored identiti
   expect(html).toContain("basemap:'none'");expect(html).not.toMatch(/https?:\/\//);expect(html).not.toContain('mock');
  }
 });
+it('distinguishes retained authored identities from changing generated identities',async()=>{
+ const {richIdentityFacts}=await import('../lib/html-rich-components-fixture.mjs');
+ const doc=new JSDOM('<main data-af-id="host-table"><aside data-af-id="note-table"></aside><span data-af-id="generated-cell-1"></span></main>').window.document;
+ const authored=[...doc.querySelectorAll('[data-af-id^="host-"],[data-af-id^="note-"]')].map(node=>({node,id:node.getAttribute('data-af-id')}));
+ doc.querySelector('span').replaceWith(doc.createElement('input'));doc.querySelector('input').setAttribute('data-af-id','generated-cell-2');
+ expect(richIdentityFacts(authored,doc)).toEqual({retained:true,unique:true});
+ doc.querySelector('input').setAttribute('data-af-id','note-table');expect(richIdentityFacts(authored,doc)).toEqual({retained:true,unique:false});
+ doc.querySelector('aside').setAttribute('data-af-id','changed-note');expect(richIdentityFacts(authored,doc).retained).toBe(false);
+});
