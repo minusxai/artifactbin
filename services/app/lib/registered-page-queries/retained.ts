@@ -1,3 +1,5 @@
+import {resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {registeredSourceCatalog} from './source-catalog';
 import { SQL_SERVICE_URL } from "@/lib/platform/config";
 import { storedRowStats } from "@/lib/datasets/dataset-store";
 import { QUERY_LIMITS as limits } from "./contracts";
@@ -24,6 +26,7 @@ interface RetainedPorts {
   resolveImport: typeof registeredQueryImportForRow;
   readWindow: typeof executeCatalog;
   sourceStats: typeof storedRowStats;
+  resolveConnection: typeof resolveDatasetConnection;
   execute: (input: RunInput) => Promise<Record<string, QueryOutcome>>;
   now: () => Date;
   fenceSignal?: AbortSignal;
@@ -68,6 +71,7 @@ export function createRetainedRegisteredQueries(
     resolveImport: registeredQueryImportForRow,
     readWindow: executeCatalog,
     sourceStats: storedRowStats,
+    resolveConnection: resolveDatasetConnection,
     execute: (input) => services().sql.run(input),
     now: () => new Date(),
     ...overrides,
@@ -160,31 +164,18 @@ export function createRetainedRegisteredQueries(
       const doc = await document(signal),
         resolved = await ports.resolveImport(doc, binding.binding, actor);
       signal.throwIfAborted();
-      if (
-        resolved.catalog.kind !== "stored" ||
-        resolved.catalog.tables.some((table) => table.sql !== undefined) ||
-        resolved.artifact.meta.truncated === true
-      )
-        throw Error("query_source_unsupported");
-      const matches = resolved.catalog.tables.filter(
-        (table) =>
-          table.name === binding.table &&
-          table.schema === resolved.catalog.defaultSchema,
-      );
-      if (matches.length !== 1 || !matches[0]!.objectKey)
-        throw Error("query_source_unsupported");
-      const selected = matches[0]!;
-      const stats = await ports.sourceStats(
-        selected.objectKey!,
-        limits.inputBytes,
-      );
+      const prepared=registeredSourceCatalog(resolved.catalog,binding.table,resolved.artifact.meta.truncated);
+      const selected=prepared.selected;
+      let inputRows=0,inputBytes=0,inputCells=0;
+      for(const object of prepared.storedObjects){
+        const stats=await ports.sourceStats(object.key,limits.inputBytes);
+        signal.throwIfAborted();
+        inputRows+=stats.rows;inputBytes+=stats.bytes;inputCells+=stats.rows*object.columns;
+        if(inputRows>limits.rows||inputBytes>limits.inputBytes||inputCells>limits.cells)throw Error('query_input_limit');
+      }
+      const connectionIdentity=async()=>createHash('sha256').update(JSON.stringify(await ports.resolveConnection(prepared.catalog.connection!,actor,resolved.artifact.id))).digest('hex');
+      const connectionStamp=prepared.catalog.kind==='postgres'?await connectionIdentity():null;
       signal.throwIfAborted();
-      if (
-        stats.rows > limits.rows ||
-        stats.bytes > limits.inputBytes ||
-        stats.rows * selected.columns.length > limits.cells
-      )
-        throw Error("query_input_limit");
       const identity = stamp(resolved.artifact),
         authority = createHash("sha256")
           .update(JSON.stringify([identity, documentStamp, actor]))
@@ -202,22 +193,25 @@ export function createRetainedRegisteredQueries(
           JSON.stringify(current.catalog) !== JSON.stringify(resolved.catalog)
         )
           throw Error("dataset_changed");
+        if(connectionStamp!==null&&await connectionIdentity()!==connectionStamp)throw Error("dataset_changed");
+        active.throwIfAborted();
       };
       ports.retainReadFence?.(() =>
         verify(ports.fenceSignal ?? new AbortController().signal),
       );
+      let connectedResult:ReturnType<typeof executeCatalog>|undefined;
       return {
         verify,
         read: async (offset, limit, active) => {
           await verify(active);
           const quote = (s: string) => '"' + s.replaceAll('"', '""') + '"';
-          const result = await ports.readWindow(
-            { ...resolved.catalog, tables: [selected] },
+          const load = () => ports.readWindow(
+            prepared.catalog,
             `SELECT * FROM ${quote(selected.schema)}.${quote(selected.name)}`,
             {},
             {
-              limit,
-              offset,
+              limit:prepared.catalog.kind==='postgres'?limits.rows:limit,
+              offset:prepared.catalog.kind==='postgres'?0:offset,
               actor,
               datasetId: resolved.artifact.id,
               signal: active,
@@ -225,14 +219,17 @@ export function createRetainedRegisteredQueries(
               execute: (input) => runOwned(input, active),
             },
           );
+          const result=await (prepared.catalog.kind==='postgres'?(connectedResult??=load()):load());
+          if(prepared.catalog.kind==='postgres'&&result.truncated)throw Error('query_input_limit');
+          const rows=prepared.catalog.kind==='postgres'?result.rows.slice(offset,offset+limit):result.rows;
           await verify(active);
           return {
             revision: String(resolved.artifact.version),
             authority,
             columns: result.columns,
-            rows: result.rows,
+            rows,
             nextOffset:
-              result.rows.length === limit ? offset + result.rows.length : null,
+              rows.length === limit ? offset + rows.length : null,
           };
         },
       };

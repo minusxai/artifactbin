@@ -1,4 +1,7 @@
 import { verifyNativeUserDerivations } from "./catalog-user-staging";
+import {AUTH_SECRET} from '@/lib/platform/config';
+import {stageNativeExternalCredentials} from './external-credentials';
+import type {NativeExternalCredentialSource} from './external-credential-contracts';
 import type {
   NativeCatalogProjection,
   NativeCatalogObjectSource,
@@ -17,6 +20,7 @@ export async function stageNativeCatalog(
   input: NativeCatalogProjection,
   source: NativeCatalogObjectSource,
   sink: NativeImmutableObjectSink,
+  externalCredentials?: NativeExternalCredentialSource,
 ): Promise<NativeStagedCatalog> {
   const projection = structuredClone(input),
     { sha256, ...payload } = projection;
@@ -26,6 +30,7 @@ export async function stageNativeCatalog(
   if (source.objectManifestSha256 !== projection.objectManifestSha256)
     throw Error("native_catalog_source_manifest_digest");
   const userTables = await verifyNativeCanonicalDatasets(projection, source);
+  const credentials=await stageNativeExternalCredentials(projection,externalCredentials,AUTH_SECRET);
   const keys = new Set<string>();
   for (const object of projection.objects) {
     assertNativeObjectKey(object.objectKey);
@@ -110,10 +115,12 @@ export async function stageNativeCatalog(
     },
     async apply(tx, pageId) {
       await verifyObjects();
+      await credentials.apply(tx);
       await applyNativeCatalog(tx, projection, pageId);
     },
     async verify(tx, pageId) {
       await verifyObjects();
+      await credentials.verify(tx);
       await verifyNativeCatalog(tx, projection, pageId);
     },
   };

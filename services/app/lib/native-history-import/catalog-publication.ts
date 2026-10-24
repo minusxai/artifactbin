@@ -167,7 +167,8 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
     const current = versions.at(-1)!;
     if (
       record(current.meta.catalog) &&
-      current.meta.catalog.kind === "postgres"
+      current.meta.catalog.kind === "postgres" &&
+      p.externalConnections?.filter(receipt=>receipt.datasetSourceId===dataset.sourceId&&validHash(receipt.sourceSecretSha256)).length!==1
     )
       throw Error("native_catalog_external_connection_projection_required");
     validateDatasetPolicyForRow(

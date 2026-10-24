@@ -1,4 +1,5 @@
 import type { NativeCatalogUserRemap } from "./catalog-user-remap-contracts";
+import type {NativeExternalConnectionReceipt} from './external-credential-contracts';
 import type { Queryable } from "@artifactbin/contracts";
 import type { NativeImportRelations } from "./contracts";
 /** Raw canonical-export receipt; no inference, row samples or synthesized objects. */
@@ -82,6 +83,7 @@ export interface NativeCatalogProjection {
   /** Root-reviewed identity plan; required when deriving typed user objects. */
   identityPlanSha256?: string;
   typedUserRemaps?: readonly NativeCatalogUserRemap[];
+  externalConnections?: readonly NativeExternalConnectionReceipt[];
   imports: readonly NativeCatalogImport[];
   identities: NativeCatalogIdentityMap;
   sourceNamespace: string;
