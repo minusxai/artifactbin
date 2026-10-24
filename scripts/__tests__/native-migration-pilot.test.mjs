@@ -6,7 +6,7 @@ import {prepareBundle} from '../../services/app/skills/artifactbin/scripts/publi
 import {planPublicationBundle} from '../../services/app/lib/html-publication-bundle/plan';
 import {describe,it,expect} from 'vitest';
 import {createHash} from 'node:crypto';
-import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot,prepareNativePilotSnapshot,pilotHarnessFiles} from '../lib/native-migration-pilot.mjs';
+import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot,prepareNativePilotSnapshot,pilotHarnessFiles,waitForImportedPilotReady} from '../lib/native-migration-pilot.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const canonical=value=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v);
 const digest=value=>sha(canonical(value));
@@ -66,4 +66,13 @@ it('normal publication helper receives the complete declared inline stylesheet c
   expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies.map(d=>d.path)).toEqual(['assets/theme.css']);
   const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/lib/component-baseline-evidence.mjs');expect(closure).toContain('scripts/gates/lib/cli-connection.mjs');
  }finally{await rm(bundle,{recursive:true,force:true});}
+});
+
+it('waits on the original reader marker without requiring a fabricated native marker',async()=>{
+ const reader=markers=>({locator:selector=>({waitFor:async()=>{if(!selector.split(',').some(marker=>markers.has(marker)))throw Error('reader-not-ready');}})});
+ const original=reader(new Set(['[data-mx-inline-story]'])),native=reader(new Set(['html[data-af-ready="yes"]']));
+ await waitForImportedPilotReady(original,'jsx');await waitForImportedPilotReady(native,'html');
+ await expect(waitForImportedPilotReady(original,'html')).rejects.toThrow('reader-not-ready');
+ await expect(waitForImportedPilotReady(native,'jsx')).rejects.toThrow('reader-not-ready');
+ const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/gates.mjs');expect(closure).toContain('scripts/lib/native-prepared-pilot-store.mjs');
 });

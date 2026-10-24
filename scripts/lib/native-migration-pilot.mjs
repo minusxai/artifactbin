@@ -16,7 +16,7 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const digest=value=>sha(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v));
 /** Full static local import closure, including the host-only mount seam. */
 export async function pilotHarnessFiles(root){
- const result=await build({absWorkingDir:root,entryPoints:['scripts/gates/gate-component-baseline.mjs','scripts/lib/gate-container.mjs'],bundle:true,format:'esm',platform:'node',packages:'external',metafile:true,write:false,outdir:'unused-pilot-output',logLevel:'silent'});
+ const result=await build({absWorkingDir:root,entryPoints:['scripts/gates/gate-component-baseline.mjs','scripts/lib/gate-container.mjs','scripts/gates.mjs'],bundle:true,format:'esm',platform:'node',packages:'external',metafile:true,write:false,outdir:'unused-pilot-output',logLevel:'silent'});
  const files=Object.keys(result.metafile.inputs).sort();
  if(files.some(file=>path.isAbsolute(file)||file.startsWith('../')))throw Error('pilot-harness-path');
  return files;
@@ -137,7 +137,7 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
   await becomeOwner(page,server,token);await page.goto(server+'/a/'+encodeURIComponent(reader.pageId),{waitUntil:'domcontentloaded'});
   const frame=await documentFrame(page);
   const hooks=await probe?.mountImportedPilot({page,frame,state,viewport,regression,server,reader,output,authenticate:async(email,targetPage=page)=>{const session=await connectAgent(server,{email});await becomeOwner(targetPage,server,session.token);}});
-  return {frame,performAction:hooks?.performAction,afterAction:hooks?.afterAction,ready:async()=>{await frame.locator('html[data-af-ready="yes"]').waitFor();await hooks?.ready?.();if(regression)await frame.addStyleTag({content:'body{transform:translateX(17px)!important}'});},screenshot:()=>page.locator('iframe[data-mx-document-frame]').screenshot({animations:'disabled',caret:'hide'})};
+  return {frame,performAction:hooks?.performAction,afterAction:hooks?.afterAction,ready:async()=>{await waitForImportedPilotReady(frame,input.implementation);await hooks?.ready?.();if(regression)await frame.addStyleTag({content:'body{transform:translateX(17px)!important}'});},screenshot:()=>page.locator('iframe[data-mx-document-frame]').screenshot({animations:'disabled',caret:'hide'})};
  }});
  try{
  const captures=await capture(false,paths.output),regressionDirectory=path.join(paths.output,'regression'),regression=await capture(true,regressionDirectory),control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});
@@ -145,4 +145,10 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
  const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(input.bundleFiles),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
  await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});if(issues.length)throw Error('native-imported-pilot-incomplete:'+issues.length);return receipt;
  }finally{await rm(probeScratch,{recursive:true,force:true});}
+}
+
+/** Each actual reader owns its readiness marker; private probes then await shared data. */
+export async function waitForImportedPilotReady(frame,implementation){
+ if(!['html','jsx'].includes(implementation))throw Error('pilot-reader-implementation');
+ await frame.locator(implementation==='html'?'html[data-af-ready="yes"]':'[data-mx-story-root],[data-mx-inline-story]').waitFor();
 }
