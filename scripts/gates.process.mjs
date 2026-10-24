@@ -32,3 +32,8 @@ export const runGateProcess = (command, args, { timeoutMs, env = process.env }) 
   child.on('error', () => done(false));
 });
 
+
+/** Flush buffered runner output before process.exit, including large failed-gate archives. */
+export async function flushGateOutput(streams=[process.stdout,process.stderr]){
+  await Promise.all(streams.map(stream=>new Promise((resolve,reject)=>stream.write('',error=>error?reject(error):resolve()))));
+}

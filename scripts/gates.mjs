@@ -27,7 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight, shouldRetryAlone } from './gates.manifest.mjs';
-import { runGateProcess } from './gates.process.mjs';
+import { runGateProcess, flushGateOutput } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -320,7 +320,9 @@ if (failed.length) {
   console.log(`FAILED: ${failed.join(', ')}`);
   // Named individually so a re-run of just the broken ones is a copy-paste.
   console.log(`re-run: node scripts/gates.mjs ${bases[0] ?? ''} --only=${failed.join(',')}`.replace(/\s+/g, ' '));
+  await flushGateOutput();
   process.exit(1);
 }
 console.log('all gates passed');
+await flushGateOutput();
 process.exit(0);
