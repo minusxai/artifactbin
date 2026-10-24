@@ -43,7 +43,7 @@ export async function seedBaselineIdentity({base,account,handle,profileImage,sig
  const session=await request('/api/auth/get-session');
  if(!session?.user?.id?.startsWith('usr_')||session.user.email!==account.email)throw Error('Baseline profile account identity was not confirmed');
  const profile=await request('/api/my/profile');
- if(profile.username!==handle||typeof profile.name!=='string'||(profile.image!==null&&typeof profile.image!=='string'))throw Error('Baseline profile readback was not confirmed');
+ if(profile.username!==handle||(profile.name!==null&&typeof profile.name!=='string')||(profile.image!==null&&typeof profile.image!=='string'))throw Error('Baseline profile readback was not confirmed');
  if(profileImage&&!profile.image)throw Error('Baseline profile image was not retained');
  return {id:session.user.id,name:profile.name,handle:profile.username,image:profile.image};
 }

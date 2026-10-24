@@ -59,3 +59,10 @@ it('supplies a fully decodable real image for the normal profile upload API',asy
  const decoded=await sharp(identityProfileImage.bytes).webp().toBuffer();
  expect(decoded.length).toBeGreaterThan(0);
 });
+
+it("retains a real fresh account's nullable profile name without inventing one",async()=>{
+ const {seedBaselineIdentity}=await import('../lib/component-baseline-session.mjs');
+ const send=async(url,options)=>new Response(JSON.stringify(url.endsWith('/get-session')?{user:{id:'usr_actual',email:'mxmx_test_identity@example.com'}}:url.endsWith('/profile')&&options.method==='GET'?{name:null,username:'mxmx_test_identity',image:null}:{}),{status:200});
+ const actual=await seedBaselineIdentity({base:'http://localhost:3030',account:{email:'mxmx_test_identity@example.com'},handle:'mxmx_test_identity',signIn:async()=>({cookie:'session=actual'}),send});
+ expect(actual).toEqual({id:'usr_actual',name:null,handle:'mxmx_test_identity',image:null});
+});

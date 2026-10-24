@@ -91,7 +91,7 @@ export interface BaselineBrowserSession {
 /** Actual account data read back after normal local profile operations. */
 export interface BaselineSeededIdentity {
   id: string;
-  name: string;
+  name: string | null;
   handle: string;
   image: string | null;
 }
