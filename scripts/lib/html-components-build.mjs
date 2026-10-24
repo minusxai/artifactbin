@@ -2,7 +2,8 @@ import {cp, mkdir, mkdtemp, readdir, readFile, writeFile, rename, rm} from 'node
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-/** @typedef {{sourceDir: string, outputDir: string, appDir?: string}} ComponentBuildOptions */
+import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
+/** @typedef {{sourceDir: string, outputDir: string, appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
 const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
 const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
 const ELK_ASSET='engine-mermaid-elk.js';
@@ -33,7 +34,7 @@ function boundedEngines(appDir, packed) {
  * Flat lowercase names obey the installed skill asset contract. Compile and validate
  * every output before replacing the previous installation; readable sources remain. */
 /** @param {ComponentBuildOptions} options */
-export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR}) {
+export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR,receipt}) {
   // fileURLToPath(directoryURL) retains a trailing separator. Staging must be a
   // sibling of the installation, never a directory inside it.
   outputDir=path.resolve(outputDir);
@@ -82,5 +83,6 @@ export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR})
     try { await rename(stage,outputDir); } catch(error) { if(movedPrevious) { await rename(backup,outputDir); movedPrevious=false; } throw error; }
     if(movedPrevious) { await rm(backup,{recursive:true,force:true}); movedPrevious=false; }
   } finally { await rm(stage,{recursive:true,force:true}); }
+  if(receipt)await writeComponentAssetReceipt({root:receipt.root,receiptPath:receipt.path,inputs:[...Object.keys(result.metafile.inputs).map(name=>path.resolve(name)),fileURLToPath(import.meta.url),fileURLToPath(new URL('./component-asset-proof.mjs',import.meta.url)),path.join(receipt.root,'package-lock.json')],outputs:[...sources,...compiled].map(({name})=>path.join(outputDir,name))});
   return names.map(name=>name.replace(/\.ts$/,''));
 }

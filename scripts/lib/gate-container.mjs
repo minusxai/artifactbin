@@ -22,6 +22,7 @@ export const BUILD_OUTPUTS = Object.freeze([
   'services/app/lib/build-assets',
   'services/app/public/islands',
   'services/app/public/libraries',
+  'services/app/skills/artifactbin/components',
   'services/app/server/routes.generated.ts',
   'services/cli/dist',
 ]);
@@ -43,7 +44,7 @@ const usage = 'usage: node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [
  * @param {{buildKey: string, changes: string, deps: string}} inputs
  */
 export function buildCacheKey({ buildKey, changes, deps }) {
-  return sha(buildKey, changes, deps).slice(0, 32);
+  return sha('component-assets-v1', buildKey, changes, deps).slice(0, 32);
 }
 
 /**

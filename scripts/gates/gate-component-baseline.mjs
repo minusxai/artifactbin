@@ -54,6 +54,7 @@ if(!input.entries) {
   input=await publishReaderManifest({...input,base:process.argv[2]||input.base||'http://localhost:3030',source:input.source||repo,output:path.join(evidenceOutput,'readers.json')});
   input.output=evidenceOutput;
 }
+if(input.componentAssets)await writeFile(path.join(input.output,'component-assets.json'),JSON.stringify({implementation:input.implementation,sourceRevision:input.sourceRevision,componentAssets:input.componentAssets},null,2));
 // Match the existing real-library gate's software WebGL configuration.
 await withComponentBaselineEvidence({output:input.output,run:async()=>{
 const browsers=[];

@@ -90,3 +90,15 @@ it('fits actual Mermaid, DeckGL and controls under publication limits with lazy 
  const bundle={entryPath:'index.html',files:[{path:'index.html',base64:Buffer.from(html).toString('base64'),contentType:'text/html'},...[...files].map(([name,text])=>({path:name,base64:Buffer.from(text).toString('base64'),contentType:'text/javascript'}))]};
  expect(()=>planPublicationBundle(html,bundle)).not.toThrow();
 },30000);
+it('writes the standard build proof with source inputs and every generated module',async()=>{
+ const root=path.resolve(import.meta.dirname,'../..');await mkdir(path.join(root,'tmp'),{recursive:true});
+ const directory=await mkdtemp(path.join(root,'tmp/component-build-proof-'));roots.push(directory);
+ const sourceDir=path.join(directory,'source'),outputDir=path.join(directory,'output');await mkdir(sourceDir);await writeFile(path.join(sourceDir,'slide.ts'),'export const gutter=24;');
+ const receiptPath=path.relative(root,path.join(directory,'receipt.json'));
+ await buildComponentAssets({sourceDir,outputDir,receipt:{root,path:receiptPath}});
+ const receipt=JSON.parse(await readFile(path.join(root,receiptPath),'utf8'));
+ expect(receipt.format).toBe('component-assets-v1');
+ expect(receipt.inputs.map(x=>x.path)).toContain(path.relative(root,path.join(sourceDir,'slide.ts')));
+ expect(receipt.outputs.map(x=>x.path)).toEqual([path.relative(root,path.join(outputDir,'slide.js')),path.relative(root,path.join(outputDir,'slide.ts'))]);
+ expect(receipt.outputs.every(x=>/^[a-f0-9]{64}$/.test(x.sha256))).toBe(true);
+});

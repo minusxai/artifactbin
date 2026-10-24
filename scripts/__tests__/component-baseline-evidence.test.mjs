@@ -12,11 +12,11 @@ it('archives existing partial captures and the failed case while preserving reje
   const failure=Error('table/dark/390/loaded-end: timed out');
   try{
     await expect(withComponentBaselineEvidence({output,emit:line=>emitted.push(line),run:async()=>{
-      await writeFile(path.join(output,'completed.png'),'image');await writeFile(path.join(output,'html-partial-captures.json'),'[{"state":"completed"}]');await writeFile(path.join(output,'loaded-end-failure.json'),'{"state":"loaded-end"}');await writeFile(path.join(output,'capture-status.json'),'{"complete":false}');await writeFile(path.join(output,'readers.json'),'private publication URLs');throw failure;
+      await writeFile(path.join(output,'completed.png'),'image');await writeFile(path.join(output,'html-partial-captures.json'),'[{"state":"completed"}]');await writeFile(path.join(output,'loaded-end-failure.json'),'{"state":"loaded-end"}');await writeFile(path.join(output,'capture-status.json'),'{"complete":false}');await writeFile(path.join(output,'readers.json'),'private publication URLs');await writeFile(path.join(output,'component-assets.json'),'{"modules":[{"sha256":"proof"}]}');throw failure;
     }})).rejects.toBe(failure);
     const archive=decodeComponentBaselineEvidence(emitted.join('\n'));
-    expect(archive.files.map(file=>file.name)).toEqual(['capture-status.json','completed.png','html-partial-captures.json','loaded-end-failure.json']);
-    expect(Buffer.from(archive.files[2].base64,'base64').toString()).toContain('completed');
+    expect(archive.files.map(file=>file.name)).toEqual(['capture-status.json','completed.png','component-assets.json','html-partial-captures.json','loaded-end-failure.json']);
+    expect(Buffer.from(archive.files[3].base64,'base64').toString()).toContain('completed');
   }finally{await rm(output,{recursive:true,force:true});}
 });
 it('never masks the initial capture error when archiving or reporting fails',async()=>{

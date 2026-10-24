@@ -15,7 +15,7 @@ export async function withComponentBaselineEvidence({output,run,emit=writeLine,r
   finally{
     try{
       const names=await readdir(output).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
-      const files=await Promise.all(names.filter(name=>name.endsWith('.png')||name.endsWith('-captures.json')||name.endsWith('-failure.json')||name==='capture-status.json').sort().map(async name=>({name,base64:(await readFile(path.join(output,name))).toString('base64')})));
+      const files=await Promise.all(names.filter(name=>name.endsWith('.png')||name.endsWith('-captures.json')||name.endsWith('-failure.json')||name==='capture-status.json'||name==='component-assets.json').sort().map(async name=>({name,base64:(await readFile(path.join(output,name))).toString('base64')})));
       const compressed=gzipSync(Buffer.from(JSON.stringify({format:'component-baseline-files-v1',files}))),base64=compressed.toString('base64');
       const chunks=base64.match(/.{1,32768}/g)||[],sha256=digest(compressed),metadata={sha256,bytes:compressed.length,chunks:chunks.length,files:files.length};
       await emit(BEGIN+JSON.stringify(metadata));
