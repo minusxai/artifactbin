@@ -150,3 +150,16 @@ test('dynamic Cell assembles only with a registered query and the exact browser 
  const ready=assembleNativePage(input);assert.equal(ready.status,'complete');if(ready.status==='complete'){assert.match(ready.html,/import \{formatNativeLiveCell\} from "\.\/components\/native-cell.js"/);assert.equal(ready.bindingTargets.filter(t=>t.kind==='cell').length,1);assert.doesNotMatch(ready.html,/\$rows<\/|unadmitted/);}
  input.files=[];const stale=assembleNativePage(input);assert.equal(stale.status,'blocked');assert.ok(stale.blockers.some(b=>b.code==='cell-adapter-file-proof'));
 });
+
+test('plain DataTable binds a registered query without serializing a source reference',async()=>{
+ 
+ const input=fixture(),node=input.analysis.nodes[0]!;if(node.type!=='element')throw Error();
+ node.tag='DataTable';node.isComponent=true;delete node.control;node.children=[];node.attributes=[{name:'data',value:{static:true,json:'$rows'},start:0,end:1},{name:'columns',value:{static:true,json:[{col:'n',title:'Count'}]},start:0,end:1}];
+ input.analysis.flow.queries=[{name:'rows',start:0,end:1}];
+ input.queries=[{name:'rows',namespace:'ops',document:'query {ops{evaluate{tables{name error columns{name type} rows{cells{text number boolean isNull}}}}}}',values:[],tableName:'rows',responsePath:['ops','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ input.operationCoverage={sourceSha256:input.analysis.sourceSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:'a'.repeat(64),queryOrder:['rows'],blockers:[],operations:[{kind:'query',name:'rows',sourceNode:'$flow',operationSha256:'b'.repeat(64),route:'registered-sqlite-query',dependencies:[],requiredGuarantees:[],status:'attested-plan'}]};
+ input.backends=[{namespace:'ops',url:'https://example.test/backend',descriptorsSha256:nativeDigest({queries:input.queries,mutations:[]}),planSha256:'a'.repeat(64),operations:[{kind:'query',name:'rows',operationSha256:'b'.repeat(64)}]}];
+ const bytes=new TextEncoder().encode('export function registerDataTable(){}'),sha256=createHash('sha256').update(bytes).digest('hex');
+ input.modules=[{name:'data-table',register:'registerDataTable',specifier:'./components/data-table.js',sha256}];input.files=[{path:'components/data-table.js',bytes,sha256}];
+ const ready=assembleNativePage(input);assert.equal(ready.status,'complete');if(ready.status==='complete'){assert.equal(ready.bindingTargets.filter(t=>t.kind==='property'&&t.property==='data').length,1);assert.match(ready.html,/<af-data-table[^>]+data-af-id=/);assert.doesNotMatch(ready.html,/data="\$rows"/);assert.match(ready.html,/\["columns"\]=\[\{"col":"n","title":"Count"\}\]/);}
+});
