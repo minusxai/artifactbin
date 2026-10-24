@@ -21,7 +21,7 @@ function resolve(value:string,owner:string):string|null{
 function links(source:string,css:boolean,js=false):Link[]{
  if(js)return parseImports(source)[0].flatMap(item=>{
   if(item.d===-2)return [];
-  if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome')return [];
+  if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome'||item.n==='@afbin/portable')return [];
   if(item.n===undefined)throw Error('Computed module imports require an explicit absolute remote URL');
   if(!item.n.startsWith('.')&&!item.n.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(item.n))throw Error('Bare module imports require an import map or absolute remote URL');
   return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const}];

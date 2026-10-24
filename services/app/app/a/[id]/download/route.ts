@@ -1,3 +1,4 @@
+import {isPortablePlatformOrigin} from '@/lib/html-runtime/portable';
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
 /**
@@ -32,6 +33,8 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     if (actor.tokenId !== artifact.token_id && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
     const at = await archivedVersionFor(request, artifact);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
+    const platformOrigin=new URL(baseUrl(request)).origin;
+    if(!isPortablePlatformOrigin(platformOrigin))return json({error:'unsupported_portable_origin',message:'Portable downloads require HTTPS or an exact localhost, 127.0.0.1, or [::1] HTTP origin. HTTP DNS aliases support hosted viewing only.'},400);
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
     let packed:string;
     try{
@@ -48,7 +51,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     let resources:Awaited<ReturnType<typeof loadBundleAssetResources>>;
     try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
     if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
-    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:new URL(baseUrl(request)).origin, offline: true });
+    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {

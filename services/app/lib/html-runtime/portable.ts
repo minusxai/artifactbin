@@ -2,9 +2,12 @@ import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import { assertStorable } from './apollo/storable';
 import type { OriginalFilePort, PortableDocument, PortableIdentity } from './portable-contract';
 
+export function isPortablePlatformOrigin(value:string):boolean {
+ try{const url=new URL(value);return (url.protocol==='https:' || url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname)) && url.origin===value && !url.username && !url.password;}catch{return false;}
+}
 function identity(value: PortableIdentity): PortableIdentity {
+ if(!isPortablePlatformOrigin(value.platformOrigin))throw new Error('Invalid portable platform origin');
  const url=new URL(value.platformOrigin);
- if(!(url.protocol==='https:' || url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname)) || url.origin!==value.platformOrigin || url.username || url.password) throw new Error('Invalid portable platform origin');
  if(!value.artifactId || !value.baseRevision || !/^[a-f0-9]{64}$/.test(value.sourceDigest)) throw new Error('Invalid portable identity');
  return {platformOrigin:url.origin,artifactId:value.artifactId,baseRevision:value.baseRevision,sourceDigest:value.sourceDigest,...(value.dependencyIdentity?{dependencyIdentity:{...value.dependencyIdentity}}:{})};
 }
