@@ -1,0 +1,93 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from 'vitest';
+import { AfButton, registerButton } from './button';
+
+const preUpgradeHost = document.createElement('div');
+preUpgradeHost.innerHTML = '<af-button type="submit" variant="ghost"><span id="kept">Save</span></af-button>';
+const preUpgrade = preUpgradeHost.firstElementChild as AfButton;
+Object.defineProperty(preUpgrade, 'disabled', { value: true, writable: true, configurable: true });
+registerButton();
+afterEach(() => document.body.replaceChildren());
+
+function fixture(attrs = '', content = '<span data-af-id="label">Save</span>') {
+  const form = document.createElement('form');
+  form.innerHTML = `<af-button ${attrs}>${content}</af-button>`;
+  document.body.append(form);
+  const host = form.firstElementChild as AfButton;
+  const button = host.querySelector('button')!;
+  return { form, host, button };
+}
+
+describe('native af-button', () => {
+  it('moves authored content once into a native button and retains identity and native click', () => {
+    const { host, button } = fixture();
+    const authored = host.querySelector('[data-af-id="label"]');
+    let clicks = 0; button.addEventListener('click', () => clicks++);
+    expect(button.tagName).toBe('BUTTON'); expect(button.textContent).toBe('Save');
+    expect(button.contains(authored)).toBe(true); expect(authored?.getAttribute('data-af-id')).toBe('label');
+    host.setAttribute('variant', 'outline'); host.setAttribute('size', 'lg');
+    expect(host.querySelector('[data-af-id="label"]')).toBe(authored);
+    button.click(); expect(clicks).toBe(1);
+  });
+
+  it('defaults to a non-submitting button and applies supported recipe variants and sizes', () => {
+    const variants = ['default', 'destructive', 'outline', 'secondary', 'ghost', 'link'];
+    const sizes = ['default', 'xs', 'sm', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'];
+    for (const variant of variants) for (const size of sizes) {
+      const { host, button } = fixture(`variant="${variant}" size="${size}"`);
+      expect(button.type).toBe('button'); expect(button.dataset.variant).toBe(variant); expect(button.dataset.size).toBe(size);
+      host.remove();
+    }
+    expect(getComputedStyle(fixture().button).display).toBe('inline-flex');
+  });
+
+  it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {
+    for (const attrs of ['disabled', 'busy']) {
+      const { host, button } = fixture(attrs);
+      let clicks = 0; button.addEventListener('click', () => clicks++);
+      expect(button.disabled).toBe(true); button.click(); expect(clicks).toBe(0);
+      host.remove();
+    }
+    const { host, button } = fixture('label="Saving" aria-label="Override"');
+    expect(button.getAttribute('aria-label')).toBe('Override');
+    host.removeAttribute('aria-label'); expect(button.getAttribute('aria-label')).toBe('Saving');
+    host.setAttribute('busy', ''); expect(button.getAttribute('aria-busy')).toBe('true');
+    host.removeAttribute('busy'); expect(button.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('preserves explicit submit/reset semantics and disabled form behavior', () => {
+    const { form, host, button } = fixture('type="submit" name="action" value="save"');
+    expect(button.type).toBe('submit'); expect(button.name).toBe('action');
+    host.setAttribute('disabled', ''); expect(button.disabled).toBe(true);
+    host.removeAttribute('disabled'); host.setAttribute('type', 'reset'); expect(button.type).toBe('reset');
+    let submits = 0; form.addEventListener('submit', event => { event.preventDefault(); submits++; });
+    host.setAttribute('type', 'submit'); button.click(); expect(submits).toBe(1);
+  });
+
+  it('forwards focus and reconnects without duplicating handlers or replacing native content', () => {
+    const { host, button } = fixture();
+    const content = button.firstChild; let clicks = 0;
+    button.addEventListener('click', () => clicks++); host.focus();
+    expect(document.activeElement).toBe(button);
+    host.remove(); document.body.append(host); host.focus(); button.click();
+    expect(document.activeElement).toBe(button); expect(button.firstChild).toBe(content); expect(clicks).toBe(1);
+  });
+
+  it('supports native keyboard activation, child controls, and pre-upgrade properties', () => {
+    const { host, button } = fixture('', '<input aria-label="Nested"><span>Go</span>');
+    let clicks = 0; button.addEventListener('click', () => clicks++);
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(clicks).toBe(0); // jsdom does not synthesize browser keyboard activation.
+    const input = button.querySelector('input')!;
+    input.dispatchEvent(new MouseEvent('click', { bubbles: true })); expect(clicks).toBe(1);
+    host.remove(); document.body.append(preUpgradeHost);
+    expect(preUpgrade.disabled).toBe(true); expect(preUpgrade.querySelector('button')?.type).toBe('submit');
+    expect(preUpgrade.querySelector('#kept')?.textContent).toBe('Save');
+  });
+
+  it('registers its tag and stylesheet idempotently', () => {
+    registerButton(); registerButton();
+    expect(customElements.get('af-button')).toBe(AfButton);
+    expect(document.querySelectorAll('style[data-af-button-styles]')).toHaveLength(1);
+  });
+});
