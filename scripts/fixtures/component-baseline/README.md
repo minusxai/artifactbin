@@ -1,31 +1,53 @@
 # Actual reader comparison
 
-This harness compares the original JSX compiler/reader against published HTML components. It never renders an invented baseline. The original pinned source is `8eaac63810b66eb575b018be89bb63443e1b7aaf`; use an isolated gate container built from that checkout. Candidate and original servers must have independent disposable storage. No production publication is allowed.
+This harness compares the original JSX compiler/reader with published native HTML components. The pinned original is `8eaac63810b66eb575b018be89bb63443e1b7aaf`; use an isolated gate container built from that checkout. Copy only the matching harness scripts into the original checkout, retain its gate manifest with the component-baseline row added, and leave its product implementation unchanged. Each server has independent disposable storage. Publication uses normal local authentication and HTTP APIs; never publish these fixtures to production.
 
-`gate-component-baseline.mjs` is self-contained without configuration: it publishes candidate HTML through normal gate authentication and the HTTP API, then captures and checks the 48 candidate states. This default proves candidate reader behavior only. Register `component-baseline` in the gate manifest. Gates are SLOW-tier: run once at the end of the brief, never per edit. The orchestrator coordinates the original and candidate container runs.
+## Independent scopes
 
-For paired evidence, copy this harness's script files into an isolated original-source worktree without modifying its product implementation. Register the gate there. Put an untracked optional configuration file at `scripts/fixtures/component-baseline/run.json` (the container runner copies untracked nonignored source files). Run the normal `node scripts/gate-container.mjs component-baseline`. No environment forwarding or production writes are needed. The optional file must never be committed.
+The default static catalogue has **28 fixtures, 65 states and 260 captures per implementation**: each state runs at two viewports and in two color modes. It covers component interactions, rich rendering, table behavior, fallback identity and unavailable upload presentation. Mermaid images, Isometric geometry and WebGL2 readiness are actual reader checks. Numeric map view-state is not exposed by the original reader. Fixture-specific limitations still apply.
 
-Original configuration (replace the source revision with the exact verified original Git revision):
+The explicit **`fixtureSet: "identity"`** adds **3 fixtures and 12 captures per implementation**: User with its real handle and no avatar, User with a real profile image, and Avatar with that uploaded image, at the same two viewports and color modes. It seeds a disposable account through normal OTP/profile APIs and a dataset with a typed user column. Original User resolves its actual page-data people; native User requests actual cards through the authorized linked dataset namespace. A synthesized person card is not parity evidence. Session cookies stay in memory; manifests contain only the disposable account reference needed for normal login.
+
+The static FileUpload fixture covers its unavailable face. Neither the static catalogue nor the identity suite proves actual file upload, retry or permission behavior. Those require a separate live upload suite and its actual server responses/readback. Likewise, fallback User/Avatar captures do not substitute for the authenticated identity suite. Private native migration captures are a separate scope documented in `scripts/gates/README.md`.
+
+Individual reader gates check behavior and readiness; they do not establish old/new visual equality. Both captures, matching inputs, comparison and visual review remain necessary.
+
+## Run a matched capture
+
+Gates are SLOW-tier: run once at completion of the brief, never per edit. The orchestrator coordinates CPU slots, source pins and original/candidate runs. The gate without configuration publishes and validates the 260 candidate static states; its source snapshot hash is explicitly not verified Git provenance and cannot establish a paired result.
+
+For paired runs, use each implementation's exact full Git revision. An original input is:
 
 ```json
-{"implementation":"jsx","sourceRevision":"8eaac63810b66eb575b018be89bb63443e1b7aaf","output":"/work/tmp/original-evidence"}
+{"implementation":"jsx","sourceRevision":"8eaac63810b66eb575b018be89bb63443e1b7aaf","output":"/component-evidence"}
 ```
 
-Use `implementation: "html"`, the candidate's full Git revision and a candidate output path for the candidate container. These modes publish and capture within the same server/container lifecycle, so disposable reader URLs never outlive their server. Optional `source` defaults to the current container checkout; gate runner's server base is passed automatically. Explicit `mode: "publish"` is available only for debugging publication inside an already running server.
+For the candidate use `implementation: "html"` and its actual revision. Add `"fixtureSet":"identity"` to run the independent 12-state identity suite. The default source is the container checkout, and the gate runner supplies its actual server base. Publication and capture occur within that same disposable server lifetime.
 
-Capture archives are emitted as `COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64` log lines: decode base64, gunzip, parse the JSON and write each file's decoded base64 under its name. This preserves the images and capture manifest after container teardown. The archives carry source revision, fixture and image hashes, browser errors and behavior. Default candidate runs use an explicitly labeled source hash, which comparison refuses as a substitute for verified Git provenance.
+Prefer an external private JSON input and explicit private output directory:
 
-To compare extracted evidence, use optional config:
+```sh
+COMPONENT_BASELINE__INPUT=/absolute/private/capture.json \
+COMPONENT_BASELINE__OUTPUT=/absolute/private/evidence \
+node scripts/gate-container.mjs --servers 1 component-baseline
+```
+
+The input file mounts read-only at `/component-input.json`; only the specified output directory mounts writable at `/component-evidence`. Both paths must be absolute. Runtime input changes can reuse the same immutable source build; capture fixture hashes still identify the actual scenario inputs. An untracked `scripts/fixtures/component-baseline/run.json` is also supported, but its contents affect the container build cache key. Never commit a run configuration, credentials or generated test data.
+
+Native candidate publication checks the installed skill ZIP's complete component module closure against a source-bound build receipt. `component-assets.json` preserves the actual module hashes and input proof. A cache hit alone is not proof of current generated assets. Original JSX capture does not require native component build outputs.
+
+## Evidence and comparison
+
+Capture evidence includes source revision, browser version, screenshot mode, fixture/image hashes, raw behavior, actual used-font bytes, resource failures and assertion results. `capture-status.json` records completion; failed captures retain partial manifests and failure diagnostics instead of becoming a successful baseline.
+
+After teardown, explicit output mounts retain the files. Logs also carry a V2 chunked archive: `COMPONENT_BASELINE_EVIDENCE_V2_BEGIN`, ordered `COMPONENT_BASELINE_EVIDENCE_V2_CHUNK` lines, and a matching `COMPONENT_BASELINE_EVIDENCE_V2_END` receipt with digest, byte and chunk counts. Decode with `scripts/component-baseline-decode.mjs`; the decoder checks completeness and rejects a truncated latest attempt. Legacy `COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64` archives remain readable.
+
+Static readers use `/raw` and `screenshotMode: "viewport"`, retaining top-layer dialogs/popovers. Authenticated identity readers use the normal `/a/<id>` shell, a verified signed-in session and the actual isolated document frame; `screenshotMode: "document-frame"` captures that iframe. Readiness belongs to the actual frame, components, fonts and resources; live shell transports need not become network-idle. Do not compare unlike screenshot modes or normalize away product differences.
+
+To compare retained captures, use `compareBrowserBaselines` from `scripts/lib/component-browser-baseline.mjs`, or the gate's explicit compare input within a container that can read those evidence paths:
 
 ```json
 {"mode":"compare","baseline":"/evidence/original/jsx-captures.json","candidate":"/evidence/candidate/html-captures.json","baselineDirectory":"/evidence/original","candidateDirectory":"/evidence/candidate","output":"/evidence/diffs"}
 ```
 
-Captures use the configured page viewport (not the HTML element box), retaining top-layer dialogs and popovers. `screenshotMode: "viewport"` distinguishes these from earlier cropped diagnostics. Raw snapshots remain in the capture manifests. Comparison only normalizes empty native button values and whitespace between a body made solely of button labels; it preserves actual label, content, focus and selection differences. File inputs are recorded as file-input diagnostics rather than textboxes; native dialogs are included even when their role is implicit.
-
-Comparison emits diagnostic images and exact changed-pixel fractions. Any changed pixel, behavior difference, missing case, hash mismatch or page error prevents a parity pass. Unequal pixels require visual inspection and a reasoned correction; the tool does not grant an arbitrary tolerance.
-
-The integrated catalogue prepares 25 root component families (including authored Slide children) and 224 captures per implementation: 56 states at two viewports and two color modes. Each state can assert named roles and value/checked/pressed/expanded/disabled/focus state, visible or absent text and exact table rows. Assertion failures are retained beside raw snapshots and fail either reader's gate. Real Mermaid image, Isometric geometry and WebGL2 readiness are required. Two workers run in separate Chromium instances with identical options, preserving native focus independence and deterministic result order.
-
-FileUpload still covers only its unavailable face; actual uploads/retry/permission need equivalent adapters. User covers no-person fallback; Avatar covers network-free fallback/group states. Zoom/reset controls and engine readiness are checked, while numeric map view-state is not exposed by the original reader. Limitations remain on each fixture. These preparations and successful individual reader gates are not old/new visual parity; both reader captures and their comparison remain required.
+Comparison requires exact matched fixture hashes, verified source revisions, screenshot modes and image hashes. It records exact pixel changes, behavior and font evidence; any missing case or error prevents a parity pass. The limited behavior normalization handles empty native button values and whitespace between button-only body labels, preserving actual labels, content, focus and selection. Nonzero pixels require visual inspection and correction, with no arbitrary tolerance. Behavior equality alone is not visual parity.

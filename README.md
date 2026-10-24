@@ -8,7 +8,7 @@ Use the guide at `<server-origin>/llms.txt`, or download `<server-origin>/skills
 
 The skill teaches email authentication, private origin-scoped credentials, source publication, comments, queries and exports. Read `/llms/http-auth` for authentication and `/llms/http-authoring` for the current source format. Create with `POST /api/artifacts`; update an existing document by reading its identity/version, preparing its edited source and committing the returned update unchanged. Keep credentials out of pages and downloaded files.
 
-This branch is the first removal phase of the smaller product. The current source publication contract remains JSX while the later HTML authoring contract is implemented. Do not assume a future HTML endpoint exists.
+Pages are normal HTML files that load the platform core script. The installed author skill documents HTML publication, native components and Apollo state: viewer-local state stays private to each browser, while shared data uses explicitly linked backends. Page scripts run on isolated document origins; account credentials stay outside pages and downloaded files.
 
 ## Develop
 

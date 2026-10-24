@@ -54,6 +54,7 @@
   "services/app/lib/html-runtime/__tests__/browser-local-datasets.test.ts",
   "services/app/lib/html-runtime/__tests__/query-readiness.test.ts",
   "services/app/lib/html-runtime/__tests__/source-relationship.test.ts",
+  "services/app/lib/html-runtime/__tests__/upload.test.ts",
   "services/app/lib/html-runtime/__tests__/viewer-state.test.ts",
   "services/app/lib/jsx/__tests__/deck-spec.test.ts",
   "services/app/lib/jsx/__tests__/template.test.ts",
