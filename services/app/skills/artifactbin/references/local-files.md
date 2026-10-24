@@ -26,7 +26,7 @@ Agent edits produce **File changed → Reload**, rather than patching the runnin
 
 A linked portable file normally attempts to connect to its original platform. **Stay offline** remembers that viewer's choice for this page; **Connect** retries the original destination. Private preview stays local. An unpublished file has no original destination to connect to. A linked file's destination is not an editable server selector.
 
-Sign-in, permission checks, comments and presence belong to the platform-owned interface. The platform rechecks current access; a local identity block or readable page grants no write authority. Local source never receives account tokens. Offline source, connection status and source comparison are separate facts: connecting does not upload edits, and a successful connection does not prove that the disk file matches remote source.
+Sign-in, permission checks, comments and presence belong to the platform-owned interface. Automatic connection uses guest access even when the platform has a signed-in account. Choose **Use my account** or **Sign in**, then explicitly approve **Connect this file** before account access. The platform rechecks current access; a local identity block or readable page grants no write authority. Local source never receives account tokens. Offline source, connection status and source comparison are separate facts: connecting does not upload edits, and a successful connection does not prove that the disk file matches remote source.
 
 ## Compare actual source
 
