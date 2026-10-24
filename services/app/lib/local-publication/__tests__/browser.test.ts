@@ -47,7 +47,7 @@ describe('platform receiver local opener boundary', () => {
     const opener = { postMessage: vi.fn() };
     const win = { location: { origin: 'https://example.test', hash: new URLSearchParams({ af_nonce: 'abcdefghijklmnop', af_opener: origin }).toString() }, opener, addEventListener: vi.fn((_type, value) => { handler = value; }), removeEventListener: vi.fn() };
     win.location.hash = '#' + win.location.hash;
-    return { win: win as unknown as Window, opener, connect: (port: unknown, patch = {}) => handler?.({ source: opener, origin, data: { type: 'af:local-publication', kind: 'connect', nonce: 'abcdefghijklmnop' }, ports: [port], ...patch } as MessageEvent) };
+    return { win: win as unknown as Window, opener, connect: (port: unknown, patch = {}) => handler?.({ source: opener, origin, data: { type: 'af:local-publication', kind: 'connect', nonce: 'abcdefghijklmnop' }, ports: [port], ...patch } as unknown as MessageEvent) };
   }
   it('never connects a foreign website or malformed opener', () => {
     for (const origin of ['https://foreign.test', 'http://foreign.test', 'https://localhost.evil.test', 'not a URL']) {

@@ -25,8 +25,7 @@ export function publishLocalDocument(options: { win: Window; platformOrigin: str
   let closedCheck: ReturnType<typeof setInterval> | undefined;
   const dispose = () => { done = true; clearInterval(closedCheck); options.win.removeEventListener('message', ready); options.win.removeEventListener('pagehide', dispose); port?.close(); };
   const ready = (event: MessageEvent) => {
-    if (done || port || popup.closed || event.source !== popup || event.origin !== origin || event.data?.type !== LOCAL_PUBLICATION_MESSAGE || event.data.kind !== 'ready' || event.data.nonce !== nonce) return;
-    port?.close();
+    if (done || port || popup?.closed || event.source !== popup || event.origin !== origin || event.data?.type !== LOCAL_PUBLICATION_MESSAGE || event.data.kind !== 'ready' || event.data.nonce !== nonce) return;
     const channel = new MessageChannel(); port = channel.port1;
     port.onmessage = message => {
       if (done || message.data?.type !== LOCAL_PUBLICATION_MESSAGE || message.data.kind !== 'published' || message.data.nonce !== nonce) return;
@@ -50,7 +49,7 @@ export function receiveLocalPublication(options: { win: Window; onConnected?: ()
   const dispose = () => { disposed = true; options.win.removeEventListener('message', connect); port?.close(); port = undefined; };
   const connect = (event: MessageEvent) => {
     if (disposed || port || !nonce || !openerOrigin || event.source !== opener || event.origin !== openerOrigin || event.data?.type !== LOCAL_PUBLICATION_MESSAGE || event.data.kind !== 'connect' || event.data.nonce !== nonce || !event.ports[0]) return;
-    port?.close(); port = event.ports[0]; options.onConnected?.();
+    port = event.ports[0]; options.onConnected?.();
   };
   let validOrigin = openerOrigin === 'null';
   try { const candidate = new URL(openerOrigin || ''); validOrigin ||= candidate.origin === openerOrigin && ['http:', 'https:'].includes(candidate.protocol) && ['localhost', '127.0.0.1', '[::1]'].includes(candidate.hostname); } catch { /* malformed handoff: publish without returning bytes */ }
