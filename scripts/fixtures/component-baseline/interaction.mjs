@@ -55,6 +55,10 @@ interactionBaselineFixtures.push({
 /** Gate afterAction hook: wait for real transport completion before scrolling,
  * then for the real virtual window to mount its appended final row. */
 export async function settleInteraction({fixture,action,frame,implementation}){
+  if(fixture.id==='slides-two'&&action.action==='click'&&action.name==='Next slide'){
+    await frame.waitForFunction(()=>document.body.innerText.includes('2 / 2'),undefined,{timeout:5000});
+    return;
+  }
   if(fixture.id!=='data-table-load-more')return;
   if(action.action==='click')await frame.waitForFunction(implementation==='jsx'
     ?()=>document.body.innerText.includes('1,001 of 1,001 rows')

@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
-import {interactionBaselineFixtures,interactionPagingSql} from '../interaction.mjs';
+import {interactionBaselineFixtures,interactionPagingSql,settleInteraction} from '../interaction.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
 const fixture=id=>interactionBaselineFixtures.find(item=>item.id===id);
 const semantic=(text,controls,rows=[])=>({text,controls,rows,overflow:0});
@@ -39,6 +39,14 @@ describe('actual original interaction contracts',()=>{
     expect(stateExpectationIssues(states[2].expected,semantic('',[{role:'columnheader',name:'Sort by score',sort:'none'}],[['name','score'],...states[1].expected.bodyRows]))).not.toEqual([]);
     expect(states.map(state=>state.actions.length)).toEqual([1,2,3]);
   });
+});
+
+it('waits for the shared SlideDeck count to reach the clicked slide with a bounded timeout',async()=>{
+  const {JSDOM}=await import('jsdom');const dom=new JSDOM('<body><output>2 / 2</output></body>');dom.window.document.body.innerText='Overview Details 2 / 2';
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'document');globalThis.document=dom.window.document;
+  const frame={waitForFunction:async(predicate,_argument,options)=>{expect(predicate()).toBe(true);expect(options).toEqual({timeout:5000});}};
+  try{await settleInteraction({fixture:{id:'slides-two'},action:{action:'click',name:'Next slide'},frame,implementation:'jsx'});}
+  finally{if(previous)Object.defineProperty(globalThis,'document',previous);else delete globalThis.document;dom.window.close();}
 });
 
 it('captures native columnheader names and aria-sort while retaining raw header text',async()=>{

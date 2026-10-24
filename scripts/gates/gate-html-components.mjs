@@ -307,7 +307,10 @@ try {
           check(await page.getByRole('button',{name:'Choose Disabled attachments',exact:true}).isDisabled(),`${tag} disabled chooser semantics`);check(requests.length===requestMark,`${tag} fake uploads issue no HTTP requests`);await readable('af-file-upload button',tag);
         } else if(fixture.family==='slide-deck') {
           const deck=page.locator('af-slide-deck').first(),next=deck.getByRole('button',{name:'Next slide',exact:true});
-          const priorViewport=page.viewportSize();await page.setViewportSize({width:390,height:844});
+          const priorViewport=page.viewportSize(),rail=deck.getByRole('navigation',{name:'Slides',exact:true,includeHidden:true});
+          check(await rail.isVisible()===(priorViewport.width>720),`${tag} thumbnail rail is desktop-only at its responsive breakpoint`);
+          check(await next.isVisible(),`${tag} shared pager remains visible when rail is unavailable`);
+          await page.setViewportSize({width:390,height:844});
           await deck.locator('af-slide').first().evaluate(node=>{node.scrollIntoView({behavior:'instant',block:'start'});window.dispatchEvent(new Event('scroll'));});await waitDeck(0);
           const mobileSlideGeometry=await deck.evaluate(node=>{const [first,second]=node.querySelectorAll(':scope > af-slide');return {firstHeight:first?.getBoundingClientRect().height??0,secondTop:second?.getBoundingClientRect().top??0,viewport:innerHeight};});
           check(mobileSlideGeometry.firstHeight>=mobileSlideGeometry.viewport-1 && mobileSlideGeometry.secondTop>=mobileSlideGeometry.viewport-1,`${tag} mobile slides fill one viewport before the next authored slide (${JSON.stringify(mobileSlideGeometry)})`);

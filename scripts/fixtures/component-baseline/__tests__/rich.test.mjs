@@ -6,6 +6,7 @@ import {validateJsx} from '../../../../services/app/lib/jsx/validate';
 import {JSX_STORY_COMPONENT_NAMES} from '../../../../services/app/lib/jsx/components';
 import {STORY_HTML_TAGS} from '../../../../services/app/lib/jsx/component-names';
 import {richBaselineRevision,richBrowserParityFixtures,richBaselineReadiness} from '../rich.mjs';
+import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
 describe('actual original/new rich reader fixture inputs',()=>{
  it('names all eleven public families and pins evidence sources without pretending captures exist',()=>{
   expect(richBrowserParityFixtures.map(f=>f.family)).toEqual(['Markdown','Mermaid','Isometric','DeckGL','SlideDeck','User','Avatar','Icon','Progress','DatePicker','Tooltip']);
@@ -29,9 +30,14 @@ describe('actual original/new rich reader fixture inputs',()=>{
   expect(date.limitations.join(' ')).toContain('trigger name');
   const user=richBrowserParityFixtures.find(f=>f.family==='User');expect(user.oldJsx).toContain('userId=""');expect(user.oldJsx).toContain('Unassigned');expect(user.newHtml).toContain('Unassigned');expect(user.limitations.join(' ')).toContain('seeded person-card');
  });
- it('pairs slide navigation through the shared reader rail while retaining focus evidence',()=>{
+ it('pairs slide navigation through the shared pager and records rail viewport applicability',()=>{
   const slides=richBrowserParityFixtures.find(f=>f.id==='slides-two');
-  expect(slides.states[1]).toMatchObject({id:'details',actions:[{role:'button',name:'Go to slide 2: Details',action:'click'}],expected:{roles:[{role:'button',name:'Go to slide 2: Details',focused:true}],textIncludes:['Details','Second observation.']}});
-  expect(slides.limitations.join(' ')).toContain('fullscreen and print remain separate');
+  expect(slides.states[0].expected.roles).toContainEqual({role:'button',name:'Next slide',disabled:false});
+  expect(slides.states[1]).toMatchObject({id:'details',actions:[{role:'button',name:'Next slide',action:'click'}],expected:{roles:[{role:'button',name:'Next slide',focused:true}],textIncludes:['Details','Second observation.','2 / 2']}});
+  expect(stateExpectationIssues(slides.states[0].expected,{text:'Overview First observation. Details Second observation. 1 / 2 Next slide',controls:[{role:'button',name:'Next slide',disabled:false}],rows:[],overflow:0})).toEqual([]);
+  expect(stateExpectationIssues(slides.states[1].expected,{text:'Details Second observation. 2 / 2',controls:[{role:'button',name:'Next slide',focused:true}],rows:[],overflow:0})).toEqual([]);
+  expect(stateExpectationIssues(slides.states[1].expected,{text:'Details Second observation. 2 / 2',controls:[],rows:[],overflow:0})).not.toEqual([]);
+  expect(slides.viewportApplicability).toEqual({pager:'shared at desktop and mobile',thumbnailRail:'desktop-only; mobile rail action is not applicable because both readers hide it at widths up to 720px'});
+  expect(slides.limitations.join(' ')).toContain('Fullscreen and print remain separate');
  });
 });
