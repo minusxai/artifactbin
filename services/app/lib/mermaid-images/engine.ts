@@ -21,7 +21,7 @@ import { mermaidDiagramKind } from '@/lib/jsx/mermaid-source';
  * and kit2 was an unreleased step between.
  */
 export const MERMAID_KIT_RENDER_VERSION = 3;
-export const MERMAID_RENDER_ENGINE = `mermaid@12.0.0+kit${MERMAID_KIT_RENDER_VERSION}`;
+export const MERMAID_RENDER_ENGINE = `mermaid@12.2.0+kit${MERMAID_KIT_RENDER_VERSION}`;
 
 /**
  * Kinds never prerendered, whatever a harvest would see. A gantt chart draws

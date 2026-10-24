@@ -23,11 +23,11 @@ it.each(['absent','old','broken npm'])('fails clearly on download failure for %s
 }));
 it('installs a verified archive into user storage and persists PATH once across repeated preparation',()=>fixture(async root=>{
  const {createHash}=await import('node:crypto');
- const unpack=join(root,'node-v24.21.0-darwin-arm64');await mkdir(join(unpack,'bin'),{recursive:true});
+ const unpack=join(root,'node-v24.22.1-darwin-arm64');await mkdir(join(unpack,'bin'),{recursive:true});
  await writeFile(join(unpack,'bin/node'),`#!/bin/sh\nexec '${process.execPath}' "$@"\n`,{mode:0o755});
  for(const name of ['npm','npx'])await writeFile(join(unpack,'bin',name),'#!/bin/sh\necho 11.0.0\n',{mode:0o755});
- const archive=join(root,'fixture.tar.gz');expect(spawnSync('/usr/bin/tar',['-czf',archive,'-C',root,'node-v24.21.0-darwin-arm64']).status).toBe(0);
- const hash=createHash('sha256').update(await readFile(archive)).digest('hex');await writeFile(join(root,'sums'),`${hash}  node-v24.21.0-darwin-arm64.tar.gz\n`);
+ const archive=join(root,'fixture.tar.gz');expect(spawnSync('/usr/bin/tar',['-czf',archive,'-C',root,'node-v24.22.1-darwin-arm64']).status).toBe(0);
+ const hash=createHash('sha256').update(await readFile(archive)).digest('hex');await writeFile(join(root,'sums'),`${hash}  node-v24.22.1-darwin-arm64.tar.gz\n`);
  await executable(root,'uname','#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else echo arm64; fi\n');
  await executable(root,'curl',`#!/bin/sh\ncase "$2" in *SHASUMS256.txt) cp '${join(root,'sums')}' "$4";; *) cp '${archive}' "$4";; esac\n`);
  const result=spawnSync('/bin/bash',['-c',`. '${helper}' && . '${helper}' && node --version && npm --version && npx --version`],{env:{...process.env,BASH_ENV:'',ENV:'',HOME:root,PATH:join(root,'bin')},encoding:'utf8'});

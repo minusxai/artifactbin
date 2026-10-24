@@ -30,7 +30,7 @@ function Test-AfbinNode {
 }
 if (Test-AfbinNode) { Write-Host 'Node and npm/npx are ready.'; return }
 if ($env:OS -ne 'Windows_NT' -or ![Environment]::Is64BitOperatingSystem) { throw 'Requires Windows x64 or ARM64. Install Node LTS: https://nodejs.org/en/download' }
-$version = '24.21.0'
+$version = '24.22.1'
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { 'arm64' } else { 'x64' }
 $destination = Join-Path $env:LOCALAPPDATA "artifactbin\node-v$version-win-$arch"
 $env:PATH = "$destination;$env:PATH"

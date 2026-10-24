@@ -1267,24 +1267,24 @@ jobs:
         # (the excludes below simply match nothing on a pull request). scripts/__tests__/ci-budget.test.mjs
         # parses both literals, so keep each a plain JSON array.
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04","macos-14","windows-2022"]' || '["ubuntu-24.04","ubuntu-24.04-arm","macos-14","macos-15-intel","windows-2022"]') }}
-        node: ${{ fromJSON(github.event_name == 'pull_request' && '["22.22.3"]' || '["22.22.3","24.21.0"]') }}
+        node: ${{ fromJSON(github.event_name == 'pull_request' && '["22.23.4"]' || '["22.23.4","24.22.1"]') }}
         phase: [native, runtime, preview, local]
         # Native ABI and offline execution cover both Node versions on every OS.
         # Each journey still covers every OS and one Node 24 cross-check. Its independent
         # runtime, preview/export and offline-file lanes get separate CPUs instead of contending.
         exclude:
-          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: runtime }
-          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: preview }
-          - { os: ubuntu-24.04-arm, node: 24.21.0, phase: local }
-          - { os: macos-14, node: 24.21.0, phase: runtime }
-          - { os: macos-14, node: 24.21.0, phase: preview }
-          - { os: macos-14, node: 24.21.0, phase: local }
-          - { os: macos-15-intel, node: 24.21.0, phase: runtime }
-          - { os: macos-15-intel, node: 24.21.0, phase: preview }
-          - { os: macos-15-intel, node: 24.21.0, phase: local }
-          - { os: windows-2022, node: 24.21.0, phase: runtime }
-          - { os: windows-2022, node: 24.21.0, phase: preview }
-          - { os: windows-2022, node: 24.21.0, phase: local }
+          - { os: ubuntu-24.04-arm, node: 24.22.1, phase: runtime }
+          - { os: ubuntu-24.04-arm, node: 24.22.1, phase: preview }
+          - { os: ubuntu-24.04-arm, node: 24.22.1, phase: local }
+          - { os: macos-14, node: 24.22.1, phase: runtime }
+          - { os: macos-14, node: 24.22.1, phase: preview }
+          - { os: macos-14, node: 24.22.1, phase: local }
+          - { os: macos-15-intel, node: 24.22.1, phase: runtime }
+          - { os: macos-15-intel, node: 24.22.1, phase: preview }
+          - { os: macos-15-intel, node: 24.22.1, phase: local }
+          - { os: windows-2022, node: 24.22.1, phase: runtime }
+          - { os: windows-2022, node: 24.22.1, phase: preview }
+          - { os: windows-2022, node: 24.22.1, phase: local }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -1406,7 +1406,7 @@ jobs:
       - name: Installed npm runtime boundary, terminal exit and declarations
         if: matrix.phase == 'runtime'
         working-directory: services/cli
-        run: node scripts/test-installed-npm.mjs runtime ${{ matrix.node == '22.22.3' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows') && '--types' || '' }}
+        run: node scripts/test-installed-npm.mjs runtime ${{ matrix.node == '22.23.4' && (runner.os == 'Linux' && runner.arch == 'X64' || runner.os == 'Windows') && '--types' || '' }}
       - name: Installed npm preview and export, with process shutdown
         if: matrix.phase == 'preview' || matrix.phase == 'local'
         working-directory: services/cli

@@ -17,11 +17,11 @@ services:
       retries: 20
     networks: [database]
   volume-init:
-    image: artifactbin-company:0.5.55
+    image: artifactbin-company:0.5.56
     build:
       context: .
       args:
-        AFBIN_PACKAGE: ${AFBIN_PACKAGE:-@afbin/cli@0.5.55}
+        AFBIN_PACKAGE: ${AFBIN_PACKAGE:-@afbin/cli@0.5.56}
     user: '0:0'
     entrypoint: [chown]
     command: ['${APP_UID:?run init.mjs}:${APP_GID:?run init.mjs}', /data]
@@ -29,7 +29,7 @@ services:
     network_mode: none
     restart: 'no'
   app:
-    image: artifactbin-company:0.5.55
+    image: artifactbin-company:0.5.56
     user: '${APP_UID:?run init.mjs}:${APP_GID:?run init.mjs}'
     restart: unless-stopped
     init: true

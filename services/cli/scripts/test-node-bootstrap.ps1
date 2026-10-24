@@ -103,7 +103,7 @@ Invoke-Expression $helper
 Write-Host ('Native timing: repeat bootstrap '+$clock.Elapsed.TotalSeconds.ToString('F1')+'s')
 if((Get-ExecutionPolicy -Scope CurrentUser) -ne 'Restricted' -or (Get-ExecutionPolicy) -ne 'Restricted'){throw 'Execution policy changed'}
 $version=& node.exe --version
-if($version -ne 'v24.21.0'){throw 'Wrong Node'}
+if($version -ne 'v24.22.1'){throw 'Wrong Node'}
 $null=& npm.cmd --version;if($LASTEXITCODE -ne 0){throw 'npm failed'}
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'npx failed'}
 # Repair a broken npm/npx command earlier on PATH without replacing valid cached Node.
@@ -118,7 +118,7 @@ Write-Output ('Repaired npm command: '+(Resolve-AfbinApplication 'npm.cmd'))
 Write-Output ('PowerShell npm command: '+(Get-Command npm.cmd -CommandType Application).Source)
 $null=& npm.cmd --version;if($LASTEXITCODE -ne 0){throw 'Broken npm repair failed'}
 $null=& npx.cmd --version;if($LASTEXITCODE -ne 0){throw 'Broken npx repair failed'}
-$private=Join-Path $env:LOCALAPPDATA 'artifactbin\node-v24.21.0-win-x64'
+$private=Join-Path $env:LOCALAPPDATA 'artifactbin\node-v24.22.1-win-x64'
 $userPath=[Environment]::GetEnvironmentVariable('PATH','User')
 if(@($userPath -split ';' | Where-Object {$_ -eq $private}).Count -ne 1){throw 'Duplicate or missing durable PATH'}
 $env:PATH=[Environment]::GetEnvironmentVariable('PATH','Machine')+';'+$userPath

@@ -19,7 +19,7 @@ describe('served npm installer compatibility URLs', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     const script = await response.text();
-    expect(script).toContain('24.21.0');
+    expect(script).toContain('24.22.1');
     expect(script).not.toMatch(/npx(?:\.cmd)? --yes @afbin\/cli@latest setup --server/);
     expect(script).toContain('Node');
     if (route.endsWith('.sh')) expect(script).toContain('Open a new terminal');

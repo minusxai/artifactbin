@@ -86,7 +86,7 @@ function release(repo,source,event='workflow_run',requestedRun='42'){
   transitionTree(fixture,repo.checkout??'0.4.0');
   // Mock only npm's official crypto boundary. Real carrier/source checks and shell run below.
   const fakeNpm=join(fixture,'fixture-npm');mkdirSync(join(fakeNpm,'bin'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/libnpmpublish/lib'),{recursive:true});mkdirSync(join(fakeNpm,'node_modules/sigstore'),{recursive:true});
-  writeFileSync(join(fakeNpm,'package.json'),JSON.stringify({version:'11.19.0'}));writeFileSync(join(fakeNpm,'bin/npm-cli.js'),'');
+  writeFileSync(join(fakeNpm,'package.json'),JSON.stringify({version:'11.19.1'}));writeFileSync(join(fakeNpm,'bin/npm-cli.js'),'');
   writeFileSync(join(fakeNpm,'node_modules/libnpmpublish/lib/provenance.js'),`exports.verifyProvenance=async(subject,file)=>{const bundle=JSON.parse(require('node:fs').readFileSync(file));if(bundle.dsseEnvelope.signatures[0].sig!=='fixture-signature')throw Error('Untrusted fixture signature');return bundle;};`);
   writeFileSync(join(fakeNpm,'node_modules/sigstore/index.js'),`exports.verify=async(bundle,options)=>{if(options.certificateIssuer!=='https://token.actions.githubusercontent.com'||options.certificateIdentityURI!=='https://github.com/minusxai/artifactbin/.github/workflows/ci.yml@refs/pull/12/merge')throw Error('Wrong certificate identity policy');};`);
   writeFileSync(join(fixture,'scripts/ci/npm-driver.mjs'),`export function npmDriver(){return new URL('../../fixture-npm/bin/npm-cli.js',import.meta.url).pathname;}`);

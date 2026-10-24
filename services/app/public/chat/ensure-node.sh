@@ -5,7 +5,7 @@ afbin_ensure_node() {
     command -v node >/dev/null 2>&1 && node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||a===22&&b>=13?0:1)' >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 && npm --version >/dev/null 2>&1 && command -v npx >/dev/null 2>&1 && npx --version >/dev/null 2>&1
   }
   if afbin_node_ready; then printf '%s\n' 'Node and npm/npx are ready.'; return 0; fi
-  local afbin_node_version=24.21.0 afbin_node_os afbin_node_arch afbin_node_file afbin_node_stage afbin_node_dir afbin_node_hash afbin_node_actual afbin_node_export afbin_node_rc
+  local afbin_node_version=24.22.1 afbin_node_os afbin_node_arch afbin_node_file afbin_node_stage afbin_node_dir afbin_node_hash afbin_node_actual afbin_node_export afbin_node_rc
   afbin_node_os=$(uname -s); afbin_node_arch=$(uname -m)
   case "$afbin_node_os" in Darwin) afbin_node_os=darwin;; Linux) afbin_node_os=linux;; *) printf '%s\n' 'Unsupported OS. Install Node LTS: https://nodejs.org/en/download' >&2; return 1;; esac
   case "$afbin_node_arch" in arm64|aarch64) afbin_node_arch=arm64;; x86_64|amd64) afbin_node_arch=x64;; *) printf '%s\n' 'Unsupported CPU. Install Node LTS: https://nodejs.org/en/download' >&2; return 1;; esac

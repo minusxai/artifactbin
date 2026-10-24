@@ -41,14 +41,14 @@ it('installs isolated acceptance tooling only for experience checks before consu
  expect(native[install].if).toBe("matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'");
  expect(native.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').if).toBe("matrix.phase == 'native'");
  const runtimes=native.filter(step=>step.uses?.startsWith('actions/setup-node@'));
- expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.22.3','${{ matrix.node }}']);
+ expect(runtimes.map(step=>step.with['node-version'])).toEqual(['22.23.4','${{ matrix.node }}']);
  expect(native.indexOf(runtimes[1])).toBeGreaterThan(install);
 });
 
 it('runs invariant declarations on Linux and Windows once while keeping every consumer journey',()=>{
  const steps=workflow().jobs.cli.steps;
  const types=steps.find(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations');
- expect(types.run).toContain("matrix.node == '22.22.3'");
+ expect(types.run).toContain("matrix.node == '22.23.4'");
  expect(types.run).toContain("runner.os == 'Windows'");
  expect(types.run).toContain("runner.os == 'Linux' && runner.arch == 'X64'");
  expect(types.run).toContain("&& '--types' || ''");
@@ -74,13 +74,13 @@ it('keeps ten cold native consumers and six complete platform/runtime journeys o
  for(const phase of ['runtime','preview','local']) {
   const experience=selected.filter(row=>row.phase===phase);
   expect(experience).toHaveLength(6);
-  expect(experience.filter(row=>row.node==='22.22.3').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
-  expect(experience.filter(row=>row.node==='24.21.0')).toEqual([{os:'ubuntu-24.04',node:'24.21.0',phase}]);
+  expect(experience.filter(row=>row.node==='22.23.4').map(row=>row.os).sort()).toEqual([...matrix.os].sort());
+  expect(experience.filter(row=>row.node==='24.22.1')).toEqual([{os:'ubuntu-24.04',node:'24.22.1',phase}]);
  }
 });
 it('trims the pull-request CLI matrix to Linux x64, one macOS and Windows on the repository Node',()=>{
  const matrix=cliMatrix('pull_request'),selected=matrix.os.flatMap(os=>matrix.node.flatMap(node=>matrix.phase.map(phase=>({os,node,phase})))).filter(row=>!(matrix.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
- expect(matrix.os).toEqual(['ubuntu-24.04','macos-14','windows-2022']);expect(matrix.node).toEqual(['22.22.3']);
+ expect(matrix.os).toEqual(['ubuntu-24.04','macos-14','windows-2022']);expect(matrix.node).toEqual(['22.23.4']);
  expect(selected).toHaveLength(12);
  const full=cliMatrix('push'),all=full.os.flatMap(os=>full.node.flatMap(node=>full.phase.map(phase=>({os,node,phase})))).filter(row=>!(full.exclude??[]).some(excluded=>Object.entries(excluded).every(([key,value])=>row[key]===value)));
  expect(all).toHaveLength(28);
