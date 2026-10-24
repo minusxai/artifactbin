@@ -18,6 +18,12 @@ export const analyzeNativeRevision: AnalyzeNativeRevision = (
   revision,
   options = {},
 ) => {
+  if (
+    revision.original.version !== revision.key.version ||
+    !Number.isSafeInteger(revision.key.version) ||
+    revision.key.version < 1
+  )
+    throw Error("native_revision_identity");
   const original = revision.original.document;
   if (nativeDigest(original) !== revision.documentSha256)
     throw Error("native_document_digest");

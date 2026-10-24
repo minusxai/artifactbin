@@ -105,3 +105,9 @@ test("admits only independently proved empty-separator repair and preserves orig
     /graph_recovery/,
   );
 });
+
+test("refuses a revision label that differs from the retained source row", () => {
+  const r = fixture();
+  r.key.version = 9;
+  assert.throws(() => analyzeNativeRevision(r), /revision_identity/);
+});
