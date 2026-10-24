@@ -1,0 +1,21 @@
+/** Read-only retained pure-style extraction. Never evaluate authored scripts or load schemas. */
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+const root=path.resolve(process.argv[2]!);let input='';for await(const chunk of process.stdin){input+=chunk;if(Buffer.byteLength(input)>16*1024*1024)throw Error('Style input limit');}
+const request=JSON.parse(input),load=(name:string)=>import(pathToFileURL(path.join(root,'services/app/lib',name)).href);
+const [{graphNodes},{splitHelmet},{documentStyleSheets,DOCUMENT_ROOT_CSS},{documentFonts},{storySystemSheetCss},{resolveStoryMode},{STORY_ROOT_ATTR,STORY_STYLED_ATTR},{STORY_ROOT_ID},{rawBuildProps},{reactAttrs},{imageRefData,resolveRefProps}]=await Promise.all([
+ load('document/document-graph.ts'),load('document/helmet.ts'),load('page-styles/document-styles.ts'),load('page-styles/document-fonts.ts'),load('data/story/story-system-sheets.ts'),load('data/story/story-themes.ts'),load('story-surface/index.ts'),load('story-runtime/contract.ts'),load('story-ui/interpreter-primitives.ts'),load('compiled-page/static-solid/attrs.ts'),load('dataflow/ref-data.ts')
+]);
+const nodes=graphNodes(request.document),{content}=splitHelmet(nodes),mode=resolveStoryMode(request.theme,request.colorMode);
+const htmlAttributes:Record<string,string>={class:mode,...(request.theme?{'data-theme':request.theme}:{})},storyAttributes:Record<string,string>={id:STORY_ROOT_ID,'data-mx-inline-story':'',[STORY_ROOT_ATTR]:'',...htmlAttributes};
+const refData=Object.fromEntries((request.refRows??[]).filter((row:any)=>row.format==='image').map((row:any)=>[row.id,imageRefData(row)]));
+const presentationUrls:string[]=[],resourcePatches:{sourceNode:string;attributes:Record<string,string>}[]=[];
+const inlineStyles:{sourceNode:string;css:string}[]=[];let styled=false;
+const visit=(node:any)=>{if(node.type!=='element')return;const cls=node.attributes.find((a:any)=>['class','className'].includes(a.name));if(cls?.value.static&&typeof cls.value.json==='string')styled=true;
+ if(node.attributes.some((a:any)=>a.name==='style'&&a.value.static)){const props=rawBuildProps(node.attributes,node.isComponent,node.tag,'');const css=reactAttrs('div',{style:props.style}).find(([name]:[string,string])=>name==='style')?.[1];if(css)inlineStyles.push({sourceNode:node.graphKey,css});}
+ const props=rawBuildProps(node.attributes,node.isComponent,node.tag,'');
+ if(!['Import','Context'].includes(node.tag)){for(const name of ['href','src','poster'])if(typeof props[name]==='string')presentationUrls.push(props[name] as string);}
+ const patch=resolveRefProps(node,props,refData);if(patch){const attributes:Record<string,string>={};for(const [name,value]of Object.entries(patch)){if(name==='style'){const css=reactAttrs('div',{style:value}).find(([name]:[string,string])=>name==='style')?.[1];if(css)attributes.style=css;}else if(typeof value==='string'||typeof value==='number')attributes[name]=String(value);}resourcePatches.push({sourceNode:node.graphKey,attributes});for(const [name,value]of Object.entries(attributes)){if(name==='src')presentationUrls.push(value);if(name==='srcSet')presentationUrls.push(...value.split(', ').map(part=>part.slice(0,part.lastIndexOf(' '))));}}
+ node.children.forEach(visit);};nodes.forEach(visit);if(styled)storyAttributes[STORY_STYLED_ATTR]='';
+const sheets=[{attr:'data-mx-root',css:DOCUMENT_ROOT_CSS},...documentStyleSheets({compiledCss:request.compiledCss,chrome:true,bare:false,theme:request.theme,docFonts:documentFonts(content),systemCss:storySystemSheetCss(request.theme),authorCss:null})];
+process.stdout.write(JSON.stringify({sheets,htmlAttributes,storyAttributes,inlineStyles,presentationUrls,resourcePatches}));
