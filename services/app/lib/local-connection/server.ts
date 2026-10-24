@@ -35,7 +35,7 @@ export async function grantLocalConnection(request:Request):Promise<Response>{
  if(!sameOrigin(request))return json({error:'forbidden'},403);
  return runWithRequest(request,async()=>{try{
   const body=await readJson(request);if(!validLinkedDocument(body?.identity))throw new LocalConnectionError('invalid_identity');
-  if(body.authorizePrivate===true)approved.add(request);
+  if(body.authorizePrivate===true){const actor=await requestOrSessionActor(request,{revalidate:true});if(!actor.userId&&!actor.tokenId)throw new LocalConnectionError('signin_required');approved.add(request);}
   else if(body.checkSession===true){const actor=await requestOrSessionActor(request,{revalidate:true});if(actor.userId||actor.tokenId)throw new LocalConnectionError('permission_required');}
   return json(await registry.grant(body.identity),200,{'Cache-Control':'no-store'});
  }catch(error){return refusal(error);}});

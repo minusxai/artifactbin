@@ -12,17 +12,16 @@ export interface LocalDocumentConnection extends LocalConnection {post(message:u
 /** No credential enters this window. The remote broker owns normal browser authentication. */
 export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalDocumentConnection{
  const {win,identity}=options;let disposed=false,stopped=false,connected=false;
- let iframe:HTMLIFrameElement|undefined,popup:Window|null=null,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0;
+ let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0;
  const pending=new Map<number,{resolve:(value:unknown)=>void;reject:(reason:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
  const state=(value:LocalConnectionState)=>{if(!disposed)options.onState(value);};
  const failPending=()=>{for(const value of pending.values()){clearTimeout(value.timer);value.reject(Error('Connection ended; operation outcome may be unknown'));}pending.clear();};
- const cleanup=()=>{connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;popup?.close();popup=null;remote=null;failPending();};
+ const cleanup=()=>{connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;remote=null;failPending();};
  const receive=(event:MessageEvent)=>{
   if(disposed||stopped||event.source!==remote||event.origin!==identity.platformOrigin||!event.data||event.data.kind!=='af:local-ready'||event.data.nonce!==nonce||port)return;
   const channel=new MessageChannel();port=channel.port1;
   port.onmessage=(message:MessageEvent)=>{
    const data=message.data;if(!data||typeof data!=='object')return;
-   if(data.kind==='signin'){begin(true);return;}
    if(data.kind==='chrome-size'&&iframe&&Number.isFinite(data.height)){iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,data.height))+'px';return;}
    if(data.kind==='state'){
     const valid:LocalConnectionState[]=['offline','connecting','connected','signin-required','permission-required','blocked','stale','unavailable','unknown-outcome'];
@@ -38,25 +37,19 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   port.onmessageerror=()=>{cleanup();state('blocked');};port.start();
   remote!.postMessage({kind:'af:local-bind',nonce,identity},identity.platformOrigin,[channel.port2]);
  };
- const begin=(signIn=false)=>{
+ const begin=()=>{
   if(disposed||options.privatePreview)return;
   if(!validLinkedDocument(identity)){state('unavailable');return;}
   stopped=false;cleanup();nonce=win.crypto.randomUUID();state('connecting');
-  const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce,...(signIn?{popup:'1'}:{})}).toString();
-  if(signIn){
-   const login=new URL('/login',identity.platformOrigin);login.searchParams.set('callbackUrl',address.pathname+address.hash);
-   popup=win.open(login.href,'_blank');remote=popup;if(!popup){state('blocked');return;}
-  }else{
-   iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
-   // Chrome remains platform-owned; the shell can style this frame without inspecting its document.
-   iframe.style.cssText='position:fixed;left:0;top:0;width:100%;height:56px;border:0;z-index:2147483646';
-   win.document.documentElement.append(iframe);remote=iframe.contentWindow;
-  }
-  timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??(signIn?300_000:15_000));
+  const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce}).toString();
+  iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
+  iframe.style.cssText='position:fixed;left:0;top:0;width:100%;height:56px;border:0;z-index:2147483646';
+  win.document.documentElement.append(iframe);remote=iframe.contentWindow;
+  timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??15_000);
  };
  win.addEventListener('message',receive);
  const connection:LocalDocumentConnection={
-  retry(){if(!options.privatePreview)begin();},signIn(){if(!options.privatePreview)begin(true);},
+  retry(){if(!options.privatePreview)begin();},signIn(){if(!options.privatePreview)state('signin-required');},
   disconnect(){stopped=true;cleanup();state('offline');},
   dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);disposed=true;},
   post(message){if(connected)port?.postMessage({kind:'bridge',message});},
