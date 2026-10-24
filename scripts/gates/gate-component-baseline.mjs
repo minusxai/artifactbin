@@ -12,7 +12,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
-import {attachVerifiedComponentAssets} from '../lib/component-baseline-input.mjs';
+import {attachVerifiedComponentAssets,writeBaselineComponentAssets} from '../lib/component-baseline-input.mjs';
 import {selectBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
 import {browserParityFixtures} from '../fixtures/component-baseline/index.mjs';
 import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
@@ -72,7 +72,7 @@ if(!input.entries) {
   input.output=evidenceOutput;
 }
 if(importedReaderEntries)input=await attachVerifiedComponentAssets(input,{source:input.source||repo,base:process.argv[2]||input.base||'http://localhost:3030'});
-if(input.componentAssets)await writeFile(path.join(input.output,'component-assets.json'),JSON.stringify({implementation:input.implementation,sourceRevision:input.sourceRevision,componentAssets:input.componentAssets},null,2));
+await writeBaselineComponentAssets(input);
 // Match the existing real-library gate's software WebGL configuration.
 await withComponentBaselineEvidence({output:input.output,run:async()=>{
 const browsers=[];
