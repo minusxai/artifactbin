@@ -1,7 +1,9 @@
-/** Property source takes precedence over the source attribute, then initial literal text. */
+/** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay code without changing its layout.
+ * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string }
 import { markdownContent } from '../markdown/content';
 import { MARKDOWN_CSS } from '../markdown/styles';
+import { STORY_BARE_TYPOGRAPHY_CSS } from '../story-surface/bare-typography';
 let nextHeadingScope = 0;
 function splitSelectors(value:string):string[]{
  const selectors:string[]=[];let start=0,depth=0,quote='',comment=false;
@@ -65,11 +67,22 @@ export class AfMarkdown extends HTMLElement implements MarkdownContract {
   this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type='button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ?? '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});} catch {button.textContent='Copy unavailable';}}); pre.append(button);});
  }
 }
-const markdownStyles=`${scopeMarkdownCss(MARKDOWN_CSS)}
+// The retained document applies preflight, Markdown, bare prose, then the
+// every-document table scroll rule. Keep that cascade inside generated output.
+const readerBareTypography=STORY_BARE_TYPOGRAPHY_CSS
+ .replaceAll(':where([data-mx-story-root])',':where(af-markdown .mx-markdown)')
+ .replaceAll(':where([data-mx-story-root]:not([data-mx-styled]))',':where(af-markdown):not(*)');
+const markdownStyles=`
+:where(af-markdown .mx-markdown,af-markdown .mx-markdown *){box-sizing:border-box;margin:0;padding:0;border:0 solid}
+:where(af-markdown pre,af-markdown code,af-markdown kbd,af-markdown samp){font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace);font-feature-settings:normal;font-variation-settings:normal;font-size:1em}
+${scopeMarkdownCss(MARKDOWN_CSS)}
+${readerBareTypography}
+af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 af-markdown{display:block}
 af-markdown .mx-markdown > :first-child{margin-block-start:0}
-af-markdown pre{overflow:auto}
-af-markdown pre button{display:block;margin-top:.5rem;padding:.25rem .5rem;color:var(--foreground,CanvasText);background:var(--background,Canvas);border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - .25rem));font:inherit;cursor:pointer}
+af-markdown pre{position:relative;overflow:auto}
+af-markdown pre button{position:absolute;top:.5rem;right:.5rem;opacity:0;padding:.25rem .5rem;color:var(--foreground,CanvasText);background:var(--background,Canvas);border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - .25rem));font:inherit;cursor:pointer}
+af-markdown pre:hover button,af-markdown pre:focus-within button{opacity:1}
 af-markdown pre button:hover{background:var(--muted,Canvas)}
 af-markdown pre button:focus-visible{outline:2px solid var(--ring,Highlight);outline-offset:2px}
 `;
