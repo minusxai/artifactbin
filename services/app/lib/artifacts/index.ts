@@ -63,7 +63,7 @@ export {transferArtifact} from './transfer';
  * the capability refusal, the mutation context pin and invocation seam, the dataset commit emitter,
  * the compiled-row result and its error text, and the folder table.
  */
-export { assertGrantCommit, grantContext, readThrough } from './dataset-policy/grants';
+export { assertGrantCommit, grantContext, uploadGrantContext, readThrough } from './dataset-policy/grants';
 export type { GrantDocument, ReadRow } from './dataset-policy/grants';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
@@ -77,3 +77,5 @@ export { compileErrorText, compileResultForRow } from './row-compile';
 export { childrenTableFor } from './placement';
 /** Host-only registered HTML action attestation; never created from namespace arguments. */
 export {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from './registered-html-mutation';
+
+export {attestSavedHtmlUpload} from './saved-html-upload';

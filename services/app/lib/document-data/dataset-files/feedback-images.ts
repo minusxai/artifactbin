@@ -7,7 +7,7 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import {effectiveRole,liveAccessFacts} from '@/lib/artifacts';
 import {canEdit,type HtmlPageLink} from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { grantsOf, grantContext, grantsPermitRead, readThrough } from '@/lib/artifacts';
+import { grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifacts';
 import { DatasetError } from '@/lib/datasets/errors';
 import { imageInsertAllowed } from '@/lib/datasets/image-upload-policy';
 import { storeImageContent } from '@/lib/datasets/data-tiers';
@@ -55,11 +55,18 @@ function liveRow(rows:ArtifactRow[],id:string,format?:string):ArtifactRow {
 async function declaredDataset(document:ArtifactRow,datasetId:string):Promise<boolean> {
   return document.format==='html'&&Array.isArray(document.meta.htmlLinks)&&(document.meta.htmlLinks as HtmlPageLink[]).some(link=>link.kind==='dataset'&&link.datasetId===datasetId&&link.mode==='live');
 }
-async function authorizeInsert(dataset:ArtifactRow,_document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
+async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
   const db=tx??await getDb(),grants=grantsOf(dataset);
   if(grants){
-    // No page/membership context: only the caller's explicit dataset insert grant counts.
-    const context=await grantContext(dataset,actor,undefined,db);
+    // Preserve direct actor grants independently of artifact membership.
+    if(imageInsertAllowed(grants,await grantContext(dataset,actor,undefined,db)))return;
+    const authority={id:document.id,editId:document.edit_id,version:document.version,datasetId:dataset.id};
+    const uploadProof=attestSavedHtmlUpload(authority,async transaction=>{
+      const rows=(await artifactQuery<ArtifactRow>(transaction,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[[document.id,dataset.id]])).rows;
+      const currentDoc=liveRow(rows,document.id,'html'),currentDataset=liveRow(rows,dataset.id,'dataset');
+      if(currentDoc.edit_id!==authority.editId||currentDoc.version!==authority.version||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,dataset.id))throw new DatasetError('Dataset file is unavailable',404);
+    });
+    const context=await uploadGrantContext(dataset,actor,{...authority,uploadProof},db);
     if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
   }else if(dataset.access!=='readwrite'||!canEdit(await effectiveRole(dataset,actor,liveAccessFacts(actor,db))))throw new DatasetError('This dataset does not grant file uploads',403);
 }

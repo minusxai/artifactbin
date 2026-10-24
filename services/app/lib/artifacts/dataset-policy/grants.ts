@@ -1,3 +1,4 @@
+import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from '../saved-html-upload';
 import {verifyRegisteredHtmlMutation} from '../registered-html-mutation';
 import {liveAccessFacts,type AccessFacts} from '@/lib/artifacts/access-facts';
 import {artifactQuery} from '@/lib/artifacts/document';
@@ -27,6 +28,13 @@ export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,fac
 }
 /** A saved, readable document plus accepted membership supplies artifact context for writes. */
 export async function grantContext(dataset:ArtifactRow,actor:AccessActor,document?:GrantDocument,tx?:Queryable):Promise<DatasetGrantContext>{
+ return savedGrantContext(dataset,actor,document,tx,document?db=>verifyRegisteredHtmlMutation(document,db):undefined);
+}
+/** File uploads use their own saved-link proof; it never authorizes SQL actions. */
+export async function uploadGrantContext(dataset:ArtifactRow,actor:AccessActor,document:SavedHtmlUploadDocument,tx?:Queryable):Promise<DatasetGrantContext>{
+ return savedGrantContext(dataset,actor,document,tx,db=>verifySavedHtmlUpload(document,dataset.id,db));
+}
+async function savedGrantContext(dataset:ArtifactRow,actor:AccessActor,document?:{id:string;editId:string},tx?:Queryable,verifyHtml?:(db:Queryable)=>Promise<boolean>):Promise<DatasetGrantContext>{
  const db=tx??await getDb();
  const editorGroups=actor.userId?(await db.query<{group_id:string}>("SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL FOR SHARE OF gm,g",[actor.userId])).rows.map(r=>r.group_id):[];
  const context:DatasetGrantContext={caller:actor,owner:principalOf(dataset),callerEditorGroupIds:editorGroups};
@@ -35,7 +43,7 @@ export async function grantContext(dataset:ArtifactRow,actor:AccessActor,documen
  if(identity?.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[dataset.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
  if(!document){if(!identity&&!owns(dataset,actor))throw new DatasetError('Sign in to change data',403);return context;}
  const doc=(await artifactQuery<ArtifactRow>(db,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[document.id])).rows[0];
- if(!doc||(doc.format!=='markup'&&!(doc.format==='html'&&await verifyRegisteredHtmlMutation(document,db)))||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
+ if(!doc||(doc.format!=='markup'&&!(doc.format==='html'&&await verifyHtml?.(db)))||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
  const tokenCreator=!doc.group_id&&!doc.user_id&&owns(doc,actor);
  if(!tokenCreator){
   if(!identity||identity.kind==='guest')throw new DatasetError('Sign in and join this artifact to use its actions',403);
