@@ -16,7 +16,7 @@ vi.mock('@/lib/page-operations',async original=>({...await original<typeof impor
 }}));
 useAppHarness();const files=()=>skillPackageFiles(skillTree(),'http://localhost:3000');
 describe('installed native author examples',()=>{
- it('publishes the report with project-relative styles and fonts from the installed archive',async()=>{
+ it('publishes report HTML with canonical data-af identities',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'native-skill-example-'));
   try{
    const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
