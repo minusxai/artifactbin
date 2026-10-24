@@ -14,9 +14,9 @@ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function runUploadBaseline({base,implementation,browser,sourceRevision,output,connectAgent,signInAccount,account:providedAccount}){
  const origin=baselineLocalOrigin(base),account=validateBaselineAccount(providedAccount??{email:`mxmx_test_upload_${randomUUID()}@example.com`});
  const {token}=await connectAgent(origin,account);
- const publish=async(body,options={})=>{const response=await fetch(origin+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});assert.equal(response.status,201,'Actual upload fixture publication');return response.json();};
+ const publish=async(body,options={})=>{const response=await fetch(origin+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});if(response.status!==201)throw Error(`Actual upload fixture publication failed (${response.status}): ${await response.text()}`);return response.json();};
  const allowed=await publish({title:'Disposable upload backing data',dataset:[{fixture:'upload'}],access:'readwrite'});
- const denied=await publish({title:'Disposable read-only backing data',dataset:[{fixture:'upload-denied'}],access:'readonly'});
+ const denied=await publish({title:'Disposable read-only backing data',dataset:[{fixture:'upload-denied'}],access:'read'});
  let skillArchive,componentAssets;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());componentAssets=await verifyComponentAssetArchive({root:path.resolve(import.meta.dirname,'../..'),files:installedFiles(skillArchive)});}
  const entries=[];
  for(const fixture of uploadBrowserParityFixtures)entries.push(...await publishBaselineFixtures({implementation,publish,serverOrigin:origin,skillArchive,fixtures:[fixture],substitutions:{uploadDataset:fixture.uploadScenario==='permission'?denied.id:allowed.id,platformOrigin:origin}}));
