@@ -1547,3 +1547,57 @@ for(const changed of [false,true])test(`committed action resets unchanged local 
  const port=client({open:true,filter:'submitted'});let request:any,release:(value:unknown)=>void=()=>{};port.mutate=async(options:any)=>{request=options.variables;return new Promise(resolve=>release=resolve);};const running=await execute(result.authorJs,port,doc);
  try{const pending=host.children[0]!.click();await port.updateQuery({},value=>({...value,open:false,...(changed?{filter:'edited'}:{})}));assert.equal(host.children.length,0);release({data:{records:{run:{requestId:request.requestId,outcome:'committed',reset:['filter']}}}});await pending;assert.equal(port.state.filter,changed?'edited':null);}finally{await running.close();}
 });
+
+for(const outcome of ['same-user','other-user','missing-row','edited'])test(`committed reset waits for settled identity and stable row after query refresh (${outcome})`,async()=>{
+  const loop = el("loop", "For", { id: "loop", keyBy: "id" });
+  if (loop.type !== "element") throw Error();
+  loop.attributes.push({
+    name: "each",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$rows",
+      reactive: { kind: "signal", name: "rows" },
+    },
+  });
+  const source = input(
+    [loop, el("save", "Button", { run: "$save" })],
+    [
+      {
+        kind: "loop",
+        sourceNode: "loop",
+        afId: "loop",
+        templateId: "rows",
+        identity: {
+          owner: "loop",
+          keyBy: "id",
+          templateIds: ["save"],
+          encoding: "archived-instance-v1",
+        },
+      },
+      { kind: "action", sourceNode: "save", afId: "save" },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", sql: "", start: 0, end: 1 }];
+  source.analysis.flow.mutations = [{ name: "save", start: 0, end: 1 }];
+  source.mutations = [
+    {
+      name: "save",
+      namespace: "records",
+      document:
+        "mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",
+      values: [{ name: "filter", type: "string" }],
+      outcomePath: ["records", "run"],
+      reset: ["filter"],
+    },
+  ];
+
+ source.viewer={namespace:'queries',identity:'target-subject-v1',document:'query NativeViewer{queries{viewer{id}}}',responsePath:['queries','viewer','id']};
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('div',{'data-af-id':'loop'});doc.body.append(host);doc.template('rows',[new Element('button',{'data-af-id':'save'})]);const port=client({open:false,filter:'keep'});let release:()=>void=()=>{};port.mutate=async(options:any)=>{await new Promise<void>(resolve=>release=resolve);return {data:{records:{run:{requestId:options.variables.requestId,outcome:'committed',reset:['filter']}}}};};
+ const running=await execute(result.authorJs,port,doc),rows=port.remotes[0]!,viewer=port.remotes[1]!;
+ try{rows.next(answer('A'));viewer.next({data:{queries:{viewer:{id:'owner'}}}});const pending=host.children[0]!.children[0]!.click();rows.next({data:{records:null},loading:true});viewer.next({data:{queries:null},loading:true});release();await pending;assert.equal(port.state.filter,'keep');if(outcome==='edited')await port.updateQuery({},value=>({...value,filter:'edited'}));const settledRows=outcome==='edited'?port.remotes.at(-1)!:rows;settledRows.next({...answer(outcome==='missing-row'?'B':'A'),loading:false});assert.equal(port.state.filter,outcome==='edited'?'edited':'keep');viewer.next({data:{queries:{viewer:{id:outcome==='other-user'?'other':'owner'}}},loading:false});await Promise.resolve();assert.equal(port.state.filter,outcome==='same-user'?null:outcome==='edited'?'edited':'keep');if(outcome==='missing-row'){rows.next(answer('A'));assert.equal(port.state.filter,'keep');}if(outcome==='other-user'){viewer.next({data:{queries:{viewer:{id:'owner'}}}});assert.equal(port.state.filter,'keep');}}finally{await running.close();}
+});

@@ -6,11 +6,11 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const requestId=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);};
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},tableErrors={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
- const cells=new WeakMap();
+ const cells=new WeakMap(),completions=new Map(),committedResets=new Set();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set(),completion:{active:true},ownsCompletion:true},scopes=new Set([rootScope]);
- const disposeScope=scope=>{if(scope.ownsCompletion)scope.completion.active=false;if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
+ const disposeScope=scope=>{if(scope.ownsCompletion){scope.completion.active=false;if(scope.completion.key&&completions.get(scope.completion.key)===scope.completion)completions.delete(scope.completion.key);}if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
  const childScope=(parent,retained=false)=>{const child={active:true,cleanups:new Set(),completion:retained?parent.completion:{active:true},ownsCompletion:!retained},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
  const clearCondition=host=>{const branch=conditions.get(host);if(branch?.scope){disposeScope(branch.scope);branch.scope=null;}host.replaceChildren();};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
@@ -93,7 +93,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     let state=loops.get(host);if(!state){state=new Map();loops.set(host,state);scope.cleanups.add(()=>{for(const item of state.values()){disposeScope(item.context.scope);item.host.remove();}state.clear();loops.delete(host);});}const keys=new Set(),desired=[];
     for(const [index,entry]of rows.entries()){const key=durable?own(entry,target.identity.keyBy):index;if(!(typeof key==='number'&&Number.isFinite(key)||typeof key==='string'&&key.length<=256&&!/[\u0000-\u001f]/.test(key)))throw Error('Missing stable row key');const encoded=JSON.stringify([typeof key,key]);if(keys.has(encoded))throw Error('Duplicate stable row key');keys.add(encoded);desired.push({entry,key,encoded});}
     for(const [key,item]of state)if(!keys.has(key)){disposeScope(item.context.scope);item.host.remove();state.delete(key);}
-    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope=childScope(scope);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
+    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope=childScope(scope);rowScope.completion.key=JSON.stringify([context?.ids??null,target.identity.owner,encoded]);completions.set(rowScope.completion.key,rowScope.completion);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
 
    }
    if(target.kind==='action'){
@@ -104,16 +104,28 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
      if(disposed||!scope.active)return;
      if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(request&&plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))throw Error('Viewer changed while a mutation outcome is unresolved');if(!request){const snapshot={};for(const field of mutation.values){const value=field.source?.kind==='row'?own(action.row,field.source.field):own(values,field.name);if(!scalar(value)||value===null&&field.nullable===false||value!==null&&typeof value!==({date:'string',timestamp:'string',user:'string'}[field.type]||field.type))throw Error('Invalid mutation argument');snapshot[field.name]=value;}request={requestId:requestId(),values:snapshot};pending.set(host,request);requestOwners.set(request,plan.viewer?viewerId:undefined);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});
       if(result.errors?.length)throw Error('Mutation failed; local values were retained');const receipt=at(result.data,mutation.outcomePath);if(!receipt||receipt.requestId!==request.requestId||!['committed','rejected','unknown'].includes(receipt.outcome))throw Error('Mutation outcome unavailable; local values were retained');
-      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||!scope.completion.active||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return;
+      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||plan.viewer&&viewerReady&&requestOwners.get(request)!==viewerId)return;
       if(receipt.outcome==='rejected')throw Error('Mutation rejected; local values were retained');
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
-      if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.completion.active||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
+      if(receipt.reset.length){committedResets.add({request,mutation,scope});await flushCommittedResets();}
      }
     }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context?.ids&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
     host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);if(disposed)pending.delete(host);topActions.delete(action);actions.delete(host);});
    }
   }
-  notifyObservers();
+  notifyObservers();void flushCommittedResets().catch(cause=>error(cause.message));
+ }
+ function flushCommittedResets(){
+  const updates=[];
+  for(const task of committedResets){const {request,mutation,scope}=task;
+   if(disposed||plan.viewer&&viewerReady&&requestOwners.get(request)!==viewerId){committedResets.delete(task);continue;}
+   if(plan.viewer&&!viewerReady||Object.values(tablePending).some(Boolean))continue;
+   committedResets.delete(task);
+   const live=()=>scope.completion.active||scope.completion.key&&completions.get(scope.completion.key)?.active;
+   if(!live())continue;
+   updates.push(client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!live()||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return data;const next={...data};for(const name of mutation.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;}));
+  }
+  return Promise.all(updates);
  }
  function refresh(){
   if(disposed)return;
@@ -127,6 +139,6 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
  if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true}).subscribe(result=>{if(disposed)return;viewerReady=false;try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');viewerId=id;viewerReady=true;render();}catch(cause){render();error(cause.message);}});
- const dispose=()=>{if(disposed)return;disposed=true;for(const listener of [...observers])listener({active:false,values:{},queries:{}});observers.clear();localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
+ const dispose=()=>{if(disposed)return;disposed=true;for(const listener of [...observers])listener({active:false,values:{},queries:{}});observers.clear();localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();committedResets.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
  return Object.assign(dispose,{observe});
 }`;
