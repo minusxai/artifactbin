@@ -7,7 +7,7 @@
 import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
 import {loadImage} from '@/lib/object-store/image-store';
 import { requestOrSessionActor } from '@/lib/accounts';
-import { json } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
@@ -43,7 +43,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
       if(!(error instanceof OfflineHtmlMediaError))throw error;
       return error.reason==='too_large'?json({error:'too_large'},413):error.reason==='unsupported_type'?json({error:'unsupported_image'},415):json({error:'not_found'},404);
     }
-    const { html } = await nativeHtmlDocument({ row:{...row,source:packed}, offline: true });
+    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:new URL(baseUrl(request)).origin, offline: true });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {

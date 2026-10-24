@@ -1,3 +1,5 @@
+import {portableRenderedDigest} from './portable-source';
+import { portableScript } from './portable';
 import { parse, parseFragment, serialize, type DefaultTreeAdapterMap } from 'parse5';
 import { assertStorable } from './apollo/storable';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
@@ -43,7 +45,8 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
   const portable=input.offline&&input.apollo?`<script type="application/json" data-af="apollo">${JSON.stringify(input.apollo).replace(/</g,'\\u003c')}</script>`:'';
   const portableReader=input.offline&&input.reader?`<script type="application/json" data-af="reader">${JSON.stringify(input.reader).replace(/</g,'\\u003c')}</script>`:'';
-  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${portable}${portableReader}<script data-af="core">${safeCore}</script>`);
+  const canonical=input.offline?portableScript(input.portable?{...input.portable,renderedDigest:portableRenderedDigest(input.html)}:{version:1,source:input.html}):'';
+  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });

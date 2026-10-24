@@ -1,3 +1,4 @@
+import type { PortableDocument } from './portable-contract';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 export interface HtmlRuntimeConfig {
   pageId: string;
@@ -10,6 +11,8 @@ export interface HtmlRuntimeConfig {
   /** Exact platform origin. Never a credential or a URL carrying one. */
   appOrigin?: string;
   initialState?: HtmlJsonObject;
+  /** Private preview helper transport; never an account capability. */
+  localPreview?: { endpoint: string; schema: import('@artifactbin/contracts').PageSchema };
 }
 export interface HtmlAssemblyInput {
   html: string;
@@ -20,7 +23,9 @@ export interface HtmlAssemblyInput {
   apollo?: string;
   /** Reader module embedded only in self-contained portable exports. */
   reader?: string;
-  /** Explicit download mode disables all remote ports. */
+  /** Canonical source and nonsecret published identity carried by downloaded files. */
+  portable?: PortableDocument;
+  /** Embedded assets work without a network; connection is a separate explicit capability. */
   offline?: boolean;
 }
 

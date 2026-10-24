@@ -1,8 +1,11 @@
 /** The retained download door emits native HTML with the original read policy. */
+import {sha256Hex} from '@artifactbin/utils';
+import {readPortableDocument} from '@/lib/html-runtime/portable';
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import sharp from 'sharp';
+import {getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
@@ -31,6 +34,10 @@ describe('GET /a/<id>/download', () => {
     expect(runtime).toMatchObject({ pageId: id, revision: '1', offline: true, initialState: { count: 3 } });
     expect(runtime.appOrigin).toBeUndefined();
     expect(doc.querySelectorAll('script[data-af="core"]')).toHaveLength(1);
+    const portable=readPortableDocument(html);
+    expect(portable.source).toBe((await getArtifactById(id))!.source);
+    expect(portable.identity).toMatchObject({artifactId:id,baseRevision:'1',sourceDigest:sha256Hex(portable.source)});
+    expect(new URL(portable.identity!.platformOrigin).origin).toBe(portable.identity!.platformOrigin);
     expect(doc.querySelector('script[src="/af/v1/core.js"]')).toBeNull();
   });
   it('lets anyone with an unlisted link download the native document', async () => {
@@ -63,7 +70,7 @@ it('packs admitted private raster image bytes only for an authorized current rea
  const published=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:`<!doctype html><html><head><title>Portable image</title></head><body><img data-af-id="picture" src="ref:${image.id}" alt="Saved picture"></body></html>`,visibility:'unlisted'}}));expect(published.status).toBe(201);const page=await published.json();
  const response=await download(request(`/a/${page.id}/download`,{token:actor.token}),params(page.id));expect(response.status).toBe(200);
  const html=await response.text(),doc=new JSDOM(html).window.document,imageNode=doc.querySelector('img')!;
- expect(imageNode.getAttribute('data-af-id')).toBe('picture');expect(imageNode.getAttribute('src')).toMatch(/^data:image\/webp;base64,/);expect(html).not.toContain(actor.token);expect(html).not.toContain(`ref:${image.id}`);
+ expect(imageNode.getAttribute('data-af-id')).toBe('picture');expect(imageNode.getAttribute('src')).toMatch(/^data:image\/webp;base64,/);expect(html).not.toContain(actor.token);expect(imageNode.getAttribute('src')).not.toContain('ref:');
  const packed=Buffer.from(imageNode.getAttribute('src')!.split(',')[1]!,'base64');expect(await sharp(packed).metadata()).toMatchObject({width:48,height:32});
  expect((await download(request(`/a/${page.id}/download`),params(page.id))).status).toBe(404);
  await (await getDb()).query("UPDATE artifacts SET deleted_at=now() WHERE id=$1",[image.id]);
