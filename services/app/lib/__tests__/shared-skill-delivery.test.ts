@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
@@ -72,13 +73,18 @@ describe('installable shared skill folder',()=>{
   try{
    const zip=path.join(dir,'artifactbin.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
    execFileSync('unzip',['-q','-n',zip,'-d',dir]);
-   for(const [name,text] of Object.entries(expected))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   for(const [name,text] of Object.entries(expected).filter(([name])=>name!=='scripts/preview-html.mjs'))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   const parser=readFileSync(path.join(dir,'artifactbin/scripts/preview-html.mjs'),'utf8');
+   expect(parser).not.toMatch(/from\s*["']parse5/);
    const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');
    expect(runtime).toContain('export default ');
    const assets=JSON.parse(runtime.slice('export default '.length).trim().replace(/;$/, ''));
    expect(assets.core).toContain('@afbin/apollo');
    expect(assets.reader).toContain('offline');
-   expect(assets.apolloPath).toMatch(/^\/af\/v1\/apollo\//);
+   expect(assets.apolloPath).toBe('/af/v1/apollo/'+createHash('sha256').update(assets.apollo).digest('hex'));
+   expect(assets.readerPath).toBe('/af/v1/reader/'+createHash('sha256').update(assets.reader).digest('hex'));
+   const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
+   expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
    const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
    const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});

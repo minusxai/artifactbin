@@ -6,6 +6,8 @@ export interface PreviewOptions {
   port?: number;
   /** Optional prebuilt public core/module assets, mounted at /af/v1/. */
   runtimeDir?: string;
+  /** Short shared content-scan cache; tests may set zero. */
+  revisionIntervalMs?: number;
 }
 export interface PreviewSession { server: Server; url: string; close(): Promise<void> }
 export declare function startPreview(options: PreviewOptions): Promise<PreviewSession>;
@@ -14,3 +16,7 @@ export declare function startPreview(options: PreviewOptions): Promise<PreviewSe
  * Intermediate writes between polls may coalesce. Reload remains an explicit viewer action.
  */
 export interface PreviewRevision { revision: string }
+export interface PreviewLimits { maxFiles: number; maxFileBytes: number; maxTotalBytes: number }
+export interface RevisionSource { current(options?: {fresh?: boolean}): Promise<string> }
+/** Concurrent clients share one scan; a monotonic test clock controls the cache. */
+export declare function createRevisionSource(root: string, options?: { now?: () => number; scan?: () => Promise<string>; intervalMs?: number }): RevisionSource;

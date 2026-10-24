@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import {createServer} from 'node:http';
-import {realpath,stat,readFile} from 'node:fs/promises';
+import {realpath,stat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
-import {projectRevision,changeNotice} from './preview-changes.mjs';
+import {createRevisionSource,changeNotice} from './preview-changes.mjs';
+import {previewHtml} from './preview-html.mjs';
+import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {pathToFileURL} from 'node:url';
 
 // No remote sources, frames, forms, workers or popup permissions. This is a
@@ -11,13 +13,14 @@ export const PRIVATE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline
 const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff','.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!tail.startsWith('..'+sep)&&tail!=='..'&&!tail.startsWith(sep));};
 /** Start a read-only server; contract: scripts/preview-contract.d.ts. */
-export async function startPreview({root,port=0,runtimeDir}) {
+export async function startPreview({root,port=0,runtimeDir,revisionIntervalMs=1000}) {
  if(!Number.isInteger(port)||port<0||port>65535)throw Error('Port must be an integer from 0 to 65535');
  const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error('Root must be a directory');
  // Generated only in the downloadable archive; optional in a source checkout.
  const runtimeModule=new URL('./preview-runtime.mjs',import.meta.url).href;
  let bundled;try{bundled=(await import(runtimeModule)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
+ const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const server=createServer(async(req,res)=>{
   res.setHeader('Content-Security-Policy',PRIVATE_CSP);res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Cross-Origin-Resource-Policy','same-origin');
   const end=(status,body)=>{res.statusCode=status;res.end(req.method==='HEAD'?undefined:body);};
@@ -27,7 +30,7 @@ export async function startPreview({root,port=0,runtimeDir}) {
   try {
    const pathname=decodeURIComponent((req.url||'/').split('?')[0]);
    if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))return end(404,'Not found');
-   if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await projectRevision(base)}));}
+   if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
    const source=bundled&&(pathname==='/af/v1/core.js'?bundled.core:pathname===bundled.readerPath?bundled.reader:pathname===bundled.apolloPath?bundled.apollo:undefined);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
@@ -35,14 +38,14 @@ export async function startPreview({root,port=0,runtimeDir}) {
    const requested=isRuntime?pathname.slice('/af/v1/'.length):pathname.slice(1);
    let file=resolve(selected,requested||'index.html');if(!inside(selected,file))return end(404,'Not found');
    file=await realpath(file);if(!inside(selected,file)||relative(selected,file).split(sep).some(part=>part.startsWith('.')))return end(404,'Not found');
-   const info=await stat(file);if(!info.isFile())return end(404,'Not found');
+   const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError('Preview file exceeds 32 MiB; reduce the file or select a smaller project.');
    const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':'application/octet-stream');
    res.setHeader('Content-Type',type);
-   if(type.startsWith('text/html')){const html=await readFile(file,'utf8');const body=html+changeNotice(await projectRevision(base));res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
-   res.setHeader('Content-Length',info.size);
+   if(type.startsWith('text/html')){const html=(await readPreviewFile(selected,file)).toString('utf8');const body=previewHtml(html,changeNotice(await revisions.current({fresh:true})));res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
-   end(200,await readFile(file));
-  }catch{return end(404,'Not found');}
+   end(200,bytes);
+  }catch(error){res.removeHeader('Content-Length');if(error.code==='PREVIEW_LIMIT'){res.removeHeader('Content-Length');res.setHeader('Content-Type','application/json');return end(413,JSON.stringify({error:error.message}));}if(req.url?.split('?')[0]==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(503,JSON.stringify({error:'Preview project is unavailable or changing; restore the selected directory and retry.'}));}return end(404,'Not found');}
  });
  await new Promise((done,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',done);});
  return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Promise((done,reject)=>server.close(error=>error?reject(error):done()))};
