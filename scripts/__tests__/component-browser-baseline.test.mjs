@@ -264,7 +264,7 @@ describe('bounded independent reader capture',()=>{
 
 
 describe('used font evidence',()=>{
-  it('binds external stylesheets to the inspected frame and drains font response reads after font loading',async()=>{
+  it.each([false,true])('binds stylesheet body waits to the inspected frame (blocked reader=%s)',async blockedReader=>{
     const output=await setup(),body=Buffer.from('font bytes'),fontSha256=createHash('sha256').update(body).digest('hex');
     const parentFrame={},handlers=new Map();let targetFrame,inspectedStylesheets;
     const emit=(type,response)=>{for(const handler of handlers.get(type)||[])handler(response);};
@@ -284,11 +284,13 @@ describe('used font evidence',()=>{
     const page={on:(type,handler)=>{const group=handlers.get(type)||[];group.push(handler);handlers.set(type,group);},screenshot:async()=>png};
     const browser={version:()=> 'test-browser',newContext:async()=>({newPage:async()=>page,close:async()=>{}})};
     const stylesheet=`@font-face{font-family:Capture Font;src:url("font.woff2");}`;
-    const captures=await captureBrowserBaseline({browser,mount:async()=>{
-      emit('response',response('stylesheet','http://localhost/parent.css',parentFrame,stylesheet.replace('font.woff2','parent-font.woff2')));
-      emit('response',response('stylesheet','http://localhost/frame.css',targetFrame,stylesheet));
+    const task=captureBrowserBaseline({browser,mount:async()=>{
+      const stale=response('stylesheet','http://localhost/parent.css',parentFrame,'');stale.text=()=>new Promise(()=>{});emit('response',stale);
+      const actual=response('stylesheet','http://localhost/frame.css',targetFrame,stylesheet);if(blockedReader)actual.text=()=>new Promise(()=>{});emit('response',actual);
       return {frame};
-    },implementation:'html',sourceRevision:'a'.repeat(40),output,fixtures:[{id:'frame-font',states:[{id:'initial',actions:[]}]}],themes:['light'],viewports:[{width:800,height:600}]});
+    },implementation:'html',sourceRevision:'a'.repeat(40),output,captureStepTimeoutMs:40,fixtures:[{id:'frame-font',states:[{id:'initial',actions:[]}]}],themes:['light'],viewports:[{width:800,height:600}]});
+    if(blockedReader){await expect(task).rejects.toThrow(/stylesheet-responses exceeded.*frame.css.*capturedFrame.*true/);return;}
+    const captures=await task;
     expect(inspectedStylesheets).toEqual([{url:'http://localhost/frame.css',status:200,css:stylesheet}]);
     expect(captures[0].fontEvidence.resources).toEqual([{url:'http://localhost/font.woff2',status:200,sha256:fontSha256}]);
     expect(fontByteProof(captures[0].fontEvidence).errors).toEqual([]);

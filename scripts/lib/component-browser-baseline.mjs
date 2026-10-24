@@ -148,18 +148,19 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`Reader ${name} exceeded ${budget}ms`)),budget);})]);}finally{clearTimeout(timer);}
     };
     const responseFrame=response=>{try{return response.frame();}catch{return undefined;}};
-    const waitForPending=async pending=>{let settled=0;while(settled<pending.length){const batch=pending.slice(settled);settled=pending.length;await Promise.all(batch);}};
+    const trackResponse=(pending,response,read)=>{const record={frame:responseFrame(response),url:response.url(),status:response.status(),state:'pending',done:undefined};record.done=Promise.resolve().then(read).finally(()=>{record.state='settled';});pending.push(record);};
+    const waitForPending=async pending=>{let settled=0;while(settled<pending.length){const batch=pending.slice(settled);settled=pending.length;await Promise.all(batch.filter(record=>record.frame===frame).map(record=>record.done));}};
     try {
       page=await context.newPage();
       page.on('pageerror',error=>errors.push(error.message));
       page.on('console',message=>{if(message.type()==='error'&&consoleErrors.length<20)consoleErrors.push(diagnosticText(message.text()));});
       page.on('requestfailed',request=>{if(requestFailures.length<20)requestFailures.push({type:request.resourceType(),url:diagnosticText(request.url()),error:diagnosticText(request.failure()?.errorText||'unknown')});});
       page.on('response',response=>{if(response.status()>=400&&httpFailures.length<20)httpFailures.push({type:response.request().resourceType(),url:diagnosticText(response.url()),status:response.status(),contentType:response.headers()['content-type']||''});});
-      page.on('response',response=>{if(response.request().resourceType()==='stylesheet')stylesheetPending.push((async()=>{try{stylesheetResponses.push({frame:responseFrame(response),url:response.url(),status:response.status(),css:await response.text()});}catch{ /* A stylesheet body unavailable to Playwright cannot prove font sources. */ }})());});
+      page.on('response',response=>{if(response.request().resourceType()==='stylesheet')trackResponse(stylesheetPending,response,async()=>{try{stylesheetResponses.push({frame:responseFrame(response),url:response.url(),status:response.status(),css:await response.text()});}catch{ /* A stylesheet body unavailable to Playwright cannot prove font sources. */ }});});
       const local=value=>{const url=new URL(value);return ['data:','blob:'].includes(url.protocol)||['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)||url.hostname.endsWith('.lvh.me');};
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
-      page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
+      page.on('response',response=>{if(response.request().resourceType()==='font')trackResponse(fontPending,response,async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}});});
       const mounted=await step('mount',()=>mount({fixture,theme,viewport,state,page}));frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
@@ -203,7 +204,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await writeFile(path.join(output,name),screenshot);
       return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } catch(cause){
-      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length};
+      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length,pendingResources:[...fontPending,...stylesheetPending].filter(record=>record.state==='pending').map(record=>({url:diagnosticText(record.url),status:record.status,capturedFrame:record.frame===frame}))};
       /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */
       const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase,...(activeAction?{action:activeAction}:{}),message:diagnosticText(cause.message),diagnostics};
       const stem=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-failure`;
