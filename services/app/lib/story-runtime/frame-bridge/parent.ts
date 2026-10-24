@@ -185,19 +185,21 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
 
   const relay = async (payload: Extract<FrameBridgeFramePayload, { kind: 'fetch' }>) => {
+    const relayKey=key;
+    const reply=(answer:FrameBridgeParentPayload)=>{if(key===relayKey)post(answer);};
     const request = relayedRequest(win, id, payload, options.htmlContext?.());
     if (!request) {
-      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) post({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
-      else post({ kind: 'fetch-result', call: payload.call, error: 'refused' });
+      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
+      else reply({ kind: 'fetch-result', call: payload.call, error: 'refused' });
       return;
     }
     try {
       const response = await appFetch(request.path, request.init);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, name) => { if (KEPT_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value; });
-      post({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
+      reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
     } catch (error) {
-      post({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
+      reply({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
     }
   };
 
