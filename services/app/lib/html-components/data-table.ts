@@ -12,6 +12,7 @@ import {
 import { compareTable, parseMetricSpecs } from "@/lib/story-ui/compare";
 import {
   nextTableSort,
+  TABLE_ROW_HEIGHT,
   tableRowIdentities,
   tableWindow,
   TableLoader,
@@ -251,6 +252,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       this.value = {
         ...result,
         rows: replace ? result.rows : [...this.data.rows, ...result.rows],
+        truncated: replace
+          ? result.truncated
+          : this.data.truncated || result.truncated,
       };
     } catch (e) {
       if (epoch === this.requestEpoch)
@@ -510,6 +514,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       ordered.length,
       this.viewport!.scrollTop,
       parseTableHeight(this.height),
+      TABLE_ROW_HEIGHT,
     );
     const active = new Set<string>();
     const spacer = (height: number) => {
@@ -722,10 +727,13 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     else if (
       this.data.truncated ||
       (this.data.totalRows ?? 0) > this.data.rows.length
-    )
-      this.footer!.append(
-        `${this.data.rows.length} of ${this.data.totalRows ?? this.data.rows.length} rows`,
-      );
+    ) {
+      const count = document.createElement("span");
+      count.setAttribute("aria-label", "Row count");
+      const format = new Intl.NumberFormat();
+      count.textContent = `${format.format(this.data.rows.length)} of ${format.format(this.data.totalRows ?? this.data.rows.length)} rows`;
+      this.footer!.append(count);
+    }
     if (
       this.source &&
       !this.pending &&
@@ -736,12 +744,17 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       button.type = "button";
       button.textContent = "load more";
       button.setAttribute("aria-label", "Load more rows");
+      button.style.cssText =
+        "font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0;text-underline-offset:2px";
+      button.style.setProperty("font-weight", "500", "important");
+      button.onmouseenter = () => (button.style.textDecoration = "underline");
+      button.onmouseleave = () => (button.style.textDecoration = "");
       button.onclick = () => void this.loadMore();
       this.footer!.append(button);
     }
   }
 }
-const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem}af-data-table [data-slot=table-scroll]{overflow:auto;position:relative;min-height:0}af-data-table table{width:100%;border-collapse:collapse}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th{padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}af-data-table td{position:relative;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);height:36px;box-sizing:border-box}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;justify-content:space-between;padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
+const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem}af-data-table [data-slot=table-scroll]{overflow:auto;position:relative;min-height:0}af-data-table table{width:100%;border-collapse:collapse}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th{padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}af-data-table td{position:relative;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);height:${TABLE_ROW_HEIGHT}px;box-sizing:border-box}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
 export function registerDataTable(
   registry: CustomElementRegistry = customElements,
   document: Document = globalThis.document,

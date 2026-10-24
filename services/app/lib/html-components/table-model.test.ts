@@ -50,9 +50,9 @@ import { tableWindow } from "./table-model";
 it("bounds large windows and clamps after shrink without dropping the last row", () => {
   expect(tableWindow(100000, 0, 420)).toEqual({
     start: 0,
-    end: 36,
+    end: 37,
     before: 0,
-    after: 99964 * 36,
+    after: 99963 * 33,
   });
   expect(tableWindow(1, 90000, 420)).toEqual({
     start: 0,
@@ -60,6 +60,18 @@ it("bounds large windows and clamps after shrink without dropping the last row",
     before: 0,
     after: 0,
   });
+});
+it("keeps the last ten 33px rows in the bottom virtual window", () => {
+  const rowHeight = 33;
+  const viewportHeight = 360;
+  const maxScroll = 1001 * rowHeight - viewportHeight;
+  const window = tableWindow(1001, maxScroll, viewportHeight);
+  const lastTenRows = Array.from({ length: 10 }, (_, offset) => 991 + offset);
+
+  expect(window.end).toBe(1001);
+  expect(window.before).toBe(window.start * rowHeight);
+  expect(window.after).toBe(0);
+  expect(lastTenRows.every((index) => index >= window.start && index < window.end)).toBe(true);
 });
 it("drops stale rejected requests but surfaces the current adapter failure", async () => {
   const loader = new TableLoader();

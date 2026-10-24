@@ -33,6 +33,7 @@ export interface TableTemplate {
   col: string;
   template: HTMLTemplateElement;
 }
+export const TABLE_ROW_HEIGHT = 33;
 export function nextTableSort(
   sort: SortSpec | null,
   col: string,
@@ -85,7 +86,7 @@ export function tableWindow(
   count: number,
   offset: number,
   height: number,
-  rowHeight = 36,
+  rowHeight = TABLE_ROW_HEIGHT,
   overscan = 12,
 ): { start: number; end: number; before: number; after: number } {
   const start = Math.min(

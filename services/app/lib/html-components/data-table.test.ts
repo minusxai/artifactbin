@@ -136,6 +136,44 @@ it("sorts from the whole header and its accessible button exactly once", () => {
   expect(button.getAttribute("aria-label")).toBe("Sort by score");
   expect(header.scope).toBe("col");
 });
+it("keeps the grouped row count and load-more footer after the final page", async () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  const columns = [{ name: "id", type: "number" }];
+  const rows = Array.from({ length: 1001 }, (_, id) => ({ id: id + 1 }));
+  el.source = {
+    async read({ offset, limit }) {
+      return {
+        columns,
+        rows: rows.slice(offset, offset + limit),
+        totalRows: rows.length,
+        truncated: offset + limit < rows.length,
+      };
+    },
+  };
+  el.data = {
+    columns,
+    rows: rows.slice(0, 1000),
+    totalRows: rows.length,
+    truncated: true,
+  };
+  document.body.append(el);
+
+  el.querySelector<HTMLButtonElement>('button[aria-label="Load more rows"]')!.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const footer = el.querySelector<HTMLDivElement>("[data-slot=table-footer]")!;
+  const rowCount = footer.querySelector('[aria-label="Row count"]');
+  const loadMore = footer.querySelector<HTMLButtonElement>(
+    'button[aria-label="Load more rows"]',
+  );
+  expect(el.data.rows.at(-1)?.id).toBe(1001);
+  expect(rowCount?.textContent).toBe("1,001 of 1,001 rows");
+  expect(loadMore).toBeTruthy();
+  expect(getComputedStyle(loadMore!).borderStyle).toBe("none");
+  expect(getComputedStyle(loadMore!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(loadMore!).cursor).toBe("pointer");
+  expect(loadMore!.style.getPropertyValue("font-weight")).toBe("500");
+});
 it("bounds large loaded results and recovers stable identities after scrolling", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
