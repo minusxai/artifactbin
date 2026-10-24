@@ -328,3 +328,5 @@ export function importNativeHistory(
 ) {
   return db.transaction((tx) => writeNativeHistory(tx, input, relations));
 }
+
+export { prepareNativeHistoryRelations } from './relations';
