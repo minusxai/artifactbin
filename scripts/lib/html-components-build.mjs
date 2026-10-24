@@ -1,35 +1,57 @@
-import {mkdir, readdir, readFile, writeFile, rename, rm} from 'node:fs/promises';
+import {cp, mkdir, mkdtemp, readdir, readFile, writeFile, rename, rm} from 'node:fs/promises';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
+/** @typedef {{sourceDir: string, outputDir: string, appDir?: string}} ComponentBuildOptions */
+const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
+const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
 
-/** Compile the optional author components, never their development tests/fixtures.
- * Each JS file is self-contained ESM so publication can carry it offline without
- * a package manager, CDN or hidden runtime dependency. Source stays readable. */
-export async function buildComponentAssets({sourceDir,outputDir}) {
+/** Compile one closed ESM graph, preserving lazy engines and sharing their chunks.
+ * Flat lowercase names obey the installed skill asset contract. Compile and validate
+ * every output before replacing the previous installation; readable sources remain. */
+/** @param {ComponentBuildOptions} options */
+export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR}) {
   const names=(await readdir(sourceDir,{withFileTypes:true}))
     .filter(entry=>entry.isFile() && /^[a-z][a-z0-9-]*\.ts$/.test(entry.name))
     .map(entry=>entry.name).sort();
   if(!names.length) throw new Error('No HTML component sources found');
-  // Finish all compilation before touching the installed skill assets.
-  const assets=await Promise.all(names.map(async name=>{
-    const filename=path.join(sourceDir,name);
-    const result=await build({entryPoints:[filename],bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',logLevel:'silent'});
-    return {name,source:await readFile(filename,'utf8'),compiled:result.outputFiles[0].text};
+  const sources=await Promise.all(names.map(async name=>({name,content:await readFile(path.join(sourceDir,name),'utf8')})));
+  const result=await build({entryPoints:names.map(name=>path.join(sourceDir,name)),outdir:outputDir,
+    bundle:true,splitting:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
+    entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent'});
+  for(const output of Object.values(result.metafile.outputs)) for(const dependency of output.imports) {
+    if(dependency.external) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);
+  }
+  // esbuild hashes use uppercase ASCII. Lowercase that alphabet (a bijection), and
+  // rewrite only emitted relative module references so entry/chunk names all match
+  // the same publication allowlist without allowing extra paths or URL schemes.
+  const renamed=new Map(result.outputFiles.map(file=>{
+    const name=path.basename(file.path); return [name,name.toLowerCase()];
   }));
-  const stage=`${outputDir}.stage-${process.pid}`;
-  await rm(stage,{recursive:true,force:true});
-  await mkdir(stage,{recursive:true});
+  if(new Set(renamed.values()).size!==renamed.size) throw new Error('Component output filenames collide after lowercase normalization');
+  const compiled=result.outputFiles.map(file=>{
+    const name=renamed.get(path.basename(file.path));
+    if(!ASSET_NAME.test(name) || !name.endsWith('.js')) throw new Error(`Unsupported component build output: ${name}`);
+    const content=file.text.replace(/(["'])\.\/([a-zA-Z0-9-]+\.js)\1/g,(reference,quote,target)=>{
+      const emitted=renamed.get(target); if(!emitted) return reference;
+      return `${quote}./${emitted}${quote}`;
+    });
+    return {name,content};
+  });
+  // Preserve unrelated files but replace all owned entries/chunks in one directory
+  // swap. Compilation, remote-dependency errors and staging errors leave the old
+  // installation intact; a failed final rename restores the previous directory.
+  await mkdir(path.dirname(outputDir),{recursive:true});
+  const stage=await mkdtemp(`${outputDir}.stage-`), backup=`${stage}.previous`;
+  let movedPrevious=false;
   try {
-    await Promise.all(assets.flatMap(({name,source,compiled})=>[
-      writeFile(path.join(stage,name),source),
-      writeFile(path.join(stage,name.replace(/\.ts$/,'.js')),compiled),
-    ]));
-    await mkdir(outputDir,{recursive:true});
-    for(const file of await readdir(stage)) await rename(path.join(stage,file),path.join(outputDir,file));
-    const expected=new Set(assets.flatMap(({name})=>[name,name.replace(/\.ts$/,'.js')]));
-    for(const file of await readdir(outputDir)) {
-      if(/^[a-z][a-z0-9-]*\.(?:ts|js)$/.test(file) && !expected.has(file)) await rm(path.join(outputDir,file));
-    }
+    let existing=[];
+    try { existing=await readdir(outputDir); } catch(error) { if(error.code!=='ENOENT') throw error; }
+    for(const name of existing) if(!ASSET_NAME.test(name)) await cp(path.join(outputDir,name),path.join(stage,name),{recursive:true});
+    await Promise.all([...sources,...compiled].map(({name,content})=>writeFile(path.join(stage,name),content)));
+    try { await rename(outputDir,backup); movedPrevious=true; } catch(error) { if(error.code!=='ENOENT') throw error; }
+    try { await rename(stage,outputDir); } catch(error) { if(movedPrevious) { await rename(backup,outputDir); movedPrevious=false; } throw error; }
+    if(movedPrevious) { await rm(backup,{recursive:true,force:true}); movedPrevious=false; }
   } finally { await rm(stage,{recursive:true,force:true}); }
-  return assets.map(({name})=>name.replace(/\.ts$/,''));
+  return names.map(name=>name.replace(/\.ts$/,''));
 }
