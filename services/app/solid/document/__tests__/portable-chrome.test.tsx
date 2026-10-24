@@ -124,3 +124,23 @@ it.each(['unpublished', 'linked'] as const)('provides local Light and Dark choic
   expect(document.documentElement).not.toHaveAttribute('data-af-dark');
   expect(onMode).toHaveBeenLastCalledWith('light');
 });
+
+it.each([
+  [{ dirty: true }, 'Local dataset edits are unsaved'],
+  [{ conflict: true }, 'Local dataset edits conflict with the file on disk'],
+] as const)('retains dataset recovery when disk revision already matches: %o', (flags, message) => {
+  const onReloadPreview = vi.fn();
+  const { chrome, ui } = mount({ onReloadPreview });
+  chrome.update({ state: 'offline', previewStatus: { changed: false, connected: true, ...flags } });
+  expect(ui.getByRole('status')).toHaveTextContent(message);
+  fireEvent.click(ui.getByRole('button', { name: 'Reload file' }));
+  expect(onReloadPreview).toHaveBeenCalledOnce();
+});
+
+it('shows the exact actionable preview error as text', () => {
+  const { chrome, ui } = mount();
+  const error = 'Preview file exceeds 32 MiB. Use a smaller file. <strong>Not markup</strong>';
+  chrome.update({ state: 'offline', previewStatus: { changed: false, connected: false, error } });
+  expect(ui.getByRole('status')).toHaveTextContent(error);
+  expect(ui.getByRole('status').querySelector('strong')).toBeNull();
+});

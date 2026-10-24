@@ -6,7 +6,7 @@ export interface PortableChromeIdentity {
   baseRevision: string;
   sourceDigest: string;
 }
-export interface PortablePreviewStatus { changed: boolean; connected: boolean; error?: string; }
+export interface PortablePreviewStatus { changed: boolean; connected: boolean; dirty?: boolean; conflict?: boolean; error?: string; }
 export interface PortableChromeUpdate {
   state: PortableChromeState;
   mode?: 'light' | 'dark';

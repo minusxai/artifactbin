@@ -56,7 +56,9 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
   const notice = () => {
     if (saveError()) return 'Could not save HTML. Try again.';
     const preview: PortablePreviewStatus | undefined = props.current.previewStatus;
-    if (preview?.error) return 'Private preview is unavailable. Your local file is preserved.';
+    if (preview?.error) return preview.error;
+    if (preview?.conflict) return 'Local dataset edits conflict with the file on disk. Reload to review.';
+    if (preview?.dirty) return 'Local dataset edits are unsaved. Review them before reloading.';
     if (preview?.changed) return 'File changed on disk. Reload to view it.';
     if (props.current.notice) return props.current.notice;
     if (preview?.connected) return 'Private preview is connected. Save HTML keeps a local copy.';
@@ -90,7 +92,7 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
     <div role="status" aria-live="polite" class="flex h-8 min-w-0 items-center gap-2 border-b border-edge bg-surface px-3 font-mono text-micro text-muted">
       <span class="shrink-0 text-fg">{LABEL[props.current.state]}</span>
       <span class="min-w-0 truncate">{notice()}</span>
-      <Show when={props.current.previewStatus?.changed}><Button variant="secondary" size="sm" aria-label="Reload file" disabled={!props.onReloadPreview} onClick={() => props.onReloadPreview?.()}>Reload</Button></Show>
+      <Show when={props.current.previewStatus?.changed || props.current.previewStatus?.dirty || props.current.previewStatus?.conflict}><Button variant="secondary" size="sm" aria-label="Reload file" disabled={!props.onReloadPreview} onClick={() => props.onReloadPreview?.()}>Reload</Button></Show>
       <span class="ml-auto hidden shrink-0 sm:inline">{props.current.sourceStatus ?? source()}</span>
     </div>
   </section>
