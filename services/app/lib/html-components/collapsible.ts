@@ -11,6 +11,9 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
   private propertyControlled = false;
   private propertyValue = false;
   private triggerTabStops = new WeakMap<AfCollapsibleTrigger, string | null>();
+  private triggerSemantics = new WeakMap<AfCollapsibleTrigger, {role:string | null; tabindex:string | null}>();
+  private nativeButtonDisabled = new WeakMap<HTMLButtonElement, boolean>();
+  private disabledNativeButtons = new WeakSet<HTMLButtonElement>();
   private observer = new MutationObserver(() => this.sync());
 
   get open(): boolean { return this.propertyControlled ? this.propertyValue : this.hasAttribute('open') || (!this.hasAttribute('open') && this.expanded); }
@@ -62,7 +65,8 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
 
   private onClick = (event: Event): void => {
     const trigger = this.triggerTarget(event);
-    if (trigger && !event.defaultPrevented && !this.hasAttribute('disabled') && !trigger.hasAttribute('disabled')) this.request(!this.open);
+    const nativeButton = event.target instanceof Element ? event.target.closest('button') : null;
+    if (trigger && !event.defaultPrevented && !this.hasAttribute('disabled') && !trigger.hasAttribute('disabled') && !nativeButton?.disabled) this.request(!this.open);
   };
 
   private onKeydown = (event: KeyboardEvent): void => {
@@ -92,14 +96,39 @@ export class AfCollapsible extends HTMLElement implements CollapsibleContract {
     for (const trigger of triggers) {
       this.identify(trigger, 'trigger');
       if (!this.triggerTabStops.has(trigger)) this.triggerTabStops.set(trigger, trigger.getAttribute('tabindex'));
-      trigger.setAttribute('role','button');
-      trigger.setAttribute('aria-expanded',String(open));
-      trigger.setAttribute('aria-disabled',String(disabled || trigger.hasAttribute('disabled')));
-      if (content) trigger.setAttribute('aria-controls',content.id); else trigger.removeAttribute('aria-controls');
-      const authoredTabindex = this.triggerTabStops.get(trigger);
-      if (disabled || trigger.hasAttribute('disabled')) trigger.tabIndex = -1;
-      else if (authoredTabindex === null) trigger.tabIndex = 0;
-      else if (authoredTabindex !== undefined) trigger.setAttribute('tabindex',authoredTabindex);
+      if (!this.triggerSemantics.has(trigger)) this.triggerSemantics.set(trigger, {role:trigger.getAttribute('role'), tabindex:trigger.getAttribute('tabindex')});
+      const nativeButtons = [...trigger.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.closest('af-collapsible') === this);
+      const triggerDisabled = disabled || trigger.hasAttribute('disabled');
+      if (nativeButtons.length) {
+        trigger.removeAttribute('role');
+        trigger.removeAttribute('tabindex');
+        trigger.removeAttribute('aria-expanded');
+        trigger.removeAttribute('aria-controls');
+        trigger.removeAttribute('aria-disabled');
+        for (const button of nativeButtons) {
+          if (!this.nativeButtonDisabled.has(button)) this.nativeButtonDisabled.set(button, button.disabled);
+          if (triggerDisabled) {
+            button.setAttribute('disabled','');
+            this.disabledNativeButtons.add(button);
+          } else if (this.disabledNativeButtons.has(button)) {
+            if (this.nativeButtonDisabled.get(button)) button.setAttribute('disabled','');
+            else button.removeAttribute('disabled');
+            this.disabledNativeButtons.delete(button);
+          }
+          button.setAttribute('aria-expanded',String(open));
+          button.setAttribute('aria-disabled',String(triggerDisabled || button.disabled));
+          if (content) button.setAttribute('aria-controls',content.id); else button.removeAttribute('aria-controls');
+        }
+      } else {
+        const semantics = this.triggerSemantics.get(trigger);
+        trigger.setAttribute('role','button');
+        trigger.setAttribute('aria-expanded',String(open));
+        trigger.setAttribute('aria-disabled',String(triggerDisabled));
+        if (content) trigger.setAttribute('aria-controls',content.id); else trigger.removeAttribute('aria-controls');
+        if (triggerDisabled) trigger.tabIndex = -1;
+        else if (semantics?.tabindex === null) trigger.tabIndex = 0;
+        else if (semantics?.tabindex !== undefined) trigger.setAttribute('tabindex',semantics.tabindex);
+      }
       trigger.dataset.state = open ? 'open' : 'closed';
     }
     for (const panel of contents) {

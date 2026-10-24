@@ -63,6 +63,31 @@ describe('native authored collapsible', () => {
     expect(root.open).toBe(false); expect(changes).toBe(2);
     inner.click(); expect(root.open).toBe(true); expect(changes).toBe(3);
   });
+  it('uses an authored native button as the only semantic and focus control', async () => {
+    const {root,trigger,content} = fixture('', '<p>Body</p>');
+    const button = document.createElement('button'); button.id = 'native-trigger'; button.textContent = 'Open'; button.setAttribute('tabindex','3'); trigger.replaceChildren(button);
+    await tick();
+    expect(trigger.hasAttribute('role')).toBe(false); expect(trigger.hasAttribute('tabindex')).toBe(false);
+    expect(button.hasAttribute('role')).toBe(false); expect(button.tabIndex).toBe(3);
+    expect(button.getAttribute('aria-expanded')).toBe('false'); expect(button.getAttribute('aria-controls')).toBe(content.id);
+    button.click(); expect(root.open).toBe(true); expect(button.getAttribute('aria-expanded')).toBe('true');
+  });
+  it('temporarily disables native trigger buttons while preserving their authored disabled and tabindex state', async () => {
+    const {root,trigger} = fixture('', '<p>Body</p>');
+    const originalEnabled = document.createElement('button'); originalEnabled.textContent = 'Enabled'; originalEnabled.setAttribute('tabindex','4');
+    const originalDisabled = document.createElement('button'); originalDisabled.textContent = 'Disabled'; originalDisabled.setAttribute('disabled',''); originalDisabled.setAttribute('tabindex','2');
+    trigger.replaceChildren(originalEnabled,originalDisabled);
+    root.setAttribute('disabled','');
+    expect(originalEnabled.disabled).toBe(true); expect(originalEnabled.getAttribute('tabindex')).toBe('4');
+    expect(originalDisabled.disabled).toBe(true); expect(originalDisabled.getAttribute('tabindex')).toBe('2');
+    let changes = 0; root.addEventListener('af-change', () => changes++);
+    originalEnabled.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); expect(changes).toBe(0);
+    root.removeAttribute('disabled');
+    expect(originalEnabled.disabled).toBe(false); expect(originalEnabled.getAttribute('tabindex')).toBe('4');
+    expect(originalDisabled.disabled).toBe(true); expect(originalDisabled.getAttribute('tabindex')).toBe('2');
+    trigger.setAttribute('disabled',''); await tick(); expect(originalEnabled.disabled).toBe(true);
+    trigger.removeAttribute('disabled'); await tick(); expect(originalEnabled.disabled).toBe(false);
+  });
   it('isolates nested roots, responds to external attributes and child changes, and reconnects cleanly', async () => {
     const {root,trigger,content} = fixture();
     const nested = document.createElement('af-collapsible'); nested.innerHTML='<af-collapsible-trigger>Nested</af-collapsible-trigger><af-collapsible-content>N</af-collapsible-content>';
