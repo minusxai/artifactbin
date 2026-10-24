@@ -1,3 +1,4 @@
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
 export interface ConnectLocalDocumentOptions {
@@ -45,7 +46,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
  const begin=()=>{
   if(disposed||options.privatePreview)return;
   if(!validLinkedDocument(identity)){state('unavailable');return;}
-  stopped=false;cleanup();nonce=win.crypto.randomUUID();state('connecting');
+  stopped=false;cleanup();try{nonce=runtimeId(win.crypto??null);}catch(error){state('blocked');throw error;}state('connecting');
   const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce}).toString();
   iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
   iframe.style.cssText='position:fixed;left:0;top:0;width:100%;height:56px;border:0;z-index:2147483646';
@@ -69,6 +70,6 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
  };
  if(!validLinkedDocument(identity)){state('unavailable');}
  else if(options.privatePreview||options.stayOffline){state('offline');}
- else begin();
+ else {try{begin();}catch(error){win.removeEventListener('message',receive);disposed=true;throw error;}}
  return connection;
 }

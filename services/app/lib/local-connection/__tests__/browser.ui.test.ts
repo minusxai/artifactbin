@@ -1,7 +1,7 @@
 import {afterEach,describe,it,expect,vi} from 'vitest';
 import {connectLocalDocument} from '../browser';
 const identity={platformOrigin:'https://platform.example',artifactId:'page123',baseRevision:'1',sourceDigest:'a'.repeat(64)};
-afterEach(()=>{document.querySelectorAll('iframe').forEach(frame=>frame.remove());vi.restoreAllMocks();});
+afterEach(()=>{document.querySelectorAll('iframe').forEach(frame=>frame.remove());vi.restoreAllMocks();vi.unstubAllGlobals();});
 describe('local file connection',()=>{
  it('never contacts the platform during private preview or remembered offline mode',()=>{
   for(const mode of [{privatePreview:true},{stayOffline:true}]){
@@ -47,4 +47,9 @@ it('ignores queued authority and observation messages after explicit disconnect'
   connection.disconnect();port.onmessage?.({data:{kind:'state',state:'connected',role:'owner'}} as MessageEvent);port.onmessage?.({data:{kind:'source-observation',remoteDigest:'b'.repeat(64),remoteRevision:'2'}} as MessageEvent);
   expect(states.at(-1)).toBe('offline');expect(observed).not.toHaveBeenCalled();
  }finally{connection.dispose();vi.unstubAllGlobals();}
+});
+it('uses secure random bytes when randomUUID is absent and fails clearly if WebCrypto is missing',()=>{
+ const crypto=window.crypto;vi.stubGlobal('crypto',{getRandomValues:crypto.getRandomValues.bind(crypto)});
+ const connection=connectLocalDocument({win:window,identity,onState:()=>{}});const frame=document.querySelector('iframe')!;expect(new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce')).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);connection.dispose();
+ vi.stubGlobal('crypto',undefined);const states:string[]=[];expect(()=>connectLocalDocument({win:window,identity,onState:s=>states.push(s)})).toThrow(/Web ?Crypto|getRandomValues/);expect(states).toEqual(['blocked']);expect(document.querySelector('iframe')).toBeNull();vi.unstubAllGlobals();
 });

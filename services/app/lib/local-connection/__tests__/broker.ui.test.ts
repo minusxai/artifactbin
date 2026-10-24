@@ -75,3 +75,10 @@ it('observes an idle remote head change and clears authority without changing th
   const calls=fetch.mock.calls.length;await port.onmessage?.({data:{kind:'operation',call:1,operation:{query:'mutation { tasks { add } }'}}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(calls);
  }finally{broker.dispose();vi.useRealTimers();}
 });
+it('opens login securely without randomUUID and reports missing WebCrypto before opening a popup',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');const fetch=vi.fn().mockResolvedValue({ok:false,status:401,json:async()=>({})});vi.stubGlobal('fetch',fetch);const crypto=window.crypto;vi.stubGlobal('crypto',{getRandomValues:crypto.getRandomValues.bind(crypto)});
+ const popup={close:vi.fn()} as unknown as Window;const open=vi.spyOn(window,'open').mockReturnValue(popup),states:string[]=[];
+ const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s)}),port=fakePort();
+ window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('signin-required'));
+ broker.signIn();expect(open).toHaveBeenCalledTimes(1);vi.stubGlobal('crypto',undefined);expect(()=>broker.signIn()).toThrow(/Web ?Crypto|getRandomValues/);expect(states.at(-1)).toBe('blocked');expect(open).toHaveBeenCalledTimes(1);broker.dispose();
+});

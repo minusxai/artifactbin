@@ -1,3 +1,4 @@
+import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {startConnectionMonitor} from './monitor';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnectionState,SourceObservation} from './contracts';
@@ -101,7 +102,7 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  win.addEventListener('focus',wake);win.document.addEventListener('visibilitychange',wake);
  win.addEventListener('pagehide',dispose);
  return {retry(){if(!connected){revoke();void connect();}},signIn(){
-  if(disposed||!identity)return;popup?.close();authNonce=win.crypto.randomUUID();
+  if(disposed||!identity)return;popup?.close();try{authNonce=runtimeId(win.crypto??null);}catch(error){state('blocked');throw error;}
   const target='/local/connect#'+new URLSearchParams({nonce:authNonce,'auth-return':'1'});
   popup=win.open('/login?callbackUrl='+encodeURIComponent(target),'_blank');
   if(!popup){state('blocked');return;}
