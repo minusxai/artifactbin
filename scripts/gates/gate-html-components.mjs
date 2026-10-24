@@ -8,21 +8,24 @@ import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import { launchChromium } from './lib/browser.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
-import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionHtml, tabsInteractionCases, componentBrowserFixtures, contrastRatio } from '../lib/component-parity.mjs';
+import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionHtml, tabsInteractionCases, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/component-parity.mjs';
 
 const check = createChecker('html-components');
 const section = createSection(check);
 const evidenceFiles = [];
-const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slider','Input','Textarea'];
+const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slider','Input','Textarea','Accordion','Select','DatePicker','Segmented','Avatar','Icon','FileUpload','SlideDeck'];
+const sourceName=family=>family.replace(/[A-Z]/g,(letter,index)=>(index?'-':'')+letter.toLowerCase());
 const repo = path.resolve(import.meta.dirname,'../..');
 // These bytes are the real retained React capture, not a new expected DOM manufactured by this gate.
 const oracleBytes = await readFile(path.join(repo,'services/app/lib/islands/__tests__/fixtures/react-oracle.json'));
 const oracleHash = createHash('sha256').update(oracleBytes).digest('hex');
 if (oracleHash !== 'fc56abeba44af903e616ed3172d5dddaad44c5c7b1afbc10ecf92078e10d468b') throw new Error('Recorded React reference changed: review and explicitly repin the capture');
 const oracle = JSON.parse(oracleBytes);
-const result = await build({stdin:{contents:families.map(family=>`import {register${family}} from './services/app/lib/html-components/${family.toLowerCase()}.ts';register${family}();`).join('')+"document.documentElement.dataset.fixtureReady='yes';",resolveDir:repo,sourcefile:'components-gate.ts'},bundle:true,format:'esm',platform:'browser',write:false});
+const result = await build({stdin:{contents:families.map(family=>`import {register${family}} from './services/app/lib/html-components/${sourceName(family)}.ts';register${family}();`).join('')+"document.documentElement.dataset.fixtureReady='yes';",resolveDir:repo,sourcefile:'components-gate.ts'},bundle:true,format:'esm',platform:'browser',write:false});
 const bundle = result.outputFiles[0].contents;
 const server = createServer((request,response) => {
+  if(request.url==='/avatar.svg'){response.writeHead(200,{'content-type':'image/svg+xml'});response.end('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#2563eb"/><circle cx="16" cy="16" r="8" fill="white"/></svg>');return;}
+  if(request.url==='/missing-avatar.svg'){response.writeHead(404);response.end('Fixture image unavailable');return;}
   if (request.url === '/components.js') { response.writeHead(200,{'content-type':'text/javascript'});response.end(bundle); }
   else { response.writeHead(200,{'content-type':'text/html'});response.end('<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>'); }
 });
@@ -37,11 +40,12 @@ async function saveImage(page,name) {
 }
 try {
   const page = await browser.newPage();
-  const errors=[]; page.on('pageerror',error=>errors.push(error.message));
-  async function mount(html,theme='light',viewport={width:800,height:600}) {
+  page.setDefaultTimeout(2500);page.setDefaultNavigationTimeout(5000);
+  const errors=[],requests=[];page.on('request',request=>requests.push(request.url()));page.on('pageerror',error=>errors.push(error.message));
+  async function mount(html,theme='light',viewport={width:800,height:600},setup='') {
     await page.setViewportSize(viewport);
     await page.goto(origin);
-    await page.setContent(`<!doctype html><html data-af-dark="${theme==='dark'}"><head><style>html{color-scheme:${theme};font-family:Arial,sans-serif;background:var(--background);color:var(--foreground)}body{padding:24px;margin:0}.gallery{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}.gallery>af-textarea{max-width:100%}af-progress{margin-block:16px}html{--background:#fff;--foreground:#18181b;--muted:#f4f4f5;--muted-foreground:#71717a;--primary:#2563eb;--primary-foreground:#fff;--ring:#2563eb;--input:#d4d4d8;--border:#d4d4d8;--secondary:#f4f4f5;--secondary-foreground:#18181b;--accent:#f4f4f5;--accent-foreground:#18181b}html[data-af-dark=true]{--background:#18181b;--foreground:#fafafa;--muted:#27272a;--muted-foreground:#a1a1aa;--primary:#60a5fa;--primary-foreground:#18181b;--ring:#93c5fd;--input:#52525b;--border:#52525b;--secondary:#27272a;--secondary-foreground:#fafafa;--accent:#27272a;--accent-foreground:#fafafa}</style></head><body>${html}<script type="module" src="/components.js"></script></body></html>`);
+    await page.setContent(`<!doctype html><html data-af-dark="${theme==='dark'}"><head><style>html{color-scheme:${theme};font-family:Arial,sans-serif;background:var(--background);color:var(--foreground)}body{padding:24px;margin:0}.gallery{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}.gallery>af-textarea{max-width:100%}af-progress{margin-block:16px}html{--background:#fff;--foreground:#18181b;--muted:#f4f4f5;--muted-foreground:#686873;--primary:#2563eb;--primary-foreground:#fff;--ring:#2563eb;--input:#d4d4d8;--border:#d4d4d8;--secondary:#f4f4f5;--secondary-foreground:#18181b;--accent:#f4f4f5;--accent-foreground:#18181b}html[data-af-dark=true]{--background:#18181b;--foreground:#fafafa;--muted:#27272a;--muted-foreground:#a1a1aa;--primary:#60a5fa;--primary-foreground:#18181b;--ring:#93c5fd;--input:#52525b;--border:#52525b;--secondary:#27272a;--secondary-foreground:#fafafa;--accent:#27272a;--accent-foreground:#fafafa}</style></head><body>${html}<script>${setup}</script><script type="module" src="/components.js"></script></body></html>`);
     await page.waitForFunction(()=>document.documentElement.dataset.fixtureReady==='yes');
     await page.evaluate(()=>document.fonts.ready);
   }
@@ -115,9 +119,27 @@ try {
     }),[first,second]);
     const ratio=contrastRatio(pixels[0],pixels[1]);check(ratio>=3,`${label} nontext contrast ${ratio.toFixed(2)}:1`);
   }
+  const settleTransitions=()=>page.evaluate(async()=>{await Promise.allSettled(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished));});
+  async function popupFits(popup,trigger,label) {
+    const bounds=await popup.boundingBox(),anchor=await trigger.boundingBox(),viewport=page.viewportSize();
+    check(bounds && anchor && bounds.x>=0 && bounds.y>=0 && bounds.x+bounds.width<=viewport.width+1 && bounds.y+bounds.height<=anchor.y+1,label);
+  }
+  async function waitDeck(index) {
+    await page.waitForFunction(index=>{const deck=document.querySelector('af-slide-deck'),slide=deck?.querySelectorAll('af-slide')[index];return deck?.index===index && slide && slide.getBoundingClientRect().top<innerHeight/3;},index,{timeout:2500});
+  }
+  const nativeState=()=>page.evaluate(()=>JSON.stringify([...document.querySelectorAll('input,textarea,select,button')].map(node=>({tag:node.localName,value:node.value,checked:node.checked,disabled:node.disabled,pressed:node.getAttribute('aria-pressed'),expanded:node.getAttribute('aria-expanded')}))));
+  async function themeFlip(theme,label,subject) {
+    const paint=()=>page.locator(subject).first().evaluate(root=>{const node=[...root.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),[data-slot=progress-indicator],h1')].find(node=>node.getClientRects().length)??root;const style=getComputedStyle(node);return JSON.stringify({color:style.color,background:style.backgroundColor,border:style.borderColor,accent:style.accentColor});});
+    const before=await nativeState(),paintBefore=await paint(),opposite=theme==='dark'?'light':'dark';
+    await page.evaluate(theme=>{document.documentElement.dataset.afDark=String(theme==='dark');document.documentElement.style.colorScheme=theme;},opposite);
+    await page.waitForFunction(color=>getComputedStyle(document.documentElement).backgroundColor===color,opposite==='dark'?'rgb(24, 24, 27)':'rgb(255, 255, 255)',{timeout:2000});await settleTransitions();
+    check(await nativeState()===before,`${label} live theme flip preserves control state`);
+    check(await paint()!==paintBefore,`${label} live theme flip repaints representative control`);
+    await page.evaluate(theme=>{document.documentElement.dataset.afDark=String(theme==='dark');document.documentElement.style.colorScheme=theme;},theme);await settleTransitions();
+  }
   for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:390,height:844}]) {
     for(const fixture of componentBrowserFixtures) await section(`${fixture.family} candidate ${theme} ${viewport.width}px`,async()=>{
-      await mount(fixture.html,theme,viewport);
+      await mount(fixture.html,theme,viewport,fixture.setup);
       await page.evaluate(()=>document.addEventListener('af-change',event=>{document.body.dataset.intent=JSON.stringify(event.detail);document.body.dataset.intentCount=String(Number(document.body.dataset.intentCount??0)+1);}));
       const tag=`${fixture.family} ${theme} ${viewport.width}px`;
       try {
@@ -204,10 +226,84 @@ try {
           check(await page.getByRole('textbox',{name:'Disabled notes',exact:true}).isDisabled(),`${tag} disabled native textarea semantics`);
           await page.keyboard.press('Tab');const readonlyNotes=page.getByRole('textbox',{name:'Read only notes',exact:true});check(await focused(readonlyNotes),`${tag} Tab skips disabled textarea`);
           await page.keyboard.type('cannot edit');check(await readonlyNotes.inputValue()==='Fixed notes',`${tag} native read only textarea preserves value`);
+        } else if(fixture.family==='accordion') {
+          const first=page.getByRole('button',{name:'First section',exact:true}),third=page.getByRole('button',{name:'Third section',exact:true});
+          await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(first,`${tag} trigger keyboard focus`);
+          await page.getByLabel('Retained accordion input').fill('Edited section');await first.focus();await page.keyboard.press('Space');check(await first.getAttribute('aria-expanded')==='false',`${tag} Space collapses`);
+          await page.keyboard.press('Enter');check(await first.getAttribute('aria-expanded')==='true',`${tag} Enter expands`);
+          await page.keyboard.press('ArrowDown');check(await focused(third),`${tag} ArrowDown skips disabled item`);await page.keyboard.press('Enter');check(await third.getAttribute('aria-expanded')==='true' && await first.getAttribute('aria-expanded')==='false',`${tag} single selection closes prior panel`);
+          await page.keyboard.press('Home');check(await focused(first),`${tag} Home focuses first`);await page.keyboard.press('Enter');check(await page.getByLabel('Retained accordion input').inputValue()==='Edited section',`${tag} mounted panel preserves input`);
+          await page.getByRole('button',{name:'Multiple A',exact:true}).click();await page.getByRole('button',{name:'Multiple B',exact:true}).click();check(await page.getByRole('button',{name:'Multiple A',exact:true}).getAttribute('aria-expanded')==='true' && await page.getByRole('button',{name:'Multiple B',exact:true}).getAttribute('aria-expanded')==='true',`${tag} multiple mode keeps both panels open`);
+          check(await page.getByRole('button',{name:'Unavailable section',exact:true}).getAttribute('aria-disabled')==='true',`${tag} disabled semantics`);await readable('af-accordion-trigger',tag);
+        } else if(fixture.family==='select') {
+          const single=page.locator('#single-picker'),trigger=single.getByRole('button',{name:'Color',exact:true});
+          await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(trigger,`${tag} picker keyboard focus`);await page.keyboard.press('ArrowDown');
+          const search=single.getByRole('searchbox');check(await focused(search),`${tag} opening focuses filter`);await search.fill('Blue');await page.keyboard.press('Enter');check(await single.evaluate(node=>node.value)==='blue' && await focused(trigger),`${tag} filtered Enter selects typed value and restores focus`);
+          const multi=page.locator('#multiple-picker');await multi.getByRole('button',{name:'Tags',exact:true}).click();await multi.getByRole('searchbox').fill('New');await page.keyboard.press('Enter');check(await multi.evaluate(node=>JSON.stringify(node.value))==='[]',`${tag} multiple selection remains draft`);
+          await multi.getByRole('button',{name:'Done',exact:true}).click();check(await multi.evaluate(node=>JSON.stringify(node.value))==='["New"]',`${tag} Done commits created tag`);
+          await multi.getByRole('button',{name:'Tags',exact:true}).click();await multi.getByRole('option',{name:'Red',exact:true}).click();await page.keyboard.press('Escape');check(await multi.evaluate(node=>JSON.stringify(node.value))==='["New"]',`${tag} Escape discards draft`);
+          check(await page.getByRole('button',{name:'Disabled picker',exact:true}).isDisabled(),`${tag} disabled picker semantics`);
+          await single.evaluate(node=>{node.style.cssText='position:fixed;right:8px;bottom:8px';});await trigger.click();await popupFits(single.locator('[data-popup]'),trigger,`${tag} corner popup flips above`);await readable('#single-picker [data-popup]',tag);
+        } else if(fixture.family==='date-picker') {
+          const picker=page.locator('af-date-picker').first();await picker.evaluate(node=>{node.clock=()=>new Date(2024,0,15,12);});
+          let trigger=picker.locator('.af-date-trigger');await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(trigger,`${tag} date trigger keyboard focus`);await page.keyboard.press('ArrowDown');
+          check(await picker.locator('[data-date="2024-01-15"]').evaluate(node=>node===document.activeElement),`${tag} opens on selected date`);
+          await page.keyboard.press('ArrowRight');check(await picker.locator('[data-date="2024-01-16"]').evaluate(node=>node===document.activeElement),`${tag} ArrowRight moves one date`);await page.keyboard.press('Enter');check(await picker.evaluate(node=>node.value)==='2024-01-16' && await focused(trigger),`${tag} Enter chooses and restores trigger`);
+          await page.keyboard.press('ArrowDown');await page.keyboard.press('PageDown');check(await picker.locator('[data-date="2024-02-16"]').evaluate(node=>node===document.activeElement),`${tag} PageDown keeps day next month`);await page.keyboard.press('Enter');check(await picker.evaluate(node=>node.value)==='2024-02-16',`${tag} month navigation commits date`);
+          await trigger.click();await picker.getByRole('button',{name:'Today',exact:true}).click();check(await picker.evaluate(node=>node.value)==='2024-01-15',`${tag} injected local Today is deterministic`);
+          await trigger.click();check(await picker.locator('[data-date="2024-01-09"]').isDisabled(),`${tag} minimum disables out of range date`);await picker.getByRole('button',{name:'Clear date',exact:true}).click();check(await picker.evaluate(node=>node.value)===null,`${tag} Clear emits null`);
+          check(await page.locator('af-date-picker[disabled] button').isDisabled(),`${tag} disabled native date trigger`);const readonly=page.locator('af-date-picker[readonly] .af-date-trigger');await readonly.focus();await page.keyboard.press('ArrowDown');check(await readonly.getAttribute('aria-expanded')==='false',`${tag} read only cannot open`);
+          await picker.evaluate(node=>{node.style.cssText='position:fixed;right:8px;bottom:8px';});await trigger.click();await popupFits(picker.getByRole('dialog'),trigger,`${tag} corner calendar flips above`);await readable('af-date-picker .af-date-popup',tag);
+        } else if(fixture.family==='segmented') {
+          const group=page.getByRole('group',{name:'Period',exact:true}),one=group.getByRole('button',{name:'One',exact:true}),two=group.getByRole('button',{name:'Two',exact:true});
+          await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(one,`${tag} roving keyboard entry`);await page.keyboard.press('ArrowRight');check(await focused(two) && await group.evaluate(node=>node.value)===2,`${tag} ArrowRight selects numeric value`);
+          await page.keyboard.press('End');check(await group.evaluate(node=>node.value)===3,`${tag} End selects final option`);await page.keyboard.press('Home');check(await group.evaluate(node=>node.value)===1,`${tag} Home selects first option`);
+          await group.evaluate(node=>node.setAttribute('dir','rtl'));await page.keyboard.press('ArrowLeft');check(await group.evaluate(node=>node.value)===2,`${tag} RTL ArrowLeft advances`);
+          await group.evaluate(node=>{node.orientation='vertical';});await page.keyboard.press('ArrowDown');check(await group.evaluate(node=>node.value)===3,`${tag} vertical ArrowDown advances`);
+          check(await page.getByRole('group',{name:'Disabled period',exact:true}).getByRole('button').evaluateAll(nodes=>nodes.every(node=>node.disabled)),`${tag} disabled group native semantics`);await settleTransitions();await readable('af-segmented [aria-pressed=true]',tag);
+        } else if(fixture.family==='avatar-icon') {
+          await page.waitForFunction(()=>document.querySelector('#portrait').status==='loaded' && document.querySelector('#missing-portrait').status==='error',null,{timeout:2000});
+          check(await page.getByRole('img',{name:'Sample portrait',exact:true}).isVisible() && await page.locator('#portrait af-avatar-fallback').isHidden(),`${tag} loaded image replaces fallback`);
+          check(await page.locator('#missing-portrait af-avatar-fallback').isVisible() && await page.locator('#missing-portrait af-avatar-fallback').textContent()==='AB',`${tag} failed image shows authored fallback`);
+          check(await page.getByRole('img',{name:'Complete',exact:true}).count()===1 && await page.getByRole('img',{name:'Unknown icon',exact:true}).count()===1,`${tag} labeled icons expose names including unknown fallback`);
+          check(await page.locator('af-icon:not([label]) svg').getAttribute('aria-hidden')==='true',`${tag} decorative icon hidden from accessibility tree`);await readable('#missing-portrait af-avatar-fallback',tag);
+        } else if(fixture.family==='file-upload') {
+          const requestMark=requests.length;
+          const upload=page.locator('af-file-upload').first();await upload.evaluate(node=>{
+            let failed=false;node.adapter={upload:async(file,context)=>{document.body.dataset.uploadCalls=String(Number(document.body.dataset.uploadCalls??0)+1);document.body.dataset.uploadDataset=context.dataset;if(file.name==='retry.txt'&&!failed){failed=true;throw new Error('Fixture upload failed');}if(file.name==='pending.txt')await new Promise(resolve=>node.addEventListener('fixture:release',()=>resolve(),{once:true}));return {ref:`fixture-${file.name}`,name:file.name,contentType:file.type,size:file.size};}};
+          });
+          const choose=upload.getByRole('button',{name:'Choose Attachments',exact:true});await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(choose,`${tag} chooser keyboard focus`);
+          const chooserPromise=page.waitForEvent('filechooser',{timeout:2000});await page.keyboard.press('Enter');const chooser=await chooserPromise;await chooser.setFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('Sample')});
+          await page.waitForFunction(()=>document.querySelector('af-file-upload').value.length===1);check(await upload.getByRole('list',{name:'Attachments files',exact:true}).textContent().then(text=>text.includes('sample.txt')),`${tag} native picker invokes deterministic adapter`);check(await page.locator('body').getAttribute('data-upload-dataset')==='fixture-files',`${tag} adapter receives dataset name`);
+          await upload.getByRole('button',{name:'Remove sample.txt',exact:true}).click();check(await upload.evaluate(node=>node.value.length)===0 && await focused(choose),`${tag} removal restores chooser focus`);
+          await upload.locator('input[type=file]').setInputFiles({name:'retry.txt',mimeType:'text/plain',buffer:Buffer.from('Retry')});await upload.getByRole('alert').waitFor();check(await upload.getByRole('alert').textContent().then(text=>text.includes('Fixture upload failed')),`${tag} failure is visible`);
+          await upload.getByRole('button',{name:'Retry retry.txt',exact:true}).click();await page.waitForFunction(()=>document.querySelector('af-file-upload').value.length===1);check(await upload.getByRole('alert').count()===0,`${tag} retry succeeds`);
+          await upload.locator('input[type=file]').setInputFiles({name:'pending.txt',mimeType:'text/plain',buffer:Buffer.from('Pending')});await page.waitForFunction(()=>document.querySelector('af-file-upload').busy);check(await choose.isDisabled() && await upload.getByRole('progressbar',{name:'Uploading files',exact:true}).isVisible(),`${tag} pending adapter disables chooser and exposes progress`);
+          await upload.evaluate(node=>node.dispatchEvent(new Event('fixture:release')));await page.waitForFunction(()=>!document.querySelector('af-file-upload').busy);check(await upload.evaluate(node=>node.value.length)===2,`${tag} pending upload commits on deterministic release`);
+          const calls=await page.locator('body').getAttribute('data-upload-calls');await upload.locator('input[type=file]').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.from('x')});await upload.getByRole('alert').waitFor();check(await page.locator('body').getAttribute('data-upload-calls')===calls,`${tag} rejected file never reaches adapter`);
+          check(await page.getByRole('button',{name:'Choose Disabled attachments',exact:true}).isDisabled(),`${tag} disabled chooser semantics`);check(requests.length===requestMark,`${tag} fake uploads issue no HTTP requests`);await readable('af-file-upload button',tag);
+        } else if(fixture.family==='slide-deck') {
+          const deck=page.locator('af-slide-deck').first(),next=deck.getByRole('button',{name:'Next slide',exact:true});
+          await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(deck,`${tag} deck keyboard focus`);await page.keyboard.press('ArrowRight');await waitDeck(1);check(await deck.locator('[data-af-deck-count]').textContent()==='2 / 2',`${tag} keyboard navigation updates active slide/count`);
+          await deck.locator('af-slide').first().evaluate(node=>node.scrollIntoView({behavior:'instant',block:'start'}));await waitDeck(0);check(await deck.locator('nav button[aria-current=true]').getAttribute('aria-controls')==='opening-slide',`${tag} document scrolling updates rail marker`);
+          const input=page.getByLabel('Slide input');await input.fill('Edited slide');await input.focus();await page.keyboard.press('ArrowRight');check(await deck.evaluate(node=>node.index)===0,`${tag} text field arrow does not page deck`);
+          await next.click();await waitDeck(1);check(await input.inputValue()==='Edited slide' && await deck.locator('af-slide').first().evaluate(node=>!node.hidden),`${tag} slide navigation preserves authored field and mounted slides`);
+          const present=deck.getByRole('button',{name:'Present',exact:true});await present.click();await page.waitForFunction(()=>document.fullscreenElement===document.querySelector('af-slide-deck'),null,{timeout:2000});check(await deck.locator(':scope > nav').isHidden(),`${tag} actual fullscreen hides rail`);
+          await deck.getByRole('button',{name:'Exit presentation',exact:true}).click();await page.waitForFunction(()=>!document.fullscreenElement);check(await focused(deck.getByRole('button',{name:'Present',exact:true})),`${tag} fullscreen exit restores control focus`);
+          await deck.evaluate(node=>{node.requestFullscreen=()=>Promise.reject(new Error('Fixture denied fullscreen'));});await deck.getByRole('button',{name:'Present',exact:true}).click();await deck.getByRole('status').filter({hasText:'Presentation unavailable'}).waitFor();check(await deck.getByRole('button',{name:'Present',exact:true}).isEnabled(),`${tag} simulated rejection leaves presentation usable`);
+          await deck.getByRole('button',{name:'Previous slide',exact:true}).click();await waitDeck(0);
+          await deck.evaluate(deck=>{const node=document.createElement('af-slide-deck');node.id='other-deck';node.style.setProperty('--af-slide-height','64px');node.innerHTML='<af-slide title="Other first">Other first</af-slide><af-slide title="Other second">Other second</af-slide>';deck.querySelector('af-slide').append(node);node.focus({preventScroll:true});});await page.keyboard.press('ArrowRight');check(await page.locator('#other-deck').evaluate(node=>node.index)===1 && await deck.evaluate(node=>node.index)===0,`${tag} nested deck keyboard does not page outer deck`);
+          await page.locator('#other-deck').evaluate(node=>node.querySelectorAll('af-slide').forEach(slide=>slide.remove()));await page.waitForFunction(()=>document.querySelector('#other-deck').index===-1);check(await page.locator('#other-deck [data-af-deck-count]').textContent()==='0 / 0',`${tag} dynamic empty deck has no selection`);
+          await page.locator('#other-deck').evaluate(node=>node.remove());await deck.focus({preventScroll:true});
+          await page.emulateMedia({media:'print'});check(await deck.locator(':scope > nav').isHidden() && await deck.locator(':scope > [data-af-deck-chrome=toolbar]').isHidden(),`${tag} print excludes chrome`);check(await deck.locator('af-slide').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).display!=='none' && getComputedStyle(node).breakAfter.match(/page|auto/))),`${tag} print keeps authored slides with page boundaries`);await saveImage(page,`candidate-slide-deck-print-${theme}-${viewport.width}.png`);await page.emulateMedia({media:null});await readable('af-slide h1',tag);
         }
         check(await page.evaluate(()=>[...document.querySelectorAll('[aria-controls],[aria-labelledby],[aria-describedby]')].every(node=>['aria-controls','aria-labelledby','aria-describedby'].every(attr=>(node.getAttribute(attr)??'').split(/\s+/).filter(Boolean).every(id=>document.getElementById(id))))),`${tag} references resolve`);
+        check((await page.evaluate(duplicateIdentities,await page.locator('html').elementHandle())).length===0,`${tag} DOM and annotation identities remain unique`);
+        await themeFlip(theme,tag,fixture.subject);
         check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${tag} no horizontal overflow`);
       } finally {
+        if(await page.evaluate(()=>!!document.fullscreenElement))await page.evaluate(()=>document.exitFullscreen());
+        await page.emulateMedia({media:null});
         // Settle finite transitions while leaving the indeterminate progress animation deterministic.
         await page.evaluate(async()=>{await Promise.allSettled(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished));for(const animation of document.getAnimations())if(animation.effect?.getTiming().iterations===Infinity){animation.pause();animation.currentTime=0;}});
         await saveImage(page,`candidate-${fixture.family}-${theme}-${viewport.width}.png`);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionCases, componentBrowserFixtures, contrastRatio } from '../lib/component-parity.mjs';
+import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionCases, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/component-parity.mjs';
 const oracle = JSON.parse(readFileSync(new URL('../../services/app/lib/islands/__tests__/fixtures/react-oracle.json', import.meta.url),'utf8'));
 const snapshot = html => semanticSnapshot(new JSDOM(html).window.document);
 describe('component semantic parity', () => {
@@ -38,8 +38,8 @@ describe('component semantic parity', () => {
 
 describe('browser fixture acceptance contracts', () => {
   it('covers the retained native families with named HTML controls', () => {
-    expect(componentBrowserFixtures.map(fixture=>fixture.family)).toEqual(['button','switch','progress','collapsible','dialog','slider','text-controls']);
-    expect(new Set(componentBrowserFixtures.map(fixture=>fixture.family)).size).toBe(7);
+    expect(componentBrowserFixtures.map(fixture=>fixture.family)).toEqual(['button','switch','progress','collapsible','dialog','slider','text-controls','accordion','select','date-picker','segmented','avatar-icon','file-upload','slide-deck']);
+    expect(new Set(componentBrowserFixtures.map(fixture=>fixture.family)).size).toBe(14);
     for (const fixture of componentBrowserFixtures) {
       const doc = new JSDOM(fixture.html).window.document;
       expect(doc.querySelector(fixture.subject)).not.toBeNull();
@@ -52,5 +52,14 @@ describe('browser fixture acceptance contracts', () => {
     expect(contrastRatio([120,120,120],[120,120,120])).toBe(1);
     expect(contrastRatio([255,255,255],[37,99,235])).toBeGreaterThan(4.5);
     expect(contrastRatio([170,170,170],[255,255,255])).toBeLessThan(4.5);
+  });
+});
+
+
+describe('authored identity acceptance',()=>{
+  it('finds copied DOM and annotation identities without conflating the two namespaces',()=>{
+    const doc=new JSDOM('<div id="one" data-af-id="one"></div><span id="one" data-af-id="annotation"></span><p data-af-id="annotation"></p>').window.document;
+    expect(duplicateIdentities(doc)).toEqual([{attribute:'id',value:'one',count:2},{attribute:'data-af-id',value:'annotation',count:2}]);
+    expect(duplicateIdentities(new JSDOM('<div id="one" data-af-id="one"></div>').window.document)).toEqual([]);
   });
 });
