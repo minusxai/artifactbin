@@ -22,23 +22,25 @@ try {
  await page.route('**/*',route=>new URL(route.request().url()).origin===new URL(session.url).origin?route.continue():route.abort());
  const requests=[];page.on('request',request=>requests.push(request.url()));
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ const chrome=page.locator('[data-af-local-chrome]');const chromeStatus=chrome.getByRole('status');
  await page.goto(session.url);await page.getByRole('button',{name:'Add one'}).click();await page.waitForFunction(()=>document.querySelector('#count').textContent==='1');
- assert.equal(await page.locator('#data').textContent(),'7');assert.equal(await page.locator('iframe[data-af-local-broker]').count(),0);
+ await page.waitForFunction(()=>document.documentElement.getAttribute('data-af-local-chrome-ready')==='true');
+ assert.equal(await chrome.count(),1);assert.equal(await page.locator('#data').textContent(),'7');assert.equal(await page.locator('iframe[data-af-local-broker]').count(),0);
  await page.route('**/__af_preview/revision',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Preview disconnected — retrying'})}));
- await page.getByText('Preview disconnected — retrying',{exact:true}).waitFor();
+ await chromeStatus.filter({hasText:'Preview disconnected — retrying'}).waitFor();
  await page.unroute('**/__af_preview/revision');
- await page.getByText('Preview disconnected — retrying',{exact:true}).waitFor({state:'hidden'});
+ await chromeStatus.filter({hasText:'Preview disconnected — retrying'}).waitFor({state:'hidden'});
  let polls=0;page.on('request',request=>{if(request.url().endsWith('/__af_preview/revision'))polls++;});
  await page.evaluate(()=>dispatchEvent(new Event('pagehide')));const stopped=polls;
  await page.waitForTimeout(1700);assert.equal(polls,stopped);
  await page.evaluate(()=>dispatchEvent(new Event('pageshow')));
  await page.waitForTimeout(1700);assert.ok(polls>stopped);
- await writeFile(join(root,'data.json'),'[8]');await page.getByText('File changed',{exact:true}).waitFor();
+ await writeFile(join(root,'data.json'),'[8]');await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();
  assert.equal(await page.locator('#data').textContent(),'7');
- await page.getByRole('button',{name:'Reload',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#data').textContent==='8');
+ await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#data').textContent==='8');
  assert.equal(await page.locator('#count').textContent(),'1');
  await writeFile(join(root,'next.html'),html.replace('Add one','Increment'));await rename(join(root,'next.html'),join(root,'index.html'));
- await page.getByText('File changed',{exact:true}).waitFor();await page.getByRole('button',{name:'Reload',exact:true}).click();await page.getByRole('button',{name:'Increment',exact:true}).waitFor();
+ await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Increment',exact:true}).waitFor();
  await writeFile(join(root,'sales.csv'),'amount\n2\n');
  const datasetHtml=`<!doctype html><html><head><link rel="af-dataset" data-af-name="sales" href="./sales.csv"><script src="/af/v1/core.js" data-af="core"></script></head><body><button id="insert">Insert local row</button><output id="rows"></output><output id="receipt"></output><script type="module">
  import {client,gql} from '@afbin/apollo';
@@ -49,10 +51,10 @@ try {
  </script></body></html>`;
  await writeFile(join(root,'dataset.html'),datasetHtml);await page.goto(new URL('dataset.html',session.url).href);await page.waitForFunction(()=>document.querySelector('#rows').textContent==='1');
  await page.getByRole('button',{name:'Insert local row'}).click();await page.waitForFunction(()=>document.querySelector('#receipt').textContent==='committed');
- await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2');await page.getByText('Local dataset edits are unsaved',{exact:true}).waitFor();
- await writeFile(join(root,'sales.csv'),'amount\n4\n');await page.getByText('File changed — local dataset edits are unsaved',{exact:true}).waitFor();
+ await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2');await chromeStatus.filter({hasText:'Local dataset edits are unsaved'}).waitFor();
+ await writeFile(join(root,'sales.csv'),'amount\n4\n');await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();
  await page.reload();await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2'); // Native reload retains dirty session.
- await page.evaluate(()=>{document.documentElement.setAttribute('data-af-local-chrome-ready','true');dispatchEvent(new Event('af:preview-reload'));});await page.getByRole('button',{name:'Reload and discard local edits'}).waitFor();
+ await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Reload and discard local edits'}).waitFor();
  assert.equal(await page.locator('#rows').textContent(),'2');
  const downloadPromise=page.waitForEvent('download');await page.getByRole('link',{name:'Export sales',exact:true}).click();const download=await downloadPromise;const exported=join(dir,'export.json');await download.saveAs(exported);
  assert.equal(JSON.parse(await readFile(exported,'utf8')).tables[0].rows.length,2);assert.equal(await readFile(join(root,'sales.csv'),'utf8'),'amount\n4\n');
