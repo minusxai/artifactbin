@@ -35,6 +35,8 @@ export interface NativeLowerInput {
   identityBindings: readonly NativeLowerIdentityBinding[];
   reservedIdentities?: readonly { afId: string; sourceNode: string }[];
   urls?: readonly NativeLowerUrlReceipt[];
+  serializedStyles?:readonly {sourceNode:string;css:string}[];
+  resourcePatches?:readonly {sourceNode:string;attributes:Readonly<Record<string,string>>}[];
   formattedValues?: readonly NativeLowerFormattedReceipt[];
   cellTables?:readonly {sourceNode:string;analysisSha256:string;tableSha256:string;rows:readonly Readonly<Record<string,NativeJson>>[]|null;localeReceipt?:NativeNumberLocaleReceipt}[];
   /** Receipt for the authored class/style closure, not permission to fetch CSS. */
@@ -81,6 +83,10 @@ function validAttribute(value: NativeJson, kind: NativeAttributeKind): boolean {
  if(Array.isArray(kind)) return typeof value==='string' && kind.includes(value);
  if(kind==='number') return typeof value==='number' && Number.isFinite(value);
  return typeof value===kind;
+}
+function validDataImage(value:string):boolean {
+ const match=/^data:image\/(?:jpeg|png|gif|webp|avif);base64,([A-Za-z0-9+/]*={0,2})$/.exec(value);
+ return !!match&&match[1]!.length>0&&match[1]!.length%4===0&&Buffer.from(match[1]!,'base64').toString('base64')===match[1];
 }
 function safeUrl(value: string): boolean {
  if(/[\u0000-\u0020\u007f\\]/.test(value)||value.startsWith('//'))return false;
@@ -230,6 +236,9 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(!attribute.value.static){if(admittedTarget(node,'property',attribute.name))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
    values[attribute.name]=attribute.value.json;
   }
+  const patch=input.resourcePatches?.find(p=>p.sourceNode===node.graphKey);
+  if(patch)Object.assign(values,patch.attributes);
+  const serializedStyle=input.serializedStyles?.find(p=>p.sourceNode===node.graphKey);
   const attrs: Record<string,string>=Object.create(null),styles: string[]=[];
   if(proof)attrs['data-af-id']=proof.afId;
   if(rule?.generatedClass)attrs.class=rule.generatedClass;
@@ -281,7 +290,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    }
    if(name==='style'||name==='className'||name==='class'){
     if(!digest(input.authoredStyleSha256)){require('style',node,'Authored class/style dependency closure requires a pinned CSS admission receipt',name);continue;}
-    if(name==='style'){require('style',node,'Style-object semantic translation requires a separately admitted CSS declaration adapter',name);continue;}
+    if(name==='style'){if(serializedStyle)styles.push(serializedStyle.css);else if(patch?.attributes.style!==undefined)styles.push(patch.attributes.style);else require('style',node,'Style-object semantic translation requires a separately admitted CSS declaration adapter',name);continue;}
     if(typeof value!=='string'){block('invalid-attribute',node,'Class names must be literal text',name);continue;}
     attrs.class=[attrs.class,value].filter(Boolean).join(' ');continue;
    }
@@ -290,11 +299,14 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(name==='href'||name==='src'||name==='poster'){
     if(typeof value!=='string'){block('invalid-url',node,'URL attributes require literal strings',name);continue;}
     if(value.startsWith('#')){attrs[name]=value;continue;}
+    if(name==='src'&&!node.isComponent&&['img','source'].includes(node.tag.toLowerCase())&&validDataImage(value)){attrs[name]=value;continue;}
+    if(patch?.attributes[name]===value){if(!safeUrl(value))block('unsafe-url-target',node,'Unsafe patched URL',name);else attrs[name]=value;continue;}
     const receipt=input.urls?.find(url=>url.source===value&&digest(url.sha256));
     if(!receipt){require('resource',node,'Resolve URL/resource against exact revision receipts before output',name);continue;}
     if(!safeUrl(receipt.target)){block('unsafe-url-target',node,'Admitted URL still contains unsafe protocol, credentials or path traversal',name);continue;}
     attrs[name]=receipt.target;continue;
    }
+   if(patch&&['srcSet','sizes'].includes(name)){attrs[name.toLowerCase()]=String(value);continue;}
    if(name==='id'){
     if(typeof value!=='string'||!value){block('invalid-dom-id',node,'Authored DOM ID must be nonempty literal text',name);continue;}
     if(usedDom.has(value))block('duplicate-dom-id',node,'Authored DOM IDs collide; repair requires an explicit identity/IDREF plan',name);

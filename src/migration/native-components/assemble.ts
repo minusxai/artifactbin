@@ -5,11 +5,21 @@ import { lowerNativeComponents } from './lower.ts';
 import { emitNativeBindings } from './bindings.ts';
 import type { RetainedJsxNode } from './analyze-contracts.ts';
 import type { NativeBindingTarget } from './bindings-contracts.ts';
-import type { NativeAssemblyInput, NativeAssemblyResult, NativeAssemblyBlocker } from './assemble-contracts.ts';
+import {rewriteNativeCss} from './resources.ts';
+import type { NativeTypedAnalysis } from './analyze-contracts.ts';
+import type { NativeAssemblyPresentation, NativeAssemblyInput, NativeAssemblyResult, NativeAssemblyBlocker } from './assemble-contracts.ts';
 const hash=(text:string)=>createHash('sha256').update(text).digest('hex');
 const json=(value:unknown)=>JSON.stringify(value).replaceAll('<','\\u003c').replaceAll('\u2028','\\u2028').replaceAll('\u2029','\\u2029');
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
 const safeUrl=(value:string)=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.hash;}catch{return false;}};
+/** Bind already extracted pure renderer output; callers must retain and verify its compiler proof. */
+export function bindNativePresentation(analysis:NativeTypedAnalysis,closure:{style:{sourceSha256:string};analysisSha256:string;compilerSha256:string;inlineStyles:readonly {sourceNode:string;css:string}[];resourcePatches:readonly {sourceNode:string;attributes:Readonly<Record<string,string>>}[]}):NativeAssemblyPresentation {
+ if(closure.style.sourceSha256!==analysis.sourceSha256||closure.analysisSha256!==analysis.analysisSha256)throw Error('Presentation analysis association mismatch');
+ const nodes=new Map<string,RetainedJsxNode>();const visit=(node:RetainedJsxNode)=>{if(nodes.has(node.graphKey))throw Error('Duplicate presentation source node');nodes.set(node.graphKey,node);if(node.type==='element')node.children.forEach(visit);};analysis.nodes.forEach(visit);
+ const bind=<T extends {sourceNode:string}>(entry:T)=>{const node=nodes.get(entry.sourceNode);if(!node)throw Error('Unknown presentation source node');return {...entry,nodeSha256:nativeDigest(node)};};
+ const payload={sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:closure.compilerSha256,inlineStyles:closure.inlineStyles.map(bind),resourcePatches:closure.resourcePatches.map(bind)};
+ return {...payload,sha256:nativeDigest(payload)};
+}
 export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResult {
  const blockers:NativeAssemblyBlocker[]=[],targets:NativeBindingTarget[]=[];
  const block=(code:string,sourceNode='$root')=>blockers.push({code,sourceNode});
@@ -20,6 +30,26 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper)&&input.style.rootSha256!==nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
  const nodes:RetainedJsxNode[]=[];
  const collect=(node:RetainedJsxNode)=>{nodes.push(node);if(node.type==='element')node.children.forEach(collect);};input.analysis.nodes.forEach(collect);
+ const presentation=input.presentation;
+ if(presentation){
+  const {sha256,...payload}=presentation;
+  if(sha256!==nativeDigest(payload)||presentation.sourceSha256!==input.analysis.sourceSha256||presentation.analysisSha256!==input.analysis.analysisSha256||!/^[a-f0-9]{64}$/.test(presentation.compilerSha256)||!input.style)block('presentation-proof');
+  const seen=new Set<string>();
+  for(const [kind,entries]of [['style',presentation.inlineStyles],['resource',presentation.resourcePatches]] as const)for(const entry of entries){
+   const matches=nodes.filter(node=>node.graphKey===entry.sourceNode),node=matches[0],key=kind+':'+entry.sourceNode;
+   if(seen.has(key)||matches.length!==1||!node||node.type!=='element'||entry.nodeSha256!==nativeDigest(node)){block('presentation-source',entry.sourceNode);continue;}seen.add(key);
+   if('css'in entry){if(!node.attributes.some(a=>a.name==='style'&&a.value.static)||/[\u0000]/.test(entry.css))block('presentation-style',entry.sourceNode);try{for(const url of rewriteNativeCss(entry.css,[]).urls)if(!input.urls?.some(u=>u.target===url||u.source===url)||/^javascript:/i.test(url))block('presentation-style-url',entry.sourceNode);}catch{block('presentation-style-css',entry.sourceNode);}}
+   else {
+    if(node.isComponent||node.tag.toLowerCase()!=='img'||!node.attributes.some(a=>a.name==='src'&&a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))block('presentation-resource-shape',entry.sourceNode);
+    for(const [name,value]of Object.entries(entry.attributes)){
+     if(!['src','srcSet','sizes','width','height','style'].includes(name)||typeof value!=='string')block('presentation-resource-attribute',entry.sourceNode);
+     if(['width','height'].includes(name)&&!/^\d+(?:\.\d+)?$/.test(value))block('presentation-resource-dimension',entry.sourceNode);
+     if(name==='src'||name==='srcSet')for(const target of name==='src'?[value]:value.split(', ').map(part=>part.replace(/ \d+(?:\.\d+)?[wx]$/,''))){const receipt=input.urls?.find(u=>u.target===target);if(!receipt||!target.startsWith('./assets/')||!input.files?.some(f=>'./'+f.path===target&&f.sha256===receipt.sha256))block('presentation-resource-file',entry.sourceNode);}
+     if(name==='style'&&node.attributes.some(a=>a.name==='style'))block('presentation-resource-style-overwrite',entry.sourceNode);
+    }
+   }
+  }
+ }
  const binding=(node:RetainedJsxNode)=>{
   const matches=identity.bindings.filter(b=>b.sourceNode===node.graphKey);
   if(matches.length!==1){block('identity-target',node.graphKey);return;}
@@ -68,7 +98,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const emitted=emitNativeBindings({analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
- const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues});
+ const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];

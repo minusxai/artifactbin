@@ -11,6 +11,13 @@ export interface NativeAssemblyStyle {
  sha256: string;
  sourceSha256: string;
 }
+/** Trusted retained renderer output, bound to exact analysis and each original node. */
+export interface NativeAssemblyPresentation {
+ sourceSha256:string; analysisSha256:string; compilerSha256:string;
+ inlineStyles:readonly {sourceNode:string;nodeSha256:string;css:string}[];
+ resourcePatches:readonly {sourceNode:string;nodeSha256:string;attributes:Readonly<Record<string,string>>}[];
+ sha256:string;
+}
 export interface NativeAssemblyBackend {
  namespace: string;
  url: string;
@@ -29,6 +36,7 @@ export interface NativeAssemblyInput {
  targetRevision: string;
  coreUrl: string;
  style?: NativeAssemblyStyle;
+ presentation?: NativeAssemblyPresentation;
  urls?: readonly {source:string;target:string;sha256:string}[];
  formattedValues?: readonly {sourceNode:string;analysisSha256:string;formatterSha256:string;text:string}[];
  
