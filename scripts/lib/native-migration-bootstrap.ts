@@ -4,6 +4,10 @@ import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
+import {identityForUser} from '../../services/app/lib/accounts';
+import {LOCAL_OBJECT_DIR,S3_URL} from '../../services/app/lib/platform/config';
+import {authorizeNativeIdentityTransaction,writeNativeIdentities} from '../../services/app/lib/native-identity-import';
+import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
 import {htmlCommentNodes} from '../../services/app/lib/annotations/html-anchor';
 import {canonicalizeHtmlPage} from '../../services/app/lib/html-page';
 import {prepareRegisteredQueryBackend,registeredPlan} from '../../services/app/lib/registered-page-queries/registry';
@@ -18,7 +22,7 @@ const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('
 /** Actual target validators and comment node extraction; no converter package import. */
 export const nativeProductPublicationModules={commentNodeIds:(html:string)=>[...htmlCommentNodes(html).keys()],canonicalizeHtmlPage,prepareRegisteredQueryBackend,registeredPlan,prepareRegisteredMutationBackend,registeredMutationPlan};
 type Prepared=Awaited<ReturnType<typeof prepareNativeProductImport>>;
-type Staged=Prepared&{reviewedRecipe:NativeHostRecipe};
+type Staged=Prepared&{reviewedRecipe:NativeHostRecipe;identityPreparationPath:string;identityPreparation:{transaction:'separate-prerequisite';identityPlanSha256:string;identities:Awaited<ReturnType<typeof writeNativeIdentities>>}};
 async function candidateSnapshot(prepared:Staged,context:NativeHostContext,options:NativeMigrationBootstrapOptions){
  if(!context.candidateRecipePath)throw Error('native_bootstrap_camera_recipe_required');
  const camera=JSON.parse(await readFile(context.candidateRecipePath,'utf8'));
@@ -45,19 +49,36 @@ async function candidateSnapshot(prepared:Staged,context:NativeHostContext,optio
  const input={...template,preparedStore:snapshot.preparedStore,bundleFiles:[...snapshot.bundleFiles,template.probe]};
  await writeFile(pilotInputPath,JSON.stringify(input),{flag:'wx',mode:0o600});
  await writeFile(cameraRecipePath,JSON.stringify({...camera,paths:{input:pilotInputPath,canonical:canonicalPath,recovery:recoveryPath,bundle:snapshot.bundleDirectory,output:path.join(context.outputDirectory,'candidate-capture')}}),{flag:'wx',mode:0o600});
- return {...snapshot,pilotInputPath,canonicalPath,recoveryPath,cameraRecipePath};
+ return {...snapshot,pilotInputPath,canonicalPath,recoveryPath,cameraRecipePath,identityPreparation:prepared.identityPreparation,identityPreparationPath:prepared.identityPreparationPath};
 }
 /** One configured product host runs all sources through the same transaction/snapshot/camera path. */
 export function createNativeProductMigrationHost(rawOptions:NativeMigrationBootstrapOptions){
  const options={...rawOptions};
+ if(options.db.raw().kind!=='pglite'||S3_URL||path.resolve(options.objectsDirectory)!==path.resolve(LOCAL_OBJECT_DIR))throw Error('native_bootstrap_disposable_local_scope_required');
  const host=createNativeMigrationHost({ports:{
   stage:async({context,recipe,files}:{context:NativeHostContext;recipe:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['reviewedRecipe'];files:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['files']})=>{
-   const raw=await options.publication({context,reviewedRecipe:structuredClone(recipe),files,prepareRuntime:prepareNativeProductRuntime,publicationModules:nativeProductPublicationModules});
+   const capability=JSON.parse(Buffer.from(files.authSchemaCapability).toString('utf8'));
+   const schemas={appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema};
+   if(!isDeepStrictEqual(capability.schemas,schemas)||!capability.runtime?.actor||typeof capability.runtime.actor.userId!=='string'||!capability.runtime.actor.userId||typeof capability.runtime.actor.tokenId!=='string'||!capability.runtime.actor.tokenId||Object.keys(capability.runtime.actor).some(key=>!['userId','tokenId'].includes(key)))throw Error('native_bootstrap_runtime_authority');
+   const origin=new URL(capability.runtime.origin);if(!['http:','https:'].includes(origin.protocol)||!['localhost','127.0.0.1','lvh.me','app.lvh.me'].includes(origin.hostname)&&!origin.hostname.endsWith('.lvh.me')||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)throw Error('native_bootstrap_runtime_origin');
+   const identity=JSON.parse(Buffer.from(files.identity).toString('utf8')) as NativeIdentityImport;
+   if(identity.plan?.sourceNamespace!==context.revision.key.sourceNamespace)throw Error('native_bootstrap_identity_binding');
+   const source=JSON.parse(Buffer.from(files.sourceHead).toString('utf8'));const heads=source.heads?.filter((row:{id:string;version:number})=>row.id===context.revision.key.sourceId&&row.version===context.revision.key.version);
+   if(heads?.length!==1||identity.plan.targets.users[heads[0].user_id]?.userId!==capability.runtime.actor.userId)throw Error('native_bootstrap_runtime_source_authority');
+   const identities=await options.db.transaction(async tx=>{const imported=await writeNativeIdentities(tx,identity,await authorizeNativeIdentityTransaction(tx,schemas));
+    const owner=(await tx.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1',[capability.runtime.actor.tokenId])).rows[0];
+    if(owner?.user_id!==capability.runtime.actor.userId)throw Error('native_bootstrap_runtime_actor');return imported;});
+   const runtimeActor=identityForUser(capability.runtime.actor.userId,capability.runtime.actor.tokenId);
+   const prepareRuntime:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['prepareRuntime']=(assemblies,preparedOptions)=>{if('actor' in preparedOptions||'origin' in preparedOptions)throw Error('native_bootstrap_runtime_override');return prepareNativeProductRuntime(assemblies,{...preparedOptions,actor:runtimeActor,origin:origin.origin});};
+   const identityPreparation={format:'native-migration-identity-preparation-v1',production:false,transaction:'separate-prerequisite' as const,identityPlanSha256:identity.plan.sha256,identities};
+   await mkdir(context.outputDirectory,{recursive:true,mode:0o700});const identityPreparationPath=path.join(context.outputDirectory,'identity-preparation.json');await writeFile(identityPreparationPath,JSON.stringify(identityPreparation),{flag:'wx',mode:0o600});
+   const raw=await options.publication({context,reviewedRecipe:structuredClone(recipe),files,prepareRuntime,publicationModules:nativeProductPublicationModules});
+   if(!isDeepStrictEqual(raw.identity,identity))throw Error('native_bootstrap_identity_binding');
    if(raw.history.sourceNamespace!==context.revision.key.sourceNamespace||raw.history.sourceId!==context.revision.key.sourceId||raw.history.headVersion!==context.revision.key.version||!isDeepStrictEqual(raw.schemas,{appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema}))throw Error('native_bootstrap_publication_binding');
    await mkdir(options.objectsDirectory,{recursive:true,mode:0o700});await mkdir(raw.catalog.sinkDirectory,{recursive:true,mode:0o700});
    if(await realpath(raw.catalog.sinkDirectory)!==await realpath(options.objectsDirectory))throw Error('native_bootstrap_object_scope');
    const prepared=await prepareNativeProductImport(raw);
-   return {...prepared,reviewedRecipe:structuredClone(recipe)};
+   return {...prepared,reviewedRecipe:structuredClone(recipe),identityPreparation,identityPreparationPath};
   },
   transaction<T>(_authority:unknown,work:(tx:Parameters<Prepared['write']>[0])=>Promise<T>){return options.db.transaction(work);},
   importHistory:(tx:Parameters<Prepared['write']>[0],staged:Prepared)=>staged.write(tx),

@@ -19,6 +19,7 @@ export interface NativeHostContext {
 /** @public Host adapter contract. */
 export interface NativeHostPrepared {
  key:NativeHostKey;assemblySha256:string;stage:'imported';historyProjectionSha256:string;
+ importResult?:{historyProjectionSha256:string;disposition?:'created'|'unchanged';identities?:{createdUsers:number;reusedUsers:number;createdTokens:number;replayed:number}};
  preparedStorePath:string;pilotInputPath:string;canonicalPath:string;recoveryPath:string;bundleDirectory:string;
 }
 /** @public Host adapter contract. */
@@ -31,7 +32,7 @@ export interface NativeHostComparison {
 export interface NativeMigrationHostPorts<Staged,Tx> {
  stage(input:{recipe:NativeHostRecipe;files:Record<keyof NativeHostRecipe['inputs'],Uint8Array>;context:NativeHostContext}):Promise<Staged>;
  transaction<T>(authority:NativeHostRecipe['authority'],work:(tx:Tx)=>Promise<T>):Promise<T>;
- importHistory(tx:Tx,staged:Staged):Promise<{historyProjectionSha256:string}>;
+ importHistory(tx:Tx,staged:Staged):Promise<NonNullable<NativeHostPrepared['importResult']>>;
  verify(tx:Tx,staged:Staged):Promise<void>;
  snapshot(staged:Staged,context:NativeHostContext):Promise<Omit<NativeHostPrepared,'key'|'assemblySha256'|'stage'|'historyProjectionSha256'>>;
  captureAndCompare(input:NativeHostContext&{imported:NativeHostPrepared;baselineRecipePath:string;candidateRecipePath:string}):Promise<NativeHostComparison>;

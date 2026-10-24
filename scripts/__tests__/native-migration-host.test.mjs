@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createNativeMigrationHost} from '../lib/native-migration-host.mjs';
 const sha=v=>createHash('sha256').update(v).digest('hex');
+const digest=v=>sha(JSON.stringify(v,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0)):value));
 async function fixture(run){
  const root=await mkdtemp(path.join(tmpdir(),'native-host-'));
  try{
@@ -47,3 +48,21 @@ it('the actual camera rejects an unrelated page before opening either reader',as
   await expect(camera({...x.context,imported:{assemblySha256:x.recipe.assemblySha256},baselineRecipePath:recipePath,candidateRecipePath:recipePath})).rejects.toThrow('source-binding');
  });
 });
+
+it('admits only byte-bound immutable source reuse with complete paired comparison evidence',()=>fixture(async x=>{
+ const directory=path.join(x.root,'reuse');await mkdir(directory);
+ const baselineEvidencePath=path.join(directory,'migration-pilot.json'),candidateEvidencePath=path.join(x.root,'candidate-proof.json'),baselineInputPath=path.join(x.root,'old-input.json'),candidateInputPath=path.join(x.root,'new-input.json'),comparisonPath=path.join(x.root,'comparison.json');
+ const baseline={implementation:'jsx',sourceRevision:'a'.repeat(40),bundleManifestSha256:sha('old-proposal')},candidate={implementation:'html',sourceRevision:'b'.repeat(40),bundleManifestSha256:sha('new-proposal')};
+ const write=async(file,value)=>{const bytes=JSON.stringify(value);await writeFile(file,bytes);return sha(bytes);};
+ const common={key:x.recipe.key,rowSha256:sha('row'),sourceSha256:sha('source'),documentSha256:sha('document'),canonicalSha256:x.recipe.inputs.sourceHead.sha256,recoverySha256:sha('recovery'),harnessSha256:sha('harness'),originalRevision:x.recipe.sourceRevision,theme:'light',viewports:[{width:390,height:844}],states:[{id:'initial',actions:[]}]};
+ const oldInput={...common,bundleFiles:[{path:'index.html',sha256:sha('old-html')}]},newInput={...common,candidateRevision:x.recipe.targetRevision,bundleFiles:[{path:'index.html',sha256:x.context.assembly.result.htmlSha256}]};
+ baseline.bundleManifestSha256=digest(oldInput.bundleFiles);candidate.bundleManifestSha256=digest(newInput.bundleFiles);for(const key of ['sourceSha256','documentSha256','canonicalSha256']){baseline[key]=common[key];candidate[key]=common[key];}
+ const reuse={baselineInputPath,candidateInputPath,baselineInputSha256:await write(baselineInputPath,oldInput),candidateInputSha256:await write(candidateInputPath,newInput),baselineProofSha256:await write(baselineEvidencePath,baseline),baselineCapturesSha256:await write(path.join(directory,'jsx-captures.json'),[{state:'initial'}])};await write(candidateEvidencePath,candidate);
+ const report={format:'native-migration-pilot-reused-source-comparison-v1',passed:true,sourceCaptureReused:true,sourceCaptureRerun:false,reuse,previousProposalSha256:baseline.bundleManifestSha256,newProposalSha256:candidate.bundleManifestSha256,baselineRevision:baseline.sourceRevision,candidateRevision:candidate.sourceRevision,pairedStates:1,control:{detected:true},issues:[],results:[{sizeEqual:true,changedPixels:0,behaviorEqual:true,fontBytesEqual:true,baselineErrors:[],candidateErrors:[],fontProofErrors:[]}]};
+ let current=report;
+ x.ports.captureAndCompare=async()=>({key:x.recipe.key,assemblySha256:x.recipe.assemblySha256,status:'verified',comparisonPath,comparisonSha256:await write(comparisonPath,current),baselineEvidencePath,candidateEvidencePath});
+ const host=createNativeMigrationHost({ports:x.ports}),imported=await host.importAndPrepare(x.context),context={...x.context,imported,baselineRecipePath:'reviewed-baseline',candidateRecipePath:'reviewed-candidate'};
+ expect(await host.captureAndCompare(context)).toMatchObject({status:'verified'});
+ for(const alter of [r=>{r.sourceCaptureReused=false;},r=>{r.sourceCaptureRerun=true;},r=>{r.previousProposalSha256=sha('other');},r=>{r.newProposalSha256=sha('other');},r=>{r.results=[];},r=>{r.results[0].fontBytesEqual=false;},...['baselineInputSha256','candidateInputSha256','baselineProofSha256','baselineCapturesSha256'].map(field=>r=>{r.reuse[field]=sha('other');})]){current=structuredClone(report);alter(current);await expect(host.captureAndCompare(context)).rejects.toThrow(/native-host-(?:comparison|reuse)/);}
+ for(const change of [{key:{...x.recipe.key,sourceId:'other'}},{sourceSha256:sha('another-source')},{viewports:[{width:500,height:844}]}]){current=structuredClone(report);current.reuse.candidateInputSha256=await write(candidateInputPath,{...newInput,...change});await expect(host.captureAndCompare(context)).rejects.toThrow('reuse-binding');}
+}));
