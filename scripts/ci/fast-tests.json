@@ -40,6 +40,7 @@
   "services/app/lib/html-presence/__tests__/preferences.test.ts",
   "services/app/lib/html-presence/__tests__/reader-session.test.ts",
   "services/app/lib/html-presence/__tests__/room.test.ts",
+  "services/app/lib/html-publication-bundle/__tests__/bundle.test.ts",
   "services/app/lib/html-runtime/__tests__/apollo.test.ts",
   "services/app/lib/html-runtime/__tests__/assembly.test.ts",
   "services/app/lib/html-runtime/__tests__/asset-retention.test.ts",
