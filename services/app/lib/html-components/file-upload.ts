@@ -1,4 +1,4 @@
-import { uploadError, type AfUploadFile, type AfFileUploadAdapter, type AfFileUploadChangeDetail } from './file-upload-model';
+import { uploadFile, uploadUrl, uploadError, type AfUploadFile, type AfFileUploadAdapter, type AfFileUploadChangeDetail } from './file-upload-model';
 export type { AfUploadFile, AfFileUploadAdapter, AfFileUploadChangeDetail } from './file-upload-model';
 
 /** Transport, account credentials and dataset access belong exclusively to the author's adapter. */
@@ -20,7 +20,7 @@ export class AfFileUpload extends HTMLElement {
   get adapter(): AfFileUploadAdapter | undefined { return this.transport; }
   set adapter(value: AfFileUploadAdapter | undefined) { this.cancel(); this.transport = value; this.render(); }
   get value(): AfUploadFile[] { return this.selection.map(file => ({ ...file })); }
-  set value(value: readonly AfUploadFile[]) { if (!this.proposed || JSON.stringify(value) !== JSON.stringify(this.proposed)) this.cancel(); this.controlled = true; this.selection = value.map(file => ({ ...file })); this.render(); }
+  set value(value: readonly AfUploadFile[]) { if (!this.proposed || JSON.stringify(value) !== JSON.stringify(this.proposed)) this.cancel(); this.controlled = true; this.selection = Array.isArray(value) ? value.map(uploadFile).filter((file): file is AfUploadFile => file !== null) : []; this.render(); }
   get busy(): boolean { return this.uploading; }
   // HTMLElement.dataset remains the native DOMStringMap; use datasetName for the upload destination.
   get datasetName(): string { return this.getAttribute('dataset') ?? ''; }
@@ -36,16 +36,24 @@ export class AfFileUpload extends HTMLElement {
     this.render();
   }
   disconnectedCallback(): void { this.cancel(); }
-  attributeChangedCallback(): void { this.cancel(); this.render(); }
+  attributeChangedCallback(name: string, previous: string | null, next: string | null): void {
+    // Presentation and picker guidance changes apply to future choices, not active requests.
+    if (previous !== next && ['dataset', 'multiple', 'disabled'].includes(name)) this.cancel();
+    this.render();
+  }
   reset(): void { this.cancel(); this.render(); }
   private setBusy(value: boolean): void { if (value !== this.uploading) { this.uploading = value; this.onBusyChange?.(value); } }
   private cancel(): void { this.generation++; this.controller?.abort(); this.controller = undefined; this.failures = []; this.error = ''; this.setBusy(false); }
   private change(value: AfUploadFile[], reason: AfFileUploadChangeDetail['reason']): void {
     const detail = { value: value.map(file => ({ ...file })), reason };
-    if (!this.dispatchEvent(new CustomEvent<AfFileUploadChangeDetail>('af-change', { detail, cancelable: true, bubbles: true, composed: true }))) return;
-    if (!this.controlled) this.selection = value;
     this.proposed = detail.value;
-    try { this.onChange?.(detail); } finally { this.proposed = undefined; }
+    const generation = this.generation;
+    try {
+      if (!this.dispatchEvent(new CustomEvent<AfFileUploadChangeDetail>('af-change', { detail, cancelable: true, bubbles: true, composed: true }))) return;
+      if (generation !== this.generation) return;
+      if (!this.controlled) this.selection = value;
+      this.onChange?.(detail);
+    } finally { this.proposed = undefined; }
   }
   async upload(files: readonly File[], retained: Array<{ file: File; error: string }> = []): Promise<void> {
     const adapter = this.adapter;
@@ -59,7 +67,8 @@ export class AfFileUpload extends HTMLElement {
     for (const file of files) {
       if (token !== this.generation) break;
       try {
-        const result = await adapter.upload(file, { dataset: this.datasetName, signal: controller.signal });
+        const result = uploadFile(await adapter.upload(file, { dataset: this.datasetName, signal: controller.signal }));
+        if (!result) throw new Error('Upload adapter returned invalid file metadata.');
         if (token !== this.generation) break;
         this.change(this.multiple ? [...this.selection.filter(item => item.ref !== result.ref), result] : [result], 'upload');
       } catch (cause) {
@@ -73,7 +82,9 @@ export class AfFileUpload extends HTMLElement {
   private render(): void {
     if (!this.isConnected) return;
     if (!this.shell) { this.shell = this.ownerDocument.createElement('div'); this.shell.className = 'af-file-upload-shell'; this.prepend(this.shell); }
-    this.shell.replaceChildren(); this.setAttribute('aria-busy', String(this.busy));
+    const target = this.shell;
+    this.shell = this.ownerDocument.createElement('div');
+    this.setAttribute('aria-busy', String(this.busy));
     const doc = this.ownerDocument;
     const add = (tag: string, text = '', parent: HTMLElement = this.shell!) => { const node = doc.createElement(tag); node.textContent = text; parent.append(node); return node; };
     const label = this.getAttribute('label') || 'Attachments'; add('span', label);
@@ -82,19 +93,48 @@ export class AfFileUpload extends HTMLElement {
     const button = (name: string, text: string, action: () => void, parent: HTMLElement) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = text; node.setAttribute('aria-label', name); node.disabled = this.disabled || this.busy || !this.adapter; node.onclick = action; parent.append(node); return node; };
     button(`Choose ${label}`, this.multiple ? 'Choose files' : 'Choose file', () => this.input?.click(), drop);
     add('span', this.adapter ? 'Or drop files here.' : 'Uploads unavailable.', drop);
-    input.onchange = () => { const files = Array.from(input.files ?? []); input.value = ''; void this.upload(files); };
+    input.onchange = () => { const files = Array.from(this.input?.files ?? []); if (this.input) this.input.value = ''; void this.upload(files); };
     drop.ondragover = event => event.preventDefault(); drop.ondrop = event => { event.preventDefault(); void this.upload(Array.from(event.dataTransfer?.files ?? [])); };
     if (this.busy) { const status = add('span', 'Uploading…'); status.setAttribute('role', 'status'); const progress = add('progress'); progress.setAttribute('aria-label', 'Uploading files'); }
     if (this.error) add('p', this.error).setAttribute('role', 'alert');
     for (const failure of this.failures) { const row = add('div'); add('span', `${failure.file.name}: ${failure.error}`, row).setAttribute('role', 'alert'); button(`Retry ${failure.file.name}`, 'Retry', () => { void this.upload([failure.file], this.failures.filter(item => item !== failure)); }, row); }
     const list = add('ul'); list.setAttribute('aria-label', `${label} files`);
     for (const file of this.selection) {
-      const row = add('li', '', list); const url = this.adapter?.fileUrl?.(file, this.datasetName);
-      if (url && file.contentType?.startsWith('image/')) { const image = doc.createElement('img'); image.src = url; image.alt = file.name; image.loading = 'lazy'; image.onerror = () => image.remove(); row.append(image); }
+      const row = add('li', '', list); row.setAttribute('data-af-upload-ref', file.ref);
+      let url: string | undefined;
+      try { url = uploadUrl(this.adapter?.fileUrl?.(file, this.datasetName), doc.baseURI); } catch { /* Preview failure must not prevent reference removal. */ }
+      if (url && file.contentType?.startsWith('image/')) { const image = doc.createElement('img'); image.src = url; image.alt = file.name; image.loading = 'lazy'; image.onerror = event => { if (typeof event !== 'string') (event.currentTarget as HTMLImageElement).remove(); }; row.append(image); }
       if (url) { const link = doc.createElement('a'); link.href = url; link.download = file.name; link.textContent = file.name; row.append(link); } else add('span', file.name, row);
-      button(`Remove ${file.name}`, 'Remove', () => { this.cancel(); this.change(this.selection.filter(item => item.ref !== file.ref), 'remove'); this.render(); }, row).disabled = this.disabled;
+      button(`Remove ${file.name}`, 'Remove', () => { const focused = this.ownerDocument.activeElement?.closest('li')?.getAttribute('data-af-upload-ref') === file.ref; this.cancel(); this.change(this.selection.filter(item => item.ref !== file.ref), 'remove'); this.render(); if (focused) (this.shell?.querySelector<HTMLButtonElement>('li button') ?? this.shell?.querySelector<HTMLButtonElement>('button'))?.focus(); }, row).disabled = this.disabled;
     }
+    reconcile(target, this.shell);
+    this.shell = target;
+    this.input = target.querySelector('input') ?? undefined;
   }
+}
+
+/** Reconcile generated light DOM without replacing focused controls or keyed file rows. */
+function reconcile(target: HTMLElement, source: HTMLElement): void {
+  for (const attribute of Array.from(target.attributes)) if (!source.hasAttribute(attribute.name) && attribute.name !== 'data-af-id') target.removeAttribute(attribute.name);
+  for (const attribute of Array.from(source.attributes)) target.setAttribute(attribute.name, attribute.value);
+  target.onerror = source.onerror; target.onclick = source.onclick; target.onchange = source.onchange; target.ondrop = source.ondrop; target.ondragover = source.ondragover;
+  if (target instanceof HTMLButtonElement && source instanceof HTMLButtonElement) target.disabled = source.disabled;
+  if (target instanceof HTMLInputElement && source instanceof HTMLInputElement) { target.disabled = source.disabled; target.multiple = source.multiple; }
+  const previous = Array.from(target.childNodes);
+  const used = new Set<Node>();
+  const key = (node: HTMLElement) => node.getAttribute('data-af-upload-ref') ?? `${node.tagName}:${node.className}:${node.getAttribute('role') ?? ''}`;
+  let index = 0;
+  for (const next of Array.from(source.childNodes)) {
+    const existing = previous.find(node => !used.has(node) && (node instanceof HTMLElement && next instanceof HTMLElement ? key(node) === key(next) : node.nodeType === next.nodeType));
+    if (existing) used.add(existing);
+    if (existing instanceof HTMLElement && next instanceof HTMLElement && existing.tagName === next.tagName) {
+      reconcile(existing, next);
+      if (target.childNodes[index] !== existing) target.insertBefore(existing, target.childNodes[index] ?? null);
+    } else if (existing?.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) { existing.textContent = next.textContent; }
+    else target.insertBefore(next, target.childNodes[index] ?? null);
+    index++;
+  }
+  while (target.childNodes.length > index) target.lastChild?.remove();
 }
 export function registerFileUpload(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
   if (!document.querySelector('style[data-af-file-upload-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-file-upload-styles', ''); style.textContent = 'af-file-upload{display:block;color:var(--foreground,#222)}af-file-upload .af-file-upload-shell{display:flex;flex-direction:column;gap:.75rem}af-file-upload .af-file-upload-drop{display:flex;align-items:center;gap:.5rem;border:1px dashed var(--input,#aaa);padding:1rem;border-radius:var(--radius,.375rem)}af-file-upload button{font:inherit;color:inherit;background:var(--background,#fff);border:1px solid var(--input,#aaa);border-radius:var(--radius,.375rem);padding:.4rem .7rem;cursor:pointer}af-file-upload button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-file-upload button:disabled{opacity:.5;cursor:not-allowed}af-file-upload li{display:flex;gap:.5rem;align-items:center}af-file-upload img{width:4rem;height:4rem;object-fit:cover}af-file-upload [role=alert]{color:var(--destructive,#b11)}'; document.head.append(style); }

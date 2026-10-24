@@ -17,3 +17,14 @@ export function uploadError(files: readonly File[], selected: number, policy: Af
   }
   return '';
 }
+/** Copy only recognized metadata; transport responses and runtime author values are untrusted. */
+export function uploadFile(value: unknown): AfUploadFile | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  if (typeof item.ref !== 'string' || !item.ref.trim() || typeof item.name !== 'string' || !item.name.trim()) return null;
+  return { ref: item.ref, name: item.name, ...(typeof item.contentType === 'string' ? { contentType: item.contentType } : {}), ...(typeof item.size === 'number' && Number.isFinite(item.size) && item.size >= 0 ? { size: item.size } : {}) };
+}
+export function uploadUrl(value: unknown, base: string): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try { const url = new URL(value, base); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : undefined; } catch { return undefined; }
+}

@@ -19,7 +19,7 @@ it('reports cancelable controlled changes, removes only references, and preserve
   expect(element.querySelector('[data-af-id="authored"]')).not.toBeNull();
 });
 it('aborts and ignores completion after external reset, dataset changes, and disconnect', async () => {
-  for (const invalidate of [(e: AfFileUpload) => { e.value = []; }, (e: AfFileUpload) => { e.datasetName = 'other'; }, (e: AfFileUpload) => e.remove()]) {
+  for (const invalidate of [(e: AfFileUpload) => { e.value = []; }, (e: AfFileUpload) => { e.datasetName = 'other'; }, (e: AfFileUpload) => e.remove(), (e: AfFileUpload) => e.reset(), (e: AfFileUpload) => { e.disabled = true; }]) {
     const element = fixture(); let resolve!: (value: AfUploadFile) => void; let signal!: AbortSignal;
     element.adapter = { upload: (_file, context) => { signal = context.signal; return new Promise(r => { resolve = r; }); } };
     const change = vi.fn(); element.onChange = change;
@@ -46,4 +46,31 @@ it('accepts synchronous author state updates across a batch and blocks invalid p
   expect(upload).toHaveBeenCalledTimes(2); expect(element.querySelector('[role="alert"]')?.textContent).toContain('accepted');
   element.setAttribute('max-files', '2'); await element.upload([file()]);
   expect(upload).toHaveBeenCalledTimes(2); expect(element.querySelector('[role="alert"]')?.textContent).toContain('at most 2');
+});
+it('reflects event-controlled state across a batch without aborting and preserves picker and row focus', async () => {
+  const element = fixture(); element.multiple = true; element.value = [];
+  element.adapter = { upload: async f => ({ ref: f.name, name: f.name }) };
+  element.addEventListener('af-change', event => { element.value = (event as CustomEvent<{ value: AfUploadFile[] }>).detail.value; });
+  const picker = element.querySelector('input');
+  await element.upload([file(), new File(['b'], 'b.png')]); expect(element.value).toHaveLength(2);
+  const row = element.querySelector('li'); const remove = row!.querySelector('button')!; remove.focus();
+  element.setAttribute('label', 'Photos'); expect(element.querySelector('input')).toBe(picker); expect(element.querySelector('li')).toBe(row); expect(document.activeElement).toBe(remove);
+  remove.click(); expect(document.activeElement?.getAttribute('aria-label')).toBe('Remove b.png');
+});
+it('rejects unsafe adapter metadata and links and tolerates invalid runtime values', async () => {
+  const element = fixture(); element.value = null as unknown as AfUploadFile[];
+  expect(element.value).toEqual([]);
+  element.adapter = { upload: async () => ({ ref: '', name: 'bad' }), fileUrl: () => 'javascript:alert(1)' };
+  await element.upload([file()]); expect(element.querySelector('[role="alert"]')?.textContent).toContain('invalid');
+  element.value = [{ ref: 'ok', name: 'safe' }]; expect(element.querySelector('a')).toBeNull();
+});
+
+it('keeps active requests on presentation changes and resets the same picker before upload', async () => {
+  const element = fixture(); let resolve!: (value: AfUploadFile) => void; let signal!: AbortSignal;
+  element.adapter = { upload: (_file, context) => { signal = context.signal; return new Promise(r => { resolve = r; }); } };
+  const input = element.querySelector('input')!; Object.defineProperty(input, 'files', { configurable: true, value: [file()] });
+  input.dispatchEvent(new Event('change')); expect(input.value).toBe('');
+  element.setAttribute('label', 'New label'); element.setAttribute('accept', 'image/*'); expect(signal.aborted).toBe(false);
+  resolve({ ref: 'a', name: 'a' }); await vi.waitFor(() => expect(element.busy).toBe(false)); expect(element.querySelector('input')).toBe(input);
+  input.dispatchEvent(new Event('change')); expect(element.busy).toBe(true); element.reset();
 });
