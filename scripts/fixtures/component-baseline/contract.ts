@@ -98,3 +98,9 @@ export interface BaselineSeededIdentity {
   handle: string;
   image: string | null;
 }
+
+/** Every reader state has finite readiness and camera budgets, including custom hooks. */
+export interface BrowserCaptureTimeouts {
+  readyTimeoutMs?: number;
+  captureStepTimeoutMs?: number;
+}

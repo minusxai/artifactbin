@@ -13,6 +13,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>]+/g,value=>{try{const url=new URL(value);return url.origin+url.pathname;}catch{return '[URL]';}}).slice(0,1000);}
 /** Linked stylesheet absence is a failure even before any font face is declared. */
 function browserResources(){return {stylesheets:[...document.querySelectorAll('link[rel~="stylesheet"]')].filter(link=>!link.disabled).map(link=>({url:link.href,loaded:link.sheet!==null}))};}
+/** No readiness promise here: diagnose stalled fonts before closing the reader. */
+function browserFontStatus(){return {status:document.fonts.status,loading:[...document.fonts].filter(face=>face.status==='loading').slice(0,30).map(face=>({family:face.family.slice(0,200),style:face.style,weight:face.weight,status:face.status}))};}
 /** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
 function browserState() {
   const visible = node => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
@@ -124,9 +126,11 @@ export function fontByteProof(evidence) {
  * optional performAction for every static fixture action. document-frame mode
  * additionally requires a camera of the real app-mounted iframe rectangle.
  * Source revisions are supplied independently, never inferred. */
-export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport'}) {
+/** @param {import('../fixtures/component-baseline/contract').BrowserCaptureTimeouts & Record<string,any>} options */
+export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport',readyTimeoutMs=30000,captureStepTimeoutMs=30000}) {
   if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
   if(!['viewport','document-frame'].includes(screenshotMode))throw Error('Unknown browser baseline screenshot mode');
+  if([readyTimeoutMs,captureStepTimeoutMs].some(value=>!Number.isSafeInteger(value)||value<=0))throw Error('Reader capture budgets must be finite positive milliseconds');
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
@@ -139,6 +143,10 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
     const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
+    const step=async(name,work,budget=captureStepTimeoutMs)=>{
+      phase=name;await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-progress.json`),JSON.stringify({phase,fixture:fixture.id,state:state.id,theme,viewport,sourceRevision}));
+      let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`Reader ${name} exceeded ${budget}ms`)),budget);})]);}finally{clearTimeout(timer);}
+    };
     const responseFrame=response=>{try{return response.frame();}catch{return undefined;}};
     const waitForPending=async pending=>{let settled=0;while(settled<pending.length){const batch=pending.slice(settled);settled=pending.length;await Promise.all(batch);}};
     try {
@@ -152,56 +160,57 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
       page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
-      const mounted=await mount({fixture,theme,viewport,state,page});frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
+      const mounted=await step('mount',()=>mount({fixture,theme,viewport,state,page}));frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
-      phase='ready';await ready?.();phase='capture';
-      await frame.evaluate(()=>document.fonts.ready);
+      await step('ready',()=>ready?.(),readyTimeoutMs);
+      await step('fonts-ready',()=>frame.evaluate(()=>document.fonts.ready));
       for(const action of state.actions) {
         activeAction=action;phase=`action:${action.action}`;
-        if(performAction)await performAction(action);
+        if(performAction)await step(`action:${action.action}`,()=>performAction(action));
         else{
         const target=actionTarget(frame,action);
-        if(action.action==='press') await target.press(action.key);
-        else if(action.action==='scroll')await target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;});
+        if(action.action==='press') await step('action:press',()=>target.press(action.key));
+        else if(action.action==='scroll')await step('action:scroll',()=>target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;}));
         else if(action.action==='upload')throw Error('Upload actions require the mounted real upload adapter');
-        else await target[action.action]();
+        else await step(`action:${action.action}`,()=>target[action.action]());
         }
-        await afterAction?.(action);
+        await step(`after-action:${action.action}`,()=>afterAction?.(action));
       }
-      activeAction=undefined;phase='capture';
-      await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-      const resourceEvidence=await frame.evaluate(browserResources);resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
+      activeAction=undefined;
+      await step('paint-ready',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+      const resourceEvidence=await step('resources',()=>frame.evaluate(browserResources));resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
       for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
       const localFailures=[...requestFailures,...httpFailures].filter(failure=>['stylesheet','script'].includes(failure.type)&&local(failure.url));
       for(const failure of localFailures)resourceEvidence.errors.push(`Local ${failure.type} failed: ${failure.url} (${failure.error||failure.status})`);
-      await waitForPending([...fontPending,...stylesheetPending]);
+      await step('stylesheet-responses',()=>waitForPending([...fontPending,...stylesheetPending]));
       const frameStylesheets=stylesheetResponses.filter(response=>response.frame===frame).map(({url,status,css})=>({url,status,css}));
-      const fontEvidence=await frame.evaluate(fontLoadingEvidence,frameStylesheets);
+      const fontEvidence=await step('font-evidence',()=>frame.evaluate(fontLoadingEvidence,frameStylesheets));
       // document.fonts.load() in the evidence probe can itself initiate the
       // response whose bytes prove the used face, so drain again after it ends.
-      await waitForPending(fontPending);
+      await step('font-responses',()=>waitForPending(fontPending));
       fontEvidence.resources=fontResources.filter(resource=>resource.frame===frame).map(({url,status,sha256})=>({url,status,sha256}));
       const usedSources=new Set(fontEvidence.used.flatMap(face=>face.sources||[]));
       fontEvidence.errors.push(...resourceErrors.filter(failure=>usedSources.has(failure.url)).map(failure=>failure.error));
       fontEvidence.errors.push(...fontByteProof(fontEvidence).errors);
-      await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-      const semantics=await frame.evaluate(browserState);
+      await step('paint-settled',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+      const semantics=await step('semantics',()=>frame.evaluate(browserState));
       const name=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}.png`;
       // Raw fixtures retain the whole viewport/top layer. Authorized fixtures
       // explicitly capture the real iframe, preserving its actual dimensions.
       if(screenshotMode==='document-frame'&&typeof mounted.screenshot!=='function')throw Error('Document-frame capture requires the mounted real frame camera');
-      const screenshot=screenshotMode==='document-frame'?await mounted.screenshot():await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
+      const screenshot=await step('screenshot',()=>screenshotMode==='document-frame'?mounted.screenshot():page.screenshot({fullPage:false,animations:'disabled',caret:'hide'}));
       await writeFile(path.join(output,name),screenshot);
       return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } catch(cause){
-      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};
+      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length};
       /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */
       const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase,...(activeAction?{action:activeAction}:{}),message:diagnosticText(cause.message),diagnostics};
       const stem=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-failure`;
       try{if(page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,animations:'disabled',caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
       // Snapshot already mounted documents only; do not run readiness again.
-      try{if(frame)failure.semantics=await frame.evaluate(browserState);}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
+      try{if(frame)failure.semantics=await step('failure-snapshot',()=>frame.evaluate(browserState),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
+      try{if(frame)diagnostics.fontStatus=await step('failure-font-status',()=>frame.evaluate(browserFontStatus),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.fontStatusError=diagnosticText(error.message);}
       failures.push(failure);
       try{await writeFile(path.join(output,stem+'.json'),JSON.stringify(failure,null,2));}catch(error){diagnostics.evidenceWriteError=diagnosticText(error.message);}
       throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});

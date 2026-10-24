@@ -481,3 +481,20 @@ it('proves used font bytes through imported stylesheet URLs rather than losing t
 });
 
 it('clicks the exact retained authored target when the browser exposes no native role',()=>{const frame={getByRole:vi.fn(),locator:vi.fn().mockReturnValue('retained-target')};expect(actionTarget(frame,{role:'button',name:'Summary',authoredId:'summary-1'})).toBe('retained-target');expect(frame.locator).toHaveBeenCalledWith('[id=\"summary-1\"]');expect(frame.getByRole).not.toHaveBeenCalled();});
+
+it('bounds a stuck readiness hook, records its phase, and closes the context to cancel its poll',async()=>{
+ const directory=await setup();let cancel,closed=0;
+ const blocked=new Promise((_,reject)=>{cancel=()=>reject(Error('context closed'));});
+ const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async()=>({text:'Present',controls:[],rows:[],overflow:0})};
+ const browser={newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{closed++;cancel();}})};
+ const run=captureBrowserBaseline({browser,mount:async()=>({frame,ready:()=>blocked}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,readyTimeoutMs:20,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded',states:[{id:'initial',actions:[]}]}]});
+ try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded readiness')),200))]);expect(error.message).toContain('Reader ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'ready'});}finally{cancel();await run.catch(()=>{});}
+});
+it('bounds an unresolved font evaluation and retains the specific camera phase',async()=>{
+ const directory=await setup();let cancel,closed=0;
+ const blocked=new Promise((_,reject)=>{cancel=()=>reject(Error('context closed'));});
+ const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Present',controls:[],rows:[],overflow:0}:blocked};
+ const browser={newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{closed++;cancel();}})};
+ const run=captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded-font',states:[{id:'initial',actions:[]}]}]});
+ try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded font wait')),200))]);expect(error.message).toContain('Reader fonts-ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'fonts-ready'});}finally{cancel();await run.catch(()=>{});}
+});
