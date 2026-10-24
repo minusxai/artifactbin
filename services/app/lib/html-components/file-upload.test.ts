@@ -74,3 +74,48 @@ it('keeps active requests on presentation changes and resets the same picker bef
   resolve({ ref: 'a', name: 'a' }); await vi.waitFor(() => expect(element.busy).toBe(false)); expect(element.querySelector('input')).toBe(input);
   input.dispatchEvent(new Event('change')); expect(element.busy).toBe(true); element.reset();
 });
+
+it('keeps picker guidance and renders successful dataset references as downloadable files', async () => {
+  const element = fixture();
+  element.datasetName = 'attachments';
+  element.multiple = true;
+  element.setAttribute('accept', 'image/png,.jpg');
+  const input = element.querySelector<HTMLInputElement>('input')!;
+  expect(input.accept).toBe('image/png,.jpg');
+  expect(input.multiple).toBe(true);
+
+  element.adapter = {
+    upload: async (_file, context) => {
+      expect(context.dataset).toBe('attachments');
+      expect(context.signal.aborted).toBe(false);
+      return { ref: 'dfile:abc123', name: 'photo.png', contentType: 'image/png', size: 3 };
+    },
+    fileUrl: (uploaded, dataset) => `/datasets/${dataset}/files/${uploaded.ref.slice('dfile:'.length)}`,
+  };
+  await element.upload([file()]);
+
+  const link = element.querySelector<HTMLAnchorElement>('a');
+  expect(link?.href).toBe('http://localhost:3000/datasets/attachments/files/abc123');
+  expect(link?.download).toBe('photo.png');
+  expect(link?.textContent).toBe('photo.png');
+  expect(element.querySelector('img')?.getAttribute('alt')).toBe('photo.png');
+  expect(element.textContent).toContain('3 bytes');
+  expect(element.value).toEqual([{ ref: 'dfile:abc123', name: 'photo.png', contentType: 'image/png', size: 3 }]);
+});
+
+it('keeps the supported signed-out or unbound state unavailable until an adapter is supplied', async () => {
+  const element = fixture();
+  const choose = element.querySelector<HTMLButtonElement>('button')!;
+  const input = element.querySelector<HTMLInputElement>('input')!;
+  expect(choose.disabled).toBe(true);
+  expect(input.disabled).toBe(true);
+  await element.upload([file()]);
+  expect(element.value).toEqual([]);
+
+  element.adapter = { upload: async f => ({ ref: 'ok', name: f.name }) };
+  expect(element.querySelector('button')?.hasAttribute('disabled')).toBe(false);
+  element.disabled = true;
+  expect(element.querySelector('button')?.hasAttribute('disabled')).toBe(true);
+  await element.upload([file()]);
+  expect(element.value).toEqual([]);
+});
