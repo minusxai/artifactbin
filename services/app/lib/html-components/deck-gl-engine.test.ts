@@ -104,7 +104,7 @@ it("renders compact map controls and a labeled gradient legend", () => {
     legend: true,
   });
 
-  const controls = host.querySelector('[role="group"][aria-label="Map controls"]');
+  const controls = host.querySelector('[data-af-deck-controls][role="group"][aria-label="Map controls"]');
   expect(controls?.querySelectorAll("button")).toHaveLength(3);
   expect(Array.from(controls?.querySelectorAll("button") ?? []).map((button) => button.getAttribute("aria-label"))).toEqual([
     "Zoom in",
@@ -112,13 +112,25 @@ it("renders compact map controls and a labeled gradient legend", () => {
     "Reset view",
   ]);
   expect(controls?.querySelectorAll("button svg[aria-hidden='true']")).toHaveLength(3);
+  const controlStyle = getComputedStyle(controls!);
+  expect(controlStyle.position).toBe("absolute");
+  expect(controlStyle.top).toBe("8px");
+  expect(controlStyle.right).toBe("8px");
+  expect(controlStyle.flexDirection).toBe("column");
 
-  const legend = host.querySelector('[role="group"][aria-label="Map legend"]');
+  const legend = host.querySelector('[data-af-deck-legend][role="group"][aria-label="Map legend"]');
   expect(legend?.textContent).toContain("value");
   expect(legend?.textContent).toContain("12");
   expect(legend?.textContent).toContain("20");
   expect(legend?.querySelector('[role="img"][aria-label="value: 12 to 20"]')).not.toBeNull();
-  expect((legend?.querySelector('[role="img"]') as HTMLElement | null)?.style.background).toContain("linear-gradient");
+  const legendStyle = getComputedStyle(legend!);
+  expect(legendStyle.position).toBe("absolute");
+  expect(legendStyle.bottom).toBe("20px");
+  expect(legendStyle.left).toBe("8px");
+  const bar = legend?.querySelector('[role="img"]') as HTMLElement | null;
+  expect(bar?.style.background).toContain("linear-gradient");
+  expect(getComputedStyle(bar!).height).toBe("8px");
+  expect(getComputedStyle(bar!).width).toBe("96px");
 });
 it("keeps deck view with an accessible explanation when street WebGL2 is unavailable", () => {
   state.fail = true;

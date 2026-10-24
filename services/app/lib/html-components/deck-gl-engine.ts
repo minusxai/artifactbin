@@ -12,7 +12,6 @@ import {
   rgbCss,
   compactNumber,
   ATTRIBUTION,
-  MAP_CLASSES,
   type MapViewState,
   type PickingInfo,
 } from "../viz/deck-engine-core";
@@ -37,17 +36,35 @@ export function mountDeckGL(
   canvas.style.cssText = "position:absolute;inset:0";
   root.append(canvas);
   const style = doc.createElement("style");
-  style.textContent =
-    "af-deck-gl .maplibregl-canvas{position:absolute;left:0;top:0}af-deck-gl .maplibregl-canvas-container{position:absolute;inset:0}af-deck-gl .maplibregl-interactive{cursor:grab}af-deck-gl .maplibregl-interactive:active{cursor:grabbing}";
+  style.textContent = `
+    figure[part="map"] .maplibregl-canvas{position:absolute;left:0;top:0}
+    figure[part="map"] .maplibregl-canvas-container{position:absolute;inset:0}
+    figure[part="map"] .maplibregl-interactive{cursor:grab}
+    figure[part="map"] .maplibregl-interactive:active{cursor:grabbing}
+    figure[part="map"] [data-af-deck-controls]{position:absolute;right:8px;top:8px;z-index:1;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border,#cfbea2);border-radius:4px;background:var(--background,#f4ead9);color:var(--foreground,#1f2937);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+    figure[part="map"] [data-af-deck-controls] button{display:flex;width:28px;height:28px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:inherit;cursor:pointer}
+    figure[part="map"] [data-af-deck-controls] button+button{border-top:1px solid var(--border,#cfbea2)}
+    figure[part="map"] [data-af-deck-controls] button:hover{background:var(--muted,rgba(0,0,0,.06))}
+    figure[part="map"] [data-af-deck-controls] button:focus-visible{position:relative;z-index:1;outline:2px solid var(--ring,#2a5bd7);outline-offset:-2px}
+    figure[part="map"] [data-af-deck-legend]{position:absolute;left:8px;bottom:20px;z-index:1;box-sizing:border-box;display:flex;max-width:45%;flex-direction:column;gap:8px;border:1px solid var(--border,#cfbea2);border-radius:4px;background:color-mix(in srgb,var(--background,#f4ead9) 90%,transparent);color:var(--foreground,#1f2937);padding:6px 8px;font:11px/1.25 var(--font-body,ui-sans-serif,system-ui,sans-serif);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+    figure[part="map"] [data-af-deck-legend] [data-af-deck-entry]{display:flex;flex-direction:column;gap:4px}
+    figure[part="map"] [data-af-deck-legend] [data-af-deck-label]{color:var(--muted-foreground,#64748b);font-weight:500}
+    figure[part="map"] [data-af-deck-ramp]{display:flex;align-items:center;gap:6px;white-space:nowrap}
+    figure[part="map"] [data-af-deck-ramp-bar]{display:block;flex:0 0 96px;width:96px;height:8px;border-radius:2px}
+    figure[part="map"] [data-af-deck-swatches]{display:flex;flex-wrap:wrap;gap:2px 8px;margin:0;padding:0;list-style:none}
+    figure[part="map"] [data-af-deck-swatch]{display:flex;align-items:center;gap:4px;min-width:0}
+    figure[part="map"] [data-af-deck-dot]{width:8px;height:8px;flex:0 0 8px;border-radius:50%}
+    figure[part="map"] [data-af-deck-swatch-label]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  `;
   root.append(style);
   const controls = doc.createElement("div");
-  controls.className = MAP_CLASSES.controls;
+  controls.setAttribute("data-af-deck-controls", "");
   controls.setAttribute("role", "group");
   controls.setAttribute("aria-label", "Map controls");
   root.append(controls);
   const legend = doc.createElement("div");
   legend.setAttribute("part", "legend");
-  legend.className = MAP_CLASSES.legend;
+  legend.setAttribute("data-af-deck-legend", "");
   legend.setAttribute("role", "group");
   legend.setAttribute("aria-label", "Map legend");
   root.append(legend);
@@ -107,7 +124,6 @@ export function mountDeckGL(
   ] as const) {
     const button = doc.createElement("button");
     button.type = "button";
-    button.className = MAP_CLASSES.button;
     button.setAttribute("aria-label", label);
     const icon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("viewBox", "0 0 24 24");
@@ -261,18 +277,18 @@ export function mountDeckGL(
     if (options.legend !== false)
       for (const scale of legendScales(built, palette)) {
         const entry = doc.createElement("div");
-        entry.className = MAP_CLASSES.legendEntry;
+        entry.setAttribute("data-af-deck-entry", "");
         const label = doc.createElement("strong");
-        label.className = MAP_CLASSES.legendLabel;
+        label.setAttribute("data-af-deck-label", "");
         label.textContent = scale.label;
         entry.append(label);
         if (scale.kind === "ramp") {
           const ramp = doc.createElement("div");
-          ramp.className = MAP_CLASSES.ramp;
+          ramp.setAttribute("data-af-deck-ramp", "");
           const min = doc.createElement("span");
           min.textContent = compactNumber.format(scale.min);
           const bar = doc.createElement("span");
-          bar.className = MAP_CLASSES.rampBar;
+          bar.setAttribute("data-af-deck-ramp-bar", "");
           bar.setAttribute(
             "aria-label",
             `${scale.label}: ${compactNumber.format(scale.min)} to ${compactNumber.format(scale.max)}`,
@@ -285,16 +301,16 @@ export function mountDeckGL(
           entry.append(ramp);
         } else {
           const swatches = doc.createElement("ul");
-          swatches.className = MAP_CLASSES.swatches;
+          swatches.setAttribute("data-af-deck-swatches", "");
           for (const item of scale.entries) {
             const row = doc.createElement("li"),
               dot = doc.createElement("span");
-            row.className = MAP_CLASSES.swatch;
-            dot.className = MAP_CLASSES.dot;
+            row.setAttribute("data-af-deck-swatch", "");
+            dot.setAttribute("data-af-deck-dot", "");
             dot.setAttribute("aria-hidden", "true");
             dot.style.background = rgbCss(item.color);
             const value = doc.createElement("span");
-            value.className = MAP_CLASSES.swatchLabel;
+            value.setAttribute("data-af-deck-swatch-label", "");
             value.textContent = String(item.value);
             row.append(dot, value);
             swatches.append(row);
