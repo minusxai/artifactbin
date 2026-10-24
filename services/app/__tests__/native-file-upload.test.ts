@@ -1,7 +1,7 @@
 import type {Actor} from '@artifactbin/contracts';
 import {expect,it,vi} from 'vitest';
 import {createUser,identityForUser} from '@/lib/accounts';
-import {changeMembership} from '@/lib/artifacts';
+import {changeMembership,membershipState} from '@/lib/artifacts';
 import {mintAccountToken,request,useAppHarness} from './harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as uploadFile} from '@/app/a/[id]/datasets/[datasetId]/files/route';
@@ -16,7 +16,7 @@ it.each(['legacy','grants','direct'])('the native upload port composes with real
  const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
  const dataset=await make({dataset:[{fixture:'native-upload'}],visibility:'private',...(mode==='legacy'?{access:'readwrite'}:{})});
  const document=await make({visibility:'unlisted',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="attachments" href="ref:${dataset.id}" data-af-mode="live"></head><body>Upload</body></html>`});
- await changeMembership(identityForUser(owner.id),document.id,{action:'join'});
+ expect((await membershipState(identityForUser(owner.id),document.id)).self?.status).toBe('accepted');
  if(mode==='direct'){
   await changeMembership(identityForUser(owner.id),document.id,{action:'leave'});
   await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify({version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:owner.id}}]})]);

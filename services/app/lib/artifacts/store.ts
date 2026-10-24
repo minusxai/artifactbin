@@ -318,7 +318,7 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  if(input.format==='markup'&&userId)await seedOwnerJoin(tx,id,userId);
+  if((input.format==='markup'||input.format==='html')&&userId)await seedOwnerJoin(tx,id,userId);
   if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],creator);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
