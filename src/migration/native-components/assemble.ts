@@ -105,12 +105,13 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
    }
    if(proof&&proof.route!==(kind==='query'?'registered-sqlite-query':'registered-dataset-mutation'))block('operation-route-not-supported',descriptor.name);
    const backends=input.backends.filter(b=>b.namespace===descriptor.namespace),backend=backends[0];
-   const descriptorSet={queries:input.queries.filter(q=>q.namespace===descriptor.namespace),mutations:input.mutations.filter(m=>m.mode!=='historical-readonly'&&m.namespace===descriptor.namespace)};
+   const descriptorSet={queries:input.queries.filter(q=>q.namespace===descriptor.namespace),mutations:input.mutations.filter(m=>m.mode!=='historical-readonly'&&m.namespace===descriptor.namespace),...(input.viewer?.namespace===descriptor.namespace?{viewer:input.viewer}:{})};
    if(!proof||backends.length!==1||!backend||!safeUrl(backend.url)||!/^([a-f0-9]{64})$/.test(backend.planSha256)||backend.descriptorsSha256!==nativeDigest(descriptorSet)||backend.operations.filter(op=>op.kind===kind&&op.name===descriptor.name&&op.operationSha256===proof.operationSha256).length!==1)block('registered-descriptor-admission',descriptor.name);
   }
  }
  if(new Set(input.backends.map(b=>b.namespace)).size!==input.backends.length)block('duplicate-backend');
- const emitted=emitNativeBindings({cellAdapter:input.cellAdapter,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
+ if(input.viewer&&input.backends.filter(backend=>backend.namespace===input.viewer!.namespace).length!==1)block('viewer-backend-admission');
+ const emitted=emitNativeBindings({cellAdapter:input.cellAdapter,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
  const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});

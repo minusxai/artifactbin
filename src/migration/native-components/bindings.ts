@@ -201,6 +201,20 @@ export function emitNativeBindings(
       return false;
     }
   };
+  if (input.viewer) {
+    const viewer=input.viewer;
+    try {
+      const document=parseGraphql(viewer.document),definition=document.definitions[0];
+      const root=definition?.kind===Kind.OPERATION_DEFINITION?definition.selectionSet.selections[0]:undefined;
+      const field=root?.kind===Kind.FIELD?root.selectionSet?.selections[0]:undefined;
+      const id=field?.kind===Kind.FIELD?field.selectionSet?.selections[0]:undefined;
+      if(viewer.identity!=="target-subject-v1"||!name(viewer.namespace)||viewer.responsePath.join('.')!==[viewer.namespace,'viewer','id'].join('.')||
+        document.definitions.length!==1||definition?.kind!==Kind.OPERATION_DEFINITION||definition.operation!=="query"||definition.variableDefinitions?.length||definition.directives?.length||definition.selectionSet.selections.length!==1||
+        root?.kind!==Kind.FIELD||root.alias||root.name.value!==viewer.namespace||root.arguments?.length||root.directives?.length||root.selectionSet?.selections.length!==1||
+        field?.kind!==Kind.FIELD||field.alias||field.name.value!=="viewer"||field.arguments?.length||field.directives?.length||field.selectionSet?.selections.length!==1||
+        id?.kind!==Kind.FIELD||id.alias||id.name.value!=="id"||id.arguments?.length||id.directives?.length||id.selectionSet)block('$viewer','invalid-viewer-descriptor');
+    }catch{block('$viewer','invalid-viewer-descriptor');}
+  }
   for (const query of input.queries)
     if (
       !name(query.name) ||
@@ -244,6 +258,7 @@ export function emitNativeBindings(
     if (
       signals(expr).some(
         (signal) =>
+          !(signal === "_me.id" && input.viewer) &&
           !Object.hasOwn(defaults, signal) &&
           !input.queries.some((query) => query.name === signal),
       )
@@ -549,6 +564,7 @@ export function emitNativeBindings(
       value.kind === "row" ||
       (value.kind === "not" && hasRow(value.value)) ||
       (value.kind === "binary" && (hasRow(value.left) || hasRow(value.right)));
+    if (expr && signals(expr).includes("_me.id")) target.viewerIdentity = true;
     if (
       expr &&
       hasRow(expr) &&
@@ -572,6 +588,7 @@ export function emitNativeBindings(
     targets,
     queries: input.queries,
     mutations: input.mutations,
+    viewer: input.viewer,
   };
   const evaluator = evaluateLocalReactiveExpression.toString();
   const cellImport=targets.some(target=>target.kind==="cell")?`import {formatNativeLiveCell} from ${escapedJson(input.cellAdapter!.specifier)};\n`:"";

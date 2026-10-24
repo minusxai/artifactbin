@@ -1416,3 +1416,18 @@ test('Cell target refuses an undeclared data query, dynamic format and missing a
  node.attributes.push({name:'format',start:0,end:1,value:{static:false,source:'$filter',exprType:'Identifier'}});source.queries=[query];source.analysis.flow.queries=[{name:'rows',start:0,end:1}];node.attributes[0]!.value={static:true,json:'$rows'};source.cellAdapter={specifier:'./components/native-cell.js',sha256:'a'.repeat(64)};
  const dynamic=emitNativeBindings(source);assert.ok(dynamic.blockers.some(b=>b.code==='invalid-cell-format-property'));
 });
+test("explicit remote viewer identity controls conditions without being persisted as viewer local state", async () => {
+ const source=input([el('branch','div',{}, {kind:'and',test:{kind:'signal',name:'_me.id'}}),el('guest','div',{}, {kind:'and',test:{kind:'not',value:{kind:'signal',name:'_me.id'}}})],[{kind:'condition',sourceNode:'branch',afId:'branch',templateId:'signed-in'},{kind:'condition',sourceNode:'guest',afId:'guest',templateId:'signed-out'}]);
+ source.viewer={namespace:'queries',identity:'target-subject-v1',document:'query NativeViewer{queries{viewer{id}}}',responsePath:['queries','viewer','id']};
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),branch=new Element('div',{'data-af-id':'branch'}),guest=new Element('div',{'data-af-id':'guest'});doc.body.append(branch,guest);doc.template('signed-in',[new Element('p')]);doc.template('signed-out',[new Element('p')]);
+ const port=client({open:false,filter:null}),running=await execute(result.authorJs,port,doc);
+ try {assert.equal(branch.children.length,0);assert.equal(guest.children.length,0);const viewer=port.remotes.find(r=>(r as any).variables===undefined)!;assert.ok(viewer);
+ viewer.next({data:{queries:{viewer:{id:'target-user'}}}});assert.equal(branch.children.length,1);
+ assert.deepEqual(port.state,{open:false,filter:null});
+ viewer.next({data:{queries:{viewer:{id:null}}}});assert.equal(branch.children.length,0);assert.equal(guest.children.length,1);
+ viewer.next({data:{queries:{viewer:{}}}});assert.equal(branch.children.length,0);assert.equal(guest.children.length,0);
+ viewer.next({data:{queries:{viewer:{id:'target-user'}}}});assert.equal(branch.children.length,1);
+ running.module.dispose();viewer.next({data:{queries:{viewer:{id:null}}}});assert.equal(branch.children.length,1);assert.equal(viewer.stopped,true);
+ }finally{await running.close();}
+});

@@ -67,8 +67,16 @@ export type NativeBindingTarget = NativeBindingIdentity &
       }
     | { kind: "action" }
   );
+/** Explicit request-authoritative target identity. Source identity equivalence belongs to migration mappings. */
+export interface NativeBindingViewer {
+  namespace: string;
+  identity: "target-subject-v1";
+  document: string;
+  responsePath: readonly [string, "viewer", "id"];
+}
 export interface NativeBindingsInput {
   cellAdapter?:NativeCellAdapter;
+  viewer?: NativeBindingViewer;
   analysis: NativeTypedAnalysis;
   targets: readonly NativeBindingTarget[];
   queries: readonly NativeBindingQuery[];

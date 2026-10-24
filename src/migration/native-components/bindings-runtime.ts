@@ -1,7 +1,7 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell){
- let disposed=false,values={},tables={},tableData={},tablePending={},localSub,failed=false;
+ let disposed=false,values={},tables={},tableData={},tablePending={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
  const cells=new WeakMap();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
@@ -11,7 +11,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
  const error=message=>{if(disposed)return;const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);};
- const read=(expr,row)=>evaluate(expr,{values:{...values,...tables},row});
+ const read=(expr,row)=>evaluate(expr,{values:{...values,...tables,...(viewerReady?{'_me.id':viewerId}:{})},row});
  const bindingId=node=>node.getAttribute?.('data-native-binding-id')||node.getAttribute?.('data-af-id');
  const all=root=>[...(bindingId(root)?[root]:[]),...(root.querySelectorAll?.('[data-af-id],[data-native-binding-id]')??[])];
  const lookup=(root,id)=>{const found=all(root).filter(node=>bindingId(node)===id);if(found.length>1)throw Error('Duplicate binding identity');return found[0];};
@@ -36,6 +36,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   const ids=context?.ids??{},scope=context?.scope??rootScope;
   if(disposed||failed||!scope.active)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
+   if(target.viewerIdentity){if(!viewerReady){if(target.kind==='condition')host.replaceChildren();else host.hidden=true;continue;}host.hidden=false;}
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
    if(target.kind==='cell'){
     let state=cells.get(host);if(!state){const child=document.createElement('span');host.replaceChildren(child);state={child,rows:null};cells.set(host,state);}
@@ -108,5 +109,6 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   }catch(cause){failed=true;stopQueries();error(cause.message);}
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
- return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();stopQueries();for(const scope of scopes)disposeScope(scope);};
+ if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true}).subscribe(result=>{if(disposed)return;viewerReady=false;try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');viewerId=id;viewerReady=true;render();}catch(cause){render();error(cause.message);}});
+ return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();viewerSub?.unsubscribe();stopQueries();for(const scope of scopes)disposeScope(scope);};
 }`;

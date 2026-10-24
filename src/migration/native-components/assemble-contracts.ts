@@ -4,7 +4,7 @@ import type { NativeAuthorProgramReceipt } from './author-program-contracts.ts';
 import type {NativeChartMapping,NativeChartAdapter} from './chart-contracts.ts';
 import type { NativeTypedAnalysis } from './analyze-contracts.ts';
 import type { NativeIdentityRevision } from './identity-contracts.ts';
-import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget } from './bindings-contracts.ts';
+import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget, NativeBindingViewer } from './bindings-contracts.ts';
 import type { NativeOperationCoverage } from './operations-contracts.ts';
 export interface NativeAssemblyStyle {
  /** Exact source CSS bytes, including the recovered theme and authored utility closure. */
@@ -34,6 +34,7 @@ export interface NativeAssemblyModule {name:string;register:string;specifier:str
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
  cellAdapter?:NativeCellAdapter;
+ viewer?: NativeBindingViewer;
  readerTemplate?:NativeReaderTemplateReceipt;
  authorPrograms?: readonly NativeAuthorProgramReceipt[];
  chartMappings?:readonly NativeChartMapping[];
