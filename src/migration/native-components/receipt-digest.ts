@@ -1,5 +1,19 @@
 import { createHash } from "node:crypto";
 
+function arrayIndex(key: string): number | null {
+  if (!/^(?:0|[1-9]\d*)$/.test(key)) return null;
+  const value = Number(key);
+  return Number.isSafeInteger(value) && value <= 0xffff_fffe ? value : null;
+}
+
+function compareCanonicalKeys(left: string, right: string): number {
+  const leftIndex = arrayIndex(left), rightIndex = arrayIndex(right);
+  if (leftIndex !== null && rightIndex !== null) return leftIndex - rightIndex;
+  if (leftIndex !== null) return -1;
+  if (rightIndex !== null) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 /**
  * Canonical receipt hash for the assembled native projection. Ordinary JSON
  * values keep nativeDigest's sorted-key JSON encoding; Uint8Array values are
@@ -37,8 +51,10 @@ export function nativeReceiptDigest(value: unknown): string {
       return;
     }
     if (current && typeof current === "object") {
+      // Object.fromEntries receives lexically sorted keys in nativeDigest, but
+      // JSON.stringify then emits integer-index keys first in numeric order.
       const entries = Object.entries(current).sort(([left], [right]) =>
-        left < right ? -1 : left > right ? 1 : 0,
+        compareCanonicalKeys(left, right),
       );
       hash.update("{");
       let first = true;

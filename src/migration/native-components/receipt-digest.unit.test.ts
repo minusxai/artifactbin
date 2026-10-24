@@ -49,4 +49,30 @@ test("binary-free receipt values retain the frozen native JSON digest", () => {
     nativeReceiptDigest({ keep: 1 }),
   );
   assert.equal(nativeReceiptDigest([undefined]), nativeReceiptDigest([null]));
+  assert.equal(
+    nativeReceiptDigest({
+      nested: {
+        "2": "two",
+        "10": "ten",
+        "1": "one",
+        "01": "leading zero",
+        b: "bee",
+        a: "aye",
+        "4294967295": "not an array index",
+      },
+      values: [Number.NaN, -0, Infinity],
+    }),
+    nativeDigest({
+      nested: {
+        "2": "two",
+        "10": "ten",
+        "1": "one",
+        "01": "leading zero",
+        b: "bee",
+        a: "aye",
+        "4294967295": "not an array index",
+      },
+      values: [Number.NaN, -0, Infinity],
+    }),
+  );
 });
