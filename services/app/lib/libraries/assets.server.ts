@@ -1,12 +1,12 @@
 import {readFile} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {libraryUrls} from './index';
 export interface RegisteredLibraryResource {url:string;contentType:'text/javascript';bytes:Uint8Array}
 export interface LibraryResourceInput {url:string;contentType:string;bytes:Uint8Array}
-const publicDir=fileURLToPath(new URL('../../public/',import.meta.url));
+// Same package-cwd contract as server/app.ts static serving, including bundled deployment.
+const publicDir=path.resolve('public');
 const registered=new Set(Object.values(libraryUrls()));
 /** Public source-owned code only. No caller-selected files or network fetches. */
 export async function registeredLibrarySources():Promise<Readonly<Record<string,string>>>{
