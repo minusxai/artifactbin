@@ -108,6 +108,20 @@ it('styles a nested native close button like the text-only close control without
   expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
   expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
 });
+it('matches the retained bare dialog heading and outline close styling', () => {
+  const {root,content} = fixture();
+  const heading = document.createElement('h2'); heading.textContent = 'Bare heading'; content.append(heading);
+  const style = document.querySelector<HTMLStyleElement>('style[data-af-dialog-styles]')!;
+  const css = style.textContent!.replace(/\s+/g,'');
+  expect(getComputedStyle(heading).fontSize).toBe('28px');
+  expect(getComputedStyle(heading).lineHeight).toBe('1.2');
+  expect(css).toContain('af-dialog-close{border:1pxsolidcurrentColor;background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs,');
+  expect(css).toContain('af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1pxsolidcurrentColor');
+  document.documentElement.dataset.afDark = 'true';
+  expect(css).toContain(':root[data-af-dark="true"]af-dialog-close,:root[data-af-dark="true"]af-dialog-close>button{border-color:var(--input);background:color-mix(inoklab,var(--input)30%,transparent)}');
+  delete document.documentElement.dataset.afDark;
+  root.remove();
+});
 it('uses the themed three-pixel focus ring on keyboard-focused dialog controls', () => {
   const {root,close} = fixture();
   root.style.setProperty('--ring','rgb(12, 34, 56)');
