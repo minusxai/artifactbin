@@ -118,7 +118,7 @@ it("renders compact map controls and a labeled gradient legend", () => {
   expect(controls?.querySelectorAll("button svg[aria-hidden='true']")).toHaveLength(3);
   const controlStyle = getComputedStyle(controls!);
   expect(controlStyle.position).toBe("absolute");
-  expect(controlStyle.top).toBe("8px");
+  expect(controlStyle.top).toBe("32px");
   expect(controlStyle.right).toBe("8px");
   expect(controlStyle.flexDirection).toBe("column");
 

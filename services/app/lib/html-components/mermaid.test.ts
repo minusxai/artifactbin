@@ -37,3 +37,7 @@ it('uses explicit false and true ancestor dark attributes',async()=>{
  vi.mocked(drawForReader).mockResolvedValue({image:{src:'data:image/svg+xml,new',type:'flowchart'}});const parent=document.createElement('div');parent.setAttribute('data-af-dark','false');const el=document.createElement('af-mermaid') as AfMermaid;el.code='graph TD; A-->B';parent.append(el);document.body.append(parent);
  await vi.waitFor(()=>expect(vi.mocked(drawForReader).mock.calls.at(-1)?.[2]).toBe(false));parent.setAttribute('data-af-dark','true');await vi.waitFor(()=>expect(vi.mocked(drawForReader).mock.calls.at(-1)?.[2]).toBe(true));
 });
+it('styles captions with the original compact medium monospace role',()=>{
+ const css=document.querySelector('style[data-af-mermaid-styles]')?.textContent ?? '';
+ expect(css).toContain('af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;line-height:1.25rem;font-weight:500;margin-bottom:.5rem}');
+});
