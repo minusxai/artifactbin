@@ -31,7 +31,7 @@ describe('af-slider', () => {
     expect(header!.textContent).toContain('Level');
     expect(header!.textContent).toContain('40%');
     expect(getComputedStyle(root).minWidth).toBe('176px');
-    expect(getComputedStyle(input).height).toBe('6px');
+    expect(getComputedStyle(input).height).toBe('16px');
     expect(getComputedStyle(input).margin).toBe('0px');
   });
   it('uses a flat theme track and a separately styled thumb instead of native range progress fill', () => {
@@ -44,6 +44,17 @@ describe('af-slider', () => {
     expect(input.disabled).toBe(false);
     input.disabled = true;
     expect(getComputedStyle(input).opacity).toBe('0.5');
+  });
+  it('keeps the native range focus outline on its intrinsic-height box around the rail', () => {
+    const {input} = fixture('label="Level" default-value="40"');
+    // The rail stays 6px tall, while the control retains the native range hit/focus box.
+    // Browsers draw the range focus outline around the input box, not just its rail.
+    expect(getComputedStyle(input).height).toBe('16px');
+    const styles = document.querySelector<HTMLStyleElement>('style[data-af-slider-styles]')?.textContent ?? '';
+    expect(styles).toContain('::-webkit-slider-runnable-track{height:6px');
+    expect(styles).toContain('::-moz-range-track{height:6px');
+    expect(getComputedStyle(input).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(styles).toContain(':focus-visible{outline:2px solid var(--accent,currentColor);outline-offset:2px}');
   });
   it('uses default-value for uncontrolled state and emits accepted native changes', () => {
     const {root,input,readout} = fixture('default-value="25" label="Volume" min="10" max="40" step="5" prefix="$" suffix=" USD" format=".1f"');
