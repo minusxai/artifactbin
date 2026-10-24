@@ -7,13 +7,15 @@ import {preparedPilotStoreDigest} from './native-prepared-pilot-store.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const safe=name=>typeof name==='string'&&!path.isAbsolute(name)&&name.split('/').every(part=>part&&part!=='.'&&part!=='..');
 /** Caller supplies the real DB dump, selected reader, assembly bytes, object sink and optional disposable auth key. */
-export async function prepareNativeMigrationSnapshot({databaseDump,reader,assembly,objectsDirectory,outputDirectory,fixtureAuthSecret}){
+export async function prepareNativeMigrationSnapshot({databaseDump,reader,assembly,history,objectsDirectory,outputDirectory,fixtureAuthSecret}){
+ const head=history?.revisions?.find(revision=>revision.page.version===history.headVersion);
+ if(!head||history.revisions.length!==1||history.pageId!==reader.pageId||history.headVersion!==reader.version||history.sourceId!==assembly.key?.sourceId||history.sourceNamespace!==assembly.key?.sourceNamespace)throw Error('native-snapshot-history-binding');
  if(assembly.result?.status!=='complete'||assembly.key?.version!==reader.version||!reader.pageId||!reader.accountEmail||!/^[a-f0-9]{64}$/.test(reader.identityPlanSha256))throw Error('native-snapshot-input');
  const bundle=path.join(outputDirectory,'bundle'),store=path.join(bundle,'prepared-store');
  // Exclusive creation prevents cross-page state reuse and overwriting an earlier snapshot.
  await mkdir(outputDirectory,{recursive:true,mode:0o700});await mkdir(bundle,{mode:0o700});await mkdir(store,{mode:0o700});
  const database=new PGlite(path.join(store,'database'),{loadDataDir:new Blob([databaseDump])});
- try{await database.waitReady;const rows=(await database.query('SELECT version FROM artifacts WHERE id=$1',[reader.pageId])).rows;if(rows.length!==1||rows[0].version!==reader.version)throw Error('native-snapshot-readback');}finally{await database.close();}
+ try{await database.waitReady;const rows=(await database.query('SELECT version,source,user_id,token_id FROM artifacts WHERE id=$1',[reader.pageId])).rows;if(rows.length!==1||rows[0].version!==reader.version||rows[0].source!==head.page.html||rows[0].user_id!==history.owner.userId||rows[0].token_id!==history.owner.tokenId)throw Error('native-snapshot-readback');}finally{await database.close();}
  const assertTree=async directory=>{for(const name of await readdir(directory)){const full=path.join(directory,name),stat=await lstat(full);if(stat.isSymbolicLink()||!stat.isDirectory()&&!stat.isFile())throw Error('native-snapshot-object-type');if(stat.isDirectory())await assertTree(full);}};
  if((await lstat(objectsDirectory)).isSymbolicLink())throw Error('native-snapshot-object-type');await assertTree(objectsDirectory);await cp(objectsDirectory,path.join(store,'objects'),{recursive:true,errorOnExist:true,force:false});
  const files=[],directories=[];
