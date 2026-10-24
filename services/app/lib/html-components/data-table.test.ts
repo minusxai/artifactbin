@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AfDataTable, registerDataTable } from "./data-table";
 registerDataTable();
 afterEach(() => document.body.replaceChildren());
@@ -169,8 +169,9 @@ it("ignores source replies after replacement or disconnect, and displays retryab
       throw new Error("Unavailable");
     },
   };
-  await el.loadMore();
-  expect(el.querySelector("[role=alert]")?.textContent).toBe("Unavailable");
+  await vi.waitFor(() =>
+    expect(el.querySelector("[role=alert]")?.textContent).toBe("Unavailable"),
+  );
   el.source = {
     read: (request) => {
       signal = request.signal;
@@ -189,4 +190,73 @@ it("renders repeated unkeyed row objects as separate rows", () => {
   el.data = { columns: [{ name: "n", type: "number" }], rows: [row, row] };
   document.body.append(el);
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(2);
+});
+it("loads a newly assigned source and replaces prior source rows from offset zero", async () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  document.body.append(el);
+  const first = vi.fn(async (_request: unknown) => ({
+    columns: [{ name: "id", type: "number" as const }],
+    rows: [{ id: 1 }],
+    totalRows: 2,
+    truncated: true,
+  }));
+  el.source = { read: first };
+  await vi.waitFor(() => expect(el.data.rows).toEqual([{ id: 1 }]));
+  expect(first.mock.calls[0]?.[0]).toMatchObject({ offset: 0 });
+  const next = vi.fn(async (_request: unknown) => ({
+    columns: [{ name: "id", type: "number" as const }],
+    rows: [{ id: 8 }],
+    totalRows: 1,
+  }));
+  el.source = { read: next };
+  await vi.waitFor(() => expect(el.data.rows).toEqual([{ id: 8 }]));
+  expect(next.mock.calls[0]?.[0]).toMatchObject({ offset: 0 });
+  expect(el.textContent).not.toContain("1 of 2");
+});
+it("cleans semantic headers and body when switching comparison and grid layouts", () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.transpose = true;
+  el.header = "name";
+  el.data = {
+    columns: [
+      { name: "name", type: "string" },
+      { name: "n", type: "number" },
+    ],
+    rows: [
+      { name: "One", n: 1 },
+      { name: "Two", n: 2 },
+    ],
+  };
+  document.body.append(el);
+  const table = el.querySelector("table")!;
+  expect(el.querySelectorAll("thead th")).toHaveLength(3);
+  expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+  el.transpose = false;
+  expect(el.querySelectorAll("thead th")).toHaveLength(2);
+  expect(el.querySelectorAll("tbody tr")).toHaveLength(2);
+  expect(table.getAttribute("aria-rowcount")).toBe("3");
+  el.transpose = true;
+  expect(el.querySelectorAll("thead th")).toHaveLength(3);
+  expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+  expect(table.getAttribute("aria-rowcount")).toBe("2");
+  expect(table.getAttribute("aria-colcount")).toBe("3");
+});
+it("resets viewport after result shrink and sort without blanking loaded rows", () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.rowKey = "id";
+  el.data = {
+    columns: [{ name: "id", type: "number" }],
+    rows: Array.from({ length: 1000 }, (_, id) => ({ id })),
+  };
+  document.body.append(el);
+  const viewport = el.querySelector("[data-slot=table-scroll]")!;
+  viewport.scrollTop = 30000;
+  viewport.dispatchEvent(new Event("scroll"));
+  el.data = { ...el.data, rows: [{ id: 3 }, { id: 1 }] };
+  expect(viewport.scrollTop).toBe(0);
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(2);
+  viewport.scrollTop = 1000;
+  el.sort = { col: "id", dir: "asc" };
+  expect(viewport.scrollTop).toBe(0);
+  expect(el.querySelector("tbody tr[data-row-key]")?.textContent).toBe("1");
 });

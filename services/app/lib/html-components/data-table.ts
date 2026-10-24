@@ -81,6 +81,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   set data(v: TableData) {
     this.loader.cancel();
     ++this.requestEpoch;
+    if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
+      this.viewport.scrollTop = 0;
     this.value = v ?? empty();
     this.error = "";
     this.pending = false;
@@ -98,6 +100,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   }
   set sort(v: SortSpec | null) {
     this.order = parseSortSpec(v);
+    if (this.viewport) this.viewport.scrollTop = 0;
     if (this.source && this.isConnected) {
       this.loader.cancel();
       ++this.requestEpoch;
@@ -113,7 +116,13 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     ++this.requestEpoch;
     this.transport = v;
     this.pending = false;
-    this.render();
+    this.error = "";
+    if (v) {
+      this.value = empty();
+      if (this.viewport) this.viewport.scrollTop = 0;
+    }
+    if (v && this.isConnected) void this.loadMore(true);
+    else this.render();
   }
   get cellRenderers() {
     return this.renderers;
@@ -197,7 +206,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         (this as unknown as Record<string, unknown>)[key] = v;
       }
     }
-    this.render();
+    if (this.source && !this.pending && !this.data.rows.length)
+      void this.loadMore(true);
+    else this.render();
   }
   disconnectedCallback() {
     this.loader.cancel();
@@ -217,8 +228,10 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         v = value;
       }
       if (name === "columns") this.specs = v;
-      else if (name === "sort") this.order = parseSortSpec(v);
-      else this.metricSpecs = v;
+      else if (name === "sort") {
+        this.sort = parseSortSpec(v);
+        return;
+      } else this.metricSpecs = v;
     }
     this.render();
   }
@@ -310,7 +323,13 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       alert.textContent = this.error;
       this.footer!.append(alert);
     }
-    table.dataset.layout = this.transpose ? "comparison" : "grid";
+    const layout = this.transpose ? "comparison" : "grid";
+    if (table.dataset.layout && table.dataset.layout !== layout) {
+      head.replaceChildren();
+      body.replaceChildren();
+      this.viewport!.scrollTop = 0;
+    }
+    table.dataset.layout = layout;
     if (this.transpose) {
       const model = compareTable({
         ...this.data,
@@ -437,6 +456,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         button.type = "button";
         button.onclick = () => {
           this.order = nextTableSort(this.sort, column.col);
+          if (this.viewport) this.viewport.scrollTop = 0;
           this.dispatchEvent(
             new CustomEvent("af-sort-change", {
               detail: this.sort,
