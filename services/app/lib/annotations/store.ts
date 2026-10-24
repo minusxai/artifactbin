@@ -23,7 +23,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
+import { readableArtifact, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
@@ -180,16 +180,6 @@ interface AnnotationRowDb {
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string, lock = false): Promise<ArtifactRow | null> => {
   const r = await artifactQuery<ArtifactRow>(q,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}${lock ? ' FOR UPDATE' : ''}`, [id, scope.val]);
-  return r.rows[0] ?? null;
-};
-
-/**
- * The access decision for a LIST, without the document: the same statement shape and scope as {@link scopedRow}, but it
- * answers with the id alone. A document is megabytes of JSONB the database would ship and the server decode just to be
- * told yes or no; `wireFor` loads it only when there are threads to anchor.
- */
-const scopedHead = async (q: Queryable, scope: Scope, id: string): Promise<AnnotatedHead | null> => {
-  const r = await q.query<AnnotatedHead>(`SELECT id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   return r.rows[0] ?? null;
 };
 
@@ -475,7 +465,7 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
 export async function listAnnotationPageFor(actor: AccessActor, artifactId: string,
   opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
-  const row = await scopedHead(db, annotationScope(actor), artifactId);
+  const row = (await readableArtifact(actor, artifactId))?.row;
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
@@ -492,8 +482,7 @@ export async function listAnnotationsFor(
   artifactId: string,
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[] | null> {
-  const db = await getDb();
-  const row = await scopedHead(db, annotationScope(actor), artifactId);
+  const row = (await readableArtifact(actor, artifactId))?.row;
   if (!row) return null;
   return annotationsWireForRow(row, opts);
 }

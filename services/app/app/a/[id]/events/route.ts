@@ -18,8 +18,7 @@ import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
 import { getDb } from '@/lib/platform/db';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@/lib/artifacts';
-import { canAnnotate } from '@artifactbin/contracts';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
@@ -47,12 +46,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // owner's live stream the moment their document goes private.
   const actor = await sessionActor(request);
   if (!(await canReadArtifact(initial, actor))) return new Response('not found', { status: 404 });
-  // Annotations are OWNER-state (either browser credential — the account
-  // owner, or the anonymous agent-cookie owner), decided once here and
-  // re-checked on every wakeup like the ACL.
-  const ownerConnection = ownsArtifact(initial, actor);
-  // Annotations are narrated to everyone who may write them: the owner, an editor, a commenter.
-  const annotatorConnection = ownerConnection || canAnnotate(await effectiveRole(initial, actor));
   const artifactId = initial.id;
   // Connect only — never in the wakeup loop, which fires per remote edit.
   void trackEvent('sse_connect', artifactId, { userId: actor.userId });
@@ -122,26 +115,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   }).catch(() => { void close(); });
 
   /**
-   * ANNOTATIONS, FOR AN ANNOTATOR'S CONNECTION ONLY. The stream serves plain
-   * readers too, and a reader is never told that a conversation exists — so
-   * the named frame exists only on a connection whose credential could
-   * annotate (owner, editor, commenter), re-checked with the ACL on every
-   * wakeup, which is what makes a demotion stop the narration rather than
-   * merely stop the next one.
+   * Comment pings follow document read admission, rechecked on every wakeup.
+   * The event carries no comment content; the listing independently checks admission.
    */
-  // A PING and nothing else — the annotator's page refetches the list, which
-  // is the blind-relay rule: what travels is that something moved, never what
-  // it says. Listing also advances the stored anchors, so a document wakeup
-  // keeps pin paths current with the edit that just landed.
   const sendAnnotations = () =>
     writer.write(encoder.encode(`event: ${STORY_ANNOTATIONS_EVENT}\ndata: {}\n\n`)).catch(() => { /* client gone */ });
 
   const pushAnnotations = async () => {
-    if (closed || !annotatorConnection) return;
+    if (closed) return;
     const row = await getArtifactById(id);
     if (!row) return void close();
     if (!(await canReadArtifact(row, actor))) return void close();
-    if (!ownsArtifact(row, actor) && !canAnnotate(await effectiveRole(row, actor))) return; // demoted mid-stream: stop narrating, keep the document
     void sendAnnotations();
   };
 
@@ -310,7 +294,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
     await followDatasets(initial);
-    if (annotatorConnection) {
+    {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
       } catch (error) {

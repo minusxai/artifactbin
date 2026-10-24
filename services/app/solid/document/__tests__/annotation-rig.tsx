@@ -177,6 +177,8 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
     const p = () => props();
     const ui = () => <AnnotationLayer
       id={p().id ?? 'doc1'}
+      canCreateComment={p().canCreateComment}
+      onSignIn={p().onSignIn}
       backend={p().backend ?? httpBackend(p().id ?? 'doc1')}
       canDeleteAny={p().canDeleteAny ?? true}
       runtimeRef={p().runtimeRef ?? runtime.ref}

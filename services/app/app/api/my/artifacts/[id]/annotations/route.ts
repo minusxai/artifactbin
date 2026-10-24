@@ -9,7 +9,8 @@ import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
  * is resolved server-side; an uncarryable base answers 409 with head so the
  * live page retries with fresh coordinates). GET lists like the bearer twin.
  *
- * Either browser credential authorizes (account session or the agent-session
+ * GET follows document read admission, including anonymous link readers.
+ * Either browser credential authorizes writes (account session or the agent-session
  * cookie); who may create is `annotationScope` — owner, editor or COMMENTER,
  * the role that may say something and change nothing. A stranger's cookie
  * sees the uniform 404, because the artifact read is actor the same way.
@@ -17,7 +18,7 @@ import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document';
-import { browserActor } from '@/lib/accounts';
+import { sessionActor, browserActor } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
@@ -64,8 +65,7 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
 }
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const actor = await browserActor(request);
-  if (actor instanceof Response) return actor;
+  const actor = await sessionActor(request);
   const { id } = await ctx.params;
   return respondToAnnotationList(request, actor, id);
 }

@@ -66,6 +66,9 @@ const loadScreenshotEditor = preloadScreenshotEditor;
 
 export interface AnnotationLayerProps {
   id: string;
+  /** Explicitly false for readers and archived versions; omitted by authoring surfaces. */
+  canCreateComment?: boolean;
+  onSignIn?: () => void;
   /** Every request the comments make; the page's surface backend when it has one. */
   backend?: ArtifactBackend;
   /** The document owner may delete any comment; other viewers may delete their own. */
@@ -132,7 +135,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
   // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
-  const pickOnOpen = createMemo(() => props.pickOnOpen !== false);
+  const mayCreate = () => props.canCreateComment !== false;
+  const pickOnOpen = createMemo(() => mayCreate() && props.pickOnOpen !== false);
   const handedSelection = createMemo(() => props.initialSelection ?? null);
   const sessionNonce = createMemo(() => props.sessionNonce ?? null);
   const runtimeRef = createMemo(() => props.runtimeRef);
@@ -376,6 +380,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
    * rail opening together with a selection ends with the composer, not the pick.
    */
   const beginPick = (mode: 'block' | 'area') => {
+    if (!mayCreate()) return;
     if (mode === 'block') capture.reset();
     setPick(mode);
     setOpenId(null);
@@ -400,6 +405,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(on(pickOnOpen, (mayPick) => {
     if (mayPick) return;
     resumeSelectAfterCompose = false; setPick(null); capture.reset();
+    if (!mayCreate()) { setSelection(null); setDeleting(null); }
   }));
 
   // A selection handed down by the page opens the composer on those exact words.
@@ -453,7 +459,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const data = event.data;
       if (!isEditFrameMessage(data, nonce)) return;
       if (data.type === 'mx:selection-action' && data.action === 'select') {
-        if (props.pickOnOpen === false) return;
+        if (!mayCreate() || props.pickOnOpen === false) return;
         startPick();
         return;
       }
@@ -515,6 +521,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   /** One thread write; rejects with the backend's refusal (a reply's box shows which), `act` turns that into false. */
   const actOrThrow = async (annId: string, body: AnnotationActionBody) => {
+    if (!mayCreate()) return false;
     setBusy(true);
     try {
       const wire = await backend.actOnAnnotation(annId, body);
@@ -562,6 +569,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   /** One comment's words, against the thread revision this viewer read. A refusal rejects (the editor keeps the draft); a conflict first re-reads the thread so saving again applies. */
   const editComment = async (rootId: string, commentId: string, body: string) => {
+    if (!mayCreate()) throw new Error('You have read-only comment access.');
     const held = [...annotations(), ...(resolvedList() ?? [])].find((row) => row.id === rootId);
     try {
       replaceThread(await backend.editAnnotation(commentId, { body, ...(held?.revision !== undefined ? { expected_revision: held.revision } : {}) }));
@@ -614,9 +622,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     catch (cause) { setConfirmError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
     finally { setConfirmBusy(false); }
   };
-  const askDelete = (commentId: string, thread: boolean) => { if (deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
+  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
 
   const save = async () => {
+    if (!mayCreate()) return;
     const subject = selection();
     if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
     if (!subject.nodeId && !subject.anchor) {
@@ -681,6 +690,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   };
 
   const submitDraft = () => {
+    if (!mayCreate()) return;
     if (busy() || !hasReplyText(draft())) return;
     void save();
   };
@@ -713,6 +723,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
 
   const beginScreenshot = async () => {
+    if (!mayCreate()) return;
     if (screenshotUnavailable()) return;
     beginPick('area');
     const preparation = capture.start(); // Only this explicit gesture requests sharing.
@@ -854,6 +865,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <h2 class="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
       <Button type="button" variant="ghost" size="sm" icon aria-label="Close comments" onClick={() => props.onRailOpenChange(false)}><X size={14} strokeWidth={1.8} /></Button>
     </div>
+    <Show when={mayCreate()} fallback={<Show when={props.onSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.onSignIn?.()}>Sign in to comment</Button></Show>}>
     <div role="group" aria-label="Comment tools" class="grid grid-cols-2 gap-2">
       {/* A tool in use is the primary variant; min-h-16 grows the control past its fixed height without fighting it. */}
       <Button type="button" variant={pick() === 'block' ? 'primary' : 'secondary'} size="sm" aria-label="Select" aria-pressed={pick() === 'block'} onClick={toggleSelect}
@@ -870,9 +882,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       </FeatureGate>
     </div>
     <p class="text-2xs leading-relaxed text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Select a block or highlight text to comment.'}</p>
+    </Show>
   </div>;
 
   const threadHandlers = (id: string, resolved: boolean) => ({
+    canCreateComment: mayCreate(),
     onHover: hoverUi,
     onReplyDraftChange: (typed: boolean) => noteThreadReply(id, typed),
     onDelete: (commentId: string) => askDelete(commentId, commentId === id),
@@ -908,8 +922,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
                 hovered={previewId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
-                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
-                onReply={item().annotation.status === 'open' ? (body, attachment) => actOrThrow(id, { reply: body, ...attachment }) : undefined}
+                onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
+                onReply={mayCreate() && item().annotation.status === 'open' ? (body, attachment) => actOrThrow(id, { reply: body, ...attachment }) : undefined}
                 backend={backend} artifactId={props.id} busy={busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
                 pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
@@ -933,7 +947,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. The composer is a NON-modal floating
           card the reader drags beside the words (no backdrop, no focus trap, the page stays live): ui/FloatingPanel. Escape is the
           window handler above, so the panel is given no `onClose`. */}
-      <Show when={selection() && composerPosition() && !pick()}>
+      <Show when={mayCreate() && selection() && composerPosition() && !pick()}>
         <FloatingPanel label="Annotation composer" data-capture-chrome ref={composerDrop.ref} class="text-sm"
           position={{ left: composerPosition()!.left, top: composerPosition()!.top }} width={composerPosition()!.width}>
           {/* The panel is portalled out of this layer's shadow root, so it carries its own copy of the capture rule. */}

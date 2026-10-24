@@ -18,8 +18,9 @@ import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { adoptServedFrame } from '@/solid/lib/served-frame';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
+import { commentAccess } from '../document/comment-access';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
+import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
@@ -27,7 +28,6 @@ import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createAppAppearance } from '../ui/theme';
-import { Button } from '../ui/Button';
 import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
@@ -98,12 +98,12 @@ export function DocumentPage(): JSX.Element {
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
   const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'html';
-  const annotatable = () => canAnnotateRole(role()) && !archivedNow();
+  const comments = () => commentAccess(role(), accountSession(), archivedNow());
+  const annotatable = () => comments().canCreateComment;
   const backend = id ? createReaderHttpBackend(id) : null;
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
-  const [commentNotice, setCommentNotice] = createSignal<string | null>(null);
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
@@ -174,7 +174,11 @@ export function DocumentPage(): JSX.Element {
     backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
     onData: (event) => {
-      if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
+      if (event.datasets.includes('_members')) {
+        setMembershipRevision((n) => n + 1);
+        // Refresh the server's role projection and frame ticket together after an ACL change.
+        replaceDocument(window.location.href);
+      }
       if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
     },
     // Reload the original server shell and its ticketed frame together: their trusted
@@ -204,14 +208,6 @@ export function DocumentPage(): JSX.Element {
   const act = (name: string) => {
     if (name === 'controls' || name === 'menu' || name === 'notifications') setPanel(name);
     else if (name === 'comment') {
-      if (!annotatable()) {
-        if (!accountSession()) window.location.assign(loginHref(window.location, 'comment'));
-        else setCommentNotice(archivedNow()
-          ? 'Comments are unavailable on archived versions.'
-          : 'You have view-only access. Ask the owner for comment access.');
-        return;
-      }
-      setCommentNotice(null);
       setRailOpen((open) => !open);
     } else if (name === 'fork') setFork(true);
     else if (name === 'share') { if (isOwner()) setSharingOpen(true); }
@@ -349,14 +345,6 @@ export function DocumentPage(): JSX.Element {
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
     {/* The document's notice takes its own row above the frame (the frame shrinks), never over it. */}
-    <Show when={!!commentNotice() && frameSlot()}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi>
-        <div class="flex items-center justify-between gap-3 border-b border-edge bg-surface px-4 py-3 text-sm">
-          <p role="status">{commentNotice()}</p>
-          <Button variant="ghost" size="sm" aria-label="Dismiss comment access notice" class="shrink-0" onClick={() => setCommentNotice(null)}>Dismiss</Button>
-        </div>
-      </TrustedUi></Portal>
-    )}</Show>
     <Show when={page?.cspRequest?.status === 'blocked' && frameSlot()}>{(slot) => (
       <Portal mount={slot()}><TrustedUi><ReaderNotice label="Document network access" load={() => import('../document/CspConsentBar')}>{module => <module.CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} />}</ReaderNotice></TrustedUi></Portal>
     )}</Show>
@@ -369,12 +357,12 @@ export function DocumentPage(): JSX.Element {
       <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canAnnotate={canStartComment()}
         onAnnotate={(selection) => {
           if (annotatable()) setInitialAnnotationSelection(selection);
-          else act('comment');
+          else if (!accountSession()) window.location.assign(loginHref(window.location, 'comment'));
         }} />
     </Show>
-    <Show when={ready() && annotatable() && id}>
-      <Suspense fallback={null}><AnnotationLayer id={id!} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
-        railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
+    <Show when={ready() && comments().canReadComments && id}>
+      <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
+        railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
     </Show>
