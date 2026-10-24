@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {NativeCanonicalReceipt,NativeSelectedRevision} from './contracts.ts';
 import type {NativePipelinePublicationConfiguration,NativePipelinePublicationCallback} from './pipeline-publication-adapter-contracts.ts';
 import {nativeDigest,selectNativeRevisions} from './selection.ts';
-import {decodeNativePublicationBytes,encodeNativePublicationBytes,prepareNativePublication} from './pipeline-publication.ts';
+import {decodeNativePublicationBytes,prepareNativePublication} from './pipeline-publication.ts';
 import {canonicalMigrationValue} from '../verification-values.ts';
 import {createNativeV3PublicationHost,preflightNativeV3Publication} from './v3-publication-projection.ts';
 const sha=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
@@ -40,11 +40,12 @@ export function createNativePipelinePublication(config:NativePipelinePublication
   if(reviewedRecipe.assemblySha256!==context.assembly.sha256||nativeDigest(context.assembly.key)!==nativeDigest(context.revision.key)||nativeDigest({appSchema:reviewedRecipe.authority.appSchema,authSchema:reviewedRecipe.authority.authSchema})!==nativeDigest(captured.shared.schemas))throw Error('native_pipeline_publication_authority_binding');
   if(context.revision.key.sourceNamespace!==captured.shared.identity.plan.sourceNamespace)throw Error('native_pipeline_publication_namespace');
   const page=await selectNativePipelinePublicationPage(captured,files.sourceHead,context.revision);
-  const result=await prepareNativePublication({selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},assemblies:[context.assembly],relations:encodeNativePublicationBytes(files.comments),shared:structuredClone(captured.shared),exportedAt:captured.exportedAt,coreUrl:captured.coreUrl},{prepare:async(assemblies,planned)=>{
+  const result=await prepareNativePublication({selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},assemblies:[context.assembly],relations:captured.relations,shared:structuredClone(captured.shared),exportedAt:captured.exportedAt,coreUrl:captured.coreUrl},{prepare:async(assemblies,planned)=>{
    const access=preflightNativeV3Publication({revisionScope:'latest',selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},planned,plannedSha256:createHash('sha256').update(canonicalMigrationValue(planned)).digest('hex'),maps:captured.shared.maps,targets:captured.shared.targets,targetIdentitySha256:nativeDigest(captured.shared.targets),assemblies}).access;
    const staged=await invocation.prepareRuntime(assemblies,{pageId:planned.pageId,visibility:access.visibility,shares:access.shares});
    return createNativeV3PublicationHost({...invocation.publicationModules,prepareBundle:staged.prepareBundle});
   }});
+  if(Buffer.from(files.compiledHtml).toString('utf8')!==context.assembly.result.html||nativeDigest(JSON.parse(Buffer.from(files.comments).toString('utf8')))!==nativeDigest(result.recipe.relations))throw Error('native_pipeline_publication_reviewed_projection');
   return result.recipe;
  };
 }
