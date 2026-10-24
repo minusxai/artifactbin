@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 24.21.0
+          node-version: 24.22.1
           registry-url: https://registry.npmjs.org
       - name: Select the exact tested immutable npm artifact
         id: package

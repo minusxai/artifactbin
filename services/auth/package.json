@@ -14,15 +14,14 @@
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
     "better-auth": "1.7.2",
-    "hono": "4.13.7",
+    "hono": "4.13.13",
     "kysely": "0.28.17",
-    "nodemailer": "10.1.0",
+    "nodemailer": "10.1.4",
     "pg": "8.23.0"
   },
   "devDependencies": {
     "@artifactbin/test-support": "0.1.0",
-    "@types/smtp-server": "3.5.13",
-    "smtp-server": "3.19.21",
-    "vitest": "4.1.11"
+    "smtp-server": "3.21.1",
+    "vitest": "4.1.12"
   }
 }

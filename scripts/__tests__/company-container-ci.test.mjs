@@ -66,7 +66,7 @@ it('packaged SMTP acceptance uses a trusted private TLS sink and the normal owne
  expect(smoke).toContain('authenticated-starttls-email-code');
  expect(smoke).not.toContain('NODE_TLS_REJECT_UNAUTHORIZED');
  const fixture=readFileSync(new URL('../../deploy/company/CI.smtp.Dockerfile',import.meta.url),'utf8');
- expect(fixture).toContain('smtp-server@3.19.21');
+ expect(fixture).toContain('smtp-server@3.21.1');
 });
 it('reports PostgreSQL ready only once the real server listens, never the initialisation-time socket server',()=>{
  const compose=yaml.parse(readFileSync(new URL('../../deploy/company/compose.yaml',import.meta.url),'utf8'));
