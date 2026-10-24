@@ -39,9 +39,13 @@ async function saveImage(page,name) {
   evidenceFiles.push({name,sha256:createHash('sha256').update(bytes).digest('hex'),mediaType:'image/png',base64:bytes.toString('base64')});
 }
 try {
-  const page = await browser.newPage();
-  page.setDefaultTimeout(2500);page.setDefaultNavigationTimeout(5000);
-  const errors=[],requests=[];page.on('request',request=>requests.push(request.url()));page.on('pageerror',error=>errors.push(error.message));
+  const errors=[],requests=[];
+  function configurePage(candidate) {
+    candidate.setDefaultTimeout(2500);candidate.setDefaultNavigationTimeout(5000);
+    candidate.on('request',request=>requests.push(request.url()));candidate.on('pageerror',error=>errors.push(error.message));
+    return candidate;
+  }
+  let page = configurePage(await browser.newPage());
   async function mount(html,theme='light',viewport={width:800,height:600},setup='') {
     await page.setViewportSize(viewport);
     await page.goto(origin);
@@ -139,10 +143,15 @@ try {
   }
   for (const theme of ['light','dark']) for (const viewport of [{width:800,height:600},{width:390,height:844}]) {
     for(const fixture of componentBrowserFixtures) await section(`${fixture.family} candidate ${theme} ${viewport.width}px`,async()=>{
-      await mount(fixture.html,theme,viewport,fixture.setup);
-      await page.evaluate(()=>document.addEventListener('af-change',event=>{document.body.dataset.intent=JSON.stringify(event.detail);document.body.dataset.intentCount=String(Number(document.body.dataset.intentCount??0)+1);}));
+      const sharedPage=page;
+      // Native chooser interception belongs to a fresh WebContents/context, rather than a
+      // page repeatedly navigated through modal/fullscreen cases. Still use real Enter activation.
+      const chooserContext=fixture.family==='file-upload'?await browser.newContext():null;
       const tag=`${fixture.family} ${theme} ${viewport.width}px`;
       try {
+        if(chooserContext)page=configurePage(await chooserContext.newPage());
+        await mount(fixture.html,theme,viewport,fixture.setup);
+        await page.evaluate(()=>document.addEventListener('af-change',event=>{document.body.dataset.intent=JSON.stringify(event.detail);document.body.dataset.intentCount=String(Number(document.body.dataset.intentCount??0)+1);}));
         if(fixture.family==='button') {
           await page.evaluate(()=>{document.querySelector('#form').addEventListener('submit',event=>{event.preventDefault();document.body.dataset.submits=String(Number(document.body.dataset.submits??0)+1);});document.querySelector('#action').addEventListener('click',()=>{document.body.dataset.clicks=String(Number(document.body.dataset.clicks??0)+1);});});
           const action=page.getByRole('button',{name:'Run action',exact:true});
@@ -299,7 +308,10 @@ try {
           const present=deck.getByRole('button',{name:'Present',exact:true});await present.click();await page.waitForFunction(()=>document.fullscreenElement===document.querySelector('af-slide-deck'),null,{timeout:2000});check(await deck.locator(':scope > nav').isHidden(),`${tag} actual fullscreen hides rail`);
           await deck.getByRole('button',{name:'Exit presentation',exact:true}).click();await page.waitForFunction(()=>{const present=document.querySelector('af-slide-deck [aria-label="Present"]');return !document.fullscreenElement && present && !present.disabled;});check(await focused(deck.getByRole('button',{name:'Present',exact:true})),`${tag} fullscreen exit restores control focus (${await page.evaluate(()=>JSON.stringify({activeTag:document.activeElement?.localName,documentFocused:document.hasFocus()}))})`);
           await deck.evaluate(node=>{node.requestFullscreen=()=>Promise.reject(new Error('Fixture denied fullscreen'));});await deck.getByRole('button',{name:'Present',exact:true}).click();await deck.getByRole('status').filter({hasText:'Presentation unavailable'}).waitFor();check(await deck.getByRole('button',{name:'Present',exact:true}).isEnabled(),`${tag} simulated rejection leaves presentation usable`);
-          await deck.getByRole('button',{name:'Previous slide',exact:true}).click();await waitDeck(0);
+          check.note(`${tag} post-fullscreen state ${JSON.stringify(await deck.evaluate(node=>({index:node.index,previousDisabled:node.querySelector('[aria-label="Previous slide"]').disabled,scrollY})))}`);
+          // Exiting fullscreen may legitimately scroll the restored control/first slide into view.
+          // Establish the authored first slide geometrically before testing nested deck isolation.
+          await deck.locator('af-slide').first().evaluate(node=>{node.scrollIntoView({behavior:'instant',block:'start'});window.dispatchEvent(new Event('scroll'));});await waitDeck(0);
           await deck.evaluate(deck=>{const node=document.createElement('af-slide-deck');node.id='other-deck';node.style.setProperty('--af-slide-height','64px');node.innerHTML='<af-slide title="Other first">Other first</af-slide><af-slide title="Other second">Other second</af-slide>';deck.querySelector('af-slide').append(node);node.focus({preventScroll:true});});await page.keyboard.press('ArrowRight');await waitDeck(1,'#other-deck');check(await page.locator('#other-deck').evaluate(node=>node.index)===1 && await deck.evaluate(node=>node.index)===0,`${tag} nested deck keyboard does not page outer deck`);
           await page.locator('#other-deck').evaluate(node=>node.querySelectorAll('af-slide').forEach(slide=>slide.remove()));await page.waitForFunction(()=>document.querySelector('#other-deck').index===-1);check(await page.locator('#other-deck [data-af-deck-count]').textContent()==='0 / 0',`${tag} dynamic empty deck has no selection`);
           await page.locator('#other-deck').evaluate(node=>node.remove());await deck.focus({preventScroll:true});
@@ -309,12 +321,21 @@ try {
         check((await page.evaluate(duplicateIdentities,await page.locator('html').elementHandle())).length===0,`${tag} DOM and annotation identities remain unique`);
         await themeFlip(theme,tag,fixture.subject);
         check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${tag} no horizontal overflow`);
+      } catch(error) {
+        // createSection keeps its verdict concise; retain the actionable locator call log here.
+        check.note(`${tag} failure details ${String(error?.stack??error).slice(0,6000)}`);
+        throw error;
       } finally {
+        try {
         if(await page.evaluate(()=>!!document.fullscreenElement))await page.evaluate(()=>document.exitFullscreen());
         await page.emulateMedia({media:null});
         // Settle finite transitions while leaving the indeterminate progress animation deterministic.
         await page.evaluate(async()=>{await Promise.allSettled(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished));for(const animation of document.getAnimations())if(animation.effect?.getTiming().iterations===Infinity){animation.pause();animation.currentTime=0;}});
         await saveImage(page,`candidate-${fixture.family}-${theme}-${viewport.width}.png`);
+        } finally {
+          page=sharedPage;
+          if(chooserContext)await chooserContext.close();
+        }
       }
     });
   }
