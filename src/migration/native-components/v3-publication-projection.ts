@@ -17,6 +17,7 @@ import type {
   NativeV3Page,
   NativeV3PublicationModules,
   NativeV3BundleDependency,
+  NativeV3Preflight,
 } from "./v3-publication-contracts.ts";
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const validSha = (value: unknown) =>
@@ -46,6 +47,7 @@ export function nativeV3ReaderPolicy(
 }
 function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
   const { selection, planned, targets } = input;
+  if (input.revisionScope !== undefined && input.revisionScope !== "history" && input.revisionScope !== "latest") invalid("revision_scope");
   if (
     !validSha(selection.manifestSha256) ||
     !validSha(input.plannedSha256) ||
@@ -104,16 +106,17 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
     if (!actor || targets.actors[actor]?.userId !== target.userId)
       invalid("target_user_identity");
   }
-  const selected = selection.page.revisions;
-  const versions = selected.map((r) => r.key.version).sort((a, b) => a - b);
-  if (
-    new Set(versions).size !== versions.length ||
-    versions.at(-1) !== selection.page.headVersion ||
-    selected.length !== selection.page.sourceFile.distinctRevisions ||
-    planned.revisions.length !== selected.length ||
-    input.assemblies.length !== selected.length
-  )
-    invalid("revision_set");
+  // The canonical export receipt remains complete even when only its head is imported.
+  const retained = selection.page.revisions;
+  const retainedVersions = retained.map(r => r.key.version).sort((a,b) => a-b);
+  if (new Set(retainedVersions).size !== retainedVersions.length ||
+      retainedVersions.at(-1) !== selection.page.headVersion ||
+      retained.length !== selection.page.sourceFile.distinctRevisions) invalid("revision_set");
+  const selected = input.revisionScope === "latest"
+    ? retained.filter(r => r.key.version === selection.page.headVersion)
+    : retained;
+  const versions = selected.map(r => r.key.version).sort((a,b) => a-b);
+  if (planned.revisions.length !== selected.length || input.assemblies.length !== selected.length) invalid("revision_set");
   exact(
     planned.revisions.map((r) => r.version).sort((a, b) => a - b),
     versions,
@@ -300,8 +303,7 @@ export function projectNativeV3Publication(
   input: NativeV3ProjectionInput,
   host: NativeV3PublicationHost,
 ): NativeV3HistoryImport {
-  const receipts = admit(input),
-    access = projectAccess(input),
+  const {assemblies: receipts, access} = preflightNativeV3Publication(input),
     ownerActor = input.planned.owner!;
   const targetOwner = input.targets.actors[ownerActor.id]!;
   const sourceToken = input.planned.original.token_id;
@@ -478,6 +480,7 @@ export function projectNativeV3Publication(
   };
   // Keep relation digest separate: B/C calculate it from this immutable base projection without a hash cycle.
   output.projectionSha256 = nativeDigest({
+    ...(input.revisionScope === undefined ? {} : {revisionScope: input.revisionScope}),
     selection: input.selection,
     plannedSha256: input.plannedSha256,
     maps: input.maps,
@@ -592,4 +595,9 @@ export function createNativeV3PublicationHost(
       );
     },
   };
+}
+
+/** Read-only admission before asynchronous dependency staging. */
+export function preflightNativeV3Publication(input: NativeV3ProjectionInput): NativeV3Preflight {
+  return {revisionScope: input.revisionScope ?? "history", assemblies: admit(input), access: projectAccess(input)};
 }

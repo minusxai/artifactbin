@@ -100,6 +100,8 @@ export interface NativeV3IdentityMaps {
   tokens: Readonly<Record<string, { tokenId: string }>>;
 }
 export interface NativeV3ProjectionInput {
+  /** Explicit latest-head import; omission preserves the historical projection contract. */
+  revisionScope?: "history" | "latest";
   selection: {
     sourceNamespace: string;
     manifestSha256: string;
@@ -114,6 +116,11 @@ export interface NativeV3ProjectionInput {
   assemblies: readonly NativeV3AssemblyReceipt[];
   /** Digest of concrete B/C relation projections, not a fabricated successful-empty receipt. */
   relationSha256?: string;
+}
+export interface NativeV3Preflight {
+  revisionScope: "history" | "latest";
+  assemblies: readonly NativeV3AssemblyReceipt[];
+  access: Pick<NativeV3HistoryImport, "visibility" | "linkRole" | "shares">;
 }
 /** Actual v3 canonicalizer/registry functions supplied by the reviewed host bridge; no copied renderer/parser or SQL execution. */
 export interface NativeV3PublicationHost {

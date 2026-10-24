@@ -12,6 +12,7 @@ import {
   createNativeV3PublicationHost,
   projectNativeV3RelationBindings,
   projectNativeV3Publication,
+  preflightNativeV3Publication,
 } from "./v3-publication-projection.ts";
 import type {
   NativeV3ProjectionInput,
@@ -750,4 +751,46 @@ test("requires retained normal-reader recipe for doc/editorial/plan instead of s
       /native_v3_reader_template_required/,
     );
   }
+});
+
+function latestFixture() {
+  const f=fixture();
+  f.input.revisionScope="latest";
+  f.input.planned.revisions=f.input.planned.revisions.filter(r=>r.version===f.input.selection.page.headVersion);
+  f.input.assemblies=f.input.assemblies.filter(r=>r.key.version===f.input.selection.page.headVersion);
+  f.input.plannedSha256=sha(canonicalMigrationValue(f.input.planned));
+  return f;
+}
+test("explicit latest scope imports only the real head while preserving the complete canonical source receipt",()=>{
+  const {input,host}=latestFixture(),source=structuredClone(input.selection);
+  const projected=projectNativeV3Publication(input,host);
+  assert.deepEqual(projected.revisions.map(r=>r.page.version),[3]);
+  assert.equal(input.selection.page.sourceFile.distinctRevisions,2);
+  assert.deepEqual(input.selection,source);
+  const original=fixture();
+  assert.deepEqual(projectNativeV3Publication(original.input,original.host).revisions.map(r=>r.page.version),[1,3]);
+});
+test("latest scope rejects historical expansion, a nonhead substitute and fabricated canonical revision counts before host calls",()=>{
+  for(const change of [
+    (f:ReturnType<typeof latestFixture>)=>{f.input.assemblies=fixture().input.assemblies;},
+    (f:ReturnType<typeof latestFixture>)=>{f.input.planned.revisions=fixture().input.planned.revisions.filter(r=>r.version===1);f.input.plannedSha256=sha(canonicalMigrationValue(f.input.planned));},
+    (f:ReturnType<typeof latestFixture>)=>{f.input.selection.page.sourceFile.distinctRevisions=1;},
+  ]){const f=latestFixture();change(f);assert.throws(()=>projectNativeV3Publication(f.input,f.host),/native_v3_revision_set/);assert.equal(f.events.length,0);}
+});
+test("preflight admits exact assemblies and resolved access without invoking any target host",()=>{
+ const f=latestFixture(),before=structuredClone(f.input);
+ const admitted=preflightNativeV3Publication(f.input);
+ assert.equal(admitted.revisionScope,"latest");assert.deepEqual(admitted.assemblies,f.input.assemblies);
+ assert.equal(admitted.access.visibility,"private");assert.equal(admitted.access.linkRole,"viewer");
+ assert.equal(f.events.length,0);assert.deepEqual(f.input,before);
+ f.input.planned.access.shares[0]!.role="owner";f.input.plannedSha256=sha(canonicalMigrationValue(f.input.planned));
+ assert.throws(()=>preflightNativeV3Publication(f.input),/native_v3_share_role_unsupported/);
+});
+
+test("preflight defaults to complete history and rejects unknown scope before target work",()=>{
+ const f=fixture();assert.equal(preflightNativeV3Publication(f.input).revisionScope,"history");
+ assert.equal(preflightNativeV3Publication(f.input).assemblies.length,2);
+ (f.input as unknown as {revisionScope:string}).revisionScope="other";
+ assert.throws(()=>preflightNativeV3Publication(f.input),/native_v3_revision_scope/);
+ assert.equal(f.events.length,0);
 });
