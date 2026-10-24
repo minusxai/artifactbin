@@ -98,7 +98,7 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
   if(!win.document.body)await new Promise<void>(resolve=>{const ready=()=>resolve();win.document.addEventListener('DOMContentLoaded',ready,{once:true});cancelChromeMount=()=>{win.document.removeEventListener('DOMContentLoaded',ready);resolve();};});
   if(disposed)return;
   bodyPadding=win.document.body.style.paddingTop;
-  let mode:'light'|'dark'=win.document.documentElement.hasAttribute('data-af-dark')?'dark':'light';
+  let mode:'light'|'dark'=win.document.documentElement.getAttribute('data-af-dark')==='true'?'dark':'light';
   try{const stored=win.localStorage.getItem('af:local-color-mode');if(stored==='light'||stored==='dark')mode=stored;}catch{/* Optional viewer preference. */}
   chrome=module.mountPortableChrome({mode,onMode(next){try{win.localStorage.setItem('af:local-color-mode',next);}catch{/* Optional viewer preference. */}},onReloadPreview(){win.dispatchEvent(new Event('af:preview-reload'));},win,stylesheet:module.stylesheet,title:win.document.title||'Local file',kind:identity?'linked':'unpublished',identity,state,publishOrigin:options.publishOrigin,onConnect:connect,onDisconnect:()=>disconnect(),onStayOffline:()=>disconnect(true),onSave:request=>save(request.includePrivateState),onPublish:request=>void publish(request.platformOrigin),onOpenHosted(){if(identity)win.open(`${identity.platformOrigin}/a/${encodeURIComponent(identity.artifactId)}`,'_blank','noopener');}});
   win.document.body.style.paddingTop=`calc(${win.getComputedStyle(win.document.body).paddingTop} + 76px)`;
