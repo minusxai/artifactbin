@@ -20,7 +20,10 @@ it("keeps data author owned and updates mounted adapter without replacing author
   await flush();
   expect(mount).toHaveBeenCalledTimes(1);
   element.options = { ...element.options!, data: [{ x: 2 }] };
-  expect(adapter.update).toHaveBeenCalledWith(element.options);
+  expect(adapter.update).toHaveBeenCalledWith({
+    ...element.options,
+    colorMode: "light",
+  });
   expect(element.querySelector("[data-af-id=caption]")?.textContent).toBe(
     "Caption",
   );
@@ -46,4 +49,59 @@ it("rejects network layer sources before calling the engine", () => {
     };
   }).toThrow();
   expect(mount).not.toHaveBeenCalled();
+});
+it("follows live ancestor themes without options changes and disconnects observation", async () => {
+  const ancestor = document.createElement("section");
+  const element = document.createElement("af-deck-gl") as AfDeckGL;
+  ancestor.append(element);
+  element.options = { data: [], layers: [], basemap: "auto" };
+  document.body.append(ancestor);
+  await flush();
+  ancestor.setAttribute("data-af-dark", "true");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "dark",
+  });
+  ancestor.removeAttribute("data-af-dark");
+  ancestor.setAttribute("data-af-design-system", "technical");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith({
+    ...element.options,
+    colorMode: "light",
+  });
+  element.options = { ...element.options!, colorMode: "dark" };
+  ancestor.removeAttribute("data-af-design-system");
+  await flush();
+  expect(adapter.update).toHaveBeenLastCalledWith(element.options);
+  element.remove();
+  adapter.update.mockClear();
+  ancestor.setAttribute("data-af-dark", "true");
+  await flush();
+  expect(adapter.update).not.toHaveBeenCalled();
+});
+it("owns one load status and clears it on retry success or options removal", async () => {
+  const element = document.createElement("af-deck-gl") as AfDeckGL;
+  element.innerHTML =
+    '<p role="status" data-af-id="authored">Author status</p>';
+  mount.mockImplementationOnce(() => {
+    throw new Error("Unavailable");
+  });
+  element.options = { data: [], layers: [] };
+  document.body.append(element);
+  await flush();
+  expect(element.querySelectorAll("[role=status]")).toHaveLength(2);
+  element.options = { data: [], layers: [] };
+  await flush();
+  expect(element.querySelectorAll("[role=status]")).toHaveLength(1);
+  expect(element.querySelector("[data-af-id=authored]")).not.toBeNull();
+  element.options = undefined;
+  mount.mockImplementationOnce(() => {
+    throw new Error("Again");
+  });
+  element.options = { data: [], layers: [] };
+  await flush();
+  expect(element.querySelectorAll("[role=status]")).toHaveLength(2);
+  element.options = undefined;
+  expect(element.querySelectorAll("[role=status]")).toHaveLength(1);
 });
