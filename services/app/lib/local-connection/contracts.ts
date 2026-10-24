@@ -1,5 +1,7 @@
 /** Shared 44px platform bar plus 32px local status strip. */
 export const LOCAL_CHROME_COLLAPSED_HEIGHT=76;
+/** Matching iframe and embedded-root schemes keep the browser canvas transparent, independently of UI appearance. */
+export const LOCAL_CHROME_CANVAS_SCHEME='light';
 /** Portable provenance is public metadata, never an authentication credential. */
 export interface LinkedDocument {
  platformOrigin:string;

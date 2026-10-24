@@ -100,3 +100,9 @@ it('makes only the mounted local broker backdrop transparent and restores prior 
 });
 
 it('places the comment rail below both local chrome rows',async()=>{mount();ready();await waitFor(()=>expect(annotation.topOffset).toBe(76));});
+
+it('keeps a matching transparent canvas scheme while dark platform controls retain their appearance',async()=>{
+ document.documentElement.dataset.theme='dark';document.documentElement.style.setProperty('color-scheme','dark','important');
+ const view=mount();ready();expect(document.documentElement.style.colorScheme).toBe('light');expect(document.documentElement.dataset.theme).toBe('dark');
+ expect(await screen.findByRole('button',{name:'Dark mode'})).toHaveAttribute('aria-pressed','true');view.unmount();expect(document.documentElement.style.colorScheme).toBe('dark');expect(document.documentElement.style.getPropertyPriority('color-scheme')).toBe('important');document.documentElement.style.removeProperty('color-scheme');
+});

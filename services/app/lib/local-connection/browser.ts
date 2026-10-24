@@ -1,4 +1,4 @@
-import {LOCAL_CHROME_COLLAPSED_HEIGHT} from './contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME} from './contracts';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
@@ -53,7 +53,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce}).toString();
   iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
   iframe.style.cssText=`position:fixed;left:0;top:0;width:100%;height:${LOCAL_CHROME_COLLAPSED_HEIGHT}px;border:0;z-index:2147483646`;
-  chromeHeight=LOCAL_CHROME_COLLAPSED_HEIGHT;resizeChrome();win.document.documentElement.append(iframe);remote=iframe.contentWindow;
+  iframe.style.colorScheme=LOCAL_CHROME_CANVAS_SCHEME;chromeHeight=LOCAL_CHROME_COLLAPSED_HEIGHT;resizeChrome();win.document.documentElement.append(iframe);remote=iframe.contentWindow;
   timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??15_000);
  };
  win.addEventListener('message',receive);win.addEventListener('resize',resizeChrome);

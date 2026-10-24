@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
-import {LOCAL_CHROME_COLLAPSED_HEIGHT,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
 import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/story-runtime/contract';
 import {chooseTheme,storedTheme} from '@/lib/story-runtime/reader-mode';
 import {createAppAppearance} from '../ui/theme';
@@ -44,7 +44,10 @@ export function LocalDocumentPage(){
  onMount(()=>{
   // The broker iframe overlays the author page; only its chrome and panels paint a surface.
   const backgrounds=[document.documentElement,document.body].map(element=>{const saved=Array.from(element.style).filter(name=>name==='background'||name.startsWith('background-')).map(name=>({name,value:element.style.getPropertyValue(name),priority:element.style.getPropertyPriority(name)}));element.style.setProperty('background','transparent','important');return()=>{element.style.removeProperty('background');for(const item of saved)element.style.setProperty(item.name,item.value,item.priority);};});
-  onCleanup(()=>backgrounds.forEach(restore=>restore()));
+  // The embedding iframe uses the same canvas scheme; app appearance stays in its own CSS variables.
+  const root=document.documentElement,scheme=root.style.getPropertyValue('color-scheme'),schemePriority=root.style.getPropertyPriority('color-scheme');
+  root.style.setProperty('color-scheme',LOCAL_CHROME_CANVAS_SCHEME,'important');
+  onCleanup(()=>{backgrounds.forEach(restore=>restore());if(scheme)root.style.setProperty('color-scheme',scheme,schemePriority);else root.style.removeProperty('color-scheme');});
   broker=installLocalConnectionBroker({win:window,onState(next){if(next!=='connected'){setNonce(null);runtimeRef.current?.dispose();runtimeRef.current=null;}setState(next);},onIdentity:setIdentity,onSourceObservation(observation){const current=identity();setRemoteChanged(Boolean(current&&observation.remoteDigest!==current.sourceDigest));},onConnected(value){
    setIdentity(value.identity);
    const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
