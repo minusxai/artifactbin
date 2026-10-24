@@ -53,3 +53,8 @@ it('uses secure random bytes when randomUUID is absent and fails clearly if WebC
  const connection=connectLocalDocument({win:window,identity,onState:()=>{}});const frame=document.querySelector('iframe')!;expect(new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce')).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);connection.dispose();
  vi.stubGlobal('crypto',undefined);const states:string[]=[];expect(()=>connectLocalDocument({win:window,identity,onState:s=>states.push(s)})).toThrow(/Web ?Crypto|getRandomValues/);expect(states).toEqual(['blocked']);expect(document.querySelector('iframe')).toBeNull();vi.unstubAllGlobals();
 });
+
+it('does not contact an HTTP DNS alias preserved as portable provenance',()=>{
+ const states:string[]=[];const connection=connectLocalDocument({win:window,identity:{...identity,platformOrigin:'http://app.lvh.me:53324'},onState:value=>states.push(value)});
+ expect(document.querySelector('iframe')).toBeNull();expect(states).toContain('unavailable');connection.retry();expect(document.querySelector('iframe')).toBeNull();connection.dispose();
+});

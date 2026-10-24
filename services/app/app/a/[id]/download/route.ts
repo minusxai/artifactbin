@@ -1,4 +1,3 @@
-import {isPortablePlatformOrigin} from '@/lib/html-runtime/portable';
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
 /**
@@ -34,7 +33,6 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     const at = await archivedVersionFor(request, artifact);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;
-    if(!isPortablePlatformOrigin(platformOrigin))return json({error:'unsupported_portable_origin',message:'Portable downloads require HTTPS or an exact localhost, 127.0.0.1, or [::1] HTTP origin. HTTP DNS aliases support hosted viewing only.'},400);
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
     let packed:string;
     try{

@@ -92,7 +92,7 @@ it('packs authorized bundle CSS and module bytes while retaining original canoni
  expect((await download(request(`/a/${saved.id}/download`,{token:actor.token}),params(saved.id))).status).toBe(404);
 });
 
-it('returns an actionable refusal for unsupported HTTP DNS aliases without weakening local-file origins',async()=>{
+it('preserves HTTP DNS provenance in offline downloads without granting connection authority',async()=>{
  const {actor,id}=await publish('unlisted');const input=request(`/a/${id}/download`,{token:actor.token});input.headers.set('x-forwarded-proto','http');input.headers.set('x-forwarded-host','app.lvh.me:53324');
- const response=await download(input,params(id));expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'unsupported_portable_origin',message:expect.stringContaining('HTTPS')});
+ const response=await download(input,params(id));expect(response.status).toBe(200);expect(readPortableDocument(await response.text()).identity?.platformOrigin).toBe('http://app.lvh.me:53324');
 });
