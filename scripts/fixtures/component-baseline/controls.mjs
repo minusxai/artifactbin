@@ -56,14 +56,14 @@ const fixtures=[
   {
     id:'collapsible',family:'Collapsible',modules:['collapsible'],provenance:{...disclosure,exports:['Collapsible','CollapsibleTrigger','CollapsibleContent']},
     oldJsx:'<Collapsible><CollapsibleTrigger>More details</CollapsibleTrigger><CollapsibleContent><p>Additional information</p><button>Inside details</button></CollapsibleContent></Collapsible>',
-    newHtml:'<af-collapsible><af-collapsible-trigger><button>More details</button></af-collapsible-trigger><af-collapsible-content><p>Additional information</p><button>Inside details</button></af-collapsible-content></af-collapsible>',
+    newHtml:'<af-collapsible><af-collapsible-trigger><button>More details</button></af-collapsible-trigger><af-collapsible-content><p>Additional information</p><button style="font:inherit;color:inherit;background:transparent;border:0;margin:0;padding:0;cursor:pointer">Inside details</button></af-collapsible-content></af-collapsible>',
     states:[initial,click('open','More details'),press('keyboard-open','button','More details','Enter'),{id:'closed-again',actions:[action('button','More details','click'),action('button','More details','click')]}],
     limitations:['Original root disabled does not disable its trigger; no claimed disabled-root parity.','Reload/comment-state and closed subtree retention are outside these captures.'],
   },
   {
     id:'popover',family:'Popover',modules:['popover'],provenance:{...disclosure,exports:['Popover','PopoverTrigger','PopoverContent']},
     oldJsx:'<Popover><PopoverTrigger>Show details</PopoverTrigger><PopoverContent aria-label="Details"><p>Additional information</p><button>Inside popover</button></PopoverContent></Popover>',
-    newHtml:'<af-popover><af-popover-trigger><button>Show details</button></af-popover-trigger><af-popover-content aria-label="Details"><p>Additional information</p><button>Inside popover</button></af-popover-content></af-popover>',
+    newHtml:'<af-popover><af-popover-trigger><button>Show details</button></af-popover-trigger><af-popover-content aria-label="Details"><p>Additional information</p><button style="font:inherit;color:inherit;background:transparent;border:0;margin:0;padding:0;cursor:pointer">Inside popover</button></af-popover-content></af-popover>',
     states:[initial,click('open','Show details'),{id:'escape',actions:[action('button','Show details','click'),action('button','Inside popover','focus'),action('button','Inside popover','press','Escape')]}],
     limitations:['Default bottom/center placement only; edge collision, outside pointer dismissal and nested overlays are outside these captures.'],
   },

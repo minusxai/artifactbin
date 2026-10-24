@@ -175,3 +175,12 @@ describe('native authored accordion', () => {
     registerAccordion(); expect(document.querySelectorAll('style[data-af-accordion-styles]')).toHaveLength(1);
   });
 });
+
+describe('accordion appearance', () => {
+  it('uses the inherited foreground for section dividers', () => {
+    const {items,root} = fixture();
+    const itemColor = getComputedStyle(items[0]!).color;
+    expect(getComputedStyle(items[0]!).borderBottomColor).toBe(itemColor);
+    root.remove();
+  });
+});
