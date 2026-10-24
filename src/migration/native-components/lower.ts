@@ -3,14 +3,8 @@
 import {format as d3format} from 'd3-format';
 import { NATIVE_COMPONENT_TARGET, NATIVE_SEMANTIC_CSS, nativeComponentRule, type NativeAttributeKind } from './component-map.ts';
 import type { NativeJson, NativeTypedAnalysis, RetainedJsxNode } from './analyze-contracts.ts';
-export interface NativeLowerIdentityBinding {
-  sourceNode: string;
-  retainedStart: number;
-  retainedEnd: number;
-  afId: string;
-  analysisSha256: string;
-  proofSha256: string;
-}
+import type { NativeLowerIdentityBinding } from './identity-contracts.ts';
+export type { NativeLowerIdentityBinding } from './identity-contracts.ts';
 export interface NativeLowerUrlReceipt { source: string; target: string; sha256: string }
 export interface NativeLowerFormattedReceipt {
   sourceNode: string;
@@ -157,9 +151,11 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
  if(!digest(input.analysis.analysisSha256)||!digest(input.analysis.compilerSourceSha256))blockers.push({code:'analysis-proof-required',sourceNode:'$root',detail:'Typed analysis/compiler digests are required'});
  for(const [collection,kind] of [['imports','import'],['values','value'],['queries','query'],['mutations','mutation'],['notifications','notification']] as const)for(const declaration of input.analysis.flow[collection]??[])requirements.push({kind,sourceNode:'$flow',detail:'Typed declaration requires its admitted operation adapter',declaration});
  const binding=(node:RetainedJsxNode):NativeLowerIdentityBinding|undefined=>{
-  const candidates=input.identityBindings.filter(value=>value.sourceNode===node.graphKey&&value.retainedStart===node.start&&value.retainedEnd===node.end);
+  const candidates=input.identityBindings.filter(value=>value.sourceNode===node.graphKey);
   const value=candidates[0];
-  if(candidates.length!==1||!value||value.analysisSha256!==input.analysis.analysisSha256||!digest(value.proofSha256)||!afId(value.afId)||!spans.has(node.graphKey)){block('identity-proof-required',node,'One exact, digest-bound source-to-annotation identity proof is required');return;}
+  const exactSpans=input.analysis.sourceSpans.filter(span=>span.sourceNode===node.graphKey);
+  const exactSpan=exactSpans[0];
+  if(candidates.length!==1||!value||exactSpans.length!==1||!exactSpan||!Number.isSafeInteger(value.sourceStart)||!Number.isSafeInteger(value.sourceEnd)||value.sourceStart<0||value.sourceEnd<value.sourceStart||value.sourceStart!==exactSpan.sourceStart||value.sourceEnd!==exactSpan.sourceEnd||value.sourceSha256!==input.analysis.sourceSha256||value.analysisSha256!==input.analysis.analysisSha256||!digest(value.proofSha256)||!afId(value.afId)||!spans.has(node.graphKey)){block('identity-proof-required',node,'One exact, digest-bound source-to-annotation identity proof is required');return;}
   if(usedBindings.has(value)){block('ambiguous-source-identity',node,'A proved identity cannot name multiple emitted nodes');return;}
   usedBindings.add(value);
   if(usedAf.has(value.afId)||input.reservedIdentities?.some(old=>old.afId===value.afId&&old.sourceNode!==node.graphKey)){block('identity-reuse',node,'Annotation identity collides with another or historical owner');return;}

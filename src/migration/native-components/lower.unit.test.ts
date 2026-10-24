@@ -10,7 +10,7 @@ const element=(tag:string,attributes:Record<string,NativeJson>={},children:Retai
 function input(nodes:RetainedJsxNode[]):NativeLowerInput {
  const all:RetainedJsxNode[]=[];const visit=(node:RetainedJsxNode)=>{all.push(node);if(node.type==='element')node.children.forEach(visit);};nodes.forEach(visit);
  const analysis:NativeTypedAnalysis={key:{sourceNamespace:'synthetic',sourceId:'synthetic-page',version:1},documentSha256:digest,sourceSha256:digest,analysisSha256:digest,compilerSourceSha256:digest,nodes,flow:{imports:[],queries:[],mutations:[],values:[]},sourceSpans:all.map(node=>({sourceNode:node.graphKey,sourceStart:0,sourceEnd:1}))};
- return {analysis,targetRevision:NATIVE_COMPONENT_TARGET,identityBindings:all.filter(node=>node.type==='element'&&!node.control).map((node,index)=>({sourceNode:node.graphKey,retainedStart:node.start,retainedEnd:node.end,afId:`stable-${index}`,analysisSha256:digest,proofSha256:proof}))};
+ return {analysis,targetRevision:NATIVE_COMPONENT_TARGET,identityBindings:all.filter(node=>node.type==='element'&&!node.control).map((node,index)=>({sourceNode:node.graphKey,sourceStart:0,sourceEnd:1,sourceSha256:digest,afId:`stable-${index}`,analysisSha256:digest,proofSha256:proof}))};
 }
 test('semantic layout preserves exact authored text, DOM IDs and ARIA separately from proved annotation IDs',()=>{
  const source=input([element('Card',{id:'dom-card','aria-labelledby':'heading'},[element('CardHeader',{},[element('CardTitle',{id:'heading'},[text('A < B & C\n  preserved')])]),element('Alert',{'aria-label':'Notice'},[text('Read this')])])]);
@@ -97,4 +97,16 @@ test('lowerer formats admitted exact table snapshots and preserves query binding
 });
 test('missing unbound Cell table renders original bare dash with placeholder chrome',()=>{
  const result=lowerNativeComponents(input([element('Cell',{prefix:'$',suffix:' units'})]));assert.equal(result.status,'complete');assert.match(result.html!,/data-mx-live=""/);assert.match(result.html!,/aria-busy="false"/);assert.match(result.html!,/<span aria-label="Number placeholder">—<\/span>/);
+});
+test('identity admission uses exact recovered source spans even when retained parser offsets are absent',()=>{
+ const source=input([element('p')]);
+ delete (source.analysis.nodes[0] as Partial<RetainedJsxNode>).start;
+ delete (source.analysis.nodes[0] as Partial<RetainedJsxNode>).end;
+ assert.equal(lowerNativeComponents(source).status,'complete');
+ const altered=structuredClone(source);altered.identityBindings[0]!.sourceEnd=2;
+ assert.ok(lowerNativeComponents(altered).blockers.some(b=>b.code==='identity-proof-required'));
+ const duplicate=structuredClone(source);duplicate.analysis.sourceSpans.push({...duplicate.analysis.sourceSpans[0]!});
+ assert.ok(lowerNativeComponents(duplicate).blockers.some(b=>b.code==='identity-proof-required'));
+ const stale=structuredClone(source);stale.identityBindings[0]!.sourceSha256='c'.repeat(64);
+ assert.ok(lowerNativeComponents(stale).blockers.some(b=>b.code==='identity-proof-required'));
 });
