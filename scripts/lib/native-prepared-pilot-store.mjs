@@ -16,7 +16,7 @@ export async function prepareImportedPilotStore({inputPath,bundle,scratch}){
  if(!directories.has('database')||!directories.has('objects'))throw fail();
  const names=new Set();for(const file of store.files){if(!safe(file.path)||names.has(file.path)||!/^[a-f0-9]{64}$/.test(file.sha256)||!Number.isSafeInteger(file.bytes)||file.bytes<0)throw fail();names.add(file.path);}
  const key=store.fixtureAuthSecret;if(key){if(key.path!=='fixture-auth-secret'||key.provenance!=='disposable-target-test-key'||!/^[a-f0-9]{64}$/.test(key.sha256)||!Number.isSafeInteger(key.bytes)||key.bytes<16)throw fail();names.add(key.path);}
- if(!names.has('database/PG_VERSION')||!store.files.some(f=>f.path.startsWith('objects/')))throw fail();
+ if(!names.has('database/PG_VERSION'))throw fail();
  const base=path.resolve(bundle,store.directory);if((await lstat(base)).isSymbolicLink()||!((await lstat(base)).isDirectory()))throw fail();
  const actual=[],actualDirectories=[];const walk=async(dir,prefix='')=>{for(const name of await readdir(dir)){const relative=prefix+name,full=path.join(dir,name),stat=await lstat(full);if(stat.isSymbolicLink())throw fail();if(stat.isDirectory()){actualDirectories.push(relative);await walk(full,relative+'/');}else if(stat.isFile())actual.push(relative);else throw fail();}};await walk(base);
  if(actualDirectories.length!==directories.size||actualDirectories.some(name=>!directories.has(name)))throw fail();
