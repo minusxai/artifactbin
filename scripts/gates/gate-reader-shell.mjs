@@ -231,7 +231,9 @@ await section('reader', async () => {
     for (const name of ['Like', 'Share', 'Star artifactbin on GitHub']) {
       check(await actions.getByRole('menuitem', { name, exact: true }).isVisible(), `${name} remains reachable at ${width}px`);
     }
-    check(await actions.getByRole('menuitem').first().evaluate(element => document.activeElement === element), `compact actions accept keyboard focus at ${width}px`);
+    check(await actions.getByRole('menuitem').first().evaluate(element => element.getRootNode().activeElement === element), `compact actions accept keyboard focus at ${width}px`);
+    await owner.keyboard.press('ArrowDown');
+    check(await actions.getByRole('menuitem').nth(1).evaluate(element => element.getRootNode().activeElement === element), `compact actions move keyboard focus at ${width}px`);
     await owner.keyboard.press('Escape');
     check(await more.evaluate(element => document.activeElement === element), `compact actions return focus at ${width}px`);
     await bar.getByRole('button', { name: 'Open menu', exact: true }).click();
