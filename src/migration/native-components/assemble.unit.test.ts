@@ -8,7 +8,7 @@ import { bindNativeIdentities } from './identity.ts';
 import { nativeDigest } from './selection.ts';
 import { NATIVE_COMPONENT_TARGET } from './component-map.ts';
 import type { NativeGraphAnalysis } from './contracts.ts';
-import type { NativeTypedAnalysis, RetainedJsxNode } from './analyze-contracts.ts';
+import type { NativeTypedAnalysis, RetainedJsxNode, NativeJson } from './analyze-contracts.ts';
 import type { NativeAssemblyInput } from './assemble-contracts.ts';
 function fixture():NativeAssemblyInput {
  const expression:RetainedJsxNode={type:'expression',graphKey:'expr',start:0,end:1,source:'$open',value:{static:false,exprType:'Identifier',source:'$open'}};
@@ -108,4 +108,10 @@ test('ordinary source programs require exact receipts and are emitted without a 
  input.authorPrograms=[adaptNativeAuthorProgram({analysis:input.analysis,identity:input.identity,admission})];
  const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status==='complete'){assert.ok(result.html.includes(script));assert.match(result.html,/<template data-af-id=/);assert.doesNotMatch(result.html,/solid-js|mx\.params/);}
  input.authorPrograms=[{...input.authorPrograms[0]!,authorJs:'changed'}];const forged=assembleNativePage(input);assert.equal(forged.status,'blocked');assert.ok(forged.blockers.some(v=>v.code==='author-program-proof'));
+});
+test('mapped charts cannot emit an undeclared or stale adapter import',async()=>{
+ const input=fixture();input.analysis.flow.values=[];const node=input.analysis.nodes[0]!;if(node.type!=='element')throw Error();node.tag='Chart';node.isComponent=true;delete node.control;node.children=[];node.attributes=[{name:'data',start:0,end:1,value:{static:true,json:'ref:asset'}},{name:'viz',start:0,end:1,value:{static:true,json:{kind:'table'}}}];
+ const {mapNativeCharts}=await import('./chart-mapping.ts');input.chartMappings=mapNativeCharts(input.analysis).mappings;let result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='chart-adapter-file-proof'));
+ input.chartAdapter={specifier:'https://example.invalid/adapter.js',sha256:'a'.repeat(64),dependencies:[]};result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='chart-adapter-file-proof'));
+ (input.chartMappings[0]!.props as Record<string,NativeJson>).viz={kind:'other'};result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='chart-mapping-proof'));
 });

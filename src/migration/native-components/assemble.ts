@@ -1,4 +1,5 @@
 import {verifyNativeAuthorProgram} from './author-programs.ts';
+import {verifyNativeChartMapping} from './chart-mapping.ts';
 /** Pure offline assembly: no registration, network, source evaluation or destination writes. */
 import { createHash } from 'node:crypto';
 import { nativeDigest } from './selection.ts';
@@ -79,9 +80,10 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
    targets.push({...proof,kind:'loop',templateId,identity:{owner:owner.json,keyBy:keyBy?.static?keyBy.json as string:null,templateIds:children.map(child=>binding(child)?.afId).filter((id):id is string=>!!id),encoding:'archived-instance-v1',domIds:children.flatMap(child=>{const proof=binding(child);return proof?.authoredDomId?[{domId:proof.authoredDomId,templateAfId:proof.afId}]:[];})}});
   }
   if(node.tag==='Button'&&node.attributes.some(a=>['set','run'].includes(a.name)))targets.push({...proof,kind:'action'});
+  for(const chart of input.chartMappings?.filter(chart=>chart.sourceNode===node.graphKey)??[]){if(!verifyNativeChartMapping(input.analysis,chart)){block('chart-mapping-proof',node.graphKey);continue;}if(chart.data.kind==='table')targets.push({...proof,kind:'property',property:'data',attribute:'data'});}
   for(const attribute of node.attributes){
    const value=attribute.value;
-   if(['disabled','value','checked'].includes(attribute.name)&&(!value.static||typeof value.json==='string'&&value.json.startsWith('$')))targets.push({...proof,kind:'property',property:attribute.name as 'disabled'|'value'|'checked',attribute:attribute.name});
+   if(['disabled','value','checked','open'].includes(attribute.name)&&(!value.static||typeof value.json==='string'&&value.json.startsWith('$')))targets.push({...proof,kind:'property',property:attribute.name as 'disabled'|'value'|'checked'|'open',attribute:attribute.name});
   }
  }
  for(const node of nodes){const id=literal(node,'id');if(id?.static&&typeof id.json==='string'&&templateIds.has(id.json))block('template-dom-id-collision',node.graphKey);}
@@ -103,7 +105,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const emitted=emitNativeBindings({analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
- const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches});
+ const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];
@@ -116,8 +118,15 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}();`;
  }).join('\n');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
+ let chartMounts='';
+ if(input.chartMappings?.length){
+  const adapter=input.chartAdapter;
+  if(!adapter||!/^\.\/components\/[A-Za-z0-9_.-]+\.js$/.test(adapter.specifier)||files.filter(file=>'./'+file.path===adapter.specifier&&file.sha256===adapter.sha256).length!==1||!adapter.dependencies.length||adapter.dependencies.some(dependency=>files.filter(file=>file.path===dependency.path&&file.sha256===dependency.sha256).length!==1))block('chart-adapter-file-proof');
+  else chartMounts=`import {mountNativeChart} from ${json(adapter.specifier)};\n`+input.chartMappings.map(chart=>{const ids=identity.bindings.filter(binding=>binding.sourceNode===chart.sourceNode);if(ids.length!==1){block('chart-adapter-identity',chart.sourceNode);return '';}return `mountNativeChart(document.querySelector('[data-af-id="${ids[0]!.afId}"]'),${json(chart)});`;}).join('\n');
+ }
+ if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const assignments=lowered.assignments.map(a=>`document.querySelector('[data-af-id="${a.afId}"]')[${json(a.property)}]=${json(a.value)};`).join('\n');
- const authorJs=registrations+'\n'+assignments+'\n'+emitted.authorJs+'\n'+(input.authorPrograms??[]).map(program=>program.authorJs).join('\n');
+ const authorJs=registrations+'\n'+chartMounts+'\n'+assignments+'\n'+emitted.authorJs+'\n'+(input.authorPrograms??[]).map(program=>program.authorJs).join('\n');
  if(/<\/script/i.test(authorJs)){block('author-script-end-tag');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  for(const backend of input.backends)if(!/^[A-Za-z_]\w*$/.test(backend.namespace)||!safeUrl(backend.url))block('backend-link');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};

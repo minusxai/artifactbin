@@ -1,4 +1,5 @@
 import type { NativeAuthorProgramReceipt } from './author-program-contracts.ts';
+import type {NativeChartMapping,NativeChartAdapter} from './chart-contracts.ts';
 import type { NativeTypedAnalysis } from './analyze-contracts.ts';
 import type { NativeIdentityRevision } from './identity-contracts.ts';
 import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget } from './bindings-contracts.ts';
@@ -31,6 +32,8 @@ export interface NativeAssemblyModule {name:string;register:string;specifier:str
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
  authorPrograms?: readonly NativeAuthorProgramReceipt[];
+ chartMappings?:readonly NativeChartMapping[];
+ chartAdapter?:NativeChartAdapter;
  modules?: readonly NativeAssemblyModule[];
  files?: readonly NativeAssemblyFile[];
  analysis: NativeTypedAnalysis;

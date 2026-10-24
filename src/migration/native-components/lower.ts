@@ -1,5 +1,7 @@
 import {verifyNativeAuthorProgram} from './author-programs.ts';
 import type {NativeAuthorProgramReceipt} from './author-program-contracts.ts';
+import {verifyNativeChartMapping} from './chart-mapping.ts';
+import type {NativeChartMapping} from './chart-contracts.ts';
 /** Pure offline lowering only. Typed analysis and admitted receipts are supplied
  * by owners; no source fetch, compiler execution, destination write or evaluation. */
 import {format as d3format} from 'd3-format';
@@ -40,6 +42,8 @@ export interface NativeLowerInput {
   urls?: readonly NativeLowerUrlReceipt[];
   serializedStyles?:readonly {sourceNode:string;css:string}[];
   resourcePatches?:readonly {sourceNode:string;attributes:Readonly<Record<string,string>>}[];
+  chartMappings?:readonly NativeChartMapping[];
+  admittedChartData?:readonly {sourceNode:string;analysisSha256:string}[];
   formattedValues?: readonly NativeLowerFormattedReceipt[];
   cellTables?:readonly {sourceNode:string;analysisSha256:string;tableSha256:string;rows:readonly Readonly<Record<string,NativeJson>>[]|null;localeReceipt?:NativeNumberLocaleReceipt}[];
   /** Receipt for the authored class/style closure, not permission to fetch CSS. */
@@ -236,6 +240,22 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(receipt.identities.length!==sourceNodes.length||new Set(receipt.identities.map(v=>v.sourceNode)).size!==sourceNodes.length){block('author-program-identities',node,'Every adapted source identity must be retained once');return '';}
    for(const original of sourceNodes){const adapted=receipt.identities.find(v=>v.sourceNode===original.graphKey),proof=binding(original,adapted?.kind??'nonvisual');if(!adapted||proof?.afId!==adapted.afId)block('author-program-identities',original,'Adapted identity must match its original graph proof');}
    return receipt.html;
+  }
+  if(node.tag==='Chart'||node.tag==='Question'){
+   const charts=input.chartMappings?.filter(chart=>chart.sourceNode===node.graphKey)??[],chart=charts[0];
+   if(charts.length===1&&chart&&verifyNativeChartMapping(input.analysis,chart)){
+    const proof=binding(node),attrs:Record<string,string>={};if(proof)attrs['data-af-id']=proof.afId;
+    if(chart.data.kind==='table'&&!input.admittedChartData?.some(receipt=>receipt.sourceNode===node.graphKey&&receipt.analysisSha256===input.analysis.analysisSha256))require('binding',node,'Chart data requires its admitted decoded table binding','data');
+    for(const [name,value]of Object.entries(chart.props)){
+     if(['data','viz','title','height'].includes(name))continue;
+     if(name==='style'){const receipt=input.serializedStyles?.find(style=>style.sourceNode===node.graphKey);if(receipt)attrs.style=receipt.css;else require('style',node,'Chart style requires exact retained declaration serialization',name);continue;}
+     if(name==='class'||name==='className'){if(!digest(input.authoredStyleSha256))require('style',node,'Chart class requires exact CSS closure',name);attrs.class=String(value);continue;}
+     if(name==='id'){if(typeof value!=='string'||!value||usedDom.has(value))block('duplicate-dom-id',node,'Chart authored DOM ID collides',name);else {usedDom.add(value);attrs.id=value;}continue;}
+     if(/^data-[a-z0-9_-]+$/.test(name)||/^aria-[a-z-]+$/.test(name))attrs[name]=String(value);
+    }
+    return `<div${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}></div>`;
+   }
+   if(charts.length)block('chart-mapping-proof',node,'Chart mapping must match exact source recipe and analysis');
   }
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
   const rule=nativeComponentRule(node.tag);
