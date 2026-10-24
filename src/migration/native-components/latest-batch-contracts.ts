@@ -23,3 +23,11 @@ export interface LatestPreparedHead {
  evidence: unknown; sourceLimitations: readonly unknown[];
  assemblyStatus: 'not-assembled';
 }
+
+export interface LatestAssemblyAttempt {
+ key: NativeRevisionKey;
+ receipt: import('./v3-publication-contracts.ts').NativeV3AssemblyReceipt;
+ status: 'assembled' | 'assembly-blocked';
+ /** A complete assembly still requires publication, authority and paired UI evidence. */
+ verificationStatus: 'not-verified';
+}
