@@ -168,7 +168,16 @@ try {
           const dialog=page.getByRole('dialog',{name:'Settings',exact:true});
           check(await dialog.isVisible() && await dialog.getAttribute('aria-describedby')!==null,`${tag} native modal has title and description`);
           check(await dialog.evaluate(node=>node.contains(document.activeElement)),`${tag} opening moves focus inside`);
-          await page.getByRole('button',{name:'Close settings',exact:true}).focus();await page.keyboard.press('Tab');check(await dialog.evaluate(node=>node.contains(document.activeElement)),`${tag} Tab stays in modal`);
+          // Preserve the retained kit's explicit edge loop; native modal inertness alone is a different contract.
+          const first=page.getByLabel('Display name',{exact:true}),last=page.getByRole('button',{name:'Close settings',exact:true});
+          const focusDescription=()=>page.evaluate(()=>{const node=document.activeElement;return JSON.stringify({tag:node?.localName,id:node?.id,role:node?.getAttribute('role'),name:node?.getAttribute('aria-label'),documentFocused:document.hasFocus()});});
+          await last.focus();await page.keyboard.press('Tab');
+          check(await focused(first),`${tag} Tab wraps last to first (${await focusDescription()})`);
+          await first.focus();await page.keyboard.press('Shift+Tab');
+          check(await focused(last),`${tag} Shift+Tab wraps first to last (${await focusDescription()})`);
+          await first.focus();
+          await page.locator('#before').evaluate(node=>node.focus());
+          check(await dialog.evaluate(node=>node.contains(document.activeElement)),`${tag} modal blocks programmatic background focus (${await focusDescription()})`);
           await page.keyboard.press('Escape');check(await page.getByRole('dialog').count()===0 && await focused(trigger),`${tag} Escape closes and restores focus`);
           await page.keyboard.press('Space');await page.getByRole('button',{name:'Close settings',exact:true}).click();check(await page.getByRole('dialog').count()===0 && await focused(trigger),`${tag} close control restores focus`);
           await page.keyboard.press('Enter');await readable('dialog',tag);
