@@ -19,6 +19,18 @@ describe('af-slider', () => {
     expect(input.value).toBe('0'); expect(root.querySelector('[data-af-id=authored]')?.textContent).toBe('Keep me');
     expect(input.labels?.[0]).toBe(root.querySelector('label'));
   });
+  it('keeps the label and value readout on a shared header above the range track', () => {
+    const {root,input,label,readout} = fixture('label="Level" default-value="40" suffix="%"');
+    const header = root.querySelector<HTMLElement>('[part="header"]');
+    expect(header).not.toBeNull();
+    expect(label.parentElement).toBe(header);
+    expect(readout.parentElement).toBe(header);
+    expect(header!.nextElementSibling).toBe(input);
+    expect(getComputedStyle(header!).display).toBe('flex');
+    expect(getComputedStyle(header!).justifyContent).toBe('space-between');
+    expect(header!.textContent).toContain('Level');
+    expect(header!.textContent).toContain('40%');
+  });
   it('uses default-value for uncontrolled state and emits accepted native changes', () => {
     const {root,input,readout} = fixture('default-value="25" label="Volume" min="10" max="40" step="5" prefix="$" suffix=" USD" format=".1f"');
     expect(root.value).toBe(25); expect(input.value).toBe('25'); expect(readout.textContent).toBe('$25.0 USD');
