@@ -1,11 +1,14 @@
+import {baselineLocalOrigin} from './component-baseline-session.mjs';
 /** Observe only real same-origin upload responses. This route must be installed
  * during mount, after captureBrowserBaseline's broader page-resource guard. */
-export async function observeUploadRequests({page,origin,proof,discardFirstSuccess=false}) {
+export async function observeUploadRequests({page,origin,runnerOrigin,proof,discardFirstSuccess=false}) {
+ const origins=new Set([baselineLocalOrigin(origin)]);
+ if(runnerOrigin){const runner=baselineLocalOrigin(runnerOrigin);if(new URL(runner).port!==new URL(origin).port)throw Error('Upload runner must use the same local app port');origins.add(runner);}
  const records=[];let dropped=false;
  // A context route is insufficient: Playwright gives page routes precedence.
  await page.route('**/a/*/datasets/*/files',async route=>{
   const request=route.request();
-  if(new URL(request.url()).origin!==origin){await route.fallback();return;}
+  if(!origins.has(new URL(request.url()).origin)){await route.fallback();return;}
   if(request.method()!=='POST'){await route.fallback();return;}
   const response=await route.fetch();const body=await response.body();let receipt;
   try{receipt=JSON.parse(body.toString());}catch{}
