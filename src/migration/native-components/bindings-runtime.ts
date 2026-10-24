@@ -1,6 +1,8 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
+import { NATIVE_TABLE_RUNTIME } from './table-runtime.ts';
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell){
+ const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
  const cells=new WeakMap();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
@@ -69,6 +71,9 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
       }catch(cause){event.preventDefault?.();error(cause.message);}
      };host.addEventListener(binding.event,change);scope.cleanups.add(()=>{host.removeEventListener(binding.event,change);bound.delete(target.property);});
     }}
+   }
+   if(target.kind==='table'){
+    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,childScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
    }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}

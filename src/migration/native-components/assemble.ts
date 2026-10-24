@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { nativeDigest } from './selection.ts';
 import { lowerNativeComponents } from './lower.ts';
 import { emitNativeBindings } from './bindings.ts';
+import { nativeTableTarget } from './table-columns.ts';
 import type { RetainedJsxNode } from './analyze-contracts.ts';
 import type { NativeBindingTarget } from './bindings-contracts.ts';
 import {rewriteNativeCss} from './resources.ts';
@@ -71,6 +72,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   const proof=binding(node);if(!proof)continue;
   if(node.type==='expression'&&!node.value.static)targets.push({...proof,kind:'text'});
   if(node.type!=='element')continue;
+  try { const table=nativeTableTarget(node,identity.bindings);if(table){targets.push(table);for(const column of table.columns)if(column.template)templateIds.add(column.template.templateId);} } catch {block('table-column-contract',node.graphKey);}
   if(node.control&&typeof node.control==='object'&&!Array.isArray(node.control)&&node.control.kind!=='fragment'){
    const templateId=`native-template-${proof.afId}`;templateIds.add(templateId);targets.push({...proof,kind:'condition',templateId});
   }
@@ -112,7 +114,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  }
  if(new Set(input.backends.map(b=>b.namespace)).size!==input.backends.length)block('duplicate-backend');
  if(input.viewer&&input.backends.filter(backend=>backend.namespace===input.viewer!.namespace).length!==1)block('viewer-backend-admission');
- const emitted=emitNativeBindings({cellAdapter:input.cellAdapter,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
+ const emitted=emitNativeBindings({identityBindings:identity.bindings,cellAdapter:input.cellAdapter,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
  const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});

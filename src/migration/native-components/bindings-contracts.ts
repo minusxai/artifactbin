@@ -43,6 +43,18 @@ export interface NativeBindingIdentity {
   analysisSha256?: string;
   proofSha256?: string;
 }
+/** Source-owned column headers and caller-owned custom cells on the native table. */
+export interface NativeTableColumn {
+  sourceNode: string;
+  afId: string;
+  domId?: string;
+  spec: { col: string; title?: string; fmt?: string; align?: "left" | "right" | "center"; width?: number | string; bar?: boolean; colorScale?: "sequential" | "diverging" };
+  template?: {
+    templateId: string;
+    templateIds: readonly string[];
+    domIds: readonly { domId: string; templateAfId: string }[];
+  };
+}
 export type NativeBindingTarget = NativeBindingIdentity &
   (
     | { kind: "text" }
@@ -66,6 +78,7 @@ export type NativeBindingTarget = NativeBindingIdentity &
         };
       }
     | { kind: "action" }
+    | { kind: "table"; owner: string; rowKey: string; columns: readonly NativeTableColumn[] }
   );
 /** Explicit request-authoritative target identity. Source identity equivalence belongs to migration mappings. */
 export interface NativeBindingViewer {
@@ -76,6 +89,7 @@ export interface NativeBindingViewer {
 }
 export interface NativeBindingsInput {
   cellAdapter?:NativeCellAdapter;
+  identityBindings?: readonly (NativeBindingIdentity & {authoredDomId?: string})[];
   viewer?: NativeBindingViewer;
   analysis: NativeTypedAnalysis;
   targets: readonly NativeBindingTarget[];

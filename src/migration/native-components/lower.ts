@@ -269,7 +269,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
    if(name==='run'||name==='set'||name==='args'){if(name!=='args'&&admittedTarget(node,'action'))continue;require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
    if(node.tag==='User'&&name==='userId'){require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
-   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name)||name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
+   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name)||name==='data'&&(admittedTarget(node,'cell','data')||admittedTarget(node,'table')))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
    if((node.tag==='Number'||node.tag==='Cell')&&['data','format','prefix','suffix','col','agg'].includes(name)){
     if(name!=='data'&&typeof value!=='string'&&value!==null)block('unsupported-cell-property',node,'Retained Cell formatting properties require literal strings',name);
     if(name==='agg'&&typeof value==='string'&&!['first','last','sum','avg','median','min','max','count'].includes(value))block('unsupported-cell-property',node,'Unknown aggregate is not silently normalized',name);
@@ -316,10 +316,23 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   }
   if(styles.length)attrs.style=styles.join(';');
   if(rule?.module)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
-  if(node.tag==='DataTable'&&node.children.some(child=>child.type==='element'&&child.tag==='Column'))require('table-column',node,'Preserve typed column templates/actions and stable row identity through the table adapter');
+  const table= node.tag==='DataTable'?admittedTarget(node,'table'):undefined;
+  if(node.tag==='DataTable'&&node.children.some(child=>child.type==='element'&&child.tag==='Column')&&!table)require('table-column',node,'Preserve typed column templates/actions and stable row identity through the table adapter');
   if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
   if(node.tag==='style'){if(node.children.some(child=>child.type!=='text'&&!(child.type==='expression'&&child.value.static&&typeof child.value.json==='string')))require('style',node,'Nonliteral CSS needs explicit expression admission');else {const raw=node.children.map(child=>child.type==='text'?child.value:child.type==='expression'&&child.value.static?String(child.value.json):'').join('');if(/<\/style/i.test(raw))block('style-end-tag',node,'Raw style terminator cannot be represented in an HTML raw-text element');else if(/@import|url\s*\(/i.test(raw))require('resource',node,'CSS resource dependencies require exact resource closure admission');else {formatted=raw;for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:child.type==='text'?'text':'nonvisual'});}}}
-  let children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
+  let children:string;
+  if(table?.kind==='table'){
+   children='';
+   for(const child of node.children){
+    if(child.type==='text'&&!child.value.trim()){binding(child,'nonvisual');continue;}
+    const column=table.columns.find(column=>column.sourceNode===child.graphKey);
+    if(!column||child.type!=='element'||child.tag!=='Column'){block('table-column-contract',child,'Every child must be an exact admitted column');continue;}
+    const header=binding(child);if(header?.afId!==column.afId)block('table-column-contract',child,'Column header identity must match');
+    if(column.domId){if(usedDom.has(column.domId))block('duplicate-dom-id',child,'Column DOM ID collides');usedDom.add(column.domId);}
+    if(column.template)templates.push(`<template id="${escape(column.template.templateId)}">${child.children.map(child=>walk(child,[...ancestors,'DataTable'],depth+1)).join('')}</template>`);
+    else for(const whitespace of child.children)binding(whitespace,'nonvisual');
+   }
+  }else children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
   if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');

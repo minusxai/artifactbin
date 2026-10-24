@@ -17,6 +17,8 @@ import type {
 } from "./bindings-contracts.ts";
 import { normalizeTimestamp } from "../../datasets/timestamp.ts";
 import { NATIVE_BINDINGS_RUNTIME } from "./bindings-runtime.ts";
+import { nativeTableTarget } from "./table-columns.ts";
+import { nativeDigest } from "./selection.ts";
 const name = (value: unknown): value is string =>
   typeof value === "string" &&
   /^[A-Za-z_]\w*$/.test(value) &&
@@ -452,6 +454,14 @@ export function emitNativeBindings(
           .size !== (target.identity.domIds ?? []).length
       )
         block(node.graphKey, "missing-loop-identity-plan");
+    } else if (target.kind === "table") {
+      try {
+        const proof = nativeTableTarget(node, input.identityBindings ?? []);
+        if(!proof || nativeDigest(proof)!==nativeDigest(target))block(node.graphKey,'invalid-table-plan');
+      } catch {block(node.graphKey,'invalid-table-plan');}
+      const data=node.type==='element'?node.attributes.find(attr=>attr.name==='data')?.value:undefined;
+      result.expression=admit(data?.static&&typeof data.json==='string'?expression({static:false,exprType:'reference',source:data.json}):null,node.graphKey);
+      if(result.expression?.kind!=='signal'||!queryNames.has(result.expression.name))block(node.graphKey,'table-needs-declared-query');
     } else if (target.kind === "action") {
       if (node.type !== "element" || node.tag !== "Button") {
         block(node.graphKey, "invalid-action-target");
@@ -570,8 +580,8 @@ export function emitNativeBindings(
       hasRow(expr) &&
       !targets.some(
         (loop) =>
-          loop.kind === "loop" &&
-          loop.identity?.templateIds.includes(target.afId),
+          loop.kind === "loop" && loop.identity?.templateIds.includes(target.afId) ||
+          loop.kind === "table" && loop.columns.some((column:any)=>column.template?.templateIds.includes(target.afId)),
       )
     )
       block(target.sourceNode, "row-expression-without-loop-plan");
