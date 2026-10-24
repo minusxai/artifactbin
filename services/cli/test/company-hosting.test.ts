@@ -48,7 +48,10 @@ test('backup stops writes before both snapshots and restore refuses populated st
  const backup=await readFile(new URL('../../../deploy/company/backup.sh',import.meta.url),'utf8');
  assert.ok(backup.indexOf('stop app')<backup.indexOf('pg_dump'));
  assert.ok(backup.indexOf('stop app')<backup.indexOf('-czf - .'));
- assert.match(backup,/trap .*start app/);assert.match(backup,/configuration.tar.gz.*config secrets/);
+ assert.match(backup,/trap .*start app/);
+ assert.match(backup,/set -- packages backup\.sh restore\.sh \.env config secrets/);
+ assert.match(backup,/\[ ! -f patch-npm\.mjs \] \|\| set -- "\$@" patch-npm\.mjs/);
+ assert.match(backup,/tar -czf "\$destination\/configuration\.tar\.gz" "\$@"/);
  const restore=await readFile(new URL('../../../deploy/company/restore.sh',import.meta.url),'utf8');
  assert.match(restore,/up -d --wait postgres/);
  assert.ok(restore.indexOf('Database is not empty')<restore.indexOf('pg_restore'));
