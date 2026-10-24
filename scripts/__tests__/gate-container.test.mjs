@@ -129,3 +129,13 @@ describe('dockerRunArgs', () => {
   });
 
 });
+
+describe('private migration pilot mounts',()=>{
+ it('passes only complete explicit private inputs read-only and the isolated evidence directory writable',()=>{
+  const env={NATIVE_MIGRATION_PILOT__INPUT:'/private/input.json',NATIVE_MIGRATION_PILOT__CANONICAL:'/private/canonical.json',NATIVE_MIGRATION_PILOT__RECOVERY:'/private/recovery.json',NATIVE_MIGRATION_PILOT__BUNDLE:'/private/bundle',NATIVE_MIGRATION_PILOT__OUTPUT:'/private/evidence'};
+  const args=dockerRunArgs({name:'pilot',image:'image',volume:'deps',buildKey:'a'.repeat(32),worktree:'/tree',cpus:4,memory:'8g',servers:1,gates:['component-baseline'],env});
+  const mounts=args.filter((_,i)=>args[i-1]==='-v');expect(mounts).toContain('/private/input.json:/pilot/input.json:ro');expect(mounts).toContain('/private/bundle:/pilot/bundle:ro');expect(mounts).toContain('/private/evidence:/pilot/output:rw');
+  expect(args).toContain('NATIVE_MIGRATION_PILOT__INPUT=/pilot/input.json');
+  expect(()=>dockerRunArgs({env:{NATIVE_MIGRATION_PILOT__INPUT:'/private/input.json'}})).toThrow('complete');
+ });
+});

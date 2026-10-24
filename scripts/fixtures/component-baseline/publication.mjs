@@ -12,7 +12,7 @@ import { browserParityFixtures, parityThemes } from './index.mjs';
 const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
 /** Stored UTF-8 ZIP is the product's normal public skill format. Validate the
  * complete immutable archive before writing any selected package member. */
-function installedFiles(archive){
+export function installedFiles(archive){
   if(!(archive instanceof Uint8Array)||archive.byteLength>128*1024*1024)throw Error('Candidate requires a bounded actual HTTP skill archive');
   const bytes=Buffer.from(archive),files=new Map();let offset=0;
   while(offset+30<=bytes.length&&bytes.readUInt32LE(offset)===0x04034b50){

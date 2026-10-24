@@ -38,9 +38,10 @@ function browserState() {
 export function fontLoadingEvidence() {
   return (async()=>{
     const clean=value=>String(value||'').trim().replace(/^['"]|['"]$/g,'');
-    const ruleFaces=[];
+    const ruleFaces=[],seenSheets=new Set();
     const rules=(list,base)=>{for(const rule of list||[]){
       if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
+      else if(rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||base);}}catch{ /* Cross-origin imports cannot prove font response bytes. */ }}
       else if(rule.cssRules)rules(rule.cssRules,base);
     }};
     for(const sheet of document.styleSheets){try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
@@ -86,12 +87,12 @@ export function fontByteProof(evidence) {
 
 /** mount({fixture,theme,viewport,state,page}) returns {frame,ready?}; must navigate to
  * a real local reader. Source revisions are supplied independently, never inferred. */
-export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,workerBrowsers=[browser]}) {
+export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser]}) {
   if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
-  const tasks=fixtures.flatMap(fixture=>parityThemes.flatMap(theme=>parityViewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
+  const tasks=fixtures.flatMap(fixture=>themes.flatMap(theme=>viewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
   const captures=new Array(tasks.length),failures=[];
   // A failed new run must never archive a stale full verdict as current evidence.
   await Promise.all([`${implementation}-captures.json`,`${implementation}-partial-captures.json`].map(name=>rm(path.join(output,name),{force:true})));

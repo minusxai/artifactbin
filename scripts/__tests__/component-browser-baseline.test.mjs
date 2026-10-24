@@ -327,3 +327,25 @@ it('captures later independent fixture groups after early failure and rejects th
   expect(peak).toBe(2);expect(closed).toBe(8);expect(active).toBe(0);
   await expect(readFile(path.join(directory,'html-captures.json'))).rejects.toMatchObject({code:'ENOENT'});
 });
+
+it('captures only the explicit retained theme and viewport plan for a private migration pilot',async()=>{
+ const directory=await setup(),contexts=[];
+ const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+ const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+ const browser={newContext:async options=>{contexts.push(options);return {newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}};}};
+ const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:1280,height:900}],fixtures:[{id:'pilot',states:[{id:'initial',actions:[]}]}]});
+ expect(captures).toHaveLength(1);expect(contexts).toHaveLength(1);expect(contexts[0]).toMatchObject({colorScheme:'light',viewport:{width:1280,height:900}});
+});
+
+it('proves used font bytes through imported stylesheet URLs rather than losing their source base',async()=>{
+ const prior=globalThis.document;
+ const face={family:'Pilot Font',style:'normal',weight:'400',unicodeRange:'U+0-10FFFF',status:'loaded'};
+ const fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];
+ const css={fontFamily:'Pilot Font',fontStyle:'normal',fontWeight:'400',visibility:'visible',getPropertyValue:()=>''};
+ const element={getClientRects:()=>[{}]},text={parentElement:element,textContent:'Actual font sample'};
+ const declarations={'font-family':'Pilot Font','font-style':'normal','font-weight':'400','unicode-range':'U+0-10FFFF',src:'url("../fonts/body.woff2")'};
+ const imported={href:'http://localhost/assets/fonts.css',cssRules:[{type:5,style:{getPropertyValue:name=>declarations[name]||''}}]};
+ globalThis.document={body:{},documentElement:{},fonts,styleSheets:[{href:'http://localhost/main.css',cssRules:[{type:3,styleSheet:imported}]}],querySelectorAll:()=>[],createTreeWalker:()=>{let done=false;return {nextNode:()=>done?null:(done=true,text)};},defaultView:{NodeFilter:{SHOW_TEXT:4},getComputedStyle:()=>css}};
+ try{const evidence=await fontLoadingEvidence();expect(evidence.errors).toEqual([]);expect(evidence.used[0].sources).toEqual(['http://localhost/fonts/body.woff2']);}
+ finally{globalThis.document=prior;}
+});

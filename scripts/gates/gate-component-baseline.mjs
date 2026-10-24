@@ -4,7 +4,9 @@
  * output and entries [{fixture,theme,url}]. Every URL must be a real local /raw
  * reader produced by that revision's normal HTTP publication API. */
 import assert from 'node:assert/strict';
-import { readFile, mkdir, readdir } from 'node:fs/promises';
+import {runNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
+import {connectAgent} from './lib/cli-connection.mjs';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
@@ -13,6 +15,13 @@ import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
 import {withComponentBaselineEvidence} from '../lib/component-baseline-evidence.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
+if(process.env.NATIVE_MIGRATION_PILOT__INPUT){
+ const browser=await launchChromium({args:['--enable-unsafe-swiftshader']});
+ try{await runNativeMigrationPilot({base:process.argv[2]||'http://localhost:3030',browser,connectAgent,paths:{input:process.env.NATIVE_MIGRATION_PILOT__INPUT,canonical:process.env.NATIVE_MIGRATION_PILOT__CANONICAL,recovery:process.env.NATIVE_MIGRATION_PILOT__RECOVERY,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,output:process.env.NATIVE_MIGRATION_PILOT__OUTPUT}});console.log('Native migration pilot capture complete; private evidence written to the explicit output directory. No paired parity claim made.');}
+ catch(error){const output=process.env.NATIVE_MIGRATION_PILOT__OUTPUT;if(output){await mkdir(output,{recursive:true,mode:0o700});await writeFile(path.join(output,'migration-pilot-failure.json'),JSON.stringify({message:error.message,stack:error.stack},null,2),{mode:0o600});}throw Error('Native migration pilot failed; consult the explicit private evidence directory');}
+ finally{await browser.close();}
+ process.exit(0);
+}
 const repo=path.resolve(import.meta.dirname,'../..');
 const optionalConfig=path.join(repo,'scripts/fixtures/component-baseline/run.json');
 let input;

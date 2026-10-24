@@ -154,7 +154,16 @@ export function containerName(worktree, pid) {
  * - No AUTH__SECRET is passed: scripts/gates.mjs mints one per run when none is set, which is the
  *   shape of CI's per-run secret.
  */
+/** Private migration inputs are never copied into the source snapshot or logs. */
+function migrationPilotMounts(env={}) {
+ if(!env.NATIVE_MIGRATION_PILOT__INPUT)return [];
+ const entries=[['INPUT','/pilot/input.json','ro'],['CANONICAL','/pilot/canonical.json','ro'],['RECOVERY','/pilot/recovery.json','ro'],['BUNDLE','/pilot/bundle','ro'],['OUTPUT','/pilot/output','rw']];
+ if(entries.some(([name])=>typeof env['NATIVE_MIGRATION_PILOT__'+name]!=='string'||!env['NATIVE_MIGRATION_PILOT__'+name].startsWith('/')||/[:\\\n\r]/.test(env['NATIVE_MIGRATION_PILOT__'+name])))throw Error('Migration pilot requires complete explicit absolute private paths');
+ return entries.flatMap(([name,inside,mode])=>['-v',`${env['NATIVE_MIGRATION_PILOT__'+name]}:${inside}:${mode}`,'-e',`NATIVE_MIGRATION_PILOT__${name}=${inside}`]);
+}
+
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
+  const pilotArgs=migrationPilotMounts(env);
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
@@ -167,6 +176,7 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${volume}:${INSIDE.deps}`,
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
     '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
+    ...pilotArgs,
     '-w', INSIDE.src,
     image,
     'node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', String(servers), '--build-key', buildKey, ...gates,
