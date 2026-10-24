@@ -34,6 +34,12 @@ describe('actual original/new rich reader fixture inputs',()=>{
  it('pairs slide navigation through the shared pager and records rail viewport applicability',()=>{
   const slides=richBrowserParityFixtures.find(f=>f.id==='slides-two');
   expect(slides.bareRoot).toBe(true);
+  const document=new JSDOM(slides.newHtml).window.document;
+  const column=document.querySelector('af-slide-deck > div');
+  expect(column).not.toBeNull();
+  expect(column.style.padding).toBe('24px');
+  expect(column.style.gridColumn).toBe('-2 / -1');
+  expect(column.querySelectorAll('af-slide')).toHaveLength(2);
   expect(htmlBodyPadding(slides)).toBe('0px');
   expect(htmlBodyPadding({})).toBe('24px');
   expect(slides.states[0].expected.roles).toContainEqual({role:'button',name:'Next slide',disabled:false});

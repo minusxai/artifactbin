@@ -21,10 +21,21 @@ describe('native slide deck',()=>{
     expect(slides[0]!.querySelector('h1')!.textContent).toBe('Hello');
     expect(slides[0]!.querySelector('input')!.value).toBe('Keep me');
   });
+  it('navigates slides inside an authored column gutter without moving its content into the rail',async()=>{
+    const {deck,slides,next}=fixture();
+    const column=document.createElement('div');column.style.cssText='grid-column:-2 / -1;padding:24px;min-width:0';
+    column.append(...slides);deck.append(column);await tick();next.click();
+    expect(deck.index).toBe(1);expect(slides[1]!.scrollIntoView).toHaveBeenCalled();
+    expect(slides[0]!.parentElement).toBe(column);expect(column.style.padding).toBe('24px');
+    expect(deck.querySelector('[data-af-deck-chrome=rail]')!.parentElement).toBe(deck);
+    expect(column.querySelector('[data-af-deck-chrome]')).toBeNull();
+  });
   it('keeps the rail local to the deck and applies page gutter only to the content column',()=>{
     const {deck,slides}=fixture();const rail=deck.querySelector<HTMLElement>('[data-af-deck-chrome="rail"]')!;
     const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
-    expect(css).toContain('af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);padding:24px');
+    expect(getComputedStyle(slides[0]!).padding).toBe('0px');
+    expect(getComputedStyle(slides[1]!).padding).toBe('0px');
+    expect(getComputedStyle(slides[1]!.querySelector('p')!).lineHeight).toBe('1.65');
     expect(css).toContain('position:sticky;top:0;width:190px;height:100vh');
     expect(css).not.toContain('translateX(var(--af-deck-rail-shift');
     slides[0]!.style.padding='8px';
@@ -77,7 +88,7 @@ describe('native slide deck',()=>{
     const thumbnail=deck.querySelector<HTMLElement>('[data-af-deck-preview] > div > div')!;
     const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
     expect(thumbnail.hasAttribute('data-af-preview-slide')).toBe(true);
-    expect(css).toContain('af-slide-deck [data-af-deck-preview] [data-af-preview-slide]{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:100%;padding:24px');
+    expect(getComputedStyle(thumbnail).padding).toBe('0px');
     expect(css).toContain('background:var(--background,Canvas);pointer-events:none');
     expect(css).toContain('af-slide-deck [data-af-deck-preview] [data-af-preview-slide] :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit);font-size:clamp(2rem,5vw,2.5rem)');
   });
