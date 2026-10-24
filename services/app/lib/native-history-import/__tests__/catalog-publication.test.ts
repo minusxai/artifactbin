@@ -115,6 +115,16 @@ async function fixture() {
     JSON.stringify({
       heads: [{ id: dataId, version: 3, updated_at: t1 }],
       artifact_shares: [],
+      dataset_policy_audit: [
+        {
+          dataset_id: dataId,
+          revision: 2,
+          policy,
+          actor_user_id: owner.userId,
+          actor_token_id: owner.id,
+          created_at: t1,
+        },
+      ],
     }),
   );
   const versions: NativeCatalogVersion[] = [rawOld, rawHead].map((row) => ({
@@ -193,6 +203,15 @@ async function fixture() {
         targetId: dataId,
         sourceSha256: nativeCatalogBytes(rawBytes),
         relationsSha256: nativeCatalogBytes(relationBytes),
+        policyAudit: [
+          {
+            revision: 2,
+            policy,
+            actorUserId: owner.userId,
+            actorTokenId: owner.id,
+            createdAt: t1,
+          },
+        ],
         currentVersion: 3,
         expectedVersions: [1, 3],
         versions,
@@ -499,6 +518,43 @@ it("requires digest-bound canonical share closure and the matching collected dat
         f.sink,
       ),
     ).rejects.toThrow(/relations_head/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+it("preserves exact source policy audit and rejects omitted history or replay tampering", async () => {
+  const f = await fixture(),
+    db = await getDb();
+  try {
+    const p = structuredClone(f.projection);
+    p.datasets[0]!.policyAudit = [];
+    const { sha256, ...payload } = p;
+    p.sha256 = nativeCatalogDigest(payload);
+    await expect(stageNativeCatalog(p, f.source, f.sink)).rejects.toThrow(
+      /source_audit/,
+    );
+    await importNativeHistory(db, f.history, f.staged);
+    const audit = (
+      await db.query(
+        "SELECT revision,policy,actor_user_id,actor_token_id,created_at FROM dataset_policy_audit WHERE dataset_id=$1",
+        [f.dataId],
+      )
+    ).rows;
+    expect(audit).toMatchObject([
+      {
+        revision: 2,
+        policy: f.projection.datasets[0]!.authority.datasetPolicy,
+        actor_user_id: f.owner.userId,
+        actor_token_id: f.owner.id,
+      },
+    ]);
+    await db.query(
+      "UPDATE dataset_policy_audit SET policy=NULL WHERE dataset_id=$1",
+      [f.dataId],
+    );
+    await expect(importNativeHistory(db, f.history, f.staged)).rejects.toThrow(
+      /policy_audit_collision/,
+    );
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

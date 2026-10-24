@@ -22,6 +22,13 @@ export interface NativeCatalogVersion {
 }
 export interface NativeCatalogDataset {
   relationsSha256: string;
+  policyAudit: readonly {
+    revision: number;
+    policy: unknown;
+    actorUserId: string | null;
+    actorTokenId: string | null;
+    createdAt: string;
+  }[];
   sourceId: string;
   targetId: string;
   sourceSha256: string;

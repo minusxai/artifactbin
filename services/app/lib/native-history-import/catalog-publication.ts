@@ -74,6 +74,17 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
     throw Error("native_catalog_provenance");
   const ids = new Set<string>();
   for (const dataset of p.datasets) {
+    if (
+      new Set(dataset.policyAudit.map((row) => row.revision)).size !==
+        dataset.policyAudit.length ||
+      dataset.policyAudit.some(
+        (row) =>
+          !Number.isSafeInteger(row.revision) ||
+          row.revision < 0 ||
+          !validDate(row.createdAt),
+      )
+    )
+      throw Error("native_catalog_policy_audit");
     const a = dataset.authority,
       versions = [...dataset.versions].sort((x, y) => x.version - y.version),
       labels = versions.map((v) => v.version);
@@ -264,6 +275,26 @@ async function verifyDataset(
       .sort((a, b) => a.email.localeCompare(b.email));
   if (nativeCatalogDigest(shares) !== nativeCatalogDigest(expectedShares))
     throw Error("native_catalog_share_collision");
+  const audit = (
+    await tx.query<Record<string, unknown>>(
+      "SELECT revision,policy,actor_user_id,actor_token_id,created_at FROM dataset_policy_audit WHERE dataset_id=$1 ORDER BY revision",
+      [d.targetId],
+    )
+  ).rows;
+  const expectedAudit = [...d.policyAudit]
+    .sort((a, b) => a.revision - b.revision)
+    .map((row) => ({
+      revision: row.revision,
+      policy: row.policy,
+      actor_user_id: row.actorUserId,
+      actor_token_id: row.actorTokenId,
+      created_at: iso(row.createdAt),
+    }));
+  if (
+    nativeCatalogDigest(audit.map(normalize)) !==
+    nativeCatalogDigest(expectedAudit)
+  )
+    throw Error("native_catalog_policy_audit_collision");
   const reservation = (
     await tx.query<{ owner: string; consumed: boolean }>(
       "SELECT owner,consumed FROM artifact_id_registry WHERE id=$1",
@@ -285,14 +316,17 @@ async function principals(tx: Queryable, d: NativeCatalogDataset) {
           a.userId,
           a.creatorUserId,
           ...d.versions.map((v) => v.actorUserId),
+          ...d.policyAudit.map((v) => v.actorUserId),
         ].filter((v): v is string => !!v),
       ),
     ],
     tokens = [
       ...new Set(
-        [a.tokenId, ...d.versions.map((v) => v.actorTokenId)].filter(
-          (v): v is string => !!v,
-        ),
+        [
+          a.tokenId,
+          ...d.versions.map((v) => v.actorTokenId),
+          ...d.policyAudit.map((v) => v.actorTokenId),
+        ].filter((v): v is string => !!v),
       ),
     ];
   if (
@@ -411,6 +445,18 @@ export async function applyNativeCatalog(
         JSON.stringify({ version: d.currentVersion }),
       ],
     );
+    for (const row of d.policyAudit)
+      await tx.query(
+        "INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id,created_at) VALUES($1,$2,$3::jsonb,$4,$5,$6)",
+        [
+          d.targetId,
+          row.revision,
+          row.policy === null ? null : JSON.stringify(row.policy),
+          row.actorUserId,
+          row.actorTokenId,
+          iso(row.createdAt),
+        ],
+      );
     await verifyDataset(tx, p, d);
   }
   await verifyImports(tx, p, pageId);

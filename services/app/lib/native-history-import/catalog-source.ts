@@ -87,6 +87,14 @@ export async function verifyNativeCanonicalDatasets(
       throw Error("native_catalog_source_relations_digest");
     const relations = JSON.parse(relationBytes.toString("utf8")) as {
       heads: { id: string; version: number; updated_at: string }[];
+      dataset_policy_audit: {
+        dataset_id: string;
+        revision: number;
+        policy: unknown;
+        actor_user_id: string | null;
+        actor_token_id: string | null;
+        created_at: string;
+      }[];
       artifact_shares: { artifact_id: string; email: string; role: string }[];
     };
     const relationHeads = relations.heads?.filter(
@@ -118,6 +126,26 @@ export async function verifyNativeCanonicalDatasets(
       ) !== nativeCatalogDigest(normalizeShares(dataset.authority.shares))
     )
       throw Error("native_catalog_source_shares");
+    if (!Array.isArray(relations.dataset_policy_audit))
+      throw Error("native_catalog_source_audit_required");
+    const audit = relations.dataset_policy_audit
+      .filter((row) => row.dataset_id === dataset.sourceId)
+      .map((row) => ({
+        revision: row.revision,
+        policy: nativeCatalogMappedPolicy(row.policy, p.identities),
+        actorUserId: mapped(p.identities.users, row.actor_user_id),
+        actorTokenId: mapped(p.identities.tokens, row.actor_token_id),
+        createdAt: iso(row.created_at),
+      }))
+      .sort((a, b) => a.revision - b.revision);
+    if (
+      nativeCatalogDigest(audit) !==
+      nativeCatalogDigest(
+        [...dataset.policyAudit].sort((a, b) => a.revision - b.revision),
+      )
+    )
+      throw Error("native_catalog_source_audit");
+
     const head = heads[0]!,
       versions = new Map<number, Record<string, unknown>>();
     for (const row of exported.versions ?? [])
