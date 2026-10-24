@@ -241,11 +241,16 @@ async function runRemote(
     return { data, errors: keys.map((key) => ({ message: reason, path: [key] })), outcomes };
   };
   if (!remote) return settled("rejected", "This page has no backend connection");
-  if (!remote.online()) return settled("offline", "offline: nothing was sent");
+  let execute:RemotePort['execute']=request=>remote.execute(request);
+  if (!remote.online()) {
+    if(kind!=="query"||!remote.whenReady)return settled("offline", "offline: nothing was sent");
+    try{const ready=await remote.whenReady();if(!ready)return settled("offline", "offline: nothing was sent");execute=ready;}
+    catch{return settled("offline", "offline: nothing was sent");}
+  }
   const request = subDocument(op, fields);
   let reply: Awaited<ReturnType<RemotePort["execute"]>>;
   try {
-    reply = await remote.execute({ query: request.query, variables: request.variables, operation: kind });
+    reply = await execute({ query: request.query, variables: request.variables, operation: kind });
   } catch (error) {
     if (error instanceof RemoteUnreachable) return settled("offline", "offline: nothing was sent");
     // Sent, then lost: the backend may have run it. Never retried.

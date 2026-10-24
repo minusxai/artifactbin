@@ -71,3 +71,21 @@ it('adopts newly published backend declarations without replacing private viewer
  expect((await client.query({query:gql`{ filter orders { count } }`})).data).toEqual({filter:'mine',orders:{count:2}});
  expect(sent).toHaveLength(1);
 });
+it('awaits an already pending query connection once, while offline mutations are never queued',async()=>{
+ let connect!:(sender:RemotePort['execute']|null)=>void,sends=0,waits=0;
+ const sender:RemotePort['execute']=async()=>{sends++;return {data:{inventory:{count:9}}};};
+ const remote:RemotePort={online:()=>false,whenReady(){waits++;return new Promise(resolve=>{connect=resolve;});},execute:sender};
+ const client=createClient({backends:['inventory'],state:createLocalStore(),remote});
+ const read=client.query({query:gql`{ inventory { count } }`});expect(sends).toBe(0);expect(waits).toBe(1);
+ const mutation=await client.mutate({mutation:gql`mutation { inventory { reserve } }`});expect(mutation.extensions?.outcomes).toEqual({'inventory.reserve':'offline'});expect(waits).toBe(1);
+ connect(sender);expect((await read).data).toEqual({inventory:{count:9}});expect(sends).toBe(1);
+});
+it('returns an offline query after connection cancellation without sending it',async()=>{
+ let sends=0;const remote:RemotePort={online:()=>false,whenReady:async()=>null,execute:async()=>{sends++;return {data:{}};}};
+ const client=createClient({backends:['inventory'],state:createLocalStore(),remote});expect((await client.query({query:gql`{ inventory { count } }`})).errors).toMatchObject([{message:expect.stringContaining('offline')}]);expect(sends).toBe(0);
+});
+it('preserves an already online remote method receiver',async()=>{
+ const remote={count:7,online:()=>true,async execute(this:{count:number}){return {data:{inventory:{count:this.count}}};}};
+ const client=createClient({backends:['inventory'],state:createLocalStore(),remote});
+ expect((await client.query({query:gql`{ inventory { count } }`})).data).toEqual({inventory:{count:7}});
+});

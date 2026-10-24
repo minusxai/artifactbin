@@ -126,6 +126,8 @@ export class RemoteUnreachable extends Error {
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
   online(): boolean;
+  /** Queries alone may await a bounded, already pending connection. The returned sender rejects after cancellation. */
+  whenReady?(): Promise<RemotePort["execute"] | null>;
   /**
    * The request holds only backend namespaces. Throws RemoteUnreachable only
    * when nothing was sent; any other throw means the outcome is unknown.
