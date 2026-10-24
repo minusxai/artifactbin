@@ -7,6 +7,7 @@ let nextId = 0;
 export class AfTabs extends HTMLElement implements TabsContract {
   static observedAttributes = ['value', 'orientation', 'activation-mode', 'dir', 'loop', 'variant'];
   private selection: string | undefined;
+  private initialized = false;
   private controlled = false;
   private propertyValue: string | undefined;
   private focused: AfTabsTrigger | undefined;
@@ -22,10 +23,12 @@ export class AfTabs extends HTMLElement implements TabsContract {
     if (Object.prototype.hasOwnProperty.call(this, 'value')) {
       const value = this.value; delete (this as {value?: string}).value; this.value = value;
     }
-    if (this.selection === undefined) this.selection = this.getAttribute('default-value') ?? undefined;
+    // No default means no selection; the first enabled trigger remains the Tab entry.
+    if (!this.initialized) { this.selection = this.getAttribute('default-value') ?? undefined; this.initialized = true; }
     this.addEventListener('click', this.onClick);
     this.addEventListener('keydown', this.keydown);
     this.addEventListener('focusin', this.focusin);
+    this.addEventListener('focusout', this.focusout);
     this.observer.observe(this, {childList:true, subtree:true, attributes:true, attributeFilter:['disabled','value']});
     this.sync();
   }
@@ -34,6 +37,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     this.removeEventListener('click', this.onClick);
     this.removeEventListener('keydown', this.keydown);
     this.removeEventListener('focusin', this.focusin);
+    this.removeEventListener('focusout', this.focusout);
   }
   attributeChangedCallback(): void { this.sync(); }
   private own<T extends HTMLElement>(tag: string): T[] {
@@ -53,6 +57,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     this.sync();
   }
   private onClick = (event: Event): void => { const trigger = this.target(event); if (trigger && !event.defaultPrevented) { this.focused = trigger; trigger.focus(); this.choose(trigger); } };
+  private focusout = (): void => { queueMicrotask(() => this.sync()); };
   private focusin = (event: Event): void => { const trigger = this.target(event); if (trigger) { this.focused = trigger; this.sync(); } };
   private keydown = (event: KeyboardEvent): void => {
     const trigger = this.target(event); if (!trigger || event.defaultPrevented) return;
@@ -84,8 +89,10 @@ export class AfTabs extends HTMLElement implements TabsContract {
     if (!this.isConnected) return;
     const triggers = this.triggers(); const panels = this.own<AfTabsContent>('af-tabs-content');
     const enabled = this.enabled();
-    if (!this.focused || !enabled.includes(this.focused)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
+    if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.ownerDocument.activeElement as AfTabsTrigger)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
     for (const list of this.own('af-tabs-list')) {
+      list.dataset.orientation = this.getAttribute('orientation') === 'vertical' ? 'vertical' : 'horizontal';
+      list.dataset.variant = list.getAttribute('variant') ?? this.getAttribute('variant') ?? 'default';
       list.setAttribute('role','tablist'); list.setAttribute('aria-orientation', this.getAttribute('orientation') === 'vertical' ? 'vertical' : 'horizontal');
     }
     for (const trigger of triggers) {
@@ -99,6 +106,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
       if (panel) { this.identify(panel, 'panel'); trigger.setAttribute('aria-controls',panel.id); }
       else trigger.removeAttribute('aria-controls');
     }
+    // Authored panels always remain mounted, including without force-mount.
     for (const panel of panels) {
       this.identify(panel, 'panel');
       const active = panel.getAttribute('value') === this.value;
@@ -116,14 +124,21 @@ export class AfTabsContent extends HTMLElement {}
 export const tabsStyles = `
 af-tabs{display:flex;gap:.5rem;flex-direction:column}
 af-tabs[orientation=vertical]{flex-direction:row}
-af-tabs-list{display:inline-flex;align-items:center;width:fit-content;padding:3px;border-radius:var(--radius,.5rem);background:var(--muted,#eee);color:var(--muted-foreground,#555)}
-af-tabs[orientation=vertical]>af-tabs-list{flex-direction:column}
-af-tabs-trigger{position:relative;cursor:pointer;padding:.25rem .5rem;border-radius:var(--radius,.375rem);font:inherit}
-af-tabs-trigger:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}
-af-tabs-trigger[disabled]{opacity:.5;cursor:default}
-af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff)}
-af-tabs-list[variant=line],af-tabs[variant=line]>af-tabs-list{background:transparent;gap:.25rem}
-af-tabs-list[variant=line]>af-tabs-trigger[data-state=active],af-tabs[variant=line]>af-tabs-list>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:0 2px var(--primary,#222)}
+af-tabs-list{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:fit-content;height:36px;padding:3px;border-radius:var(--radius-lg,.5rem);background:var(--muted,#eee);color:var(--muted-foreground,#555)}
+af-tabs-list[data-orientation=vertical]{height:fit-content;flex-direction:column}
+af-tabs-trigger{box-sizing:border-box;position:relative;display:inline-flex;flex:1;align-items:center;justify-content:center;gap:.375rem;height:calc(100% - 1px);cursor:pointer;border:1px solid transparent;padding:4px 8px;border-radius:var(--radius-md,.375rem);font-family:inherit;font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;color:var(--muted-foreground,#555);transition:background-color .15s,color .15s,box-shadow .15s}
+af-tabs-list[data-orientation=vertical]>af-tabs-trigger{width:100%;justify-content:flex-start}
+af-tabs-trigger:focus-visible{z-index:10;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-tabs-trigger[disabled]{opacity:.5;cursor:default;pointer-events:none}
+af-tabs-trigger[data-state=inactive]:hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
+af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
+af-tabs-trigger>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
+af-tabs-list[data-variant=line]{background:transparent;gap:.25rem;border-radius:0}
+af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:none}
+af-tabs-list[data-variant=line]>af-tabs-trigger::after{position:absolute;content:"";background:var(--primary,#222);opacity:0;transition:opacity .15s}
+af-tabs-list[data-variant=line][data-orientation=horizontal]>af-tabs-trigger::after{left:0;right:0;bottom:-5px;height:2px}
+af-tabs-list[data-variant=line][data-orientation=vertical]>af-tabs-trigger::after{top:0;bottom:0;right:-4px;width:2px}
+af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]::after{opacity:1}
 af-tabs-content{flex:1;outline:none}
 af-tabs-content[hidden]{display:none!important}
 `;

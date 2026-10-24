@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { AfTabs, registerTabs } from './tabs';
+const preUpgradeHost = document.createElement('div');
+preUpgradeHost.innerHTML = '<af-tabs><af-tabs-list><af-tabs-trigger id="authored-tab" value="a">A</af-tabs-trigger><af-tabs-trigger id="authored-tab" value="b">B</af-tabs-trigger></af-tabs-list><af-tabs-content value="b">B</af-tabs-content></af-tabs>';
+const preUpgradeRoot = preUpgradeHost.firstElementChild as AfTabs;
+Object.defineProperty(preUpgradeRoot, 'value', {value:'b',writable:true,configurable:true});
 registerTabs();
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
@@ -86,6 +90,34 @@ describe('native authored tabs', () => {
     const canceled = new KeyboardEvent('keydown', {key:'Home', bubbles:true, cancelable:true});
     canceled.preventDefault(); triggers[1]!.dispatchEvent(canceled);
     expect(document.activeElement).toBe(triggers[1]);
+  });
+  it('moves the controlled Tab entry to selection outside the list, while retaining live manual focus', () => {
+    const {root,triggers} = fixture('value="a" activation-mode="manual"');
+    root.value = 'b'; expect(triggers[1]!.tabIndex).toBe(0);
+    triggers[0]!.focus(); root.value = 'b'; expect(triggers[0]!.tabIndex).toBe(0);
+  });
+  it('supports inherited RTL and Home without a default selection', () => {
+    const {root,triggers,panels} = fixture();
+    expect(root.value).toBeUndefined(); expect(panels.every(panel => panel.hidden)).toBe(true);
+    root.parentElement!.dir = 'rtl'; triggers[0]!.focus();
+    triggers[0]!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
+    expect(root.value).toBe('b');
+    triggers[1]!.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+    expect(root.value).toBe('a'); expect(document.activeElement).toBe(triggers[0]);
+  });
+  it('honors a pre-upgrade value and preserves authored IDs even if duplicated', () => {
+    const root = preUpgradeRoot; document.body.append(preUpgradeHost);
+    expect(root.value).toBe('b'); expect(root.querySelector('af-tabs-content')!.hasAttribute('hidden')).toBe(false);
+    expect([...root.querySelectorAll('af-tabs-trigger')].map(node => node.id)).toEqual(['authored-tab','authored-tab']);
+  });
+  it('provides compact recipe sizing and vertical list layout through installed CSS', () => {
+    const {root,triggers} = fixture('default-value="a" orientation="vertical" variant="line"');
+    const list = root.querySelector('af-tabs-list')!;
+    expect(getComputedStyle(triggers[0]!).fontSize).toBe('14px');
+    expect(getComputedStyle(triggers[0]!).fontWeight).toBe('500');
+    expect(getComputedStyle(list).flexDirection).toBe('column');
+    root.setAttribute('orientation','horizontal');
+    expect(getComputedStyle(list).height).toBe('36px');
   });
   it('keeps nested instances independent', () => {
     const outer = fixture('default-value="a"'); const inner = fixture('default-value="a"');
