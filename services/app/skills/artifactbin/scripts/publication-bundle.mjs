@@ -4,6 +4,7 @@ import path from 'node:path';
 import {realpathSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {sendPublication} from './publish.mjs';
+import {publicationLocalReferences} from './preview-html.mjs';
 import {fileURLToPath} from 'node:url';
 const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.csv':'text/csv','.json':'application/json','.js':'text/javascript','.mjs':'text/javascript','.woff2':'font/woff2'};
 export async function prepareBundle({root,entry,server,manifest=[],mappings={}}){
@@ -17,11 +18,10 @@ export async function prepareBundle({root,entry,server,manifest=[],mappings={}})
   const canonical=await realpath(full);if(!canonical.startsWith(project+path.sep))throw Error('Dependency escapes project root');
   if(files.has(name))return;const bytes=await readFile(canonical);if(bytes.length>4_000_000||(size+=bytes.length)>16_000_000||files.size>=100)throw Error('Publication bundle limit exceeded');
   const contentType=types[path.extname(name).toLowerCase()]??'application/octet-stream';files.set(name,{path:name,contentType,base64:bytes.toString('base64')});
-  if(name===entry||contentType==='text/css'){
-   const source=contentType==='text/css'?bytes.toString('utf8'):bytes.toString('utf8').replace(/<!--[\s\S]*?-->/g,'').replace(/(<script\b[^>]*>)[\s\S]*?<\/script\s*>/gi,'$1</script>');
-   // Only static markup/CSS URLs are discovered. Dynamic script dependencies belong in manifest.
-   const pattern=contentType==='text/css'?/\/\*[\s\S]*?\*\/|url\(\s*["']?([^"'\s)]+)|@import\s+["']([^"']+)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/gi:/<(?:img|script|link|source|video|audio|iframe|object|embed|image|use)\b[^>]*?\b(?:src|href|poster)\s*=\s*["']([^"']+)["']/gi;
-   for(const match of source.matchAll(pattern)){const url=match[1]??match[2];if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(/[?#]/)[0])));if(!mappings[dep])await load(dep);}
+  if(name===entry||contentType==='text/css'||contentType==='text/javascript'){
+   const source=bytes.toString('utf8');
+   const urls=contentType==='text/css'?[...source.matchAll(/\/\*[\s\S]*?\*\/|url\(\s*["']?([^"'\s)]+)|@import\s+["']([^"']+)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/gi)].map(match=>match[1]??match[2]):publicationLocalReferences(source,contentType);
+   for(const url of urls){if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(/[?#]/)[0])));if(!mappings[dep])await load(dep);}
   }
  }
  entry=path.posix.normalize(entry);await load(entry);for(const name of manifest)await load(name);

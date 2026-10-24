@@ -21,11 +21,13 @@ node scripts/publication-bundle.mjs --send REQUEST.json
 ```
 
 Supply the selected server origin. The helper confines reads to the project root,
-refuses symlinks, and discovers static HTML URLs and CSS `url()` / `@import` paths.
+refuses symlinks, and discovers static HTML URLs, CSS `url()` / `@import` paths,
+and static or literal dynamic module imports, including inline module scripts.
 An optional fifth argument names a JSON file containing `manifest` (additional
 relative file paths) and `mappings` (previous returned dependency receipts keyed
-by path). Include JavaScript module dependencies in that explicit manifest; the
-server parses and rewrites literal module imports. Computed imports are refused.
+by path). List other runtime-loaded files in that explicit manifest. The server
+parses and rewrites literal module imports. Computed imports and cyclic dependency
+graphs are refused.
 The snapshot is bounded to 99 files, 4 MB per file and 16 MB total decoded bytes.
 Remote URLs, absolute server paths and `ref:` dataset links remain unchanged.
 The server validates existing dataset permissions as usual.

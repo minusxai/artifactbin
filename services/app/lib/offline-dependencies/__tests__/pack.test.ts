@@ -46,3 +46,14 @@ it('bounds HTML size, resource count, per-resource and aggregate bytes before pa
  const {OFFLINE_DEPENDENCY_LIMITS:l}=await import('..');
  const cases=[{html:'x'.repeat(l.htmlBytes+1),resources:[]},{html:'',resources:Array.from({length:l.resources+1},()=>file('./x','text/plain',''))},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.resourceBytes+1)}]},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.totalBytes)},{url:'./y',contentType:'image/png',bytes:new Uint8Array(1)}]}];for(const input of cases)await expect(packOfflineDependencies({...input,baseUrl})).rejects.toThrow(/limit/);
 });
+
+it('admits presentation query aliases only for the same immutable page asset',async()=>{
+ const admitted='/a/PAGE12/assets?dependency=CHUNK1&revision=2';
+ const script=(url:string)=>'<script type="module" src="'+url+'"></script>';
+ const resources=[file(admitted,'text/javascript','export const value=42;')];
+ const packed=await packOfflineDependencies({html:script(admitted+'&version=8&cache=1#export'),baseUrl,resources});
+ expect(packed.embeddedUrls).toHaveLength(1);expect(packed.html).toContain('data:text/javascript;base64,');
+ for(const denied of [admitted.replace('revision=2','revision=3'),admitted.replace('PAGE12','OTHER1'),admitted+'&revision=2','https://other.test'+admitted])await expect(packOfflineDependencies({html:script(denied),baseUrl,resources})).rejects.toThrow(/admitted/);
+ await expect(packOfflineDependencies({html:script('./plain.js?cache=1'),baseUrl,resources:[file('./plain.js','text/javascript','export const value=42;')]})).rejects.toThrow(/admitted/);
+ await expect(packOfflineDependencies({html:script(admitted),baseUrl,resources:[...resources,file(admitted+'&version=3','text/javascript','export const value=99;')]})).rejects.toThrow(/Conflicting/);
+});

@@ -8,7 +8,7 @@ import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
-interface Link {start:number;end:number;value:string;kind:'asset'|'dataset'}
+interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true}
 function normalized(value:string):string{
  if(!value||value.includes('\\')||value.includes('\0')||value.startsWith('/')||value.split('/').includes('..'))throw Error('Invalid bundle path: '+value);
  const result=path.posix.normalize(value);if(result==='.'||result.startsWith('../'))throw Error('Invalid bundle path: '+value);return result;
@@ -61,18 +61,18 @@ function links(source:string,css:boolean,js=false):Link[]{
     const raw=written.slice(equals+1),leading=raw.search(/\S/),quote=raw[leading];const start=loc.startOffset+equals+1+leading+(quote==='"'||quote==="'"?1:0);
     const end=quote==='"'||quote==="'"?source.indexOf(quote,start):loc.endOffset;
     if(attr.name==='style'){
-     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end});
+     for(const link of links(source.slice(start,end),true))result.push({...link,start:start+link.start,end:start+link.end,htmlAttribute:true});
     }else if(attr.name==='srcset'){
      const value=source.slice(start,end);let cursor=0;
      while(cursor<value.length){
       while(/[\s,]/.test(value[cursor]??'')&&cursor<value.length)cursor++;
       const begin=cursor;while(cursor<value.length&&!/\s/.test(value[cursor]!))cursor++;
       let stop=cursor;while(value[stop-1]===',')stop--;
-      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset'});
+      if(stop>begin)result.push({start:start+begin,end:start+stop,value:value.slice(begin,stop),kind:'asset',htmlAttribute:true});
       if(stop<cursor)continue;
       while(cursor<value.length&&value[cursor]!==',')cursor++;
      }
-    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset'});
+    }else result.push({start,end,value:attr.value,kind:dataset?'dataset':'asset',htmlAttribute:true});
    }
    if(node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   }
@@ -125,7 +125,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const edits=dependencies(source,owner,files.get(owner)?.contentType==='text/css');let result=source;
-  for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=owner===entryPath?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
+  for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
@@ -142,7 +142,7 @@ export function pinPublicationAssetUrls(source:string,pageId:string,version:numb
   if(url.pathname!==`/a/${pageId}/assets`||url.searchParams.getAll('dependency').length!==1)continue;
   url.searchParams.set('version',String(version));
   const address=url.pathname+url.search+url.hash;
-  const escaped=contentType==='text/html'?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
+  const escaped=link.htmlAttribute?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
   result=result.slice(0,link.start)+escaped+result.slice(link.end);
  }
  return result;

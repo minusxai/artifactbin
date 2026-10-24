@@ -1,5 +1,27 @@
 // The downloadable archive bundles this parser; installed previews need only Node.
 import {parse,parseFragment,serialize} from 'parse5';
+import {initSync,parse as parseImports} from 'es-module-lexer';
+initSync();
+/** Literal file references for publication snapshots; runtime-computed URLs need a manifest.
+ * Module imports must be literals, matching the server publication contract. */
+export function publicationLocalReferences(source,contentType){
+ const moduleReferences=text=>parseImports(text)[0].flatMap(item=>{
+  if(item.d===-2)return [];
+  if(item.n===undefined)throw Error('Computed module imports cannot be discovered; use literal imports. Other runtime-loaded files must be listed in the publication manifest.');
+  return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[];
+ });
+ if(contentType==='text/javascript')return moduleReferences(source);
+ const references=[];
+ const walk=node=>{
+  if(node.tagName){
+   if(['img','script','link','source','video','audio','iframe','object','embed','image','use'].includes(node.tagName))for(const attr of node.attrs)if(['src','href','poster'].includes(attr.name))references.push(attr.value);
+   if(node.tagName==='script'&&node.attrs.some(attr=>attr.name==='type'&&attr.value==='module'))references.push(...moduleReferences(node.childNodes.map(child=>child.value??'').join('')));
+   if(node.tagName==='template'&&node.content)walk(node.content);
+  }
+  for(const child of node.childNodes??[])walk(child);
+ };
+ walk(parse(source));return references;
+}
 export function previewHtml(source,notice,localConfig){
  const document=parse(source);
  const html=document.childNodes.find(node=>node.nodeName==='html');
