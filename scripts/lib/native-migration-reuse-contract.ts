@@ -6,4 +6,6 @@ export interface NativeSourceCaptureReuse {
  candidateInputSha256:string;
  baselineProofSha256:string;
  baselineCapturesSha256:string;
+ /** Extra target-only behavior checks, tied to the independently recorded target probe. */
+ additionalCandidateAssertions?:{probeSha256:string;ids:readonly string[]};
 }

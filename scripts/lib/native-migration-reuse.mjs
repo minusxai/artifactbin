@@ -20,10 +20,11 @@ export async function compareReusedNativeMigrationPilot({baselineDirectory,candi
   return fixtureHash;
  };
  validate(oldInput,oldProof,baseline,'jsx');const nextHash=validate(newInput,candidateProof,candidate,'html');
+ const extra=reuse.additionalCandidateAssertions;if(extra&&(extra.probeSha256!==newInput.probe?.sha256||!Array.isArray(extra.ids)||!extra.ids.length||new Set(extra.ids).size!==extra.ids.length||extra.ids.some(id=>typeof id!=='string'||!id.trim())))throw Error('pilot-reuse-candidate-assertions');
  for(const key of ['key','rowSha256','sourceSha256','documentSha256','canonicalSha256','recoverySha256','harnessSha256','originalRevision','theme','viewports','states'])if(digest(oldInput[key])!==digest(newInput[key]))throw Error('pilot-reuse-source-changed');
  // Only the derived target-proposal fixture binding changes, in memory. Original bytes stay untouched.
  const results=await compareBrowserBaselines({baseline:baseline.map(capture=>({...capture,fixtureHash:nextHash})),candidate,baselineDirectory,candidateDirectory,output});
  const issues=[...oldProof.issues,...candidateProof.issues,...pilotComparisonIssues(results,candidateProof.control)];
- const report={format:'native-migration-pilot-reused-source-comparison-v1',passed:issues.length===0,sourceCaptureReused:true,sourceCaptureRerun:false,reuse,baselineRevision:oldProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,previousProposalSha256:oldProof.bundleManifestSha256,newProposalSha256:candidateProof.bundleManifestSha256,pairedStates:results.length,control:candidateProof.control,issues,results};
+ const report={format:'native-migration-pilot-reused-source-comparison-v1',passed:issues.length===0,sourceCaptureReused:true,sourceCaptureRerun:false,originalProbeSha256:oldInput.probe?.sha256,candidateProbeSha256:newInput.probe?.sha256,additionalCandidateAssertions:extra?.ids??[],reuse,baselineRevision:oldProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,previousProposalSha256:oldProof.bundleManifestSha256,newProposalSha256:candidateProof.bundleManifestSha256,pairedStates:results.length,control:candidateProof.control,issues,results};
  await writeFile(path.join(output,'migration-pilot-comparison.json'),JSON.stringify(report,null,2),{mode:0o600});return report;
 }
