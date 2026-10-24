@@ -9,9 +9,9 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const cells=new WeakMap();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
- const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
- const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
- const childScope=parent=>{const child={active:true,cleanups:new Set()},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
+ const rootScope={active:true,cleanups:new Set(),completion:{active:true},ownsCompletion:true},scopes=new Set([rootScope]);
+ const disposeScope=scope=>{if(scope.ownsCompletion)scope.completion.active=false;if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
+ const childScope=(parent,retained=false)=>{const child={active:true,cleanups:new Set(),completion:retained?parent.completion:{active:true},ownsCompletion:!retained},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
  const clearCondition=host=>{const branch=conditions.get(host);if(branch?.scope){disposeScope(branch.scope);branch.scope=null;}host.replaceChildren();};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
@@ -86,7 +86,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
    }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}
-    const yes=!!read(target.expression,row);if(yes){if(!branch.scope?.active)branch.scope=childScope(scope);if(!host.childNodes.length)host.append(...branch.nodes);render(host,row,{...context,scope:branch.scope},target.sourceNode);}else clearCondition(host);
+    const yes=!!read(target.expression,row);if(yes){if(!branch.scope?.active)branch.scope=childScope(scope,true);if(!host.childNodes.length)host.append(...branch.nodes);render(host,row,{...context,scope:branch.scope},target.sourceNode);}else clearCondition(host);
    }
    if(target.kind==='loop'){
     const rows=read(target.expression,row)??[],durable=target.identity.keyBy!==null;if(!Array.isArray(rows)||rows.length>10000)throw Error('Repeat source must be bounded rows');
@@ -104,10 +104,10 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
      if(disposed||!scope.active)return;
      if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(request&&plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))throw Error('Viewer changed while a mutation outcome is unresolved');if(!request){const snapshot={};for(const field of mutation.values){const value=field.source?.kind==='row'?own(action.row,field.source.field):own(values,field.name);if(!scalar(value)||value===null&&field.nullable===false||value!==null&&typeof value!==({date:'string',timestamp:'string',user:'string'}[field.type]||field.type))throw Error('Invalid mutation argument');snapshot[field.name]=value;}request={requestId:requestId(),values:snapshot};pending.set(host,request);requestOwners.set(request,plan.viewer?viewerId:undefined);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});
       if(result.errors?.length)throw Error('Mutation failed; local values were retained');const receipt=at(result.data,mutation.outcomePath);if(!receipt||receipt.requestId!==request.requestId||!['committed','rejected','unknown'].includes(receipt.outcome))throw Error('Mutation outcome unavailable; local values were retained');
-      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||!scope.active||plan.viewer&&requestOwners.get(request)!==viewerId)return;
+      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||!scope.completion.active||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return;
       if(receipt.outcome==='rejected')throw Error('Mutation rejected; local values were retained');
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
-      if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.active)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
+      if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.completion.active||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
      }
     }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context?.ids&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
     host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);if(disposed)pending.delete(host);topActions.delete(action);actions.delete(host);});

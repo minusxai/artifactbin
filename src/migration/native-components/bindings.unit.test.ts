@@ -1538,3 +1538,12 @@ test('Select query options preserve retained first-column value and second-colum
  port.remotes[0]!.next({data:{ops:{evaluate:{tables:[{name:'choices',error:null,columns:[{name:'key',type:'number'},{name:'label',type:'string'}],rows:[{cells:[{isNull:false,number:7},{isNull:false,text:'Seven'}]},{cells:[{isNull:true},{isNull:true}]}]}]}}}});assert.deepEqual(host.options,[{value:'7',label:'Seven'},{value:'',label:''}]);
  port.remotes[0]!.next({errors:[{message:'revoked'}]});assert.deepEqual(host.options,[]);assert.equal(port.state.filter,null);assert.equal(port.remotes.length,1);await runtime.close();
 });
+
+for(const changed of [false,true])test(`committed action resets unchanged local values after its conditional branch disappears (edited=${changed})`,async()=>{
+ const branch=el('branch','div',{}, {kind:'and',test:{kind:'signal',name:'open'}});if(branch.type!=='element')throw Error();branch.children=[el('save','Button',{run:'$save'})];
+ const source=input([branch],[{kind:'condition',sourceNode:'branch',afId:'branch',templateId:'book'},{kind:'action',sourceNode:'save',afId:'save'}]);source.analysis.flow.mutations=[{name:'save',start:0,end:1}];source.mutations=[{name:'save',namespace:'records',document:'mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}',values:[{name:'filter',type:'string',nullable:true}],outcomePath:['records','run'],reset:['filter']}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('div',{'data-af-id':'branch'});doc.body.append(host);doc.template('book',[new Element('button',{'data-af-id':'save'})]);
+ const port=client({open:true,filter:'submitted'});let request:any,release:(value:unknown)=>void=()=>{};port.mutate=async(options:any)=>{request=options.variables;return new Promise(resolve=>release=resolve);};const running=await execute(result.authorJs,port,doc);
+ try{const pending=host.children[0]!.click();await port.updateQuery({},value=>({...value,open:false,...(changed?{filter:'edited'}:{})}));assert.equal(host.children.length,0);release({data:{records:{run:{requestId:request.requestId,outcome:'committed',reset:['filter']}}}});await pending;assert.equal(port.state.filter,changed?'edited':null);}finally{await running.close();}
+});
