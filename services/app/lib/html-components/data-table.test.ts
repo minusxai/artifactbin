@@ -3,6 +3,21 @@ import { afterEach, expect, it, vi } from "vitest";
 import { STORY_TABLE_CSS } from "@/lib/page-styles/chrome-css";
 import { AfDataTable, registerDataTable } from "./data-table";
 registerDataTable();
+it("preserves caller column header identities through sorting and removes stale mappings", () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.columnIdentities = { value: { afId: "source-column", id: "authored-column" } };
+  el.data = { columns: [{ name: "value", type: "number" }], rows: [{ value: 2 }, { value: 1 }] };
+  document.body.append(el);
+  const header = el.querySelector("th")!;
+  expect(header.id).toBe("authored-column");
+  expect(header.getAttribute("data-af-id")).toBe("source-column");
+  (header.firstElementChild as HTMLButtonElement).click();
+  expect(el.querySelector("th")).toBe(header);
+  expect(header.getAttribute("data-af-id")).toBe("source-column");
+  el.columnIdentities = {};
+  expect(header.hasAttribute("id")).toBe(false);
+  expect(header.hasAttribute("data-af-id")).toBe(false);
+});
 afterEach(() => {
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());

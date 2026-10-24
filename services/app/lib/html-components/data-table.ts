@@ -21,9 +21,14 @@ import {
   type TableCellRenderer,
   type TableTemplate,
 } from "./table-model";
+export interface TableColumnIdentity {
+  afId: string;
+  id?: string;
+}
 interface DataTableContract {
   data: TableData;
   columns: unknown;
+  columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
   sort: SortSpec | null;
   transpose: boolean;
   header?: string;
@@ -57,6 +62,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   ];
   private value = empty();
   private specs: unknown = null;
+  private headerIdentities: Readonly<Record<string, TableColumnIdentity>> = {};
   private order: SortSpec | null = null;
   private renderers: Record<string, TableCellRenderer> = {};
   private templateList: TableTemplate[] = [];
@@ -99,6 +105,22 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   }
   set columns(v: unknown) {
     this.specs = v;
+    this.render();
+  }
+  get columnIdentities() {
+    return this.headerIdentities;
+  }
+  set columnIdentities(value: Readonly<Record<string, TableColumnIdentity>>) {
+    const ids = new Set<string>(), afIds = new Set<string>();
+    const valid = (id: unknown): id is string => typeof id === "string" && !!id && id.length <= 4096 && !/[\s\u0000-\u001f]/.test(id);
+    const next: Record<string, TableColumnIdentity> = Object.create(null);
+    for (const [column, identity] of Object.entries(value)) {
+      if (!column || !identity || !valid(identity.afId) || afIds.has(identity.afId) || identity.id !== undefined && (!valid(identity.id) || ids.has(identity.id))) throw Error("Invalid column identity");
+      afIds.add(identity.afId);
+      if (identity.id !== undefined) ids.add(identity.id);
+      next[column] = Object.freeze({ ...identity });
+    }
+    this.headerIdentities = Object.freeze(next);
     this.render();
   }
   get sort() {
@@ -195,6 +217,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     for (const key of [
       "data",
       "columns",
+      "columnIdentities",
       "sort",
       "source",
       "cellRenderers",
@@ -493,6 +516,11 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         this.heads.set(column.col, th);
       }
       const button = th.firstElementChild!;
+      const identity = this.columnIdentities[column.col];
+      if (identity) th.setAttribute("data-af-id", identity.afId);
+      else th.removeAttribute("data-af-id");
+      if (identity?.id) th.id = identity.id;
+      else th.removeAttribute("id");
       button.textContent = column.title;
       if (this.sort?.col === column.col) {
         const indicator = document.createElement("span");
