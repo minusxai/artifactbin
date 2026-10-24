@@ -1,0 +1,138 @@
+export type AfSelectScalar = string | number | boolean;
+export type AfSelectValue = AfSelectScalar | null | AfSelectScalar[];
+export type AfSelectOption = AfSelectScalar | { value: AfSelectScalar; label: string };
+export interface AfSelectChangeDetail { value: AfSelectValue }
+export interface AfSelectContract {
+  options: AfSelectOption[];
+  value: AfSelectValue;
+  defaultValue: AfSelectValue;
+  multiple: boolean;
+  disabled: boolean;
+  allowCreate: boolean;
+}
+
+let nextSelectId = 0;
+
+/** Light DOM picker. Controlled values report intent; uncontrolled values commit accepted intent. */
+export class AfSelect extends HTMLElement implements AfSelectContract {
+  static observedAttributes = ['options', 'value', 'default-value', 'multiple', 'disabled', 'allow-create', 'label', 'aria-label', 'placeholder'];
+  private readonly popupId = `af-select-${++nextSelectId}`;
+  private suppliedOptions?: AfSelectOption[];
+  private suppliedValue?: AfSelectValue;
+  private controlled = false;
+  private state: AfSelectValue = null;
+  private initial = false;
+  private expanded = false;
+  private draft: AfSelectScalar[] = [];
+  private query = '';
+  private highlight = -1;
+  private trigger?: HTMLButtonElement;
+  private labelNode?: HTMLSpanElement;
+  private popup?: HTMLDivElement;
+  private search?: HTMLInputElement;
+  private list?: HTMLDivElement;
+  private done?: HTMLButtonElement;
+  get options(): AfSelectOption[] { return this.suppliedOptions ?? this.json<AfSelectOption[]>('options', []); }
+  set options(value: AfSelectOption[]) { this.suppliedOptions = value; this.update(); }
+  get value(): AfSelectValue { return this.controlled ? this.suppliedValue ?? null : this.hasAttribute('value') ? this.json<AfSelectValue>('value', this.getAttribute('value')) : this.state; }
+  set value(value: AfSelectValue) { this.controlled = true; this.suppliedValue = value; this.update(); }
+  get defaultValue(): AfSelectValue { return this.json<AfSelectValue>('default-value', this.multiple ? [] : null); }
+  set defaultValue(value: AfSelectValue) { this.setAttribute('default-value', JSON.stringify(value)); }
+  get multiple(): boolean { return this.hasAttribute('multiple'); }
+  set multiple(value: boolean) { this.toggleAttribute('multiple', value); }
+  get disabled(): boolean { return this.hasAttribute('disabled'); }
+  set disabled(value: boolean) { this.toggleAttribute('disabled', value); }
+  get allowCreate(): boolean { return this.hasAttribute('allow-create'); }
+  set allowCreate(value: boolean) { this.toggleAttribute('allow-create', value); }
+  private json<T>(name: string, fallback: T): T { try { const raw = this.getAttribute(name); return raw === null ? fallback : JSON.parse(raw) as T; } catch { return fallback; } }
+  connectedCallback(): void {
+    for (const name of ['options', 'value', 'defaultValue', 'multiple', 'disabled', 'allowCreate'] as const) {
+      if (Object.hasOwn(this, name)) { const value = this[name]; delete (this as unknown as Record<string, unknown>)[name]; (this as unknown as Record<string, unknown>)[name] = value; }
+    }
+    if (!this.initial) { this.state = this.defaultValue; this.initial = true; }
+    this.structure(); this.update();
+    this.ownerDocument.addEventListener('pointerdown', this.outside);
+    this.ownerDocument.addEventListener('focusin', this.outside);
+  }
+  disconnectedCallback(): void { this.close(false); this.ownerDocument.removeEventListener('pointerdown', this.outside); this.ownerDocument.removeEventListener('focusin', this.outside); }
+  attributeChangedCallback(): void { if (this.disabled) this.close(false); this.update(); }
+  private outside = (event: Event): void => { if (!event.composedPath().includes(this)) this.close(true); };
+  private entries(): {value: AfSelectScalar | null; label: string}[] {
+    const entries = this.options.map(option => typeof option === 'object' ? option : { value: option, label: String(option) });
+    for (const value of this.draft) if (!entries.some(option => option.value === value)) entries.push({ value, label: String(value) });
+    return [...(!this.multiple && this.hasAttribute('placeholder') ? [{ value: null, label: this.getAttribute('placeholder')! }] : []), ...entries];
+  }
+  private filtered() { return this.entries().filter(option => option.label.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase())); }
+  private canCreate(): boolean { return this.multiple && this.allowCreate && !!this.query.trim() && !this.entries().some(option => String(option.value) === this.query.trim()); }
+  private structure(): void {
+    if (this.trigger) return;
+    const doc = this.ownerDocument;
+    this.labelNode = doc.createElement('span'); this.labelNode.className = 'af-select-label';
+    this.trigger = doc.createElement('button'); this.trigger.type = 'button'; this.trigger.className = 'af-select-trigger'; this.trigger.setAttribute('aria-haspopup', 'listbox');
+    this.popup = doc.createElement('div'); this.popup.dataset.popup = ''; this.popup.className = 'af-select-popup';
+    this.search = doc.createElement('input'); this.search.type = 'text'; this.search.setAttribute('role', 'searchbox'); this.search.placeholder = 'Type to filter…';
+    this.list = doc.createElement('div'); this.list.setAttribute('role', 'listbox'); this.list.id = `${this.popupId}-list`; this.search.setAttribute('aria-controls', this.list.id); this.trigger.setAttribute('aria-controls', this.list.id);
+    this.done = doc.createElement('button'); this.done.type = 'button'; this.done.dataset.done = ''; this.done.textContent = 'Done';
+    this.popup.append(this.search, this.list, this.done); this.prepend(this.labelNode, this.trigger, this.popup);
+    this.trigger.addEventListener('click', () => this.expanded ? this.close(true, true) : this.open());
+    this.trigger.addEventListener('keydown', event => {
+      if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); this.open(); this.highlight = event.key === 'ArrowDown' ? 0 : this.filtered().length - 1; this.renderOptions(); }
+      else if (event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); this.open(); this.query += event.key; this.highlight = 0; this.update(); }
+    });
+    this.search.addEventListener('input', () => { this.query = this.search!.value; this.highlight = 0; this.renderOptions(); });
+    this.addEventListener('keydown', event => {
+      if (!this.expanded) return;
+      if (event.key === 'Escape') { event.preventDefault(); this.close(false, true); }
+      if (event.target !== this.search) return;
+      const count = this.filtered().length + Number(this.canCreate());
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault(); this.highlight = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1 : Math.max(0, Math.min(count - 1, this.highlight + (event.key === 'ArrowDown' ? 1 : -1))); this.renderOptions();
+      } else if (event.key === 'Enter') { event.preventDefault(); const option = this.filtered()[this.highlight]; if (option) this.choose(option.value); else if (this.canCreate()) this.choose(this.query.trim()); }
+    });
+    this.done.addEventListener('click', () => this.close(true, true));
+  }
+  private open(): void { if (this.disabled || this.expanded) return; this.expanded = true; this.draft = Array.isArray(this.value) ? [...this.value] : []; this.query = ''; this.highlight = -1; this.update(); this.search?.focus(); }
+  private close(commit: boolean, focus = false): void { if (!this.expanded) return; this.expanded = false; if (commit && this.multiple && !this.disabled) this.commit([...this.draft]); this.query = ''; this.update(); if (focus) this.trigger?.focus(); }
+  private commit(value: AfSelectValue): void {
+    if (!this.dispatchEvent(new CustomEvent<AfSelectChangeDetail>('af-change', { detail: { value }, bubbles: true, composed: true, cancelable: true }))) return;
+    if (!this.controlled && !this.hasAttribute('value')) this.state = value;
+  }
+  private choose(value: AfSelectScalar | null): void {
+    if (this.disabled) return;
+    if (this.multiple && value !== null) { this.draft = this.draft.includes(value) ? this.draft.filter(item => item !== value) : [...this.draft, value]; this.query = ''; this.highlight = -1; this.update(); this.search?.focus(); }
+    else { this.commit(value); this.close(false, true); }
+  }
+  private renderOptions(): void {
+    if (!this.list) return;
+    this.list.replaceChildren();
+    this.search?.removeAttribute('aria-activedescendant');
+    const entries = this.filtered();
+    const add = (label: string, value: AfSelectScalar | null, index: number, create = false) => {
+      const button = this.ownerDocument.createElement('button'); button.type = 'button'; button.setAttribute('role', 'option'); button.tabIndex = -1; button.textContent = label;
+      button.setAttribute('aria-selected', String(!create && (this.multiple ? this.draft.includes(value as AfSelectScalar) : this.value === value)));
+      button.id = `${this.popupId}-option-${index}`;
+      if (index === this.highlight) this.search?.setAttribute('aria-activedescendant', button.id);
+      button.dataset.highlighted = String(index === this.highlight); if (create) button.dataset.create = '';
+      button.addEventListener('mousedown', event => event.preventDefault()); button.addEventListener('click', () => this.choose(value));
+      this.list!.append(button);
+    };
+    entries.forEach((entry, index) => add(entry.label, entry.value, index));
+    if (this.canCreate()) add(`Create “${this.query.trim()}”`, this.query.trim(), entries.length, true);
+    else if (!entries.length) { const status = this.ownerDocument.createElement('div'); status.setAttribute('role', 'status'); status.textContent = 'No matches'; this.list.append(status); }
+  }
+  private update(): void {
+    if (!this.trigger || !this.labelNode || !this.popup || !this.search || !this.list || !this.done) return;
+    const label = this.getAttribute('label') ?? ''; const name = this.getAttribute('aria-label') || label;
+    this.labelNode.textContent = label; this.labelNode.hidden = !label;
+    this.trigger.setAttribute('aria-label', name); this.trigger.setAttribute('aria-expanded', String(this.expanded)); this.trigger.disabled = this.disabled;
+    const values = Array.isArray(this.value) ? this.value : this.value === null ? [] : [this.value];
+    this.trigger.textContent = values.map(value => this.entries().find(entry => entry.value === value)?.label ?? String(value)).join(', ') || this.getAttribute('placeholder') || 'All';
+    this.popup.hidden = !this.expanded; this.search.value = this.query; this.search.setAttribute('aria-label', name ? `Search ${name}` : 'Search options');
+    this.list.setAttribute('aria-label', name); this.list.setAttribute('aria-multiselectable', String(this.multiple)); this.done.hidden = !this.multiple; this.renderOptions();
+  }
+}
+const styles = `af-select{display:inline-flex;position:relative;flex-direction:column;gap:.375rem;color:var(--foreground,light-dark(#222,#eee));font:inherit}af-select [hidden]{display:none!important}af-select .af-select-label{font-size:11px;color:var(--muted-foreground,light-dark(#555,#aaa))}af-select button,af-select input{font:inherit;color:inherit;border:1px solid var(--input,light-dark(#ddd,#555));background:var(--background,light-dark(#fff,#222));border-radius:4px;padding:.5rem .75rem}af-select button{cursor:pointer}af-select button:disabled{opacity:.5;cursor:not-allowed}af-select button:focus-visible,af-select input:focus-visible{outline:2px solid var(--ring,light-dark(#777,#aaa));outline-offset:2px}af-select .af-select-trigger{min-width:9rem;text-align:left}af-select .af-select-popup{position:absolute;top:100%;left:0;min-width:100%;z-index:50;padding:.375rem;border:1px solid var(--border,light-dark(#ddd,#555));background:var(--popover,var(--background,light-dark(#fff,#222)));color:var(--popover-foreground,var(--foreground,light-dark(#222,#eee)));border-radius:6px;box-shadow:0 4px 16px #0002}af-select [role=listbox]{max-height:14rem;overflow:auto}af-select [role=option]{display:block;width:100%;text-align:left;border:0}af-select [role=option][aria-selected=true]{font-weight:600}af-select [role=option]:hover,af-select [data-highlighted=true]{background:var(--accent,light-dark(#eee,#444));color:var(--accent-foreground,var(--foreground,light-dark(#222,#eee)))}af-select [role=status]{padding:.75rem;color:var(--muted-foreground,light-dark(#555,#aaa))}`;
+export function registerSelect(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-select-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-select-styles', ''); style.textContent = styles; document.head.append(style); }
+  if (!registry.get('af-select')) registry.define('af-select', AfSelect);
+}
