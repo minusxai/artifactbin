@@ -49,6 +49,7 @@ afterEach(() => {
   state.deck = [];
   state.maps = [];
   state.fail = false;
+  document.body.removeAttribute("style");
   document.body.replaceChildren();
 });
 it("renders offline deck layers, controls and reset without any basemap", () => {
@@ -85,7 +86,10 @@ it("renders offline deck layers, controls and reset without any basemap", () => 
   expect(host.children).toHaveLength(0);
 });
 it("renders compact map controls and a labeled gradient legend", () => {
-  const host = document.createElement("div");
+  const host = document.createElement("af-deck-gl");
+  host.style.setProperty("--radius-md", "14px");
+  host.style.setProperty("--radius-sm", "6px");
+  document.body.style.fontFamily = "monospace";
   document.body.append(host);
   mountDeckGL(host, {
     data: [
@@ -131,6 +135,22 @@ it("renders compact map controls and a labeled gradient legend", () => {
   expect(bar?.style.background).toContain("linear-gradient");
   expect(getComputedStyle(bar!).height).toBe("8px");
   expect(getComputedStyle(bar!).width).toBe("96px");
+
+  const chromeCss = host.querySelector('figure[part="map"] style')?.textContent ?? "";
+  expect(host.style.getPropertyValue("--radius-md")).toBe("14px");
+  expect(host.style.getPropertyValue("--radius-sm")).toBe("6px");
+  expect(chromeCss).toContain("border-radius:var(--radius-md,calc(var(--radius,.625rem) - .125rem))");
+  expect(chromeCss).toContain("border-radius:var(--radius-sm,calc(var(--radius,.625rem) - .25rem))");
+  expect(chromeCss).toContain("font-family:inherit");
+  expect(chromeCss).not.toContain("var(--font-body");
+
+  const unrelated = document.createElement("figure");
+  unrelated.setAttribute("part", "map");
+  const unrelatedControls = document.createElement("div");
+  unrelatedControls.setAttribute("data-af-deck-controls", "");
+  unrelated.append(unrelatedControls);
+  document.body.append(unrelated);
+  expect(getComputedStyle(unrelatedControls).position).toBe("static");
 });
 it("keeps deck view with an accessible explanation when street WebGL2 is unavailable", () => {
   state.fail = true;
