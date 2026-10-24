@@ -370,7 +370,8 @@ test("emitted query subscriptions cancel stale responses and keyed rows keep sup
         identity: {
           owner: "loop",
           keyBy: "id",
-          templateIds: ["row-title"],
+          templateIds: ["row-title", "row-label"],
+          domIds: [{ domId: "authored-title", templateAfId: "row-title" }],
           encoding: "archived-instance-v1",
         },
       },
@@ -394,7 +395,12 @@ test("emitted query subscriptions cancel stale responses and keyed rows keep sup
     host = new Element("div", { "data-af-id": "loop" });
   doc.body.append(host);
   doc.template("row-template", [
-    new Element("span", { "data-af-id": "row-title" }),
+    new Element("span", { "data-af-id": "row-title", id: "authored-title" }),
+    new Element("label", {
+      "data-af-id": "row-label",
+      "aria-labelledby": "authored-title",
+      for: "authored-title",
+    }),
   ]);
   const port = client({ open: false, filter: null }),
     runtime = await execute(result.authorJs, port, doc);
@@ -404,6 +410,10 @@ test("emitted query subscriptions cancel stale responses and keyed rows keep sup
     const row = host.children[0]!,
       id = row.children[0]!.getAttribute("data-af-id");
     assert.match(id!, /^mx-instance-/);
+    const domId = row.children[0]!.getAttribute("id");
+    assert.notEqual(domId, "authored-title");
+    assert.equal(row.children[1]!.getAttribute("aria-labelledby"), domId);
+    assert.equal(row.children[1]!.getAttribute("for"), domId);
     assert.equal(row.children[0]!.textContent, "Visible A");
     await port.updateQuery({}, (v) => ({ ...v, filter: "next" }));
     assert.equal(port.remotes[0]!.stopped, true);

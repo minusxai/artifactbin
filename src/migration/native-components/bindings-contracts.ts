@@ -43,6 +43,7 @@ export type NativeBindingTarget = NativeBindingIdentity &
           owner: string;
           keyBy: string;
           templateIds: readonly string[];
+          domIds?: readonly { domId: string; templateAfId: string }[];
           encoding: "archived-instance-v1";
         };
       }

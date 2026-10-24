@@ -331,7 +331,18 @@ export function emitNativeBindings(
         key.value.json !== target.identity.keyBy ||
         !target.identity.templateIds.length ||
         new Set(target.identity.templateIds).size !==
-          target.identity.templateIds.length
+          target.identity.templateIds.length ||
+        target.identity.templateIds.some(
+          (id) => typeof id !== "string" || !id,
+        ) ||
+        (target.identity.domIds ?? []).some(
+          (entry) =>
+            !entry.domId ||
+            /\s/.test(entry.domId) ||
+            !target.identity.templateIds.includes(entry.templateAfId),
+        ) ||
+        new Set((target.identity.domIds ?? []).map((entry) => entry.domId))
+          .size !== (target.identity.domIds ?? []).length
       )
         block(node.graphKey, "missing-loop-identity-plan");
     } else if (target.kind === "action") {
