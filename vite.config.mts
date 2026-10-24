@@ -71,6 +71,8 @@ const READER_SHARED = [
   'solid/document/DocumentChrome.tsx', 'solid/document/DocumentBarActions.tsx',
   'solid/document/comment-access.ts', 'solid/document/reactions.ts',
   'solid/document/create-reader-presence.ts',
+  'lib/html-presence/preferences.ts', 'lib/html-presence/reader-session.ts',
+  'lib/html-presence/model.ts', 'lib/html-presence/contract.ts',
   'solid/components/TrustedUi.tsx', 'solid/editor/create-live-artifact.ts', 'solid/lib/document-navigation.ts',
   'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts',
   'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/serving/artifact-pwa.ts',
