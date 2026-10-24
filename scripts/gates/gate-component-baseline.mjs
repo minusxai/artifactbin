@@ -46,6 +46,14 @@ if(input.mode==='publish') {
   await publishReaderManifest(input);
   process.exit(0);
 }
+if(input.mode==='upload') {
+ const {runUploadBaseline}=await import('../lib/component-upload-baseline.mjs');
+ const {signInAccount}=await import('./lib/cli-connection.mjs');
+ const browser=await launchChromium();
+ try{await runUploadBaseline({...input,base:process.argv[2]||input.base||'http://localhost:3030',browser,connectAgent,signInAccount});}
+ finally{await browser.close();}
+ process.exit(0);
+}
 if(input.mode==='compare') {
   const [baseline,candidate]=await Promise.all([readFile(input.baseline,'utf8').then(JSON.parse),readFile(input.candidate,'utf8').then(JSON.parse)]);
   const results=await compareBrowserBaselines({...input,baseline,candidate});
