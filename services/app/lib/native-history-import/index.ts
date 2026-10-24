@@ -13,6 +13,13 @@ import {
 } from "@/lib/registered-page-mutations";
 import type { NativeHistoryImport, NativeImportRelations } from "./contracts";
 const fail = () => Error("native_import_invalid");
+/** Final lifetime reservation state, including identities absent from authored HTML. */
+interface SourceIdentity {
+  source_id: string;
+  provenance: "authored";
+  first_version: number;
+  retired_version: number | null;
+}
 /** Trusted offline transaction body. Caller MUST supply one transaction for this writer AND relation projection.
  * It opens no connection, accepts no HTTP input, and never creates accounts or invents an ACL. */
 export async function writeNativeHistory(
@@ -47,7 +54,7 @@ export async function writeNativeHistory(
        !Object.hasOwn(relations.headMetadata, "nativeRelationContext"))) throw fail();
   const allocated = new Set<string>();
   let next = 1;
-  const identities = new Map<string, { source_id: string; provenance: string; first_version: number; retired_version: number | null }>();
+  const identities = new Map<string, SourceIdentity>();
   for (const r of revisions) {
     const canonical = canonicalizeHtmlPage(r.page.html, {
       previousHtml: r.page.html,
@@ -243,10 +250,6 @@ export async function writeNativeHistory(
       shares: input.shares,
     },
   );
-  await tx.query(
-    "UPDATE artifact_source_ids SET first_version=$2 WHERE artifact_id=$1",
-    [input.pageId, first.page.version],
-  );
   for (const r of revisions) {
     const meta = revisionMeta(r);
     await tx.query(
@@ -291,11 +294,6 @@ export async function writeNativeHistory(
         input.owner.userId,
         prepared,
       );
-    for (const id of r.ledger.allocatedIds)
-      await tx.query(
-        "INSERT INTO artifact_source_ids(artifact_id,source_id,provenance,first_version) VALUES($1,$2,'authored',$3) ON CONFLICT DO NOTHING",
-        [input.pageId, id, r.page.version],
-      );
   }
   // Head reserves every historical ID, including IDs absent from current authored HTML.
   await tx.query(
@@ -306,9 +304,16 @@ export async function writeNativeHistory(
       first.createdAt,
     ],
   );
-  for (const identity of identities.values()) await tx.query(
-    "UPDATE artifact_source_ids SET first_version=$3,retired_version=$4 WHERE artifact_id=$1 AND source_id=$2",
-    [input.pageId, identity.source_id, identity.first_version, identity.retired_version],
+  // The complete lifetime state was computed before any writes. Reconcile genesis
+  // reservations and absent historical IDs together, retaining stored provenance
+  // so the exact readback still detects an incompatible prior reservation.
+  await tx.query(
+    `INSERT INTO artifact_source_ids(artifact_id,source_id,provenance,first_version,retired_version)
+     SELECT $1, expected.source_id, expected.provenance, expected.first_version, expected.retired_version
+     FROM jsonb_to_recordset($2::jsonb) AS expected(source_id text,provenance text,first_version integer,retired_version integer)
+     ON CONFLICT (artifact_id,source_id) DO UPDATE
+     SET first_version=EXCLUDED.first_version, retired_version=EXCLUDED.retired_version`,
+    [input.pageId, JSON.stringify([...identities.values()])],
   );
   await tx.query(
     "UPDATE artifact_edits SET inserted=$2,span_end=$3,document_state=jsonb_build_object('version',$4::integer) WHERE artifact_id=$1",

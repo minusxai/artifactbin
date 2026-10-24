@@ -1,6 +1,7 @@
 import { it, expect } from "vitest";
 import { useAppHarness, mintAccountToken } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
+import type { Queryable } from "@/lib/platform/db";
 import { identityForUser } from "@/lib/accounts";
 import { readHtmlPage } from "@/lib/html-publication";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
@@ -19,6 +20,34 @@ import { listAnnotationsFor } from "@/lib/annotations/store";
 import { prepareNativeHistoryRelations } from "../relations";
 import { importNativeHistory, writeNativeHistory } from "../index";
 useAppHarness();
+it("writes a large latest-only lifetime ledger in bounded statements and verifies every reservation on replay", async () => {
+  const {db,input} = await fixture();
+  const revision = structuredClone(input.revisions[1]!);
+  revision.page.version = 20;
+  revision.page.revision = "20";
+  revision.page.links = [];
+  revision.queries = [];
+  revision.mutations = [];
+  const reserved = Array.from({length:512}, (_,index)=>`reserved_${index}`);
+  revision.ledger = {...revision.ledger,allocatedIds:[...revision.ledger.allocatedIds,...reserved]};
+  const latest = {...input,headVersion:20,revisions:[revision]};
+  const writes:string[] = [];
+  expect(await db.transaction(tx=>{
+    const measured:Queryable = {query:<T>(sql:string,params?:unknown[])=>{
+      if(/\b(?:INSERT INTO|UPDATE) artifact_source_ids\b/i.test(sql))writes.push(sql);
+      return tx.query<T>(sql,params);
+    }};
+    return writeNativeHistory(measured,latest);
+  })).toBe("created");
+  const stored = (await db.query<{source_id:string;provenance:string;first_version:number;retired_version:number|null}>("SELECT source_id,provenance,first_version,retired_version FROM artifact_source_ids WHERE artifact_id=$1",[latest.pageId])).rows;
+  expect(new Set(stored.map(row=>row.source_id))).toEqual(new Set(revision.ledger.allocatedIds));
+  for(const row of stored)expect(row).toEqual({source_id:row.source_id,provenance:"authored",first_version:20,retired_version:reserved.includes(row.source_id)?20:null});
+  expect(await importNativeHistory(db,latest)).toBe("unchanged");
+  await db.query("UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=$2",[latest.pageId,reserved[0]]);
+  await expect(importNativeHistory(db,latest)).rejects.toThrow("native_import_collision");
+  // The createArtifact genesis reservation and one complete ledger batch are bounded independently of ID count.
+  expect(writes.length).toBeLessThanOrEqual(2);
+});
 async function fixture() {
   const owner = await mintAccountToken("synthetic_history_owner"),
     db = await getDb();
