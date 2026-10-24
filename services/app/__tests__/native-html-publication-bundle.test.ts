@@ -4,6 +4,23 @@ import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 const harness=useAppHarness();
 const file=(path:string,source:string,contentType:string)=>({path,contentType,base64:Buffer.from(source).toString('base64')});
+it('serves reused immutable module dependencies through only their new admitted parent',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const actor=await mintAccountToken('bundle-reused-module');
+ const files=[file('main.js','import "./nested.js";','text/javascript'),file('nested.js','export const ready=true;','text/javascript')];
+ const publish=async(key:string,mappings?:Record<string,unknown>)=>{const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':key},json:{html:'<script type="module" src="./main.js"></script>',publicationBundle:{entryPath:'index.html',files,...(mappings?{mappings}:{})}}}));expect(response.status).toBe(201);return response.json();};
+ const first=await publish('bundle_reused_module_first');
+ const second=await publish('bundle_reused_module_second',Object.fromEntries(first.dependencyReceipts.map(({path,...entry}:{path:string})=>[path,entry])));
+ expect(second.dependencyReceipts).toEqual(first.dependencyReceipts);
+ const main=second.dependencyReceipts.find((entry:{path:string})=>entry.path==='main.js');
+ const nested=second.dependencyReceipts.find((entry:{path:string})=>entry.path==='nested.js');
+ const read=(id:string,dependency:string)=>assetGet(request(`/a/${id}/assets?dependency=${dependency}&revision=1&version=1`,{token:actor.token}),{params:Promise.resolve({id})});
+ const served=await read(second.id,main.id);expect(served.status).toBe(200);
+ const source=await served.text();expect(source).toContain(`/a/${second.id}/assets?dependency=${nested.id}&revision=1&version=1`);expect(source).not.toContain(`/a/${first.id}/assets`);
+ expect((await read(second.id,nested.id)).status).toBe(200);
+ expect((await read(second.id,'Other12')).status).toBe(404);
+ const original=await read(first.id,main.id);expect(await original.text()).toContain(`/a/${first.id}/assets?dependency=${nested.id}`);
+});
 it('rejects missing dependencies before creating anything',async()=>{
  const actor=await mintAccountToken('bundle-missing');
  const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:'<img src="./assets/missing.svg">'}}));
