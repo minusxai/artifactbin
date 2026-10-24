@@ -191,7 +191,7 @@ it('initializes local defaults on first author import after the blocking reader 
 it('uploads through the credential-free author port and rejects late or portable writes',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
  const runtime=await import('../browser-client');const events:Array<any>=[];
- const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event)});bridges.push(bridge);
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null,uploadContext:{state:'signed-in',scope:'owner'}}});bridges.push(bridge);
  const file=new File(['hello'],'sample.txt',{type:'text/plain'});const first=runtime.uploadFile(file,{dataset:'attachments'});
  for(let i=0;i<8;i++)await Promise.resolve();
  const sent=events.find(event=>event.kind==='upload-file');expect(sent).toMatchObject({datasetId:'Dataset123',filename:'sample.txt'});expect(sent).not.toHaveProperty('credentials');
@@ -199,4 +199,22 @@ it('uploads through the credential-free author port and rejects late or portable
  expect(await first).toMatchObject({ref:'dfile:abc123def456',url:'https://platform.example/a/Page123/datasets/Dataset123/files/abc123def456'});
  const controller=new AbortController();const canceled=runtime.uploadFile(file,{dataset:'attachments',signal:controller.signal});for(let i=0;i<8;i++)await Promise.resolve();controller.abort();await expect(canceled).rejects.toThrow('canceled');
  bridge.dispose();await expect(runtime.uploadFile(file,{dataset:'attachments'})).rejects.toThrow('connection unavailable');
+});
+it('the public initializer uses trusted context, cancels an old subject and keeps a late receipt out of the real control',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
+ const {registerFileUpload}=await import('../../html-components/file-upload');registerFileUpload();
+ const runtime=await import('../browser-client');const events:any[]=[];
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'Page123',nodes:[],editId:'2',source:null,uploadContext:{state:'signed-out',scope:'guest'}}});bridges.push(bridge);
+ const control=document.createElement('af-file-upload') as import('../../html-components/file-upload').AfFileUpload;control.datasetName='attachments';document.body.append(control);
+ const binding=runtime.bindFileUpload(control,{helperText:'Choose a receipt.'});
+ expect(control.querySelector('input')?.disabled).toBe(true);expect(control.textContent).toContain('Sign in to upload files.');
+ bridge.receive({kind:'upload-context',context:{state:'signed-in',scope:'account-a'}});
+ expect(control.querySelector('input')?.disabled).toBe(false);expect(control.textContent).toContain('Choose a receipt.');
+ const change=vi.fn();control.onChange=change;const pending=control.upload([new File(['hello'],'sample.txt',{type:'text/plain'})]);
+ await vi.waitFor(()=>expect(events.some(event=>event.kind==='upload-file')).toBe(true));const call=events.find(event=>event.kind==='upload-file').call;
+ bridge.receive({kind:'upload-context',context:{state:'signed-out',scope:'guest-again'}});
+ await pending;expect(control.busy).toBe(false);expect(control.querySelector('input')?.disabled).toBe(true);
+ bridge.receive({kind:'fetch-result',call,status:201,headers:{},body:JSON.stringify({ref:'dfile:abc123',name:'sample.txt',contentType:'text/plain',size:5,url:'/file'})});
+ expect(change).not.toHaveBeenCalled();expect(control.value).toEqual([]);expect(control.textContent).toContain('Sign in to upload files.');
+ binding.dispose();bridge.receive({kind:'upload-context',context:{state:'signed-in',scope:'account-b'}});expect(control.disabled).toBe(true);
 });

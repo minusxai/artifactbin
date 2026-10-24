@@ -6,3 +6,12 @@ export interface FileUploadTransport {send(request:FileUploadRequest,signal?:Abo
 export interface FileUploader {
  upload(file:File,options:FileUploadOptions):Promise<DatasetUploadResult>;
 }
+
+/** Structural port: custom controls remain transport/account agnostic. */
+export interface PlatformUploadControl {
+ disabled:boolean;
+ helperText:string;
+ adapter?:{upload(file:File,options:{dataset:string;signal:AbortSignal}):Promise<{ref:string;name:string;contentType?:string;size?:number}>;fileUrl?(file:{ref:string;name:string;contentType?:string;size?:number},dataset:string):string};
+ reset():void;
+}
+export interface FileUploadBinding {setDisabled(disabled:boolean):void;dispose():void}

@@ -1,3 +1,4 @@
+import type {UploadContext} from '@artifactbin/contracts';
 import {relayedFileUpload} from './upload';
 /**
  * THE PARENT HALF OF THE BRIDGE — a stand-in for the island controller, for a document framed on its own origin.
@@ -29,7 +30,7 @@ import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate } from '@/lib/story-runtime/contract';
 
-interface HtmlRelayContext { revision: string; readOnly: boolean }
+interface HtmlRelayContext { revision: string; readOnly: boolean; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
 interface FrameBridgeParentOptions {
   /** Set by the trusted HTML shell, never by a page message. */
   htmlContext?: () => HtmlRelayContext;
@@ -59,6 +60,7 @@ interface FrameBridgeParentOptions {
 
 export interface FrameBridgeParent extends IslandStoryController {
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
+  refreshUploadContext():void;
   setContext(editId: string, source: string | null): void;
   /**
    * How far the page's bars reach over the frame's top edge (contract `inset`). Kept, and sent again to every
@@ -130,6 +132,16 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   let key = runtimeId();
   let nonce = '';
   let pendingUploads=0;
+  const uploadControllers=new Set<AbortController>();
+  let uploadSignature='',uploadContext:UploadContext={state:'unavailable',scope:runtimeId()};
+  const cancelUploads=()=>{for(const controller of uploadControllers)controller.abort();uploadControllers.clear();};
+  const readUploadContext=()=>{
+    const html=options.htmlContext?.(),session=html?.uploadSession;
+    const state:UploadContext['state']=!html?'unavailable':html.readOnly?'read-only':session?.state??'unavailable';
+    const signature=JSON.stringify([key,options.editId(),options.source(),html?.revision,state,session?.subject]);
+    if(signature!==uploadSignature){uploadSignature=signature;cancelUploads();uploadContext={state,scope:runtimeId()};}
+    return uploadContext;
+  };
   /** The frame's controller answered `ready` under the current key: commands go straight out. */
   let attached = false;
   let closed = false;
@@ -158,7 +170,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   /** (Re)send this session's attach: the door starts the frame half on the first one and ignores a key it holds. */
   const attach = () => {
     if (attached || closed || !frame.contentWindow) return;
-    envelope({ kind: 'attach', id, nodes, editId: options.editId(), source: options.source() });
+    envelope({ kind: 'attach', id, nodes, editId: options.editId(), source: options.source(), ...(options.htmlContext?{uploadContext:readUploadContext()}:{}) });
   };
   const reject = (reason: string) => {
     for (const waiting of restoring.values()) waiting.reject(new Error(`the framed document closed (${reason})`));
@@ -166,6 +178,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
   /** A new document in the frame: its controller is gone, so a new session starts under a fresh key. */
   const reattach = () => {
+    cancelUploads();
     reject('the framed document loaded again');
     key = runtimeId();
     nonce = '';
@@ -178,6 +191,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const close = (reason: string) => {
     if (closed) return;
     try { frame.contentWindow?.postMessage({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'detach' } }, target); } catch { /* gone */ }
+    cancelUploads();
     closed = true;
     key = '';
     reject(reason);
@@ -238,12 +252,14 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         return;
       }
       case 'upload-file': {
+        const current=readUploadContext();
         const context=options.htmlContext?.();
-        const request=context?relayedFileUpload(id,options.editId(),context.readOnly,payload):null;
+        const request=current.state==='signed-in'&&context?relayedFileUpload(id,options.editId(),context.readOnly,payload):null;
         if(!request||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
         pendingUploads++;
-        const uploadKey=key;const reply=(answer:FrameBridgeParentPayload)=>{if(key===uploadKey)post(answer);};
-        void (async()=>{try{const response=await appFetch(request.path,request.init);reply({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;}})();return;
+        const controller=new AbortController();uploadControllers.add(controller);
+        const uploadKey=key,uploadScope=current.scope;const reply=(answer:FrameBridgeParentPayload)=>{if(!closed&&key===uploadKey&&readUploadContext().scope===uploadScope)post(answer);};
+        void (async()=>{try{const response=await appFetch(request.path,{...request.init,signal:controller.signal});reply({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;uploadControllers.delete(controller);}})();return;
       }
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;
@@ -288,7 +304,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       const box = frame.getBoundingClientRect();
       return new DOMRect(box.left + frame.clientLeft, box.top + frame.clientTop, frame.clientWidth, frame.clientHeight);
     },
-    setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source }); },
+    refreshUploadContext(){if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()});},
+    setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source });if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()}); },
     setNodes(next: JsxNode[]) {
       if (nodes.length || !next.length) return;
       nodes = next;

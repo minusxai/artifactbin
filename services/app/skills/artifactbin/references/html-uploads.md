@@ -20,19 +20,21 @@ A hosted page may upload files to a linked live dataset through the trusted plat
 <af-file-upload dataset="attachments" label="Attachments" multiple accept="text/plain"></af-file-upload>
 ```
 
-After registering the installed FileUpload component, supply its caller adapter:
+After registering the installed FileUpload component, bind the real platform adapter and picker availability:
 
 ```js
-import {uploadFile} from '@afbin/apollo';
+import {bindFileUpload} from '@afbin/apollo';
 const control = document.querySelector('af-file-upload');
-control.adapter = {
-  upload(file, {dataset, signal}) {
-    return uploadFile(file, {dataset, signal});
-  }
-};
+const binding = bindFileUpload(control, {helperText: 'Or drop files here.'});
+// For caller-owned business rules: binding.setDisabled(true/false).
+// When removing the view: binding.dispose();
 ```
 
-`uploadFile` returns the server's `{ref,url,name,contentType,size,replayed?}` receipt. The control stores metadata in its `value`; use `af-change` to keep controlled viewer state through `client`. An optional adapter `fileUrl` may resolve retained server URLs for previews. Never invent a receipt before the server accepts the file.
+`bindFileUpload` disables the chooser while the trusted session loads, when signed out, in archived/portable readers, or when its connection is unavailable. It sets ordinary `helperText` presentation (including “Sign in to upload files.”); it does not prove an insert grant. Account/connection changes cancel pending local completions. Keep caller disabled rules through `binding.setDisabled`; a recovered signed-in session restores your helper text. Dispose the binding when removing the view. Raw files without the trusted shell stay unavailable.
+
+For a custom control, `watchUploadContext(listener)` immediately reports `{state,scope}` and returns `{unsubscribe()}`. Treat scope as opaque; it changes when the trusted session or served context changes. Never infer server permission from `signed-in`.
+
+`uploadFile(file, {dataset,signal,requestId?})` returns the server's `{ref,url,name,contentType,size,replayed?}` receipt. The control stores metadata in its `value`; use `af-change` to keep controlled viewer state through `client`. An optional adapter `fileUrl` may resolve retained server URLs for previews. Never invent a receipt before the server accepts the file.
 
 ## Permissions and retries
 

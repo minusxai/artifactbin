@@ -2,8 +2,9 @@ import { uploadFile, uploadUrl, uploadError, type AfUploadFile, type AfFileUploa
 export type { AfUploadFile, AfFileUploadAdapter, AfFileUploadChangeDetail } from './file-upload-model';
 
 /** Transport, account credentials and dataset access belong exclusively to the author's adapter. */
+let nextHelperId=0;
 export class AfFileUpload extends HTMLElement {
-  static observedAttributes = ['dataset', 'label', 'accept', 'multiple', 'max-files', 'max-bytes', 'disabled'];
+  static observedAttributes = ['dataset', 'label', 'accept', 'multiple', 'max-files', 'max-bytes', 'disabled', 'helper-text'];
   onChange?: (detail: AfFileUploadChangeDetail) => void;
   onBusyChange?: (busy: boolean) => void;
   private transport?: AfFileUploadAdapter;
@@ -17,6 +18,10 @@ export class AfFileUpload extends HTMLElement {
   private error = '';
   private shell?: HTMLDivElement;
   private input?: HTMLInputElement;
+  private readonly helperId = `af-upload-help-${++nextHelperId}`;
+  /** Ordinary caller-owned helper text, with no authentication semantics. */
+  get helperText(): string { return this.getAttribute('helper-text') ?? ''; }
+  set helperText(value: string) { if(value)this.setAttribute('helper-text',value);else this.removeAttribute('helper-text'); }
   get adapter(): AfFileUploadAdapter | undefined { return this.transport; }
   set adapter(value: AfFileUploadAdapter | undefined) { this.cancel(); this.transport = value; this.render(); }
   get value(): AfUploadFile[] { return this.selection.map(file => ({ ...file })); }
@@ -30,7 +35,7 @@ export class AfFileUpload extends HTMLElement {
   get disabled(): boolean { return this.hasAttribute('disabled'); }
   set disabled(value: boolean) { this.toggleAttribute('disabled', value); }
   connectedCallback(): void {
-    for (const key of ['value', 'adapter', 'onChange', 'onBusyChange'] as const) {
+    for (const key of ['value', 'adapter', 'helperText', 'onChange', 'onBusyChange'] as const) {
       if (Object.prototype.hasOwnProperty.call(this, key)) { const value = this[key]; delete (this as unknown as Record<string, unknown>)[key]; (this as unknown as Record<string, unknown>)[key] = value; }
     }
     this.render();
@@ -89,10 +94,10 @@ export class AfFileUpload extends HTMLElement {
     const add = (tag: string, text = '', parent: HTMLElement = this.shell!) => { const node = doc.createElement(tag); node.textContent = text; parent.append(node); return node; };
     const label = this.getAttribute('label') || 'Attachments'; add('span', label);
     const drop = add('div'); drop.className = 'af-file-upload-drop';
-    const input = doc.createElement('input'); this.input = input; input.type = 'file'; input.className = 'af-file-upload-input'; input.tabIndex = -1; input.multiple = this.multiple; input.accept = this.getAttribute('accept') ?? ''; input.setAttribute('aria-label', `Choose ${label}`); input.disabled = this.disabled || this.busy || !this.adapter; drop.append(input);
-    const button = (name: string, text: string, action: () => void, parent: HTMLElement) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = text; node.setAttribute('aria-label', name); node.disabled = this.disabled || this.busy || !this.adapter; node.onclick = action; parent.append(node); return node; };
+    const input = doc.createElement('input'); this.input = input; input.type = 'file'; input.className = 'af-file-upload-input'; input.tabIndex = -1; input.multiple = this.multiple; input.accept = this.getAttribute('accept') ?? ''; input.setAttribute('aria-label', `Choose ${label}`); input.setAttribute('aria-describedby', this.helperId); input.disabled = this.disabled || this.busy || !this.adapter; drop.append(input);
+    const button = (name: string, text: string, action: () => void, parent: HTMLElement) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = text; node.setAttribute('aria-label', name); if(name===`Choose ${label}`)node.setAttribute('aria-describedby',this.helperId); node.disabled = this.disabled || this.busy || !this.adapter; node.onclick = action; parent.append(node); return node; };
     button(`Choose ${label}`, this.multiple ? 'Choose files' : 'Choose file', () => this.input?.click(), drop);
-    add('span', this.adapter ? 'Or drop files here.' : 'Uploads unavailable.', drop);
+    add('span', this.helperText || (this.adapter ? 'Or drop files here.' : 'Uploads unavailable.'), drop).id=this.helperId;
     input.onchange = () => { const files = Array.from(this.input?.files ?? []); if (this.input) this.input.value = ''; void this.upload(files); };
     drop.ondragover = event => event.preventDefault(); drop.ondrop = event => { event.preventDefault(); void this.upload(Array.from(event.dataTransfer?.files ?? [])); };
     if (this.busy) { const status = add('span', 'Uploading…'); status.setAttribute('role', 'status'); const progress = add('progress'); progress.setAttribute('aria-label', 'Uploading files'); }

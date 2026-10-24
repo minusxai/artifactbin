@@ -237,7 +237,7 @@ describe('native upload trusted context',()=>{
  it('pins the live edit and passes only bounded upload fields to the authenticated file door',async()=>{
   const frame=document.createElement('iframe');document.body.append(frame);const posted=vi.spyOn(frame.contentWindow!,'postMessage');
   const fetcher=vi.fn(async()=>answer(403,{error:'dataset_file_upload_failed',detail:'No insert grant permits this upload'}));vi.stubGlobal('fetch',fetcher);
-  createRoot(dispose=>{cleanups.push(dispose);createFramedStory({id:'Page123',framed:{frame,origin:PAGES},nodes:[],editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision:'3',readOnly:false})});});
+  createRoot(dispose=>{cleanups.push(dispose);createFramedStory({id:'Page123',framed:{frame,origin:PAGES},nodes:[],editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision:'3',readOnly:false,uploadSession:{state:'signed-in',subject:'owner'}})});});
   const key=(posted.mock.calls[0][0] as {key:string}).key;
   const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:PAGES,source:frame.contentWindow}));send({kind:'ready',nonce:'native'});
   send({kind:'upload-file',call:2,datasetId:'Dataset123',filename:'sample.txt',contentType:'text/plain',requestId:'upload-request-123',bytes:new Uint8Array([1,2]),editId:'forged',authorization:'Bearer forged'});

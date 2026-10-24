@@ -137,3 +137,12 @@ it('keeps the named file picker accessible while unavailable and delegates the c
   element.disabled = true;
   expect(input.disabled).toBe(true);
 });
+it('uses caller helper text as accessible picker guidance with a stable unique ID',()=>{
+ const first=fixture(),second=fixture();first.helperText='Sign in to upload files.';
+ const input=first.querySelector('input')!,button=first.querySelector('button')!;
+ const id=input.getAttribute('aria-describedby')!;
+ expect(id).toBeTruthy();expect(document.getElementById(id)?.textContent).toBe('Sign in to upload files.');expect(button.getAttribute('aria-describedby')).toBe(id);
+ expect(second.querySelector('input')?.getAttribute('aria-describedby')).not.toBe(id);
+ first.helperText='<b>Plain text</b>';expect(document.getElementById(id)?.textContent).toBe('<b>Plain text</b>');expect(document.getElementById(id)?.querySelector('b')).toBeNull();
+ first.helperText='';expect(document.getElementById(id)?.textContent).toBe('Uploads unavailable.');
+});

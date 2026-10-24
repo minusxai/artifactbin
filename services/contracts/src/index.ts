@@ -52,7 +52,7 @@ export * from './preview-connect';
 // makes esbuild's split reader graph load that chunk through unrelated contract imports.
 export type {CommentViewState, ReviewJson} from './comment-view-state';
 
-export type { DatasetUploadResult } from './dataset-upload';
+export type { DatasetUploadResult, UploadContext } from './dataset-upload';
 
 export * from './artifact-format';
 export * from './live-channels';
