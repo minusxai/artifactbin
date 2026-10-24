@@ -374,6 +374,15 @@ export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | n
 const datasetResolverForRow = (row: ArtifactRow, viewer: AccessActor | null): DatasetResolver => async (id,mode) =>
   tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
 
+/** Host-only registered query imports retain the original document reach / viewer grants split.
+ * Returns metadata only; the caller windows stored sources through executeCatalog. */
+export async function registeredQueryImportForRow(row:ArtifactRow,id:string,viewer:AccessActor){
+ const artifact=await importedArtifactFor(row,id);
+ const data=await tableForRef(artifact,viewer,row,false);
+ if(!artifact||artifact.format!=='dataset'||!data?.catalog)throw Error('query_source_unavailable');
+ return {artifact,catalog:data.catalog};
+}
+
 /** The artifact a document's import names, by the document's own reach. */
 const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<ArtifactRow | null> =>
   getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id)));

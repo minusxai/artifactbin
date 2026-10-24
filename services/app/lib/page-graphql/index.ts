@@ -1,3 +1,6 @@
+import {registeredPlan} from '@/lib/registered-page-queries/registry';
+import {registeredQueryInvoker} from '@/lib/registered-page-queries/namespace';
+import {createRetainedRegisteredQueries} from '@/lib/registered-page-queries/retained';
 import type {AccessActor} from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
@@ -14,6 +17,7 @@ async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly
  const backends=await Promise.all(page.links.filter(link=>link.kind==='backend').map(async link=>{
   const backend=await getHtmlBackendVersion(link.backendId,link.version);
   if(!backend||backend.pageId!==page.pageId)throw Error('backend_link_mismatch');
+  registeredPlan(page,link,backend);
   return {name:link.name,fileId:link.backendId,version:link.version,typeDefs:backend.typeDefs};
  }));
  return [...backends,...datasetNamespaceSources(page.links.filter(link=>link.kind==='dataset'))];
@@ -21,10 +25,17 @@ async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly
 function operations(actor:AccessActor,page:HtmlPageVersion,retainReadFence?:(verify:()=>Promise<void>)=>void){
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
  const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
- return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:call=>{
+ return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
-  return link.kind==='backend'?backend(call):dataset(call);
+  if(link.kind==='backend'){
+   const record=await getHtmlBackendVersion(link.backendId,link.version);
+   if(!record)throw Error('backend_link_mismatch');
+   const plan=registeredPlan(page,link,record);
+   if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
+   return backend(call);
+  }
+  return dataset(call);
  }});
 }
 /** Original request identity and ACLs guard both SDL and executions. */
