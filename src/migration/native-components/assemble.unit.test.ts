@@ -1,3 +1,5 @@
+import {adaptNativeAuthorProgram} from './author-programs.ts';
+import {createHash} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from 'parse5';
@@ -93,4 +95,17 @@ test('generated sheet ordering precedes authored Helmet styles in the final casc
 test('rehashed presentation still rejects duplicate entries and unknown node hashes',async()=>{
  const input=await attachPresentation(presentationFixture());input.presentation!.inlineStyles=[...input.presentation!.inlineStyles,...input.presentation!.inlineStyles];let {sha256,...payload}=input.presentation!;input.presentation!.sha256=nativeDigest(payload);let result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='presentation-source'));
  const other=await attachPresentation(presentationFixture());other.presentation!.resourcePatches[0]!.nodeSha256='b'.repeat(64);({sha256,...payload}=other.presentation!);other.presentation!.sha256=nativeDigest(payload);result=assembleNativePage(other);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='presentation-source'));
+});
+
+test('ordinary source programs require exact receipts and are emitted without a legacy runtime',()=>{
+ const input=fixture();input.analysis.flow.values=[];
+ const node=input.analysis.nodes[0]!;if(node.type!=='element')throw Error();
+ node.tag='script';delete node.control;node.attributes=[];node.children=[];
+ const script='(()=>{document.body.dataset.started="yes";})();';
+ const body:RetainedJsxNode={type:'text',graphKey:'text',start:0,end:1,value:script};node.children=[body];
+ const missing=assembleNativePage(input);assert.equal(missing.status,'blocked');assert.ok(missing.blockers.some(v=>v.code==='unadmitted-script'));
+ const admission={key:input.analysis.key,sourceSha256:input.analysis.sourceSha256,analysisSha256:input.analysis.analysisSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sourceNode:node.graphKey,nodeSha256:nativeDigest(node),scriptSha256:createHash('sha256').update(script).digest('hex'),profile:'ordinary-dom-script' as const,filter:'search' as const};
+ input.authorPrograms=[adaptNativeAuthorProgram({analysis:input.analysis,identity:input.identity,admission})];
+ const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status==='complete'){assert.ok(result.html.includes(script));assert.match(result.html,/<template data-af-id=/);assert.doesNotMatch(result.html,/solid-js|mx\.params/);}
+ input.authorPrograms=[{...input.authorPrograms[0]!,authorJs:'changed'}];const forged=assembleNativePage(input);assert.equal(forged.status,'blocked');assert.ok(forged.blockers.some(v=>v.code==='author-program-proof'));
 });

@@ -1,3 +1,5 @@
+import {verifyNativeAuthorProgram} from './author-programs.ts';
+import type {NativeAuthorProgramReceipt} from './author-program-contracts.ts';
 /** Pure offline lowering only. Typed analysis and admitted receipts are supplied
  * by owners; no source fetch, compiler execution, destination write or evaluation. */
 import {format as d3format} from 'd3-format';
@@ -28,6 +30,7 @@ export interface NativeCellFormatInput {
 export type NativeCellFormatOutput={status:'formatted';text:string}|{status:'requires-locale';detail:string};
 export interface NativeLowerInput {
   analysis: NativeTypedAnalysis;
+  authorPrograms?:readonly NativeAuthorProgramReceipt[];
   emitTextIdentities?: boolean;
   admittedBindings?: readonly NativeBindingTarget[];
   admittedDeclarations?: readonly {kind:string;name:string;analysisSha256:string}[];
@@ -224,6 +227,15 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
     templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,[...ancestors,'For'],depth+1)).join('')}</template>`);
     return proof?`<div${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}></div>`:'';
    }
+  }
+  if(['script','Iframe'].includes(node.tag)&&input.authorPrograms?.some(program=>program.admission.sourceNode===node.graphKey)){
+   const receipts=input.authorPrograms.filter(program=>program.admission.sourceNode===node.graphKey),receipt=receipts[0];
+   if(receipts.length!==1||!receipt||!verifyNativeAuthorProgram({analysis:input.analysis,node,receipt})){block('author-program-proof',node,'Author output requires its exact immutable source receipt');return '';}
+   const descendants=(value:RetainedJsxNode):RetainedJsxNode[]=>[value,...(value.type==='element'?value.children.flatMap(descendants):[])];
+   const sourceNodes=descendants(node);
+   if(receipt.identities.length!==sourceNodes.length||new Set(receipt.identities.map(v=>v.sourceNode)).size!==sourceNodes.length){block('author-program-identities',node,'Every adapted source identity must be retained once');return '';}
+   for(const original of sourceNodes){const adapted=receipt.identities.find(v=>v.sourceNode===original.graphKey),proof=binding(original,adapted?.kind??'nonvisual');if(!adapted||proof?.afId!==adapted.afId)block('author-program-identities',original,'Adapted identity must match its original graph proof');}
+   return receipt.html;
   }
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
   const rule=nativeComponentRule(node.tag);

@@ -1,3 +1,4 @@
+import {verifyNativeAuthorProgram} from './author-programs.ts';
 /** Pure offline assembly: no registration, network, source evaluation or destination writes. */
 import { createHash } from 'node:crypto';
 import { nativeDigest } from './selection.ts';
@@ -30,6 +31,10 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper)&&input.style.rootSha256!==nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
  const nodes:RetainedJsxNode[]=[];
  const collect=(node:RetainedJsxNode)=>{nodes.push(node);if(node.type==='element')node.children.forEach(collect);};input.analysis.nodes.forEach(collect);
+ for(const program of input.authorPrograms??[]){
+  const matches=nodes.filter(node=>node.graphKey===program.admission.sourceNode),node=matches[0];
+  if(matches.length!==1||!node||!verifyNativeAuthorProgram({analysis:input.analysis,node,receipt:program})||input.authorPrograms!.filter(other=>other.admission.sourceNode===program.admission.sourceNode).length!==1)block('author-program-proof',program.admission.sourceNode);
+ }
  const presentation=input.presentation;
  if(presentation){
   const {sha256,...payload}=presentation;
@@ -98,7 +103,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const emitted=emitNativeBindings({analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
- const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches});
+ const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];
@@ -112,7 +117,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  }).join('\n');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const assignments=lowered.assignments.map(a=>`document.querySelector('[data-af-id="${a.afId}"]')[${json(a.property)}]=${json(a.value)};`).join('\n');
- const authorJs=registrations+'\n'+assignments+'\n'+emitted.authorJs;
+ const authorJs=registrations+'\n'+assignments+'\n'+emitted.authorJs+'\n'+(input.authorPrograms??[]).map(program=>program.authorJs).join('\n');
  if(/<\/script/i.test(authorJs)){block('author-script-end-tag');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  for(const backend of input.backends)if(!/^[A-Za-z_]\w*$/.test(backend.namespace)||!safeUrl(backend.url))block('backend-link');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};

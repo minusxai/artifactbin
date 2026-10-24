@@ -1,3 +1,4 @@
+import type { NativeAuthorProgramReceipt } from './author-program-contracts.ts';
 import type { NativeTypedAnalysis } from './analyze-contracts.ts';
 import type { NativeIdentityRevision } from './identity-contracts.ts';
 import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget } from './bindings-contracts.ts';
@@ -29,6 +30,7 @@ export interface NativeAssemblyBackend {
 export interface NativeAssemblyModule {name:string;register:string;specifier:string;sha256:string}
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
+ authorPrograms?: readonly NativeAuthorProgramReceipt[];
  modules?: readonly NativeAssemblyModule[];
  files?: readonly NativeAssemblyFile[];
  analysis: NativeTypedAnalysis;
