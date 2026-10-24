@@ -210,10 +210,10 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
       if (program.kind === "mutation") {
         const descriptor = receipt.input.mutations.find(
           (d) =>
-            d.namespace === program.namespace &&
+            d.mode !== "historical-readonly" && d.namespace === program.namespace &&
             d.name === program.program.name,
         );
-        if (!descriptor) invalid("mutation_descriptor");
+        if (!descriptor || descriptor.mode === "historical-readonly") invalid("mutation_descriptor");
         exact(descriptor.reset, program.program.reset, "mutation_reset");
         exact(
           [...descriptor.values]

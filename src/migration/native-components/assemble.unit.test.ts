@@ -126,3 +126,13 @@ test('reader-template proof is consumed in assembly and rejects a stale template
  input.readerTemplate.template='plan';
  const stale=assembleNativePage(input);assert.equal(stale.status,'blocked');assert.ok(stale.blockers.some(b=>b.code==='reader-template-proof'));
 });
+
+test('historical readonly mutation admission preserves rendering without a remote write backend',()=>{
+ const input=fixture();input.analysis.flow.mutations=[{name:'change',start:0,end:1}];
+ input.mutations=[{name:'change',mode:'historical-readonly'}];
+ input.operationCoverage={sourceSha256:input.analysis.sourceSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:'a'.repeat(64),queryOrder:[],blockers:[],operations:[{kind:'mutation',name:'change',sourceNode:'$flow',operationSha256:'b'.repeat(64),route:'historical-readonly',dependencies:[],requiredGuarantees:['revision-authority-fence'],status:'attested-plan'}]};
+ const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ assert.doesNotMatch(result.html, /rel="af-backend"/);
+ input.operationCoverage.operations[0]!.route='registered-dataset-mutation';
+ assert.equal(assembleNativePage(input).status,'blocked');
+});

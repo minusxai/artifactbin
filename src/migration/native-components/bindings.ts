@@ -215,7 +215,11 @@ export function emitNativeBindings(
       query.values.some((field) => !Object.hasOwn(defaults, field.name))
     )
       block(query.name, "invalid-query-descriptor");
-  for (const mutation of input.mutations)
+  for (const mutation of input.mutations) {
+    if (mutation.mode === "historical-readonly") {
+      if (!name(mutation.name) || !mutationNames.has(mutation.name) || Object.keys(mutation).some(key => !["name", "mode"].includes(key))) block(mutation.name, "invalid-readonly-mutation-descriptor");
+      continue;
+    }
     if (
       !name(mutation.name) ||
       !mutationNames.has(mutation.name) ||
@@ -228,6 +232,7 @@ export function emitNativeBindings(
       mutation.reset.some((field) => !Object.hasOwn(defaults, field))
     )
       block(mutation.name, "invalid-mutation-descriptor");
+  }
   const targets: any[] = [];
   const admit = (expr: LocalReactiveExpression | null, sourceNode: string) => {
     if (!expr) {

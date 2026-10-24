@@ -9,7 +9,8 @@ export interface NativeBindingQuery {
   decode: "registered-page-table-cells-v1";
 }
 /** Supplied by a registered operation owner; author output never contains SQL. */
-export interface NativeBindingMutation {
+export interface NativeRegisteredBindingMutation {
+  mode?: "registered";
   name: string;
   document: string;
   namespace: string;
@@ -18,6 +19,12 @@ export interface NativeBindingMutation {
   outcomePath: readonly string[];
   reset: readonly string[];
 }
+/** A saved historical action has no wire operation and no write backend. */
+export interface NativeReadonlyBindingMutation {
+  name: string;
+  mode: "historical-readonly";
+}
+export type NativeBindingMutation = NativeRegisteredBindingMutation | NativeReadonlyBindingMutation;
 /** Actual native control event ABI; derived from retained assignable scalar binding. */
 export interface NativeControlWriteback {
   event: "af-change" | "input" | "change";

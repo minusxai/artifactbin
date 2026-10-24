@@ -70,6 +70,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
 
    }
    if(target.kind==='action'){
+    if(target.run&&plan.mutations.find(item=>item.name===target.run)?.mode==='historical-readonly'){host.disabled=true;host.setAttribute('aria-disabled','true');continue;}
     const existing=actions.get(host);if(existing){existing.row=row;if(!context&&target.run&&operationLocks.has(target.run))host.disabled=true;continue;}const action={row,host,run:target.run};actions.set(host,action);if(!context&&target.run)topActions.add(action);
     const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy||!context&&target.run&&operationLocks.has(target.run))return;action.busy=true;if(!context&&target.run)operationBusy(target.run,true);host.disabled=true;try{
      if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,...patch}));}

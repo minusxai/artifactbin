@@ -1365,3 +1365,15 @@ test("chart data targets project declared query TableData without persisting sha
   );
   assert.equal(emitNativeBindings(invalid).status, "blocked");
 });
+
+test("historical readonly actions stay disabled while local-only actions remain interactive", async () => {
+ const nodes=[el('save','Button',{run:'$save'}),el('local','Button',{set:{open:true}})];
+ const source=input(nodes,[{kind:'action',sourceNode:'save',afId:'save'},{kind:'action',sourceNode:'local',afId:'local'}]);
+ source.analysis.flow.mutations=[{name:'save',start:0,end:1}];source.mutations=[{name:'save',mode:'historical-readonly'}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),body=doc.body,save=new Element('button',{'data-af-id':'save'}),local=new Element('button',{'data-af-id':'local'});body.append(save,local);
+ const port=client({open:false,filter:null});port.mutate=async()=>{throw Error('Readonly action reached remote');};
+ const running=await execute(result.authorJs,port,doc);
+ assert.equal(save.disabled,true);await save.click();await local.click();assert.equal(port.state.open,true);
+ await running.close();
+});

@@ -98,9 +98,13 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   if(descriptors.length!==declarations.length||declarations.some(d=>descriptors.filter(v=>v.name===d.name).length!==1))block('operation-descriptor-coverage');
   for(const descriptor of descriptors){
    const proof=coverage?.operations.find(op=>op.kind===kind&&op.name===descriptor.name&&op.status==='attested-plan');
+   if ('mode' in descriptor && descriptor.mode==='historical-readonly') {
+    if(kind!=='mutation'||!proof||proof.route!=='historical-readonly')block('readonly-descriptor-admission',descriptor.name);
+    continue;
+   }
    if(proof&&proof.route!==(kind==='query'?'registered-sqlite-query':'registered-dataset-mutation'))block('operation-route-not-supported',descriptor.name);
    const backends=input.backends.filter(b=>b.namespace===descriptor.namespace),backend=backends[0];
-   const descriptorSet={queries:input.queries.filter(q=>q.namespace===descriptor.namespace),mutations:input.mutations.filter(m=>m.namespace===descriptor.namespace)};
+   const descriptorSet={queries:input.queries.filter(q=>q.namespace===descriptor.namespace),mutations:input.mutations.filter(m=>m.mode!=='historical-readonly'&&m.namespace===descriptor.namespace)};
    if(!proof||backends.length!==1||!backend||!safeUrl(backend.url)||!/^([a-f0-9]{64})$/.test(backend.planSha256)||backend.descriptorsSha256!==nativeDigest(descriptorSet)||backend.operations.filter(op=>op.kind===kind&&op.name===descriptor.name&&op.operationSha256===proof.operationSha256).length!==1)block('registered-descriptor-admission',descriptor.name);
   }
  }
