@@ -36,13 +36,13 @@ function browserState() {
 
 /** Browser-side proof for actually used declared fonts. Unused styles/subsets
  * remain legitimately unloaded; FontFaceSet.load resolves real matching ranges. */
-export function fontLoadingEvidence() {
+export function fontLoadingEvidence(externalStylesheets=[]) {
   return (async()=>{
     const clean=value=>String(value||'').trim().replace(/^['"]|['"]$/g,'');
     const ruleFaces=[],seenSheets=new Set();
-    const rules=(list,base)=>{for(const rule of list||[]){
+    const rules=(list,base,followImports=true)=>{for(const rule of list||[]){
       if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
-      else if(rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||(rule.href?new URL(rule.href,base).href:base));}}catch{ /* Cross-origin imports cannot prove font response bytes. */ }}
+      else if(followImports&&rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||(rule.href?new URL(rule.href,base).href:base));}}catch{ /* Cross-origin imports are recovered from captured stylesheet responses below. */ }}
       else if(rule.cssRules)rules(rule.cssRules,base);
     }};
     const stylesheetRoots=[document],seenRoots=new Set();
@@ -52,6 +52,22 @@ export function fontLoadingEvidence() {
       try{for(const element of root.querySelectorAll?.('style, link[rel~="stylesheet"]')||[])if(element.sheet)sheets.push(element.sheet);}catch{}
       for(const sheet of sheets){if(seenSheets.has(sheet))continue;seenSheets.add(sheet);try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
       try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)stylesheetRoots.push(element.shadowRoot);}catch{}
+    }
+    // A page can use a cross-origin <link> or an external sheet whose CSSOM
+    // rules are hidden by CORS. The Playwright capture supplies the bodies of
+    // stylesheet responses it actually received. Parse those bodies in an
+    // inert constructed sheet and resolve each src against that response URL;
+    // only the resulting exact URL can later join to captured font bytes.
+    for(const response of externalStylesheets||[]){
+      if(response.status!==200||typeof response.css!=='string'||!response.url)continue;
+      try{
+        const Sheet=document.defaultView?.CSSStyleSheet;
+        if(!Sheet)continue;
+        const parsed=new Sheet();
+        if(typeof parsed.replaceSync!=='function')continue;
+        parsed.replaceSync(response.css);
+        rules(parsed.cssRules,response.url,false);
+      }catch{ /* Unparseable/external stylesheet evidence stays unproved. */ }
     }
     const requested=new Map();
     const add=(element,text)=>{
@@ -75,7 +91,12 @@ export function fontLoadingEvidence() {
       if(!declared.length){if(themeFamilies.includes(request.family))errors.push(`Used theme font ${request.family} has no declared font face`);used.push({...request,declared:false,sources:[]});continue;}
       try{
         const loaded=await document.fonts.load(`${request.style} ${request.weight} 16px ${JSON.stringify(request.family)}`,request.text);
-        const sources=[...new Set(loaded.flatMap(face=>ruleFaces.filter(rule=>rule.family===clean(face.family)&&rule.style===face.style&&rule.unicodeRange.replace(/\s/g,'').toUpperCase()===(face.unicodeRange||'U+0-10FFFF').replace(/\s/g,'').toUpperCase()&&(rule.weight===face.weight||rule.weight==='normal'&&face.weight==='400')).flatMap(rule=>rule.sources)))];
+        const faceSources=loaded.map(face=>{
+          const matches=ruleFaces.filter(rule=>rule.family===clean(face.family)&&rule.style===face.style&&rule.unicodeRange.replace(/\s/g,'').toUpperCase()===(face.unicodeRange||'U+0-10FFFF').replace(/\s/g,'').toUpperCase()&&(rule.weight===face.weight||rule.weight==='normal'&&face.weight==='400'));
+          const uniqueSources=new Map(matches.map(rule=>[JSON.stringify(rule.sources),rule.sources]));
+          return uniqueSources.size===1?[...uniqueSources.values()][0]:[];
+        });
+        const sources=faceSources.length&&faceSources.every(value=>value.length)?[...new Set(faceSources.flat())]:[];
         if(!loaded.length||loaded.some(face=>face.status!=='loaded'))errors.push(`Used declared font ${request.family} ${request.style} ${request.weight} did not load`);
         if(loaded.length&&!sources.length)errors.push(`Used declared font ${request.family} has no inspectable source URL`);
         used.push({...request,declared:true,loaded:loaded.length>0&&loaded.every(face=>face.status==='loaded'),sources});
@@ -112,17 +133,20 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:0,failures:[]}));
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
-    const errors=[],fontResources=[],fontPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
+    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
+    const responseFrame=response=>{try{return response.frame();}catch{return undefined;}};
+    const waitForPending=async pending=>{let settled=0;while(settled<pending.length){const batch=pending.slice(settled);settled=pending.length;await Promise.all(batch);}};
     try {
       page=await context.newPage();
       page.on('pageerror',error=>errors.push(error.message));
       page.on('console',message=>{if(message.type()==='error'&&consoleErrors.length<20)consoleErrors.push(diagnosticText(message.text()));});
       page.on('requestfailed',request=>{if(requestFailures.length<20)requestFailures.push({type:request.resourceType(),url:diagnosticText(request.url()),error:diagnosticText(request.failure()?.errorText||'unknown')});});
       page.on('response',response=>{if(response.status()>=400&&httpFailures.length<20)httpFailures.push({type:response.request().resourceType(),url:diagnosticText(response.url()),status:response.status(),contentType:response.headers()['content-type']||''});});
+      page.on('response',response=>{if(response.request().resourceType()==='stylesheet')stylesheetPending.push((async()=>{try{stylesheetResponses.push({frame:responseFrame(response),url:response.url(),status:response.status(),css:await response.text()});}catch{ /* A stylesheet body unavailable to Playwright cannot prove font sources. */ }})());});
       const local=value=>{const url=new URL(value);return ['data:','blob:'].includes(url.protocol)||['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)||url.hostname.endsWith('.lvh.me');};
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
-      page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
+      page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
       const mounted=await mount({fixture,theme,viewport,state,page});frame=mounted.frame;const {ready,afterAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
@@ -142,9 +166,13 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
       const localFailures=[...requestFailures,...httpFailures].filter(failure=>['stylesheet','script'].includes(failure.type)&&local(failure.url));
       for(const failure of localFailures)resourceEvidence.errors.push(`Local ${failure.type} failed: ${failure.url} (${failure.error||failure.status})`);
-      const fontEvidence=await frame.evaluate(fontLoadingEvidence);
-      await Promise.all(fontPending);
-      fontEvidence.resources=fontResources;
+      await waitForPending([...fontPending,...stylesheetPending]);
+      const frameStylesheets=stylesheetResponses.filter(response=>response.frame===frame).map(({url,status,css})=>({url,status,css}));
+      const fontEvidence=await frame.evaluate(fontLoadingEvidence,frameStylesheets);
+      // document.fonts.load() in the evidence probe can itself initiate the
+      // response whose bytes prove the used face, so drain again after it ends.
+      await waitForPending(fontPending);
+      fontEvidence.resources=fontResources.filter(resource=>resource.frame===frame).map(({url,status,sha256})=>({url,status,sha256}));
       const usedSources=new Set(fontEvidence.used.flatMap(face=>face.sources||[]));
       fontEvidence.errors.push(...resourceErrors.filter(failure=>usedSources.has(failure.url)).map(failure=>failure.error));
       fontEvidence.errors.push(...fontByteProof(fontEvidence).errors);

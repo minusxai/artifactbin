@@ -253,6 +253,35 @@ describe('bounded independent reader capture',()=>{
 
 
 describe('used font evidence',()=>{
+  it('binds external stylesheets to the inspected frame and drains font response reads after font loading',async()=>{
+    const output=await setup(),body=Buffer.from('font bytes'),fontSha256=createHash('sha256').update(body).digest('hex');
+    const parentFrame={},handlers=new Map();let targetFrame,inspectedStylesheets;
+    const emit=(type,response)=>{for(const handler of handlers.get(type)||[])handler(response);};
+    const response=(type,url,frame,content)=>({request:()=>({resourceType:()=>type}),url:()=>url,status:()=>200,frame:()=>frame,headers:()=>({'content-type':type==='stylesheet'?'text/css':'font/woff2'}),text:async()=>content,body:async()=>{await new Promise(resolve=>setTimeout(resolve,10));return body;}});
+    const frame={url:()=> 'http://localhost/reader',evaluate:async(fn,...args)=>{
+      if(fn.name==='fontLoadingEvidence'){
+        inspectedStylesheets=args[0];
+        emit('response',response('font','http://localhost/font.woff2',targetFrame,''));
+        return {faces:[],used:[{family:'Capture Font',style:'normal',weight:'400',declared:true,loaded:true,sources:['http://localhost/font.woff2']}],errors:[]};
+      }
+      if(fn.name==='browserResources')return {stylesheets:[],errors:[]};
+      if(fn.name==='browserState')return {text:'Actual font',controls:[],rows:[],overflow:0};
+      return undefined;
+    }};
+    targetFrame=frame;
+    const png=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const page={on:(type,handler)=>{const group=handlers.get(type)||[];group.push(handler);handlers.set(type,group);},screenshot:async()=>png};
+    const browser={version:()=> 'test-browser',newContext:async()=>({newPage:async()=>page,close:async()=>{}})};
+    const stylesheet=`@font-face{font-family:Capture Font;src:url("font.woff2");}`;
+    const captures=await captureBrowserBaseline({browser,mount:async()=>{
+      emit('response',response('stylesheet','http://localhost/parent.css',parentFrame,stylesheet.replace('font.woff2','parent-font.woff2')));
+      emit('response',response('stylesheet','http://localhost/frame.css',targetFrame,stylesheet));
+      return {frame};
+    },implementation:'html',sourceRevision:'a'.repeat(40),output,fixtures:[{id:'frame-font',states:[{id:'initial',actions:[]}]}],themes:['light'],viewports:[{width:800,height:600}]});
+    expect(inspectedStylesheets).toEqual([{url:'http://localhost/frame.css',status:200,css:stylesheet}]);
+    expect(captures[0].fontEvidence.resources).toEqual([{url:'http://localhost/font.woff2',status:200,sha256:fontSha256}]);
+    expect(fontByteProof(captures[0].fontEvidence).errors).toEqual([]);
+  });
   it('accepts variable weight matching while leaving unused italic faces unloaded',async()=>{
     const dom=new JSDOM('<style>@font-face{font-family:"DM Sans";font-style:normal;font-weight:400;src:url(/fonts/body.woff2)}@font-face{font-family:"DM Sans";font-style:italic;font-weight:400;src:url(/fonts/italic.woff2)}</style><p style="font-family:DM Sans;font-weight:500">Actual text</p>',{url:'http://localhost/reader'});
     for(const rule of dom.window.document.styleSheets[0].cssRules){const get=rule.style.getPropertyValue.bind(rule.style);rule.style.getPropertyValue=key=>key==='font-weight'?'100 1000':key==='src'?`url(/fonts/${get('font-style')==='italic'?'italic':'body'}.woff2)`:get(key);}
@@ -299,6 +328,37 @@ describe('used font evidence',()=>{
       expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['a'.repeat(64)]);
       expect(fontByteProof({...evidence,resources:[{url:'http://localhost/unrelated.woff2',status:200,sha256:'a'.repeat(64)}]}).errors).toContain('Used declared font DM Sans normal 500 has no verified response bytes');
     }finally{globalThis.document=original;}
+  });
+  it('joins a used face in a CORS stylesheet to its actual external font response URL',async()=>{
+    const dom=new JSDOM('<p style="font-family: Remote Font; font-weight: 500">Cross-origin text</p>',{url:'http://localhost/reader'});
+    const original=globalThis.document;
+    const face={family:'Remote Font',style:'normal',weight:'100 900',status:'loaded',unicodeRange:'U+0-10FFFF'};
+    const fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];
+    Object.defineProperty(dom.window.document,'fonts',{value:fonts});
+    Object.defineProperty(dom.window.document,'styleSheets',{value:[{get cssRules(){throw new dom.window.DOMException('Blocked by CORS','SecurityError');}}]});
+    dom.window.HTMLElement.prototype.getClientRects=()=>[{}];
+    dom.window.document.defaultView.CSSStyleSheet=class {
+      replaceSync(css){
+        expect(css).toContain('font-family: "Remote Font"');
+        const values={'font-family':'"Remote Font"','font-style':'normal','font-weight':'100 900','unicode-range':'U+0-10FFFF','src':/src:\s*(.*?);/.exec(css)?.[1]||''};
+        this.cssRules=[{type:5,style:{getPropertyValue:name=>values[name]||''}}];
+      }
+    };
+    globalThis.document=dom.window.document;
+    const stylesheetUrl='https://fonts.example.test/css/reader.css';
+    const stylesheetResponses=[{url:stylesheetUrl,status:200,css:'@font-face { font-family: "Remote Font"; font-style: normal; font-weight: 100 900; unicode-range: U+0-10FFFF; src: url("../files/remote.woff2") format("woff2"); }'}];
+    try{
+      const evidence=await fontLoadingEvidence(stylesheetResponses);
+      expect(evidence.used).toMatchObject([{family:'Remote Font',weight:'500',loaded:true,sources:['https://fonts.example.test/files/remote.woff2']}]);
+      expect(evidence.errors).toEqual([]);
+      const source=evidence.used[0].sources[0];
+      const proof=fontByteProof({...evidence,resources:[{url:source,status:200,sha256:'a'.repeat(64)}]});
+      expect(proof.errors).toEqual([]);expect(proof.used[0].hashes).toEqual(['a'.repeat(64)]);
+      expect(fontByteProof({...evidence,resources:[{url:'https://fonts.example.test/unrelated.woff2',status:200,sha256:'a'.repeat(64)}]}).errors).toContain('Used declared font Remote Font normal 500 has no verified response bytes');
+      const ambiguous=await fontLoadingEvidence([{...stylesheetResponses[0],css:stylesheetResponses[0].css.replace('../files/remote.woff2','../files/first.woff2')},{...stylesheetResponses[0],url:'https://fonts.example.test/css/other.css',css:stylesheetResponses[0].css.replace('../files/remote.woff2','../files/second.woff2')}]);
+      expect(ambiguous.used[0].sources).toEqual([]);
+      expect(fontByteProof({...ambiguous,resources:[{url:'https://fonts.example.test/files/first.woff2',status:200,sha256:'a'.repeat(64)},{url:'https://fonts.example.test/files/second.woff2',status:200,sha256:'b'.repeat(64)}]}).errors).toContain('Used declared font Remote Font normal 500 has no verified response bytes');
+    }finally{globalThis.document=original;dom.window.close();}
   });
   it('resolves imported font URLs against the imported stylesheet URL and rejects wrong bytes',async()=>{
     const face={family:'Pilot Font',style:'normal',weight:'400',status:'loaded',unicodeRange:'U+0-10FFFF'};
