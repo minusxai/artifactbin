@@ -141,6 +141,8 @@ export interface NativeV3PublicationHost {
     dependencies: readonly NativeV3BundleDependency[];
     fileDigests: readonly { path: string; sha256: string }[];
   };
+  /** Actual target comment-reader eligibility; separate from the complete identity ledger. */
+  commentNodeIds?(html:string):readonly string[];
   canonicalize(
     html: string,
     options: { previousHtml: string; ledger: NativeV3Ledger },
@@ -191,6 +193,7 @@ export interface NativeV3HistoryImport {
 export interface NativeV3PublicationModules {
   prepareBundle?: NativeV3PublicationHost["prepareBundle"];
   canonicalizeHtmlPage: NativeV3PublicationHost["canonicalize"];
+  commentNodeIds?: NativeV3PublicationHost["commentNodeIds"];
   prepareRegisteredQueryBackend(
     name: string,
     id: string,

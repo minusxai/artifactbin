@@ -253,6 +253,7 @@ function fixture(withPeople = false) {
   };
   const events: string[] = [];
   const host: NativeV3PublicationHost = {
+    commentNodeIds:html=>[...html.matchAll(/data-af-id="([^"]+)"/g)].map(m=>m[1]!),
     canonicalize(html, options) {
       events.push("canonicalize");
       return {
@@ -829,3 +830,8 @@ test("refuses an unadmitted or rewritten people dataset identity rather than inv
 test("rejects a people namespace collision with SQL registration before any host write",()=>{
  const {input,host,events}=fixture(true);for(const receipt of input.assemblies){receipt.input.people!.namespace='records';receipt.input.analysis.flow.imports[0]!.name='records';const {sha256:_,...body}=receipt;receipt.sha256=nativeReceiptDigest(body);}assert.throws(()=>projectNativeV3Publication(input,host),/dataset_namespace_collision/);assert.deepEqual(events,[]);
 });
+
+test("relation bindings use actual reader eligibility without deleting inert-template identities",()=>{
+ const {input,host}=fixture();const history=projectNativeV3Publication(input,host),before=structuredClone(history);assert.ok(projectNativeV3RelationBindings(input,history,host).length>0);host.commentNodeIds=()=>[];const bindings=projectNativeV3RelationBindings(input,history,host);assert.deepEqual(bindings,[]);assert.deepEqual(history,before);assert.ok(history.revisions.every(revision=>revision.ledger.allocatedIds.length>0));
+});
+test("relation projection refuses missing reader eligibility before calling a host",()=>{const {input,host,events}=fixture();const history=projectNativeV3Publication(input,host);events.length=0;delete host.commentNodeIds;assert.throws(()=>projectNativeV3RelationBindings(input,history,host),/comment_reader_required/);assert.deepEqual(events,[]);});

@@ -512,6 +512,7 @@ export function projectNativeV3RelationBindings(
   history: NativeV3HistoryImport,
   host: NativeV3PublicationHost,
 ) {
+  if(!host.commentNodeIds)invalid("comment_reader_required");
   const expected = projectNativeV3Publication(input, host);
   const { relationSha256: _expectedRelation, ...expectedBase } = expected,
     { relationSha256: _actualRelation, ...actualBase } = history;
@@ -535,8 +536,10 @@ export function projectNativeV3RelationBindings(
       ledger: revision.ledger,
     });
     if (canonical.html !== revision.page.html) invalid("relation_canonical");
+    const eligible=new Set(host.commentNodeIds!(revision.page.html));
+    if([...eligible].some(id=>!canonical.nodeIds.includes(id)))invalid("comment_reader_identity");
     return receipt.input.identity.bindings
-      .filter((binding) => canonical.nodeIds.includes(binding.afId))
+      .filter((binding) => canonical.nodeIds.includes(binding.afId)&&eligible.has(binding.afId))
       .map((binding) => ({
         version: receipt.key.version,
         htmlSha256: revision.sourceSha256,
@@ -553,6 +556,7 @@ export function createNativeV3PublicationHost(
 ): NativeV3PublicationHost {
   return {
     ...(modules.prepareBundle ? { prepareBundle: modules.prepareBundle } : {}),
+    ...(modules.commentNodeIds ? {commentNodeIds:modules.commentNodeIds} : {}),
     canonicalize: (html, options) =>
       modules.canonicalizeHtmlPage(html, options),
     prepareQuery: (page, receipt) =>
