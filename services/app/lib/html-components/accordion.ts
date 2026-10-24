@@ -205,9 +205,14 @@ export class AfAccordionContent extends HTMLElement {}
 export const accordionStyles = `
 af-accordion{display:block}
 af-accordion-item{display:block;border-bottom:1px solid var(--border,#ddd)}
-af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
-af-accordion-trigger:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
-af-accordion-trigger[aria-disabled=true]{opacity:.5;cursor:default}
+af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
+af-accordion-trigger:has(>button){display:contents}
+af-accordion-trigger>button{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left!important;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:transparent;color:inherit;cursor:pointer}
+af-accordion-trigger::after,af-accordion-trigger>button::after{box-sizing:border-box;content:"";flex:none;width:.5rem;height:.5rem;margin-left:auto;border-right:2px solid var(--muted-foreground,currentColor);border-bottom:2px solid var(--muted-foreground,currentColor);transform:translateY(-.125rem) rotate(45deg);transition:transform .2s}
+af-accordion-trigger[aria-expanded="true"]::after,af-accordion-trigger>button[aria-expanded="true"]::after{transform:translateY(.125rem) rotate(225deg)}
+af-accordion-trigger:has(>button)::after{content:none}
+af-accordion-trigger:focus-visible,af-accordion-trigger>button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-accordion-trigger[aria-disabled=true],af-accordion-trigger>button[aria-disabled=true],af-accordion-trigger>button:disabled{opacity:.5;cursor:default}
 af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.875rem}
 af-accordion-content[hidden]{display:none!important}
 `;

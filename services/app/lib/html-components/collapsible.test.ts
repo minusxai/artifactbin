@@ -72,6 +72,19 @@ describe('native authored collapsible', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false'); expect(button.getAttribute('aria-controls')).toBe(content.id);
     button.click(); expect(root.open).toBe(true); expect(button.getAttribute('aria-expanded')).toBe('true');
   });
+  it('styles a nested native trigger like its text-only host and preserves its disclosure behavior', async () => {
+    const {root,trigger,content}=fixture(); trigger.innerHTML='<button>Toggle</button>'; await tick();
+    const button=trigger.querySelector('button')!; const hostStyle=getComputedStyle(trigger); const buttonStyle=getComputedStyle(button);
+    for (const property of ['display','paddingTop','paddingRight','paddingBottom','paddingLeft','fontFamily','fontSize','fontWeight','color','backgroundColor','borderTopWidth','borderTopStyle','cursor'] as const) {
+      if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(hostStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(hostStyle[property]);
+    }
+    const unrelated=document.createElement('button'); content.append(unrelated);
+    const bareStyle=getComputedStyle(document.createElement('button'));
+    expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
+    expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
+    button.focus(); expect(document.activeElement).toBe(button); button.click();
+    expect(root.open).toBe(true); expect(content.hidden).toBe(false); expect(button.getAttribute('aria-expanded')).toBe('true');
+  });
   it('temporarily disables native trigger buttons while preserving their authored disabled and tabindex state', async () => {
     const {root,trigger} = fixture('', '<p>Body</p>');
     const originalEnabled = document.createElement('button'); originalEnabled.textContent = 'Enabled'; originalEnabled.setAttribute('tabindex','4');

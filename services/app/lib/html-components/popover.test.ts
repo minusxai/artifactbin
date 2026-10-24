@@ -25,6 +25,18 @@ it('keeps keyboard-open focus on the trigger and allows focus into content befor
  action.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
  expect(root.open).toBe(false); expect(document.activeElement).toBe(trigger);
 });
+it('styles only a nested native trigger button like its text-only host and preserves click focus', () => {
+ const {root,trigger,content} = fixture(); const wrapper=trigger.parentElement!; const wrapperStyle=getComputedStyle(wrapper); const buttonStyle=getComputedStyle(trigger);
+ for (const property of ['paddingTop','paddingRight','paddingBottom','paddingLeft','fontFamily','fontSize','fontWeight','color','backgroundColor','borderTopWidth','borderTopStyle','cursor'] as const) {
+  if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(wrapperStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(wrapperStyle[property]);
+ }
+ expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
+ const unrelated=document.createElement('button'); content.append(unrelated);
+ const bareStyle=getComputedStyle(document.createElement('button'));
+ expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
+ expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
+ trigger.focus(); trigger.click(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger);
+});
 it('waits for author-controlled state and supports canceled intent', () => {
  const {root,trigger,content} = fixture('open'); trigger.click(); expect(content.hidden).toBe(false);
  root.open = false; trigger.click(); expect(root.open).toBe(false); root.open = undefined; root.removeAttribute('open');

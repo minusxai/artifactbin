@@ -94,6 +94,20 @@ it('styles only a nested native trigger button like the text-only trigger and pr
   trigger.removeAttribute('disabled'); await tick(); button.focus();
   expect(document.activeElement).toBe(button);
 });
+it('styles a nested native close button like the text-only close control without styling dialog content buttons', async () => {
+  const {root,close} = fixture();
+  close.innerHTML = '<button>Close</button>'; await tick();
+  const button = close.querySelector('button')!;
+  const textOnly = document.createElement('af-dialog-close'); textOnly.textContent = 'Text close'; document.body.append(textOnly);
+  const nestedStyle = getComputedStyle(button); const textStyle = getComputedStyle(textOnly);
+  for (const property of ['display','paddingTop','paddingRight','paddingBottom','paddingLeft','fontSize','fontWeight','background','color','borderTopWidth','borderTopStyle','borderRadius','cursor'] as const) {
+    expect(nestedStyle[property], property).toBe(textStyle[property]);
+  }
+  const unrelated = document.createElement('button'); root.querySelector('af-dialog-content')!.append(unrelated);
+  const bareStyle=getComputedStyle(document.createElement('button'));
+  expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
+  expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
+});
 it('disposes an open native modal on content removal and accepts replacement content', async () => {
   const {root,trigger,content,native} = fixture(); trigger.focus(); trigger.click(); content.remove(); await tick();
   expect(native.open).toBe(false); expect(native.isConnected).toBe(false); expect(document.activeElement).toBe(trigger);

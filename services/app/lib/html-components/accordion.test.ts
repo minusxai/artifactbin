@@ -130,6 +130,18 @@ describe('native authored accordion', () => {
     root.setAttribute('disabled',''); expect(button.disabled).toBe(true); button.dispatchEvent(new MouseEvent('click',{bubbles:true})); expect(changes).toBe(1);
     root.removeAttribute('disabled'); expect(button.disabled).toBe(false);
   });
+  it('styles a nested native trigger like the full-row text trigger and keeps it as the interactive control', () => {
+    const {root,triggers,contents} = fixture('', '<af-accordion-trigger><button>Toggle</button></af-accordion-trigger>', ['a','b']);
+    const trigger=triggers[0]!; const button=trigger.querySelector('button')!; const hostStyle=getComputedStyle(trigger); const buttonStyle=getComputedStyle(button);
+    for (const property of ['width','paddingTop','paddingRight','paddingBottom','paddingLeft','fontSize','fontWeight','fontFamily','lineHeight','textAlign','color','backgroundColor','cursor'] as const) {
+      if (/^(padding|border.*Width)/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(hostStyle[property]) || 0); else expect(buttonStyle[property],property).toBe(hostStyle[property]);
+    }
+    const unrelated=document.createElement('button'); contents[0]!.append(unrelated);
+    expect(getComputedStyle(unrelated).display).not.toBe(buttonStyle.display);
+    button.focus(); expect(document.activeElement).toBe(button);
+    button.click(); expect(root.value).toBe('a'); expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(contents[0]!.hidden).toBe(false);
+  });
   it('settles observer updates when disabling an accordion with a native trigger button', async () => {
     const NativeObserver = globalThis.MutationObserver;
     const runs = [0];

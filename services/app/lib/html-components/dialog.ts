@@ -153,20 +153,23 @@ export class AfDialogClose extends HTMLElement {}
 export const dialogStyles = `
 af-dialog{display:contents}
 dialog[data-af-dialog-native]{margin:auto;max-height:calc(100svh - 4rem);width:fit-content;max-width:min(32rem,calc(100vw - 2rem));overflow:auto;border-radius:var(--radius-lg,var(--radius,.625rem));border:1px solid var(--border);background:var(--background);padding:1.5rem;color:var(--foreground);box-shadow:var(--shadow-lg,0 10px 15px -3px rgb(0 0 0 / 10%),0 4px 6px -4px rgb(0 0 0 / 10%))}
-dialog[data-af-dialog-native]::backdrop{background:rgb(0 0 0 / 50%)}
 af-dialog-content{display:flex;flex-direction:column;gap:1rem}
+af-dialog-content h2{font-family:var(--font-display,inherit);font-weight:600}
 af-dialog-header{display:flex;flex-direction:column;gap:.5rem}
 af-dialog-footer{display:flex;justify-content:flex-end;gap:.5rem}
-af-dialog-title{display:block;font-size:1.125rem;font-weight:600;line-height:1}
+af-dialog-title{display:block;font-family:var(--font-display,inherit);font-size:1.125rem;font-weight:600;line-height:1}
 af-dialog-description{display:block;color:var(--muted-foreground);font-size:.875rem}
 af-dialog-trigger,af-dialog-close{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
 af-dialog-trigger:has(button,input,select,textarea,a[href]),af-dialog-close:has(button,input,select,textarea,a[href]){display:contents}
 af-dialog-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
 af-dialog-close{border:1px solid var(--border);background:var(--background);color:var(--foreground)}
+af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1px solid var(--border);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--background);color:var(--foreground)}
 af-dialog-trigger:focus-visible,af-dialog-close:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-dialog-trigger>button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+af-dialog-close>button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-dialog-trigger[disabled],af-dialog-close[disabled]{opacity:.5;cursor:default}
 af-dialog-trigger[disabled]>button,af-dialog-trigger>button:disabled,af-dialog-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}
+af-dialog-close[disabled]>button,af-dialog-close>button:disabled,af-dialog-close>button[aria-disabled="true"]{opacity:.5;cursor:default}
 `;
 export function registerDialog(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
   if (!document.querySelector('style[data-af-dialog-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-dialog-styles',''); style.textContent = dialogStyles; document.head.append(style); }

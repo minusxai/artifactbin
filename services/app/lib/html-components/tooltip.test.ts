@@ -14,6 +14,14 @@ it('delays hover, cancels pending work on leave and opens immediately on focus',
  trigger.focus(); expect(root.open).toBe(true); expect(content.getAttribute('role')).toBe('tooltip'); expect(trigger.getAttribute('aria-describedby')).toBe(`existing ${content.id}`);
  trigger.blur(); vi.runAllTimers(); expect(root.open).toBe(false); expect(trigger.getAttribute('aria-describedby')).toBe('existing');
 });
+it('styles only a nested native tooltip trigger like its host and preserves keyboard focus behavior', () => {
+ const {root,trigger,content}=fixture(); const wrapper=trigger.parentElement!; const wrapperStyle=getComputedStyle(wrapper); const buttonStyle=getComputedStyle(trigger);
+ for (const property of ['paddingTop','paddingRight','paddingBottom','paddingLeft','fontFamily','fontSize','fontWeight','color','backgroundColor','borderTopWidth','borderTopStyle','cursor'] as const) {
+  if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(wrapperStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(wrapperStyle[property]);
+ }
+ expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
+ trigger.focus(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger); expect(content.getAttribute('role')).toBe('tooltip');
+});
 it('allows hovering the tooltip itself and preserves controlled/canceled visibility', () => {
  vi.useFakeTimers(); const {root,trigger,content} = fixture('default-open');
  trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true,relatedTarget:content})); vi.runAllTimers(); expect(root.open).toBe(true);
