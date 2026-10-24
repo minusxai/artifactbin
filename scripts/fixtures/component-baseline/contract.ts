@@ -18,6 +18,7 @@ export interface BrowserParityCapture {
   implementation: 'jsx' | 'html';
   sourceRevision: string;
   fixtureHash: string;
+  screenshotMode: 'viewport';
   screenshot: string;
   screenshotSha256: string;
   semantics: unknown;

@@ -22,6 +22,8 @@ To compare extracted evidence, use optional config:
 {"mode":"compare","baseline":"/evidence/original/jsx-captures.json","candidate":"/evidence/candidate/html-captures.json","baselineDirectory":"/evidence/original","candidateDirectory":"/evidence/candidate","output":"/evidence/diffs"}
 ```
 
+Captures use the configured page viewport (not the HTML element box), retaining top-layer dialogs and popovers. `screenshotMode: "viewport"` distinguishes these from earlier cropped diagnostics. Raw snapshots remain in the capture manifests. Comparison only normalizes empty native button values and whitespace between a body made solely of button labels; it preserves actual label, content, focus and selection differences. File inputs are recorded as file-input diagnostics rather than textboxes; native dialogs are included even when their role is implicit.
+
 Comparison emits diagnostic images and exact changed-pixel fractions. Any changed pixel, behavior difference, missing case, hash mismatch or page error prevents a parity pass. Unequal pixels require visual inspection and a reasoned correction; the tool does not grant an arbitrary tolerance.
 
 Current coverage is six families and 48 states per implementation: Button, Dialog, Tabs, Select, FileUpload and DataTable at 800×600 and 390×844, light and dark almanac theme. FileUpload covers only the unavailable static face, and DataTable covers initial rendering of identical query data. Selection persistence, actual uploads/retry/permission, table sorting/editing/virtualization, the remaining 20 families and cross-browser comparison remain outstanding. These fixtures are preparation until both actual reader runs have completed; unit tests and candidate-only screenshots do not establish visual parity.
