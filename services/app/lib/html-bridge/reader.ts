@@ -5,7 +5,8 @@ export function installHtmlReaderCommands(win: Window, appOrigin: string): () =>
     const data = event.data as { type?: unknown; mode?: unknown; hash?: unknown } | null;
     if (!data || typeof data !== 'object') return;
     if (data.type === 'mx:reader-mode' && (data.mode === 'dark' || data.mode === 'light')) {
-      win.document.documentElement.toggleAttribute('data-af-dark', data.mode === 'dark');
+      if (data.mode === 'dark') win.document.documentElement.setAttribute('data-af-dark', 'true');
+      else win.document.documentElement.removeAttribute('data-af-dark');
       win.document.documentElement.style.colorScheme = data.mode;
     }
     if (data.type === 'mx:frame-hash' && typeof data.hash === 'string' && /^#\S{1,512}$/.test(data.hash)) {
