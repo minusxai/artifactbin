@@ -2,8 +2,13 @@ import { floatingVisibility, identifyFloating, positionFloating, topFloating } f
 import { inBounds, localToday, monthGrid, moveMonth, validDate, type CalendarMonth } from './date-calendar';
 export interface AfDatePickerChangeDetail { value: string | null }
 interface DatePickerClock { clock: () => Date }
+export interface AfDatePickerContract {
+  label: string;
+  value: string | null;
+  disabled: boolean;
+}
 /** Author-owned controlled value, or viewer-local default; never persists data. */
-export class AfDatePicker extends HTMLElement implements DatePickerClock {
+export class AfDatePicker extends HTMLElement implements DatePickerClock, AfDatePickerContract {
   /** Inject local time for deterministic viewer behavior. */
   clock: () => Date = () => new Date();
   private focusedDate: string | null = null;
@@ -12,7 +17,9 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock {
   private propertyValue: string | null = null;
   private state: string | null = null;
   private initialized = false;
+  private labelNode?: HTMLSpanElement;
   private trigger?: HTMLButtonElement;
+  private valueNode?: HTMLSpanElement;
   private popup?: HTMLDivElement;
   private view: CalendarMonth = {year:2024,month:1};
   private open = false;
@@ -20,12 +27,23 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock {
   set value(value: string | null) { this.controlled=true; this.propertyValue=validDate(value)?value:null; this.render(); }
   get disabled(): boolean { return this.hasAttribute('disabled'); }
   set disabled(value: boolean) { this.toggleAttribute('disabled',value); }
+  get label(): string { return this.getAttribute('label') ?? ''; }
+  set label(value: string) { this.setAttribute('label',value); }
   private get locked(): boolean { return this.disabled || this.hasAttribute('readonly') || this.hasAttribute('read-only'); }
   connectedCallback(): void {
     if(Object.prototype.hasOwnProperty.call(this,'value')) { const v=this.value; delete (this as unknown as {value?:string|null}).value; this.value=v; }
     if(!this.initialized) { const v=this.getAttribute('default-value'); this.state=validDate(v)?v:null; this.initialized=true; }
     if(!this.trigger) {
+      this.labelNode=this.ownerDocument.createElement('span'); this.labelNode.className='af-date-label';
       this.trigger=this.ownerDocument.createElement('button'); this.trigger.type='button'; this.trigger.className='af-date-trigger';
+      this.valueNode=this.ownerDocument.createElement('span'); this.valueNode.className='af-date-value';
+      const icon=this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','svg');
+      icon.setAttribute('xmlns','http://www.w3.org/2000/svg'); icon.setAttribute('viewBox','0 0 24 24'); icon.setAttribute('fill','none'); icon.setAttribute('stroke','currentColor'); icon.setAttribute('stroke-width','2'); icon.setAttribute('stroke-linecap','round'); icon.setAttribute('stroke-linejoin','round'); icon.setAttribute('aria-hidden','true'); icon.setAttribute('focusable','false'); icon.classList.add('af-date-icon');
+      const first=this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path'); first.setAttribute('d','M8 2v4');
+      const second=this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path'); second.setAttribute('d','M16 2v4');
+      const frame=this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','rect'); frame.setAttribute('width','18'); frame.setAttribute('height','18'); frame.setAttribute('x','3'); frame.setAttribute('y','4'); frame.setAttribute('rx','2');
+      const separator=this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path'); separator.setAttribute('d','M3 10h18');
+      icon.append(first,second,frame,separator); this.trigger.append(this.valueNode,icon);
       this.trigger.setAttribute('aria-haspopup','dialog'); this.trigger.addEventListener('click',()=>this.toggle());
       this.popup=this.ownerDocument.createElement('div'); this.popup.className='af-date-popup'; this.popup.setAttribute('role','dialog'); this.popup.setAttribute('popover','manual'); identifyFloating(this.popup); this.trigger.setAttribute('aria-controls',this.popup.id);
       this.prepend(this.trigger,this.popup); this.addEventListener('keydown',this.keydown);
@@ -90,7 +108,10 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock {
     const restore=!!active && this.popup.contains(active);
     const activeDate=active?.dataset.date; const activeLabel=active?.getAttribute('aria-label');
     const label=this.getAttribute('aria-label') || this.getAttribute('label') || 'Date';
-    this.trigger.textContent=this.value ?? this.getAttribute('placeholder') ?? 'Pick a date'; this.trigger.setAttribute('aria-label',`${label}: ${this.value ?? 'Pick a date'}`);
+    const visibleLabel=this.getAttribute('label') ?? '';
+    if(visibleLabel) { this.labelNode!.textContent=visibleLabel; if(this.labelNode!.parentElement!==this) this.insertBefore(this.labelNode!,this.trigger); }
+    else this.labelNode?.remove();
+    this.valueNode!.textContent=this.value ?? this.getAttribute('placeholder') ?? 'Pick a date'; this.trigger.setAttribute('aria-label',`${label}: ${this.value ?? 'Pick a date'}`);
     this.trigger.disabled=this.disabled; this.trigger.setAttribute('aria-readonly',String(this.locked)); this.trigger.setAttribute('aria-expanded',String(this.open));
     this.popup.hidden=!this.open; this.popup.setAttribute('aria-label',`${label} calendar`); if(!this.open) { if(typeof this.popup.hidePopover==='function' && this.popup.matches(':popover-open')) this.popup.hidePopover(); return; }
     this.popup.replaceChildren();
@@ -112,7 +133,7 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock {
     if(restore) { const candidate=[...this.popup.querySelectorAll<HTMLButtonElement>('button')].find(button=>!button.disabled && (activeDate ? button.dataset.date===this.focusedDate : button.getAttribute('aria-label')===activeLabel)); (candidate ?? this.popup.querySelector<HTMLButtonElement>('[data-date][tabindex="0"]') ?? this.trigger).focus(); }
   }
 }
-const styles=`af-date-picker{display:inline-block;position:relative;color:var(--foreground,#222);font:inherit}af-date-picker button{box-sizing:border-box;font:inherit;color:inherit;background:var(--background,#fff);border:1px solid var(--border,#ddd);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - 4px));padding:.375rem;cursor:pointer}af-date-picker .af-date-trigger{height:2.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:0 .75rem;font-size:.875rem;line-height:1.25rem;border-color:var(--input,#ddd);box-shadow:0 1px 2px #0000000d}af-date-picker button:disabled{opacity:.4;cursor:not-allowed}af-date-picker button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-date-picker .af-date-popup{position:fixed;inset:auto;margin:0;z-index:50;box-sizing:border-box;width:18rem;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;padding:.75rem;background:var(--popover,var(--background,#fff));color:var(--popover-foreground,var(--foreground,#222));border:1px solid var(--border,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));box-shadow:var(--shadow-md,0 4px 6px -1px rgb(0 0 0 / 10%),0 2px 4px -2px rgb(0 0 0 / 10%))}af-date-picker .af-date-popup[hidden]{display:none}af-date-picker .af-date-header{display:flex;align-items:center;justify-content:space-between;gap:.25rem}af-date-picker .af-date-grid{display:grid;grid-template-columns:repeat(7,1fr);margin:.5rem 0;gap:.125rem;text-align:center}af-date-picker .af-date-grid button{border:0}af-date-picker [data-adjacent=true]{color:var(--muted-foreground,#777)}af-date-picker [aria-pressed=true]{background:var(--primary,#222);color:var(--primary-foreground,#fff)}af-date-picker abbr{text-decoration:none;font-size:.75rem}`;
+const styles=`af-date-picker{display:inline-flex;flex-direction:column;align-items:flex-start;gap:.375rem;vertical-align:top;position:relative;color:var(--foreground,#222);font:inherit}af-date-picker .af-date-label{display:block;color:var(--muted-foreground,#777);font-size:.6875rem;font-weight:500;line-height:1rem;letter-spacing:.05em;text-transform:uppercase}af-date-picker button{box-sizing:border-box;font:inherit;color:inherit;background:var(--background,#fff);border:1px solid var(--border,#ddd);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - 4px));padding:.375rem;cursor:pointer}af-date-picker .af-date-trigger{display:flex;width:10rem;align-items:center;justify-content:space-between;gap:.5rem;height:2.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:0 .75rem;font-size:.875rem;line-height:1.25rem;border-color:var(--input,#ddd);box-shadow:0 1px 2px #0000000d}af-date-picker .af-date-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}af-date-picker .af-date-icon{width:1rem;height:1rem;flex-shrink:0;opacity:.5}af-date-picker button:disabled{opacity:.4;cursor:not-allowed}af-date-picker button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-date-picker .af-date-popup{position:fixed;inset:auto;margin:0;z-index:50;box-sizing:border-box;width:18rem;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;padding:.75rem;background:var(--popover,var(--background,#fff));color:var(--popover-foreground,var(--foreground,#222));border:1px solid var(--border,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));box-shadow:var(--shadow-md,0 4px 6px -1px rgb(0 0 0 / 10%),0 2px 4px -2px rgb(0 0 0 / 10%))}af-date-picker .af-date-popup[hidden]{display:none}af-date-picker .af-date-header{display:flex;align-items:center;justify-content:space-between;gap:.25rem}af-date-picker .af-date-grid{display:grid;grid-template-columns:repeat(7,1fr);margin:.5rem 0;gap:.125rem;text-align:center}af-date-picker .af-date-grid button{border:0}af-date-picker [data-adjacent=true]{color:var(--muted-foreground,#777)}af-date-picker [aria-pressed=true]{background:var(--primary,#222);color:var(--primary-foreground,#fff)}af-date-picker abbr{text-decoration:none;font-size:.75rem}`;
 export function registerDatePicker(registry:CustomElementRegistry=customElements,document:Document=globalThis.document):void {
  if(!document.querySelector('style[data-af-date-picker-styles]')) { const style=document.createElement('style'); style.setAttribute('data-af-date-picker-styles',''); style.textContent=styles; document.head.append(style); }
  if(!registry.get('af-date-picker'))registry.define('af-date-picker',AfDatePicker);

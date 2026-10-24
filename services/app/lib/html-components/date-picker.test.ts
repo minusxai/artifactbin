@@ -11,6 +11,25 @@ it('opens a labeled calendar, changes uncontrolled values and preserves authored
  expect(root.value).toBe('2024-03-01'); expect(root.querySelector('[data-af-id]')).toBe(authored);
  root.remove(); document.body.append(root); expect(root.querySelectorAll('.af-date-trigger')).toHaveLength(1);
 });
+it('renders the authored visible label and a decorative calendar icon without changing the trigger name',()=>{
+ const root=fixture('label="Due date" default-value="2024-06-15"');
+ const label=root.querySelector<HTMLElement>('.af-date-label');
+ const trigger=root.querySelector<HTMLButtonElement>('.af-date-trigger')!;
+ expect(label?.textContent).toBe('Due date');
+ expect(trigger.getAttribute('aria-label')).toBe('Due date: 2024-06-15');
+ const icon=trigger.querySelector('svg');
+ expect(icon?.getAttribute('aria-hidden')).toBe('true');
+ expect(icon?.getAttribute('viewBox')).toBe('0 0 24 24');
+ expect(icon?.querySelector('path')?.getAttribute('d')).toBe('M8 2v4');
+ expect(icon?.querySelector('rect')?.getAttribute('x')).toBe('3');
+ root.setAttribute('aria-label','Deadline');
+ expect(root.querySelector('.af-date-label')?.textContent).toBe('Due date');
+ expect(trigger.getAttribute('aria-label')).toBe('Deadline: 2024-06-15');
+ root.label='Ship date';
+ expect(root.querySelector('.af-date-label')?.textContent).toBe('Ship date');
+ root.removeAttribute('label');
+ expect(root.querySelector('.af-date-label')).toBeNull();
+});
 it('reports cancelable composed intent and waits for controlled reflection',()=>{
  const root=fixture('value="2024-02-29"'); let event:CustomEvent<AfDatePickerChangeDetail>|undefined;
  root.addEventListener('af-change',e=>{event=e as CustomEvent<AfDatePickerChangeDetail>; e.preventDefault();});
