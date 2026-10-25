@@ -66,3 +66,10 @@ it('executes both dataviz reference grammars with shipped modules under no-eval'
   }finally{view.finalize();}
  }expect(blocked).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
 });
+
+it('keeps the full native Vega API within its browser download budget',async()=>{
+ const {module:vega,result}=await bundled('vega');
+ // Full API remains available; the budget removes duplicate dependencies, not transforms.
+ for(const name of ['View','parse','changeset','sceneVisit'])expect(typeof vega[name]).toBe('function');
+ expect(result.outputFiles[0]!.contents.byteLength).toBeLessThan(650_000);
+});
