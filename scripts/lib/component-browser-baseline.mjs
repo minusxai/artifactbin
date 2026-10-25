@@ -43,6 +43,19 @@ function browserState() {
 export function fontLoadingEvidence(externalStylesheets=[]) {
   return (async()=>{
     const clean=value=>String(value||'').trim().replace(/^['"]|['"]$/g,'');
+    const genericFamilies=new Set(['serif','sans-serif','cursive','fantasy','monospace','system-ui','ui-serif','ui-sans-serif','ui-monospace','ui-rounded','emoji','math','fangsong']);
+    const firstFamily=value=>{
+      const source=String(value||'').trim();let quote='',escaped=false,end=source.length;
+      for(let index=0;index<source.length;index++){
+        const character=source[index];
+        if(escaped){escaped=false;continue;}
+        if(quote){if(character==='\\'){escaped=true;continue;}if(character===quote)quote='';continue;}
+        if(character==='"'||character==="'"){quote=character;continue;}
+        if(character===','){end=index;break;}
+      }
+      const token=source.slice(0,end).trim(),quoted=(token.length>=2&&(token[0]==='"'&&token.at(-1)==='"'||token[0]==="'"&&token.at(-1)==="'")),family=clean(token);
+      return {family,generic:!quoted&&genericFamilies.has(family.toLowerCase())};
+    };
     const ruleFaces=[],seenSheets=new Set();
     const rules=(list,base,followImports=true)=>{for(const rule of list||[]){
       if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
@@ -81,8 +94,8 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
       let visible=!!element.getClientRects().length;
       if(!visible&&textNode&&css.display==='contents'){const range=document.createRange();try{range.selectNodeContents(textNode);visible=!!range.getClientRects().length;}finally{range.detach();}}
       if(!visible)return;
-      const family=clean(css.fontFamily.split(',')[0]);const key=[family,css.fontStyle,css.fontWeight].join('|');
-      const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
+      const {family,generic}=firstFamily(css.fontFamily);const key=[family,css.fontStyle,css.fontWeight,generic?'generic':'named'].join('|');
+      const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,generic,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
     };
     const textRoots=[document.body],seenTextRoots=new Set();
     for(let index=0;index<textRoots.length;index++){
@@ -95,6 +108,7 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
     const themeFamilies=['--font-body','--font-display','--font-mono'].map(key=>clean(document.defaultView.getComputedStyle(document.documentElement).getPropertyValue(key).split(',')[0])).filter(Boolean);
     const errors=[],used=[];
     for(const request of requested.values()){
+      if(request.generic){used.push({...request,declared:false,sources:[]});continue;}
       const declared=[...document.fonts].filter(face=>clean(face.family)===request.family);
       if(!declared.length){if(themeFamilies.includes(request.family))errors.push(`Used theme font ${request.family} has no declared font face`);used.push({...request,declared:false,sources:[]});continue;}
       try{
