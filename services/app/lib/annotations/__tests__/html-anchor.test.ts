@@ -28,6 +28,8 @@ it('validates a dynamic scope without interpreting runtime words as source or ac
 it('decodes bounded explicit selection segments and rejects malformed parts',()=>{
  const segment={nodeId:'part',quote:'selected',range:{start:0,end:8,length:8,fingerprint:'abcd'}};
  const anchor={kind:'html-node',v:1,revision:'3',nodeId:'root',quote:'selected',segments:[segment]};
+ expect(parseHtmlNodeAnchor({...anchor,segments:[{...segment,endAffinity:'forward'}]})?.segments).toEqual([{...segment,endAffinity:'forward'}]);
+ expect(parseHtmlNodeAnchor({...anchor,segments:[{...segment,endAffinity:'backward'}]})).toBeNull();
  expect(parseHtmlNodeAnchor(anchor)?.segments).toEqual([segment]);expect(parseHtmlNodeAnchor({...anchor,segments:[]} )?.segments).toEqual([]);
  for(const segments of [[{...segment,range:undefined}],[{...segment,nodeId:null}],[{...segment,extra:true}],Array(257).fill(segment)])expect(parseHtmlNodeAnchor({...anchor,segments})).toBeNull();
 });

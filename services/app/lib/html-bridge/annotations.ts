@@ -45,7 +45,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
             if(targets.length!==1)return {id:pin.id,status:targets.length?'ambiguous':'missing',rect:box(node.getBoundingClientRect())};
             const target=targets[0]!,text=target.textContent??'',range=part.range;
             if(text.length!==range.length || htmlTextFingerprint(text)!==range.fingerprint || text.slice(range.start,range.end).replace(/\s+/g,' ').trim()!==part.quote.replace(/\s+/g,' ').trim())return {id:pin.id,status:'missing',rect:box(node.getBoundingClientRect())};
-            const partResolved=resolveHtmlRange(target,{...pin.anchor,nodeId:part.nodeId,quote:part.quote,range,segments:undefined});
+            const partResolved=resolveHtmlRange(target,{...pin.anchor,nodeId:part.nodeId,quote:part.quote,range,segments:undefined},{endAffinity:part.endAffinity});
             if(!partResolved.range || partResolved.status!=='exact')return {id:pin.id,status:partResolved.status,rect:box(node.getBoundingClientRect())};
             ranges.push(partResolved.range);
           }

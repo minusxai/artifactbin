@@ -291,9 +291,9 @@ it('preserves projected multi-node selection parts through the same HTML public 
  const {htmlTextFingerprint}=await import('@artifactbin/contracts');
  const {db,history,projection,actor}=await fixture();history.visibility='public';
  projection.bindings=[...projection.bindings,{...projection.bindings[0]!,version:3,htmlSha256:history.revisions[1]!.sourceSha256}];
- const root=projection.annotations[0]!;root.anchor={version:3,sourceNamespace:'graph',sourceNodeId:'original-node',quote:'A quote',segments:[{sourceNodeId:'original-node',quote:'A quote',range:{start:0,end:7,length:9,fingerprint:htmlTextFingerprint('A quote 3')}}]};
+ const root=projection.annotations[0]!;root.anchor={version:3,sourceNamespace:'graph',sourceNodeId:'original-node',quote:'A quote',segments:[{sourceNodeId:'original-node',quote:'A quote',endAffinity:'forward',range:{start:0,end:7,length:9,fingerprint:htmlTextFingerprint('A quote 3')}}]};
  const binding=projection.bindings.find(b=>b.version===3)!;root.anchor.sourceNodeId=binding.sourceNodeId;root.anchor.segments![0]!.sourceNodeId=binding.sourceNodeId;
  const relations=prepareNativeHistoryRelations(projection);history.relationSha256=relations.sourceSha256;await importNativeHistory(db,history,relations);
- const rows=await listAnnotationsFor(actor,history.pageId,{status:'all'});expect(rows?.[0]?.anchor).toMatchObject({kind:'html-node',nodeId:'stable',segments:[{nodeId:'stable',quote:'A quote',range:{start:0,end:7}}]});expect(rows?.[0]?.quote_found).toBe(true);
+ const rows=await listAnnotationsFor(actor,history.pageId,{status:'all'});expect(rows?.[0]?.anchor).toMatchObject({kind:'html-node',nodeId:'stable',segments:[{nodeId:'stable',quote:'A quote',endAffinity:'forward',range:{start:0,end:7}}]});expect(rows?.[0]?.quote_found).toBe(true);
  const outsider=await mintAccountToken('synthetic_segment_reader');expect((await listAnnotationsFor(identityForUser(outsider.userId,outsider.id),history.pageId,{status:'all'}))?.[0]?.anchor).toEqual(rows?.[0]?.anchor);
 });
