@@ -23,13 +23,17 @@ export function prepareNativeProductionAuthority(input:NativeProductionAuthority
  const identity=json(files.identity),source=json(files.sourceHead),heads=source.heads?.filter((row:{id:string;version:number})=>row.id===recipe.key.sourceId&&row.version===recipe.key.version);
  if(identity.approvedPlanSha256!==identity.plan?.sha256||identity.plan.sourceNamespace!==plan.sourceNamespace||heads?.length!==1)fail();
  const userId=identity.plan.targets.users[heads[0].user_id]?.userId,before=json(files.authSchemaCapability),previous=before.runtime;
- if(!userId||previous?.actor?.userId!==userId||typeof previous.actor.tokenId!=='string'||!previous.actor.tokenId||typeof previous.origin!=='string'||!isDeepStrictEqual(before.schemas,{appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema}))fail();
- const transformed=structuredClone(files),capability={...before,schemas,runtime:{...previous,origin,actor:{userId},authority:{mode:authority.mode,ttlMs:authority.ttlMs}}};
+ const previousTokenId=previous?.actor?.tokenId,hasPreviousToken=typeof previousTokenId==='string'&&previousTokenId.length>0;
+ const previousRuntimeMode=previous?.mode===undefined?null:typeof previous.mode==='string'?previous.mode:fail();
+ const exactDisposableActor=previousRuntimeMode==='disposable-scoped-tokens'&&Object.keys(previous?.actor??{}).sort().join(',')==='userId';
+ if(!userId||previous?.actor?.userId!==userId||(!hasPreviousToken&&!exactDisposableActor)||typeof previous.origin!=='string'||!isDeepStrictEqual(before.schemas,{appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema}))fail();
+ const {mode:_previousMode,...previousRuntimeWithoutMode}=previous;
+ const transformed=structuredClone(files),capability={...before,schemas,runtime:{...previousRuntimeWithoutMode,origin,actor:{userId},authority:{mode:authority.mode,ttlMs:authority.ttlMs}}};
  transformed.authSchemaCapability=Buffer.from(JSON.stringify(capability));
  const derived=structuredClone(recipe),preserved:Record<string,string>={};
  for(const name of Object.keys(files) as (keyof typeof files)[]){const bytes=transformed[name]!;if(!bytes)fail();const currentSha=sha(bytes);if(name!=='authSchemaCapability'){if(currentSha!==recipe.inputs[name]!.sha256||!Buffer.from(bytes).equals(Buffer.from(files[name]!)))fail();preserved[name]=currentSha;}derived.inputs[name]={path:name+'.input',sha256:currentSha};}
  derived.authority={...derived.authority,...schemas};
- return {recipe:derived,files:transformed,diff:{format:'native-production-authority-diff-v1',planSha256:plan.sha256,key:structuredClone(recipe.key),assemblySha256:recipe.assemblySha256,preservedInputSha256:preserved,schemas:{before:{appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema},after:schemas},origin:{beforeSha256:sha(previous.origin),afterSha256:sha(origin)},actor:{userId,previousTokenIdSha256:sha(previous.actor.tokenId),afterAuthority:'scoped-internal-tokens',ttlMs:authority.ttlMs},sourceAndTargetRevisionsPreserved:true,imported:false,comparisonAdmitted:false,productionWrites:0}};
+ return {recipe:derived,files:transformed,diff:{format:'native-production-authority-diff-v1',planSha256:plan.sha256,key:structuredClone(recipe.key),assemblySha256:recipe.assemblySha256,preservedInputSha256:preserved,schemas:{before:{appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema},after:schemas},origin:{beforeSha256:sha(previous.origin),afterSha256:sha(origin)},actor:{userId,previousTokenIdSha256:hasPreviousToken?sha(previousTokenId):null,previousRuntimeMode,afterAuthority:'scoped-internal-tokens',ttlMs:authority.ttlMs},sourceAndTargetRevisionsPreserved:true,imported:false,comparisonAdmitted:false,productionWrites:0}};
 }
 /** Independently reject any extra evidence, key, revision, capability or actor mutation. */
 export function verifyNativeProductionAuthorityBinding(input:NativeProductionAuthorityInput,prepared:NativeProductionAuthorityPrepared):void {

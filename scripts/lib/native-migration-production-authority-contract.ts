@@ -11,6 +11,6 @@ export interface NativeProductionAuthorityPrepared {
  preservedInputSha256:Readonly<Record<string,string>>;
  schemas:{before:{appSchema:string;authSchema:string};after:{appSchema:string;authSchema:string}};
  origin:{beforeSha256:string;afterSha256:string};
- actor:{userId:string;previousTokenIdSha256:string;afterAuthority:'scoped-internal-tokens';ttlMs:number};
+ actor:{userId:string;previousTokenIdSha256:string|null;previousRuntimeMode:string|null;afterAuthority:'scoped-internal-tokens';ttlMs:number};
  sourceAndTargetRevisionsPreserved:true;imported:false;comparisonAdmitted:false;productionWrites:0};
 }
