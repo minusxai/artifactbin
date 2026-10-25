@@ -1,7 +1,7 @@
 import type {NativePipelineRequest,NativePipelineHostContext,NativePipelineResult,NativePipelineImport} from './pipeline-contracts.ts';
 import type {NativePipelineAdapterPorts,NativePipelineLifecycle} from './pipeline-adapter-contracts.ts';
 import type {NativeV3HistoryImport} from './v3-publication-contracts.ts';
-export interface NativePipelineBatchRequest {format:'native-pipeline-batch-v1';revisionScope:'latest';outputDirectory:string;captureOutputDirectory:string;requests:readonly NativePipelineRequest[]}
+export interface NativePipelineBatchRequest {format:'native-pipeline-batch-v1';revisionScope:'latest';outputDirectory:string;captureOutputDirectory:string;preparationConcurrency?:number;requests:readonly NativePipelineRequest[]}
 export interface NativePipelineUnsnapshotted {
  stage:'imported-unsnapshotted';key:NativePipelineHostContext['revision']['key'];assemblySha256:string;historyProjectionSha256:string;
  history:NativeV3HistoryImport;identityPlan:{sha256:string;targets:{users:Readonly<Record<string,{userId:string;email:string|null}>>}};datasetIds:readonly string[];
@@ -17,4 +17,5 @@ export interface NativePipelineBatchPorts extends NativePipelineAdapterPorts {
  convert(request:NativePipelineRequest):Promise<NativePipelineResult>;
  snapshot(input:{request:NativePipelineBatchRequest;lifecycle:NativePipelineLifecycle;heads:readonly NativePipelineBatchHead[];targetRoot:string}):Promise<NativePipelineBatchSnapshot>;
 }
-export interface NativePipelineBatchResult {format:'native-pipeline-batch-result-v1';revisionScope:'latest';status:'imported';heads:readonly NativePipelineBatchHead[];snapshot:NativePipelineBatchSnapshot}
+export interface NativePipelineBatchOutcome {sourceId:string;status:'imported'|'conversion-blocked'|'authority-failed';code?:string}
+export interface NativePipelineBatchResult {format:'native-pipeline-batch-result-v1';revisionScope:'latest';status:'imported'|'partial'|'blocked';outcomes:readonly NativePipelineBatchOutcome[];heads:readonly NativePipelineBatchHead[];snapshot?:NativePipelineBatchSnapshot}
