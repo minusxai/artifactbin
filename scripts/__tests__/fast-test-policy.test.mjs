@@ -117,3 +117,17 @@ describe('reviewed query request port', () => {
     expect(auditFastSource('options.remote!.fetch()','services/app/unreviewed.ts')).not.toEqual([]);
   });
 });
+
+describe('reviewed parser extension dispatch', () => {
+  const file='node_modules/acorn/dist/acorn.mjs';
+  const extension='Parser.extend = function extend(){var cls=this; for(var i=0;i<plugins.length;i++){cls=plugins[i](cls);} return cls;}';
+  it('admits only the Acorn Parser.extend plugin callback with the class argument', () => {
+    expect(auditFastSource(extension,file)).toEqual([]);
+    expect(auditFastSource(extension,file.replaceAll('/', '\\'))).toEqual([]);
+  });
+  it('rejects unrelated computed calls, arguments, constructors and ambient capabilities', () => {
+    for(const source of ['plugins[i](cls)', extension.replace('Parser.extend','Other.extend'), extension.replace('plugins[i](cls)','plugins[other](cls)'), extension.replace('plugins[i](cls)','plugins[i](url)'), extension.replace('plugins[i](cls)','new plugins[i](cls)'), extension.replace('plugins[i](cls)','globalThis[capability](cls)'), extension.replace('plugins[i](cls)','plugins[i](fetch(url))')])expect(auditFastSource(source,file)).not.toEqual([]);
+    expect(auditFastSource(extension,'services/app/parser.ts')).not.toEqual([]);
+    expect(auditFastSource(extension,'node_modules/unreviewed/dist/acorn.mjs')).not.toEqual([]);
+  });
+});
