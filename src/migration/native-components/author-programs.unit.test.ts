@@ -61,3 +61,12 @@ test('preview author profile binds child capability to exact identity and resour
  next({active:true,values:{},queries:{page:{rows:[{script:'two'}],loading:false,error:null}}});assert.equal(frames[0].removed,true);assert.deepEqual(revoked,['blob:owned-1']);
  next({active:false,values:{},queries:{}});assert.equal(frames[1].removed,true);assert.deepEqual(revoked,['blob:owned-1','blob:owned-2']);const before=frames.length;next({active:true,values:{},queries:{page:{rows:[{script:'late'}]}}});assert.equal(frames.length,before);
 });
+
+
+test('local DOM author receipt binds literal viewer state and rejects altered output or declarations',()=>{
+ const source="import {signal} from 'page';const [read,set]=signal('$chosen');document.body.textContent=read();set('updated');";
+ const input=fixture(source);input.analysis.flow.values=[{kind:'scalar',name:'chosen',type:'string',default:'',start:0,end:1}];input.admission.profile='local-state-dom';
+ const receipt=adaptNativeAuthorProgram(input);assert.match(receipt.authorJs,/@afbin\/apollo/);assert.doesNotMatch(receipt.authorJs,/mx\.params/);assert.equal(verifyNativeAuthorProgram({analysis:input.analysis,node:input.analysis.nodes[0]!,receipt}),true);assert.deepEqual(receipt.identities,input.identity.bindings.map(({sourceNode,afId},index)=>({sourceNode,afId,kind:index?'nonvisual':'element'})));
+ const {sha256,...body}=receipt,changed={...body,authorJs:body.authorJs+';document.body.textContent="changed";'};assert.equal(verifyNativeAuthorProgram({analysis:input.analysis,node:input.analysis.nodes[0]!,receipt:{...changed,sha256:nativeDigest(changed)}}),false);
+ input.analysis.flow.values[0]!.type='table';assert.throws(()=>adaptNativeAuthorProgram(input),/local declaration/);
+});

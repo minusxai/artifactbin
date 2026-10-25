@@ -41,3 +41,11 @@ test('preview capability requires an explicit source-bound host profile and deri
  const {resourceSha256}=await import('./resources.ts');p.authorProfiles=async()=>[{sourceNode:'script',profile:'native-query-preview',filter:'search',scriptSha256:resourceSha256(script)}];
  const result=await runNativePipeline(request('preview'),p);assert.equal(result.status,'assembled',JSON.stringify(result.blockers));const receipt=result.assembly!.input.authorPrograms![0]!;assert.equal(receipt.admission.preview?.sourceNodeId,result.identity!.bindings.find(binding=>binding.sourceNode==='script')!.afId);assert.deepEqual(receipt.admission.preview?.resources,[]);
 });
+
+test('pipeline automatically adapts literal local page signals and keeps unproven legacy globals blocked',async()=>{
+ let script="import {signal} from 'page';const [day,setDay]=signal('$day');setDay('2026-01-01');";
+ const p=ports(),load=p.readRevision;p.readRevision=async r=>{const revision=await load(r);const document={kind:'graph',schema:3,claimedIds:{},nodes:{$root:{parent:null,parts:['',''],children:['script'],ast:null},script:{parent:'$root',parts:['<script>','</script>'],children:['body'],ast:null},body:{parent:'script',parts:[script],children:[],ast:null}}};const original={...revision.original,document};return {...revision,original,rowSha256:nativeDigest(original),documentSha256:nativeDigest(document)};};
+ p.compiler.extract=async()=>({nodes:[{type:'element',graphKey:'script',tag:'script',isComponent:false,selfClosing:false,start:0,end:1,attributes:[],children:[{type:'text',graphKey:'body',value:script,start:0,end:1}]}],flow:{imports:[],values:[{kind:'scalar',name:'day',type:'date',default:null,start:0,end:1}],queries:[],mutations:[]}});
+ const result=await runNativePipeline(request('calendar'),p);assert.equal(result.status,'assembled',JSON.stringify(result.blockers));assert.equal(result.assembly?.input.authorPrograms?.[0]?.admission.profile,'local-state-dom');assert.match(result.assembly!.input.authorPrograms![0]!.authorJs,/@afbin\/apollo/);
+ script="try{mx.params.set('day','2026-01-01');}catch{}";const legacy=await runNativePipeline(request('legacy'),p);assert.ok(legacy.blockers.some(blocker=>blocker.code==='author-program-unsupported'));
+});
