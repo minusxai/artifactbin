@@ -21,12 +21,14 @@ export async function verifyReviewedComparison({root,ref,approvedSha256,context,
   if(camera.format!=='native-migration-camera-recipe-v1'||typeof camera.paths?.input!=='string'||sha(await readFile(camera.paths.input))!==[d.sourceCameraInput,d.targetCameraInput][i].sha256)fail();
   const input=inputs[i],implementation=i?'html':'jsx',revision=i?recipe.targetRevision:recipe.sourceRevision;
   if(input.implementation!==implementation||!isDeepStrictEqual(input.key,recipe.key)||input[i?'candidateRevision':'originalRevision']!==revision||input.canonicalSha256!==recipe.inputs.sourceHead.sha256||!hash(d.sourceCameraHtmlSha256)||input.bundleFiles?.find(f=>f.path==='index.html')?.sha256!==(i?recipe.inputs.compiledHtml.sha256:d.sourceCameraHtmlSha256))fail();
-  for(const field of ['sourceSha256','documentSha256','harnessSha256','canonicalSha256'])if(!hash(input[field])||inputs[0][field]!==inputs[1][field])fail();
+  for(const field of ['sourceSha256','documentSha256','canonicalSha256'])if(!hash(input[field])||inputs[0][field]!==inputs[1][field])fail();
+  const protocol=d.captureProtocols;if(!protocol||typeof protocol.description!=='string'||!protocol.description.trim()||!hash(input.harnessSha256)||input.harnessSha256!==protocol[i?'targetHarnessSha256':'sourceHarnessSha256'])fail();
+  const issues=d.captureIssues?.[i?'target':'source'];if(!Array.isArray(issues)||issues.some(e=>typeof e!=='string'))fail();
   if(Array.isArray(evidence)){
    // A reviewed successful initial subset does not assert that a failed full pilot passed.
-   if(!evidence.length||evidence.some(e=>e.implementation!==implementation||e.sourceRevision!==revision||e.errors?.length||e.assertionErrors?.length||!input.states?.some(s=>s.id===e.state)||!input.viewports?.some(v=>isDeepStrictEqual(v,e.viewport))))fail();
+   if(issues.length||!evidence.length||evidence.some(e=>e.implementation!==implementation||e.sourceRevision!==revision||e.errors?.length||e.assertionErrors?.length||!input.states?.some(s=>s.id===e.state)||!input.viewports?.some(v=>isDeepStrictEqual(v,e.viewport))))fail();
   }else{
-   if(evidence.format!=='native-migration-pilot-capture-v1'||evidence.implementation!==implementation||evidence.sourceRevision!==revision||evidence.issues?.length)fail();
+   if(evidence.format!=='native-migration-pilot-capture-v1'||evidence.implementation!==implementation||evidence.sourceRevision!==revision||!isDeepStrictEqual(evidence.issues,issues))fail();
    for(const field of ['sourceSha256','documentSha256','harnessSha256','canonicalSha256'])if(evidence[field]!==input[field])fail();
   }
  }

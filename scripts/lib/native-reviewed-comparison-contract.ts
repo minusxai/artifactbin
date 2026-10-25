@@ -4,6 +4,8 @@ export interface NativeReviewedComparisonDecision {
  format:'native-reviewed-comparison-decision-v1';accepted:true;revisionScope:'latest';
  key:NativeHostKey;assemblySha256:string;sourceRevision:string;targetRevision:string;
  sourceHeadSha256:string;compiledHtmlSha256:string;membershipSha256:string;commentsSha256:string;
+ captureProtocols:{sourceHarnessSha256:string;targetHarnessSha256:string;description:string};
+ captureIssues:{source:readonly string[];target:readonly string[]};
  sourceCameraHtmlSha256:string;sourceCameraInput:NativeHostFile;targetCameraInput:NativeHostFile;sourceEvidence:NativeHostFile;targetEvidence:NativeHostFile;
  strictReport:NativeHostFile;strictFalseField:'passed'|'strictEqual';strictPassed:false;
  evidence:readonly {kind:'source'|'target'|'assembly'|'relations'|'behavior'|'classification';file:NativeHostFile}[];
