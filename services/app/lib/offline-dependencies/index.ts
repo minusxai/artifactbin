@@ -1,7 +1,9 @@
 import {parse as parseJavaScript} from 'acorn';
-import {build,type Loader} from 'esbuild';
+import {createHash} from 'node:crypto';
+import {build,transform,type Loader} from 'esbuild';
+import {initSync,parse as parseModuleImports} from 'es-module-lexer';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
-import type {OfflineDependencyInput,OfflineDependencyResult} from './contracts';
+import {OFFLINE_MODULES_BLOCK,type OfflineEmbeddedModules,type OfflineDependencyInput,type OfflineDependencyResult} from './contracts';
 export type {OfflineDependencyInput,OfflineDependencyResult} from './contracts';
 export const OFFLINE_DEPENDENCY_LIMITS={resources:256,resourceBytes:16*1024*1024,totalBytes:16*1024*1024,htmlBytes:4*1024*1024} as const;
 const JS=new Set(['application/javascript','text/javascript','application/ecmascript','text/ecmascript']);
@@ -25,10 +27,27 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  const checkClassic=(source:string)=>{const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const record=node as Record<string,unknown>;if(record.type==='ImportExpression'||record.type==='CallExpression'&&['require','importScripts'].includes(String((record.callee as Record<string,unknown>)?.name)))throw Error('Classic script dependencies are unsupported in offline export');for(const value of Object.values(record))if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);};visit(parseJavaScript(source,{ecmaVersion:'latest',sourceType:'script'}));};
  const dataResource=(value:string)=>{const comma=value.indexOf(',');if(!/^data:/i.test(value)||comma<0)throw Error('Invalid self-contained resource');const header=value.slice(5,comma).split(';'),mime=header.shift()||'text/plain',payload=value.slice(comma+1).split('#')[0]!;const bytes=header.some(part=>part.toLowerCase()==='base64')?Buffer.from(payload,'base64'):Buffer.from(decodeURIComponent(payload));if(bytes.length>limits.resourceBytes)throw Error('Offline dependency byte limit exceeded');return {contentType:mime,bytes};};
  const checkModule=(source:string,selfContained=false)=>{const visit=(node:unknown):void=>{if(!node||typeof node!=='object')return;const record=node as Record<string,unknown>;const imported=(record.source as Record<string,unknown>|undefined)?.value;if(selfContained&&typeof imported==='string'&&record.type&&['ImportExpression','ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration'].includes(String(record.type))&&!['@afbin/apollo','@afbin/reader'].includes(imported)){if(!/^data:/i.test(imported))throw Error('Self-contained module has an unresolved dependency');const child=dataResource(imported);if(!JS.has(type(child.contentType)))throw Error('Script resource MIME is not JavaScript');checkModule(new TextDecoder().decode(child.bytes),true);}if(record.type==='ImportExpression'&&(!record.source||typeof record.source!=='object'||(record.source as Record<string,unknown>).type!=='Literal'))throw Error('Offline dynamic imports must be literal admitted URLs');for(const value of Object.values(record))if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);};visit(parseJavaScript(source,{ecmaVersion:'latest',sourceType:'module'}));};
+ // Only already-closed ESM modules can bypass graph bundling. Keep native
+ // module identity without building a second enormous JavaScript AST in Node.
+ initSync();
+ const closedModules=new Map<string,Promise<string|null>>(),embeddedModules:Record<string,string>={};
+ const closedModule=(url:string):Promise<string|null>=>{
+  const identity=assetIdentity(url)??url,cached=closedModules.get(identity);if(cached)return cached;
+  const pending=(async()=>{
+   const resource=get(url);if(!JS.has(type(resource.contentType)))return null;
+   const source=new TextDecoder().decode(resource.bytes),[imports,exports]=parseModuleImports(source);
+   // CommonJS/side-effect scripts and dependency graphs retain esbuild's path.
+   if(imports.length||!exports.length)return null;
+   const validated=await transform(source,{loader:'js',format:'esm',target:'es2022',logLevel:'silent'});
+   if(validated.warnings.some(warning=>warning.id==='commonjs-variable-in-esm'))return null;
+   const specifier='@afbin/offline/'+createHash('sha256').update(identity).update('\0').update(resource.bytes).digest('hex');
+   embeddedModules[specifier]=source;return specifier;
+  })();closedModules.set(identity,pending);return pending;
+ };
  const bundle=async(source:string,url:string,loader:'js'|'css')=>{
   if(loader==='js')checkModule(source);
   const result=await build({stdin:{contents:source,sourcefile:url,loader},bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',legalComments:'none',logLevel:'silent',outdir:'/offline',plugins:[{name:'admitted-offline-only',setup(builder){
-   builder.onResolve({filter:/.*/},args=>{if(['@afbin/apollo','@afbin/reader'].includes(args.path))return {path:args.path,external:true};if(/^(?:data:|#)/i.test(args.path))return {path:args.path,external:true};const resolved=canonical(args.path,args.importer||url);if(args.kind==='url-token')return {path:binary(args.path,args.importer||url),external:true};return {path:resolved,namespace:'admitted'};});
+   builder.onResolve({filter:/.*/},async args=>{if(['@afbin/apollo','@afbin/reader'].includes(args.path))return {path:args.path,external:true};if(/^(?:data:|#)/i.test(args.path))return {path:args.path,external:true};const resolved=canonical(args.path,args.importer||url);if(args.kind==='url-token')return {path:binary(args.path,args.importer||url),external:true};if(args.kind==='import-statement'||args.kind==='dynamic-import'){const shared=await closedModule(resolved);if(shared)return {path:shared,external:true};}return {path:resolved,namespace:'admitted'};});
    builder.onLoad({filter:/.*/,namespace:'admitted'},args=>{const resource=get(args.path),mime=type(resource.contentType);let loader:Loader;if(JS.has(mime)){loader='js';checkModule(new TextDecoder().decode(resource.bytes));}else if(mime==='text/css')loader='css';else if(mime==='application/json')loader='json';else if(/^(?:image|font|audio|video)\//.test(mime)||mime==='application/octet-stream')return {contents:'export default '+JSON.stringify(encoded(mime,resource.bytes)),loader:'js'};else throw Error('Unsupported offline resource MIME');return {contents:resource.bytes,loader};});
   }}]});
   const output=result.outputFiles.find(file=>file.path.endsWith(loader==='css'?'.css':'.js'));if(!output)throw Error('Offline dependency bundle has no output');
@@ -53,5 +72,15 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
   if(attr('style')){const packed=await bundle('.offline-declarations{'+attr('style')+'}',input.baseUrl,'css');const css=Buffer.from(packed.url.split(',')[1]!,'base64').toString();set('style',css.slice(css.indexOf('{')+1,css.lastIndexOf('}')).trim());}
   if(element.tagName==='style'){const loc=element.sourceCodeLocation;if(loc?.startTag&&loc.endTag){const packed=await bundle(input.html.slice(loc.startTag.endOffset,loc.endTag.startOffset),input.baseUrl,'css');edits.push({start:loc.startTag.endOffset,end:loc.endTag.startOffset,text:Buffer.from(packed.url.split(',')[1]!,'base64').toString().replace(/<\/style/gi,'<\\/style')});}}
  }
- let html=input.html;for(const edit of edits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+edit.text+html.slice(edit.end);if(extraCss)html=/<\/head\s*>/i.test(html)?html.replace(/<\/head\s*>/i,extraCss+'</head>'):extraCss+html;return {html,embeddedUrls:[...used]};
+ let html=input.html;for(const edit of edits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+edit.text+html.slice(edit.end);if(extraCss)html=/<\/head\s*>/i.test(html)?html.replace(/<\/head\s*>/i,extraCss+'</head>'):extraCss+html;if(Object.keys(embeddedModules).length){
+  const modules:OfflineEmbeddedModules=embeddedModules;
+  const payload=JSON.stringify(modules).replace(/</g,'\\u003c');
+  const loader=`(()=>{const own=document.currentScript,modules=JSON.parse(own.previousElementSibling.textContent),imports={};for(const [key,source]of Object.entries(modules))imports[key]=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const map=document.createElement('script');map.type='importmap';const nonce=document.querySelector('script[data-af="core"]')?.nonce;if(nonce)map.nonce=nonce;map.textContent=JSON.stringify({imports});own.after(map);addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(imports))URL.revokeObjectURL(url);});})();`;
+  const bootstrap=`<script type="application/json" data-af="${OFFLINE_MODULES_BLOCK}">${payload}</script><script data-af="offline-module-loader">${loader}</script>`;
+  const rendered=parse(html,{sourceCodeLocationInfo:true}),root=rendered.childNodes.find(node=>node.nodeName==='html');
+  const head=root&&'childNodes'in root?root.childNodes.find(node=>node.nodeName==='head'):undefined;
+  const location=head?.sourceCodeLocation;const at=location&&'startTag'in location?location.startTag?.endOffset??0:0;
+  html=html.slice(0,at)+bootstrap+html.slice(at);
+ }
+ return {html,embeddedUrls:[...used]};
 }

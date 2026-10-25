@@ -57,3 +57,47 @@ it('admits presentation query aliases only for the same immutable page asset',as
  await expect(packOfflineDependencies({html:script('./plain.js?cache=1'),baseUrl,resources:[file('./plain.js','text/javascript','export const value=42;')]})).rejects.toThrow(/admitted/);
  await expect(packOfflineDependencies({html:script(admitted),baseUrl,resources:[...resources,file(admitted+'&version=3','text/javascript','export const value=99;')]})).rejects.toThrow(/Conflicting/);
 });
+
+function inlineModules(html:string):string[]{return [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map(match=>match[1]!);}
+function embedded(html:string):Record<string,string>{const match=html.match(/<script type="application\/json" data-af="offline-modules">([\s\S]*?)<\/script>/);return match?JSON.parse(match[1]!):{};}
+async function executeModule(source:string,html:string){for(const [key,value]of Object.entries(embedded(html)))source=source.replaceAll(JSON.stringify(key),JSON.stringify('data:text/javascript;base64,'+Buffer.from(value).toString('base64')+'#'+key));return import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);}
+it('retains shared closed ESM default, named and namespace identity across entries and aliases',async()=>{
+ const resource=file('./shared.js','text/javascript','export default {};export let count=0;export function increment(){count++;}');
+ const html='<script type="module">import value,{increment} from "./shared.js";import * as same from "https://example.test/a/page/shared.js";export {value,increment,same};export const entry=1;</script><script type="module">import value,* as shared from "./shared.js";export {value,shared};export const entry=2;</script>';
+ const packed=await packOfflineDependencies({html,baseUrl,resources:[resource]});const [a,b]=await Promise.all(inlineModules(packed.html).map(source=>executeModule(source,packed.html)));
+ expect(a.value).toBe(b.value);expect(a.same).toBe(b.shared);a.increment();expect(b.shared.count).toBe(1);expect(packed.embeddedUrls).toHaveLength(1);
+});
+it('keeps distinct closed module URLs distinct even when their bytes are identical',async()=>{
+ const source='export default {};';const html='<script type="module">import a from "./a.js";import b from "./b.js";export {a,b};</script>';
+ const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./a.js','text/javascript',source),file('./b.js','text/javascript',source)]});const result=await executeModule(inlineModules(packed.html)[0]!,packed.html);expect(result.a).not.toBe(result.b);
+});
+it('retains relative graph resolution while sharing closed leaf modules',async()=>{
+ const html='<script type="module">import {value} from "./nested/wrapper.js";import direct from "./nested/leaf.js";export {value,direct};</script>';
+ const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./nested/wrapper.js','text/javascript','import value from "./leaf.js";export {value};'),file('./nested/leaf.js','text/javascript','export default {};')]});const result=await executeModule(inlineModules(packed.html)[0]!,packed.html);expect(result.value).toBe(result.direct);
+});
+it('shares immutable asset aliases and binds separate exports to the exact admitted content',async()=>{
+ const asset='/a/PAGE12/assets?dependency=LIB123&revision=3';
+ const html=`<script type="module">import first from "${asset}";import second from "${asset}&version=8";export {first,second};</script>`;
+ const packed=await packOfflineDependencies({html,baseUrl,resources:[file(asset,'text/javascript','export default {};')]});const result=await executeModule(inlineModules(packed.html)[0]!,packed.html);expect(result.first).toBe(result.second);
+ const entry='<script type="module">export {default} from "./content.js";</script>';
+ const exports=await Promise.all([1,2].map(async version=>{const value=await packOfflineDependencies({html:entry,baseUrl,resources:[file('./content.js','text/javascript',`export default {version:${version}};`)]});return executeModule(inlineModules(value.html)[0]!,value.html);}));expect(exports[0].default.version).toBe(1);expect(exports[1].default.version).toBe(2);expect(exports[0].default).not.toBe(exports[1].default);
+});
+
+it.each(['module.exports={value:7};','exports.value=7;'])("preserves esbuild's CommonJS conversion without require: %s",async source=>{
+ const html='<script type="module">import value from "./common.cjs";export default value;</script>';
+ const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./common.cjs','text/javascript',source)]});expect((await executeModule(inlineModules(packed.html)[0]!,packed.html)).default.value).toBe(7);
+});
+
+it('embeds a shared payload once regardless of inline entry count',async()=>{
+ const source='export const value='+JSON.stringify('x'.repeat(20000))+';';const entry='<script type="module">import {value} from "./large.js";console.log(value);</script>';
+ const one=await packOfflineDependencies({html:entry,baseUrl,resources:[file('./large.js','text/javascript',source)]});const many=await packOfflineDependencies({html:entry.repeat(10),baseUrl,resources:[file('./large.js','text/javascript',source)]});
+ expect(Object.values(embedded(many.html))).toEqual([source]);expect(many.html.length-one.html.length).toBeLessThan(4000);expect(many.html).not.toContain('data:text/javascript;base64,');
+});
+
+it('installs one nonce-authorized map and retains blob identities across bfcache',async()=>{
+ const packed=await packOfflineDependencies({html:'<script type="module">import value from "./shared.js";</script>',baseUrl,resources:[file('./shared.js','text/javascript','export default {};')]});
+ const payload=embedded(packed.html),loader=packed.html.match(/<script data-af="offline-module-loader">([\s\S]*?)<\/script>/)![1]!;const maps:any[]=[],revoked:string[]=[];let hide:(event:{persisted:boolean})=>void=()=>{};
+ const document={currentScript:{previousElementSibling:{textContent:JSON.stringify(payload)},after:(map:unknown)=>maps.push(map)},querySelector:()=>({nonce:'trusted-nonce'}),createElement:()=>({})};
+ new Function('document','URL','Blob','addEventListener',loader)(document,{createObjectURL:()=> 'blob:shared',revokeObjectURL:(url:string)=>revoked.push(url)},Blob,(_name:string,callback:typeof hide)=>{hide=callback;});
+ expect(maps).toHaveLength(1);expect(maps[0].nonce).toBe('trusted-nonce');expect(Object.values(JSON.parse(maps[0].textContent).imports)).toEqual(['blob:shared']);hide({persisted:true});expect(revoked).toEqual([]);hide({persisted:false});expect(revoked).toEqual(['blob:shared']);
+});
