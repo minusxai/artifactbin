@@ -15,6 +15,14 @@ function fixture(attrs = '') {
   const root = host.firstElementChild as AfTabs;
   return { root, triggers: [...root.querySelectorAll<HTMLElement>('af-tabs-trigger')], panels: [...root.querySelectorAll<HTMLElement>('af-tabs-content')] };
 }
+function shadowFixture(attrs = '') {
+  const host = document.createElement('div');
+  const shadow = host.attachShadow({mode:'open'});
+  shadow.innerHTML = `<af-tabs ${attrs}><af-tabs-list><af-tabs-trigger value="a">A</af-tabs-trigger><af-tabs-trigger value="b">B</af-tabs-trigger><af-tabs-trigger value="c" disabled>C</af-tabs-trigger></af-tabs-list></af-tabs>`;
+  document.body.append(host);
+  const root = shadow.querySelector('af-tabs') as AfTabs;
+  return {host, shadow, root, triggers:[...root.querySelectorAll<HTMLElement>('af-tabs-trigger')]};
+}
 describe('native authored tabs', () => {
   it('preserves panels and authored identity, links unique ARIA ids, and emits intent', () => {
     const {root, triggers, panels} = fixture('default-value="a"');
@@ -86,6 +94,44 @@ describe('native authored tabs', () => {
     });
     reentrant.triggers[1]!.click();
     expect(count).toBe(1);
+  });
+  it('recognizes an already-focused trigger inside a shadow root when click has no focusin to trigger activation', () => {
+    const {host, shadow, root, triggers} = shadowFixture('value="a"');
+    const intents: string[] = [];
+    root.addEventListener('af-change', event => intents.push((event as CustomEvent).detail.value));
+    triggers[1]!.addEventListener('focusin', event => event.stopPropagation(), {once:true});
+
+    triggers[1]!.focus();
+    expect(document.activeElement).toBe(host);
+    expect(shadow.activeElement).toBe(triggers[1]);
+    triggers[1]!.click();
+    expect(intents).toEqual(['b']);
+    expect(triggers[1]!.tabIndex).toBe(0);
+  });
+  it('keeps automatic, manual and disabled focus behavior inside a shadow root without duplicate pointer intent', () => {
+    const automatic = shadowFixture('value="a"');
+    const automaticIntents: string[] = [];
+    automatic.root.addEventListener('af-change', event => automaticIntents.push((event as CustomEvent).detail.value));
+    automatic.triggers[1]!.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+    automatic.triggers[1]!.focus();
+    expect(automatic.shadow.activeElement).toBe(automatic.triggers[1]);
+    expect(automatic.triggers[1]!.tabIndex).toBe(0);
+    expect(automaticIntents).toEqual(['b']);
+    automatic.triggers[1]!.dispatchEvent(new MouseEvent('click', {bubbles:true, detail:1}));
+    expect(automaticIntents).toEqual(['b']);
+
+    const manual = shadowFixture('default-value="a" activation-mode="manual"');
+    const manualIntents: string[] = [];
+    manual.root.addEventListener('af-change', event => manualIntents.push((event as CustomEvent).detail.value));
+    manual.triggers[1]!.focus();
+    expect(manual.shadow.activeElement).toBe(manual.triggers[1]);
+    expect(manual.triggers[1]!.tabIndex).toBe(0);
+    expect(manual.root.value).toBe('a');
+    expect(manualIntents).toEqual([]);
+
+    manual.triggers[2]!.focus();
+    expect(manual.root.value).toBe('a');
+    expect(manualIntents).toEqual([]);
   });
   it('separates manual focus from selection and respects RTL, boundaries and disabled tabs', () => {
     const {root, triggers} = fixture('default-value="a" activation-mode="manual" dir="rtl" loop="false"');

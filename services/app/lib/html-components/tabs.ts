@@ -55,6 +55,10 @@ export class AfTabs extends HTMLElement implements TabsContract {
     const node = event.target instanceof Element ? event.target.closest<AfTabsTrigger>('af-tabs-trigger') : null;
     return node?.closest('af-tabs') === this && !node.hasAttribute('disabled') ? node : undefined;
   }
+  private activeElement(): Element | null {
+    const root = this.getRootNode();
+    return root instanceof ShadowRoot ? root.activeElement : this.ownerDocument.activeElement;
+  }
   private choose(trigger: AfTabsTrigger): void {
     const value = trigger.getAttribute('value');
     if (this.dispatchingChange || value === null || value === this.value) return;
@@ -69,7 +73,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
   }
   private onClick = (event: Event): void => {
     const trigger = this.target(event); if (!trigger || event.defaultPrevented) return;
-    const alreadyFocused = this.ownerDocument.activeElement === trigger;
+    const alreadyFocused = this.activeElement() === trigger;
     const activatedOnPointerFocus = event instanceof MouseEvent && event.detail > 0 && this.pointerFocusActivation === trigger;
     this.pointerDownTrigger = undefined; this.pointerFocusActivation = undefined;
     this.focused = trigger; trigger.focus();
@@ -97,7 +101,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     const index=tabFocusTarget({key:event.key,index:enabled.indexOf(trigger),count:enabled.length,orientation:vertical?'vertical':'horizontal',dir:rtl?'rtl':'ltr',loop:this.getAttribute('loop')!=='false'});
     if(index===null)return;
     event.preventDefault(); const next = enabled[index]; if (!next) return;
-    const alreadyFocused = this.ownerDocument.activeElement === next;
+    const alreadyFocused = this.activeElement() === next;
     this.focused = next; next.focus();
     if (alreadyFocused && this.getAttribute('activation-mode') !== 'manual') this.choose(next);
     this.sync();
@@ -112,7 +116,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     if (!this.isConnected) return;
     const triggers = this.triggers(); const panels = this.own<AfTabsContent>('af-tabs-content');
     const enabled = this.enabled();
-    if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.ownerDocument.activeElement as AfTabsTrigger)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
+    if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.activeElement() as AfTabsTrigger)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
     for (const list of this.own('af-tabs-list')) {
       list.dataset.orientation = this.getAttribute('orientation') === 'vertical' ? 'vertical' : 'horizontal';
       list.dataset.variant = list.getAttribute('variant') ?? this.getAttribute('variant') ?? 'default';
