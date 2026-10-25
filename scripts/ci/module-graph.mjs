@@ -48,11 +48,12 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/lib/html-runtime/browser-reader.ts',
+  'services/app/lib/html-runtime/table-scroll.ts',
   'services/app/solid/',
 ];
 const ISLANDS_BROWSER_LEAVES = [
   'frame-links', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
+  'live-update', 'person-face', 'table-scroll', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
