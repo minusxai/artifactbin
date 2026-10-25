@@ -123,6 +123,9 @@ it('keeps the supported signed-out or unbound state unavailable until an adapter
 // Retained FileUpload uses a visually clipped input, not a hidden accessibility node.
 it('keeps the named file picker accessible while unavailable and delegates the chooser when enabled', () => {
   const element = fixture(); element.setAttribute('label', 'Screenshots');
+  expect(element.querySelector('.af-file-upload-label')?.textContent).toBe('Screenshots');
+  expect(element.querySelector('.af-file-upload-help')?.textContent).toBe('Uploads unavailable.');
+  expect(element.querySelector('.af-file-upload-help')?.id).toBeTruthy();
   const input = element.querySelector('input')!;
   expect(input.hidden).toBe(false);
   expect(input.tabIndex).toBe(-1);

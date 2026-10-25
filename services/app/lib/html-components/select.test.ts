@@ -25,7 +25,10 @@ it('selects typed options, emits cancelable intent, and respects controlled valu
 it('filters, supports nullable choice and keyboard search', () => {
   const root = fixture(); root.setAttribute('placeholder', 'All');
   trigger(root).dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
-  expect(root.querySelector('[role=searchbox]')?.getAttribute('aria-label')).toBe('Search Pick');
+  const search=root.querySelector<HTMLInputElement>('[role=searchbox]');
+  expect(search?.getAttribute('aria-label')).toBe('Search Pick');
+  expect(search?.parentElement?.classList.contains('af-select-search')).toBe(true);
+  expect(root.querySelector('[role=listbox]')?.parentElement?.classList.contains('af-select-popup')).toBe(true);
   root.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(root.value).toBe(2);
   trigger(root).click(); option(root, 'All').click(); expect(root.value).toBe(null);
