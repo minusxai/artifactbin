@@ -1,3 +1,4 @@
+import {htmlTextFingerprint} from '@artifactbin/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHtmlAnnotationPainter } from '../../html-bridge/annotations';
 afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.querySelectorAll('[data-af="annotation-overlay"]').forEach((node) => node.remove()); window.getSelection()?.removeAllRanges(); });
@@ -85,4 +86,14 @@ it('paints migrated ranges behind text with the original comment palette and cle
  painter.paint({pins:[{id:'thread',path:'root',anchor}],mode:'on',openId:null,hoverId:null});expect(registry.size).toBe(1);expect(Highlight).toHaveBeenCalledTimes(1);expect(document.querySelector('[data-af="annotation-overlay"] style')!.textContent).toContain('rgba(245, 158, 11, 0.1)');expect(document.querySelector('[data-af="annotation-overlay"] div')).toBeNull();
  painter.paint({pins:[],mode:'off',openId:null,hoverId:null});expect(registry.size).toBe(0);painter.dispose();
  }finally{vi.unstubAllGlobals();}
+});
+
+it('positions migrated comments from the original forward inline endpoint',()=>{
+ document.body.innerHTML='<p data-af-id="p"><af-text>Keep </af-text><strong><af-text>bold</af-text></strong> tail</p>';
+ const node=document.querySelector('p')!,text=node.textContent!,next=node.querySelector('strong af-text')!.firstChild;
+ vi.spyOn(Range.prototype,'getBoundingClientRect').mockImplementation(function(this:Range){return new DOMRect(10,this.endContainer===next?19:20,80,40);});
+ vi.spyOn(Range.prototype,'getClientRects').mockReturnValue([] as unknown as DOMRectList);
+ const painter=createHtmlAnnotationPainter(document),anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'Keep ',segments:[{nodeId:'p',quote:'Keep ',endAffinity:'forward' as const,range:{start:0,end:5,length:text.length,fingerprint:htmlTextFingerprint(text)}}]};
+ const positions=painter.paint({pins:[{id:'comment',path:'p',anchor}],mode:'on',openId:null,hoverId:null});
+ expect(positions[0]).toMatchObject({status:'exact',rect:{x:10,y:19,width:80,height:40}});painter.dispose();
 });

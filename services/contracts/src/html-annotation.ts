@@ -1,5 +1,7 @@
 export interface HtmlAnnotationSegment {
   nodeId: string; quote: string;
+  /** Preserve a migrated end at the next canonical character, including inline boundaries. */
+  endAffinity?: 'forward';
   range: { start: number; end: number; length: number; fingerprint: string };
 }
 /** Explicit extension: never encode data-af-id as a compiler AST path. */
@@ -36,10 +38,12 @@ export function parseHtmlNodeAnchor(value: unknown): HtmlNodeAnchor | null {
     if (!Array.isArray(v.segments) || v.segments.length > 256 || v.nodeId === null || v.ancestorId !== undefined) return null;
     anchor.segments=[];
     for (const part of v.segments) {
-      if (!part || typeof part !== "object" || Array.isArray(part) || Object.keys(part).some(k=>!["nodeId","quote","range"].includes(k))) return null;
-      const segment=parseHtmlNodeAnchor({kind:"html-node",v:1,revision:v.revision,...part});
+      if (!part || typeof part !== "object" || Array.isArray(part) || Object.keys(part).some(k=>!["nodeId","quote","range","endAffinity"].includes(k))) return null;
+      const {endAffinity,...coordinates}=part as Record<string,unknown>;
+      if(endAffinity!==undefined&&endAffinity!=='forward')return null;
+      const segment=parseHtmlNodeAnchor({kind:"html-node",v:1,revision:v.revision,...coordinates});
       if (!segment?.nodeId || !segment.range || segment.range.start===segment.range.end || !segment.quote) return null;
-      anchor.segments.push({nodeId:segment.nodeId,quote:segment.quote,range:segment.range});
+      anchor.segments.push({nodeId:segment.nodeId,quote:segment.quote,range:segment.range,...(endAffinity?{endAffinity}: {})});
     }
   }
   return anchor;
