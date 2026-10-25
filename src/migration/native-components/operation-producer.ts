@@ -31,12 +31,13 @@ export function produceNativeOperations(input:NativeOperationProducerInput):Nati
   const operation=initial.operations.find(o=>o.kind==='mutation'&&o.name===m.name);
   if(input.historical){mutations.push({name:m.name,mode:'historical-readonly'});plans.set('mutation:'+m.name,nativeDigest({route:'historical-readonly',operationSha256:operation?.operationSha256}));continue;}
   const imported=c.imports.find(i=>i.name===m.target.import),catalog=imported&&catalogs.get(imported.ref),facts=input.statements.filter(s=>s.sqlSha256===hash(m.sql));
-  if(!imported||!catalog||facts.length!==1||!m.target.table||m.expectedAffected!==1){blockers.push({sourceNode:operation?.sourceNode??'',code:'mutation-source-proof-missing'});continue;}
+  if(!imported||!catalog||facts.length!==1||!m.target.table||(m.expectedAffected!==undefined&&(!Number.isSafeInteger(m.expectedAffected)||m.expectedAffected<0))){blockers.push({sourceNode:operation?.sourceNode??'',code:'mutation-source-proof-missing'});continue;}
+  if(m.reads.builtins.some(name=>!name.startsWith('_row.')&&!['_me.id','_now','_tz'].includes(name))){blockers.push({sourceNode:operation?.sourceNode??'',code:'mutation-event-binding-not-supported'});continue;}
   const values:NativeV3MutationProgram['values']=Object.create(null);
   for(const arg of m.args){const original=c.values.find(v=>v.kind==='scalar'&&v.name===arg.name);if(!original||!['string','number','boolean','date','timestamp','user'].includes(String(arg.type)))throw Error('mutation_arg_source_missing');values[arg.name]={type:arg.type==='number'?'number':arg.type==='boolean'?'boolean':'string',nullable:true,parameter:arg.name,default:original.default as string|number|boolean|null??null};}
   for(const [field,type] of Object.entries(m.rowTypes??{})){if(!['string','number','boolean','date','timestamp','user'].includes(String(type)))throw Error('mutation_row_type_unknown');values['row_'+field]={type:type==='number'?'number':type==='boolean'?'boolean':'string',nullable:false,parameter:'_row__'+field};}
   const builtins=m.reads.builtins.filter(b=>!b.startsWith('_row.')).map(name=>{if(!['_me.id','_now','_tz'].includes(name))throw Error('mutation_builtin_unknown');return {name:name as '_me.id'|'_now'|'_tz',parameter:name.replaceAll('.','__')};});
-  const program:NativeV3MutationProgram={name:m.name,kind:facts[0]!.kind,sql:m.sql,target:{datasetId:catalog.targetDatasetId,schema:imported.name,table:m.target.table},values,builtins,expectedAffected:1,reset:m.reset??[]};
+  const program:NativeV3MutationProgram={name:m.name,kind:facts[0]!.kind,sql:m.sql,target:{datasetId:catalog.targetDatasetId,schema:imported.name,table:m.target.table},values,builtins,...(m.expectedAffected===undefined?{}:{expectedAffected:m.expectedAffected}),reset:m.reset??[]};
   const namespace='actions_'+m.name,descriptor=host.mutation(namespace,program);if(descriptor.mode!=='historical-readonly')descriptor.values=descriptor.values.map(v=>v.name.startsWith('row_')?{...v,source:{kind:'row',field:v.name.slice(4)}}:v);
   mutations.push(descriptor);register('mutation',namespace,program);
  }

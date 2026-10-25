@@ -34,7 +34,7 @@ export interface NativeV3QueryProgram {
 }
 export interface NativeV3MutationProgram {
   name: string;
-  kind: "insert" | "delete";
+  kind: "insert" | "update" | "delete";
   sql: string;
   target: { datasetId: string; schema: string; table: string };
   values: Record<
@@ -47,7 +47,8 @@ export interface NativeV3MutationProgram {
     }
   >;
   builtins: readonly { name: "_me.id" | "_now" | "_tz"; parameter: string }[];
-  expectedAffected: 1;
+  /** Exact source count, or absent when the source imposed no count constraint. */
+  expectedAffected?: number;
   reset: readonly string[];
 }
 export interface NativeV3BackendLink {

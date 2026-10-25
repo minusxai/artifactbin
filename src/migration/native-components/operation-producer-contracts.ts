@@ -14,7 +14,7 @@ export interface NativeOperationProducerInput {
  targetPageId:string; targetOrigin:string;
  /** Verified immutable catalog/policy receipts, not source-request claims. */
  datasets:readonly NativeCatalogOperationBinding[];
- statements:readonly {sqlSha256:string;kind:'insert'|'delete'}[];
+ statements:readonly {sqlSha256:string;kind:'insert'|'update'|'delete'}[];
  visualizationAdmissions?:readonly NativeOperationAdmission[];
  host:NativeOperationProducerHost;
 }
