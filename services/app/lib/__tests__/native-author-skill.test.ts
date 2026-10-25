@@ -43,7 +43,7 @@ describe('one installable native HTML author skill',()=>{
   expect(json).toBeTruthy();
   const anchor=JSON.parse(json!);
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
-  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','auto-target the document frame','pageErrors','failedRequests','overflow','return {heading, body, overflow, pageErrors, failedRequests}','scripts/publish.mjs','PUT /api/artifacts/ID'])expect(guide).toContain(value);
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','auto-scopes `page` locators','pageErrors','failedRequests','overflow','return {heading, body, overflow, pageErrors, failedRequests}','scripts/publish.mjs','PUT /api/artifacts/ID'])expect(guide).toContain(value);
   const browserExample=[...guide.matchAll(/```js\n([\s\S]*?)```/g)][1]?.[1];
   expect(browserExample).toBeTruthy();
   expect(browserExample).toContain('page.getByRole');
