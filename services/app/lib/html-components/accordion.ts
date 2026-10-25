@@ -217,7 +217,8 @@ export class AfAccordionContent extends HTMLElement {}
 
 export const accordionStyles = `
 af-accordion{display:block}
-af-accordion-item{display:block;border-bottom:1px solid currentColor}
+af-accordion-item{display:block}
+af-accordion-item:not(:last-child){border-bottom:1px solid currentColor}
 af-accordion-trigger{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
 af-accordion-trigger:has(>button){display:contents}
 af-accordion-trigger>button{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left!important;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:transparent;color:inherit;cursor:pointer}

@@ -17,7 +17,11 @@ function fixture(attrs = '', content = '') {
 describe('af-switch', () => {
   it('uses the source story label line-height while inheriting the page font', () => {
     const style = document.querySelector('style[data-af-switch-styles]')?.textContent ?? '';
-    expect(style).toContain('af-switch .af-switch-label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;');
+    expect(style).toContain('af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;');
+    expect(style).toContain('af-switch .af-switch-label{display:block}');
+    const { root } = fixture('label="Notifications"');
+    expect(root.querySelector('.af-switch-caption')?.firstElementChild).toBe(root.querySelector('.af-switch-label'));
+    expect(root.querySelector('.af-switch-shell')?.lastElementChild?.tagName).toBe('BUTTON');
   });
 
   it('renders a labeled native switch and initializes from checked presence or default-checked', () => {

@@ -116,6 +116,9 @@ describe('native authored segmented control', () => {
     expect(getComputedStyle(label).fontSize).toBe('11px');
     expect(getComputedStyle(label).fontWeight).toBe('500');
     expect(getComputedStyle(label).lineHeight).toBe('1.5');
+    expect(label.parentElement?.classList.contains('af-segmented-caption')).toBe(true);
+    expect(segmentedStyles).toContain('af-segmented .af-segmented-caption{display:flex;align-items:baseline;gap:.75rem;');
+    expect(segmentedStyles).toContain('font-size:.875rem;line-height:1.25rem;transition:background-color');
     expect(segmentedStyles).toContain('background:color-mix(in oklab,var(--muted,#eee) 40%,transparent)');
     expect(segmentedStyles).not.toContain('color-mix(in srgb,var(--muted,#eee)');
     expect(segmentedStyles).toContain('focus-visible{z-index:1;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab');

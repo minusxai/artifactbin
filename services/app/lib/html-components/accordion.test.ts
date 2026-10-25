@@ -211,10 +211,14 @@ describe('accordion appearance', () => {
     root.remove();
   });
 
-  it('uses the inherited foreground for section dividers', () => {
+  it('matches the source border-b and last:border-b-0 recipe', () => {
     const {items,root} = fixture();
     const itemColor = getComputedStyle(items[0]!).color;
     expect(getComputedStyle(items[0]!).borderBottomColor).toBe(itemColor);
+    expect(getComputedStyle(items[0]!).borderBottomWidth).toBe('1px');
+    expect(getComputedStyle(items[1]!).borderBottomWidth).toBe('1px');
+    expect(items.at(-1)!.matches('af-accordion-item:not(:last-child)')).toBe(false);
+    expect(accordionStyles).toContain('af-accordion-item:not(:last-child){border-bottom:1px solid currentColor}');
     root.remove();
   });
 });

@@ -18,6 +18,7 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
   private buttons = new Map<string, HTMLButtonElement>();
   private buttonOptions = new WeakMap<HTMLButtonElement, SegmentedOption>();
   private labelNode?: HTMLSpanElement;
+  private captionNode?: HTMLSpanElement;
   private optionsNode?: HTMLDivElement;
   private selection: SegmentedValue = null;
   private controlled = false;
@@ -106,12 +107,19 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
     return [...unique.values()];
   }
   private ensureStructure(): void {
+    this.captionNode ??= [...this.children].find((child): child is HTMLSpanElement =>
+      child instanceof HTMLSpanElement && child.classList.contains('af-segmented-caption'));
     this.labelNode ??= [...this.children].find((child): child is HTMLSpanElement =>
       child instanceof HTMLSpanElement && child.classList.contains('af-segmented-label'));
     if (!this.labelNode) {
       this.labelNode = this.ownerDocument.createElement('span');
       this.labelNode.className = 'af-segmented-label';
       this.labelNode.dataset.afControlLabel = '';
+    }
+    if (!this.captionNode) {
+      this.captionNode = this.ownerDocument.createElement('span');
+      this.captionNode.className = 'af-segmented-caption';
+      this.captionNode.dataset.afControlCaption = '';
     }
     this.optionsNode ??= [...this.children].find((child): child is HTMLDivElement =>
       child instanceof HTMLDivElement && child.hasAttribute('data-segment-options'));
@@ -120,8 +128,9 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
       this.optionsNode.className = 'af-segmented-options';
       this.optionsNode.setAttribute('data-segment-options', '');
     }
-    if (this.labelNode.parentElement !== this || this.labelNode.nextElementSibling !== this.optionsNode) {
-      this.insertBefore(this.labelNode, this.optionsNode.parentElement === this ? this.optionsNode : null);
+    if (this.labelNode.parentElement !== this.captionNode) this.captionNode.append(this.labelNode);
+    if (this.captionNode.parentElement !== this || this.captionNode.nextElementSibling !== this.optionsNode) {
+      this.insertBefore(this.captionNode, this.optionsNode.parentElement === this ? this.optionsNode : null);
     }
     if (this.optionsNode.parentElement !== this) this.append(this.optionsNode);
   }
@@ -136,6 +145,7 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
       this.labelNode.textContent = label ?? '';
       this.labelNode.hidden = !label;
     }
+    if (this.captionNode) this.captionNode.hidden = !label;
     if (this.hasAttribute('aria-label') && !this.mappedLabel) return;
     if (label !== null) {
       this.writingMappedLabel = true; this.setAttribute('aria-label', label); this.writingMappedLabel = false;
@@ -210,11 +220,12 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
 
 export const segmentedStyles = `
 af-segmented{display:inline-flex;vertical-align:top;flex-direction:column;align-items:flex-start;gap:.375rem;width:fit-content;box-sizing:border-box;color:inherit;font:inherit}
-af-segmented .af-segmented-label{font-family:inherit;font-size:11px;font-weight:500;line-height:1.5;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
+af-segmented .af-segmented-caption{display:flex;align-items:baseline;gap:.75rem;font-family:inherit;font-size:11px;font-weight:500;line-height:1.5;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
+af-segmented .af-segmented-label{display:block}
 af-segmented .af-segmented-label[hidden]{display:none!important}
 af-segmented .af-segmented-options{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.125rem;background:color-mix(in oklab,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
 af-segmented[data-orientation=vertical] .af-segmented-options{flex-direction:column;align-items:stretch}
-af-segmented .af-segmented-options>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;transition:background-color .15s,color .15s}
+af-segmented .af-segmented-options>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;line-height:1.25rem;transition:background-color .15s,color .15s}
 af-segmented .af-segmented-options>button[data-segment-option][data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
 af-segmented .af-segmented-options>button[data-segment-option]:not([data-state=active]):hover{background:color-mix(in oklab,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
 af-segmented .af-segmented-options>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
