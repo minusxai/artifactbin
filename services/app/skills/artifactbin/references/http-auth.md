@@ -2,10 +2,6 @@
 name: http-auth
 description: Direct HTTP email sign-in, origin-scoped credential storage and OAuth refresh.
 ---
-## Installed scripts
-
-`node scripts/auth.mjs status` reports this origin's grant without secrets. Start `auth.mjs login --email ADDRESS`; wait for the user's emailed OTP, then `auth.mjs login --challenge HANDLE --code-file FILE`. The private wrapper handle is origin-bound. Credentials reuse the existing private origin store and serialized refresh. `auth.mjs logout` removes the local grant only: no self-revocation endpoint exists, and an environment grant remains active. Select `--server ORIGIN` if different from the archive origin. No token appears in results or journals.
-
 ## Read first
 
 [% include "fragments/http-authentication.md" %]
@@ -13,6 +9,10 @@ description: Direct HTTP email sign-in, origin-scoped credential storage and OAu
 Verified email sessions receive an OAuth bearer/refresh grant through the email-session token endpoint; email OTP is not an OAuth grant type. No product installation is needed.
 
 `account_created_this_login` says whether this sign-in created the account. `has_created_document` reflects documents the user created, including group-owned documents and trash; use it for first-artifact guidance.
+
+## Installed scripts
+
+`node scripts/auth.mjs status` reports this origin's grant without secrets. Start `auth.mjs login --email ADDRESS`; wait for the user's emailed OTP, then `auth.mjs login --challenge HANDLE --code-file FILE`. The private wrapper handle is origin-bound. Credentials reuse the existing private origin store and serialized refresh. `auth.mjs logout` removes the local grant only: no self-revocation endpoint exists, and an environment grant remains active. Select `--server ORIGIN` if different from the archive origin. No token appears in results or journals.
 
 ## Storage and refresh
 
