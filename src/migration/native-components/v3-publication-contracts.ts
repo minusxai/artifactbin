@@ -15,6 +15,7 @@ export interface NativeV3BundleDependency {
 }
 type Scalar = string | number | boolean | null;
 export interface NativeV3QueryProgram {
+  localTables?: import("./query-plan-contracts.ts").NativeRegisteredQueryPlan["localTables"];
   scalars: Record<
     string,
     {

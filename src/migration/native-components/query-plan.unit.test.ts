@@ -21,3 +21,13 @@ test('local sqlite plans retain dependency order and explicit mapped import bind
  const input=fixture();input.flow.queries=[{name:'local',engine:'sqlite',sql:'SELECT * FROM source.records',reads:{queries:[],imports:['source'],values:[],builtins:[]}}];input.flow.imports=[{name:'source',ref:'source_dataset',tables:[{name:'records',columns:[]}]}];
  assert.deepEqual(registeredNativeQueryPlan(input).queries,[{name:'local',sql:'SELECT * FROM source.records',dependencies:[]}]);assert.deepEqual(registeredNativeQueryPlan(input).imports,[{alias:'source',binding:'target_dataset',table:'records'}]);
 });
+
+test('retains exact typed readonly local table rows independently from scalar parameters',()=>{
+ const input=fixture();input.flow.values=[{name:'items',kind:'table',type:'table',default:null,columns:[{name:'amount',type:'number'}],rows:[{amount:2},{amount:null}]}];input.flow.queries=[{name:'total',engine:'sqlite',sql:'select sum(amount) from items',reads:{queries:[],imports:[],values:['items'],builtins:[]}}];
+ const plan=registeredNativeQueryPlan(input);assert.deepEqual(plan.localTables,[{name:'items',columns:[{name:'amount',type:'number'}],rows:[{amount:2},{amount:null}]}]);assert.deepEqual(Object.keys(plan.scalars),[]);
+ input.flow.values[0]!.rows![0]!.amount=9;assert.equal(plan.localTables![0]!.rows[0]!.amount,2);
+});
+test('refuses local table/query collisions, invalid cells',()=>{
+ const input=fixture();input.flow.values=[{name:'results',kind:'table',type:'table',default:null,columns:[{name:'amount',type:'number'}],rows:[{amount:2}]}];assert.throws(()=>registeredNativeQueryPlan(input));
+ input.flow.values[0]!.name='items';input.flow.values[0]!.rows=[{amount:'wrong'}];assert.throws(()=>registeredNativeQueryPlan(input));
+});

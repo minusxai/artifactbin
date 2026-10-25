@@ -1,3 +1,4 @@
+import {nativeLocalTable} from './local-table.ts';
 /** Offline translation of retained typed bindings into ordinary author JavaScript. */
 import { parseExpressionAt } from "acorn";
 import { parse as parseGraphql, Kind } from "graphql";
@@ -122,6 +123,10 @@ export function emitNativeBindings(
   };
   input.analysis.nodes.forEach(walk);
   for (const value of input.analysis.flow.values) {
+    if(value.kind==='table'){
+      try {nativeLocalTable(value as unknown as Parameters<typeof nativeLocalTable>[0]);}catch{block('$values','invalid-local-table');}
+      continue;
+    }
     const type = typeof value.type === "string" ? value.type : "";
     const primitive =
       type === "number"
