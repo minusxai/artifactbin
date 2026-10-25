@@ -220,6 +220,17 @@ it("executes real page GraphQL with result-only document authority and viewer fi
     },
   });
   expect(reads).toBe(1);
+  const descriptor = registeredQueryDescriptor("queries", program, "sum");
+  const compact = await executePageOperation({
+    schema: composePageSchema([{ name: "queries", fileId: "backend", version: backend.version, typeDefs: backend.typeDefs }]),
+    caller: { pageId: "page", subject: "viewer", role: "VIEWER" },
+    request: { query: descriptor.document, variables: { values: { amount: null }, only: ["sum"] } },
+    invoke,
+  });
+  expect(compact.errors).toBeUndefined();
+  expect(compact.data).toMatchObject({ queries: { evaluate: { tables: [{ rows: [{ cells: [{ text: null, number: 6, boolean: null }] }] }] } } });
+  expect(JSON.stringify(compact.data)).not.toContain("isNull");
+
   expect(
     calls.every(
       (call) =>
@@ -263,6 +274,8 @@ it("emits a portable public descriptor with no SQL, binding IDs or platform over
   });
   expect(JSON.stringify(descriptor)).not.toContain("private-source");
   expect(descriptor.document).toContain("$values: queries__Values!");
+  expect(descriptor.document).toContain("cells { text number boolean }");
+  expect(descriptor.document).not.toContain("isNull");
   expect(
     registeredQueryDescriptor("queries", { ...program, scalars: {} }, "sum")
       .document,
