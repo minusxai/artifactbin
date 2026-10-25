@@ -97,6 +97,7 @@ it('aligns the Select control and gives the focused search a translucent ring', 
   expect(getComputedStyle(label).alignItems).toBe('baseline');
   const styles = document.querySelector<HTMLStyleElement>('[data-af-select-styles]')!.textContent!;
   expect(styles).toContain('font:inherit;line-height:1.5');
+  expect(styles).toContain('@media(hover:hover){af-select .af-select-trigger:hover{background-color:color-mix(in srgb,var(--muted,light-dark(#eee,#444)) 40%,transparent);background-color:color-mix(in oklab,var(--muted,light-dark(#eee,#444)) 40%,transparent)}}');
   trigger(root).click();
   const search = root.querySelector<HTMLInputElement>('[role=searchbox]')!;
   expect(document.activeElement).toBe(search);
