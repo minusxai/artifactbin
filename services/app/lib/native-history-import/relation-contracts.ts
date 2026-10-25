@@ -69,3 +69,6 @@ export interface NativeRelationProjection {
   members: readonly NativeMemberProjection[];
   images: readonly NativeCommentImageProjection[];
 }
+
+/** Postgres returns Date values; retained source projections contain ISO strings. */
+export type NativeStoredRelationTimestamp = string | Date;
