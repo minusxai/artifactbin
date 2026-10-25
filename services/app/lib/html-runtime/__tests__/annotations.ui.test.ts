@@ -72,3 +72,17 @@ it('restores all exact migrated nested and sibling parts, while stale or duplica
  document.querySelector('b')!.textContent='two';document.body.insertAdjacentHTML('beforeend','<p data-af-id="next">next words</p>');expect(paint()[0]?.status).toBe('ambiguous');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
  painter.dispose();
 });
+it('keeps stale migrated selection root geometry without painting any surviving fragment',()=>{
+ document.body.innerHTML='<p data-af-id="root">retained node</p>';const painter=createHtmlAnnotationPainter(document);
+ const positions=painter.paint({pins:[{id:'old',path:'root',anchor:{kind:'html-node',v:1,revision:'3',nodeId:'root',quote:'old selection',segments:[]}}],mode:'on',openId:null,hoverId:null});
+ expect(positions[0]?.status).toBe('exact');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);painter.dispose();
+});
+it('paints migrated ranges behind text with the original comment palette and cleans registrations',async()=>{
+ const {htmlTextFingerprint}=await import('@artifactbin/contracts');document.body.innerHTML='<p data-af-id="root">selected</p>';
+ const registry=new Map<string,unknown>(),Highlight=vi.fn(function(...ranges:Range[]){return {ranges};});
+ vi.stubGlobal('CSS',{highlights:registry});vi.stubGlobal('Highlight',Highlight);
+ try{const painter=createHtmlAnnotationPainter(document),anchor={kind:'html-node' as const,v:1 as const,revision:'3',nodeId:'root',quote:'selected',segments:[{nodeId:'root',quote:'selected',range:{start:0,end:8,length:8,fingerprint:htmlTextFingerprint('selected')}}]};
+ painter.paint({pins:[{id:'thread',path:'root',anchor}],mode:'on',openId:null,hoverId:null});expect(registry.size).toBe(1);expect(Highlight).toHaveBeenCalledTimes(1);expect(document.querySelector('[data-af="annotation-overlay"] style')!.textContent).toContain('rgba(245, 158, 11, 0.1)');expect(document.querySelector('[data-af="annotation-overlay"] div')).toBeNull();
+ painter.paint({pins:[],mode:'off',openId:null,hoverId:null});expect(registry.size).toBe(0);painter.dispose();
+ }finally{vi.unstubAllGlobals();}
+});
