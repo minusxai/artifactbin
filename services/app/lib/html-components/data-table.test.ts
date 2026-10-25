@@ -569,3 +569,42 @@ it("keeps authored header typography on the named column header without duplicat
   expect(el.querySelectorAll("thead button")).toHaveLength(0);
   expect(heads.every(header=>getComputedStyle(header).textTransform==="uppercase")).toBe(true);
 });
+
+it("remeasures retained keyed rows after data replacement and subsequent viewport resize", async () => {
+  const observers: ObservedResizeObserver[] = [];
+  let rowHeight = 43;
+  class ObservedResizeObserver implements ResizeObserver {
+    targets = new Set<Element>();
+    pending = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) { if (!this.targets.has(target)) this.pending.add(target); this.targets.add(target); }
+    unobserve(target: Element) { this.targets.delete(target); this.pending.delete(target); }
+    disconnect() { this.targets.clear(); this.pending.clear(); }
+    flush() {
+      const entries = [...this.pending].map(target => ({ target, borderBoxSize: [{blockSize: rowHeight}], contentRect: {height: rowHeight} }) as unknown as ResizeObserverEntry);
+      this.pending.clear(); this.callback(entries, this);
+    }
+  }
+  vi.stubGlobal("ResizeObserver", ObservedResizeObserver);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.rowKey = "id";
+  el.height = 420;
+  const data = {columns: [{name: "id", type: "number" as const}], rows: Array.from({length: 100}, (_, id) => ({id}))};
+  el.data = data; document.body.append(el); await Promise.resolve();
+  const rowObserver = observers.at(-1)!;
+  rowObserver.flush();
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
+  const retained = el.querySelector("tbody tr[data-row-key]");
+  el.data = {...data, rows: data.rows.map(row => ({...row}))};
+  rowObserver.flush();
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
+  expect(el.querySelector("tbody tr[data-row-key]")).toBe(retained);
+  rowHeight = 53;
+  el.data = {...data, rows: data.rows.map(row => ({...row, extra: "taller content"}))};
+  rowObserver.flush();
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(20);
+  const viewport = el.querySelector("[data-slot=table-scroll]")!;
+  Object.defineProperty(viewport, "clientHeight", {configurable: true, value: 86});
+  observers[0]!.callback([], observers[0]!);
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(14);
+});

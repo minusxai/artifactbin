@@ -32,6 +32,8 @@ export interface TableColumnIdentity {
   id?: string;
 }
 interface DataTableContract {
+  /** Replacing data retains keyed DOM, but invalidates and remeasures its geometry
+   * even when the observed rows have not resized. Header line height follows its font scale. */
   data: TableData;
   columns: unknown;
   columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
@@ -96,6 +98,12 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private ids = new Map<string, string>();
   private serial = 0;
   private cellModes = new WeakMap<HTMLElement, unknown>();
+  private invalidateMeasurements() {
+    this.rowHeights.clear();
+    // Observers do not redeliver unchanged retained nodes after a cache reset.
+    // Reobserve them during render so every rendered row obtains a fresh size.
+    this.rowObserver?.disconnect();
+  }
   get data() {
     return this.value;
   }
@@ -105,7 +113,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
-    this.rowHeights.clear();
+    this.invalidateMeasurements();
     this.showRowCount = Boolean(
       this.value.truncated ||
         (this.value.totalRows ?? 0) > this.value.rows.length,
@@ -546,7 +554,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (signature !== this.columnSignature) {
       this.columnSignature = signature;
       this.measuredHeaderWidths = null;
-      this.rowHeights.clear();
+      this.invalidateMeasurements();
       this.virtualized = false;
     }
     table.style.display = this.virtualized ? "block" : "";
@@ -899,7 +907,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     }
   }
 }
-const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;min-width:0;box-sizing:border-box;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem;line-height:1.25rem}af-data-table[data-af-fill]{height:100%}af-data-table [data-slot=table-scroll]{flex:1 1 auto;width:100%;overflow:auto;position:relative;min-height:0}af-data-table table.af-data-table__table{display:table;width:100%;max-width:none;border-collapse:collapse;font-size:inherit;line-height:inherit}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th.af-data-table__header-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th.af-data-table__header-cell:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td.af-data-table__cell{position:relative;min-width:0;overflow:hidden;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);box-sizing:border-box;vertical-align:middle}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
+const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;min-width:0;box-sizing:border-box;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem;line-height:1.4285714285714286}af-data-table[data-af-fill]{height:100%}af-data-table [data-slot=table-scroll]{flex:1 1 auto;width:100%;overflow:auto;position:relative;min-height:0}af-data-table table.af-data-table__table{display:table;width:100%;max-width:none;border-collapse:collapse;font-size:inherit;line-height:inherit}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th.af-data-table__header-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th.af-data-table__header-cell:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td.af-data-table__cell{position:relative;min-width:0;overflow:hidden;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);box-sizing:border-box;vertical-align:middle}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
 export function registerDataTable(
   registry: CustomElementRegistry = customElements,
   document: Document = globalThis.document,

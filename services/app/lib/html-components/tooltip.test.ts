@@ -66,3 +66,24 @@ it('keeps hovered content visible when trigger focus leaves until both hover and
  content.dispatchEvent(new MouseEvent('pointerover',{bubbles:true,relatedTarget:trigger})); trigger.blur(); expect(root.open).toBe(true);
  content.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(100); expect(root.open).toBe(false);
 });
+
+it('provides one native button for noninteractive trigger content without replacing authored nodes', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger><span data-af-id="authored-icon">i</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';
+ const span=host.querySelector('span')!;document.body.append(host);await Promise.resolve();
+ const wrapper=host.querySelector('af-tooltip-trigger')!;
+ const button=wrapper.querySelector('button')!;
+ expect(button).not.toBeNull();expect(button.type).toBe('button');expect(button.firstElementChild).toBe(span);
+ expect(wrapper.querySelectorAll('button')).toHaveLength(1);
+ button.focus();expect((host as AfTooltip).open).toBe(true);
+ wrapper.setAttribute('disabled','');await Promise.resolve();expect(button.disabled).toBe(true);
+ wrapper.removeAttribute('disabled');await Promise.resolve();expect(button.disabled).toBe(false);
+ host.remove();document.body.append(host);await Promise.resolve();expect(wrapper.querySelector('button')).toBe(button);
+});
+it('preserves an existing interactive child without nesting a generated button', async () => {
+ for(const markup of ['<button type="button">Help</button>','<a href="#details">Help</a>','<input aria-label="Help">']){
+  const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger>'+markup+'</af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';
+  const control=host.querySelector('af-tooltip-trigger')!.firstElementChild;document.body.append(host);await Promise.resolve();
+  expect(host.querySelector('af-tooltip-trigger')!.firstElementChild).toBe(control);
+  expect(host.querySelector('button button,button a,button input')).toBeNull();
+ }
+});
