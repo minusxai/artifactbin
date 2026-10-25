@@ -20,7 +20,7 @@ export interface QueryContext extends QueryIdentity {
 export interface QueryPlan {
   registration: QueryIdentity;
   scalars: Record<string, { type: ColumnType; default: Scalar }>;
-  /** Immutable authored rows from the saved, registered program. Never request arguments. */
+  /** Immutable authored rows from the saved program. Column labels are bounded exact row keys, quoted by SQLite; never request arguments. */
   localTables?: readonly {name:string;columns:DatasetColumn[];rows:Row[]}[];
   queries: readonly {
     name: string;

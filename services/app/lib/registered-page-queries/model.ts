@@ -91,6 +91,10 @@ export function prepare(plan: QueryPlan, request: unknown) {
   }
   const localTables = plan.localTables ?? [];
   const sqlName=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value)&&!['__proto__','prototype','constructor'].includes(value.toLowerCase());
+  // Column labels come from authored row keys. SQLite quotes them at every
+  // schema boundary, so preserve bounded labels verbatim instead of treating
+  // them as interpolated identifiers.
+  const columnName=(value:unknown):value is string=>typeof value==='string'&&value.length>0&&value.length<=128&&!value.includes('\0')&&!['__proto__','prototype','constructor'].includes(value.toLowerCase());
   const occupied=new Set(['_me',...plan.queries.map(q=>q.name.toLowerCase()),...Object.keys(plan.scalars).map(s=>s.toLowerCase()),...plan.imports.map(i=>i.alias.toLowerCase())]);
   let localRows=0,localCells=0;
   if(!Array.isArray(localTables)||localTables.length+plan.imports.length>limits.tables)throw Error('invalid_query_registry');
@@ -99,7 +103,7 @@ export function prepare(plan: QueryPlan, request: unknown) {
     occupied.add(table.name.toLowerCase());
     const columns=new Set<string>();
     for(const column of table.columns){
-      if(!record(column)||Object.keys(column).some(k=>!['name','type'].includes(k))||!sqlName(column.name)||columns.has(column.name.toLowerCase())||typeof column.type!=='string'||!['string','number','boolean','date','timestamp','user'].includes(column.type))throw Error('invalid_query_registry');
+      if(!record(column)||Object.keys(column).some(k=>!['name','type'].includes(k))||!columnName(column.name)||columns.has(column.name.toLowerCase())||typeof column.type!=='string'||!['string','number','boolean','date','timestamp','user'].includes(column.type))throw Error('invalid_query_registry');
       columns.add(column.name.toLowerCase());
     }
     const keys=new Set(table.columns.map(c=>c.name));

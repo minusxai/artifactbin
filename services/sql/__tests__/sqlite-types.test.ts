@@ -17,6 +17,17 @@ async function read(rows: Row[], columns: DatasetColumn[], query = 'select * fro
 }
 
 describe('on load', () => {
+  it('loads and queries quoted authored column labels without interpreting their contents as SQL', async () => {
+    const name = 'p (shuffle "test")';
+    const hostile = 'x"); DROP TABLE t; --';
+    const result = await read(
+      [{ [name]: 'kept', [hostile]: 7 }],
+      [{ name, type: 'string' }, { name: hostile, type: 'number' }],
+      `select "p (shuffle ""test"")", "x""); DROP TABLE t; --" from t`,
+    );
+    expect(result).toMatchObject({ rows: [{ [name]: 'kept', [hostile]: 7 }] });
+    expect(errorOf(await read([{ [name]: 'still here' }], [{ name, type: 'string' }], `select "p (shuffle ""test"")" from t`))).toBe('admitted');
+  });
   it('refuses a value that is not a calendar date, naming table, column and row', async () => {
     expect(errorOf(await read([{ d: '2026-01-01' }, { d: '2026-02-30' }], [{ name: 'd', type: 'date' }]))).toMatch(/t\.d \(row 2\) is not a date/);
   });

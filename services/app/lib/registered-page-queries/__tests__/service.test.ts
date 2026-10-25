@@ -383,9 +383,15 @@ it("queries immutable saved local tables with scalar filters and dependencies wi
  await expect(f.run({values:{},only:['total'],localTables:[]})).rejects.toThrow('invalid_query_request');
  await expect(f.run({values:{items:[]},only:['total']})).rejects.toThrow('invalid_query_request');
 });
+it('accepts authored local column labels and preserves them through quoted SQL execution',async()=>{
+ const f=fixture(),sql=createSqliteSql(),label='Lowest in';
+ f.ports.registry=async()=>({...plan,localTables:[{name:'rank',columns:[{name:label,type:'string'},{name:'x\"); DROP TABLE rank; --',type:'number'}],rows:[{[label]:'period',[ 'x\"); DROP TABLE rank; --']:7}]}],queries:[{name:'total',sql:'select "Lowest in", "x""); DROP TABLE rank; --" from rank',dependencies:[]}]});
+ f.ports.execute=input=>({result:sql.run(input),cancelAndDrain:async()=>{}});
+ expect(await f.run(validRequest)).toMatchObject({total:{rows:[{[label]:'period',['x\"); DROP TABLE rank; --']:7}]}});
+});
 it("rejects invalid saved table names, collisions, cells and excessive data before execution",async()=>{
  const good={name:'items',columns:[{name:'amount',type:'number' as const}],rows:[{amount:2}]};
- for(const localTables of [[{...good,name:'_me'}],[{...good,name:'total'}],[{...good,name:'amount'}],[good,{...good,name:'ITEMS'}],[good,good],[{...good,columns:[...good.columns,...good.columns]}],[{...good,rows:[{amount:'wrong'}]}],[{...good,rows:[{amount:2,extra:1}]}],[{...good,rows:Array.from({length:10001},()=>({amount:1}))}]]){
+ for(const localTables of [[{...good,name:'_me'}],[{...good,name:'total'}],[{...good,name:'amount'}],[good,{...good,name:'ITEMS'}],[good,good],[{...good,columns:[...good.columns,...good.columns]}],[{...good,columns:[{name:'A label',type:'string' as const},{name:'a LABEL',type:'string' as const}],rows:[{'A label':'x','a LABEL':'y'}]}],[{...good,columns:[{name:'label\0tail',type:'string' as const}],rows:[{'label\0tail':'x'}]}],[{...good,columns:[{name:'x'.repeat(129),type:'string' as const}],rows:[{['x'.repeat(129)]:'x'}]}],[{...good,rows:[{amount:'wrong'}]}],[{...good,rows:[{amount:2,extra:1}]}],[{...good,rows:Array.from({length:10001},()=>({amount:1}))}]]){
   const f=fixture();f.ports.registry=async()=>({...plan,localTables});await expect(f.run(validRequest)).rejects.toThrow();expect(f.calls).toEqual([]);
  }
 });
