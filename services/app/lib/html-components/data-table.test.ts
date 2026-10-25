@@ -11,7 +11,7 @@ it("preserves caller column header identities through sorting and removes stale 
   const header = el.querySelector("th")!;
   expect(header.id).toBe("authored-column");
   expect(header.getAttribute("data-af-id")).toBe("source-column");
-  (header.firstElementChild as HTMLButtonElement).click();
+  header.click();
   expect(el.querySelector("th")).toBe(header);
   expect(header.getAttribute("data-af-id")).toBe("source-column");
   el.columnIdentities = {};
@@ -38,7 +38,7 @@ it("keeps its virtual table in native table layout under document table styling"
   document.body.append(page);
   expect(getComputedStyle(el.querySelector("table")!).display).not.toBe("block");
 });
-it("retains keyed rows and controls while cycling sort with accessible buttons", () => {
+it("retains keyed rows and controls while cycling sort with accessible column headers", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
   el.setAttribute("label", "Sales");
@@ -55,16 +55,16 @@ it("retains keyed rows and controls while cycling sort with accessible buttons",
   document.body.append(el);
   const row = el.querySelector("tbody tr[data-row-key]");
   const cell = row?.querySelector("td");
-  const button = el.querySelector(
-    'button[aria-label="Sort by value"]',
-  ) as HTMLButtonElement;
-  button.click();
+  const header = el.querySelector(
+    'th[aria-label="Sort by value"]',
+  ) as HTMLTableCellElement;
+  header.click();
   expect(el.querySelector("table")?.getAttribute("aria-label")).toBe("Sales");
   expect(el.querySelector("tbody tr[data-row-key]")?.textContent).toBe("13");
   expect(el.querySelectorAll("tbody tr[data-row-key]")[1]).toBe(row);
   expect(row?.querySelector("td")).toBe(cell);
-  button.click();
-  button.click();
+  header.click();
+  header.click();
   expect(el.sort).toBeNull();
 });
 it("renders bars, tint, custom cells and scoped edit intents", () => {
@@ -109,7 +109,7 @@ it("keeps the bar overlay out of table-cell layout", () => {
   expect(getComputedStyle(cell).position).not.toBe("absolute");
   expect(getComputedStyle(bar).position).toBe("absolute");
 });
-it("sorts from the whole header and its accessible button exactly once", () => {
+it("sorts from its single accessible column header with mouse, Enter and Space", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.data = {
     columns: [
@@ -124,10 +124,9 @@ it("sorts from the whole header and its accessible button exactly once", () => {
   };
   document.body.append(el);
 
-  const button = el.querySelector<HTMLButtonElement>(
-    'button[aria-label="Sort by score"]',
-  )!;
-  const header = button.closest("th")!;
+  const header = el.querySelector<HTMLTableCellElement>('th[aria-label="Sort by score"]')!;
+  expect(header.querySelector("button")).toBeNull();
+  expect(header.tabIndex).toBe(0);
   const changes: unknown[] = [];
   el.addEventListener("af-sort-change", (event) => {
     changes.push((event as CustomEvent).detail);
@@ -138,17 +137,26 @@ it("sorts from the whole header and its accessible button exactly once", () => {
   expect(header.getAttribute("aria-sort")).toBe("ascending");
   expect(changes).toEqual([{ col: "score", dir: "asc" }]);
 
-  button.focus();
-  button.click();
+  header.focus();
+  const enter = new KeyboardEvent("keydown", {key:"Enter",bubbles:true,cancelable:true});
+  header.dispatchEvent(enter);
+  expect(enter.defaultPrevented).toBe(true);
   expect(el.sort).toEqual({ col: "score", dir: "desc" });
   expect(header.getAttribute("aria-sort")).toBe("descending");
   expect(changes).toEqual([
     { col: "score", dir: "asc" },
     { col: "score", dir: "desc" },
   ]);
-  expect(document.activeElement).toBe(button);
-  expect(button.type).toBe("button");
-  expect(button.getAttribute("aria-label")).toBe("Sort by score");
+  expect(document.activeElement).toBe(header);
+  const space = new KeyboardEvent("keydown", {key:" ",bubbles:true,cancelable:true});
+  header.dispatchEvent(space);
+  expect(space.defaultPrevented).toBe(true);
+  expect(el.sort).toBeNull();
+  expect(header.getAttribute("aria-sort")).toBe("none");
+  header.dispatchEvent(new KeyboardEvent("keydown", {key:"ArrowDown",bubbles:true}));
+  expect(el.sort).toBeNull();
+  expect(changes).toHaveLength(3);
+  expect(header.getAttribute("aria-label")).toBe("Sort by score");
   expect(header.scope).toBe("col");
 });
 it("keeps the grouped row count after the final page without more requests", async () => {
@@ -398,4 +406,16 @@ it("resets viewport after result shrink and sort without blanking loaded rows", 
   el.sort = { col: "id", dir: "asc" };
   expect(viewport.scrollTop).toBe(0);
   expect(el.querySelector("tbody tr[data-row-key]")?.textContent).toBe("1");
+});
+
+it("keeps authored header typography on the named column header without duplicate sorting controls", () => {
+  const style=document.createElement("style");style.setAttribute("data-table-layout-test","");style.textContent='af-data-table thead th{text-transform:uppercase} button{text-transform:none}';document.head.append(style);
+  const el=document.createElement("af-data-table") as AfDataTable;
+  el.columns=[{col:"day",title:"Day"},{col:"time",title:"Time"},{col:"action",title:""}];
+  el.data={columns:[{name:"day",type:"string"},{name:"time",type:"string"},{name:"action",type:"string"}],rows:[]};document.body.append(el);
+  const heads=[...el.querySelectorAll("thead th")];
+  expect(heads.map(header=>header.textContent)).toEqual(["Day","Time",""]);
+  expect(heads.map(header=>header.getAttribute("aria-label"))).toEqual(["Sort by Day","Sort by Time","Sort by "]);
+  expect(el.querySelectorAll("thead button")).toHaveLength(0);
+  expect(heads.every(header=>getComputedStyle(header).textTransform==="uppercase")).toBe(true);
 });

@@ -24,7 +24,7 @@ it('executes the authored candidate choice and detects a lost controlled write',
 });
 it('executes real sorting and detects an ignored second sort activation',()=>{
   const fixture=pair('data-table-sort-cycle');mount(fixture);
-  const header=document.querySelector('button[aria-label="Sort by score"]');
+  const header=document.querySelector('th[aria-label="Sort by score"]');
   header.click();expect(stateExpectationIssues(fixture.states[0].expected,tableState())).toEqual([]);
   // Negative control: preserve the populated table but swallow the next sort activation.
   header.addEventListener('click',event=>event.stopImmediatePropagation(),{capture:true,once:true});
