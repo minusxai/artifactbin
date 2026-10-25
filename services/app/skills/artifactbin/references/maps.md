@@ -3,9 +3,13 @@ name: maps
 description: Build native HTML maps with the pinned framework-free deck.gl API.
 ---
 
-# deck.gl maps in native HTML
+## Read first
 
 Use deck.gl's own `Deck`, views and layer classes. The shipped module combines exports from `@deck.gl/core`, `@deck.gl/layers` and `@deck.gl/aggregation-layers`; it does not include React or the legacy `<af-deck-gl>` adapter.
+
+## Contents
+
+[Example](#offline-basemap-free-example) · [Theme](#theme-updates-and-lifetime) · [Data](#data-and-network-limits) · [API](#api-reference)
 
 ## Offline, basemap-free example
 
@@ -132,6 +136,4 @@ The legacy `<af-deck-gl>` element remains available for existing pages. New nati
 
 ## API reference
 
-- [deck.gl API reference](https://deck.gl/docs/api-reference)
-- [Deck](https://deck.gl/docs/api-reference/core/deck)
-- [ScatterplotLayer](https://deck.gl/docs/api-reference/layers/scatterplot-layer)
+- [deck.gl documentation and API reference](https://deck.gl/)

@@ -3,9 +3,13 @@ name: diagrams
 description: Author Mermaid diagrams directly in native HTML pages.
 ---
 
-# Mermaid diagrams in native HTML
+## Read first
 
 Use the pinned Mermaid ESM module directly. It is a JavaScript library, not a platform custom element. Keep diagram source in the page, initialize Mermaid before rendering, and render into a page-owned element.
+
+## Contents
+
+[Example](#minimal-example) · [Theme](#theme-updates-and-cleanup) · [Offline](#offline-and-data-limits) · [API](#api-reference)
 
 ## Minimal example
 

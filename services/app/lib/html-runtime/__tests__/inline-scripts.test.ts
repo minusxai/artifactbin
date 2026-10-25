@@ -71,3 +71,14 @@ it("preserves legacy language while parameterized and inactive types cannot gran
   );
   expect(admitted.scriptHashes).toEqual([hash("legacy()")]);
 });
+
+it("declares UTF-8 before portable code so non-ASCII script bytes retain their admitted CSP identity",()=>{
+ const source='<html><head><meta charset="windows-1252"></head><body><script type="module">globalThis.label="î → Done";</script></body></html>';
+ const output=downloadableHtml({html:source,core:'/*'+'x'.repeat(2048)+'*/',config:{pageId:'p',revision:'1',backends:[]}});
+ expect(output.indexOf('<meta charset="utf-8">')).toBeGreaterThan(-1);
+ expect(output.indexOf('<meta charset="utf-8">')).toBeLessThan(1024);
+ expect(output.indexOf('<meta charset="utf-8">')).toBeLessThan(output.indexOf('<script'));
+ expect(output).not.toContain('charset="windows-1252"');
+ expect(output).toContain(hash('globalThis.label="î → Done";'));
+ expect(recoverPortableSource(output)).toBe(source);
+});

@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
+import {exerciseDirectVisualLibraries} from './direct-visual-libraries.mjs';
 import {launchChromium} from '../gates/lib/browser.mjs';
 import {readPortableDocument} from '../../services/app/lib/html-runtime/portable.ts';
 import {recoverPortableSource} from '../../services/app/lib/html-runtime/portable-source.ts';
@@ -20,12 +21,13 @@ try {
  while(offset+30<=archive.length&&archive.readUInt32LE(offset)===0x04034b50){
   assert.equal(archive.readUInt16LE(offset+8),0,'stored skill ZIP member');const size=archive.readUInt32LE(offset+18),nameBytes=archive.readUInt16LE(offset+26),extra=archive.readUInt16LE(offset+28),start=offset+30+nameBytes+extra,end=start+size;assert.ok(end<=archive.length,'complete skill member');
   const member=archive.subarray(offset+30,offset+30+nameBytes).toString('utf8');assert.ok(member.startsWith('artifactbin/'),'skill root');const relative=member.slice('artifactbin/'.length);assert.ok(!relative.split('/').some(part=>part==='..'||part==='.'||!part),'safe archive member');
-  if(/^(?:scripts|components)\//.test(relative)){const target=join(skill,relative);await mkdir(dirname(target),{recursive:true});await writeFile(target,archive.subarray(start,end));}
+  if(/^(?:scripts|components|references)\//.test(relative)){const target=join(skill,relative);await mkdir(dirname(target),{recursive:true});await writeFile(target,archive.subarray(start,end));}
   offset=end;
  }
  const scripts=join(skill,'scripts');
  const libraries=(await import(pathToFileURL(join(scripts,'preview-libraries.mjs')).href)).default;
  const vega=Object.keys(libraries).find(url=>/\/vega-\d/.test(url)),vegaLite=Object.keys(libraries).find(url=>/\/vega-lite-\d/.test(url));assert.ok(vega&&vegaLite,'installed registered Vega and Vega-Lite');
+ const mermaid=Object.keys(libraries).find(url=>/\/mermaid-\d/.test(url)),deck=Object.keys(libraries).find(url=>/\/deck-gl-\d/.test(url));assert.ok(mermaid&&deck,'installed direct Mermaid and deck.gl');
  const {startPreview}=await import(pathToFileURL(join(scripts,'preview.mjs')).href);
  await writeFile(join(root,'data.json'),'[7]');
  const html=`<!doctype html><html><head><script>if(document.documentElement.getAttribute("data-af-private-preview")!=="true")throw Error("Private marker missing before source scripts");</script><script data-af="portable" type="application/json">{"version":1,"source":"<h1>Linked fixture</h1>","identity":{"platformOrigin":"https://example.invalid","artifactId":"linked-fixture","baseRevision":"1","sourceDigest":"0000000000000000000000000000000000000000000000000000000000000000"}}</script><script src="/af/v1/core.js" data-af="core"></script><script data-af="state" type="application/json">{"count":0}</script></head><body><button id="increment">Add one</button><output id="count"></output><output id="data"></output><script type="module">import {client,gql} from '@afbin/apollo';const query=gql\`{count}\`;client.watchQuery({query}).subscribe(({data})=>{document.querySelector('#count').textContent=String(data.count);});document.querySelector('#increment').onclick=()=>{client.updateQuery({query},({count})=>({count:count+1}));};document.querySelector('#data').textContent=(await (await fetch('./data.json')).json())[0];</script></body></html>`;
@@ -91,6 +93,7 @@ try {
  const chooser=offline.waitForEvent('filechooser'),repeatDownload=offline.waitForEvent('download');await offline.locator('[data-af-local-chrome]').getByRole('button',{name:'Save HTML',exact:true}).click();await (await chooser).setFiles(saved.file);const repeat=await repeatDownload,repeatPath=join(dir,'portable-repeat.html');await repeat.saveAs(repeatPath);const repeated=await readFile(repeatPath,'utf8');assert.equal(readPortableDocument(repeated).source,portableSource);assert.equal(recoverPortableSource(repeated),portableSource);assert.equal(readPortableDocument(repeated).privateState,undefined);assert.equal(await readFile(saved.file,'utf8'),saved.html);
  await chrome.getByRole('button',{name:'Local file actions',exact:true}).click();await page.getByRole('menuitemcheckbox',{name:'Include private filters and drafts',exact:true}).click();const opted=await savePage(page,'portable-private.html');assert.equal(readPortableDocument(opted.html).privateState.count,1);assert.equal(readPortableDocument(opted.html).privateState.draft,'private-draft');assert.equal(readPortableDocument(opted.html).source,portableSource);
  assert.deepEqual(offlineRequests,[],'saved HTML must execute without network');assert.deepEqual(offlineErrors,[]);await offlineContext.close();
+ await exerciseDirectVisualLibraries({browser,page,root,session,dir,origin,savePage,mermaid,deck,skill});
  // A real missing dependency must produce a visible error and no empty download.
  const failureSource='<!doctype html><script src="/af/v1/core.js" data-af="core"></script><script type="module">import "./components/missing.js";</script>';
  await writeFile(join(root,'failure.html'),failureSource);await page.goto(new URL('failure.html',session.url).href);await page.waitForFunction(()=>document.documentElement.getAttribute('data-af-local-chrome-ready')==='true');let failureDownloads=0;const failedDownload=()=>failureDownloads++;page.on('download',failedDownload);await chrome.getByRole('button',{name:'Save HTML',exact:true}).click();await chromeStatus.filter({hasText:'Missing local dependency: /components/missing.js'}).waitFor();assert.equal(failureDownloads,0);page.off('download',failedDownload);assert.equal(await readFile(join(root,'failure.html'),'utf8'),failureSource);assert.equal(await readFile(join(root,'portable.html'),'utf8'),portableSource);

@@ -50,3 +50,9 @@ it('reads the deployed public directory after bundling relocates import.meta.url
   expect(new TextDecoder().decode(resources[0].bytes)).toBe(expected[resources[0].url]);
  }finally{await rm(directory,{recursive:true,force:true});}
 });
+
+it('packs direct Mermaid and deck.gl imports from admitted project modules without network dependencies',async()=>{
+ const html='<script type="module" data-af-id="chart-script">import mermaid from "/libraries/mermaid-12.0.0/index.js";import {Deck} from "/libraries/deck-gl-9.4.0/index.js";console.log(mermaid,Deck);</script>';
+ const resources=await referencedLibraryResources(html,[],baseUrl);expect(resources.map(r=>r.url)).toEqual(['/libraries/deck-gl-9.4.0/index.js','/libraries/mermaid-12.0.0/index.js']);
+ const packed=await packOfflineDependencies({html,baseUrl,resources});expect(packed.embeddedUrls).toHaveLength(2);expect(authorModule(packed.html)).not.toMatch(/from ["']\/libraries\//);expect(authorModule(packed.html)).toContain('startOnLoad');
+});

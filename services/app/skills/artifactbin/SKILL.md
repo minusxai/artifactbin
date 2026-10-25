@@ -24,7 +24,7 @@ For HTML comment anchors and server-side browser verification, read [HTML operat
 
 ## Optional HTML components
 
-Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. These are 25 roots plus `af-slide`, not automatic platform tags.
+Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. The 24 UI elements below require explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain available for compatibility; new diagrams and maps use the direct libraries.
 
 | Purpose | Retained elements |
 |---|---|
