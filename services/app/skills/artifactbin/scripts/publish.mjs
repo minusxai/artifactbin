@@ -42,6 +42,7 @@ export async function sendPublication(saved,env=process.env,fetcher=fetch){
  return receipt;
 }
 async function main(args){
+ if(args.length===1&&args[0]==='--help'){console.log('Usage: node publish.mjs --prepare SAMPLE --server ORIGIN --output REQUEST.json [--dataset-id ID]\n       node publish.mjs --send REQUEST.json\nSAMPLE: report, repairs-data, csv-dashboard, shared-app. Send requires origin-matched ARTIFACTBIN_URL and ARTIFACTBIN_TOKEN. Prefer publication-bundle.mjs --send to save dependency receipts.');return;}
  const options={};for(let index=0;index<args.length;index+=2){const flag=args[index];if(!['--prepare','--server','--output','--dataset-id','--send'].includes(flag)||!args[index+1]||Object.hasOwn(options,flag))throw Error('Use --prepare SAMPLE --server ORIGIN --output REQUEST.json, or --send REQUEST.json.');options[flag]=args[index+1];}
  if(options['--prepare']){
   if(options['--send']||!options['--server']||!options['--output'])throw Error('Preparation requires server and output, without send.');

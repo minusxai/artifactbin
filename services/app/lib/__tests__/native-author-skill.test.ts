@@ -27,6 +27,15 @@ describe('one installable native HTML author skill',()=>{
   expect(packed).toContain('src="data:image/png;base64,AQID"');
   expect(packed).toContain('alt="Garden beds after the harvest"');
  });
+ it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
+  const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
+  const guide=publicGuideText('html-backends',BASE)!;
+  const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
+  expect(query).toBeTruthy();
+  const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
+  const response=await executePageOperation({schema,request:{query:query!,variables:{items:[{category:'Food',amount:200}]}},caller:{pageId:'PAGE12',subject:'test-user',role:'OWNER'},signal:new AbortController().signal,invoke:async call=>{expect(call.args.items).toEqual([{category:'Food',amount:200}]);return true;}});
+  expect(response.errors).toBeUndefined();expect(response.data).toEqual({budget:{save:true}});
+ });
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','PUT /api/artifacts/ID','expectedVersion','expectedState','Idempotency-Key','data-af-id'])expect(root).toContain(value);
@@ -75,6 +84,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
+   for(const script of ['check','publication-bundle','publish','preview'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    for(const sample of ['report','csv-dashboard','shared-app']){
     const request=path.join(dir,sample+'.json'),source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample==='csv-dashboard'?['--dataset-id','REALDATA123']:[])],{cwd:installed});

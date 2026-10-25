@@ -50,7 +50,7 @@ const created = await request(`/api/artifacts/${artifactId}/annotations`, {
 });
 ```
 
-The HTTP request helper sends the selected origin's bearer, `Origin` and JSON content type. Keep `commentKey` and `commentBody` if the outcome is uncertain; retry the same request with both unchanged. The create response is the comment thread receipt; retain its `id` and `revision` for replies or state changes.
+Retain the returned thread `id` and `revision`. Retry uncertain writes with identical body and idempotency key.
 
 The native anchor shape is:
 
@@ -58,9 +58,9 @@ The native anchor shape is:
 {"kind":"html-node","v":1,"revision":"7","nodeId":"results-heading","quote":"March results"}
 ```
 
-`revision` is the current artifact version encoded as a string. `nodeId` is the stable page-node identity. `quote` is exact context within that node; use an empty string when commenting on the whole node without selected text. A comment on a script-created node also supplies `ancestorId`, the stable `data-af-id` of its saved source ancestor. Keep IDs stable, unique and scoped beneath that ancestor.
+Use an empty `quote` for the whole node. A comment on a script-created node also supplies `ancestorId`, the stable `data-af-id` of its saved source ancestor. Keep IDs stable, unique and scoped beneath that ancestor.
 
-Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` by repeating the request with the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply` or `resolve:true` and the last `expected_revision`. To edit a comment you wrote, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`. Read the current thread after a conflict before retrying.
+Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` by repeating the request with the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply`, `resolve:true`, or both and the last `expected_revision`. One `{reply:"Fixed in version 2",resolve:true,expected_revision:REVISION}` request atomically replies then resolves. Quote the version actually checked. To edit a comment you wrote, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`. Read the current thread after a conflict before retrying.
 
 ## Verify the actual HTML in a server browser session
 
@@ -85,7 +85,7 @@ const overflow = await page.locator('html').evaluate(html => {
   const width = Math.max(html.scrollWidth, body.scrollWidth);
   return {viewport: html.clientWidth, content: width, fits: width <= html.clientWidth + 1};
 });
-await output.image(await page.locator('body').screenshot());
+// Optional for image-capable reviewers: await output.image(await page.locator('body').screenshot());
 return {heading, body, overflow, pageErrors, failedRequests};
 `;
 const session_id = crypto.randomUUID();
@@ -110,10 +110,11 @@ try {
 
 Poll with `POST /api/browser-sessions` and `{op:'status',session_id,execution_id}` until the same execution is `completed`; inspect `result`, `error` and `attachments`. If the call outcome is uncertain, check that receipt before resubmitting. Close the accepted session with `{op:'close',session_id}` when finished. A changed script requires a new `execution_id`; do not replay a browser action with a new receipt.
 
-Use accessible roles, inspect page errors and failed requests, and check a narrow viewport. Locators inspect the document; use `page.mainFrame()` for reader chrome. A shell screenshot alone does not prove document rendering. For writes, use the right account; verify refusals with a separate guest or test-user session.
+Verify write refusals in a separate guest/test-user session. A shell screenshot alone does not prove document rendering.
 
 ## Create, update and the local helper
 
-The normal authoring path is `POST /api/artifacts` for a new HTML page and conditional `PUT /api/artifacts/ID` for an edit, as described in [HTML publication](html-authoring.md). The installed `scripts/publish.mjs` helper prepares bounded sample publication bundles for **new** artifacts. It does not edit a published page. Use its saved request/idempotency workflow for a new sample, and use the observed `version`/`state` with `PUT` for updates.
+Create with `POST /api/artifacts`; edit with conditional `PUT /api/artifacts/ID` using observed version/state ([HTML publication](html-authoring.md)). `scripts/publish.mjs` sends saved requests; keep body and idempotency key unchanged after an uncertain result, including HTTP 502. Preserve dependency receipts for bundle updates.
 
+Session limits: 20 s/script, 65,536 script bytes, 16 executions, eight pages, 30-minute idle expiry. Bound navigation and assertions below the script limit; avoid `networkidle`. A deadline does not identify its cause: return caught errors plus text/network/overflow before expiry; inspect page errors and the awaited condition. After a hard deadline, inspect the same receipt and use a new read-only execution for diagnostics before considering another action. Text/geometry and unread screenshots leave appearance unverified; clicking with unchanged data does not verify refresh or persistence.
 For slide navigation, use the runnable [SlideDeck example](html-examples.md#slide-deck-with-viewer-local-navigation); it retains the selected index in viewer-local Apollo state.

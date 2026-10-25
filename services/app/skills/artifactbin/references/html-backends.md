@@ -56,7 +56,13 @@ const result=await client.query({query:gql`{garden{count}}`});
 const changed=await client.mutate({mutation:gql`mutation {garden{increment}}`});
 ```
 
-Direct authenticated clients use `GET /api/artifacts/ID/graphql?revision=VERSION` for `{sdl,revision}`. Run `POST /api/artifacts/ID/graphql` with `{"revision":"VERSION","query":"query {garden{count}}","variables":{}}`; omit optional variables/operationName when absent. Query the schema for the saved page version being used. GraphQL errors and permission refusals are failures, not successful results.
+Direct authenticated clients use `GET /api/artifacts/ID/graphql?revision=VERSION` for `{sdl,revision}`. Run `POST /api/artifacts/ID/graphql` with `{"revision":"VERSION","query":"query {garden{count}}","variables":{}}`; omit optional variables/operationName when absent. Query the schema for the saved page version being used. GraphQL errors and permission refusals are failures, not successful results. Fields stay nested under the declared namespace; custom input types carry its prefix, such as `budget__BudgetInput`, not `BudgetInput`. Copy exact names from that SDL before writing variables:
+
+```js
+await client.mutate({mutation:gql`mutation Save($items:[budget__BudgetInput!]!){budget{save(items:$items)}}`,variables:{items:[{category:"Food",amount:200}]}});
+```
+
+This illustrates naming only: `save`, fields and return selection must match your backend SDL. Backend reads do not promise cross-tab push; use documented runtime invalidation and test requested refresh behavior. Add polling only when needed by the task.
 
 The shared-app example keeps tasks in the backend store and a display preference in viewer-local Apollo state. Check it as an editor and a viewer; viewers must not be able to run the editor mutation.
 
