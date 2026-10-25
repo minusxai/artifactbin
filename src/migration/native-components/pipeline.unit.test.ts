@@ -32,3 +32,12 @@ test('source SignIn emits exact platform delegation rather than dropping embedde
  p.compiler.extract=async()=>({nodes:[{type:'element',graphKey:'signin',tag:'SignIn',isComponent:true,selfClosing:true,start:0,end:9,attributes:[],children:[]}],flow:{imports:[],values:[],queries:[],mutations:[]}});
  const result=await runNativePipeline(request('auth'),p);assert.equal(result.status,'assembled',JSON.stringify(result.blockers));assert.equal(result.assembly?.input.authDelegations?.length,1);assert.equal(result.assembly?.input.authDelegations?.[0]?.destination,'platform-topbar-sign-in');
 });
+
+test('preview capability requires an explicit source-bound host profile and derives identity/resources from closure',async()=>{
+ const script=`import {signal,query} from 'page';import {createEffect} from 'solid-js';const url=URL.createObjectURL(new Blob(['source'],{type:'text/javascript'}));const frame=document.createElement('iframe');frame.srcdoc='<p>Preview</p>';`;
+ const p=ports(),load=p.readRevision;p.readRevision=async r=>{const revision=await load(r);const document={kind:'graph',schema:3,claimedIds:{},nodes:{$root:{parent:null,parts:['',''],children:['script'],ast:null},script:{parent:'$root',parts:['<script>','</script>'],children:['body'],ast:null},body:{parent:'script',parts:[script],children:[],ast:null}}};const original={...revision.original,document};return {...revision,original,rowSha256:nativeDigest(original),documentSha256:nativeDigest(document)};};
+ p.compiler.extract=async()=>({nodes:[{type:'element',graphKey:'script',tag:'script',isComponent:false,selfClosing:false,start:0,end:1,attributes:[],children:[{type:'text',graphKey:'body',value:script,start:0,end:1}]}],flow:{imports:[],values:[],queries:[],mutations:[]}});
+ const blocked=await runNativePipeline(request('preview'),p);assert.equal(blocked.status,'blocked');assert.ok(blocked.blockers.some(blocker=>blocker.code==='author-program-unsupported'));
+ const {resourceSha256}=await import('./resources.ts');p.authorProfiles=async()=>[{sourceNode:'script',profile:'native-query-preview',filter:'search',scriptSha256:resourceSha256(script)}];
+ const result=await runNativePipeline(request('preview'),p);assert.equal(result.status,'assembled',JSON.stringify(result.blockers));const receipt=result.assembly!.input.authorPrograms![0]!;assert.equal(receipt.admission.preview?.sourceNodeId,result.identity!.bindings.find(binding=>binding.sourceNode==='script')!.afId);assert.deepEqual(receipt.admission.preview?.resources,[]);
+});
