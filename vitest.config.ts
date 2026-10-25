@@ -126,7 +126,7 @@ export default defineConfig({
           environment: 'node',
           include: ['services/app/__tests__/native-runtime-bridge.test.ts'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
-          env: { PDF__MAX_BYTES: '50000000' },
+          env: { PDF__MAX_BYTES: '50000000', FILES__MAX_BYTES: '50000000' },
         },
       },
       {
