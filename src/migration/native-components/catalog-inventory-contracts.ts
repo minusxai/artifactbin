@@ -3,7 +3,9 @@ import type {
   NativePublicationCatalog,
   NativePublicationSharedInput,
 } from "./pipeline-publication-contracts.ts";
-/** Immutable current source capture; every head is checked against both complete raw receipts. */
+/** Immutable current source capture; every head is checked against both complete raw receipts.
+ * Absent-token sentinels (null/empty string) project to null only for token fields;
+ * the original source and relation bytes remain unchanged. Nonempty IDs require mappings. */
 export interface NativeCurrentCatalogCapture {
   sourceId: string;
   version: number;

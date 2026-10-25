@@ -49,7 +49,11 @@ export const buildNativeCatalogInventory: BuildNativeCatalogInventory = (
     kind: keyof typeof identities,
     value: unknown,
   ): string | null {
-    if (value === null || value === undefined) return null;
+    if (
+      value === null ||
+      value === undefined ||
+      (kind === "tokens" && value === "")
+    ) return null;
     if (
       typeof value !== "string" ||
       !Object.hasOwn(identities[kind], value) ||

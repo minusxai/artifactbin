@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildNativeCatalogInventory } from "../src/migration/native-components/catalog-inventory.ts";
-import { encodeNativePublicationBytes } from "../src/migration/native-components/pipeline-publication.ts";
+import { encodeNativePublicationBytes, decodeNativePublicationBytes } from "../src/migration/native-components/pipeline-publication.ts";
 import { nativeDigest } from "../src/migration/native-components/selection.ts";
 import type { NativeCatalogInventoryInput } from "../src/migration/native-components/catalog-inventory-contracts.ts";
 const pin = "a".repeat(64),
@@ -617,4 +617,27 @@ test("external catalogs require exact credential provenance digests without emit
   );
   assert.deepEqual(output.projection.objects, []);
   assert.equal(output.projection.datasets[0]?.versions.length, 1);
+});
+
+test("current policy audit projects only the empty token sentinel to null without rewriting source evidence", () => {
+  const input = fixture();
+  const capture = input.captures[0]!;
+  const relations = JSON.parse(Buffer.from(decodeNativePublicationBytes(capture.relations.bytes)).toString());
+  relations.dataset_policy_audit[1].actor_token_id = "";
+  capture.relations.bytes = encode(relations);
+  const before = structuredClone(input);
+  const result = buildNativeCatalogInventory(input);
+  const audit = result.projection.datasets[0]!.policyAudit as any[];
+  assert.equal(audit[0].actorTokenId, null);
+  assert.equal(audit[0].actorUserId, "mapped-user");
+  assert.equal((result.projection.datasets[0]!.authority as any).tokenId, "mapped-token");
+  assert.deepEqual(input, before);
+  assert.equal(JSON.parse(Buffer.from(decodeNativePublicationBytes(capture.relations.bytes)).toString()).dataset_policy_audit[1].actor_token_id, "");
+  relations.dataset_policy_audit[1].actor_token_id = "nonempty-unmapped-token";
+  capture.relations.bytes = encode(relations);
+  assert.throws(() => buildNativeCatalogInventory(input), /identity_unmapped/);
+  relations.dataset_policy_audit[1].actor_token_id = "";
+  relations.dataset_policy_audit[1].actor_user_id = "";
+  capture.relations.bytes = encode(relations);
+  assert.throws(() => buildNativeCatalogInventory(input), /identity_unmapped/);
 });
