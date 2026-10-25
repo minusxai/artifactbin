@@ -12,6 +12,9 @@ export class AfTabs extends HTMLElement implements TabsContract {
   private controlled = false;
   private propertyValue: string | undefined;
   private focused: AfTabsTrigger | undefined;
+  private dispatchingChange = false;
+  private pointerDownTrigger: AfTabsTrigger | undefined;
+  private pointerFocusActivation: AfTabsTrigger | undefined;
   private observer = new MutationObserver(() => this.sync());
   get value(): string | undefined { return this.controlled ? this.propertyValue : this.getAttribute('value') ?? this.selection; }
   set value(value: string | undefined) {
@@ -27,6 +30,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     // No default means no selection; the first enabled trigger remains the Tab entry.
     if (!this.initialized) { this.selection = this.getAttribute('default-value') ?? undefined; this.initialized = true; }
     this.addEventListener('click', this.onClick);
+    this.addEventListener('mousedown', this.onMouseDown);
     this.addEventListener('keydown', this.keydown);
     this.addEventListener('focusin', this.focusin);
     this.addEventListener('focusout', this.focusout);
@@ -36,6 +40,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
   disconnectedCallback(): void {
     this.observer.disconnect();
     this.removeEventListener('click', this.onClick);
+    this.removeEventListener('mousedown', this.onMouseDown);
     this.removeEventListener('keydown', this.keydown);
     this.removeEventListener('focusin', this.focusin);
     this.removeEventListener('focusout', this.focusout);
@@ -50,16 +55,43 @@ export class AfTabs extends HTMLElement implements TabsContract {
     const node = event.target instanceof Element ? event.target.closest<AfTabsTrigger>('af-tabs-trigger') : null;
     return node?.closest('af-tabs') === this && !node.hasAttribute('disabled') ? node : undefined;
   }
+  private activeElement(): Element | null {
+    const root = this.getRootNode();
+    return root instanceof ShadowRoot ? root.activeElement : this.ownerDocument.activeElement;
+  }
   private choose(trigger: AfTabsTrigger): void {
     const value = trigger.getAttribute('value');
-    if (value === null || value === this.value) return;
+    if (this.dispatchingChange || value === null || value === this.value) return;
     const event = new CustomEvent<TabsChangeDetail>('af-change', {detail:{value}, bubbles:true, composed:true, cancelable:true});
-    if (this.dispatchEvent(event) && !this.controlled && !this.hasAttribute('value')) this.selection = value;
-    this.sync();
+    this.dispatchingChange = true;
+    try {
+      if (this.dispatchEvent(event) && !this.controlled && !this.hasAttribute('value')) this.selection = value;
+    } finally {
+      this.dispatchingChange = false;
+      this.sync();
+    }
   }
-  private onClick = (event: Event): void => { const trigger = this.target(event); if (trigger && !event.defaultPrevented) { this.focused = trigger; trigger.focus(); this.choose(trigger); } };
+  private onClick = (event: Event): void => {
+    const trigger = this.target(event); if (!trigger || event.defaultPrevented) return;
+    const alreadyFocused = this.activeElement() === trigger;
+    const activatedOnPointerFocus = event instanceof MouseEvent && event.detail > 0 && this.pointerFocusActivation === trigger;
+    this.pointerDownTrigger = undefined; this.pointerFocusActivation = undefined;
+    this.focused = trigger; trigger.focus();
+    // Automatic mode activates through focusin; retain click activation for manual mode
+    // and clicks on an already-focused trigger without dispatching intent twice.
+    if (!activatedOnPointerFocus && (alreadyFocused || this.getAttribute('activation-mode') === 'manual')) this.choose(trigger);
+  };
+  private onMouseDown = (event: Event): void => { this.pointerDownTrigger = this.target(event); this.pointerFocusActivation = undefined; };
   private focusout = (): void => { queueMicrotask(() => this.sync()); };
-  private focusin = (event: Event): void => { const trigger = this.target(event); if (trigger) { this.focused = trigger; this.sync(); } };
+  private focusin = (event: Event): void => {
+    const trigger = this.target(event); if (!trigger) return;
+    this.focused = trigger;
+    if (this.getAttribute('activation-mode') !== 'manual') {
+      if (this.pointerDownTrigger === trigger) this.pointerFocusActivation = trigger;
+      this.choose(trigger);
+    }
+    this.sync();
+  };
   private keydown = (event: KeyboardEvent): void => {
     const trigger = this.target(event); if (!trigger || event.defaultPrevented) return;
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.choose(trigger); return; }
@@ -69,8 +101,9 @@ export class AfTabs extends HTMLElement implements TabsContract {
     const index=tabFocusTarget({key:event.key,index:enabled.indexOf(trigger),count:enabled.length,orientation:vertical?'vertical':'horizontal',dir:rtl?'rtl':'ltr',loop:this.getAttribute('loop')!=='false'});
     if(index===null)return;
     event.preventDefault(); const next = enabled[index]; if (!next) return;
+    const alreadyFocused = this.activeElement() === next;
     this.focused = next; next.focus();
-    if (this.getAttribute('activation-mode') !== 'manual') this.choose(next);
+    if (alreadyFocused && this.getAttribute('activation-mode') !== 'manual') this.choose(next);
     this.sync();
   };
   private identify(node: HTMLElement, kind: string): void {
@@ -83,7 +116,7 @@ export class AfTabs extends HTMLElement implements TabsContract {
     if (!this.isConnected) return;
     const triggers = this.triggers(); const panels = this.own<AfTabsContent>('af-tabs-content');
     const enabled = this.enabled();
-    if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.ownerDocument.activeElement as AfTabsTrigger)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
+    if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.activeElement() as AfTabsTrigger)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
     for (const list of this.own('af-tabs-list')) {
       list.dataset.orientation = this.getAttribute('orientation') === 'vertical' ? 'vertical' : 'horizontal';
       list.dataset.variant = list.getAttribute('variant') ?? this.getAttribute('variant') ?? 'default';
