@@ -2,6 +2,10 @@
 name: http-auth
 description: Direct HTTP email sign-in, origin-scoped credential storage and OAuth refresh.
 ---
+## Installed scripts
+
+`node scripts/auth.mjs status` reports this origin's grant without secrets. Start `auth.mjs login --email ADDRESS`; wait for the user's emailed OTP, then `auth.mjs login --challenge HANDLE --code-file FILE`. The private wrapper handle is origin-bound. Credentials reuse the existing private origin store and serialized refresh. `auth.mjs logout` removes the local grant only: no self-revocation endpoint exists, and an environment grant remains active. Select `--server ORIGIN` if different from the archive origin. No token appears in results or journals.
+
 ## Read first
 
 [% include "fragments/http-authentication.md" %]

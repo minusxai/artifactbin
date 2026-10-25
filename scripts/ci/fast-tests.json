@@ -1,4 +1,5 @@
 [
+  "services/app/lib/skills/__tests__/author-commands.test.ts",
   "services/app/lib/html-components/tab-navigation.test.ts",
   "services/app/lib/html-components/slide-navigation.test.ts",
   "services/app/lib/html-components/accordion-model.test.ts",

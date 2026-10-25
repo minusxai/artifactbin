@@ -11,7 +11,7 @@ Use this guide for native HTML comments and browser QA. Read [HTML authoring](ht
 
 - [Comment on a saved HTML node](#comment-on-a-saved-html-node)
 - [Verify the actual HTML in a server browser session](#verify-the-actual-html-in-a-server-browser-session)
-- [Create, update and the local helper](#create-update-and-the-local-helper)
+- [Recovery and limits](#recovery-and-limits)
 
 # Native HTML comments and browser verification
 
@@ -50,7 +50,7 @@ const created = await request(`/api/artifacts/${artifactId}/annotations`, {
 });
 ```
 
-The HTTP request helper sends the selected origin's bearer, `Origin` and JSON content type. Keep `commentKey` and `commentBody` if the outcome is uncertain; retry the same request with both unchanged. The create response is the comment thread receipt; retain its `id` and `revision` for replies or state changes.
+Retain the returned thread `id` and `revision`. Retry uncertain writes with identical body and idempotency key.
 
 The native anchor shape is:
 
@@ -58,9 +58,9 @@ The native anchor shape is:
 {"kind":"html-node","v":1,"revision":"7","nodeId":"results-heading","quote":"March results"}
 ```
 
-`revision` is the current artifact version encoded as a string. `nodeId` is the stable page-node identity. `quote` is exact context within that node; use an empty string when commenting on the whole node without selected text. A comment on a script-created node also supplies `ancestorId`, the stable `data-af-id` of its saved source ancestor. Keep IDs stable, unique and scoped beneath that ancestor.
+Use an empty `quote` for the whole node. A comment on a script-created node also supplies `ancestorId`, the stable `data-af-id` of its saved source ancestor. Keep IDs stable, unique and scoped beneath that ancestor.
 
-Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` by repeating the request with the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply` or `resolve:true` and the last `expected_revision`. To edit a comment you wrote, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`. Read the current thread after a conflict before retrying.
+Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` by repeating the request with the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply`, `resolve:true`, or both and the last `expected_revision`. One `{reply:"Fixed in version 2",resolve:true,expected_revision:REVISION}` request atomically replies then resolves. Quote the version actually checked. To edit a comment you wrote, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`. Read the current thread after a conflict before retrying.
 
 ## Verify the actual HTML in a server browser session
 
@@ -68,52 +68,25 @@ Read the current thread list with `GET /api/artifacts/ID/annotations?status=all`
 
 Keep the bearer in the caller that sends the API request. It does not belong in `code`, page HTML or downloaded files. The page is signed in as the caller unless the session-creation request explicitly sets `viewer:'guest'` or an authorized `viewer:{testuser:'ID'}`. A session's viewer is fixed at creation.
 
+Use `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa.json`. Explicit viewports replace defaults. `--viewer self|guest` creates an isolated fixed-identity server session; never use the user's browser for QA. The helper returns page/console errors, failed requests, HTTP errors, visible text, overflow, task evidence and screenshot paths. Known same-origin view telemetry is separate; functional event streams and GraphQL errors are not silently excluded. Cleanup cancellations do not change captured evidence.
+
+The step file is an async function body receiving document-scoped `page`:
+
 ```js
-const code = `
-const page = await context.newPage();
-const pageErrors = [], failedRequests = [];
-page.on('pageerror', error => pageErrors.push(error.message));
-page.on('requestfailed', request => failedRequests.push({url: request.url(), error: request.failure()?.errorText}));
-await page.setViewportSize({width: 390, height: 844});
-await page.goto('/a/${artifactId}');
-const headingLocator = page.getByRole('heading').first();
-await headingLocator.waitFor();
-const heading = await headingLocator.innerText();
-const body = await page.locator('body').innerText();
-const overflow = await page.locator('html').evaluate(html => {
-  const body = html.ownerDocument.body;
-  const width = Math.max(html.scrollWidth, body.scrollWidth);
-  return {viewport: html.clientWidth, content: width, fits: width <= html.clientWidth + 1};
-});
-await output.image(await page.locator('body').screenshot());
-return {heading, body, overflow, pageErrors, failedRequests};
-`;
-const session_id = crypto.randomUUID();
-const execution_id = crypto.randomUUID();
-const submitted = await request('/api/browser-sessions', {method: 'POST', body: {
-  op: 'script', session_id, execution_id, create: true, code
-}});
-const accepted = submitted.session_id === session_id && submitted.execution_id === execution_id;
-if (!accepted) throw Error('Browser session was not accepted');
-let run = submitted;
-try {
-  for (const end = Date.now() + 20000; ['queued', 'running'].includes(run.status) && Date.now() < end;) {
-    await new Promise(resolve => setTimeout(resolve, 250));
-    run = await request('/api/browser-sessions', {method: 'POST', body: {op: 'status', session_id, execution_id}});
-  }
-  if (run.status !== 'completed') throw Error(run.error?.code ?? run.status);
-  const capture = run.result; // inspect the returned heading and text
-} finally {
-  await request('/api/browser-sessions', {method: 'POST', body: {op: 'close', session_id}});
-}
+const before=await page.getByRole('status').innerText();
+await page.getByRole('button',{name:'Refresh'}).click();
+const after=await page.getByRole('status').innerText();
+if(before===after)throw Error('Expected changed test data after refresh');
+return {assertions:['refresh shows changed fixture data'],before,after};
 ```
 
-Poll with `POST /api/browser-sessions` and `{op:'status',session_id,execution_id}` until the same execution is `completed`; inspect `result`, `error` and `attachments`. If the call outcome is uncertain, check that receipt before resubmitting. Close the accepted session with `{op:'close',session_id}` when finished. A changed script requires a new `execution_id`; do not replay a browser action with a new receipt.
+Use disposable test fixtures: hooks can write data. Return the actual assertion evidence; throw on failure. A generic smoke pass proves neither full task behavior, persistence nor permissions. For persistence, change data, reload and assert the changed value. For refusals, use a separate guest session. View screenshots with an image-capable reviewer; capturing an unread image does not establish appearance. Stop once requested behavior and appearance pass at desktop and 390px; fix known defects, then avoid optional polish.
 
-Use accessible roles, inspect page errors and failed requests, and check a narrow viewport. Locators inspect the document; use `page.mainFrame()` for reader chrome. A shell screenshot alone does not prove document rendering. For writes, use the right account; verify refusals with a separate guest or test-user session.
+The helper creates one receipt-safe browser session, one execution per viewport, and closes it. The existing API remains `POST /api/browser-sessions` with `{op:'script',session_id,execution_id,create:true,code}`, then `{op:'status',session_id,execution_id}` until complete, and `{op:'close',session_id}`. Credentials stay in the API caller. After an uncertain submission, inspect the same receipt rather than replaying actions. A changed script needs a new execution ID. Direct scripts can return `{pageErrors,failedRequests,overflow,text}` and optionally call `output.image(await page.locator('body').screenshot())`; `page.mainFrame()` reaches reader chrome.
 
-## Create, update and the local helper
+## Recovery and limits
 
-The normal authoring path is `POST /api/artifacts` for a new HTML page and conditional `PUT /api/artifacts/ID` for an edit, as described in [HTML publication](html-authoring.md). The installed `scripts/publish.mjs` helper prepares bounded sample publication bundles for **new** artifacts. It does not edit a published page. Use its saved request/idempotency workflow for a new sample, and use the observed `version`/`state` with `PUT` for updates.
+`comment.mjs watch ID --once --output comments.ndjson` establishes now without a cursor. `--cursor CHECKPOINT_OR_LOG` resumes human comments; `--append --output LOG` validates origin/artifact/stream and resumes its flushed checkpoint. Events deduplicate by ID. Only delivered events advance checkpoints; cursor/access failures refuse instead of silently resetting. Agent comments, resolve and reopen are not human-feed events. Each command's `--help` lists write/revision flags.
 
+Session limits: 20 s/script, 65,536 script bytes, 16 executions, eight pages, 30-minute idle expiry. Bound navigation and assertions below the script limit; avoid `networkidle`. A deadline does not identify its cause: return caught errors plus text/network/overflow before expiry; inspect page errors and the awaited condition. After a hard deadline, inspect the same receipt and use a new read-only execution for diagnostics before considering another action. Text/geometry and unread screenshots leave appearance unverified; clicking with unchanged data does not verify refresh or persistence.
 For slide navigation, use the runnable [SlideDeck example](html-examples.md#slide-deck-with-viewer-local-navigation); it retains the selected index in viewer-local Apollo state.

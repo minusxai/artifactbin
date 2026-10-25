@@ -54,3 +54,8 @@ export function previewDatasetLinks(source){
   for(const child of node.childNodes??[])visit(child);
  }visit(document);return {links,baseHref};
 }
+
+/** Backend hrefs are source declarations; a read may explicitly retain their saved remote binding. */
+export function previewBackendLinks(source){
+ const found=[];function walk(node){if(node.tagName==='link'&&node.attrs.some(attr=>attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){const value=name=>node.attrs.find(attr=>attr.name===name)?.value;found.push({name:value('data-af-name'),href:value('href')??''});}for(const child of node.childNodes??[])walk(child);if(node.content)walk(node.content);}walk(parse(source));return found;
+}

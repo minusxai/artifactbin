@@ -25,3 +25,9 @@ export function buildPreviewDatasets():Promise<string>{
   const text=result.outputFiles?.[0]?.text;if(!text)throw Error('Preview dataset build was empty');return text;
  }).catch(error=>{datasets=undefined;throw error;});
 }
+
+/** Native toolbox shares platform credentials, publication planning and GraphQL parsing; installs need only Node. */
+export async function buildToolboxPlatform():Promise<string>{
+ const result=await build({entryPoints:[path.resolve('skills/artifactbin/scripts/toolbox-platform.mjs')],bundle:true,write:false,minify:true,format:'esm',platform:'node',target:'node22'});
+ const text=result.outputFiles?.[0]?.text;if(!text)throw Error('Toolbox platform build was empty');return text;
+}

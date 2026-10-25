@@ -6,7 +6,7 @@ import parseCss from 'css-tree/parser';
 import walkCss from 'css-tree/walker';
 initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
-import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext} from './contracts';
+import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext,AuthoringHtmlOptions} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
 interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true}
@@ -132,8 +132,8 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
-export function inspectPublicationBundle(html:string,bundle:PublicationBundle){
- const plan=planPublicationBundle(html,bundle);
+export function inspectPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}){
+ const plan=planPublicationBundle(html,bundle,context);
  return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
@@ -152,5 +152,31 @@ export function pinPublicationAssetUrls(source:string,pageId:string,version:numb
   const escaped=link.htmlAttribute?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;
   result=result.slice(0,link.start)+escaped+result.slice(link.end);
  }
+ return result;
+}
+
+/** Produce local authoring references from a canonical saved page, never from a rendered/exported wrapper. */
+export function authoringHtml(html:string,options:AuthoringHtmlOptions):string{
+ const origin=new URL(options.server).origin;
+ const receipts=new Map(options.receipts.map(receipt=>[receipt.id,receipt]));
+ const edits=links(html,false).flatMap(link=>{
+  let receipt;let suffix='';
+  if(link.value.startsWith('ref:'))receipt=receipts.get(link.value.slice(4));
+  else try{
+   const url=new URL(link.value,origin);
+   if(url.origin!==origin||url.pathname!==`/a/${options.pageId}/assets`)return [];
+   receipt=receipts.get(url.searchParams.get('dependency')??'');
+   if(!receipt||receipt.revision!==url.searchParams.get('revision'))return [];
+   url.searchParams.delete('dependency');url.searchParams.delete('revision');url.searchParams.delete('version');
+   suffix=(url.searchParams.size?'?'+url.searchParams.toString():'')+url.hash;
+  }catch{return [];}
+  if(!receipt)return [];
+  normalized(receipt.path);
+  let value=path.posix.relative(path.posix.dirname(options.entryPath),receipt.path);if(!value.startsWith('.'))value='./'+value;
+  value+=suffix;
+  if(link.htmlAttribute)value=value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+  return [{start:link.start,end:link.end,value}];
+ });
+ let result=html;for(const edit of edits.sort((a,b)=>b.start-a.start))result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);
  return result;
 }

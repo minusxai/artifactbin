@@ -14,11 +14,15 @@ For an existing page, read its canonical `html`, `version` and `state`, preserve
 
 ## Author and publish
 
-1. Read [native HTML publication](references/html-authoring.md). Create with `POST /api/artifacts` and `{"html":"<complete HTML>","visibility":"unlisted"}`. Updates use `PUT /api/artifacts/ID` with `html`, the observed `expectedVersion` and `expectedState`. Send one durable `Idempotency-Key` per intended write; retry an uncertain request with the same body and key. The optional `scripts/publish.mjs` helper prepares new sample artifacts; use the conditional `PUT` flow for edits.
+[[ authorCommands ]]
+
+Every script supports complete offline `--help`, `--server ORIGIN`, `--json` and exclusive `--output FILE` where applicable. Use the archive’s Node scripts, never shell-built HTTP wrappers; [authentication](references/http-auth.md) reuses the same private origin-bound grant. Groups, ACLs, secrets and trash remain explicit HTTP operations.
+
+1. Read [native HTML publication](references/html-authoring.md). New source: `node scripts/publish.mjs ./project/index.html`; local CSS, images, fonts and backend files publish together. Existing source: `node scripts/read.mjs ID --output page.html`, edit its canonical IDs, then `node scripts/publish.mjs page.html`. Keep the `.af.json` companion. Publish returns a new canonical source pair without overwriting author edits. Its external immutable journal supports `--resume FILE` after an uncertain write; no new key or identity. A bare `POST /api/artifacts` refuses unresolved local dependencies.
 2. Read [state and JavaScript](references/html-runtime.md), including explicit field declarations for saved comment views. All page state goes through `client` from `@afbin/apollo`. Top-level local state is private to each viewer’s browser. Shared data lives behind declared dataset/backend namespaces. Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files.
 3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Keep `design-systems/` and the packaged `fonts/` inside the project root; link `./design-systems/NAME.css` from root-level HTML (adjust for subfolders). Preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; optional native components below need explicit registration.
 4. For a CSV/dashboard read [datasets](references/html-datasets.md). For a shared app read [backend files](references/html-backends.md) before modeling identity or writes. A readable page grants no dataset write access. Use authenticated account identity, never a name typed into a form, to authorize actions.
-5. Verify the actual published page at desktop and 390px. Exercise changed controls and inspect errors. Check values, comparisons and charts against returned data; label sample or assumed data. Share what passed and anything still unverified. Publication accepts source; it does not prove appearance.
+5. Run `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa.json`; [operations](references/html-operations.md) explains task hooks and the 20-second/16-execution session limits. Check values against data and exercise requested behavior, persistence and permission refusals. Inspect screenshots with image-capable review; text/geometry alone leaves appearance unverified. Stop once requested behavior and appearance pass at desktop and 390px; fix remaining defects, then stop optional polish. Report observed tests, assumptions and unverified acceptance.
 
 For HTML comment anchors and server-side browser verification, read [HTML operations](references/html-operations.md). It describes the native HTML anchor contract and how to inspect the sandboxed document frame.
 
@@ -72,9 +76,9 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
 - [Examples and verification](references/html-examples.md): report, CSV dashboard and shared task app.
 
-For a private local project preview, read [local preview](references/html-preview.md) and run `node scripts/preview.mjs PROJECT_DIR`; the downloaded skill includes local runtime assets.
+For a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/`; [local preview](references/html-preview.md) covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.
 
-Optional `scripts/publish.mjs` sends a saved JSON request with an origin-bound token supplied outside the page. It is a helper inside this skill, not an installed product command.
+Scripts are helpers inside this skill, not installed global product commands. Existing `preview.mjs` and `publication-bundle.mjs` entrypoints are compatibility shims; use the verb commands above.
 [% else %]
 
 ## Read first
