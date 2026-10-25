@@ -30,7 +30,7 @@ export async function selectNativePipelinePublicationPage(config:Pick<NativePipe
  const selected=await selectNativeRevisions({sourceNamespace:revision.key.sourceNamespace,sourceIds:[revision.key.sourceId],expectedHeads:1,expectedRevisions:receipt.distinctRevisions,manifestBytes:Buffer.from(JSON.stringify({receipts:[receipt],failures:[]})),readFile:async()=>canonical});
  const page=selected.pages[0]!;const head=page.revisions.find(r=>r.key.version===page.headVersion);
  if(!head||head.rowSha256!==revision.rowSha256||head.documentSha256!==revision.documentSha256||nativeDigest(head.key)!==nativeDigest(revision.key))throw Error('native_pipeline_publication_source_binding');
- return {...page,revisions:[head]};
+ return page;
 }
 /** Supplies the actual product bootstrap callback for every head through one captured configuration. */
 export function createNativePipelinePublication(config:NativePipelinePublicationConfiguration):NativePipelinePublicationCallback {

@@ -30,3 +30,12 @@ test('reviewed raw relation capture binds before staging without a precomputed t
  invocation.files.comments=raw;await assert.rejects(callback(invocation),/canonical_file_digest/);assert.equal(staged,0);
  invocation.files.compiledHtml=Buffer.from('<html>substituted</html>');await assert.rejects(callback(invocation),/compiled_html/);assert.equal(staged,0);
 });
+
+test('latest publication preserves the full admitted canonical revision witness for head-only projection',async()=>{
+ const f=fixture('first');const old={...f.revision.original,version:1,document:{old:true}},head={...f.revision.original,version:2,document:{current:true}};
+ const raw=JSON.stringify({snapshot:{},heads:[head],versions:[old]});const receipt={id:'first',path:'page.json',bytes:Buffer.byteLength(raw),sha256:hash(raw),expectedVersion:2,distinctRevisions:2,archivedRows:1};
+ const manifestRaw=JSON.stringify({receipts:[receipt],failures:[]});const manifest={encoding:'base64' as const,data:Buffer.from(manifestRaw).toString('base64'),sha256:hash(manifestRaw)};
+ const revision={...f.revision,key:{...f.revision.key,version:2},original:head,rowSha256:nativeDigest(head),documentSha256:nativeDigest(head.document)};
+ const page=await selectNativePipelinePublicationPage({selectionManifest:manifest,approvedSelectionManifestSha256:manifest.sha256},Buffer.from(raw),revision);
+ assert.equal(page.headVersion,2);assert.equal(page.sourceFile.distinctRevisions,2);assert.deepEqual(page.revisions.map(r=>r.key.version),[1,2]);assert.equal(page.revisions.find(r=>r.key.version===2)?.rowSha256,revision.rowSha256);
+});
