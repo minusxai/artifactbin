@@ -1,3 +1,4 @@
+import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
 /** Actual product staging and atomic identity/catalog/comment/membership publication.
  * No account seed, grant, empty relation substitute or renderer replacement lives here. */
 import {createHash} from 'node:crypto';
@@ -33,6 +34,7 @@ export async function prepareNativeProductImport(raw:NativeProductImportRecipe|N
  const annotations=prepareNativeHistoryRelations(recipe.relations,membership);
  const source=await canonicalNativeObjectSource(catalog.root,catalog.ledgerPath,catalog.receipts);
  const sink=options.catalogSink??await createNativeLocalObjectSink(catalog.sinkDirectory);
+ const avatars=await prepareNativeIdentityAvatars(identity,sink);
  const stagedCatalog=await stageNativeCatalog(catalog.projection,source.source,sink);
  const relations={sourceSha256:nativeCatalogDigest({annotations:annotations.sourceSha256,catalog:stagedCatalog.sourceSha256}),headMetadata:annotations.headMetadata,
   apply:async(tx:Parameters<typeof writeNativeHistory>[0],id:string)=>{await annotations.apply(tx,id);await stagedCatalog.apply(tx,id);},
@@ -40,7 +42,7 @@ export async function prepareNativeProductImport(raw:NativeProductImportRecipe|N
  history.relationSha256=relations.sourceSha256;
  const write=async(tx:Parameters<typeof writeNativeHistory>[0])=>{
    const authority=await authorizeNativeIdentityTransaction(tx,recipe.schemas);
-   const identities=await writeNativeIdentities(tx,identity,authority);
+   const identities=await writeNativeIdentities(tx,identity,authority,avatars);
    const disposition=await writeNativeHistory(tx,history,relations);
    return {disposition,identities,historyProjectionSha256:history.projectionSha256,relationsSha256:relations.sourceSha256};
  };
