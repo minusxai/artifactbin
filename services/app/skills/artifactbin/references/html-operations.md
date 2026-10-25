@@ -3,6 +3,16 @@ name: html-operations
 description: Native HTML comment anchors and server-side browser verification.
 ---
 
+## Read first
+
+Use this guide for native HTML comments and browser QA. Read [HTML authoring](html-authoring.md) for page creation and updates; keep credentials in the API caller, never in page code.
+
+## Contents
+
+- [Comment on a saved HTML node](#comment-on-a-saved-html-node)
+- [Verify the actual HTML in a server browser session](#verify-the-actual-html-in-a-server-browser-session)
+- [Create, update and the local helper](#create-update-and-the-local-helper)
+
 # Native HTML comments and browser verification
 
 Use these procedures with the [HTML API](html-authoring.md) and the selected server. They describe native HTML operations; JSX `node_id` anchors and CLI-only browser guidance are separate compatibility contracts.
