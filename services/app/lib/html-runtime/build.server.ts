@@ -22,8 +22,10 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const apolloPath='/af/v1/apollo/'+createHash('sha256').update(apollo).digest('hex');
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('../islands/frame-door.ts',import.meta.url)))};
+import {markScrollableTables} from ${JSON.stringify(fileURLToPath(new URL('../islands/table-scroll.ts',import.meta.url)))};
 const supplied=document.querySelector('[data-af="runtime"]');
 const config=supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};
+if(document.querySelector('table'))markScrollableTables(document);
 const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
 const portableReader=document.querySelector('[data-af="reader"]');
 if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!portableReader)throw Error('Portable HTML is missing its reader module');

@@ -44,6 +44,39 @@ it('keeps reader code out of the bootstrap and embeds exact portable reader byte
 });
 
 import {runInNewContext} from 'node:vm';
+it('marks overflowing tables in the native HTML core and updates the fade at the scroll end',async()=>{
+ const core=await buildHtmlCore();
+ const makeTable=(scrollWidth:number,clientWidth:number)=>{
+  const attributes=new Map<string,string>(),listeners=new Map<string,(event:Event)=>void>();
+  const table={scrollWidth,clientWidth,scrollLeft:0,attributes,listeners,
+   hasAttribute(name:string){return attributes.has(name);},
+   setAttribute(name:string,value:string){attributes.set(name,value);},
+   removeAttribute(name:string){attributes.delete(name);},
+   addEventListener(name:string,listener:(event:Event)=>void){listeners.set(name,listener);},
+   removeEventListener(name:string){listeners.delete(name);},
+  };
+  return table;
+ };
+ const wide=makeTable(900,340),fits=makeTable(300,340),tables=[wide,fits];
+ const resizeListeners=new Map<string,(event:Event)=>void>();
+ class Observer{constructor(readonly callback:MutationCallback){}observe(){}disconnect(){}}
+ const win={setTimeout:()=>1,clearTimeout(){},addEventListener(name:string,listener:(event:Event)=>void){resizeListeners.set(name,listener);},removeEventListener(name:string){resizeListeners.delete(name);},MutationObserver:Observer};
+ (win as {parent?:unknown}).parent=win;
+ const doc={defaultView:win,body:{},documentElement:{hasAttribute:()=>false},
+  querySelector(selector:string){if(selector==='table')return wide;return selector==='[data-af="runtime"]'?{textContent:JSON.stringify({pageId:'p',revision:'1',backends:[],offline:false})}:null;},
+  querySelectorAll(selector:string){return selector.startsWith('table')?tables:[];},
+  createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(){}},
+ };
+ runInNewContext(core,{document:doc,window:win,location:{href:'https://page.example/report'},URL,Blob});
+ expect(wide.attributes.get('data-mx-scrollable')).toBe('');
+ expect(fits.attributes.has('data-mx-scrollable')).toBe(false);
+ wide.scrollLeft=560;wide.listeners.get('scroll')?.({currentTarget:wide} as unknown as Event);
+ expect(wide.attributes.get('data-mx-scrollable')).toBe('end');
+ wide.scrollLeft=0;wide.listeners.get('scroll')?.({currentTarget:wide} as unknown as Event);
+ expect(wide.attributes.get('data-mx-scrollable')).toBe('');
+ wide.clientWidth=1000;resizeListeners.get('resize')?.(new Event('resize'));
+ expect(wide.attributes.has('data-mx-scrollable')).toBe(false);
+});
 it('leaves hosted top-level captures untouched and boots portable and raw local pages',async()=>{
  const assets=await buildHtmlAssets();
  for(const {offline,privatePreview} of [{offline:false,privatePreview:false},{offline:true,privatePreview:false},{offline:undefined,privatePreview:false},{offline:true,privatePreview:true}]) {
