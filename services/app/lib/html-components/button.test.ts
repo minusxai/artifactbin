@@ -71,6 +71,12 @@ describe('native af-button', () => {
     expect(style.textContent).toContain('color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)');
   });
 
+  it('uses the authored 3px 50-percent focus ring in light and dark themes', () => {
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
+    expect(css).toContain('box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)');
+    expect(css).toContain('html[data-af-dark="true"] af-button>button:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)');
+  });
+
   it('uses borders only for the outline variant and matches its source current-color edge', () => {
     const plain=fixture().button, outline=fixture('variant="outline"').button;
     expect(getComputedStyle(plain).borderTopWidth).toBe('0px');
