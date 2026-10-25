@@ -1,3 +1,8 @@
+import {NATIVE_TABS_RULES} from './adapters/tabs.ts';
+import {NATIVE_ACCORDION_RULES} from './adapters/accordion.ts';
+import {NATIVE_MERMAID_RULES} from './adapters/mermaid.ts';
+import {NATIVE_IDENTITY_DECORATION_RULES} from './adapters/identity-decoration.ts';
+import {NATIVE_SLIDE_DECK_RULES} from './adapters/slide-deck.ts';
 /** Offline lowering rules pinned to reviewed native component interfaces. No
  * renderer, legacy runtime or target browser module is imported by this file.
  * Source provenance at the target revision: services/app/lib/html-components/
@@ -19,7 +24,7 @@ export interface NativeComponentRule {
   parent?: readonly string[];
   generatedClass?: string;
 }
-const rules: NativeComponentRule[] = [];
+const rules: NativeComponentRule[] = [...NATIVE_TABS_RULES,...NATIVE_ACCORDION_RULES,...NATIVE_MERMAID_RULES,...NATIVE_IDENTITY_DECORATION_RULES,...NATIVE_SLIDE_DECK_RULES];
 const semantic = (tag: string, htmlTag: string, generatedClass?: string) => rules.push({tag,htmlTag,kind:'semantic',generatedClass});
 for(const [tag,htmlTag,css] of [
  ['Card','section','native-card'],['CardHeader','header','native-card-header'],['CardTitle','h2','native-card-title'],['CardDescription','p','native-muted'],['CardContent','div','native-card-content'],['CardFooter','footer','native-card-footer'],['CardAction','div','native-card-action'],

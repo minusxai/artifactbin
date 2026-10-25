@@ -367,6 +367,8 @@ export function emitNativeBindings(
         Segmented: "value",
         DatePicker: "value",
         Dialog: "open",
+        Tabs: "value",
+        Accordion: "value",
       } as Record<string, string>;
       const isNative = ["input", "textarea", "select"].includes(node.tag);
       const isControl =

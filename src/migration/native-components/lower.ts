@@ -1,3 +1,9 @@
+import {prepareNativeTabs} from './adapters/tabs.ts';
+import {prepareNativeAccordion} from './adapters/accordion.ts';
+import {prepareNativeMermaid} from './adapters/mermaid.ts';
+import {prepareNativeIdentityDecoration} from './adapters/identity-decoration.ts';
+import {prepareNativeSlideDeck} from './adapters/slide-deck.ts';
+import {prepareNativeDocumentMarkup,SVG_TAGS,SVG_ATTRIBUTES,HEAD_METADATA_TAGS} from './adapters/document-markup.ts';
 import {nativeMarkdownSource} from './markdown.ts';
 import {nativeDigest} from './selection.ts';
 import {nativeComponentHelperIdentity} from './component-presentation.ts';
@@ -77,7 +83,7 @@ const escape = (value: unknown): string => String(value).replace(/&/g,'&amp;').r
 const digest = (value: unknown): value is string => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const afId = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
 const htmlTags = new Set('title style a abbr address article aside b bdi bdo blockquote br button caption cite code col colgroup dd del details dfn dialog div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hgroup hr i img input kbd label legend li main mark menu nav ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong sub summary sup table tbody td textarea tfoot th thead time tr u ul var video audio track wbr fieldset form'.split(' '));
-const voidTags = new Set('br col hr img input source track wbr'.split(' '));
+const voidTags = new Set('br col hr img input meta source track wbr'.split(' '));
 const common = new Set('id class className title role lang dir tabIndex hidden inert slot'.split(' '));
 const nativeHtml = new Set('href src alt width height type name value checked selected disabled required readOnly multiple placeholder rows cols min max step minLength maxLength htmlFor for colSpan rowSpan scope open controls loop muted preload loading decoding target rel download dateTime start reversed autoComplete autoFocus'.split(' '));
 const booleanAttrs = new Set('hidden inert disabled checked selected required readonly multiple open controls loop muted reversed autofocus'.split(' '));
@@ -111,6 +117,8 @@ function validProperty(tag:string,name:string,value:NativeJson):boolean {
  if(tag==='Slider'||tag==='Progress')return value===null||typeof value==='number'&&Number.isFinite(value);
  if(tag==='DatePicker')return value===null||typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
  if(tag==='Segmented')return scalar(value);
+ if(tag==='Tabs')return typeof value==='string';
+ if(tag==='Accordion')return typeof value==='string';
  if(tag==='Select')return scalar(value)||Array.isArray(value)&&value.every(v=>v!==null&&scalar(v));
  // Complex table parsers are deliberately delegated rather than silently normalizing malformed input.
  if(tag==='DataTable')return name==='data'&&value!==null&&!Array.isArray(value)&&typeof value==='object'&&Array.isArray(value.rows)&&Array.isArray(value.columns)&&value.rows.every(v=>v!==null&&!Array.isArray(v)&&typeof v==='object')&&value.columns.every(v=>v!==null&&!Array.isArray(v)&&typeof v==='object'&&typeof v.name==='string');
@@ -121,6 +129,9 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
  const head:string[]=[],templates:string[]=[];
  const layouts=new Map<string,string>();
  const modules=new Map<string,{name:string;register:string;targetRevision:string}>();
+ const svgFragmentIds=new Map<string,readonly string[]>();
+ const svgIds=(nodes:readonly RetainedJsxNode[]):string[]=>nodes.flatMap(node=>node.type==='element'?[...node.attributes.flatMap(a=>a.name==='id'&&a.value.static&&typeof a.value.json==='string'?[a.value.json]:[]),...svgIds(node.children)]:[]);
+ const associateSvg=(nodes:readonly RetainedJsxNode[],ids?:readonly string[])=>{for(const node of nodes){if(node.type!=='element')continue;const scope=node.tag==='svg'?svgIds([node]):ids;if(scope)svgFragmentIds.set(node.graphKey,scope);associateSvg(node.children,scope);}};associateSvg(input.analysis.nodes);
  const usedAf=new Map<string,string>(),usedDom=new Set<string>(),usedBindings=new Set<NativeLowerIdentityBinding>();
  const spans=new Set(input.analysis.sourceSpans.map(span=>span.sourceNode));
  const block=(code:string,node:RetainedJsxNode,detail:string,attribute?:string)=>blockers.push({code,sourceNode:node.graphKey,tag:node.type==='element'?node.tag:undefined,attribute,detail});
@@ -149,12 +160,19 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
  const walk=(node:RetainedJsxNode,ancestors:readonly string[]=[],depth=0):string=>{
   if(depth>128){block('tree-depth-limit',node,'Typed tree exceeds the bounded lowering depth');return '';}
   if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
-  if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
+  if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
   if(node.type==='expression'){
    if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
    const value=node.value.json;
-   if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${text}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
+   if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${text}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
    block('unsupported-expression-literal',node,'Array/object expression children require explicit semantic admission');return '';
+  }
+  if(node.type==='element'){
+   const prepare=node.tag==='Tabs'||node.tag.startsWith('Tabs')?prepareNativeTabs:node.tag==='Accordion'?prepareNativeAccordion:node.tag==='Mermaid'?prepareNativeMermaid:['Icon','Separator'].includes(node.tag)?prepareNativeIdentityDecoration:node.tag==='SlideDeck'?prepareNativeSlideDeck:null;
+   if(prepare){const plan=prepare(node);blockers.push(...plan.blockers);if(plan.blockers.length)return '';node=plan.node;}
+   if(node.type!=='element'){block('component-normalization-type',node,'Component normalization must retain an element');return '';}
+   const markup=prepareNativeDocumentMarkup(node,{inHead:ancestors.includes('Helmet'),svgNamespace:ancestors.includes('svg'),fragmentIds:svgFragmentIds.get(node.graphKey)});blockers.push(...markup.blockers);if(markup.blockers.length)return '';
+   if(SVG_TAGS.has(node.tag)&&node.tag!=='svg'&&node.tag!=='title'&&!ancestors.includes('svg')){block('svg-parent-required',node,'SVG children require an SVG namespace parent');return '';}
   }
   if(node.control){
    const control=node.control;
@@ -169,7 +187,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    require('condition',node,'Preserve the complete typed conditional and keyed branch identity plan');return '';
   }
   if(declarationTags[node.tag]){const kind=declarationTags[node.tag]!,name=node.attributes.find(a=>a.name==='name')?.value;if(name?.static&&typeof name.json==='string'&&input.admittedDeclarations?.some(r=>r.kind===kind&&r.name===name.json&&r.analysisSha256===input.analysis.analysisSha256))return '';require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
-  if(node.tag==='Helmet'){identities.push({sourceNode:node.graphKey,kind:'nonvisual'});for(const child of node.children)head.push(walk(child,ancestors,depth+1));return '';}
+  if(node.tag==='Helmet'){identities.push({sourceNode:node.graphKey,kind:'nonvisual'});for(const child of node.children)head.push(walk(child,[...ancestors,'Helmet'],depth+1));return '';}
   if(node.tag==='SignIn'){
    const receipts=input.authDelegations?.filter(receipt=>receipt.sourceNode===node.graphKey)??[];
    const safe=node.attributes.every(attribute=>['id','class','className'].includes(attribute.name)&&attribute.value.static&&typeof attribute.value.json==='string');
@@ -229,7 +247,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   }
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
   const rule=nativeComponentRule(node.tag);
-  if(!rule&&!htmlTags.has(node.tag)){block('unsupported-component',node,'No reviewed semantic/native mapping exists for this tag');return '';}
+  if(!rule&&!htmlTags.has(node.tag)&&!SVG_TAGS.has(node.tag)&&!HEAD_METADATA_TAGS.has(node.tag)){block('unsupported-component',node,'No reviewed semantic/native mapping exists for this tag');return '';}
   if(rule?.parent&&!rule.parent.some(parent=>ancestors.includes(parent)))block('compound-parent-required',node,'Native compound part requires its owning component');
   const recipeEntries=input.componentRecipes?.filter(entry=>entry.sourceNode===node.graphKey)??[];
   const recipe=recipeEntries[0];
@@ -330,6 +348,11 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
     if(usedDom.has(value))block('duplicate-dom-id',node,'Authored DOM IDs collide; repair requires an explicit identity/IDREF plan',name);
     usedDom.add(value);attrs.id=value;continue;
    }
+   if((node.tag==='svg'||ancestors.includes('svg'))&&SVG_ATTRIBUTES.has(name)){
+    const svgAliases:Record<string,string>={fillRule:'fill-rule',fillOpacity:'fill-opacity',strokeWidth:'stroke-width',strokeOpacity:'stroke-opacity',strokeLinecap:'stroke-linecap',strokeLinejoin:'stroke-linejoin',strokeDasharray:'stroke-dasharray',strokeDashoffset:'stroke-dashoffset',stopColor:'stop-color',stopOpacity:'stop-opacity',clipRule:'clip-rule',vectorEffect:'vector-effect',shapeRendering:'shape-rendering',textAnchor:'text-anchor',dominantBaseline:'dominant-baseline',fontFamily:'font-family',fontSize:'font-size',fontWeight:'font-weight',letterSpacing:'letter-spacing',clipPath:'clip-path',markerStart:'marker-start',markerMid:'marker-mid',markerEnd:'marker-end'};
+    attrs[svgAliases[name]??aliases[name]??name]=String(value);continue;
+   }
+   if(node.tag==='meta'&&['name','content','property','charSet','httpEquiv','itemProp','media'].includes(name)){attrs[({charSet:'charset',httpEquiv:'http-equiv',itemProp:'itemprop'} as Record<string,string>)[name]??name]=String(value);continue;}
    const generic=common.has(name)||/^aria-[a-z-]+$/.test(name)||/^data-[a-z0-9_-]+$/.test(name)||(!rule&&nativeHtml.has(name));
    if(node.tag==='DataTable'&&name==='columns'){if(proof)assignments.push({afId:proof.afId,property:name,value});continue;}
    if(node.tag==='DataTable'&&['sort','metrics'].includes(name)){require('table-column',node,'Admit table sort/metric specifications',name);continue;}
@@ -353,7 +376,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
   if(node.tag==='style'){if(node.children.some(child=>child.type!=='text'&&!(child.type==='expression'&&child.value.static&&typeof child.value.json==='string')))require('style',node,'Nonliteral CSS needs explicit expression admission');else {const raw=node.children.map(child=>child.type==='text'?child.value:child.type==='expression'&&child.value.static?String(child.value.json):'').join('');if(/<\/style/i.test(raw))block('style-end-tag',node,'Raw style terminator cannot be represented in an HTML raw-text element');else if(/@import|url\s*\(/i.test(raw))require('resource',node,'CSS resource dependencies require exact resource closure admission');else {formatted=raw;for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:child.type==='text'?'text':'nonvisual'});}}}
   let children:string;
-  if(node.tag==='Markdown'){children='';for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:'nonvisual'});}
+  if(node.tag==='Markdown'||node.tag==='Mermaid'){children='';for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:'nonvisual'});}
   else if(table?.kind==='table'){
    children='';
    for(const child of node.children){

@@ -88,6 +88,6 @@ type NativePipelineFlowRecipe=Omit<import('./operation-producer-contracts.ts').N
 export interface NativePipelineOperationRecipe extends NativePipelineFlowRecipe {
  key:NativeSelectedRevision['key'];targetPageId:string;targetOrigin:string;
  datasets:readonly import('./operations-contracts.ts').NativeCatalogOperationBinding[];
- statements?:readonly {sqlSha256:string;kind:'insert'|'delete'}[];
+ statements?:readonly {sqlSha256:string;kind:'insert'|'update'|'delete'}[];
  people?:import('./person-contracts.ts').NativeBindingPeople;
 }

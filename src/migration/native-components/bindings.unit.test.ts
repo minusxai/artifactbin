@@ -905,6 +905,8 @@ for (const [tag, property, type, next, expected] of [
   ["Dialog", "open", "boolean", true, true],
   ["Segmented", "value", "boolean", "true", true],
   ["DatePicker", "value", "date", "2026-01-02", "2026-01-02"],
+  ["Tabs", "value", "string", "details", "details"],
+  ["Accordion", "value", "string", "section", "section"],
 ] as const)
   test(`${tag} typed af-change writes viewer state and refreshes query variables`, async () => {
     const node = el("control", tag, { [property]: "$filter" });
