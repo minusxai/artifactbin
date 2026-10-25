@@ -1,0 +1,9 @@
+import{test}from'node:test';import assert from'node:assert/strict';import{parse,walk,generate}from'css-tree';
+import{extractNativeStyleSnapshot,nativeStyleCompilerProof}from'./styles-retained.ts';
+const legacyRoot=process.env.NATIVE_STYLE_LEGACY_ROOT;
+const document={nodes:{'$root':{parts:['',''],children:['heading']},heading:{parts:['<h1 className="text-3xl p-7">','</h1>'],children:['text'],ast:{kind:'jsx',schema:1,roots:[{type:'element',tag:'h1',isComponent:false,attributes:[{name:'className',value:{static:true,json:['value','text-3xl p-7']}}],children:[]}]}},text:{parts:['Heading'],children:[],ast:{kind:'jsx',schema:1,roots:[{type:'text',value:'Heading'}]}}}};
+for(const cache of[null,'.stale-cache-marker { opacity: .12345 }'])test(`retained source styles compile ${cache===null?'missing':'stale'} stored CSS before resource closure`,{skip:!legacyRoot},async()=>{
+ const proof=await nativeStyleCompilerProof(legacyRoot!);const result=await extractNativeStyleSnapshot({document,sourceSha256:'a'.repeat(64),analysisSha256:'b'.repeat(64),compiledCss:cache,cssCompileVersion:'stale',theme:'industry',colorMode:'light'},legacyRoot!,proof);
+ const sheet=result.sheets.find(s=>s.attr==='data-mx-tw');assert.ok(sheet,'reader requires its retained base/utility stylesheet');
+ const tree=parse(sheet.css);assert.equal(tree.type,'StyleSheet');const selectors:string[]=[];walk(tree,{visit:'Rule',enter(node){if(node.prelude)selectors.push(generate(node.prelude));}});assert.ok(selectors.includes('.p-7'),'authored spacing must be compiled');assert.ok(selectors.includes('.text-3xl'),'authored typography must be compiled');assert.ok(!selectors.includes('.stale-cache-marker'),'stale cached styling must not replace current source styling');assert.ok(result.sourceFiles.some(f=>f.path.endsWith('story-css.server.ts')),'compiler source belongs in retained provenance');
+});
