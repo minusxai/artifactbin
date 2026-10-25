@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {resourceSha256,closeNativeResources,rewriteNativeCss} from './resources.ts';
 import {closeNativeStyles,type NativeStyleSnapshot} from './styles.ts';
+import {nativeDigest} from './selection.ts';
 const sha='a'.repeat(64),bytes=new TextEncoder().encode('font bytes'),asset={sources:['/fonts/example.woff2'],bytes,sha256:resourceSha256(bytes),extension:'woff2',provenanceSha256:sha};
 const snapshot:NativeStyleSnapshot={sourceSha256:sha,analysisSha256:sha,compilerSha256:sha,sourceFiles:[{path:'pure/styles.ts',sha256:sha}],htmlAttributes:{class:'dark','data-theme':'sample'},storyAttributes:{'data-mx-story-root':'',class:'dark'},inlineStyles:[{sourceNode:'node',css:'color: red'}],sheets:[{attr:'utilities',css:'.x { color: red }'},{attr:'fonts',css:'@font-face{src:url("/fonts/example.woff2")}'},{attr:'override',css:'@import "https://fonts.example.invalid/family.css"; p { font-family: Example }'}]};
 test('actual font bytes and ordered separate CSS sheets form an import bundle without moving external imports',()=>{
@@ -44,6 +45,23 @@ test('source story column and exact component recipes survive resource closure a
  const closed=closeNativeStyles({...snapshot,storyColumn,componentRecipes},snapshot,[asset]);
  assert.deepEqual(closed.style.storyColumn,storyColumn);assert.deepEqual(closed.componentRecipes,componentRecipes);
  assert.notEqual(closed.style.rootSha256,closeNativeStyles(snapshot,snapshot,[asset]).style.rootSha256);
+});
+test('a classless authored document keeps the served compiler column styled without adding bare-document padding',()=>{
+ const storyColumn={tag:'div' as const,attributes:{class:'mx-doc' as const}};
+ const originalAttributes={...snapshot.storyAttributes};delete originalAttributes['data-mx-styled'];
+ const closed=closeNativeStyles({...snapshot,storyAttributes:originalAttributes,storyColumn},snapshot,[asset]);
+ assert.equal(closed.style.storyWrapper.attributes['data-mx-styled'],'');
+ assert.equal(closed.storyAttributes['data-mx-styled'],'');
+ assert.equal(originalAttributes['data-mx-styled'],undefined);
+ assert.deepEqual(closed.style.storyColumn,storyColumn);
+ const {rootSha256,...root}=closed.style;
+ assert.equal(rootSha256,nativeDigest({storyColumn:root.storyColumn,sourceSha256:root.sourceSha256,htmlAttributes:root.htmlAttributes,storyWrapper:root.storyWrapper}));
+});
+test('a root without the retained compiler column preserves its observed attributes exactly',()=>{
+ const originalAttributes={'data-mx-story-root':'',class:'light','data-author-value':'class="example"'};
+ const closed=closeNativeStyles({...snapshot,storyAttributes:originalAttributes},snapshot,[asset]);
+ assert.deepEqual(closed.storyAttributes,originalAttributes);
+ assert.deepEqual(closed.style.storyWrapper.attributes,originalAttributes);
 });
 test('reviewed navigation receipts preserve original links without fabricating resource files',async()=>{
  const {prepareNativeNavigation}=await import('./resource-navigation.ts'),{nativeDigest}=await import('./selection.ts');const planBody={artifactIds:{pending:'future'}},identityPlan={...planBody,sha256:nativeDigest(planBody)},policy=prepareNativeNavigation({sourceOrigin:'https://original.example',targetOrigin:'https://platform.example',identityPlan,approvedPlanSha256:identityPlan.sha256,imports:[]});
