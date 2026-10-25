@@ -5,6 +5,7 @@ import { canonicalMigrationValue } from "../verification-values.ts";
 import { nativeDigest } from "./selection.ts";
 import { resolveNativeIdentityComment } from "./identity.ts";
 import { mapNativeCommentAuthorIdentity, mapNativeCommentImageActorIdentity } from "./comment-author-provenance.ts";
+import {nativeCommentAnchorHasContinuity} from './comment-anchor-continuity.ts';
 import {
   projectNativeV3Publication,
   projectNativeV3RelationBindings,
@@ -175,10 +176,7 @@ export async function prepareNativePublication(
   const rootAnchor = (
     root: LegacyRow,
   ): NativePublicationCommentAnchor | null => {
-    if (
-      root.anchor_version !== page.headVersion ||
-      typeof root.anchor_key !== "string"
-    )
+    if (typeof root.anchor_key !== 'string' || !nativeCommentAnchorHasContinuity({sourceId:page.sourceId,headVersion:page.headVersion,anchorVersion:root.anchor_version,anchorKey:root.anchor_key,allocations:tables.artifact_source_ids??[]}))
       return null;
     const quote = root.quote ?? "";
     if (
@@ -188,7 +186,8 @@ export async function prepareNativePublication(
     )
       return null;
     // Retained annotation keys explicitly name authored DOM IDs. Never guess
-    // a graph key, another version, or a text match when that ID is absent.
+    // a graph key or text match when that ID is absent. An older annotation
+    // additionally requires captured allocation continuity, never an old page.
     let target;
     try {
       target = resolveNativeIdentityComment([assembly.input.identity], {
