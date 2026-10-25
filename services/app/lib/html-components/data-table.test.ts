@@ -21,9 +21,39 @@ it("preserves caller column header identities through sorting and removes stale 
   expect(header.hasAttribute("data-af-id")).toBe(false);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());
+});
+it("measures columns after detached initialization and remeasures changed row content", async () => {
+  let widths = [180, 96];
+  vi.spyOn(HTMLTableCellElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLTableCellElement) {
+    const width = this.isConnected ? widths[this.cellIndex] ?? 0 : 0;
+    return { width, height: 20, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 20, toJSON() {} };
+  });
+  const el = document.createElement("af-data-table") as AfDataTable;
+  const columns = [{name: "person", type: "string" as const}, {name: "amount", type: "number" as const}];
+  el.data = {columns, rows: []};
+  await Promise.resolve();
+  document.body.append(el);
+  await Promise.resolve();
+  expect(el.querySelector("thead tr")!.getAttribute("style")).toContain("minmax(180px, 1fr) minmax(96px, 1fr)");
+  widths = [249, 113];
+  el.data = {columns, rows: [{person: "A longer resolved person", amount: 12}]};
+  await Promise.resolve();
+  const header = el.querySelector<HTMLElement>("thead tr")!;
+  const row = el.querySelector<HTMLElement>("tbody tr[data-row-key]")!;
+  expect(header.style.gridTemplateColumns).toBe("minmax(249px, 1fr) minmax(113px, 1fr)");
+  expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+  widths = [210, 101];
+  el.data = {columns, rows: [{person: "Changed", amount: 13}]};
+  widths = [230, 105];
+  el.data = {columns, rows: [{person: "Latest", amount: 14}]};
+  await Promise.resolve();
+  expect(el.querySelector("tbody tr[data-row-key]")).toBe(row);
+  expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(105px, 1fr)");
+  expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
 });
 it("uses a shared measured grid for its virtual header and body rows", async () => {
   const page = document.createElement("div");
@@ -596,11 +626,13 @@ it("remeasures retained keyed rows after data replacement and subsequent viewpor
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   const retained = el.querySelector("tbody tr[data-row-key]");
   el.data = {...data, rows: data.rows.map(row => ({...row}))};
+  await Promise.resolve(); // Natural column layout precedes the virtual window.
   rowObserver.flush();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   expect(el.querySelector("tbody tr[data-row-key]")).toBe(retained);
   rowHeight = 53;
   el.data = {...data, rows: data.rows.map(row => ({...row, extra: "taller content"}))};
+  await Promise.resolve();
   rowObserver.flush();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(20);
   const viewport = el.querySelector("[data-slot=table-scroll]")!;

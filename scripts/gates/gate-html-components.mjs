@@ -14,7 +14,7 @@ import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteract
 const check = createChecker('html-components');
 const section = createSection(check);
 const evidenceFiles = [];
-const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slider','Input','Textarea','Accordion','Select','DatePicker','Segmented','Avatar','Icon','FileUpload','SlideDeck'];
+const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slider','Input','Textarea','Accordion','Select','DatePicker','Segmented','Avatar','Icon','FileUpload','SlideDeck','DataTable'];
 const sourceName=family=>family.replace(/[A-Z]/g,(letter,index)=>(index?'-':'')+letter.toLowerCase());
 const repo = path.resolve(import.meta.dirname,'../..');
 // These bytes are the real retained React capture, not a new expected DOM manufactured by this gate.
@@ -22,7 +22,7 @@ const oracleBytes = await readFile(path.join(repo,'services/app/lib/islands/__te
 const oracleHash = createHash('sha256').update(oracleBytes).digest('hex');
 if (oracleHash !== 'fc56abeba44af903e616ed3172d5dddaad44c5c7b1afbc10ecf92078e10d468b') throw new Error('Recorded React reference changed: review and explicitly repin the capture');
 const oracle = JSON.parse(oracleBytes);
-const result = await build({stdin:{contents:families.map(family=>`import {register${family}} from './services/app/lib/html-components/${sourceName(family)}.ts';register${family}();`).join('')+"document.documentElement.dataset.fixtureReady='yes';",resolveDir:repo,sourcefile:'components-gate.ts'},bundle:true,format:'esm',platform:'browser',write:false});
+const result = await build({stdin:{contents:families.map(family=>`import {register${family}} from './services/app/lib/html-components/${sourceName(family)}.ts';register${family}();`).join('')+"import {STORY_TABLE_CSS} from './services/app/lib/page-styles/chrome-css.ts';const tableStyle=document.createElement('style');tableStyle.textContent=STORY_TABLE_CSS;document.head.append(tableStyle);document.documentElement.dataset.fixtureReady='yes';",resolveDir:repo,sourcefile:'components-gate.ts'},bundle:true,format:'esm',platform:'browser',write:false});
 const bundle = result.outputFiles[0].contents;
 const server = createServer((request,response) => {
   if(request.url==='/avatar.svg'){response.writeHead(200,{'content-type':'image/svg+xml'});response.end('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#2563eb"/><circle cx="16" cy="16" r="8" fill="white"/></svg>');return;}
@@ -404,6 +404,24 @@ try {
       }
     });
   }
+
+  await mount('<div data-mx-story-root style="width:600px"><af-data-table></af-data-table></div>');
+  const tableMeasurement = await page.evaluate(async () => {
+    const table = document.querySelector('af-data-table');
+    const columns = [{name:'person',type:'string'},{name:'amount',type:'number'}];
+    const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    table.data = {columns,rows:[]};
+    await settle();
+    const widths = () => [...table.querySelectorAll('thead th')].map(cell => cell.getBoundingClientRect().width);
+    const before = widths();
+    table.data = {columns,rows:[{person:'A resolved person with a substantially longer display name',amount:12}]};
+    await settle();
+    const after = widths();
+    const cells = [...table.querySelectorAll('tbody tr[data-row-key] td')].map(cell => cell.getBoundingClientRect().width);
+    return {before,after,cells};
+  });
+  check(tableMeasurement.after[0] > tableMeasurement.before[0] + 20,'table remeasures loaded content after an empty same-schema result');
+  check(tableMeasurement.after.every((width,index)=>Math.abs(width-tableMeasurement.cells[index])<1),'remeasured table header and body use the same column geometry');
 
   check(errors.length===0,`candidate has no page errors (${errors.join('; ') || 'none'})`);
   const evidence=JSON.stringify({candidateBundleSha256:createHash('sha256').update(bundle).digest('hex'),reference:{kind:'recorded-react-ssr',sha256:oracleHash,fixtures:tabsParityFixtures().map(fixture=>({id:fixture.id,oldJsx:fixture.oldJsx,newHtml:fixture.newHtml}))},families:componentBrowserFixtures.map(fixture=>({family:fixture.family,evidence:fixture.evidence})),viewports:[800,390],screenshots:'candidate-only; old-browser visual comparison not yet captured',themes:'fixture token pairs, not every product design system'},null,2);

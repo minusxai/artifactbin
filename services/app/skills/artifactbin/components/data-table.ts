@@ -33,7 +33,8 @@ export interface TableColumnIdentity {
 }
 interface DataTableContract {
   /** Replacing data retains keyed DOM, but invalidates and remeasures its geometry
-   * even when the observed rows have not resized. Header line height follows its font scale. */
+   * even when the observed rows have not resized. Column measurement waits for a connected
+   * table and repeats when its data changes. Header line height follows its font scale. */
   data: TableData;
   columns: unknown;
   columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
@@ -114,6 +115,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
     this.invalidateMeasurements();
+    this.measuredHeaderWidths = null;
+    this.virtualized = false;
     this.showRowCount = Boolean(
       this.value.truncated ||
         (this.value.totalRows ?? 0) > this.value.rows.length,
@@ -856,9 +859,11 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       td.colSpan = Math.max(1, columns.length);
       td.textContent = this.pending ? "loading rows…" : "no rows";
     }
-    if (!this.virtualized && !this.virtualizationPending) {
+    if (!this.virtualized) {
       const widths = columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
       if (widths.some((width) => width > 0)) this.measuredHeaderWidths = widths;
+    }
+    if (!this.virtualized && !this.virtualizationPending) {
       this.virtualizationPending = true;
       queueMicrotask(() => {
         this.virtualizationPending = false;
