@@ -5,7 +5,8 @@ import type {NativeV3AssemblyReceipt,NativeV3PublicationModules,NativeV3Publicat
 export interface NativePipelinePublicationConfiguration {
  selectionManifest:NativePublicationBytes; approvedSelectionManifestSha256:string;
  refreshManifest?:NativePublicationBytes; approvedRefreshManifestSha256?:string;
- shared:NativePublicationSharedInput; relations:NativePublicationBytes; ancillaryFolders?:NativePublicationBytes; exportedAt:string; coreUrl:string;
+ sourceRelations?:{manifest:{path:string;sha256:string};refresh?:{path:string;sha256:string}};
+ shared:NativePublicationSharedInput; relations?:NativePublicationBytes; ancillaryFolders?:NativePublicationBytes; exportedAt:string; coreUrl:string;
 }
 export interface NativePipelinePublicationInvocation {
  context:NativePipelineHostContext;

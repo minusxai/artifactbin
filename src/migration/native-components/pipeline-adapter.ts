@@ -1,3 +1,4 @@
+import {selectNativePipelineRelations} from './pipeline-relations.ts';
 import {readFile,realpath,mkdir,writeFile} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -107,7 +108,7 @@ export async function materializeNativePipelineAuthority(request:NativePipelineR
  const catalog=publication.shared.catalog.projection,{sha256:catalogSha,...catalogBody}=catalog;
  if(nativeDigest(catalogBody)!==catalogSha||catalog.identityPlanSha256!==batch.identityPlanSha256||catalog.selectionSha256!==batch.approvalManifestSha256||catalog.sourceNamespace!==revision.key.sourceNamespace||publication.shared.identity.plan.sha256!==batch.identityPlanSha256)throw Error('native_pipeline_adapter_shared_binding');
  const ancillary=nativePipelineAncillaryInput(publication);
- const rawRelations=decodeNativePublicationBytes(publication.relations);
+ const rawRelations=await selectNativePipelineRelations(publication,revision);
  const membership={...publication.shared.membership,source:{...publication.shared.membership.source,canonicalSource:encodeNativePublicationBytes(canonical)}};
  for(const [name,bytes]of Object.entries(membership.source)){
   decodeNativePublicationBytes(bytes);const approved=membership.approved[name+'Sha256'];
