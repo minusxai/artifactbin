@@ -1,8 +1,8 @@
 import {parse,parseFragment,serialize,type DefaultTreeAdapterMap} from 'parse5';
-import {STORY_BARE_TYPOGRAPHY_CSS} from '@/lib/story-surface/bare-typography';
+import {STORY_BARE_TEXT_CSS} from '@/lib/story-surface/bare-typography';
 
 const STRUCTURAL_DOC_CSS=':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])>.mx-doc){line-height:1.5}:where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc{padding-inline:0;padding-block-start:0;padding-block-end:0}';
-const INLINE_BARE_TYPOGRAPHY_CSS=STORY_BARE_TYPOGRAPHY_CSS
+const INLINE_BARE_TYPOGRAPHY_CSS=STORY_BARE_TEXT_CSS
  .replaceAll(':where([data-mx-story-root]:not([data-mx-styled]))',':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))')
  .replaceAll(':where([data-mx-story-root])',':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))');
 

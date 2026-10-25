@@ -7,6 +7,7 @@ describe('nativeHtmlStructuralWrapper typography baseline',()=>{
   const rendered=nativeHtmlStructuralWrapper(source);
   expect(rendered).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])) :where(p,ul,ol,blockquote,table,pre):not([class]){margin-block:0.75em;max-width:68ch;line-height:1.65}');
   expect(rendered).not.toContain(':where([data-mx-story-root])');
+  expect(rendered).not.toContain('clamp(1rem,5vw,3rem)');
   expect(rendered).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])>.mx-doc){line-height:1.5}');
   expect(rendered).toContain('<p>Story</p>');
   expect(nativeHtmlStructuralWrapper(rendered)).toBe(rendered);
