@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
+import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/story-surface/bare-typography";
 import { STORY_TABLE_CSS } from "@/lib/page-styles/chrome-css";
 import { AfDataTable, registerDataTable } from "./data-table";
 registerDataTable();
@@ -37,6 +38,47 @@ it("keeps its virtual table in native table layout under document table styling"
   page.append(el);
   document.body.append(page);
   expect(getComputedStyle(el.querySelector("table")!).display).not.toBe("block");
+});
+it("keeps component-owned table cells out of bare document typography", () => {
+  const page = document.createElement("div");
+  page.setAttribute("data-mx-story-root", "");
+  const style = document.createElement("style");
+  style.setAttribute("data-table-layout-test", "");
+  style.textContent = STORY_BARE_TYPOGRAPHY_CSS;
+  document.head.append(style);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.data = {
+    columns: [{ name: "value", type: "number" }],
+    rows: [{ value: 1 }],
+  };
+  page.append(el);
+  document.body.append(page);
+
+  const table = el.querySelector("table")!;
+  const head = el.querySelector("thead th")!;
+  const cell = el.querySelector("tbody td[data-column]")!;
+  expect(table.hasAttribute("class")).toBe(true);
+  expect(head.hasAttribute("class")).toBe(true);
+  expect(cell.hasAttribute("class")).toBe(true);
+  expect(getComputedStyle(table).maxWidth).not.toBe("68ch");
+  expect(getComputedStyle(head).borderLeftStyle).not.toBe("solid");
+});
+it("fills a GridItem without turning standalone height into a forced fill", () => {
+  const gridItem = document.createElement("div");
+  gridItem.className = "native-grid-item";
+  gridItem.style.height = "172px";
+  const filled = document.createElement("af-data-table") as AfDataTable;
+  filled.setAttribute("data-af-fill", "");
+  filled.height = 166;
+  const standalone = document.createElement("af-data-table") as AfDataTable;
+  standalone.height = 166;
+  gridItem.append(filled);
+  document.body.append(gridItem, standalone);
+
+  expect(getComputedStyle(filled).height).toBe("100%");
+  expect(getComputedStyle(filled.querySelector("[data-slot=table-scroll]")!).flexGrow).toBe("1");
+  expect(getComputedStyle(standalone).height).not.toBe("100%");
+  expect(standalone.getAttribute("height")).toBe("166");
 });
 it("retains keyed rows and controls while cycling sort with accessible column headers", () => {
   const el = document.createElement("af-data-table") as AfDataTable;

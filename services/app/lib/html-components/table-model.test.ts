@@ -50,15 +50,25 @@ import { tableWindow } from "./table-model";
 it("bounds large windows and clamps after shrink without dropping the last row", () => {
   expect(tableWindow(100000, 0, 420)).toEqual({
     start: 0,
-    end: 37,
+    end: 25,
     before: 0,
-    after: 99963 * 33,
+    after: 99975 * 33,
   });
   expect(tableWindow(1, 90000, 420)).toEqual({
     start: 0,
     end: 1,
     before: 0,
     after: 0,
+  });
+});
+it("matches the native virtualizer's one-sided initial overscan", () => {
+  // At scrollTop 0, the source virtualizer includes the visible window and 12
+  // rows after it. There are no rows before the viewport to overscan.
+  expect(tableWindow(21, 0, 166)).toEqual({
+    start: 0,
+    end: 18,
+    before: 0,
+    after: 3 * 33,
   });
 });
 it("keeps the last ten 33px rows in the bottom virtual window", () => {

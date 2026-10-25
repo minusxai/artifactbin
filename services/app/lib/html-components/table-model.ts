@@ -93,9 +93,12 @@ export function tableWindow(
     Math.max(0, Math.floor(offset / rowHeight) - overscan),
     Math.max(0, count - Math.ceil(height / rowHeight)),
   );
+  // Match the served table's virtualizer: its range is the visible interval
+  // plus `overscan` on either side. At the top of the list there is no leading
+  // range to fill, so only one overscan buffer belongs after the viewport.
   const end = Math.min(
     count,
-    start + Math.ceil(height / rowHeight) + overscan * 2,
+    Math.max(start, Math.ceil((offset + height) / rowHeight) + overscan),
   );
   return {
     start,
