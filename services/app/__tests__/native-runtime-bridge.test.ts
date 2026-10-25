@@ -36,7 +36,8 @@ it('stages exact component and resource closures through normal publication and 
  const legacyRequestKey=sha(JSON.stringify({kind:'native-runtime-v1',key:input.key,assemblySha256:input.sha256,pageId:options.pageId,sourceHtmlSha256:input.result.htmlSha256,fileDigests,owner:{userId:actor.userId,tokenId:actor.tokenId},visibility:options.visibility,shares:[]}));
  const legacyReservedIds=await reserveIds(actor,sha(legacyRequestKey+'_bundle_ids'));
  const prepared=await prepareNativeRuntimeBundle(input,options);
- expect(prepared.dependencies.map(dependency=>dependency.id)).toEqual(legacyReservedIds.slice(0,prepared.dependencies.length));
+ // Reservation slots are canonical paths; receipt order retains source traversal.
+ expect([...prepared.dependencies].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0).map(dependency=>dependency.id)).toEqual(legacyReservedIds.slice(0,prepared.dependencies.length));
  const {assetsSha256,...legacyReceipt}=prepared;
  expect(assetsSha256).toBe(sha(JSON.stringify(legacyReceipt)));
  expect(prepared.sourceHtmlSha256).toBe(input.result.htmlSha256);
