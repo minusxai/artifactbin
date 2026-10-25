@@ -5,6 +5,7 @@ import { canonicalMigrationValue } from "../verification-values.ts";
 import { nativeDigest } from "./selection.ts";
 import { resolveNativeIdentityComment } from "./identity.ts";
 import { mapNativeCommentAuthorIdentity, mapNativeCommentImageActorIdentity } from "./comment-author-provenance.ts";
+import {nativeCommentTextSegment} from './comment-text-segment.ts';
 import {nativeCommentAnchorHasContinuity} from './comment-anchor-continuity.ts';
 import {
   projectNativeV3Publication,
@@ -211,11 +212,13 @@ export async function prepareNativePublication(
       )
     )
       return null;
+    const segments=assembly.result.status === "complete" ? nativeCommentTextSegment({html:assembly.result.html,nodeId:target.afId,sourceNodeId:target.sourceNode,legacyRange:root.range}) : undefined;
     return {
       version: page.headVersion,
       sourceNamespace: selection.sourceNamespace,
       sourceNodeId: target.sourceNode,
       quote,
+      ...(segments ? {segments} : {}),
     };
   };
   const projected = sorted.map((a) => {

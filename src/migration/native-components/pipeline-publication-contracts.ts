@@ -99,11 +99,16 @@ export interface NativePublicationInput {
   exportedAt: string;
   coreUrl: string;
 }
+export interface NativePublicationCommentSegment {
+  sourceNodeId: string; quote: string; endAffinity: "forward";
+  range: {start:number;end:number;length:number;fingerprint:string};
+}
 export interface NativePublicationCommentAnchor {
   version: number;
   sourceNamespace: string;
   sourceNodeId: string;
   quote: string;
+  segments?: readonly NativePublicationCommentSegment[];
 }
 export interface NativePublicationRelationProjection {
   history: NativeV3HistoryImport;
