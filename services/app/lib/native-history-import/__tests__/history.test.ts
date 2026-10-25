@@ -390,3 +390,42 @@ it("composes historical metadata and real retained annotation context without ad
   await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{nativeRelationContext}', '[]')");
   await expect(importNativeHistory(db, projected, relations)).rejects.toThrow();
 });
+
+it("imports and replays a latest human-owned page with no creator token and preserves private access",async()=>{
+ const {db,input,actor}=await fixture();
+ const revision=structuredClone(input.revisions.at(-1)!);revision.actorTokenId=null;
+ const latest={...input,owner:{...input.owner,tokenId:null},revisions:[revision]};
+ const tokenCount=(await db.query("SELECT id FROM tokens")).rows.length;
+ expect(await importNativeHistory(db,latest)).toBe("created");
+ expect(await importNativeHistory(db,latest)).toBe("unchanged");
+ expect((await db.query("SELECT user_id,creator_user_id,token_id,actor_token_id,visibility FROM artifacts WHERE id=$1",[latest.pageId])).rows).toEqual([{user_id:input.owner.userId,creator_user_id:input.owner.userId,token_id:null,actor_token_id:null,visibility:"private"}]);
+ expect((await db.query("SELECT id FROM tokens")).rows).toHaveLength(tokenCount);
+ expect(await readHtmlPage({...actor,tokenId:null},latest.pageId,String(latest.headVersion))).toEqual(revision.page);
+ await expect(readHtmlPage({userId:null,tokenId:null,email:null,documentEditor:false},latest.pageId,String(latest.headVersion))).rejects.toThrow();
+});
+it("rolls back tokenless imports after verification failure and rejects unknown human owners",async()=>{
+ const {db,input}=await fixture();const revision=structuredClone(input.revisions.at(-1)!);revision.actorTokenId=null;
+ const latest={...input,owner:{...input.owner,tokenId:null},revisions:[revision]};
+ await expect(db.transaction(async tx=>{await writeNativeHistory(tx,latest);throw Error("post_verify_failure");})).rejects.toThrow("post_verify_failure");
+ for(const table of ["artifacts","artifact_versions","artifact_id_registry","html_backend_versions"])expect((await db.query(`SELECT * FROM ${table}`)).rows).toHaveLength(0);
+ await expect(importNativeHistory(db,{...latest,owner:{userId:"unmapped-human",tokenId:null}})).rejects.toThrow("native_import_invalid");
+ expect((await db.query("SELECT * FROM artifact_id_registry")).rows).toHaveLength(0);
+});
+it("normal creation rejects an absent human and absent token",async()=>{
+ const {createArtifact}=await import("@/lib/artifacts");
+ await expect(createArtifact(null,null,{format:"html",source:"<html><body>Unowned</body></html>",meta:{}})).rejects.toThrow();
+ expect((await (await getDb()).query("SELECT * FROM artifacts")).rows).toHaveLength(0);
+});
+
+it("the declared migration relaxes legacy creator-token constraints without changing existing rows",async()=>{
+ const {db,input}=await fixture();
+ const {createArtifact}=await import("@/lib/artifacts");
+ const old=await createArtifact(input.owner.tokenId,input.owner.userId,{format:"html",source:"<html><body>Legacy</body></html>",meta:{}});
+ await db.query("ALTER TABLE artifacts ALTER COLUMN token_id SET NOT NULL");
+ const {SCHEMA_STATEMENTS}=await import("@/lib/platform/schema");
+ const relax=SCHEMA_STATEMENTS.find(sql=>/ALTER TABLE artifacts ALTER COLUMN token_id DROP NOT NULL/.test(sql));expect(relax).toBeDefined();
+ await db.query(relax!);await db.query(relax!);
+ expect((await db.query("SELECT token_id FROM artifacts WHERE id=$1",[old.id])).rows).toEqual([{token_id:input.owner.tokenId}]);
+ const revision=structuredClone(input.revisions.at(-1)!);revision.actorTokenId=null;
+ expect(await importNativeHistory(db,{...input,owner:{...input.owner,tokenId:null},revisions:[revision]})).toBe("created");
+});

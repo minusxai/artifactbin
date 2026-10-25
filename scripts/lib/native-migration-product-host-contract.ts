@@ -1,3 +1,4 @@
+import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders/contracts';
 import type {Queryable} from '../../services/app/lib/platform/db';
 import type {NativeHistoryImport} from '../../services/app/lib/native-history-import/contracts';
 import type {NativeRelationProjection} from '../../services/app/lib/native-history-import/relation-contracts';
@@ -13,6 +14,7 @@ export interface NativeProductImportRecipe {
  identity:NativeIdentityImport;
  /** Explicit reviewed mapping for pre-existing group identities; no inferred or created groups. */
  identityGroups?:Readonly<Record<string,string>>;
+ ancillaryFolders?:NativeAncillaryFolderRecipe;
  schemas:NativeIdentityMigrationSchemas;
  catalog:{projection:NativeCatalogProjection;root:string;ledgerPath:string;receipts:Parameters<typeof canonicalNativeObjectSource>[2];sinkDirectory:string};
 }

@@ -32,13 +32,14 @@ export async function writeNativeHistory(
     !input.sourceNamespace ||
     !input.sourceId ||
     !input.owner.userId ||
-    !input.owner.tokenId ||
+    (input.owner.tokenId !== null && (typeof input.owner.tokenId !== "string" || !input.owner.tokenId)) ||
     !input.revisions.length ||
     ![input.selectionSha256, input.projectionSha256].every((v) =>
       /^[a-f0-9]{64}$/.test(v),
     )
   )
     throw fail();
+  if (!(await tx.query("SELECT 1 FROM users WHERE id=$1 AND kind IN ('account','testuser')", [input.owner.userId])).rows.length) throw fail();
   const revisions = [...input.revisions].sort(
       (a, b) => a.page.version - b.page.version,
     ),
@@ -173,7 +174,7 @@ export async function writeNativeHistory(
     actor_user_id: string | null; actor_token_id: string | null;
   }
   interface StoredHead extends StoredRevision {
-    creator_user_id: string; user_id: string; token_id: string; visibility: string; link_role: string;
+    creator_user_id: string; user_id: string; token_id: string | null; visibility: string; link_role: string;
     deleted_at: Date | string | null; group_id: string | null;
   }
   const matchesRevision = (row: StoredRevision, r: (typeof revisions)[number], meta = revisionMeta(r)) =>

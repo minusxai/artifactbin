@@ -31,6 +31,7 @@ let mockLiveOptions: Parameters<typeof import('../editor/create-live-artifact').
 let mockSelectionBridge = false;
 const selectionSend = vi.fn();
 let selectionReceive: ((data: unknown) => void) | undefined;
+let selectionListeners: Array<(data: unknown) => void> = [];
 vi.mock('../document/create-framed-story', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../document/create-framed-story')>();
   return { ...actual, createFramedStory: (...args: Parameters<typeof actual.createFramedStory>) => {
@@ -38,7 +39,9 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
     return {
       frame: args[0].framed.frame, nonce: () => 'guest-selection-nonce', setTopInset: () => {},
       controller: () => ({ send: selectionSend, getViewportRect: () => undefined, subscribe: (receive: (data: unknown) => void) => {
-        selectionReceive = receive; return () => {};
+        selectionListeners.push(receive);
+        selectionReceive = (data) => { for (const listener of [...selectionListeners]) listener(data); };
+        return () => { selectionListeners = selectionListeners.filter((listener) => listener !== receive); };
       } }),
     } as unknown as FramedStory;
   } };
@@ -73,6 +76,7 @@ beforeEach(() => {
   mockSelectionBridge = false;
   selectionSend.mockClear();
   selectionReceive = undefined;
+  selectionListeners = [];
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
     if (url.includes('/annotations')) return Response.json({ annotations: [], next_cursor: null });
@@ -722,8 +726,11 @@ it('reacts to a linked thread added on the same document route without login',as
 
 it('starts original block picking when Select arrives before an empty reader discussion layer exists',async()=>{
  mockRole='owner';mockSelectionBridge=true;mount();await vi.dynamicImportSettled();
+ expect(selectionReceive).toBeTypeOf('function');
+ expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
- selectionReceive?.({type:'mx:selection-action',nonce:'guest-selection-nonce',action:'select',selection:{kind:'text',path:'0',nodeId:'target',tag:'p',rect:{x:0,y:0,width:1,height:1},className:'',style:'',ancestors:[]}});
+ selectionReceive!({type:'mx:selection-action',nonce:'guest-selection-nonce',action:'select',selection:{kind:'text',path:'0',nodeId:'target',tag:'p',rect:{x:0,y:0,width:1,height:1},className:'',style:'',ancestors:[]}});
+ await vi.dynamicImportSettled();
  expect(await trusted(1).findByRole('status',{name:'Select tool active'})).toBeInTheDocument();
  expect(trusted(1).queryByRole('dialog',{name:'Annotation composer'})).toBeNull();expect(loginHref).not.toHaveBeenCalled();
 });

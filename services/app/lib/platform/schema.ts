@@ -151,7 +151,7 @@ const ARTIFACTS: Table = {
     // API handle, ref:<id> target, and URL address all at once — an address,
     // not a secret. The PK is what makes collisions retryable (23505).
     { name: 'id', type: 'TEXT', notNull: true },
-    { name: 'token_id', type: 'TEXT', notNull: true }, // creating token (provenance + anon scope)
+    { name: 'token_id', type: 'TEXT', relaxNotNull: true }, // creating token when present; account-owned imports may have no credential
     { name: 'user_id', type: 'TEXT' }, // personal owner; NULL for token/group ownership
     { name: 'group_id', type: 'TEXT' }, // independent group owner; never a user identity
     { name: 'creator_user_id', type: 'TEXT' }, // immutable human creator attribution

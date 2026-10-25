@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createHumanAuth} from '@artifactbin/auth';
 import {useAppHarness} from '@/__tests__/harness';
+import {LOCAL_OBJECT_DIR} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {pageSourceDigest} from '@/lib/registered-page-queries/registry';
@@ -22,7 +23,7 @@ async function fixture(prefix,root){
  const sourceInventory={users:[user],tokens:[token]},targetInventory={users:[]};
  const body={sourceNamespace:prefix,sourceInventorySha256:digest(sourceInventory),targetInventorySha256:digest(targetInventory),targets:{users:{[userId]:{userId,email:user.email}},actors:{[user.email]:{userId}},tokens:{[tokenId]:{tokenId}}},users:[{sourceId:userId,targetId:userId,action:'create-preserved',sourceRowSha256:digest(user)}],createUsers:[{...user,sourceId:userId,sourceRowSha256:digest(user)}],tokens:[{sourceId:tokenId,targetId:tokenId,userId,action:'create-disabled-provenance',sourceRowSha256:digest(token),sourceCreatedAt:at,sourceDeletedAt:null,sourceExpiresAt:null}],blockers:[],artifactIds:{[sourceId]:pageId}};
  const plan={...body,sha256:digest(body)},identity={plan,approvedPlanSha256:plan.sha256,sourceInventory,targetInventory,revokedAt:at};
- const source=bytes({heads:[{id:sourceId,version:3,edit_id:'synthetic-edit',document:{kind:'graph',nodes:{}}}],versions:[]}),selection=bytes({receipts:[{id:sourceId,path:'source.json',sha256:sha(source),expectedVersion:3,bytes:source.length}]}),capture=bytes({snapshot:[{read_only:'on'}],relations:[]}),witness=bytes({snapshot:[{read_only:'on'}],relations:[{id:sourceId,version:3,edit_id:'synthetic-edit'}]});
+ const source=bytes({heads:[{id:sourceId,version:3,edit_id:'synthetic-edit',document:{kind:'graph',nodes:{}},user_id:userId,token_id:prefix==='BootstrapSecond'?null:tokenId}],versions:[]}),selection=bytes({receipts:[{id:sourceId,path:'source.json',sha256:sha(source),expectedVersion:3,bytes:source.length}]}),capture=bytes({snapshot:[{read_only:'on'}],relations:[]}),witness=bytes({snapshot:[{read_only:'on'}],relations:[{id:sourceId,version:3,edit_id:'synthetic-edit'}]});
  const canonical=canonicalizeHtmlPage('<html><head></head><body><p data-af-id="stable">Synthetic</p></body></html>');
  const history={sourceNamespace:prefix,sourceId,selectionSha256:sha(selection),projectionSha256:sha(prefix),pageId,owner:{userId,tokenId},visibility:'private',linkRole:'viewer',shares:[],headVersion:3,revisions:[{page:{pageId,version:3,revision:'3',html:canonical.html,nextNodeId:canonical.ledger.nextNodeId,links:[]},ledger:canonical.ledger,sourceSha256:pageSourceDigest(canonical.html),title:prefix,description:null,createdAt:at,actorUserId:userId,actorTokenId:tokenId,queries:[],mutations:[]}]};
  const membership={history,identityPlan:plan,source:{capture,selectionManifest:selection,canonicalSource:source,headWitness:witness},approved:{captureSha256:sha(capture),selectionManifestSha256:sha(selection),headWitnessSha256:sha(witness),identityPlanSha256:plan.sha256}};
@@ -66,23 +67,37 @@ it('one shared bootstrap imports and snapshots two source recipes through the sa
  const root=await mkdtemp(path.join(tmpdir(),'native-bootstrap-'));
  try{
   const db=await getDb(),recipes=new Map();
-  const host=createNativeProductMigrationHost({db,objectsDirectory:path.join(root,'sink'),publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,actor:recipe.history.owner,origin:'http://localhost:3000',visibility:recipe.history.visibility,shares:recipe.history.shares});expect(runtime.prepareBundle(context.assembly,recipe.history.pageId).assemblySha256).toBe(context.assembly.sha256);return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
+  const host=createNativeProductMigrationHost({db,objectsDirectory:LOCAL_OBJECT_DIR,publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,visibility:recipe.history.visibility,shares:recipe.history.shares});const receipt=runtime.prepareBundle(context.assembly,recipe.history.pageId);expect(receipt.assemblySha256).toBe(context.assembly.sha256);const canonical=publicationModules.canonicalizeHtmlPage(receipt.html,{previousHtml:recipe.history.revisions[0].page.html,ledger:recipe.history.revisions[0].ledger});recipe.history.revisions[0].page.html=canonical.html;recipe.history.revisions[0].page.nextNodeId=canonical.ledger.nextNodeId;recipe.history.revisions[0].ledger=canonical.ledger;recipe.history.revisions[0].sourceSha256=pageSourceDigest(canonical.html);recipe.history.revisions[0].htmlPublicationDependencies=receipt.dependencies;return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
   for(const prefix of ['BootstrapFirst','BootstrapSecond']){
-   const publicationRecipe=await fixture(prefix,root),key={sourceNamespace:prefix,sourceId:publicationRecipe.history.sourceId,version:3};
-   const html=publicationRecipe.history.revisions[0].page.html,assembly={key,sha256:sha(prefix+'assembly'),result:{status:'complete',html,htmlSha256:sha(html),files:[]}};
+   const publicationRecipe=await fixture(prefix,root);publicationRecipe.catalog.sinkDirectory=LOCAL_OBJECT_DIR;
+   const key={sourceNamespace:prefix,sourceId:publicationRecipe.history.sourceId,version:3};
+   const css=Buffer.from('p{color:rgb(12,34,56)}');const html=publicationRecipe.history.revisions[0].page.html.replace('</head>','<link rel="stylesheet" href="./theme.css"></head>'),assembly={key,sha256:sha(prefix+'assembly'),result:{status:'complete',html,htmlSha256:sha(html),files:[{path:'theme.css',bytes:css,sha256:sha(css)}]}};
    const canonical=Buffer.from(publicationRecipe.membership.source.canonicalSource),row=JSON.parse(canonical).heads[0],source='<p>Synthetic</p>',recovery=bytes({key,documentSha256:digest(row.document),sourceSha256:sha(source),source});
    const probe=Buffer.from('export async function mountImportedPilot(){return {}}');
    const canonicalPath=path.join(root,prefix+'canonical.json'),recoveryPath=path.join(root,prefix+'recovery.json'),probePath=prefix+'probe.mjs',templatePath=path.join(root,prefix+'template.json'),cameraPath=path.join(root,prefix+'camera.json');
    await writeFile(canonicalPath,canonical);await writeFile(recoveryPath,recovery);await writeFile(path.join(root,probePath),probe);
    const template={format:'native-migration-pilot-v1',implementation:'html',preparedStore:{},probe:{path:probePath,sha256:sha(probe)},harnessSha256:sha('harness'),gateManifestSha256:sha('gate'),originalRevision:'a'.repeat(40),candidateRevision:'b'.repeat(40),canonicalSha256:sha(canonical),recoverySha256:sha(recovery),key,rowSha256:digest(row),documentSha256:digest(row.document),sourceSha256:sha(source),bundleFiles:[{path:'index.html',sha256:sha(html)},{path:probePath,sha256:sha(probe)}],theme:'light',viewports:[{width:390,height:844}],states:[{id:'initial',actions:[]}]};
    await writeFile(templatePath,JSON.stringify(template));await writeFile(cameraPath,JSON.stringify({format:'native-migration-camera-recipe-v1',base:'http://localhost:3000',paths:{input:templatePath,canonical:canonicalPath,recovery:recoveryPath,bundle:root,output:path.join(root,'capture')}}));
-   const inputs={};for(const name of ['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments']){const content=name==='compiledHtml'?html:name==='sourceHead'?canonical:bytes(name);const relative=prefix+name;await writeFile(path.join(root,relative),content);inputs[name]={path:relative,sha256:sha(content)};}
+   const inputs={};for(const name of ['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments']){const content=name==='compiledHtml'?html:name==='sourceHead'?canonical:name==='identity'?bytes(publicationRecipe.identity):name==='authSchemaCapability'?bytes({schemas:publicationRecipe.schemas,runtime:{actor:publicationRecipe.history.owner,origin:'http://localhost:3000'}}):bytes(name);const relative=prefix+name;await writeFile(path.join(root,relative),content);inputs[name]={path:relative,sha256:sha(content)};}
    const reviewed={format:'native-migration-host-v1',revisionScope:'latest',key,assemblySha256:assembly.sha256,sourceRevision:'a'.repeat(40),targetRevision:'b'.repeat(40),inputs,authority:{appSchema:'public',authSchema:'auth',capabilities:['reviewed-migration']}};
    const authorityRecipePath=path.join(root,prefix+'authority.json');await writeFile(authorityRecipePath,JSON.stringify(reviewed));
    recipes.set(key.sourceId,publicationRecipe);
-   const imported=await host.importAndPrepare({revision:{key},assembly,receiptRoot:root,outputDirectory:path.join(root,prefix+'output'),authorityRecipePath,candidateRecipePath:cameraPath});
+   const context={revision:{key},assembly,receiptRoot:root,outputDirectory:path.join(root,prefix+'output'),authorityRecipePath,candidateRecipePath:cameraPath};
+   if(prefix==='BootstrapFirst'){
+    const folderPath=prefix+'folder.json';await writeFile(path.join(root,folderPath),'{}');reviewed.inputs.ancillaryFolders={path:folderPath,sha256:sha('{}')};await writeFile(authorityRecipePath,JSON.stringify(reviewed));
+    await expect(host.importAndPrepare(context)).rejects.toThrow();expect((await db.query('SELECT id FROM users WHERE id=$1',[prefix+'user'])).rows).toEqual([]);
+    await writeFile(path.join(root,folderPath),'changed');await expect(host.importAndPrepare(context)).rejects.toThrow('input-digest');
+    delete reviewed.inputs.ancillaryFolders;await writeFile(authorityRecipePath,JSON.stringify(reviewed));
+   }
+   const imported=await host.importAndPrepare(context);
    expect(imported).toMatchObject({key,stage:'imported',assemblySha256:assembly.sha256});
-   const input=JSON.parse(await readFile(imported.pilotInputPath,'utf8'));expect(input.preparedStore.reader.pageId).toBe(publicationRecipe.history.pageId);expect(input.bundleFiles).toEqual([{path:'index.html',sha256:sha(html)},template.probe]);
+   const input=JSON.parse(await readFile(imported.pilotInputPath,'utf8'));expect(input.preparedStore.reader.pageId).toBe(publicationRecipe.history.pageId);expect(input.bundleFiles).toEqual([{path:'index.html',sha256:sha(html)},{path:'theme.css',sha256:sha(css)},template.probe]);expect(imported.importResult.disposition).toBe('created');expect(imported.identityPreparation).toMatchObject({transaction:'separate-prerequisite',identities:{createdUsers:1,createdTokens:1}});expect(input.preparedStore.files.some(file=>file.path.startsWith('objects/'))).toBe(true);
   }
  }finally{await rm(root,{recursive:true,force:true});}
 },30000);
+
+it('refuses a nondisposable database before invoking publication or any write',()=>{
+ let invoked=false;
+ expect(()=>createNativeProductMigrationHost({db:{raw:()=>({kind:'postgres'}),transaction:()=>{invoked=true;}},objectsDirectory:LOCAL_OBJECT_DIR,publication:async()=>{invoked=true;},captureAndCompare:async()=>{invoked=true;}})).toThrow('disposable_local_scope_required');
+ expect(invoked).toBe(false);
+});

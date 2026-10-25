@@ -141,7 +141,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
 }
 
 export async function createArtifact(
-  tokenId: string,
+  tokenId: string | null,
   userId: string | null,
   input: ArtifactInput,
   /**
@@ -170,6 +170,7 @@ export async function createArtifact(
    */
   atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
+  if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if (input.format === 'markup' && input.source) {
@@ -224,13 +225,15 @@ export async function afterCreated(row: ArtifactRow, userId: string | null): Pro
 async function insertArtifact(
   tx: Queryable,
   id: string,
-  tokenId: string,
+  tokenId: string | null,
   userId: string | null,
   input: ArtifactInput,
   sourceIds: string[],
   atCreation: Parameters<typeof createArtifact>[3] = {},
 ): Promise<ArtifactRow> {
   // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
+  const creatorId = userId ?? tokenId;
+  if (!creatorId) throw new Error("Artifact creation requires a user or token");
   const creator = identityForUser(userId, tokenId);
   await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
   await assertDestination(tx,creator,input.destination??{type:'personal'});
@@ -262,7 +265,7 @@ async function insertArtifact(
   if(input.format==='html'&&input.htmlBackends){
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
-    const links=await commitHtmlBackends(tx,id,userId??tokenId,input.htmlBackends,[]);
+    const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
     input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
   }
   if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:input.htmlDatasets}};
@@ -615,7 +618,9 @@ async function replaceScoped(
       const names=htmlBackendNames(input.source??'');
       if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
       if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
-      const changed=input.htmlBackends?await commitHtmlBackends(tx,id,current.user_id??current.token_id,input.htmlBackends,previous):[];
+      const backendOwner=current.user_id??current.token_id;
+      if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
+      const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
       input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
     }
@@ -750,8 +755,8 @@ function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; 
  * publishing an image or a PDF is, so those two refuse by name instead of
  * quietly working for free (lib/publish/document/input).
  */
-export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
-  return () => assetByteQuotaExceeded(tokenId);
+export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId, ownerUserId);
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */

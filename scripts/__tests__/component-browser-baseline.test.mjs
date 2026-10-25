@@ -3,10 +3,14 @@ import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
 import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
+import {verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
+import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
+const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -56,8 +60,25 @@ describe('default candidate reader gate',()=>{
 });
 
 let actualArchive;
+async function loadCandidateArchive(){
+  const {GET}=await import('../../services/app/app/skills/artifactbin.zip/route.ts');
+  const response=await GET(new Request('https://example.test/skills/artifactbin.zip'));
+  expect(response.status).toBe(200);
+  return new Uint8Array(await response.arrayBuffer());
+}
 async function candidateArchive(){
-  if(!actualArchive)actualArchive=(async()=>{const {GET}=await import('../../services/app/app/skills/artifactbin.zip/route.ts');const response=await GET(new Request('https://example.test/skills/artifactbin.zip'));expect(response.status).toBe(200);return new Uint8Array(await response.arrayBuffer());})();
+  if(!actualArchive)actualArchive=(async()=>{
+    let archive=await loadCandidateArchive();
+    try{await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});}
+    catch(error){
+      if(!/^(?:Missing component build proof|Stale component build:|Served component module closure differs from build|Served component bytes differ from build:)/.test(error.message))throw error;
+      // Preserve actual ZIP validation while refreshing only a missing or stale component build.
+      execFileSync(process.execPath,[path.join(repo,'scripts/build/build-html-components.mjs')],{cwd:repo,stdio:'pipe'});
+      archive=await loadCandidateArchive();
+      await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});
+    }
+    return archive;
+  })();
   return actualArchive;
 }
 const archiveContents=new WeakMap();
@@ -415,16 +436,21 @@ describe('used font evidence',()=>{
 describe('component gate resource acceptance',()=>{
   it('rejects missing stylesheets in explicit input and default candidate validation',async()=>{
     const output=await setup(),config=path.join(output,'run.json'),prior=process.env.COMPONENT_BASELINE__INPUT;
+    const archive=await candidateArchive(),originalFetch=globalThis.fetch;
     const broken={fixture:'theme',state:'initial',errors:[],assertionErrors:[],fontEvidence:{errors:[]},resourceEvidence:{errors:['Stylesheet did not load: /theme.css']},semantics:{text:'Ready',controls:[],overflow:0}};
     vi.doMock('../gates/lib/browser.mjs',()=>({launchChromium:async()=>({close:async()=>{}})}));
     vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],compareBrowserBaselines,candidateCaptureIssues}));
+    vi.stubGlobal('fetch',async(input,init)=>{
+      const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
+      return new URL(url).pathname==='/skills/artifactbin.zip'?new Response(archive,{status:200}):originalFetch(input,init);
+    });
     process.env.COMPONENT_BASELINE__INPUT=config;
     try{
       for(const defaultCandidateValidation of [false,true]){
         await writeFile(config,JSON.stringify({implementation:'html',sourceRevision:'a'.repeat(40),output,entries:[],defaultCandidateValidation}));
         await expect(import('../gates/gate-component-baseline.mjs?resource-acceptance='+defaultCandidateValidation)).rejects.toThrow('Reader capture failures: Stylesheet did not load: /theme.css');
       }
-    }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
+    }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.unstubAllGlobals();vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
   });
 });
 
