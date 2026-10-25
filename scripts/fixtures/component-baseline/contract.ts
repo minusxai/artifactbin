@@ -47,23 +47,7 @@ export interface BrowserParityFixture {
   limitations?: string[];
   states: Array<{ id: string; expected?: BrowserStateExpectation; actions: BrowserParityAction[] }>;
 }
-export interface BrowserParityCapture {
-  fixture: string;
-  state: string;
-  theme: 'light' | 'dark';
-  viewport: { width: number; height: number };
-  implementation: 'jsx' | 'html';
-  sourceRevision: string;
-  fixtureHash: string;
-  screenshotMode: 'viewport' | 'document-frame';
-  browserVersion: string;
-  screenshot: string;
-  screenshotSha256: string;
-  semantics: unknown;
-  errors: string[];
-  assertionErrors: string[];
-  resourceEvidence?: { stylesheets: Array<{ url: string; loaded: boolean }>; errors: string[] };
-  animationEvidence?: {
+interface BrowserAnimationSettlement {
     format: 'frame-animation-settlement-v1';
     policy: 'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence';
     shadowCoverage: 'open-shadow-roots-only';
@@ -81,6 +65,27 @@ export interface BrowserParityCapture {
     infinite: Array<{ name: string; playState: string; duration: number | null; iterations: number | 'infinite' | null }>;
     counts: { finished: number; canceled: number; detached: number };
     timedOut: Array<{ name: string; playState: string; duration: number | null; iterations: number | 'infinite' | null }>;
+}
+export interface BrowserParityCapture {
+  fixture: string;
+  state: string;
+  theme: 'light' | 'dark';
+  viewport: { width: number; height: number };
+  implementation: 'jsx' | 'html';
+  sourceRevision: string;
+  fixtureHash: string;
+  screenshotMode: 'viewport' | 'document-frame';
+  browserVersion: string;
+  screenshot: string;
+  screenshotSha256: string;
+  semantics: unknown;
+  errors: string[];
+  assertionErrors: string[];
+  resourceEvidence?: { stylesheets: Array<{ url: string; loaded: boolean }>; errors: string[] };
+  animationEvidence?: BrowserAnimationSettlement & {
+    /** Recheck after font evidence, then settle finite parent UI (comment badges). */
+    frameAfterFonts?: BrowserAnimationSettlement;
+    parentDocument?: BrowserAnimationSettlement;
   };
   fontEvidence: { faces: unknown[]; used: unknown[]; resources: unknown[]; errors: string[] };
 }
