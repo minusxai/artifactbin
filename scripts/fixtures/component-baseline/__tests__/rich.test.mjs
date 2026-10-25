@@ -31,6 +31,15 @@ describe('actual original/new rich reader fixture inputs',()=>{
   expect(date.limitations.join(' ')).toContain('trigger name');
   const user=richBrowserParityFixtures.find(f=>f.family==='User');expect(user.oldJsx).toContain('userId=""');expect(user.oldJsx).toContain('Unassigned');expect(user.newHtml).toContain('Unassigned');expect(user.limitations.join(' ')).toContain('seeded person-card');
  });
+ it('publishes the native Icon paragraph inside the same bare-story typography root as the source reader',()=>{
+  const icon=richBrowserParityFixtures.find(fixture=>fixture.id==='icon-glyphs');
+  const document=new JSDOM(icon.newHtml).window.document;
+  const story=document.querySelector('[data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])');
+  expect(story).not.toBeNull();
+  expect(story.querySelector(':scope > .mx-doc > p')?.textContent).toContain('Completed');
+  expect(story.querySelector('p')?.className).toBe('');
+  expect(htmlBodyPadding(icon)).toBe('24px');
+ });
  it('pairs slide navigation through the shared pager and records rail viewport applicability',()=>{
   const slides=richBrowserParityFixtures.find(f=>f.id==='slides-two');
   expect(slides.bareRoot).toBe(true);
