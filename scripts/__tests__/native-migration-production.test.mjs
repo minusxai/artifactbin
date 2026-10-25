@@ -88,3 +88,16 @@ it('normal paired proof admission binds the actual source, head, revisions and a
  for(const [name,change] of cases){const before=await readFile(path.join(x.root,name));const original=JSON.parse(before);await x.put(name,Object.keys(change).length?{...original,...change}:{});await expect(verify()).rejects.toThrow(/normal-proof/);await writeFile(path.join(x.root,name),before);}
  expect(await verify()).toMatchObject({status:'verified'});
 }));
+
+it('requires a separately pinned reviewed decision for an exact difference before target opening',()=>fixture(async x=>{
+ const data=await ready(x),recipe=JSON.parse(await readFile(data.context.authorityRecipePath,'utf8'));
+ const strictReport=await x.put('strict-difference.json',{passed:false,images:[{changedPixels:1}]}),evidence=await x.put('review-evidence.json',{complete:true});
+ const comparison={...data.comparison,status:'difference',comparisonPath:path.join(x.root,strictReport.path),comparisonSha256:strictReport.sha256};x.batch.heads[0].comparison=await x.put('difference.json',comparison);
+ const fileRef=async name=>({path:name,sha256:sha(await readFile(path.join(x.root,name)))});
+ const decision={format:'native-reviewed-comparison-decision-v1',accepted:true,revisionScope:'latest',key:data.key,assemblySha256:recipe.assemblySha256,sourceRevision:recipe.sourceRevision,targetRevision:recipe.targetRevision,sourceHeadSha256:recipe.inputs.sourceHead.sha256,compiledHtmlSha256:recipe.inputs.compiledHtml.sha256,membershipSha256:recipe.inputs.membership.sha256,commentsSha256:recipe.inputs.comments.sha256,sourceCameraInput:await fileRef('baseline-input.json'),targetCameraInput:await fileRef('candidate-input.json'),sourceEvidence:await fileRef('baseline.json'),targetEvidence:await fileRef('candidate.json'),strictReport,strictPassed:false,strictFalseField:'passed',evidence:['source','target','assembly','relations','behavior','classification'].map(kind=>({kind,file:evidence})),differences:[{id:'exact-pair',description:'One explicitly reviewed pair',evidence}],behaviorComplete:true,sourceTargetComplete:true};
+ const decisionRef=await x.put('review-decision.json',decision);x.batch.heads[0].reviewedDecision=decisionRef;await x.saveBatch();let opens=0;
+ const options={planPath:x.planPath,batchPath:x.batchPath,receiptRoot:x.root,outputDirectory:path.join(x.root,'reviewed-out'),openTarget:async()=>{opens++;throw Error('not permitted')}};
+ await expect(runNativeProductionMigration(options)).rejects.toThrow();expect(opens).toBe(0);
+ expect(await runNativeProductionMigration({...options,approvedReviewedDecisionSha256:[decisionRef.sha256]})).toMatchObject({targetOpened:false,targetWrites:0,batchPages:1});expect(opens).toBe(0);
+ expect(JSON.parse(await readFile(path.join(x.root,strictReport.path),'utf8')).passed).toBe(false);
+}));
