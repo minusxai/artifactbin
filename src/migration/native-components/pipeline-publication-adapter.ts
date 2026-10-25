@@ -43,12 +43,23 @@ export function createNativePipelinePublication(config:NativePipelinePublication
   if(!Buffer.from(files.comments).equals(Buffer.from(rawRelations)))throw Error('native_pipeline_publication_raw_relations');
   if(Buffer.from(files.compiledHtml).toString('utf8')!==context.assembly.result.html)throw Error('native_pipeline_publication_compiled_html');
   const page=await selectNativePipelinePublicationPage(captured,files.sourceHead,context.revision);
+  const ancillary=nativePipelineAncillaryInput(captured);
+  if(ancillary?(!files.ancillaryFolders||!Buffer.from(files.ancillaryFolders).equals(Buffer.from(ancillary.bytes))):files.ancillaryFolders!==undefined)throw Error('native_pipeline_ancillary_file_binding');
   const shared=structuredClone(captured.shared);shared.membership.source={...shared.membership.source,canonicalSource:encodeNativePublicationBytes(files.sourceHead)};
   const result=await prepareNativePublication({selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},assemblies:[context.assembly],relations:captured.relations,shared,exportedAt:captured.exportedAt,coreUrl:captured.coreUrl},{prepare:async(assemblies,planned)=>{
    const access=preflightNativeV3Publication({revisionScope:'latest',selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},planned,plannedSha256:createHash('sha256').update(canonicalMigrationValue(planned)).digest('hex'),maps:captured.shared.maps,targets:captured.shared.targets,targetIdentitySha256:nativeDigest(captured.shared.targets),assemblies}).access;
    const staged=await invocation.prepareRuntime(assemblies,{pageId:planned.pageId,visibility:access.visibility,shares:access.shares});
    return createNativeV3PublicationHost({...invocation.publicationModules,prepareBundle:staged.prepareBundle});
   }});
-  return result.recipe;
+  return {...result.recipe,...(ancillary?{ancillaryFolders:ancillary.recipe}:{})};
  };
+}
+/** The product folder adapter validates the complete source proof; this bridge binds its immutable envelope. */
+export function nativePipelineAncillaryInput(config:NativePipelinePublicationConfiguration){
+ const ancestors=config.shared.catalog.projection.datasets.flatMap(dataset=>{const authority=dataset.authority as {ancestorIds?:unknown}|undefined;return Array.isArray(authority?.ancestorIds)?authority.ancestorIds.map(String):[];});
+ if(!config.ancillaryFolders){if(ancestors.length)throw Error('native_pipeline_ancillary_required');return undefined;}
+ const bytes=decodeNativePublicationBytes(config.ancillaryFolders),recipe=JSON.parse(Buffer.from(bytes).toString('utf8')) as {schema:string;sourceNamespace:string;identityPlanSha256:string;selection:{selectionSha256:string};identityGroups?:Readonly<Record<string,string>>;folders:readonly {targetId:string}[];sha256:string;[key:string]:unknown};
+ const {sha256,...body}=recipe;
+ if(recipe.schema!=='native-reviewed-ancillary-folders-v1'||nativeDigest(body)!==sha256||recipe.sourceNamespace!==config.shared.catalog.projection.sourceNamespace||recipe.identityPlanSha256!==config.shared.identity.approvedPlanSha256||recipe.selection?.selectionSha256!==config.approvedSelectionManifestSha256||nativeDigest(recipe.identityGroups??{})!==nativeDigest(config.shared.identityGroups??{})||!Array.isArray(recipe.folders)||ancestors.some(id=>!recipe.folders.some(folder=>folder.targetId===id)))throw Error('native_pipeline_ancillary_binding');
+ return {bytes,recipe};
 }

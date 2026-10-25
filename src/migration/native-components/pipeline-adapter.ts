@@ -8,7 +8,7 @@ import {nativeDigest} from './selection.ts';
 import {decodeNativePublicationBytes,encodeNativePublicationBytes} from './pipeline-publication.ts';
 import {verifyReceipt,selectLatestHead} from './latest-batch-prepare.ts';
 import type {LatestBatchPreparation} from './latest-batch-contracts.ts';
-import {createNativePipelinePublication,selectNativePipelinePublicationPage} from './pipeline-publication-adapter.ts';
+import {createNativePipelinePublication,selectNativePipelinePublicationPage,nativePipelineAncillaryInput} from './pipeline-publication-adapter.ts';
 import type {NativePipelineRequest,NativePipelinePorts,NativePipelineHostContext,NativePipelineImport} from './pipeline-contracts.ts';
 import type {NativePipelineAdapterConfiguration,NativePipelineAdapterPorts,NativePipelineLifecycle} from './pipeline-adapter-contracts.ts';
 import type {NativePipelinePublicationConfiguration} from './pipeline-publication-adapter-contracts.ts';
@@ -29,6 +29,7 @@ export function nativePipelineAdapterFilePorts():NativePipelineAdapterPorts {
    const current=(await execute('git',['rev-parse','HEAD'],{cwd:configuration.targetRoot})).stdout.trim();if(current!==configuration.targetRevision)throw Error('native_pipeline_adapter_target_changed');
    const reference=await checked(request.receiptRoot,configuration.publication);
    const publication=JSON.parse(reference.bytes.toString('utf8')) as NativePipelinePublicationConfiguration;
+   if(configuration.ancillaryFolders){const proof=await checked(request.receiptRoot,configuration.ancillaryFolders);if(publication.ancillaryFolders&&!Buffer.from(decodeNativePublicationBytes(publication.ancillaryFolders)).equals(proof.bytes))throw Error('native_pipeline_adapter_ancillary_configuration');publication.ancillaryFolders=encodeNativePublicationBytes(proof.bytes);}
    await checked(configuration.targetRoot,configuration.lifecycle);
    if(configuration.lifecycleConfiguration)await checked(request.receiptRoot,configuration.lifecycleConfiguration);
    return {configuration,publication};
@@ -54,13 +55,14 @@ export async function createNativePipelineAdapter(request:NativePipelineRequest,
  if(request.revisionScope!=='latest')throw Error('native_pipeline_adapter_latest_required');
  if(request.stage==='assemble')return {};
  const loaded=await ports.configuration(request),configuration=structuredClone(loaded.configuration),sharedPublication=structuredClone(loaded.publication);
- type Active={lifecycle:NativePipelineLifecycle;host:NonNullable<NativePipelinePorts['host']>;imported?:NativePipelineImport};
+ type Active={binding:string;lifecycle:NativePipelineLifecycle;host:NonNullable<NativePipelinePorts['host']>;imported?:NativePipelineImport};
  const active=new Map<string,Active>();const opening=new Set<string>();
+ const owner=(context:NativePipelineHostContext)=>nativeDigest({key:context.revision.key,output:path.resolve(context.outputDirectory)});
  const binding=(context:NativePipelineHostContext)=>nativeDigest({key:context.revision.key,assemblyKey:context.assembly.key,assembly:context.assembly.sha256,output:context.outputDirectory});
  async function release(key:string,state:Active){if(active.get(key)===state)active.delete(key);await state.lifecycle.dispose();}
  return {host:{
   importAndPrepare:async context=>{
-   const key=binding(context);if(active.has(key)||opening.has(key))throw Error('native_pipeline_adapter_lifecycle_occupied');
+   const key=owner(context);if(active.has(key)||opening.has(key))throw Error('native_pipeline_adapter_lifecycle_occupied');
    opening.add(key);let lifecycle:NativePipelineLifecycle|undefined;let state:Active|undefined;
    try{
     const admitted=ports.materialize?await ports.materialize(request,context,configuration,structuredClone(sharedPublication)):context;
@@ -70,7 +72,7 @@ export async function createNativePipelineAdapter(request:NativePipelineRequest,
     if(ports.materialize)publicationConfiguration.shared.catalog.sinkDirectory=path.join(await realpath(context.outputDirectory),'disposable-target','objects');
     const publication=createNativePipelinePublication(publicationConfiguration);
     const host=await ports.createProductHost({db:lifecycle.db,objectsDirectory:lifecycle.objectsDirectory,...(lifecycle.fixtureAuthSecret?{fixtureAuthSecret:lifecycle.fixtureAuthSecret}:{}),publication,captureAndCompare:lifecycle.captureAndCompare},structuredClone(configuration));
-    state={lifecycle,host};active.set(key,state);
+    state={binding:binding(context),lifecycle,host};active.set(key,state);
     const imported=await host.importAndPrepare(admitted);
     if(nativeDigest(imported.key)!==nativeDigest(context.revision.key)||imported.assemblySha256!==context.assembly.sha256)throw Error('native_pipeline_adapter_import_binding');
     state.imported=structuredClone(imported);
@@ -79,8 +81,9 @@ export async function createNativePipelineAdapter(request:NativePipelineRequest,
    }catch(error){if(state){if(active.get(key)===state)await release(key,state);}else if(lifecycle)await lifecycle.dispose();throw error;}finally{opening.delete(key);}
   },
   captureAndCompare:async context=>{
-   const key=binding(context),state=active.get(key);
-   if(!state?.imported||nativeDigest(context.imported)!==nativeDigest(state.imported))throw Error('native_pipeline_adapter_lifecycle_binding');
+   const key=owner(context),state=active.get(key);
+   if(!state)throw Error('native_pipeline_adapter_lifecycle_binding');
+   if(state.binding!==binding(context)||!state.imported||nativeDigest(context.imported)!==nativeDigest(state.imported)){await release(key,state);throw Error('native_pipeline_adapter_lifecycle_binding');}
    try{return await state.host.captureAndCompare(context);}finally{await release(key,state);}
   },
  }};
@@ -103,6 +106,7 @@ export async function materializeNativePipelineAuthority(request:NativePipelineR
  await selectNativePipelinePublicationPage(publication,canonical,revision);
  const catalog=publication.shared.catalog.projection,{sha256:catalogSha,...catalogBody}=catalog;
  if(nativeDigest(catalogBody)!==catalogSha||catalog.identityPlanSha256!==batch.identityPlanSha256||catalog.selectionSha256!==batch.approvalManifestSha256||catalog.sourceNamespace!==revision.key.sourceNamespace||publication.shared.identity.plan.sha256!==batch.identityPlanSha256)throw Error('native_pipeline_adapter_shared_binding');
+ const ancillary=nativePipelineAncillaryInput(publication);
  const rawRelations=decodeNativePublicationBytes(publication.relations);
  const membership={...publication.shared.membership,source:{...publication.shared.membership.source,canonicalSource:encodeNativePublicationBytes(canonical)}};
  for(const [name,bytes]of Object.entries(membership.source)){
@@ -112,7 +116,7 @@ export async function materializeNativePipelineAuthority(request:NativePipelineR
  const expected=path.resolve(context.outputDirectory,'operator-inputs','authority.json');
  const directory=path.join(await realpath(context.outputDirectory),'operator-inputs'),authorityPath=path.join(directory,'authority.json');
  if(path.resolve(context.authorityRecipePath)!==expected)throw Error('native_pipeline_adapter_authority_output');
- const values:Record<string,Uint8Array>={sourceHead:canonical,compiledHtml:Buffer.from(context.assembly.result.html),datasetCatalog:Buffer.from(JSON.stringify({...publication.shared.catalog,sinkDirectory:path.join(await realpath(context.outputDirectory),'disposable-target','objects')})),identity:Buffer.from(JSON.stringify(publication.shared.identity)),authSchemaCapability:Buffer.from(JSON.stringify({schemas:publication.shared.schemas,runtime:{actor:runtimeActor,origin:authority.runtime.origin}})),membership:Buffer.from(JSON.stringify(membership)),comments:rawRelations};
+ const values:Record<string,Uint8Array>={sourceHead:canonical,compiledHtml:Buffer.from(context.assembly.result.html),datasetCatalog:Buffer.from(JSON.stringify({...publication.shared.catalog,sinkDirectory:path.join(await realpath(context.outputDirectory),'disposable-target','objects')})),identity:Buffer.from(JSON.stringify(publication.shared.identity)),authSchemaCapability:Buffer.from(JSON.stringify({schemas:publication.shared.schemas,runtime:{actor:runtimeActor,origin:authority.runtime.origin}})),membership:Buffer.from(JSON.stringify(membership)),comments:rawRelations,...(ancillary?{ancillaryFolders:ancillary.bytes}:{})};
  const receiptRoot=await realpath(context.receiptRoot);if(!directory.startsWith(receiptRoot+path.sep))throw Error('native_pipeline_adapter_output_scope');
  await mkdir(directory,{mode:0o700});const inputs:Record<string,{path:string;sha256:string}>={};
  for(const [name,bytes]of Object.entries(values)){

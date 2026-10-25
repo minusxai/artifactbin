@@ -3,7 +3,7 @@ import type {NativePipelinePublicationConfiguration,NativePipelinePublicationCal
 export interface NativePipelineAdapterConfiguration {
  format:'native-pipeline-host-v1';revisionScope:'latest';targetRoot:string;targetRevision:string;
  publication:{path:string;sha256:string};lifecycle:{path:string;sha256:string};
- lifecycleConfiguration?:{path:string;sha256:string};
+ lifecycleConfiguration?:{path:string;sha256:string};ancillaryFolders?:{path:string;sha256:string};
  authority?:{sourceRevision:string;capabilities:readonly string[];runtime:{actor?:unknown;runtimeActorBySourceUserId?:Readonly<Record<string,unknown>>;origin:string}};sha256:string;
 }
 /** Actual target owns disposable database/schema/auth/camera setup; no source-specific publication callback. */
