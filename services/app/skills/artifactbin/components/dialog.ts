@@ -155,6 +155,7 @@ af-dialog{display:contents}
 dialog[data-af-dialog-native]{margin:auto;max-height:calc(100svh - 4rem);width:fit-content;max-width:min(32rem,calc(100vw - 2rem));overflow:auto;border-radius:var(--radius-lg,var(--radius,.625rem));border:1px solid var(--border);background:var(--background);padding:1.5rem;color:var(--foreground);box-shadow:var(--shadow-lg,0 10px 15px -3px rgb(0 0 0 / 10%),0 4px 6px -4px rgb(0 0 0 / 10%))}
 af-dialog-content{display:flex;flex-direction:column;gap:1rem}
 af-dialog-content h2{font-family:var(--font-display,inherit);font-weight:600}
+af-dialog-content p:not([class]){line-height:1.65;margin:.75rem 0}
 af-dialog-content h2:not([class]){font-size:1.75rem;font-weight:600;line-height:1.2;margin-block:1.6em .5em;text-wrap:balance}
 @media(max-width:639px){af-dialog-content h2:not([class]){font-size:1.5rem}}
 af-dialog-header{display:flex;flex-direction:column;gap:.5rem}

@@ -108,6 +108,22 @@ it('styles a nested native close button like the text-only close control without
   expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
   expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
 });
+it('matches retained bare dialog paragraph rhythm without overriding authored paragraph styles', () => {
+  const {root,content} = fixture();
+  const paragraph = document.createElement('p'); paragraph.textContent = 'Source paragraph'; content.append(paragraph);
+  const authored = document.createElement('p'); authored.className = 'authored-copy'; authored.textContent = 'Authored paragraph'; content.append(authored);
+  const style = document.querySelector<HTMLStyleElement>('style[data-af-dialog-styles]')!;
+  const css = style.textContent!.replace(/\s+/g,'');
+  expect(css).toContain('af-dialog-contentp:not([class]){line-height:1.65;margin:.75rem0}');
+  expect(css).not.toContain('af-dialog-contentp{');
+  expect(getComputedStyle(paragraph).lineHeight).toBe('1.65');
+  expect(getComputedStyle(paragraph).marginTop).toBe('12px');
+  const authorStyle = document.createElement('style'); authorStyle.textContent = '.authored-copy{line-height:2;margin:3px 0}'; document.head.append(authorStyle);
+  expect(getComputedStyle(authored).lineHeight).toBe('2');
+  expect(getComputedStyle(authored).marginTop).toBe('3px');
+  authorStyle.remove(); root.remove();
+});
+
 it('matches the retained bare dialog heading and outline close styling', () => {
   const {root,content} = fixture();
   const heading = document.createElement('h2'); heading.textContent = 'Bare heading'; content.append(heading);
