@@ -4,6 +4,6 @@ af-collapsible-trigger{box-sizing:border-box;display:inline-flex;align-items:cen
 af-collapsible-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;margin:0;padding:0;border:0;border-radius:0;background:transparent;font:inherit;line-height:inherit;color:inherit;cursor:inherit}
 af-collapsible-trigger:focus-visible,af-collapsible-trigger>button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
 af-collapsible-trigger[aria-disabled=true],af-collapsible-trigger>button[aria-disabled=true],af-collapsible-trigger>button:disabled{opacity:.5;cursor:default}
-af-collapsible-content{display:block;overflow:hidden}
+af-collapsible-content{display:block}
 af-collapsible-content[hidden]{display:none!important}
 `;function g(n=customElements,t=globalThis.document){if(!t.querySelector("style[data-af-collapsible-styles]")){let s=t.createElement("style");s.setAttribute("data-af-collapsible-styles",""),s.textContent=h,t.head.append(s)}for(let[s,r]of Object.entries({"af-collapsible":o,"af-collapsible-trigger":d,"af-collapsible-content":b}))n.get(s)||n.define(s,r)}export{o as AfCollapsible,b as AfCollapsibleContent,d as AfCollapsibleTrigger,h as collapsibleStyles,g as registerCollapsible};

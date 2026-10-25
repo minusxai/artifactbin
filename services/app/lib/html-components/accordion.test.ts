@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfAccordion, registerAccordion } from './accordion';
+import { AfAccordion, accordionStyles, registerAccordion } from './accordion';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-accordion><af-accordion-item value="a"><af-accordion-trigger>A</af-accordion-trigger><af-accordion-content>A</af-accordion-content></af-accordion-item><af-accordion-item value="b"><af-accordion-trigger>B</af-accordion-trigger><af-accordion-content>B</af-accordion-content></af-accordion-item></af-accordion>';
@@ -177,6 +177,20 @@ describe('native authored accordion', () => {
 });
 
 describe('accordion appearance', () => {
+  it('uses the authored recipe line-height without adding un-authored panel padding', () => {
+    const {root,items,contents} = fixture('default-value="a"', '<af-accordion-trigger><button>Toggle</button></af-accordion-trigger>', ['a']);
+    const button = items[0]!.querySelector('button')!;
+    expect(getComputedStyle(button).lineHeight).toBe('20px');
+    expect(getComputedStyle(contents[0]!).lineHeight).toBe('20px');
+    expect(parseFloat(getComputedStyle(contents[0]!).paddingBottom)).toBe(0);
+    const icon = button.querySelector('svg[data-af-accordion-icon]')!;
+    expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(icon.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
+    expect(icon.getAttribute('stroke-linecap')).toBe('round');
+    expect(accordionStyles).toContain('rotate(180deg)');
+    root.remove();
+  });
+
   it('uses the inherited foreground for section dividers', () => {
     const {items,root} = fixture();
     const itemColor = getComputedStyle(items[0]!).color;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfTabs, registerTabs } from './tabs';
+import { AfTabs, registerTabs, tabsStyles } from './tabs';
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-tabs><af-tabs-list><af-tabs-trigger id="authored-tab" value="a">A</af-tabs-trigger><af-tabs-trigger id="authored-tab" value="b">B</af-tabs-trigger></af-tabs-list><af-tabs-content value="b">B</af-tabs-content></af-tabs>';
 const preUpgradeRoot = preUpgradeHost.firstElementChild as AfTabs;
@@ -210,6 +210,11 @@ describe('native authored tabs', () => {
     expect(getComputedStyle(list).flexDirection).toBe('column');
     root.setAttribute('orientation','horizontal');
     expect(getComputedStyle(list).height).toBe('36px');
+  });
+  it('implements the source ring as a two pixel focus ring without an outline offset', () => {
+    expect(tabsStyles).toContain('outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px');
+    expect(tabsStyles).not.toContain('outline:2px solid color-mix');
+    expect(tabsStyles.indexOf('af-tabs-trigger:focus-visible')).toBeGreaterThan(tabsStyles.indexOf('af-tabs-trigger[data-state=active]'));
   });
   it('keeps nested instances independent', () => {
     const outer = fixture('default-value="a"'); const inner = fixture('default-value="a"');

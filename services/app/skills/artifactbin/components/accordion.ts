@@ -141,6 +141,18 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
     node.id = id;
   }
 
+  private ensureChevron(trigger: AfAccordionTrigger): void {
+    const control = trigger.querySelector('button') ?? trigger;
+    if (control.querySelector(':scope > svg[data-af-accordion-icon]')) return;
+    const svg = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('fill','none'); svg.setAttribute('stroke','currentColor');
+    svg.setAttribute('stroke-width','2'); svg.setAttribute('stroke-linecap','round'); svg.setAttribute('stroke-linejoin','round');
+    svg.setAttribute('aria-hidden','true'); svg.setAttribute('data-af-accordion-icon','');
+    svg.classList.add('af-accordion-icon');
+    const path = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d','m6 9 6 6 6-6'); svg.append(path); control.append(svg);
+  }
+
   private sync(): void {
     if (!this.isConnected) return;
     const type = this.type; const value = this.value; const orientation = this.getAttribute('orientation') === 'horizontal' ? 'horizontal' : 'vertical';
@@ -154,6 +166,7 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
       const controlledIds = contents.map(content => content.id).join(' ');
       const labelledByIds: string[] = [];
       for (const trigger of triggers) {
+        this.ensureChevron(trigger);
         this.identify(trigger,'trigger');
         if (!this.triggerSemantics.has(trigger)) this.triggerSemantics.set(trigger,{role:trigger.getAttribute('role'),tabindex:trigger.getAttribute('tabindex')});
         const buttons = [...trigger.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.closest('af-accordion-item') === item && button.closest('af-accordion') === this);
@@ -204,16 +217,15 @@ export class AfAccordionContent extends HTMLElement {}
 
 export const accordionStyles = `
 af-accordion{display:block}
-af-accordion-item{display:block;border-bottom:1px solid var(--border,#ddd)}
-af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
+af-accordion-item{display:block;border-bottom:1px solid currentColor}
+af-accordion-trigger{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
 af-accordion-trigger:has(>button){display:contents}
-af-accordion-trigger>button{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left!important;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:transparent;color:inherit;cursor:pointer}
-af-accordion-trigger::after,af-accordion-trigger>button::after{box-sizing:border-box;content:"";flex:none;width:.5rem;height:.5rem;margin-left:auto;border-right:2px solid var(--muted-foreground,currentColor);border-bottom:2px solid var(--muted-foreground,currentColor);transform:translateY(-.125rem) rotate(45deg);transition:transform .2s}
-af-accordion-trigger[aria-expanded="true"]::after,af-accordion-trigger>button[aria-expanded="true"]::after{transform:translateY(.125rem) rotate(225deg)}
-af-accordion-trigger:has(>button)::after{content:none}
+af-accordion-trigger>button{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left!important;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:transparent;color:inherit;cursor:pointer}
+af-accordion-trigger .af-accordion-icon{pointer-events:none;flex:none;width:1rem;height:1rem;transform:translateY(.125rem);color:var(--muted-foreground,currentColor);transition:transform .2s}
+af-accordion-trigger[aria-expanded="true"] .af-accordion-icon,af-accordion-trigger>button[aria-expanded="true"] .af-accordion-icon{transform:translateY(.125rem) rotate(180deg)}
 af-accordion-trigger:focus-visible,af-accordion-trigger>button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
 af-accordion-trigger[aria-disabled=true],af-accordion-trigger>button[aria-disabled=true],af-accordion-trigger>button:disabled{opacity:.5;cursor:default}
-af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.875rem}
+af-accordion-content{display:block;overflow:hidden;font-size:.875rem;line-height:1.25rem}
 af-accordion-content[hidden]{display:none!important}
 `;
 

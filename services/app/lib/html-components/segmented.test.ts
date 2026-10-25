@@ -110,4 +110,11 @@ describe('native authored segmented control', () => {
     expect(document.querySelectorAll('style[data-af-segmented-styles]')).toHaveLength(1);
     let events = 0; control.addEventListener('af-change', () => events++); buttons(control)[2]!.click(); expect(events).toBe(1);
   });
+  it('matches the source control shell alignment and caption line-height recipe', () => {
+    const control = fixture(); const label = control.querySelector<HTMLElement>('.af-segmented-label')!;
+    expect(getComputedStyle(control).verticalAlign).toBe('top');
+    expect(getComputedStyle(label).fontSize).toBe('11px');
+    expect(getComputedStyle(label).fontWeight).toBe('500');
+    expect(getComputedStyle(label).lineHeight).toBe('1.5');
+  });
 });

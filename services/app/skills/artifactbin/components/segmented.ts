@@ -209,8 +209,8 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
 }
 
 export const segmentedStyles = `
-af-segmented{display:inline-flex;flex-direction:column;align-items:flex-start;gap:.375rem;width:fit-content;box-sizing:border-box;color:inherit;font:inherit}
-af-segmented .af-segmented-label{font-family:inherit;font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
+af-segmented{display:inline-flex;vertical-align:top;flex-direction:column;align-items:flex-start;gap:.375rem;width:fit-content;box-sizing:border-box;color:inherit;font:inherit}
+af-segmented .af-segmented-label{font-family:inherit;font-size:11px;font-weight:500;line-height:1.5;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
 af-segmented .af-segmented-label[hidden]{display:none!important}
 af-segmented .af-segmented-options{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.125rem;background:color-mix(in srgb,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
 af-segmented[data-orientation=vertical] .af-segmented-options{flex-direction:column;align-items:stretch}
