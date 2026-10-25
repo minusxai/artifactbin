@@ -31,7 +31,7 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('outline:2px solid var(--ring,Highlight)');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('min-width: 6em');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('padding: .5em .75em');
- expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain(':where(af-markdown pre code){font-size:1em}');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain(':where(af-markdown .mx-markdown code){font-size:1em}');
  expect(getComputedStyle(el.querySelector('table')!).overflowX).toBe('auto');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('af-markdown .mx-markdown > :first-child{margin-block-start:0}');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('padding:1rem;background:var(--muted');
