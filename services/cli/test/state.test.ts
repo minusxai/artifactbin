@@ -7,6 +7,7 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {once} from 'node:events';
 import {State,withLock,HOME_SCOPE} from '../src/state';
+import {configDir} from '../src/config';
 
 
 const fixture = (run: (home: string) => Promise<void>) => async () => {
@@ -102,7 +103,7 @@ test('a lock refuses a competing process, is re-entrant in-process, and the OS r
   let childStderr='';
   child.stderr.on('data',data=>{childStderr=(childStderr+String(data)).slice(-2000);});
   const unexpectedEntry=async()=>{
-    const lock=join(home,'.artifactbin','locks',createHash('sha256').update('/work').digest('hex').slice(0,16)+'.sqlite');
+    const lock=join(configDir(home),'locks',createHash('sha256').update('/work').digest('hex').slice(0,16)+'.sqlite');
     const info=await stat(lock).catch(()=>null);
     const stderr=childStderr.split(home).join('<fixture>').replace(/(?:[A-Za-z]:[\\/]|\/)[^\s'"<>]+/g,'<path>');
     let holder:{lockDevice?:number;lockInode?:number;pathHash?:string}={};
