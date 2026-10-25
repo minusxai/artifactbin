@@ -36,9 +36,10 @@ it('snapshots inline, static and lazy module graphs with shared chunks once',asy
   const {packOfflineDependencies}=await import('../../offline-dependencies');
   const offline=await packOfflineDependencies({html:plan.rewrite(bundle.body.html,'index.html',addresses),baseUrl:'https://example.test/index.html',resources:plan.dependencies.map(dep=>({url:addresses.get(dep.path)!,contentType:dep.contentType,bytes:Buffer.from(plan.rewrite(Buffer.from(dep.bytes).toString(),dep.path,addresses))}))});
   expect(offline.embeddedUrls).toHaveLength(3);
-  const offlineSource=offline.html.slice(offline.html.indexOf('>')+1,offline.html.lastIndexOf('</script>'));
+  const {JSDOM}=await import('jsdom');const dom=new JSDOM(offline.html),document=dom.window.document;
+  let offlineSource=document.querySelector('script[type="module"]')!.textContent!;const modules=JSON.parse(document.querySelector('script[data-af="offline-modules"]')!.textContent!);for(const [key,source]of Object.entries(modules))offlineSource=offlineSource.replaceAll(JSON.stringify(key),JSON.stringify('data:text/javascript;base64,'+Buffer.from(source as string).toString('base64')));
   const executed=await import('data:text/javascript;base64,'+Buffer.from(offlineSource).toString('base64'));
-  expect(executed.answer.value).toBe(42);
+  expect(executed.answer.value).toBe(42);dom.window.close();
   await writeFile(join(root,'components/shared.js'),'import "./main.js";');
   const cyclic=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
   expect(cyclic.body.publicationBundle.files).toHaveLength(3);

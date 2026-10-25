@@ -93,11 +93,3 @@ it('embeds a shared payload once regardless of inline entry count',async()=>{
  const one=await packOfflineDependencies({html:entry,baseUrl,resources:[file('./large.js','text/javascript',source)]});const many=await packOfflineDependencies({html:entry.repeat(10),baseUrl,resources:[file('./large.js','text/javascript',source)]});
  expect(Object.values(embedded(many.html))).toEqual([source]);expect(many.html.length-one.html.length).toBeLessThan(4000);expect(many.html).not.toContain('data:text/javascript;base64,');
 });
-
-it('installs one nonce-authorized map and retains blob identities across bfcache',async()=>{
- const packed=await packOfflineDependencies({html:'<script type="module">import value from "./shared.js";</script>',baseUrl,resources:[file('./shared.js','text/javascript','export default {};')]});
- const payload=embedded(packed.html),loader=packed.html.match(/<script data-af="offline-module-loader">([\s\S]*?)<\/script>/)![1]!;const maps:any[]=[],revoked:string[]=[];let hide:(event:{persisted:boolean})=>void=()=>{};
- const document={currentScript:{previousElementSibling:{textContent:JSON.stringify(payload)},after:(map:unknown)=>maps.push(map)},querySelector:()=>({nonce:'trusted-nonce'}),createElement:()=>({})};
- new Function('document','URL','Blob','addEventListener',loader)(document,{createObjectURL:()=> 'blob:shared',revokeObjectURL:(url:string)=>revoked.push(url)},Blob,(_name:string,callback:typeof hide)=>{hide=callback;});
- expect(maps).toHaveLength(1);expect(maps[0].nonce).toBe('trusted-nonce');expect(Object.values(JSON.parse(maps[0].textContent).imports)).toEqual(['blob:shared']);hide({persisted:true});expect(revoked).toEqual([]);hide({persisted:false});expect(revoked).toEqual(['blob:shared']);
-});

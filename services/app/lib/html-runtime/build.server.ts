@@ -39,7 +39,10 @@ const portableEngine=engineBlock?blob(JSON.parse(engineBlock.textContent)):new U
 const chromeBlock=document.querySelector('[data-af="chrome"]');
 const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
 if(!config.publishOrigin&&document.currentScript.src)config.publishOrigin=new URL(document.currentScript.src,location.href).origin;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine}});document.currentScript.after(map);
+const sharedBlock=config.offline?document.querySelector('[data-af="offline-modules"]'):null;
+const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
+if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...sharedImports,'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine}});document.currentScript.after(map);
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(config.appOrigin&&!config.offline&&window.parent!==window){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
