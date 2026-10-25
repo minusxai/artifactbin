@@ -84,6 +84,7 @@ it('shows a visible selected-option checkmark and moves it with selection', () =
   const marker = (text: string) => option(root, text).querySelector<SVGSVGElement>('[data-selected-indicator]');
   expect(marker('Alpha')).not.toBeNull();
   expect(marker('Alpha')?.getAttribute('aria-hidden')).toBe('true');
+  expect(marker('Alpha')?.querySelector('path')?.getAttribute('d')).toBe('M20 6 9 17l-5-5');
   expect(marker('Beta')).toBeNull();
   option(root, 'Beta').click(); trigger(root).click();
   expect(marker('Alpha')).toBeNull();

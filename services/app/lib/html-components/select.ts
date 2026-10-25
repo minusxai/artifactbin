@@ -133,7 +133,7 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
         const indicator = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
         indicator.dataset.selectedIndicator = ''; indicator.setAttribute('viewBox', '0 0 24 24'); indicator.setAttribute('fill', 'none'); indicator.setAttribute('stroke', 'currentColor');
         indicator.setAttribute('stroke-width', '2'); indicator.setAttribute('stroke-linecap', 'round'); indicator.setAttribute('stroke-linejoin', 'round'); indicator.setAttribute('aria-hidden', 'true');
-        const check = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'path'); check.setAttribute('d', 'm5 12 4 4L19 6'); indicator.append(check); button.append(indicator);
+        const check = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'path'); check.setAttribute('d', 'M20 6 9 17l-5-5'); indicator.append(check); button.append(indicator);
       }
       const key = create ? `create:${selectKey(value)}` : selectKey(value);
       let id = this.optionIds.get(key); if (!id) { id = `${this.popupId}-option-${++this.nextOptionId}`; this.optionIds.set(key, id); }
