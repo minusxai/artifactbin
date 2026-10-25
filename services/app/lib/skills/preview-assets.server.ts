@@ -9,7 +9,7 @@ import {build} from 'esbuild';
 let cached:{source:string;output:Promise<string>}|undefined;
 export async function buildPreviewParser(source:string):Promise<string>{
  const scripts=path.resolve('skills/artifactbin/scripts');
- const graph=await Promise.all(['skills/artifactbin/scripts/preview-export.mjs','lib/html-runtime/portable-source.ts','lib/html-runtime/portable.ts','lib/html-runtime/apollo/storable.ts','../utils/src/sha256.ts'].map(file=>readFile(path.resolve(file),'utf8')));
+ const graph=await Promise.all(['lib/html-publication-bundle/runtime-module-imports.ts','skills/artifactbin/scripts/preview-export.mjs','lib/html-runtime/portable-source.ts','lib/html-runtime/portable.ts','lib/html-runtime/apollo/storable.ts','../utils/src/sha256.ts'].map(file=>readFile(path.resolve(file),'utf8')));
  const cacheKey=JSON.stringify([source,...graph]);
  if(cached?.source===cacheKey)return cached.output;
  const output=build({stdin:{contents:source,resolveDir:scripts,loader:'js'},bundle:true,write:false,minify:true,format:'esm',platform:'node',target:'node22'}).then(result=>{

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import {admitRuntimeModuleImports} from './runtime-module-imports';
 import {fileContentType} from '@artifactbin/contracts';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import parseCss from 'css-tree/parser';
@@ -8,7 +9,7 @@ import {parse, type DefaultTreeAdapterMap} from 'parse5';
 import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
-interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true}
+interface Link {start:number;end:number;value:string;kind:'asset'|'dataset';htmlAttribute?:true;runtimeModule?:true}
 function normalized(value:string):string{
  if(!value||value.includes('\\')||value.includes('\0')||value.startsWith('/')||value.split('/').includes('..'))throw Error('Invalid bundle path: '+value);
  const result=path.posix.normalize(value);if(result==='.'||result.startsWith('../'))throw Error('Invalid bundle path: '+value);return result;
@@ -19,13 +20,13 @@ function resolve(value:string,owner:string):string|null{
  const resolved=path.posix.normalize(path.posix.join(path.posix.dirname(owner),decoded));return normalized(resolved);
 }
 function links(source:string,css:boolean,js=false):Link[]{
- if(js)return parseImports(source)[0].flatMap(item=>{
+ if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap(item=>{
   if(item.d===-2)return [];
   if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome'||item.n==='@afbin/portable')return [];
-  if(item.n===undefined)throw Error('Computed module imports require an explicit absolute remote URL');
+  if(item.n===undefined){const admitted=runtime.find(entry=>entry.importStart===item.ss);if(!admitted)throw Error('Computed module imports require an explicit absolute remote URL');return [{start:admitted.argumentStart,end:admitted.argumentEnd,value:admitted.replacement,kind:'asset' as const,runtimeModule:true as const}];}
   if(!item.n.startsWith('.')&&!item.n.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(item.n))throw Error('Bare module imports require an import map or absolute remote URL');
   return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const}];
- });
+ });}
  if(css){
   const result:Link[]=[];
   let tree;try{tree=parseCss(source,{positions:true});}catch{tree=parseCss(source,{positions:true,context:'declarationList'});}
@@ -111,7 +112,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  };findBackends(backendDocument);
  for(const edit of backendEdits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+html.slice(edit.end);
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
- const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{const name=resolve(link.value,owner);return name?[{...link,path:name}]:[];});
+ const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{if(link.runtimeModule)return [];const name=resolve(link.value,owner);return name?[{...link,path:name}]:[];});
  const visit=(name:string,kind:'asset'|'dataset')=>{
   if(backendPaths.has(name))throw Error('Backend files cannot also be uploaded assets: '+name);
   if(visiting.has(name))throw Error('Dependency cycle: '+name);
@@ -126,8 +127,8 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  for(const name of files.keys())if(name!==entryPath&&!backendPaths.has(name)&&!visited.has(name))visit(name,'asset');
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
  return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
-  const edits=dependencies(source,owner,files.get(owner)?.contentType==='text/css');let result=source;
-  for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
+  const css=files.get(owner)?.contentType==='text/css',js=/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'');const guards=links(source,css,js).filter(link=>link.runtimeModule);const edits=[...dependencies(source,owner,css),...guards.map(link=>({...link,path:''}))];let result=source;
+  for(const edit of edits.sort((a,b)=>b.start-a.start)){if(edit.runtimeModule){result=result.slice(0,edit.start)+edit.value+result.slice(edit.end);continue;}const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=edit.htmlAttribute?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
 }
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */

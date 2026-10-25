@@ -27,7 +27,13 @@ An optional fifth argument names a JSON file containing `manifest` (additional
 relative file paths) and `mappings` (previous returned dependency receipts keyed
 by path). List other runtime-loaded files in that explicit manifest. The server
 parses and rewrites literal module imports. Computed imports and cyclic dependency
-graphs are refused.
+graphs are refused, except a private `const` arrow adapter used only in direct calls
+with literal `data:`/`blob:` URLs, a literal string-array URL join, or
+`URL.createObjectURL(new Blob([...literal strings], {type:"text/javascript"}))`.
+These runtime-created URLs are not project files. The saved import checks that its
+actual argument remains a `data:` or `blob:` string; relative, bare and unknown
+arguments, escaped adapters and coercible objects remain refused. This does not
+change the page CSP or make computed imports portable in an offline export.
 The snapshot is bounded to 99 files, 4 MB per file and 16 MB total decoded bytes.
 Remote URLs, absolute server paths and `ref:` dataset links remain unchanged.
 The server validates existing dataset permissions as usual.
