@@ -10,6 +10,13 @@ import {POST as reserve} from '@/app/api/artifacts/reservations/route';
 import * as identifiers from '@/lib/platform/ids';
 import {getDb} from '@/lib/platform';
 useAppHarness();
+it('replays concurrent requests for one batch as the same complete canonical pool',async()=>{
+ const token=await mintToken('synthetic_concurrent_reservations'),actor=identityForUser(token.userId,token.id);
+ const [first,second]=await Promise.all([reserveIds(actor,'batch_concurrent_0001'),reserveIds(actor,'batch_concurrent_0001')]);
+ expect(first).toHaveLength(100);expect(new Set(first).size).toBe(100);expect(second).toEqual(first);
+ const rows=(await(await getDb()).query<{id:string;ordinal:number}>('SELECT id,ordinal FROM artifact_id_registry WHERE owner=$1 AND batch=$2 ORDER BY ordinal',[token.userId,'batch_concurrent_0001'])).rows;
+ expect(rows.map(row=>row.ordinal)).toEqual(Array.from({length:100},(_,i)=>i));expect(rows.map(row=>row.id)).toEqual(first);
+});
 it('reserves an invisible batch and publishes the exact identity with durable replay',async()=>{
  const token=await mintToken('mxmx_test_reservations');const actor=identityForUser(token.userId, token.id);
  const ids=await reserveIds(actor,'batch_000000000001');expect(ids).toHaveLength(100);expect(new Set(ids).size).toBe(100);

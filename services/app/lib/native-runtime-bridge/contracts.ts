@@ -52,3 +52,15 @@ export interface NativeRuntimePreparationOptions {
  visibility:'private'|'unlisted'|'public';
  shares?:readonly {email:string;role:'viewer'|'commenter'|'editor'}[];
 }
+/** Every dependency retains an owned saved revision and exact remotely read bytes. */
+export interface NativeRuntimeObjectVerification {
+ path:string;
+ id:string;
+ revision:string;
+ expected:Uint8Array;
+ contentType:string;
+}
+export interface NativeRuntimeObjectVerificationPorts {
+ readOwned(id:string):Promise<{format:string;version:number;meta:Record<string,unknown>}|null>;
+ readObject(objectKey:string):Promise<Uint8Array>;
+}
