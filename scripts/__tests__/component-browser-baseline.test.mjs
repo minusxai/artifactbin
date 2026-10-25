@@ -13,7 +13,7 @@ import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
 const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
-const noAnimations=()=>({format:'frame-animation-settlement-v1',reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
+const noAnimations=()=>({format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
 async function capture(directory,implementation,color,overrides={}){
   const screenshot=`${implementation}.png`;
   const bytes=await sharp({create:{width:2,height:2,channels:4,background:color}}).png().toBuffer();
@@ -194,11 +194,35 @@ describe('reader screenshot contract',()=>{
     const dom=new JSDOM('<div id="before"></div><div id="during"></div>',{url:'http://localhost/reader'}),doc=dom.window.document;
     const before=doc.querySelector('#before'),during=doc.querySelector('#during');let release;
     const animation=target=>({animationName:'fade-up',playState:'running',effect:{target,getComputedTiming:()=>({duration:100,iterations:1})},finished:new Promise(resolve=>{if(target===during)release=resolve;else resolve();})});
-    doc.getAnimations=()=>[animation(before),animation(during)];const oldDocument=globalThis.document;globalThis.document=doc;
+    const animations=[animation(before),animation(during)];doc.getAnimations=()=>animations;const oldDocument=globalThis.document;globalThis.document=doc;
     try{
       const pending=settleFiniteFrameAnimations({timeoutMs:100});during.remove();
       const evidence=await pending;expect(evidence.counts.detached).toBe(1);expect(evidence.counts.finished).toBe(1);expect(evidence.timedOut).toEqual([]);
       release?.();
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('settles finite animations targeting connected shadow-root elements',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),host=dom.window.document.querySelector('#host'),shadow=host.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');shadow.append(target);
+    const animation={animationName:'shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    dom.window.document.getAnimations=()=>[];shadow.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(target.isConnected).toBe(true);
+      expect(evidence).toMatchObject({policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:1,uniqueAnimations:1,counts:{finished:1,detached:0},timedOut:[]});
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('resurveys animations after completion and waits for a chained finite animation',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),target=dom.window.document.querySelector('#host');let calls=0,releaseChained;
+    const first={animationName:'first',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    const chained={animationName:'chained',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:new Promise(resolve=>{releaseChained=resolve;})};
+    dom.window.document.getAnimations=()=>{calls++;if(calls===2)releaseChained();return calls<2?[first]:[first,chained];};
+    const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(calls).toBeGreaterThanOrEqual(3);
+      expect(evidence).toMatchObject({uniqueAnimations:2,counts:{finished:2,detached:0},timedOut:[]});
     }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
   });
 

@@ -16,50 +16,93 @@ function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>
 function browserResources(){return {stylesheets:[...document.querySelectorAll('link[rel~="stylesheet"]')].filter(link=>!link.disabled).map(link=>({url:link.href,loaded:link.sheet!==null}))};}
 /** No readiness promise here: diagnose stalled fonts before closing the reader. */
 function browserFontStatus(){return {status:document.fonts.status,loading:[...document.fonts].filter(face=>face.status==='loading').slice(0,30).map(face=>({family:face.family.slice(0,200),style:face.style,weight:face.weight,status:face.status}))};}
-/** Wait for finite animations already running in the actual document frame.
+/** Wait for finite animations in the actual document frame, including chained
+ * animations discoverable during the bounded two-frame quiescence check. It
+ * explicitly walks open shadow roots because Document.getAnimations() omits
+ * animations scoped to those roots in Chromium. Closed roots are unavailable.
  * This function is serialized into that frame by Playwright; keep it self-contained. */
 export async function settleFiniteFrameAnimations({timeoutMs=5000}={}) {
   const startedAtMs=performance.now();
   const reducedMotion=typeof globalThis.matchMedia==='function'&&globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const connected=target=>!!target&&(document.documentElement?.contains?document.documentElement.contains(target):target.isConnected!==false);
+  const connected=target=>!!target&&target.ownerDocument===document&&target.isConnected===true;
   const describe=animation=>{
     const timing=animation.effect?.getComputedTiming?.()??{};
     return {name:typeof animation.animationName==='string'?animation.animationName:'',playState:animation.playState,duration:Number.isFinite(timing.duration)?timing.duration:null,iterations:timing.iterations===Infinity?'infinite':Number.isFinite(timing.iterations)?timing.iterations:null};
   };
-  const all=typeof document.getAnimations==='function'?document.getAnimations({subtree:true}):[];
-  const finite=[],infinite=[],detached=[],paused=[];let alreadyFinished=0,alreadyIdle=0;
-  for(const animation of all){
-    const state=animation.playState;
-    if(state==='finished'){alreadyFinished++;continue;}
-    if(state==='idle'){alreadyIdle++;continue;}
-    if(state==='paused'){paused.push(describe(animation));continue;}
-    if(state!=='running'&&state!=='pending')continue;
-    const target=animation.effect?.target;
-    if(!connected(target)){detached.push(describe(animation));continue;}
-    const timing=animation.effect?.getComputedTiming?.()??{};
-    if(timing.iterations===Infinity||timing.duration===Infinity){infinite.push(describe(animation));continue;}
-    finite.push({animation,target,description:describe(animation),outcome:undefined});
-  }
-  let observer;
+  const seen=new Set(),finite=[],infinite=[],detached=[],paused=[],roots=new Set([document]);let alreadyFinished=0,alreadyIdle=0,observed=0,rounds=0;
   const markDetached=()=>{for(const record of finite)if(record.outcome===undefined&&!connected(record.target)){record.outcome='detached';record.resolve?.();}};
   const MutationObserverCtor=document.defaultView?.MutationObserver??globalThis.MutationObserver;
-  if(finite.length&&MutationObserverCtor&&document.documentElement){observer=new MutationObserverCtor(markDetached);observer.observe(document.documentElement,{childList:true,subtree:true});}
-  const waits=finite.map(record=>new Promise(resolve=>{
-    record.resolve=resolve;
-    if(record.outcome!==undefined){resolve();return;}
-    Promise.resolve(record.animation.finished).then(()=>{if(record.outcome===undefined)record.outcome='finished';resolve();},()=>{if(record.outcome===undefined)record.outcome='canceled';resolve();});
-  }));
-  let timer;let timedOut=false;
-  try{
-    if(waits.length){
-      const outcome=await Promise.race([Promise.all(waits).then(()=> 'settled'),new Promise(resolve=>{timer=setTimeout(()=>resolve('timeout'),timeoutMs);})]);
-      timedOut=outcome==='timeout';
-      markDetached();
+  const observers=[];
+  if(MutationObserverCtor&&document.documentElement){const observer=new MutationObserverCtor(markDetached);observer.observe(document.documentElement,{childList:true,subtree:true});observers.push(observer);}
+  let timedOut=false;
+  const remaining=()=>Math.max(0,timeoutMs-(performance.now()-startedAtMs));
+  const collect=()=>{
+    for(const root of [...roots])for(const node of root.querySelectorAll?.('*')??[])if(node.shadowRoot&&!roots.has(node.shadowRoot))roots.add(node.shadowRoot);
+    const all=[];
+    for(const root of roots)if(typeof root.getAnimations==='function')all.push(...root.getAnimations({subtree:true}));
+    observed+=all.length;
+    for(const animation of all){
+      if(seen.has(animation))continue;seen.add(animation);
+      const state=animation.playState;
+      if(state==='finished'){alreadyFinished++;continue;}
+      if(state==='idle'){alreadyIdle++;continue;}
+      if(state==='paused'){paused.push(describe(animation));continue;}
+      if(state!=='running'&&state!=='pending')continue;
+      const target=animation.effect?.target;
+      if(!connected(target)){detached.push(describe(animation));continue;}
+      const timing=animation.effect?.getComputedTiming?.()??{};
+      if(timing.iterations===Infinity||timing.duration===Infinity){infinite.push(describe(animation));continue;}
+      finite.push({animation,target,description:describe(animation),outcome:undefined});
+      const root=target.getRootNode?.();
+      if(root&&root!==document&&!roots.has(root)&&root.nodeType===11&&root.host){
+        roots.add(root);
+        if(MutationObserverCtor){const observer=new MutationObserverCtor(markDetached);observer.observe(root,{childList:true,subtree:true});observers.push(observer);}
+      }
     }
-  }finally{clearTimeout(timer);observer?.disconnect();}
+    return finite.filter(record=>record.outcome===undefined);
+  };
+  const waitForRecords=async records=>{
+    if(!records.length)return;
+    const waits=records.map(record=>new Promise(resolve=>{
+      record.resolve=resolve;
+      if(record.outcome!==undefined){resolve();return;}
+      Promise.resolve(record.animation.finished).then(()=>{if(record.outcome===undefined)record.outcome='finished';resolve();},()=>{if(record.outcome===undefined)record.outcome='canceled';resolve();});
+    }));
+    let timer;
+    try{
+      const outcome=await Promise.race([Promise.all(waits).then(()=> 'settled'),new Promise(resolve=>{timer=setTimeout(()=>resolve('timeout'),remaining());})]);
+      if(outcome==='timeout'){timedOut=true;markDetached();}
+    }finally{clearTimeout(timer);}
+  };
+  const waitOneFrame=()=>new Promise(resolve=>{
+    let timer;const done=value=>{clearTimeout(timer);resolve(value);};
+    timer=setTimeout(()=>done(false),remaining());
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>done(true));
+    else setTimeout(()=>done(true),0);
+  });
+  const twoFrameQuiescence=async()=>{
+    for(let i=0;i<2;i++){
+      if(remaining()<=0){timedOut=true;return;}
+      if(!await waitOneFrame()){timedOut=true;return;}
+    }
+  };
+  try{
+    while(!timedOut){
+      rounds++;
+      const pending=collect();
+      if(pending.length)await waitForRecords(pending);
+      if(timedOut)break;
+      await twoFrameQuiescence();
+      if(timedOut)break;
+      const before=seen.size;
+      const newlyPending=collect();
+      if(!newlyPending.length&&seen.size===before)break;
+      if(newlyPending.length)await waitForRecords(newlyPending);
+    }
+  }finally{for(const observer of observers)observer.disconnect();}
   const pending=finite.filter(record=>record.outcome===undefined).map(record=>record.description);
   const counts={finished:finite.filter(record=>record.outcome==='finished').length,canceled:finite.filter(record=>record.outcome==='canceled').length,detached:detached.length+finite.filter(record=>record.outcome==='detached').length};
-  return {format:'frame-animation-settlement-v1',reducedMotion,startedAtMs,completedAtMs:performance.now(),elapsedMs:performance.now()-startedAtMs,observed:all.length,alreadyFinished,alreadyIdle,paused,infinite,counts,timedOut:timedOut?pending:[]};
+  return {format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:roots.size-1,reducedMotion,startedAtMs,completedAtMs:performance.now(),elapsedMs:performance.now()-startedAtMs,observed,uniqueAnimations:seen.size,rounds,alreadyFinished,alreadyIdle,paused,infinite,counts,timedOut:timedOut?(pending.length?pending:[{name:'<quiescence-check>',playState:'running',duration:null,iterations:null}]):[]};
 }
 /** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
 function browserState() {
