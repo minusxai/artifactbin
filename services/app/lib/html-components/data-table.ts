@@ -7,6 +7,7 @@ import {
   parseTableHeight,
   resolveColumns,
   sortRows,
+  gridGeometry,
   type SortSpec,
 } from "@/lib/story-ui/data-table";
 import { compareTable, parseMetricSpecs } from "@/lib/story-ui/compare";
@@ -14,18 +15,25 @@ import {
   nextTableSort,
   TABLE_ROW_HEIGHT,
   tableRowIdentities,
-  tableWindow,
+  measuredTableWindow,
   TableLoader,
   type TableData,
   type TableSource,
   type TableCellRenderer,
   type TableTemplate,
 } from "./table-model";
+const DATA_TABLE_CLASSES = {
+  table: "af-data-table__table",
+  header: "af-data-table__header-cell",
+  cell: "af-data-table__cell",
+} as const;
 export interface TableColumnIdentity {
   afId: string;
   id?: string;
 }
 interface DataTableContract {
+  /** Replacing data retains keyed DOM, but invalidates and remeasures its geometry
+   * even when the observed rows have not resized. Header line height follows its font scale. */
   data: TableData;
   columns: unknown;
   columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
@@ -76,6 +84,13 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private error = "";
   private table?: HTMLTableElement;
   private viewport?: HTMLDivElement;
+  private viewportObserver?: ResizeObserver;
+  private rowObserver?: ResizeObserver;
+  private rowHeights = new Map<string, number>();
+  private measuredHeaderWidths: number[] | null = null;
+  private columnSignature = "";
+  private virtualized = false;
+  private virtualizationPending = false;
   private footer?: HTMLDivElement;
   private rows = new Map<string, HTMLTableRowElement>();
   private comparisonRows = new Map<string, HTMLTableRowElement>();
@@ -83,6 +98,12 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private ids = new Map<string, string>();
   private serial = 0;
   private cellModes = new WeakMap<HTMLElement, unknown>();
+  private invalidateMeasurements() {
+    this.rowHeights.clear();
+    // Observers do not redeliver unchanged retained nodes after a cache reset.
+    // Reobserve them during render so every rendered row obtains a fresh size.
+    this.rowObserver?.disconnect();
+  }
   get data() {
     return this.value;
   }
@@ -92,6 +113,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
+    this.invalidateMeasurements();
     this.showRowCount = Boolean(
       this.value.truncated ||
         (this.value.totalRows ?? 0) > this.value.rows.length,
@@ -244,6 +266,10 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     this.loader.cancel();
     ++this.requestEpoch;
     this.pending = false;
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = undefined;
+    this.rowObserver?.disconnect();
+    this.rowObserver = undefined;
   }
   attributeChangedCallback(
     name: string,
@@ -337,6 +363,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       this.viewport = document.createElement("div");
       this.viewport.dataset.slot = "table-scroll";
       this.table = document.createElement("table");
+      this.table.className = DATA_TABLE_CLASSES.table;
       this.table.setAttribute("data-mx-kit-table", "");
       this.table.createTHead().insertRow();
       this.table.createTBody();
@@ -360,6 +387,10 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         )
           void this.loadMore();
       });
+    }
+    if (!this.viewportObserver && typeof ResizeObserver !== "undefined") {
+      this.viewportObserver = new ResizeObserver(() => this.render());
+      this.viewportObserver.observe(this.viewport!);
     }
     const table = this.table,
       body = table.tBodies[0]!,
@@ -388,6 +419,19 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     }
     table.dataset.layout = layout;
     if (this.transpose) {
+      table.style.display = "";
+      table.tHead!.style.display = "";
+      table.tHead!.rows[0]!.style.display = "";
+      table.tHead!.rows[0]!.style.gridTemplateColumns = "";
+      body.style.display = "";
+      body.style.height = "";
+      body.style.position = "";
+      for (const row of this.comparisonRows.values()) {
+        row.style.display = "";
+        row.style.gridTemplateColumns = "";
+        row.style.position = "";
+        row.style.transform = "";
+      }
       const model = compareTable({
         ...this.data,
         header: this.header,
@@ -407,6 +451,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
           th = document.createElement("th");
           head.append(th);
         }
+        th.className = DATA_TABLE_CLASSES.header;
         th.scope = "col";
         th.textContent = title;
       });
@@ -425,16 +470,20 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         let th = tr.cells[0];
         if (!th) {
           th = document.createElement("th");
+          th.className = DATA_TABLE_CLASSES.header;
           th.scope = "row";
           tr.append(th);
         }
+        th.className = DATA_TABLE_CLASSES.header;
         th.textContent = metric.title;
         metric.cells.forEach((cell, index) => {
           let td = tr!.cells[index + 1];
           if (!td) {
             td = document.createElement("td");
+            td.className = DATA_TABLE_CLASSES.cell;
             tr!.append(td);
           }
+          td.className = DATA_TABLE_CLASSES.cell;
           td.setAttribute(
             "data-af-id",
             this.identity(`comparison-cell:${metric.col}:${index}`),
@@ -455,6 +504,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         if (this.edge) {
           let cell = tr.cells[length - 1];
           if (!cell) cell = tr.insertCell();
+          cell.className = DATA_TABLE_CLASSES.cell;
           cell.textContent = metric.edge
             ? metric.edge.lead + metric.edge.rest
             : "";
@@ -471,6 +521,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
           row.remove();
       if (!model.items.length) {
         const td = body.insertRow().insertCell();
+        td.className = DATA_TABLE_CLASSES.cell;
         td.colSpan = Math.max(1, headerTitles.length);
         td.textContent = "no rows";
       }
@@ -488,6 +539,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     } catch (e) {
       body.replaceChildren();
       const td = body.insertRow().insertCell();
+      td.className = DATA_TABLE_CLASSES.cell;
       td.setAttribute("role", "alert");
       td.textContent = (e as Error).message;
       return;
@@ -498,6 +550,15 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       this.data.columns,
       this.data.rows,
     );
+    const signature = columns.map((column) => `${column.col}:${column.width ?? ""}`).join("\u0000");
+    if (signature !== this.columnSignature) {
+      this.columnSignature = signature;
+      this.measuredHeaderWidths = null;
+      this.invalidateMeasurements();
+      this.virtualized = false;
+    }
+    table.style.display = this.virtualized ? "block" : "";
+    table.tHead!.style.display = this.virtualized ? "block" : "";
     const wanted = new Set(columns.map((c) => c.col));
     for (const [key, th] of this.heads)
       if (!wanted.has(key)) {
@@ -508,6 +569,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       let th = this.heads.get(column.col);
       if (!th) {
         th = document.createElement("th");
+        th.className = DATA_TABLE_CLASSES.header;
         th.scope = "col";
         th.onclick = () => this.cycleSort(column.col);
         th.tabIndex = 0;
@@ -519,6 +581,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         };
         this.heads.set(column.col, th);
       }
+      th.className = DATA_TABLE_CLASSES.header;
       const identity = this.columnIdentities[column.col];
       if (identity) th.setAttribute("data-af-id", identity.afId);
       else th.removeAttribute("data-af-id");
@@ -544,6 +607,11 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       if (head.cells[columns.indexOf(column)] !== th)
         head.insertBefore(th, head.cells[columns.indexOf(column)] ?? null);
     }
+    const geometry = gridGeometry(columns, this.measuredHeaderWidths);
+    head.style.display = this.virtualized ? "grid" : "";
+    head.style.gridTemplateColumns = this.virtualized ? geometry.template : "";
+    head.style.width = this.virtualized ? "100%" : "";
+    head.style.minWidth = this.virtualized && geometry.minWidth ? `${geometry.minWidth}px` : "";
     const byRow = new Map<TableData["rows"][number], string[]>();
     this.data.rows.forEach((row, index) => {
       const queue = byRow.get(row) ?? [];
@@ -554,23 +622,19 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       ? this.data.rows
       : sortRows(this.data.rows, this.sort);
     const orderedKeys = ordered.map((row) => byRow.get(row)!.shift()!);
-    const window = tableWindow(
-      ordered.length,
-      this.viewport!.scrollTop,
-      parseTableHeight(this.height),
-      TABLE_ROW_HEIGHT,
-    );
+    const window = this.virtualized
+      ? measuredTableWindow(
+          orderedKeys.map((key) => this.rowHeights.get(key) ?? TABLE_ROW_HEIGHT),
+          this.viewport!.scrollTop,
+          this.viewport!.clientHeight || parseTableHeight(this.height),
+        )
+      : { start: 0, end: Math.min(50, ordered.length), total: 0, offsets: [] as number[] };
+    body.style.display = this.virtualized ? "block" : "";
+    body.style.height = this.virtualized ? `${window.total}px` : "";
+    body.style.position = this.virtualized ? "relative" : "";
+    body.style.width = this.virtualized ? "100%" : "";
     const active = new Set<string>();
-    const spacer = (height: number) => {
-      const tr = document.createElement("tr");
-      tr.setAttribute("aria-hidden", "true");
-      const td = tr.insertCell();
-      td.colSpan = Math.max(1, columns.length);
-      td.style.cssText = `height:${height}px;padding:0;border:0`;
-      return tr;
-    };
     const desired: Node[] = [];
-    if (window.before) desired.push(spacer(window.before));
     for (let i = window.start; i < window.end; i++) {
       const row = ordered[i]!,
         key = orderedKeys[i]!;
@@ -583,12 +647,37 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         this.rows.set(key, tr);
       }
       tr.setAttribute("aria-rowindex", String(i + 2));
+      tr.style.display = this.virtualized ? "grid" : "";
+      tr.style.gridTemplateColumns = this.virtualized ? geometry.template : "";
+      tr.style.width = this.virtualized ? "100%" : "";
+      tr.style.minWidth = this.virtualized && geometry.minWidth ? `${geometry.minWidth}px` : "";
+      tr.style.position = this.virtualized ? "absolute" : "";
+      tr.style.top = this.virtualized ? "0px" : "";
+      tr.style.left = this.virtualized ? "0px" : "";
+      tr.style.transform = this.virtualized ? `translateY(${window.offsets[i]}px)` : "";
+      if (this.virtualized && !this.rowObserver && typeof ResizeObserver !== "undefined") {
+        this.rowObserver = new ResizeObserver((entries) => {
+          let changed = false;
+          for (const entry of entries) {
+            const row = entry.target as HTMLTableRowElement;
+            const key = row.dataset.rowKey;
+            const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+            if (row.isConnected && key && height > 0 && this.rowHeights.get(key) !== height) {
+              this.rowHeights.set(key, height);
+              changed = true;
+            }
+          }
+          if (changed) this.render();
+        });
+      }
+      if (this.virtualized) this.rowObserver?.observe(tr);
       for (const column of columns) {
         let td = Array.from(tr.cells).find(
           (c) => c.dataset.column === column.col,
         );
         if (!td) {
           td = document.createElement("td");
+          td.className = DATA_TABLE_CLASSES.cell;
           td.dataset.column = column.col;
           td.setAttribute(
             "data-af-id",
@@ -597,6 +686,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
           if (tr.cells[columns.indexOf(column)] !== td)
             tr.insertBefore(td, tr.cells[columns.indexOf(column)] ?? null);
         }
+        td.className = DATA_TABLE_CLASSES.cell;
         td.style.textAlign = column.align;
         td.style.fontVariantNumeric =
           column.type === "number" ? "tabular-nums" : "";
@@ -743,7 +833,6 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       desired.push(tr);
     }
     // Preserve nodes and focused controls by moving only rows whose order changed.
-    if (window.after) desired.push(spacer(window.after));
     let cursor = body.firstChild;
     for (const node of desired) {
       if (node === cursor) cursor = cursor.nextSibling;
@@ -754,13 +843,30 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       cursor.remove();
       cursor = next;
     }
-    for (const [key] of this.rows) if (!active.has(key)) this.rows.delete(key);
+    for (const [key, row] of this.rows)
+      if (!active.has(key)) {
+        this.rowObserver?.unobserve(row);
+        this.rows.delete(key);
+      }
     if (focused?.isConnected && this.ownerDocument.activeElement !== focused)
       focused.focus({ preventScroll: true });
     if (!ordered.length) {
       const td = body.insertRow().insertCell();
+      td.className = DATA_TABLE_CLASSES.cell;
       td.colSpan = Math.max(1, columns.length);
       td.textContent = this.pending ? "loading rows…" : "no rows";
+    }
+    if (!this.virtualized && !this.virtualizationPending) {
+      const widths = columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
+      if (widths.some((width) => width > 0)) this.measuredHeaderWidths = widths;
+      this.virtualizationPending = true;
+      queueMicrotask(() => {
+        this.virtualizationPending = false;
+        if (this.isConnected) {
+          this.virtualized = true;
+          this.render();
+        }
+      });
     }
     table.setAttribute("aria-colcount", String(columns.length));
     table.setAttribute(
@@ -801,7 +907,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     }
   }
 }
-const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem}af-data-table [data-slot=table-scroll]{overflow:auto;position:relative;min-height:0}af-data-table table{width:100%;border-collapse:collapse}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th{padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td{position:relative;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);height:${TABLE_ROW_HEIGHT}px;box-sizing:border-box}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
+const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;min-width:0;box-sizing:border-box;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem;line-height:1.4285714285714286}af-data-table[data-af-fill]{height:100%}af-data-table [data-slot=table-scroll]{flex:1 1 auto;width:100%;overflow:auto;position:relative;min-height:0}af-data-table table.af-data-table__table{display:table;width:100%;max-width:none;border-collapse:collapse;font-size:inherit;line-height:inherit}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th.af-data-table__header-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th.af-data-table__header-cell:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td.af-data-table__cell{position:relative;min-width:0;overflow:hidden;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);box-sizing:border-box;vertical-align:middle}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
 export function registerDataTable(
   registry: CustomElementRegistry = customElements,
   document: Document = globalThis.document,
