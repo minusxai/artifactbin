@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import {nativeRelationTimestamp} from "./relation-timestamps";
 import {
   parseHtmlNodeAnchor,
   type Queryable,
@@ -72,7 +73,7 @@ function normalized(row: Record<string, unknown>) {
     Object.entries(row).map(([key, value]) => [
       key,
       value !== null && dates.has(key)
-        ? new Date(String(value)).toISOString()
+        ? nativeRelationTimestamp(value instanceof Date ? value : String(value))
         : key === "bytes" || (key === "change_seq" && value !== null)
           ? Number(value)
           : value,
