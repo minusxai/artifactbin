@@ -35,9 +35,9 @@ describe('af-icon', () => {
     const {root, svg} = fixture('data-af-id="icon-anchor" name="circle-check" aria-label="Completed"');
     expect(svg.getAttribute('width')).toBe('16');
     expect(root.dataset.afId).toBe('icon-anchor');
-    expect(getComputedStyle(root).display).toBe('inline');
-    expect(getComputedStyle(svg).display).toBe('inline-block');
-    expect(getComputedStyle(svg).verticalAlign).toBe('-0.125em');
+    expect(getComputedStyle(root).display).toBe('inline-block');
+    expect(getComputedStyle(root).verticalAlign).toBe('-0.125em');
+    expect(getComputedStyle(svg).display).toBe('block');
     expect(svg.getAttribute('role')).toBe('img');
     expect(svg.getAttribute('aria-label')).toBe('Completed');
   });

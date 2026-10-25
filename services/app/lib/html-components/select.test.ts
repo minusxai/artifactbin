@@ -103,6 +103,7 @@ it('aligns the Select control and gives the focused search a translucent ring', 
   const search = root.querySelector<HTMLInputElement>('[role=searchbox]')!;
   expect(document.activeElement).toBe(search);
   expect(styles).toContain('af-select button:focus-visible,af-select input:focus-visible{outline:none;outline-offset:0;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,light-dark(#777,#aaa)) 50%,transparent)}');
+  expect(styles).toContain('af-select .af-select-trigger:focus-visible{box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,light-dark(#777,#aaa)) 50%,transparent),0 1px 2px #0000000d}');
 });
 it('normalizes malformed options and keeps typed duplicate values separate', () => {
   const root = fixture(); root.setAttribute('options', 'null'); root.options = null as never;
