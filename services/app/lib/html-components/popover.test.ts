@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,expect,it} from 'vitest';
-import {AfPopover,registerPopover} from './popover';
+import {AfPopover,popoverStyles,registerPopover} from './popover';
 import {registerTooltip} from './tooltip';
 registerPopover();
 afterEach(() => document.body.replaceChildren());
@@ -36,6 +36,17 @@ it('styles only a nested native trigger button like its text-only host and prese
  expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
  expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
  trigger.focus(); trigger.click(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger);
+});
+it('keeps the floating panel text rhythm and border inherited from its source story surface', () => {
+ const {root,content} = fixture(); root.style.color='rgb(55, 72, 54)';
+ const panelStyle=getComputedStyle(content);
+ expect(panelStyle.lineHeight).toBe('1.5');
+ expect(popoverStyles).toContain('border:1px solid currentColor');
+});
+it('leaves a nested native trigger button to its browser focus treatment', () => {
+ const {root,trigger} = fixture(); root.style.setProperty('--ring','rgb(1, 2, 3)'); trigger.focus();
+ expect(getComputedStyle(trigger).outlineColor).not.toBe('rgb(1, 2, 3)');
+ expect(popoverStyles).not.toContain('af-popover-trigger>button:focus-visible');
 });
 it('waits for author-controlled state and supports canceled intent', () => {
  const {root,trigger,content} = fixture('open'); trigger.click(); expect(content.hidden).toBe(false);

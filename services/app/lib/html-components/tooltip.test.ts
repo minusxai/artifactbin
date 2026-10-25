@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {afterEach,expect,it,vi} from 'vitest';
-import {AfTooltip,registerTooltip} from './tooltip';
+import {AfTooltip,registerTooltip,tooltipStyles} from './tooltip';
 registerTooltip();
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); });
 function fixture(attrs = '') {
@@ -21,6 +21,11 @@ it('styles only a nested native tooltip trigger like its host and preserves keyb
  }
  expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
  trigger.focus(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger); expect(content.getAttribute('role')).toBe('tooltip');
+});
+it('leaves a nested native trigger button to its browser focus treatment', () => {
+ const {root,trigger}=fixture(); root.style.setProperty('--ring','rgb(1, 2, 3)'); trigger.focus();
+ expect(getComputedStyle(trigger).outlineColor).not.toBe('rgb(1, 2, 3)');
+ expect(tooltipStyles).not.toContain('af-tooltip-trigger>button:focus-visible');
 });
 it('allows hovering the tooltip itself and preserves controlled/canceled visibility', () => {
  vi.useFakeTimers(); const {root,trigger,content} = fixture('default-open');
