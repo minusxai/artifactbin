@@ -18,6 +18,8 @@ export type Variables = AfJsonObject;
 interface QueryOptions {
   /** Clear remote fields before each read; loading distinguishes this from a completed null answer. */
   clearOnRefresh?:boolean;
+  /** Retain results only for trusted same-session data invalidations; reconnects still clear. */
+  preserveOnDataRefresh?:boolean;
   query: DocumentNode;
   variables?: Variables;
 }
@@ -128,10 +130,11 @@ export class RemoteUnreachable extends Error {
   }
 }
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
+export type QueryInvalidation = "data" | "authority";
 export interface RemotePort {
   /** Invalidation/reconnection signal only; never carries results or credentials. */
   /** May notify synchronously; the returned cleanup is owned exactly once, even if the observer closes during setup. */
-  subscribe?(listener:()=>void):()=>void;
+  subscribe?(listener:(reason?:QueryInvalidation)=>void):()=>void;
   online(): boolean;
   /** Queries alone may await a bounded, already pending connection. The returned sender rejects after cancellation. */
   whenReady?(): Promise<RemotePort["execute"] | null>;

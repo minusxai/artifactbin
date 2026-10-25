@@ -165,6 +165,10 @@ function migrationPilotMounts(env={}) {
 
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
   const pilotArgs=migrationPilotMounts(env);
+  const batchRoot=env.NATIVE_MIGRATION_BATCH__ROOT,batchOutput=env.NATIVE_MIGRATION_BATCH__OUTPUT;
+  const batchRequested=batchRoot!==undefined||batchOutput!==undefined;
+  if(batchRequested&&(servers!==1||env.NATIVE_MIGRATION_PILOT__INPUT||[batchRoot,batchOutput].some(value=>typeof value!=='string'||!value.startsWith('/')||/[:\\\n\r]/.test(value))))throw Error('Migration batch requires one server and explicit isolated input/output directories');
+  const batchArgs=batchRequested?['-v',`${batchRoot}:/pilot-batch:ro`,'-v',`${batchOutput}:/pilot-batch-output:rw`,'-e','NATIVE_MIGRATION_BATCH__ROOT=/pilot-batch','-e','NATIVE_MIGRATION_BATCH__OUTPUT=/pilot-batch-output']:[];
   const output=env.COMPONENT_BASELINE__OUTPUT;
   const input=env.COMPONENT_BASELINE__INPUT;
   if(input!==undefined&&(typeof input!=='string'||!input.startsWith('/')||/[:\\\n\r]/.test(input)))throw Error('Component capture input requires an explicit absolute private path');
@@ -182,7 +186,7 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${volume}:${INSIDE.deps}`,
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
     '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
-    ...pilotArgs,
+    ...pilotArgs, ...batchArgs,
     ...componentArgs,
     '-w', INSIDE.src,
     image,

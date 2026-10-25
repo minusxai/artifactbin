@@ -510,25 +510,28 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         th = document.createElement("th");
         th.scope = "col";
         th.onclick = () => this.cycleSort(column.col);
-        const button = document.createElement("button");
-        button.type = "button";
-        th.append(button);
+        th.tabIndex = 0;
+        th.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            this.cycleSort(column.col);
+          }
+        };
         this.heads.set(column.col, th);
       }
-      const button = th.firstElementChild!;
       const identity = this.columnIdentities[column.col];
       if (identity) th.setAttribute("data-af-id", identity.afId);
       else th.removeAttribute("data-af-id");
       if (identity?.id) th.id = identity.id;
       else th.removeAttribute("id");
-      button.textContent = column.title;
+      th.textContent = column.title;
       if (this.sort?.col === column.col) {
         const indicator = document.createElement("span");
         indicator.setAttribute("aria-hidden", "true");
         indicator.textContent = this.sort.dir === "asc" ? " ▲" : " ▼";
-        button.append(indicator);
+        th.append(indicator);
       }
-      button.setAttribute("aria-label", `Sort by ${column.title}`);
+      th.setAttribute("aria-label", `Sort by ${column.title}`);
       th.setAttribute(
         "aria-sort",
         this.sort?.col === column.col
@@ -798,7 +801,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     }
   }
 }
-const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem}af-data-table [data-slot=table-scroll]{overflow:auto;position:relative;min-height:0}af-data-table table{width:100%;border-collapse:collapse}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th{padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}af-data-table td{position:relative;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);height:${TABLE_ROW_HEIGHT}px;box-sizing:border-box}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
+const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem}af-data-table [data-slot=table-scroll]{overflow:auto;position:relative;min-height:0}af-data-table table{width:100%;border-collapse:collapse}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th{padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td{position:relative;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);height:${TABLE_ROW_HEIGHT}px;box-sizing:border-box}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
 export function registerDataTable(
   registry: CustomElementRegistry = customElements,
   document: Document = globalThis.document,

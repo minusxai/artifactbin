@@ -73,9 +73,13 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
       }catch{ /* Unparseable/external stylesheet evidence stays unproved. */ }
     }
     const requested=new Map();
-    const add=(element,text)=>{
-      if(!text.trim()||!element.getClientRects().length)return;
+    const add=(element,text,textNode)=>{
+      if(!text.trim())return;
       const css=document.defaultView.getComputedStyle(element);if(css.visibility==='hidden')return;
+      // display:contents identity spans have no element box; their text still paints.
+      let visible=!!element.getClientRects().length;
+      if(!visible&&textNode&&css.display==='contents'){const range=document.createRange();try{range.selectNodeContents(textNode);visible=!!range.getClientRects().length;}finally{range.detach();}}
+      if(!visible)return;
       const family=clean(css.fontFamily.split(',')[0]);const key=[family,css.fontStyle,css.fontWeight].join('|');
       const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
     };
@@ -83,7 +87,7 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
     for(let index=0;index<textRoots.length;index++){
       const root=textRoots[index];if(!root||seenTextRoots.has(root))continue;seenTextRoots.add(root);
       const walk=document.createTreeWalker(root,document.defaultView.NodeFilter.SHOW_TEXT);
-      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'');
+      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'',node);
       try{for(const input of root.querySelectorAll?.('input,textarea')||[])if(input.value)add(input,input.value);}catch{}
       try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)textRoots.push(element.shadowRoot);}catch{}
     }
@@ -136,13 +140,14 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   const browserVersion=browser.version?.()||'unreported';
   const fixtureIds=fixtures.map(fixture=>fixture.id);
   const tasks=fixtures.flatMap(fixture=>themes.flatMap(theme=>viewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
-  const captures=new Array(tasks.length),failures=[];
+  const captures=new Array(tasks.length),failures=[],taintedFixtures=new Set();
   // A failed new run must never archive a stale full verdict as current evidence.
   await Promise.all([`${implementation}-captures.json`,`${implementation}-partial-captures.json`].map(name=>rm(path.join(output,name),{force:true})));
   await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,fixtureIds,completed:0,failures:[]}));
   async function capture({fixture,theme,viewport,state},workerBrowser) {
+    if(taintedFixtures.has(fixture.id)){const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase:'cleanup-blocked',message:'Prior state cleanup failed; fixture state is not proven restored',diagnostics:{phase:'cleanup-blocked'}};failures.push(failure);throw Error(failure.message);}
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
-    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
+    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction,mounted,captureFailure;
     const step=async(name,work,budget=captureStepTimeoutMs)=>{
       phase=name;await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-progress.json`),JSON.stringify({phase,fixture:fixture.id,state:state.id,theme,viewport,sourceRevision}));
       let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`Reader ${name} exceeded ${budget}ms`)),budget);})]);}finally{clearTimeout(timer);}
@@ -161,7 +166,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
       page.on('response',response=>{if(response.request().resourceType()==='font')trackResponse(fontPending,response,async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}});});
-      const mounted=await step('mount',()=>mount({fixture,theme,viewport,state,page}));frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
+      mounted=await step('mount',()=>mount({fixture,theme,viewport,state,page}));frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
       await step('ready',()=>ready?.(),readyTimeoutMs);
@@ -214,8 +219,18 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       try{if(frame)diagnostics.fontStatus=await step('failure-font-status',()=>frame.evaluate(browserFontStatus),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.fontStatusError=diagnosticText(error.message);}
       failures.push(failure);
       try{await writeFile(path.join(output,stem+'.json'),JSON.stringify(failure,null,2));}catch(error){diagnostics.evidenceWriteError=diagnosticText(error.message);}
-      throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
-    } finally {await context.close();}
+      captureFailure=new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});throw captureFailure;
+    } finally {
+      try{
+        if(mounted?.cleanup)await step('cleanup',()=>mounted.cleanup());
+      }catch(cause){
+        const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase:'cleanup',message:diagnosticText(cause.message),diagnostics:{phase:'cleanup'}};
+        failures.push(failure);taintedFixtures.add(fixture.id);
+        try{await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-cleanup-failure.json`),JSON.stringify(failure,null,2));}catch(error){failure.diagnostics.evidenceWriteError=diagnosticText(error.message);}
+        if(captureFailure)captureFailure.message+=`; cleanup failed: ${diagnosticText(cause.message)}`;
+        else throw new Error(`Reader cleanup failed: ${diagnosticText(cause.message)}`,{cause});
+      }finally{await context.close();}
+    }
   }
   let next=0;const taskErrors=[];
   const workers=await Promise.allSettled(Array.from({length:Math.min(2,workerBrowsers.length,tasks.length)},async(_,workerIndex)=>{

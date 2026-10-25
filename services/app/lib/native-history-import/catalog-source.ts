@@ -24,6 +24,13 @@ function mapped(
     throw Error("native_catalog_identity_unmapped");
   return map[value]!;
 }
+/** Canonical actor-token absence may be null or an empty sentinel; owner/user IDs stay strict. */
+function mappedTokenActor(
+  map: Readonly<Record<string, string>>,
+  value: unknown,
+): string | null {
+  return value === "" ? null : mapped(map, value);
+}
 /** Only known identity-bearing fields are translated. Schemas, row bytes,
  * object keys, SQL and arbitrary literal strings are never guessed or rewritten. */
 function nativeCatalogMappedMetadata(
@@ -141,7 +148,7 @@ export async function verifyNativeCanonicalDatasets(
         revision: row.revision,
         policy: nativeCatalogMappedPolicy(row.policy, p.identities),
         actorUserId: mapped(p.identities.users, row.actor_user_id),
-        actorTokenId: mapped(p.identities.tokens, row.actor_token_id),
+        actorTokenId: mappedTokenActor(p.identities.tokens, row.actor_token_id),
         createdAt: iso(row.created_at),
       }))
       .sort((a, b) => a.revision - b.revision);
@@ -213,7 +220,7 @@ export async function verifyNativeCanonicalDatasets(
       const row = versions.get(version.version)!;
       if (
         mapped(p.identities.users, row.actor_user_id) !== version.actorUserId ||
-        mapped(p.identities.tokens, row.actor_token_id) !== version.actorTokenId
+        mappedTokenActor(p.identities.tokens, row.actor_token_id) !== version.actorTokenId
       )
         throw Error("native_catalog_source_actor");
     }

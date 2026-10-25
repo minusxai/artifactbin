@@ -526,3 +526,14 @@ it('bounds an unresolved font evaluation and retains the specific camera phase',
  const run=captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded-font',states:[{id:'initial',actions:[]}]}]});
  try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded font wait')),200))]);expect(error.message).toContain('Reader fonts-ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'fonts-ready'});}finally{cancel();await run.catch(()=>{});}
 });
+
+it('proves fonts on visible text inside display-contents identities without counting hidden text',async()=>{
+ const dom=new JSDOM('<style>@font-face{font-family:"Body Font";font-style:normal;font-weight:400;src:url(/body.woff2)}</style><span id="visible" style="display:contents;font-family:Body Font;font-weight:400">Visible identity text</span><span id="hidden" style="display:none;font-family:Body Font">Hidden text</span><span id="invisible" style="display:contents;visibility:hidden;font-family:Body Font">Invisible text</span>',{url:'http://localhost/reader'});
+ const rule=dom.window.document.styleSheets[0].cssRules[0],get=rule.style.getPropertyValue.bind(rule.style);rule.style.getPropertyValue=key=>key==='src'?'url(/body.woff2)':get(key);
+ const prior=globalThis.document,face={family:'Body Font',style:'normal',weight:'400',status:'loaded',unicodeRange:'U+0-10FFFF'},fonts=[face];fonts.ready=Promise.resolve();fonts.load=async()=>[face];Object.defineProperty(dom.window.document,'fonts',{value:fonts});
+ dom.window.HTMLElement.prototype.getClientRects=()=>[];
+ dom.window.document.createRange=()=>{let node;return {selectNodeContents:value=>{node=value;},getClientRects:()=>node.parentElement.id==='hidden'?[]:[{}],detach:()=>{}};};
+ globalThis.document=dom.window.document;
+ try{const evidence=await fontLoadingEvidence();expect(evidence.used).toMatchObject([{family:'Body Font',weight:'400',text:'Visible identity text',loaded:true}]);expect(fontByteProof({...evidence,resources:[{url:'http://localhost/body.woff2',status:200,sha256:'d'.repeat(64)}]})).toEqual({used:[{family:'Body Font',style:'normal',weight:'400',hashes:['d'.repeat(64)]}],errors:[]});expect(fontByteProof({...evidence,resources:[]} ).errors).toContain('Used declared font Body Font normal 400 has no verified response bytes');}
+ finally{globalThis.document=prior;dom.window.close();}
+});

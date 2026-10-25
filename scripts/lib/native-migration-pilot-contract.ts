@@ -38,5 +38,5 @@ export interface NativePreparedPilotStore {
 }
 
 export interface NativeImportedPilotProbe {
- mountImportedPilot(context:{page:unknown;frame:unknown;state:NativeMigrationPilotInput['states'][number];viewport:{width:number;height:number};regression:boolean;server:string;reader:NativePreparedPilotStore['reader'];output:string;authenticate:(email:string,page?:unknown)=>Promise<void>}):Promise<{ready?:()=>Promise<void>;performAction?:(action:unknown)=>Promise<void>;afterAction?:(action:unknown)=>Promise<void>}>;
+ mountImportedPilot(context:{page:unknown;frame:unknown;state:NativeMigrationPilotInput['states'][number];viewport:{width:number;height:number};regression:boolean;server:string;reader:NativePreparedPilotStore['reader'];output:string;authenticate:(email:string,page?:unknown)=>Promise<void>}):Promise<{ready?:()=>Promise<void>;performAction?:(action:unknown)=>Promise<void>;afterAction?:(action:unknown)=>Promise<void>;cleanup?:()=>Promise<void>}>;
 }

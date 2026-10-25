@@ -13,11 +13,11 @@ import {htmlCommentNodes} from '../../services/app/lib/annotations/html-anchor';
 import {canonicalizeHtmlPage} from '../../services/app/lib/html-page';
 import {prepareRegisteredQueryBackend,registeredPlan} from '../../services/app/lib/registered-page-queries/registry';
 import {prepareRegisteredMutationBackend,registeredMutationPlan} from '../../services/app/lib/registered-page-mutations';
-import {createNativeMigrationHost} from './native-migration-host.mjs';
+import {createNativeMigrationHost,readNativeMigrationHostInputs} from './native-migration-host.mjs';
 import {prepareNativeMigrationSnapshot} from './native-migration-snapshot.mjs';
 import {validatePilotInputs} from './native-migration-pilot.mjs';
 import {prepareNativeProductImport,prepareNativeProductRuntime} from './native-migration-product-host';
-import type {NativeMigrationBootstrapOptions} from './native-migration-bootstrap-contract';
+import type {NativeMigrationBootstrapOptions,NativeMigrationImportOnlyResult} from './native-migration-bootstrap-contract';
 import type {NativeHostContext,NativeHostRecipe} from './native-migration-host-contract';
 const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 /** Actual target validators and comment node extraction; no converter package import. */
@@ -56,7 +56,7 @@ async function candidateSnapshot(prepared:Staged,context:NativeHostContext,optio
 export function createNativeProductMigrationHost(rawOptions:NativeMigrationBootstrapOptions){
  const options={...rawOptions};
  if(options.db.raw().kind!=='pglite'||S3_URL||path.resolve(options.objectsDirectory)!==path.resolve(LOCAL_OBJECT_DIR))throw Error('native_bootstrap_disposable_local_scope_required');
- const host=createNativeMigrationHost({ports:{
+ const ports={
   stage:async({context,recipe,files}:{context:NativeHostContext;recipe:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['reviewedRecipe'];files:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['files']})=>{
    const capability=JSON.parse(Buffer.from(files.authSchemaCapability).toString('utf8'));
    const schemas={appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema};
@@ -90,6 +90,12 @@ export function createNativeProductMigrationHost(rawOptions:NativeMigrationBoots
   verify:async(tx:Parameters<Prepared['write']>[0],staged:Staged)=>{await staged.relations.verify(tx,staged.history.pageId);await staged.ancillary?.verify(tx);},
   snapshot:(staged:Staged,context:NativeHostContext)=>candidateSnapshot(staged,context,options),
   captureAndCompare:options.captureAndCompare,
- }});
- return {importAndPrepare:host.importAndPrepare,captureAndCompare:(context:Parameters<NativeMigrationBootstrapOptions['captureAndCompare']>[0])=>host.captureAndCompare({...context,candidateRecipePath:(context.imported as typeof context.imported&{cameraRecipePath?:string}).cameraRecipePath??context.candidateRecipePath})};
+ };
+ const host=createNativeMigrationHost({ports});
+ const importOnly=async(context:NativeHostContext):Promise<NativeMigrationImportOnlyResult>=>{
+  const input=await readNativeMigrationHostInputs(context),staged=await ports.stage(input);
+  const result=await ports.transaction(input.recipe.authority,async tx=>{const imported=await ports.importHistory(tx,staged);await ports.verify(tx,staged);return imported;});
+  return {stage:'imported-unsnapshotted',key:input.recipe.key,assemblySha256:input.recipe.assemblySha256,historyProjectionSha256:result.historyProjectionSha256,importResult:result,history:structuredClone(staged.history),identityPlan:structuredClone(staged.identityPlan),datasetIds:[...staged.datasetIds],reviewedRecipe:structuredClone(staged.reviewedRecipe),identityPreparation:structuredClone(staged.identityPreparation),identityPreparationPath:staged.identityPreparationPath};
+ };
+ return {importOnly,importAndPrepare:host.importAndPrepare,captureAndCompare:(context:Parameters<NativeMigrationBootstrapOptions['captureAndCompare']>[0])=>host.captureAndCompare({...context,candidateRecipePath:(context.imported as typeof context.imported&{cameraRecipePath?:string}).cameraRecipePath??context.candidateRecipePath})};
 }

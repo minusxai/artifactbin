@@ -30,6 +30,7 @@ import type {
   MutationResult,
   ObservableQuery,
   QueryResult,
+  QueryInvalidation,
   RemotePort,
   ResultError,
   StatePort,
@@ -278,7 +279,7 @@ export function createClient(options: ClientOptions): AfClient {
   const maxAttempts = options.maxAttempts ?? DEFAULT_ATTEMPTS;
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
   const resolvers = new Map<string, LocalResolver>();
-  const invalidations=new Set<()=>void>();let remoteWatches=0;
+  const invalidations=new Set<(reason?:QueryInvalidation)=>void>();let remoteWatches=0;
   const isBackend = (field: FieldNode) => backends().has(field.name.value);
 
   function localOnly(document: DocumentNode, variables: Variables | undefined, what: string) {
@@ -445,17 +446,17 @@ export function createClient(options: ClientOptions): AfClient {
     const result: MutationResult<T> = { data: data as T };
     if (errors.length) result.errors = errors;
     if (anyRemote) result.extensions = { outcomes };
-    if(Object.values(outcomes).includes("committed"))for(const notify of [...invalidations])try{notify();}catch{/* A view failure cannot change a committed mutation outcome or skip other views. */}
+    if(Object.values(outcomes).includes("committed"))for(const notify of [...invalidations])try{notify("data");}catch{/* A view failure cannot change a committed mutation outcome or skip other views. */}
     return result;
   }
 
-  function watchQuery<T>({ query: document, variables,clearOnRefresh }: { query: DocumentNode; variables?: Variables;clearOnRefresh?:boolean }): ObservableQuery<T> {
+  function watchQuery<T>({ query: document, variables,clearOnRefresh,preserveOnDataRefresh }: { query: DocumentNode; variables?: Variables;clearOnRefresh?:boolean;preserveOnDataRefresh?:boolean }): ObservableQuery<T> {
     const op=operation(document,variables);if(op.node.operation!=="query")throw new LocalError("watchQuery takes a query");
     const fields=fieldsOf(op.node.selectionSet,op),localFields=fields.filter(field=>!isBackend(field)),remoteFields=fields.filter(isBackend);
     const names=[...new Set(localFields.map(field=>field.name.value))];read(localFields,op,{});
-    return createQueryWatch<T>({clearOnRefresh,state,signature:current=>names.map(name=>canonical(own(current,name))).join("\u0000"),local:current=>read(localFields,op,current),empty:Object.fromEntries(remoteFields.map(field=>[responseKey(field),null])),...(remoteFields.length?{remote:{
+    return createQueryWatch<T>({clearOnRefresh,preserveOnDataRefresh,state,signature:current=>names.map(name=>canonical(own(current,name))).join("\u0000"),local:current=>read(localFields,op,current),empty:Object.fromEntries(remoteFields.map(field=>[responseKey(field),null])),...(remoteFields.length?{remote:{
       acquire(){if(remoteWatches>=16)throw Error("Too many remote query subscriptions");remoteWatches++;return()=>{remoteWatches--;};},
-      subscribe(notify:()=>void){invalidations.add(notify);try{const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};}catch(error){invalidations.delete(notify);throw error;}},
+      subscribe(notify:(reason?:QueryInvalidation)=>void){invalidations.add(notify);try{const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};}catch(error){invalidations.delete(notify);throw error;}},
       async fetch(){const settled=await runRemote(remote,op,remoteFields,"query");return settled.errors.length?{data:settled.data,errors:settled.errors}:{data:settled.data};}
     }}:{})});
   }

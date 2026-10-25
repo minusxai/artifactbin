@@ -5,6 +5,7 @@
  * readers; authenticated identity fixtures use the real app shell and document
  * iframe. Every reader comes from the normal HTTP publication API. */
 import assert from 'node:assert/strict';
+import {loadNativeMigrationCaptureBatch,runNativeMigrationCaptureBatch} from '../lib/native-migration-batch-camera.mjs';
 import {runNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
 import {createBaselineSession} from '../lib/component-baseline-session.mjs';
 import {connectAgent,signInAccount} from './lib/cli-connection.mjs';
@@ -22,6 +23,17 @@ import {withComponentBaselineEvidence} from '../lib/component-baseline-evidence.
 import {documentFrame,DOCUMENT_FRAME} from './lib/page-facts.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
+if(process.env.NATIVE_MIGRATION_BATCH__ROOT){
+ const output=process.env.NATIVE_MIGRATION_BATCH__OUTPUT;
+ const admitted=await loadNativeMigrationCaptureBatch({root:process.env.NATIVE_MIGRATION_BATCH__ROOT,output});
+ const browser=await launchChromium({args:['--enable-unsafe-swiftshader']});
+ try{
+  const report=await runNativeMigrationCaptureBatch(admitted,{base:process.argv[2]||'http://localhost:3030',browser,connectAgent});
+  await mkdir(output,{recursive:true,mode:0o700});await writeFile(path.join(output,'batch-capture.json'),JSON.stringify(report,null,2),{flag:'wx',mode:0o600});
+  if(!report.complete)throw Error('Native migration batch incomplete; consult private per-head evidence');
+ }finally{await browser.close();}
+ process.exit(0);
+}
 if(process.env.NATIVE_MIGRATION_PILOT__INPUT){
  const browser=await launchChromium({args:['--enable-unsafe-swiftshader']});
  try{await runNativeMigrationPilot({base:process.argv[2]||'http://localhost:3030',browser,connectAgent,paths:{input:process.env.NATIVE_MIGRATION_PILOT__INPUT,canonical:process.env.NATIVE_MIGRATION_PILOT__CANONICAL,recovery:process.env.NATIVE_MIGRATION_PILOT__RECOVERY,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,output:process.env.NATIVE_MIGRATION_PILOT__OUTPUT}});console.log('Native migration pilot capture complete; private evidence written to the explicit output directory. No paired parity claim made.');}

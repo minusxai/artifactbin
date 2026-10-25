@@ -2,16 +2,18 @@ import type { HtmlJsonObject as AfJsonObject } from "@artifactbin/contracts";
 import type {
   ObservableQuery,
   QueryResult,
+  QueryInvalidation,
   StatePort,
 } from "./apollo-contracts";
 export interface QueryWatchOptions {
   clearOnRefresh?:boolean;
+  preserveOnDataRefresh?:boolean;
   state: StatePort;
   signature(document: AfJsonObject): string;
   local(document: AfJsonObject): AfJsonObject;
   empty: AfJsonObject;
   remote?: {
-    subscribe(listener: () => void): () => void;
+    subscribe(listener: (reason?:QueryInvalidation) => void): () => void;
     fetch(): Promise<QueryResult>;
     acquire(): () => void;
   };
@@ -60,11 +62,11 @@ export function createQueryWatch<T>(
           } as T,
         });
       };
-      const refresh = () => {
+      const refresh = (reason?:QueryInvalidation) => {
         if (!active || !options.remote) return;
         generation++;
         const wasPending=pending;pending=true;
-        if(options.clearOnRefresh){snapshot={data:options.empty};publish();}else if(!wasPending)publish();
+        if(options.clearOnRefresh&&!(options.preserveOnDataRefresh&&reason==="data")){snapshot={data:options.empty};publish();}else if(!wasPending)publish();
         if(!active)return;
         dirty = true;
         if (running) return;

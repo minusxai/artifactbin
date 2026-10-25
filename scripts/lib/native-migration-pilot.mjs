@@ -143,7 +143,7 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
   await becomeOwner(page,server,token);await page.goto(server+'/a/'+encodeURIComponent(reader.pageId),{waitUntil:'domcontentloaded'});
   const frame=await documentFrame(page);
   const hooks=await probe?.mountImportedPilot({page,frame,state,viewport,regression,server,reader,output,authenticate:async(email,targetPage=page)=>{const session=await connectAgent(server,{email});await becomeOwner(targetPage,server,session.token);}});
-  return {frame,performAction:hooks?.performAction,afterAction:hooks?.afterAction,ready:async()=>{await waitForImportedPilotReady(frame,input.implementation);await hooks?.ready?.();if(regression)await frame.addStyleTag({content:'body{transform:translateX(17px)!important}'});},screenshot:()=>page.locator('iframe[data-mx-document-frame]').screenshot({animations:'disabled',caret:'hide'})};
+  return {frame,performAction:hooks?.performAction,afterAction:hooks?.afterAction,cleanup:hooks?.cleanup,ready:async()=>{await waitForImportedPilotReady(frame,input.implementation);await hooks?.ready?.();if(regression)await frame.addStyleTag({content:'body{transform:translateX(17px)!important}'});},screenshot:()=>page.locator('iframe[data-mx-document-frame]').screenshot({animations:'disabled',caret:'hide'})};
  }});
  try{
  const captures=await capture(false,paths.output),regressionDirectory=path.join(paths.output,'regression'),regression=await capture(true,regressionDirectory),control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});
