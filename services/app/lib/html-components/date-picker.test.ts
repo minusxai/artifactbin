@@ -53,6 +53,8 @@ it('matches the original popup width, left anchor, weekday labels and default na
  expect(getComputedStyle(day).width).toBe('32px'); expect(getComputedStyle(day).height).toBe('32px');
  expect(getComputedStyle(ordinaryDay).backgroundColor).toBe('rgba(0, 0, 0, 0)');
  const styles=document.querySelector<HTMLStyleElement>('style[data-af-date-picker-styles]')?.textContent ?? '';
+ expect(styles).toContain('af-date-picker .af-date-label{display:block;color:var(--muted-foreground,#777);font-size:.6875rem;font-weight:500;line-height:1.5');
+ expect(styles).toContain('af-date-picker .af-date-grid abbr{display:flex;width:2rem;height:2rem;align-items:center;justify-content:center;text-decoration:none;font-size:.6875rem;font-weight:500;line-height:1.5');
  expect(styles).toContain('af-date-picker .af-date-grid [data-date]{background:transparent}');
  expect(styles).toContain('af-date-picker .af-date-grid [data-date][aria-pressed=true]{background:var(--primary,#222)');
  const header=popup.querySelector<HTMLElement>('.af-date-header')!;
