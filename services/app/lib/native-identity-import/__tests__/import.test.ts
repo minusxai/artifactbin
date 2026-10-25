@@ -150,6 +150,132 @@ it("creates exact source account and permanently noncredential provenance token,
     }),
   ).toMatchObject({ createdUsers: 0, createdTokens: 0, replayed: 2 });
 });
+it(
+  "batches multiple disabled provenance tokens while preserving exact replay dates and per-row ledgers",
+  async () => {
+    const db = await getDb(),
+      input = fixture(),
+      sourceTokens = [
+        ...input.sourceInventory.tokens,
+        {
+          id: "source_token_2",
+          user_id: sourceUser.id,
+          created_at: "2020-03-01T00:00:00.000Z",
+          deleted_at: null,
+          expires_at: null,
+        },
+        {
+          id: "source_token_3",
+          user_id: sourceUser.id,
+          created_at: "2020-04-01T00:00:00.000Z",
+          deleted_at: null,
+          expires_at: null,
+        },
+      ];
+    input.sourceInventory = { ...input.sourceInventory, tokens: sourceTokens };
+    input.plan.sourceInventorySha256 = digest(input.sourceInventory);
+    input.plan.tokens = sourceTokens.map((token) => ({
+      sourceId: token.id,
+      targetId: token.id,
+      userId: token.user_id,
+      action: "create-disabled-provenance" as const,
+      sourceRowSha256: digest(token),
+      sourceCreatedAt: token.created_at!,
+      sourceDeletedAt: token.deleted_at!,
+      sourceExpiresAt: token.expires_at!,
+    }));
+    input.plan.targets.tokens = Object.fromEntries(
+      sourceTokens.map((token) => [token.id, { tokenId: token.id }]),
+    );
+    resign(input);
+
+    expect(await importNativeIdentities(db, input)).toMatchObject({
+      createdUsers: 1,
+      createdTokens: 3,
+      replayed: 0,
+    });
+    const rows = (
+      await db.query<any>(
+        "SELECT id,user_id,token_hash,deleted_at,expires_at,request_authority FROM tokens ORDER BY id",
+      )
+    ).rows;
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.user_id).toBe(sourceUser.id);
+      expect(row.token_hash).toMatch(/^!native-provenance:/);
+      expect(new Date(row.deleted_at).toISOString()).toBe(input.revokedAt);
+      expect(new Date(row.expires_at).toISOString()).toBe(input.revokedAt);
+      expect(row.request_authority).toBe(false);
+    }
+    expect(
+      (
+        await db.query<any>(
+          "SELECT kind,source_id,original_state FROM native_identity_imports ORDER BY kind,source_id",
+        )
+      ).rows.filter((row) => row.kind === "token"),
+    ).toHaveLength(3);
+    expect(
+      await importNativeIdentities(db, {
+        ...input,
+        revokedAt: "2026-02-01T00:00:00.000Z",
+      }),
+    ).toMatchObject({ createdUsers: 0, createdTokens: 0, replayed: 4 });
+    for (const token of sourceTokens) {
+      const row = (
+        await db.query<any>("SELECT created_at,deleted_at FROM tokens WHERE id=$1", [token.id])
+      ).rows[0];
+      expect(new Date(row.created_at).toISOString()).toBe(token.created_at);
+      expect(new Date(row.deleted_at).toISOString()).toBe(input.revokedAt);
+    }
+  },
+);
+it("rolls back all users and provenance tokens when a target collision appears in a batch", async () => {
+  const db = await getDb(),
+    input = fixture(),
+    extras = [
+      {
+        id: "source_token_2",
+        user_id: sourceUser.id,
+        created_at: "2020-03-01T00:00:00.000Z",
+        deleted_at: null,
+        expires_at: null,
+      },
+      {
+        id: "source_token_3",
+        user_id: sourceUser.id,
+        created_at: "2020-04-01T00:00:00.000Z",
+        deleted_at: null,
+        expires_at: null,
+      },
+    ],
+    sourceTokens = [...input.sourceInventory.tokens, ...extras];
+  input.sourceInventory = { ...input.sourceInventory, tokens: sourceTokens };
+  input.plan.sourceInventorySha256 = digest(input.sourceInventory);
+  input.plan.tokens = sourceTokens.map((token) => ({
+    sourceId: token.id,
+    targetId: token.id,
+    userId: token.user_id,
+    action: "create-disabled-provenance" as const,
+    sourceRowSha256: digest(token),
+    sourceCreatedAt: token.created_at!,
+    sourceDeletedAt: token.deleted_at!,
+    sourceExpiresAt: token.expires_at!,
+  }));
+  input.plan.targets.tokens = Object.fromEntries(
+    sourceTokens.map((token) => [token.id, { tokenId: token.id }]),
+  );
+  resign(input);
+  await db.query("INSERT INTO tokens(id,token_hash)VALUES('source_token_3','unrelated')");
+  await expect(importNativeIdentities(db, input)).rejects.toThrow(
+    "native_identity_token_collision",
+  );
+  expect((await db.query("SELECT id FROM users")).rows).toHaveLength(0);
+  expect((await db.query('SELECT id FROM auth."user"')).rows).toHaveLength(0);
+  expect((await db.query("SELECT id FROM tokens")).rows).toEqual([
+    { id: "source_token_3" },
+  ]);
+  expect((await db.query("SELECT source_id FROM native_identity_imports")).rows).toHaveLength(0);
+});
 it("rejects forged approved/source proofs and unrelated source-ID collisions without partial writes", async () => {
   const db = await getDb(),
     bad = fixture();
@@ -463,4 +589,41 @@ it('captures public import input and schema configuration before transaction sch
  expect(await pending).toMatchObject({createdUsers:1});
  expect((await db.query<{name:string}>('SELECT name FROM users WHERE id=$1',[sourceUser.id])).rows[0]?.name).toBe(original);
  expect((await db.query('SELECT id FROM auth."user" WHERE id=$1',[sourceUser.id])).rows).toHaveLength(1);
+});
+
+
+function extraProvenance(input:NativeIdentityImport,id='source_token_new'):NativeIdentityImport {
+ const token={id,user_id:sourceUser.id,created_at:'2021-05-06T07:08:09.123456Z',deleted_at:null,expires_at:null};
+ input.sourceInventory={...input.sourceInventory,tokens:[...input.sourceInventory.tokens,token]};input.plan.sourceInventorySha256=digest(input.sourceInventory);
+ input.plan.tokens=[...input.plan.tokens,{sourceId:id,targetId:id,userId:token.user_id,action:'create-disabled-provenance',sourceRowSha256:digest(token),sourceCreatedAt:token.created_at,sourceDeletedAt:null,sourceExpiresAt:null}];
+ input.plan.targets.tokens={...input.plan.targets.tokens,[id]:{tokenId:id}};resign(input);return input;
+}
+it('mixes prior and new disabled tokens without changing earlier revocation instants, then replays both',async()=>{
+ const db=await getDb(),first=fixture();await importNativeIdentities(db,first);
+ const before=(await db.query("SELECT to_jsonb(tokens) AS value FROM tokens WHERE id='source_token'")).rows;
+ const extended=extraProvenance(fixture());extended.revokedAt='2026-03-04T00:00:00.654321Z';
+ expect(await importNativeIdentities(db,extended)).toMatchObject({createdUsers:0,createdTokens:1,replayed:2});
+ expect((await db.query("SELECT to_jsonb(tokens) AS value FROM tokens WHERE id='source_token'")).rows).toEqual(before);
+ const row=(await db.query<{created_at:string;deleted_at:string}>("SELECT to_jsonb(tokens)->>'created_at' AS created_at,to_jsonb(tokens)->>'deleted_at' AS deleted_at FROM tokens WHERE id='source_token_new'")).rows[0]!;
+ expect(row.created_at).toContain('.123456');expect(row.deleted_at).toContain('.654321');
+ expect(await importNativeIdentities(db,{...extended,revokedAt:'2027-01-01T00:00:00Z'})).toMatchObject({createdUsers:0,createdTokens:0,replayed:3});
+ expect((await db.query("SELECT source_id FROM native_identity_imports WHERE kind='token' ORDER BY source_id")).rows).toEqual([{source_id:'source_token'},{source_id:'source_token_new'}]);
+});
+it('rolls back actual inserted token rows when the later bulk ledger SQL fails, retaining a valid prior replay',async()=>{
+ const db=await getDb();
+ await db.query("ALTER TABLE native_identity_imports ADD CONSTRAINT synthetic_token_ledger_failure CHECK(kind<>'token' OR source_id<>'source_token_new')");
+ try{await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow();}finally{await db.query('ALTER TABLE native_identity_imports DROP CONSTRAINT synthetic_token_ledger_failure');}
+ for(const table of ['users','tokens','native_identity_imports','auth."user"'])expect((await db.query('SELECT count(*)::integer AS count FROM '+table)).rows).toEqual([{count:0}]);
+ await importNativeIdentities(db,fixture());
+ const beforeTokens=(await db.query('SELECT to_jsonb(tokens) AS value FROM tokens ORDER BY id')).rows,beforeLedger=(await db.query('SELECT to_jsonb(native_identity_imports) AS value FROM native_identity_imports ORDER BY kind,source_id')).rows;
+ await db.query("ALTER TABLE native_identity_imports ADD CONSTRAINT synthetic_token_ledger_failure CHECK(kind<>'token' OR source_id<>'source_token_new')");
+ try{await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow();}finally{await db.query('ALTER TABLE native_identity_imports DROP CONSTRAINT synthetic_token_ledger_failure');}
+ expect((await db.query('SELECT to_jsonb(tokens) AS value FROM tokens ORDER BY id')).rows).toEqual(beforeTokens);
+ expect((await db.query('SELECT to_jsonb(native_identity_imports) AS value FROM native_identity_imports ORDER BY kind,source_id')).rows).toEqual(beforeLedger);
+ expect(await importNativeIdentities(db,extraProvenance(fixture()))).toMatchObject({createdTokens:1,replayed:2});
+});
+it('rejects a changed prior token alongside a new mapping without writing the new token or ledger',async()=>{
+ const db=await getDb();await importNativeIdentities(db,fixture());await db.query("UPDATE tokens SET request_authority=true WHERE id='source_token'");
+ await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow('native_identity_token_replay_changed');
+ expect((await db.query("SELECT id FROM tokens WHERE id='source_token_new'")).rows).toEqual([]);expect((await db.query("SELECT source_id FROM native_identity_imports WHERE source_id='source_token_new'")).rows).toEqual([]);
 });

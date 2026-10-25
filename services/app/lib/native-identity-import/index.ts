@@ -1,3 +1,4 @@
+import {writeDisabledNativeIdentityTokens} from './token-batch';
 import {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction,nativeIdentityMigrationScope} from './auth-companions';
 export {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction} from './auth-companions';
 import type { Queryable } from "@artifactbin/contracts";
@@ -11,7 +12,6 @@ import type {
 } from "./contracts";
 import {
   nativeIdentityDigest,
-  nativeIdentityTimestamp,
   storedUser,
   verifyNativeIdentityInput,
 } from "./model";
@@ -165,93 +165,9 @@ export async function writeNativeIdentities(
       sourceUser: storedUser(proof.users.get(mapping.sourceId)!),
     });
   }
-  for (const mapping of [...input.plan.tokens].sort((a, b) =>
-    a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0,
-  )) {
-    const prior = await ledger("token", mapping.sourceId);
-    if (prior) verifyLedger(prior, mapping);
-    const revokedAt = prior
-      ? nativeIdentityTimestamp(prior.created_at)
-      : nativeIdentityTimestamp(input.revokedAt);
-    // Deliberately NOT a SHA256 credential hash: no bearer plaintext can hash to this marker.
-    const tokenHash =
-      "!native-provenance:v1:" +
-      nativeIdentityDigest([ns, mapping.sourceId, mapping.sourceRowSha256]);
-    const expected = {
-      id: mapping.targetId,
-      user_id: mapping.userId,
-      token_hash: tokenHash,
-      name: "imported provenance (disabled)",
-      created_at: nativeIdentityTimestamp(mapping.sourceCreatedAt ?? revokedAt),
-      deleted_at: revokedAt,
-      expires_at: revokedAt,
-      audience: null,
-      scope: null,
-      request_authority: false,
-    };
-    const targetSha = nativeIdentityDigest(expected);
-    const read = async () =>
-      (
-        await tx.query<typeof expected>(
-          "SELECT id,user_id,token_hash,name,to_jsonb(tokens)->>'created_at' AS created_at,to_jsonb(tokens)->>'deleted_at' AS deleted_at,to_jsonb(tokens)->>'expires_at' AS expires_at,audience,scope,request_authority FROM tokens WHERE id=$1 FOR UPDATE",
-          [mapping.targetId],
-        )
-      ).rows[0];
-    let current = await read();
-    if (prior) {
-      if (
-        !current ||
-        prior.target_sha256 !== targetSha ||
-        nativeIdentityDigest({
-          ...plain(current),
-          created_at: nativeIdentityTimestamp(current.created_at),
-          deleted_at: current.deleted_at
-            ? nativeIdentityTimestamp(current.deleted_at)
-            : null,
-          expires_at: current.expires_at
-            ? nativeIdentityTimestamp(current.expires_at)
-            : null,
-        }) !== targetSha
-      )
-        throw Error("native_identity_token_replay_changed");
-      result.replayed++;
-      continue;
-    }
-    if (current) throw Error("native_identity_token_collision");
-    await tx.query(
-      "INSERT INTO tokens(id,user_id,token_hash,name,created_at,deleted_at,expires_at,audience,scope,request_authority) VALUES($1,$2,$3,$4,$5,$6,$6,NULL,NULL,false)",
-      [
-        expected.id,
-        expected.user_id,
-        expected.token_hash,
-        expected.name,
-        expected.created_at,
-        revokedAt,
-      ],
-    );
-    current = await read();
-    if (
-      !current ||
-      nativeIdentityDigest({
-        ...plain(current),
-        created_at: nativeIdentityTimestamp(current.created_at),
-        deleted_at: current.deleted_at
-          ? nativeIdentityTimestamp(current.deleted_at)
-          : null,
-        expires_at: current.expires_at
-          ? nativeIdentityTimestamp(current.expires_at)
-          : null,
-      }) !== targetSha
-    )
-      throw Error("native_identity_token_verification_failed");
-    await save("token", mapping, targetSha, {
-      sourceCreatedAt: mapping.sourceCreatedAt,
-      sourceDeletedAt: mapping.sourceDeletedAt,
-      sourceExpiresAt: mapping.sourceExpiresAt,
-      forcedRevokedAt: revokedAt,
-    });
-    result.createdTokens++;
-  }
+  const tokenResult=await writeDisabledNativeIdentityTokens(tx,input);
+  result.createdTokens+=tokenResult.createdTokens;
+  result.replayed+=tokenResult.replayed;
   return result;
 }
 /** Atomic identity preparation; compose writeNativeIdentities with page publication for one larger transaction. */
