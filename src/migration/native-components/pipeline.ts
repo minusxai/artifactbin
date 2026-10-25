@@ -1,3 +1,4 @@
+import {resolveNativePipelineOperationRecipe} from './pipeline-operation-recipe.ts';
 /** Parameterized compiled JSX → native pipeline. No source-script evaluation or fallback SSR. */
 import {nativeDigest} from './selection.ts';
 import {nativeReceiptDigest} from './receipt-digest.ts';
@@ -50,6 +51,7 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  const requiresOperations=analysis.flow.queries.length>0||analysis.flow.mutations.length>0||chart.mappings.length>0;
  let operations={input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[]} as Awaited<ReturnType<NonNullable<NativePipelinePorts['operations']>>>;
  if(ports.operations)operations=await ports.operations(context);else if(requiresOperations)block('operation-producer-missing');
+ if(operations.preparation)result.operationPreparation=operations.preparation;
  blockers.push(...operations.blockers);
  const authDelegations=nodes.filter(n=>n.type==='element'&&n.tag==='SignIn').map(n=>({sourceNode:n.graphKey,analysisSha256:analysis.analysisSha256,destination:'platform-topbar-sign-in' as const,behavior:'platform-sign-in-replaces-embedded-auth' as const}));
  if(blockers.length){result.blockers=blockers;return result;}
@@ -85,7 +87,6 @@ import {compileNativeFlowOffline} from './flow-producer.ts';
 import {produceNativeOperations} from './operation-producer.ts';
 import {registeredNativeOperationHost} from './operation-host.ts';
 import {analyzeNativeOperations} from './operations.ts';
-import type {NativePipelineOperationRecipe} from './pipeline-contracts.ts';
 import {externalCompile} from '../conversion/compiled/index.ts';
 import {retainedCompilerFingerprint} from './analyze.ts';
 import {nativeStyleCompilerProof,extractNativeStyleSnapshot} from './styles-retained.ts';
@@ -145,18 +146,19 @@ export async function nativePipelineFilePorts(request:NativePipelineRequest,extr
   modules:tags=>collectNativePipelineModules(tags,request.componentRoot),
   charts:async()=>{if(!index.chart)throw Error('native_pipeline_chart_libraries_missing');return buildNativeChartAdapter({legacyRoot:request.legacyRoot,libraries:index.chart.libraries,libraryFiles:await Promise.all(index.chart.files.map(async ref=>({path:ref.bundlePath,bytes:await checked(ref),sha256:ref.sha256})))});},
   operations:async context=>{
-   const matches=(index.operations??[]).filter(ref=>nativeDigest(ref.key)===nativeDigest(context.revision.key));
-   if(matches.length!==1)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:context.analysis.flow.queries.length||context.analysis.flow.mutations.length||context.chartMappings.length?[{sourceNode:'$root',code:'operation-recipe-missing'}]:[]};
-   const recipe=JSON.parse((await checked(matches[0]!)).toString()) as NativePipelineOperationRecipe;
-   if(nativeDigest(recipe.key)!==nativeDigest(context.revision.key))throw Error('native_pipeline_operation_source');
-   const compilation=await compileNativeFlowOffline({...recipe,document:context.revision.original.document,analysis:context.analysis},{legacyRoot:request.legacyRoot});
+   if(!context.analysis.flow.queries.length&&!context.analysis.flow.mutations.length&&!context.chartMappings.length)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[]};
+   const resolved=await resolveNativePipelineOperationRecipe(context,index,file=>readFile(locate(file)));
+   if(!resolved)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[{sourceNode:'$root',code:'operation-recipe-missing'}]};
+   if('blocker' in resolved)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[{sourceNode:'$root',code:resolved.blocker}]};
+   const {recipe,preparation}=resolved;
+   const compilation=preparation?.compilation??await compileNativeFlowOffline({...recipe,document:context.revision.original.document,analysis:context.analysis},{legacyRoot:request.legacyRoot});
    const initial=analyzeNativeOperations({analysis:context.analysis,compilation,historical:false,sqlEngineSha256:compilation.sqlEngineSha256});
    const visualizationAdmissions=initial.operations.filter(op=>op.kind==='visualization').flatMap(op=>{const mapping=context.chartMappings.find(m=>m.sourceNode===op.sourceNode);return mapping&&context.chartAdapter?[{kind:op.kind,name:op.name,operationSha256:op.operationSha256,route:op.route,planSha256:nativeDigest({mapping,adapter:context.chartAdapter}),guarantees:op.requiredGuarantees,datasets:[]}]:[];});
    const root=(await promisify(execFile)('git',['rev-parse','--show-toplevel'],{cwd:request.componentRoot,encoding:'utf8'})).stdout.trim();
    const statements=(compilation.statementFacts??[]).filter((fact):fact is typeof fact & {kind:'insert'|'delete'}=>fact.kind==='insert'||fact.kind==='delete');
    if(recipe.statements)for(const fact of recipe.statements){const actual=statements.find(s=>s.sqlSha256===fact.sqlSha256);if(!actual||actual.kind!==fact.kind)throw Error('native_pipeline_statement_changed');}
    const produced=produceNativeOperations({analysis:context.analysis,compilation,historical:false,targetPageId:recipe.targetPageId,targetOrigin:recipe.targetOrigin,datasets:recipe.datasets,statements,visualizationAdmissions,host:await registeredNativeOperationHost({targetRoot:root,targetPageId:recipe.targetPageId,version:context.revision.key.version})});
-   const {programs,blockers,...input}=produced;return {input:{...input,...(recipe.people?{people:recipe.people}:{})},programs,blockers};
+   const {programs,blockers,...input}=produced;return {input:{...input,...(recipe.people?{people:recipe.people}:{})},programs,blockers,...(preparation?{preparation}:{})};
   },
   authorProfiles:async context=>(index.authorProfiles??[]).filter(p=>nativeDigest(p.key)===nativeDigest(context.revision.key)),...extra};
  return ports;

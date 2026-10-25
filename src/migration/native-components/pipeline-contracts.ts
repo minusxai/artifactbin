@@ -1,3 +1,4 @@
+import type {NativeOperationPreparationResult} from './operation-preparation-contracts.ts';
 import type {NativeSelectedRevision,NativeGraphAnalysis} from './contracts.ts';
 import type {NativeTypedAnalysis,NativeTypedCompilerPort} from './analyze-contracts.ts';
 import type {NativeIdentityRevision} from './identity-contracts.ts';
@@ -20,6 +21,7 @@ export interface NativePipelineOperations {
  input:Pick<NativeAssemblyInput,'backends'|'queries'|'mutations'|'viewer'|'people'|'operationCoverage'>;
  programs:readonly NativeV3ProgramReceipt[];
  blockers:readonly {sourceNode:string;code:string}[];
+ preparation?:NativeOperationPreparationResult;
 }
 export interface NativePipelineImport {
  key:NativeSelectedRevision['key'];assemblySha256:string;stage:'imported';historyProjectionSha256:string;
@@ -53,7 +55,7 @@ export interface NativePipelineResult {
  status:'blocked'|'assembled'|'imported'|'verified'|'difference'|'environment-blocked';
  blockers:readonly {sourceNode:string;code:string}[];
  graph:NativeGraphAnalysis;analysis:NativeTypedAnalysis;identity:NativeIdentityRevision;
- style?:NativePipelineStyleSnapshot;assembly?:NativeV3AssemblyReceipt;
+ style?:NativePipelineStyleSnapshot;assembly?:NativeV3AssemblyReceipt;operationPreparation?:NativeOperationPreparationResult;
  imported?:NativePipelineImport;comparison?:NativePipelineComparison;
 }
 export interface NativePipelineFileReference {path:string;sha256:string}
@@ -66,6 +68,7 @@ export interface NativePipelineReceiptIndex {
  sha256:string;
  chart?:{libraries:{vega:string;vegaLite:string;dataTable:string};files:readonly (NativePipelineFileReference & {bundlePath:string})[]};
  operations?:readonly (NativePipelineFileReference & {key:NativeSelectedRevision['key']})[];
+ operationPreparation?:{catalogIndex:NativePipelineFileReference;identityPlan:NativePipelineFileReference;externalCatalogs?:NativePipelineFileReference;targetOrigin:string;probeClockIso:string};
  authorProfiles?:readonly {key:NativeSelectedRevision['key'];sourceNode:string;profile:NativeAuthorProgramAdmission['profile'];filter:NativeAuthorProgramAdmission['filter'];scriptSha256:string}[];
 }
 
