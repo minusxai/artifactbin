@@ -35,7 +35,14 @@ for entry in \
   # Retain upstream/Debian library features, including Xlib threads/locales and Xpm gzip input.
   configure_extra=
   [ "$name" != libX11 ] || configure_extra="--disable-specs --without-fop"
-  ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --enable-static --enable-shared $configure_extra
+  library_ldflags=$LDFLAGS
+  if [ "$name" = libXi ]; then
+    # Debian's original libXi exports these zero-size section boundaries.
+    # Request GNU ld's own default-script PROVIDE definitions; retain the
+    # complete ABI comparison rather than excluding the missing symbols.
+    library_ldflags="$library_ldflags -Wl,--undefined=__bss_start,--undefined=_edata,--undefined=_end"
+  fi
+  LDFLAGS="$library_ldflags" ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --enable-static --enable-shared $configure_extra
   make -j2
   make check
   make DESTDIR="$stage" install

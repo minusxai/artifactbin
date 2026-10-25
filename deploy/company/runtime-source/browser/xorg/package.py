@@ -48,6 +48,28 @@ def exports(path):
             if len(line.split()) >= 7 and '*UND*' not in line and '*ABS*' not in line}
 
 
+def check_xi_boundaries(path):
+    sections = {}
+    for line in subprocess.check_output(['objdump', '-h', str(path)], text=True).splitlines():
+        parts = line.split()
+        if len(parts) >= 7 and parts[0].isdigit() and parts[1] in ('.data', '.bss'):
+            sections[parts[1]] = (int(parts[3], 16), int(parts[2], 16))
+    assert set(sections) == {'.data', '.bss'}, f'Missing libXi boundary sections: {path}'
+    data, bss = sections['.data'], sections['.bss']
+    expected = {'_edata': sum(data), '__bss_start': bss[0], '_end': sum(bss)}
+    found = {}
+    for line in subprocess.check_output(['readelf', '--dyn-syms', '--wide', str(path)], text=True).splitlines():
+        parts = line.split()
+        if len(parts) == 8 and parts[-1] in expected:
+            name = parts[-1]
+            assert parts[2:6] == ['0', 'NOTYPE', 'GLOBAL', 'DEFAULT'], f'Changed boundary symbol interface: {path} {name}'
+            assert parts[6].isdigit(), f'Boundary is not section-relative: {path} {name}'
+            assert int(parts[1], 16) == expected[name], f'Incorrect section boundary: {path} {name}'
+            found[name] = expected[name]
+    assert set(found) == set(expected), f'Missing boundary definitions: {path}'
+    return found
+
+
 for captured in sorted(profile.iterdir()):
     if not captured.is_dir():
         continue
@@ -116,6 +138,9 @@ for captured in sorted(profile.iterdir()):
         new_real = [path for path in candidates if elf(path)]
         assert len(new_real) == 1 and old_real, f'Ambiguous ABI family {family}'
         for old in old_real:
+            if family == 'libXi.so.6' and {('Base', name) for name in ('__bss_start', '_edata', '_end')} <= exports(old):
+                check_xi_boundaries(old)
+                check_xi_boundaries(new_real[0])
             missing = exports(old) - exports(new_real[0])
             assert not missing, f'Lost ABI exports {package} {family}: {sorted(missing)}'
         for new in candidates:
