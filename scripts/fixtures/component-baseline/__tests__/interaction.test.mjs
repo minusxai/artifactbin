@@ -58,9 +58,15 @@ it('captures native columnheader names and aria-sort while retaining raw header 
   const output=await mkdtemp(path.join(tmpdir(),'interaction-snapshot-'));
   try{
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-    const frame={url:()=> 'http://localhost/reader',evaluate:async fn=>fn.name==='browserState'?fn():{faces:[],used:[],errors:[]}};
+    const animationEvidence={format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:true,startedAtMs:10,completedAtMs:12,elapsedMs:2,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:0,infinite:0,counts:{finished:0,canceled:0,detached:0},timedOut:[]};
+    const frame={url:()=> 'http://localhost/reader',evaluate:async(fn,arg)=>{
+      if(fn.name==='browserState')return fn();
+      if(fn.name==='settleFiniteFrameAnimations'){expect(arg).toEqual({timeoutMs:5000});return animationEvidence;}
+      return {faces:[],used:[],errors:[]};
+    }};
     const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
     const [capture]=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output,fixtures:[{id:'headers',states:[{id:'sorted',actions:[]}]}]});
+    expect(capture.animationEvidence).toEqual(animationEvidence);
     expect(capture.semantics.controls).toEqual(expect.arrayContaining([expect.objectContaining({role:'columnheader',name:'Sort by score',sort:'ascending'}),expect.objectContaining({role:'columnheader',name:'Sort by name',sort:'none'})]));
     expect(capture.semantics.rows).toEqual([['score▲','name'],['85','Linus']]);
     expect(stateExpectationIssues({bodyRows:[['85','Linus']]},capture.semantics)).toEqual([]);
