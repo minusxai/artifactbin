@@ -135,3 +135,39 @@ it("rewrites a module asset argument without changing or dropping its literal lo
   expect(saved).toContain('import "/a/CHILD1/raw?v=1"');
   expect(saved).toContain(runtimeModuleArgument("u"));
 });
+
+it("ships a self-contained installed parser that admits the same runtime adapter outside the repository", async () => {
+  const { readFile, writeFile, mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const { buildPreviewParser } =
+    await import("../../skills/preview-assets.server");
+  const directory = await mkdtemp(
+    join(tmpdir(), "installed-runtime-module-parser-"),
+  );
+  try {
+    const parser = await buildPreviewParser(
+      await readFile(
+        new URL(
+          "../../../skills/artifactbin/scripts/preview-html.mjs",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await writeFile(join(directory, "preview-html.mjs"), parser);
+    await writeFile(
+      join(directory, "probe.mjs"),
+      `import{publicationLocalReferences}from'./preview-html.mjs';const html=${JSON.stringify('<script type="module">' + body + "</script>")};if(publicationLocalReferences(html,"text/html").length)throw Error('unexpected dependency');let refused=false;try{publicationLocalReferences('<script type="module">const dyn=u=>import(u);dyn("./local.js")</script>','text/html')}catch{refused=true}if(!refused)throw Error('computed local dependency admitted');console.log('installed-parser-passed');`,
+    );
+    expect(
+      execFileSync(process.execPath, [join(directory, "probe.mjs")], {
+        cwd: directory,
+        encoding: "utf8",
+      }).trim(),
+    ).toBe("installed-parser-passed");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
