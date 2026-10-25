@@ -26,6 +26,8 @@ test('maps each source family tag to the reviewed accordion module and enforces 
     ['AccordionTrigger', 'af-accordion-trigger', 'accordion', 'registerAccordion'],
     ['AccordionContent', 'af-accordion-content', 'accordion', 'registerAccordion'],
   ]);
+  assert.deepEqual(NATIVE_ACCORDION_RULES.find(rule => rule.tag === 'Accordion')?.attributes?.type, ['single']);
+  assert.deepEqual(NATIVE_ACCORDION_RULES.find(rule => rule.tag === 'Accordion')?.properties, ['value']);
   assert.deepEqual(NATIVE_ACCORDION_RULES.find(rule => rule.tag === 'AccordionTrigger')?.parent, ['AccordionItem']);
   assert.equal(isNativeAccordionTag('AccordionContent'), true);
   assert.equal(isNativeAccordionTag('AccordionHeader'), false);
@@ -44,49 +46,37 @@ test('preserves the blocked source head shape, default single mode, IDs, and chi
   assert.equal(attributeJson(result.node, 'id'), 'accordion-id');
 });
 
-test('uses single as the exact omitted default and converts multiple alias to target type', () => {
+test('uses single as the exact omitted default and blocks an invented multiple alias', () => {
   const single = prepareNativeAccordion(element());
   assert.deepEqual(single.blockers, []);
   assert.equal(attribute(single.node, 'type'), undefined);
 
-  const multipleSource = element('Accordion', [['multiple', true], ['defaultValue', ['first', '', 'second', 'first']]]);
-  const multiple = prepareNativeAccordion(multipleSource);
-  assert.deepEqual(multiple.blockers, []);
-  assert.equal(attribute(multiple.node, 'multiple'), undefined);
-  assert.equal(attributeJson(multiple.node, 'type'), 'multiple');
-  assert.equal(attributeJson(multiple.node, 'defaultValue'), '["first","second"]');
-  assert.equal(attributeJson(multipleSource, 'multiple'), true);
-  assert.deepEqual(attributeJson(multipleSource, 'defaultValue'), ['first', '', 'second', 'first']);
-
-  const falseAlias = prepareNativeAccordion(element('Accordion', [['multiple', false]]));
-  assert.deepEqual(falseAlias.blockers, []);
-  assert.equal(attributeJson(falseAlias.node, 'type'), 'single');
-
-  const nullMultipleDefault = prepareNativeAccordion(element('Accordion', [['multiple', true], ['defaultValue', null]]));
-  assert.deepEqual(nullMultipleDefault.blockers, []);
-  assert.equal(attributeJson(nullMultipleDefault.node, 'defaultValue'), '[]');
+  const unsupportedAlias = prepareNativeAccordion(element('Accordion', [['multiple', true]]));
+  assert.ok(unsupportedAlias.blockers.some(value => value.attribute === 'multiple'));
+  assert.equal(attribute(unsupportedAlias.node, 'multiple'), undefined);
+  assert.equal(attribute(unsupportedAlias.node, 'type'), undefined);
 });
 
-test('keeps controlled values as the value property and normalizes them by target mode', () => {
-  const controlledMultiple = prepareNativeAccordion(element('Accordion', [
-    ['type', 'multiple'], ['value', ['one', '', 'two', 'one']], ['defaultValue', ['ignored-by-controlled-value']],
-  ]));
-  assert.deepEqual(controlledMultiple.blockers, []);
-  assert.deepEqual(attributeJson(controlledMultiple.node, 'value'), ['one', 'two']);
-  assert.equal(attributeJson(controlledMultiple.node, 'defaultValue'), '["ignored-by-controlled-value"]');
+test('keeps string controlled/default values and forces source type multiple to single mode', () => {
+  const source = element('Accordion', [['type', 'multiple'], ['value', 'one'], ['defaultValue', 'first']]);
+  const prepared = prepareNativeAccordion(source);
+  assert.deepEqual(prepared.blockers, []);
+  assert.equal(attributeJson(prepared.node, 'type'), 'single');
+  assert.equal(attributeJson(prepared.node, 'value'), 'one');
+  assert.equal(attributeJson(prepared.node, 'defaultValue'), 'first');
+  assert.equal(attributeJson(source, 'type'), 'multiple');
 
-  const controlledSingle = prepareNativeAccordion(element('Accordion', [['value', ['first', 'extra']]]));
-  assert.deepEqual(controlledSingle.blockers, []);
-  assert.equal(attributeJson(controlledSingle.node, 'value'), 'first');
-  assert.equal(attribute(controlledSingle.node, 'type'), undefined);
+  const arrayValue = prepareNativeAccordion(element('Accordion', [['value', ['one', 'two']]]));
+  assert.ok(arrayValue.blockers.some(value => value.attribute === 'value'));
+  assert.deepEqual(attributeJson(arrayValue.node, 'value'), ['one', 'two']);
 });
 
-test('normalizes string defaults and explicit matching type/multiple props', () => {
+test('keeps collapsible behavior and a string default when source type is multiple', () => {
   const result = prepareNativeAccordion(element('Accordion', [
-    ['type', 'multiple'], ['multiple', true], ['defaultValue', 'open-item'], ['collapsible', false],
+    ['type', 'multiple'], ['defaultValue', 'open-item'], ['collapsible', false],
   ]));
   assert.deepEqual(result.blockers, []);
-  assert.equal(attributeJson(result.node, 'type'), 'multiple');
+  assert.equal(attributeJson(result.node, 'type'), 'single');
   assert.equal(result.node.type === 'element' ? result.node.attributes.filter(value => value.name === 'type').length : 0, 1);
   assert.equal(attribute(result.node, 'multiple'), undefined);
   assert.equal(attributeJson(result.node, 'defaultValue'), 'open-item');
@@ -99,6 +89,7 @@ test('reports unsupported source properties without changing source identity or 
   const result = prepareNativeAccordion(invalid);
   assert.deepEqual(result.blockers.map(value => [value.code, value.attribute]), [
     ['accordion-prop-unsupported', 'type'],
+    ['accordion-prop-unsupported', 'multiple'],
     ['accordion-prop-unsupported', 'collapsible'],
     ['accordion-prop-unsupported', 'value'],
   ]);
@@ -106,15 +97,12 @@ test('reports unsupported source properties without changing source identity or 
   assert.equal(result.node.children[0], child);
 });
 
-test('rejects conflicting type/multiple modes and malformed defaults', () => {
-  const conflict = prepareNativeAccordion(element('Accordion', [['type', 'single'], ['multiple', true]]));
-  assert.ok(conflict.blockers.some(value => value.attribute === 'multiple' && /conflicts/.test(value.detail)));
+test('rejects non-string controlled/default values and malformed source props', () => {
+  const invalidDefault = prepareNativeAccordion(element('Accordion', [['type', 'multiple'], ['defaultValue', ['one', 'two']]]));
+  assert.ok(invalidDefault.blockers.some(value => value.attribute === 'defaultValue'));
 
   const invalidMultiple = prepareNativeAccordion(element('Accordion', [['multiple', 'true']]));
   assert.ok(invalidMultiple.blockers.some(value => value.attribute === 'multiple'));
-
-  const invalidDefault = prepareNativeAccordion(element('Accordion', [['type', 'multiple'], ['defaultValue', [1, 2]]]));
-  assert.ok(invalidDefault.blockers.some(value => value.attribute === 'defaultValue'));
 
   const dynamicDefault = element('Accordion');
   if (dynamicDefault.type === 'element') dynamicDefault.attributes.push({
