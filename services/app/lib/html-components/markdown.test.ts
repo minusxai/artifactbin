@@ -38,6 +38,17 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(el.querySelector('th')?.textContent).toBe('Name');
  expect(el.querySelector('button')?.textContent).toBe('Copy code');
 });
+it('defaults copy controls on, but supports an explicit opt-out across rerender and reconnect',()=>{
+ const el=document.createElement('af-markdown') as AfMarkdown;
+ el.source='```js\nconst first = 1\n```';document.body.append(el);
+ const initial=el.querySelector('button');expect(initial?.textContent).toBe('Copy code');
+ el.setAttribute('copy-controls','false');expect(el.querySelector('button')).toBeNull();expect(initial?.isConnected).toBe(false);
+ el.source='```js\nconst second = 2\n```';expect(el.querySelector('button')).toBeNull();
+ el.removeAttribute('copy-controls');expect(el.querySelector('button')?.textContent).toBe('Copy code');
+ el.copyControls=false;expect(el.getAttribute('copy-controls')).toBe('false');expect(el.querySelector('button')).toBeNull();
+ el.remove();el.source='```js\nconst third = 3\n```';document.body.append(el);expect(el.querySelector('button')).toBeNull();
+ el.copyControls=true;expect(el.hasAttribute('copy-controls')).toBe(false);expect(el.querySelector('button')?.textContent).toBe('Copy code');
+});
 it('keeps reader Markdown styling inside the custom element',()=>{
  const sibling=document.createElement('div');sibling.className='mx-markdown';const heading=document.createElement('h1');heading.textContent='Independent sibling';sibling.append(heading);document.body.append(sibling);
  expect(getComputedStyle(heading).fontFamily).not.toContain('--font-display');

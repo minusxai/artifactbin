@@ -1,6 +1,6 @@
 /** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
-export interface MarkdownContract { source: string }
+export interface MarkdownContract { source: string; copyControls: boolean }
 import { markdownContent } from '../markdown/content';
 import { MARKDOWN_CSS } from '../markdown/styles';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '../story-surface/bare-typography';
@@ -45,15 +45,17 @@ function scopeMarkdownCss(css:string):string{
 }
 /** Only generated output is replaced; the host remains the authored identity. */
 export class AfMarkdown extends HTMLElement implements MarkdownContract {
- static observedAttributes = ['source'];
+ static observedAttributes = ['source','copy-controls'];
  private value: string | undefined;
  private literalSource = "";
  private output: HTMLDivElement | undefined;
  private scope = `af-markdown-${++nextHeadingScope}`;
  get source(): string { return this.value ?? this.getAttribute('source') ?? this.literalSource; }
  set source(value: string) { this.value=String(value); this.render(); }
+ get copyControls(): boolean { return this.getAttribute('copy-controls') !== 'false'; }
+ set copyControls(value: boolean) { if(value)this.removeAttribute('copy-controls');else this.setAttribute('copy-controls','false'); }
  connectedCallback(): void {
-  if(Object.prototype.hasOwnProperty.call(this,'source')) { const value=this.source; delete (this as {source?:string}).source; this.source=value; }
+  for(const key of ['source','copyControls'] as const)if(Object.prototype.hasOwnProperty.call(this,key)){const value=this[key];delete (this as unknown as Record<string,unknown>)[key];Object.assign(this,{[key]:value});}
   if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nodeType===3).map(node=>node.textContent ?? '').join(''); for(const node of [...this.childNodes]) if(node.nodeType===3) node.remove(); this.output=this.ownerDocument.createElement('div'); this.output.className='mx-markdown'; this.append(this.output); }
   this.render();
  }
@@ -64,7 +66,7 @@ export class AfMarkdown extends HTMLElement implements MarkdownContract {
   if(rendered.errors.length) { const alert=this.ownerDocument.createElement('p'); alert.setAttribute('role','alert'); alert.textContent=rendered.errors.join(' '); this.output.replaceChildren(alert); return; }
   this.output.innerHTML=rendered.html;
   this.output.querySelectorAll<HTMLElement>('[data-mx-markdown-heading]').forEach(heading=>{heading.id=`${this.id || this.scope}-heading-${heading.dataset.mxMarkdownHeading}`;});
-  this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type='button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ?? '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});} catch {button.textContent='Copy unavailable';}}); pre.append(button);});
+  if(this.copyControls)this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type='button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ?? '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});} catch {button.textContent='Copy unavailable';}}); pre.append(button);});
  }
 }
 // The retained document applies preflight, Markdown, bare prose, then the
