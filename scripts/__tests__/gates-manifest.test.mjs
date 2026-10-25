@@ -261,3 +261,18 @@ it('overlaps independent file and screenshot journeys while retaining every engi
   expect(closed.sort()).toEqual(engines.sort());
   for(const engine of engines)expect(fileSteps.filter(([name])=>name===engine).map(([,name])=>name)).toEqual(['reading','editing','codeViewOnline','editedByAnAgent','engineChoice','connecting']);
 });
+
+it('waits for the mounted contenteditable heading before focusing and selecting its exact text',async()=>{
+  const code=source('offline-file'),start=code.indexOf('async function selectHeading('),end=code.indexOf('async function answerName(',start);
+  const events=[],text={data:'Regional sales'};let mounted=false;
+  const editor={get isContentEditable(){return mounted;},focus(){if(!mounted)throw Error('Focused before editor mount');events.push('focus');}};
+  const heading={closest:()=>editor};
+  const document={getElementById:id=>{expect(id).toBe('fixture-heading');return heading;},createTreeWalker:()=>({nextNode:()=>text})};
+  const selection={removeAllRanges:()=>events.push('clear'),setBaseAndExtent:(...args)=>events.push(args)};
+  const page={bringToFront:async()=>events.push('front'),evaluate:async(fn,arg)=>fn(arg)};
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const run=new AsyncFunction('expect','headingId','document','NodeFilter','getSelection','page',code.slice(start,end)+'await selectHeading(page,8);');
+  const timer=setTimeout(()=>{mounted=true;},20);
+  try{await run(expect,'fixture-heading',document,{SHOW_TEXT:4},()=>selection,page);}finally{clearTimeout(timer);}
+  expect(events).toEqual(['front','focus','clear',[text,0,text,8]]);
+});

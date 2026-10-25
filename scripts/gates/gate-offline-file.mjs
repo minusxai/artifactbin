@@ -243,10 +243,16 @@ async function expectUiFonts(page, label) {
 
 /** Select the first `length` characters of the heading's text, as a reader's drag does. */
 async function selectHeading(page, length) {
+  // The edit tab can appear before the editable document replaces its reader tree.
+  // Focus and select only the actual mounted editor, never a transient noneditable heading.
+  await page.bringToFront();
+  await expect.poll(() => page.evaluate(id => Boolean(document.getElementById(id)?.closest('.ProseMirror')?.isContentEditable), headingId)).toBe(true);
   await page.evaluate(({ id, length }) => {
     const heading = document.getElementById(id);
     const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
-    (heading.closest('.ProseMirror') ?? heading).focus({ preventScroll: true });
+    const editor = heading.closest('.ProseMirror');
+    if (!editor?.isContentEditable) throw new Error('Heading editor is not ready');
+    editor.focus({ preventScroll: true });
     const selection = getSelection();
     selection.removeAllRanges();
     selection.setBaseAndExtent(text, 0, text, length);
@@ -811,8 +817,13 @@ async function connecting(engineName, browser) {
       await step('edit and comment stay unsaved in the original file', async () => {
         await page.getByRole('button', { name: 'Edit', exact: true }).click();
         await answerName(page, 'Local reviewer');
-        await page.getByRole('heading', { name: 'Offline prose' }).evaluate((heading) => {
-          (heading.closest('.ProseMirror') ?? heading).focus({ preventScroll: true });
+        const heading = page.getByRole('heading', { name: 'Offline prose' });
+        await page.bringToFront();
+        await expect.poll(() => heading.evaluate(node => Boolean(node.closest('.ProseMirror')?.isContentEditable))).toBe(true);
+        await heading.evaluate((heading) => {
+          const editor = heading.closest('.ProseMirror');
+          if (!editor?.isContentEditable) throw new Error('Heading editor is not ready');
+          editor.focus({ preventScroll: true });
           const text = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT).nextNode();
           const selection = window.getSelection();
           selection.removeAllRanges(); selection.setBaseAndExtent(text, 0, text, text.textContent.length);
