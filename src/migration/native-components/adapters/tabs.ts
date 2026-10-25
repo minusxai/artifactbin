@@ -9,7 +9,7 @@ export interface PreparedNativeTabs {
 }
 
 /** The reviewed html-components/tabs.ts contract. */
-export const NATIVE_TABS_RULES: readonly NativeComponentRule[] = Object.freeze([
+export const NATIVE_TABS_RULES: readonly NativeComponentRule[] = Object.freeze<NativeComponentRule[]>([
   {
     tag: "Tabs",
     htmlTag: "af-tabs",
@@ -19,9 +19,7 @@ export const NATIVE_TABS_RULES: readonly NativeComponentRule[] = Object.freeze([
     attributes: {
       defaultValue: "string",
       orientation: ["horizontal", "vertical"],
-      "activation-mode": ["automatic", "manual"],
       dir: ["ltr", "rtl"],
-      loop: "boolean",
     },
     properties: ["value"],
   },
@@ -86,11 +84,7 @@ export function prepareNativeTabs(node: RetainedJsxNode): PreparedNativeTabs {
 
   const rule = rulesByTag.get(node.tag)!;
   const blockers: NativeLowerBlocker[] = [];
-  const normalizedAttributes = node.attributes.map((attribute) =>
-    node.tag === "Tabs" && attribute.name === "activationMode"
-      ? { ...attribute, name: "activation-mode" }
-      : attribute,
-  );
+  const normalizedAttributes = node.attributes;
   const seen = new Set<string>();
 
   for (const attribute of normalizedAttributes) {
