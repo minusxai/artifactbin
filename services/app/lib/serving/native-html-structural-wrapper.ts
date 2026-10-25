@@ -1,6 +1,6 @@
 import {parse,parseFragment,serialize,type DefaultTreeAdapterMap} from 'parse5';
 
-const STRUCTURAL_DOC_CSS=':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc{padding-inline:0;padding-block-start:0;padding-block-end:0}';
+const STRUCTURAL_DOC_CSS=':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled])>.mx-doc){line-height:1.5}:where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc{padding-inline:0;padding-block-start:0;padding-block-end:0}';
 
 function hasStructuralBareDocRoot(node:DefaultTreeAdapterMap['node']):boolean{
  if('attrs'in node){

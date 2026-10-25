@@ -8,6 +8,7 @@ const focus=(role,name)=>({id:'focus',actions:[action(role,name,'focus')]});
 const press=(id,role,name,key)=>({id,actions:[action(role,name,'focus'),action(role,name,'press',key)]});
 const click=(id,name)=>({id,actions:[action('button',name,'click')]});
 const bind=(tag,property)=>`const field=document.querySelector('${tag}');field.addEventListener('af-change',event=>{field.${property}=event.detail.value;});`;
+const nativeStory=html=>`<div data-mx-story-root data-mx-inline-story><div class="mx-doc">${html}</div></div>`;
 const scalarLimit='Viewer reload/persistence and shared backend behavior are outside these independent captures.';
 /** @type {import('./controls-contract').ControlBaselineFixture[]} */
 const fixtures=[
@@ -34,13 +35,13 @@ const fixtures=[
   {
     id:'switch',family:'Switch',modules:['switch'],provenance:{...controls,exports:['Switch']},
     oldJsx:'<Helmet><Value name="enabled" type="boolean" default={false} /></Helmet><div><Switch label="Notifications" checked="$enabled" /><Switch label="Unavailable notifications" checked={false} disabled /></div>',
-    newHtml:'<div><af-switch label="Notifications"></af-switch><af-switch label="Unavailable notifications" disabled></af-switch></div>',
+    newHtml:nativeStory('<div><af-switch label="Notifications"></af-switch><af-switch label="Unavailable notifications" disabled></af-switch></div>'),
     setup:bind('af-switch','checked'),states:[initial,focus('switch','Notifications'),press('space','switch','Notifications','Space')],limitations:[scalarLimit,'Pointer gestures are outside these keyboard captures.'],
   },
   {
     id:'segmented',family:'Segmented',modules:['segmented'],provenance:{...controls,exports:['Segmented']},
     oldJsx:'<Helmet><Value name="period" type="string" default="Now" /></Helmet><Segmented label="Period" value="$period" options={["Now","Later"]} />',
-    newHtml:'<af-segmented label="Period"></af-segmented>',
+    newHtml:nativeStory('<af-segmented label="Period"></af-segmented>'),
     setup:'const field=document.querySelector("af-segmented");field.options=["Now","Later"];field.value="Now";field.addEventListener("af-change",event=>{field.value=event.detail.value;});',
     states:[initial,focus('button','Now'),click('later','Later'),press('keyboard-later','button','Later','Enter')],
     limitations:[scalarLimit,'Original Segmented has ordinary buttons and no roving arrow navigation. Candidate-only arrow behavior is not a parity scenario.','Nullable options and disabled groups are outside these captures.'],
@@ -49,14 +50,14 @@ const fixtures=[
     id:'accordion',family:'Accordion',modules:['accordion'],
     provenance:{revision,path:'services/app/lib/islands/kit/accordion.tsx',sha256:'e78a88b7f42d51d186bce565bfab52b9590ce5d3c7ac2f2ce90b2d4bdb9f436a',exports:['Accordion','AccordionItem','AccordionTrigger','AccordionContent']},
     oldJsx:'<Accordion type="single" collapsible defaultValue="first"><AccordionItem value="first"><AccordionTrigger>First section</AccordionTrigger><AccordionContent>First section details</AccordionContent></AccordionItem><AccordionItem value="second"><AccordionTrigger>Second section</AccordionTrigger><AccordionContent>Second section details</AccordionContent></AccordionItem><AccordionItem value="blocked" disabled><AccordionTrigger>Unavailable section</AccordionTrigger><AccordionContent>Unavailable details</AccordionContent></AccordionItem></Accordion>',
-    newHtml:'<af-accordion type="single" collapsible default-value="first"><af-accordion-item value="first"><af-accordion-trigger><button>First section</button></af-accordion-trigger><af-accordion-content>First section details</af-accordion-content></af-accordion-item><af-accordion-item value="second"><af-accordion-trigger><button>Second section</button></af-accordion-trigger><af-accordion-content>Second section details</af-accordion-content></af-accordion-item><af-accordion-item value="blocked" disabled><af-accordion-trigger><button>Unavailable section</button></af-accordion-trigger><af-accordion-content>Unavailable details</af-accordion-content></af-accordion-item></af-accordion>',
+    newHtml:nativeStory('<af-accordion type="single" collapsible default-value="first"><af-accordion-item value="first"><af-accordion-trigger><button>First section</button></af-accordion-trigger><af-accordion-content>First section details</af-accordion-content></af-accordion-item><af-accordion-item value="second"><af-accordion-trigger><button>Second section</button></af-accordion-trigger><af-accordion-content>Second section details</af-accordion-content></af-accordion-item><af-accordion-item value="blocked" disabled><af-accordion-trigger><button>Unavailable section</button></af-accordion-trigger><af-accordion-content>Unavailable details</af-accordion-content></af-accordion-item></af-accordion>'),
     states:[initial,click('second','Second section'),press('collapse-first','button','First section','Space')],
     limitations:['Only actual original single-selection behavior is paired; its multiple and arrow-navigation behavior is not implemented.','Closed subtree retention and reload/comment-state behavior are outside these captures.'],
   },
   {
     id:'collapsible',family:'Collapsible',modules:['collapsible'],provenance:{...disclosure,exports:['Collapsible','CollapsibleTrigger','CollapsibleContent']},
     oldJsx:'<Collapsible><CollapsibleTrigger>More details</CollapsibleTrigger><CollapsibleContent><p>Additional information</p><button>Inside details</button></CollapsibleContent></Collapsible>',
-    newHtml:'<af-collapsible><af-collapsible-trigger><button>More details</button></af-collapsible-trigger><af-collapsible-content><p>Additional information</p><button style="font:inherit;color:inherit;background:transparent;border:0;margin:0;padding:0;cursor:pointer">Inside details</button></af-collapsible-content></af-collapsible>',
+    newHtml:nativeStory('<af-collapsible><af-collapsible-trigger><button>More details</button></af-collapsible-trigger><af-collapsible-content><p>Additional information</p><button style="font:inherit;color:inherit;background:transparent;border:0;margin:0;padding:0;cursor:pointer">Inside details</button></af-collapsible-content></af-collapsible>'),
     states:[initial,click('open','More details'),press('keyboard-open','button','More details','Enter'),{id:'closed-again',actions:[action('button','More details','click'),action('button','More details','click')]}],
     limitations:['Original root disabled does not disable its trigger; no claimed disabled-root parity.','Reload/comment-state and closed subtree retention are outside these captures.'],
   },

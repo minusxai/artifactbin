@@ -113,7 +113,7 @@ export class AfSwitch extends HTMLElement {
 const switchStyles = `
 af-switch{display:inline-flex;vertical-align:top}
 af-switch .af-switch-shell{display:inline-flex;flex-direction:column;gap:.375rem;align-items:flex-start}
-af-switch .af-switch-label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.25;color:var(--muted-foreground,#555)}
+af-switch .af-switch-label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
 af-switch .af-switch-label[hidden]{display:none}
 af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;transition:background-color .15s;outline:none}
 af-switch .af-switch-button[data-state=checked]{background:var(--primary,#222)}
