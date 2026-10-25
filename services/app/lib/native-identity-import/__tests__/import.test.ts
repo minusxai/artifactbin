@@ -590,3 +590,40 @@ it('captures public import input and schema configuration before transaction sch
  expect((await db.query<{name:string}>('SELECT name FROM users WHERE id=$1',[sourceUser.id])).rows[0]?.name).toBe(original);
  expect((await db.query('SELECT id FROM auth."user" WHERE id=$1',[sourceUser.id])).rows).toHaveLength(1);
 });
+
+
+function extraProvenance(input:NativeIdentityImport,id='source_token_new'):NativeIdentityImport {
+ const token={id,user_id:sourceUser.id,created_at:'2021-05-06T07:08:09.123456Z',deleted_at:null,expires_at:null};
+ input.sourceInventory={...input.sourceInventory,tokens:[...input.sourceInventory.tokens,token]};input.plan.sourceInventorySha256=digest(input.sourceInventory);
+ input.plan.tokens=[...input.plan.tokens,{sourceId:id,targetId:id,userId:token.user_id,action:'create-disabled-provenance',sourceRowSha256:digest(token),sourceCreatedAt:token.created_at,sourceDeletedAt:null,sourceExpiresAt:null}];
+ input.plan.targets.tokens={...input.plan.targets.tokens,[id]:{tokenId:id}};resign(input);return input;
+}
+it('mixes prior and new disabled tokens without changing earlier revocation instants, then replays both',async()=>{
+ const db=await getDb(),first=fixture();await importNativeIdentities(db,first);
+ const before=(await db.query("SELECT to_jsonb(tokens) AS value FROM tokens WHERE id='source_token'")).rows;
+ const extended=extraProvenance(fixture());extended.revokedAt='2026-03-04T00:00:00.654321Z';
+ expect(await importNativeIdentities(db,extended)).toMatchObject({createdUsers:0,createdTokens:1,replayed:2});
+ expect((await db.query("SELECT to_jsonb(tokens) AS value FROM tokens WHERE id='source_token'")).rows).toEqual(before);
+ const row=(await db.query<{created_at:string;deleted_at:string}>("SELECT to_jsonb(tokens)->>'created_at' AS created_at,to_jsonb(tokens)->>'deleted_at' AS deleted_at FROM tokens WHERE id='source_token_new'")).rows[0]!;
+ expect(row.created_at).toContain('.123456');expect(row.deleted_at).toContain('.654321');
+ expect(await importNativeIdentities(db,{...extended,revokedAt:'2027-01-01T00:00:00Z'})).toMatchObject({createdUsers:0,createdTokens:0,replayed:3});
+ expect((await db.query("SELECT source_id FROM native_identity_imports WHERE kind='token' ORDER BY source_id")).rows).toEqual([{source_id:'source_token'},{source_id:'source_token_new'}]);
+});
+it('rolls back actual inserted token rows when the later bulk ledger SQL fails, retaining a valid prior replay',async()=>{
+ const db=await getDb();
+ await db.query("ALTER TABLE native_identity_imports ADD CONSTRAINT synthetic_token_ledger_failure CHECK(kind<>'token' OR source_id<>'source_token_new')");
+ try{await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow();}finally{await db.query('ALTER TABLE native_identity_imports DROP CONSTRAINT synthetic_token_ledger_failure');}
+ for(const table of ['users','tokens','native_identity_imports','auth."user"'])expect((await db.query('SELECT count(*)::integer AS count FROM '+table)).rows).toEqual([{count:0}]);
+ await importNativeIdentities(db,fixture());
+ const beforeTokens=(await db.query('SELECT to_jsonb(tokens) AS value FROM tokens ORDER BY id')).rows,beforeLedger=(await db.query('SELECT to_jsonb(native_identity_imports) AS value FROM native_identity_imports ORDER BY kind,source_id')).rows;
+ await db.query("ALTER TABLE native_identity_imports ADD CONSTRAINT synthetic_token_ledger_failure CHECK(kind<>'token' OR source_id<>'source_token_new')");
+ try{await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow();}finally{await db.query('ALTER TABLE native_identity_imports DROP CONSTRAINT synthetic_token_ledger_failure');}
+ expect((await db.query('SELECT to_jsonb(tokens) AS value FROM tokens ORDER BY id')).rows).toEqual(beforeTokens);
+ expect((await db.query('SELECT to_jsonb(native_identity_imports) AS value FROM native_identity_imports ORDER BY kind,source_id')).rows).toEqual(beforeLedger);
+ expect(await importNativeIdentities(db,extraProvenance(fixture()))).toMatchObject({createdTokens:1,replayed:2});
+});
+it('rejects a changed prior token alongside a new mapping without writing the new token or ledger',async()=>{
+ const db=await getDb();await importNativeIdentities(db,fixture());await db.query("UPDATE tokens SET request_authority=true WHERE id='source_token'");
+ await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow('native_identity_token_replay_changed');
+ expect((await db.query("SELECT id FROM tokens WHERE id='source_token_new'")).rows).toEqual([]);expect((await db.query("SELECT source_id FROM native_identity_imports WHERE source_id='source_token_new'")).rows).toEqual([]);
+});
