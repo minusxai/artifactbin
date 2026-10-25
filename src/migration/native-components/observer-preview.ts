@@ -1,3 +1,7 @@
+import type {NativeObserverPreviewPlan} from './observer-preview-contracts.ts';
+/** Only copied, content-addressed assets may be granted to opaque children.
+ * Generic external/navigation receipts are not resource authority. */
+export function nativeObserverPreviewResources(resources:NativeObserverPreviewPlan['resources']):NativeObserverPreviewPlan['resources']{return resources.filter(resource=>resource.source&&new RegExp('^(?:\\./|/)?assets/'+resource.sha256+'\\.[a-z0-9]{1,8}$').test(resource.target)&&/^[a-f0-9]{64}$/.test(resource.sha256)).map(resource=>({...resource}));}
 /** Literal runtime: children have opaque origins and no credential or parent bridge.
  * Resource URLs are exact host-receipted assets; never inherit runner/platform access.
  */
@@ -11,7 +15,7 @@ export const NATIVE_OBSERVER_PREVIEW_RUNTIME=String.raw`function installPreview(
  const hide=event=>{if(!event.persisted)dispose();};
  const allowed=new Set(plan.resources.map(resource=>resource.target));
  const attr=value=>value.replaceAll('&','&amp;').replaceAll('"','&quot;');
- const assetPolicy=plan.resources.map(resource=>{const target=resource.target;if(!/^(\/?assets\/|https?:\/\/)/.test(target)||/[\s;'"<>]/.test(target)||!/^([a-f0-9]{64})$/.test(resource.sha256))throw Error('Invalid preview resource');return new URL(target,document.baseURI).href;}).join(' ');
+ const assetPolicy=plan.resources.map(resource=>{const target=resource.target;if(!/^[a-f0-9]{64}$/.test(resource.sha256)||!new RegExp('^(?:\\./|/)?assets/'+resource.sha256+'\\.[a-z0-9]{1,8}$').test(target))throw Error('Invalid preview resource');return new URL(target,document.baseURI).href;}).join(' ');
  const csp="default-src 'none'; script-src blob: 'unsafe-inline' "+assetPolicy+"; style-src 'unsafe-inline' "+assetPolicy+"; img-src data: blob: "+assetPolicy+"; font-src data: "+assetPolicy+"; media-src data: blob: "+assetPolicy+"; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
  document.defaultView?.addEventListener('pagehide',hide);
  return {

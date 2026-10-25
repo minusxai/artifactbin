@@ -13,6 +13,7 @@ import {NATIVE_COMPONENT_TARGET} from './component-map.ts';
 import {mapNativeCharts} from './chart-mapping.ts';
 import {closeNativeStyles} from './styles.ts';
 import {prepareNativeReaderTemplate} from './reader-template.ts';
+import {nativeObserverPreviewResources} from './observer-preview.ts';
 import {adaptNativeAuthorProgram} from './author-programs.ts';
 import {resourceSha256} from './resources.ts';
 import {prepareNativeNavigation} from './resource-navigation.ts';
@@ -57,7 +58,7 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
   const text=node.type==='element'?node.children.map(n=>n.type==='text'?n.value:n.type==='expression'&&n.value.static&&typeof n.value.json==='string'?n.value.json:'').join(''):'';
   const configured=profiles.filter(p=>p.sourceNode===node.graphKey);if(configured.length>1)throw Error('native_pipeline_author_profile');
   const candidates=configured.length?configured:[{sourceNode:node.graphKey,profile:'native-query-observer' as const,filter:'search' as const,scriptSha256:resourceSha256(text)},{sourceNode:node.graphKey,profile:'bookshelf-local-state' as const,filter:analysis.flow.values.some(v=>v.name==='filter')?'search-and-status' as const:'search' as const,scriptSha256:resourceSha256(text)}];
-  let adapted=false;for(const profile of candidates){try{authorPrograms.push(adaptNativeAuthorProgram({analysis,identity,presentation,urls:closure.urls,admission:{...profile,...profile.profile==='native-query-preview'?{preview:{sourceNodeId:identity.bindings.find(binding=>binding.sourceNode===node.graphKey)!.afId,resources:closure.urls}}:{},key:analysis.key,sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSourceSha256:analysis.compilerSourceSha256,nodeSha256:nativeDigest(node)}}));adapted=true;break;}catch{if(configured.length)throw Error('native_pipeline_author_admission');}}
+  let adapted=false;for(const profile of candidates){try{authorPrograms.push(adaptNativeAuthorProgram({analysis,identity,presentation,urls:closure.urls,admission:{...profile,...profile.profile==='native-query-preview'?{preview:{sourceNodeId:identity.bindings.find(binding=>binding.sourceNode===node.graphKey)!.afId,resources:nativeObserverPreviewResources(closure.urls)}}:{},key:analysis.key,sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSourceSha256:analysis.compilerSourceSha256,nodeSha256:nativeDigest(node)}}));adapted=true;break;}catch{if(configured.length)throw Error('native_pipeline_author_admission');}}
   if(!adapted)block('author-program-unsupported',node.graphKey);
  }
  const requiresOperations=analysis.flow.queries.length>0||analysis.flow.mutations.length>0||chart.mappings.length>0;

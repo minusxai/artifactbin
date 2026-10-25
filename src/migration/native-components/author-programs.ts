@@ -2,7 +2,7 @@
 import {createHash} from 'node:crypto';
 import {parse} from 'acorn';
 import {adaptNativeObserverSource} from './observer-source.ts';
-import {NATIVE_OBSERVER_PREVIEW_RUNTIME} from './observer-preview.ts';
+import {NATIVE_OBSERVER_PREVIEW_RUNTIME,nativeObserverPreviewResources} from './observer-preview.ts';
 import {NATIVE_OBSERVER_RUNTIME} from './observer-runtime.ts';
 import {nativeDigest} from './selection.ts';
 import {rewriteNativeCss} from './resources.ts';
@@ -65,7 +65,7 @@ export function adaptNativeAuthorProgram(input:NativeAuthorProgramInput):NativeA
   if(node!==scripts[0]||node.type!=='element'||node.attributes.length)throw Error('Unsupported script wrapper');
   html=`<template data-af-id="${escape(identities[0]!.afId)}"></template>`;
   if(a.profile==='ordinary-dom-script')authorJs=original;
-  else if(a.profile==='native-query-observer'||a.profile==='native-query-preview'){if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==identities[0]!.afId||nativeDigest(a.preview.resources)!==nativeDigest(input.urls??[])))throw Error('Preview resource/identity association mismatch');if(a.profile!=='native-query-preview'&&a.preview)throw Error('Unexpected preview capability');authorJs=observerAuthorJs(input.analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined);}
+  else if(a.profile==='native-query-observer'||a.profile==='native-query-preview'){if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==identities[0]!.afId||nativeDigest(a.preview.resources)!==nativeDigest(nativeObserverPreviewResources(input.urls??[]))))throw Error('Preview resource/identity association mismatch');if(a.profile!=='native-query-preview'&&a.preview)throw Error('Unexpected preview capability');authorJs=observerAuthorJs(input.analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined);}
   else {
    const books=sourceBooks(original),fields=input.analysis.flow.values.map(v=>v.name),fieldSet=new Set(fields),groups=fields.filter(k=>k.startsWith('group_')).map(k=>k.slice(6));
    if(fields.some(k=>!/^[_A-Za-z][_A-Za-z0-9]*$/.test(k))||new Set(fields).size!==fields.length||!['search','surprise','empty',...(a.filter==='search-and-status'?['filter']:[]),...books.flatMap(b=>['visible_'+b.id,'open_'+b.id]),...books.map(b=>'group_'+b.group)].every(k=>fieldSet.has(k)))throw Error('Incomplete bookshelf local state declarations');
