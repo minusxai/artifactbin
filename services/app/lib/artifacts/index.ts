@@ -24,7 +24,7 @@ export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, se
 export type { ArtifactInput } from './store';
 export { updateMetadataFromBody } from './metadata-wire';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
-export { CreationReplay, creationOperation, lookupCreation } from './creation-ledger';
+export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds } from './creation-ledger';
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
