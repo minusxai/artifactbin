@@ -4,6 +4,7 @@ import {mkdtemp,readdir,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {once} from 'node:events';
 import {State,withLock,HOME_SCOPE} from '../src/state';
 
@@ -97,13 +98,23 @@ test('a competing process waits for a short holder by default — parallel agent
 
 test('a lock refuses a competing process, is re-entrant in-process, and the OS releases it after SIGKILL', fixture(async home => {
   const module = new URL('../src/state.ts', import.meta.url).href;
-  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `import {withLock} from ${JSON.stringify(module)}; await withLock(${JSON.stringify(home)}, '/work', async()=>{process.stdin.resume(); process.stdout.write('locked'); await new Promise(()=>{});});`], {stdio: ['pipe', 'pipe', 'pipe']});
+  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `import {withLock} from ${JSON.stringify(module)}; await withLock(${JSON.stringify(home)}, '/work', async()=>{process.stdin.resume(); const {stat}=await import('node:fs/promises'); const {createHash}=await import('node:crypto'); const {join}=await import('node:path'); const {configDir}=await import(${JSON.stringify(new URL('../src/config.ts', import.meta.url).href)}); const lock=join(configDir(${JSON.stringify(home)}),'locks',createHash('sha256').update('/work').digest('hex').slice(0,16)+'.sqlite'); const info=await stat(lock); process.stderr.write(JSON.stringify({lockDevice:info.dev,lockInode:info.ino,pathHash:createHash('sha256').update(lock).digest('hex')})+'\\n'); process.stdout.write('locked'); await new Promise(()=>{});});`], {stdio: ['pipe', 'pipe', 'pipe']});
+  let childStderr='';
+  child.stderr.on('data',data=>{childStderr=(childStderr+String(data)).slice(-2000);});
+  const unexpectedEntry=async()=>{
+    const lock=join(home,'.artifactbin','locks',createHash('sha256').update('/work').digest('hex').slice(0,16)+'.sqlite');
+    const info=await stat(lock).catch(()=>null);
+    const stderr=childStderr.split(home).join('<fixture>').replace(/(?:[A-Za-z]:[\\/]|\/)[^\s'"<>]+/g,'<path>');
+    let holder:{lockDevice?:number;lockInode?:number;pathHash?:string}={};
+    try{holder=JSON.parse(childStderr.split('\n').find(line=>line.startsWith('{'))??'{}');}catch{}
+    assert.fail(`competing writer entered ${JSON.stringify({exitCode:child.exitCode,signalCode:child.signalCode,stderr,lockFilePresent:Boolean(info),samePath:holder.pathHash===createHash('sha256').update(lock).digest('hex'),sameInode:holder.lockDevice===info?.dev&&holder.lockInode===info?.ino})}`);
+  };
   try {
     const outcome = await Promise.race([once(child.stdout, 'data').then(x => String(x[0])), once(child, 'exit').then(() => 'exited')]);
     assert.equal(outcome, 'locked');
-    await assert.rejects(withLock(home, '/work', async () => assert.fail('competing writer entered'), {waitMs: 0}), /workspace_busy/);
+    await assert.rejects(withLock(home, '/work', unexpectedEntry, {waitMs: 0}), /workspace_busy/);
     const started = Date.now();
-    await assert.rejects(withLock(home, '/work', async () => assert.fail('competing writer entered'), {waitMs: 250}), /workspace_busy/);
+    await assert.rejects(withLock(home, '/work', unexpectedEntry, {waitMs: 250}), /workspace_busy/);
     assert.ok(Date.now() - started >= 200, 'a bounded wait polls the scope before refusing');
     assert.equal(await withLock(home, HOME_SCOPE, async () => 'other scope is independent'), 'other scope is independent');
     const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited;

@@ -418,6 +418,17 @@ async function editing(engineName, browser) {
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
       await answerName(page, 'Asha');
       await expect(page.getByRole('tab', { name: 'Edit the source' })).toBeVisible({ timeout: 20_000 });
+      // Observe the real offline editing flow without changing focus, selection or input.
+      await page.evaluate(id => {
+        const events=[];
+        const record=event=>{
+          if(events.length>=40)return;
+          const heading=document.getElementById(id),editor=heading?.closest('.ProseMirror'),selection=getSelection();
+          events.push({type:event.type,at:Math.round(performance.now()),inputType:event.inputType??null,defaultPrevented:event.defaultPrevented,heading:heading?.textContent?.slice(0,100),selection:selection?.toString().slice(0,100),focused:Boolean(editor?.contains(document.activeElement))});
+        };
+        window.__headingEditEvents=events;
+        for(const type of ['focusin','focusout','selectionchange','beforeinput','input'])document.addEventListener(type,record,true);
+      },headingId);
       await selectHeading(page, 'Regional'.length);
       // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
       await page.keyboard.insertText('Quarterly');
@@ -425,7 +436,7 @@ async function editing(engineName, browser) {
       catch(error){
         try { check.note(`${name}: heading edit state ${JSON.stringify(await page.evaluate(id=>{
           const heading=document.getElementById(id),editor=heading?.closest('.ProseMirror'),selection=getSelection();
-          return {heading:heading?.textContent?.slice(0,100),selection:selection?.toString().slice(0,100),editable:Boolean(editor?.isContentEditable),focused:Boolean(editor?.contains(document.activeElement))};
+          return {heading:heading?.textContent?.slice(0,100),selection:selection?.toString().slice(0,100),editable:Boolean(editor?.isContentEditable),focused:Boolean(editor?.contains(document.activeElement)),events:window.__headingEditEvents};
         },headingId))}`); } catch { check.note(`${name}: heading edit diagnostics unavailable`); }
         throw error;
       }
