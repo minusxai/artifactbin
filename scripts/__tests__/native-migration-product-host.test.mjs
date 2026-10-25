@@ -7,6 +7,7 @@ import {createHumanAuth} from '@artifactbin/auth';
 import {useAppHarness} from '@/__tests__/harness';
 import {LOCAL_OBJECT_DIR} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform';
+import {mintToken,revokeToken} from '@/lib/accounts';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {pageSourceDigest} from '@/lib/registered-page-queries/registry';
 import {nativeIdentityDigest as digest} from '@/lib/native-identity-import/model';
@@ -64,10 +65,10 @@ it('runs actual adapters for two unrelated reviewed source identities, verifies 
 },30000);
 
 it('one shared bootstrap snapshots two sources and imports a third without snapshot through the actual product modules',async()=>{
- const root=await mkdtemp(path.join(tmpdir(),'native-bootstrap-'));
+ const root=await mkdtemp(path.join(tmpdir(),'native-bootstrap-')),minted=[];
  try{
   const db=await getDb(),recipes=new Map();
-  const host=createNativeProductMigrationHost({db,objectsDirectory:LOCAL_OBJECT_DIR,publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,visibility:recipe.history.visibility,shares:recipe.history.shares});const receipt=runtime.prepareBundle(context.assembly,recipe.history.pageId);expect(receipt.assemblySha256).toBe(context.assembly.sha256);const canonical=publicationModules.canonicalizeHtmlPage(receipt.html,{previousHtml:recipe.history.revisions[0].page.html,ledger:recipe.history.revisions[0].ledger});recipe.history.revisions[0].page.html=canonical.html;recipe.history.revisions[0].page.nextNodeId=canonical.ledger.nextNodeId;recipe.history.revisions[0].ledger=canonical.ledger;recipe.history.revisions[0].sourceSha256=pageSourceDigest(canonical.html);recipe.history.revisions[0].htmlPublicationDependencies=receipt.dependencies;return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
+  const host=createNativeProductMigrationHost({db,objectsDirectory:LOCAL_OBJECT_DIR,runtimeActors:{provision:async(tx,userId)=>{const token=await mintToken('native-bootstrap-fixture',userId,tx,{expiresInMs:3600000,audience:'http://localhost:3000'});minted.push(token.id);return {userId,tokenId:token.id};}},publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,visibility:recipe.history.visibility,shares:recipe.history.shares});const receipt=runtime.prepareBundle(context.assembly,recipe.history.pageId);expect(receipt.assemblySha256).toBe(context.assembly.sha256);const canonical=publicationModules.canonicalizeHtmlPage(receipt.html,{previousHtml:recipe.history.revisions[0].page.html,ledger:recipe.history.revisions[0].ledger});recipe.history.revisions[0].page.html=canonical.html;recipe.history.revisions[0].page.nextNodeId=canonical.ledger.nextNodeId;recipe.history.revisions[0].ledger=canonical.ledger;recipe.history.revisions[0].sourceSha256=pageSourceDigest(canonical.html);recipe.history.revisions[0].htmlPublicationDependencies=receipt.dependencies;return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
   for(const prefix of ['BootstrapFirst','BootstrapSecond','BootstrapImportOnly']){
    const publicationRecipe=await fixture(prefix,root);publicationRecipe.catalog.sinkDirectory=LOCAL_OBJECT_DIR;
    const key={sourceNamespace:prefix,sourceId:publicationRecipe.history.sourceId,version:3};
@@ -78,7 +79,7 @@ it('one shared bootstrap snapshots two sources and imports a third without snaps
    await writeFile(canonicalPath,canonical);await writeFile(recoveryPath,recovery);await writeFile(path.join(root,probePath),probe);
    const template={format:'native-migration-pilot-v1',implementation:'html',preparedStore:{},probe:{path:probePath,sha256:sha(probe)},harnessSha256:sha('harness'),gateManifestSha256:sha('gate'),originalRevision:'a'.repeat(40),candidateRevision:'b'.repeat(40),canonicalSha256:sha(canonical),recoverySha256:sha(recovery),key,rowSha256:digest(row),documentSha256:digest(row.document),sourceSha256:sha(source),bundleFiles:[{path:'index.html',sha256:sha(html)},{path:probePath,sha256:sha(probe)}],theme:'light',viewports:[{width:390,height:844}],states:[{id:'initial',actions:[]}]};
    await writeFile(templatePath,JSON.stringify(template));await writeFile(cameraPath,JSON.stringify({format:'native-migration-camera-recipe-v1',base:'http://localhost:3000',paths:{input:templatePath,canonical:canonicalPath,recovery:recoveryPath,bundle:root,output:path.join(root,'capture')}}));
-   const inputs={};for(const name of ['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments']){const content=name==='compiledHtml'?html:name==='sourceHead'?canonical:name==='identity'?bytes(publicationRecipe.identity):name==='authSchemaCapability'?bytes({schemas:publicationRecipe.schemas,runtime:{actor:publicationRecipe.history.owner,origin:'http://localhost:3000'}}):bytes(name);const relative=prefix+name;await writeFile(path.join(root,relative),content);inputs[name]={path:relative,sha256:sha(content)};}
+   const inputs={};for(const name of ['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments']){const content=name==='compiledHtml'?html:name==='sourceHead'?canonical:name==='identity'?bytes(publicationRecipe.identity):name==='authSchemaCapability'?bytes({schemas:publicationRecipe.schemas,runtime:{mode:'disposable-scoped-tokens',actor:{userId:publicationRecipe.history.owner.userId},origin:'http://localhost:3000'}}):bytes(name);const relative=prefix+name;await writeFile(path.join(root,relative),content);inputs[name]={path:relative,sha256:sha(content)};}
    const reviewed={format:'native-migration-host-v1',revisionScope:'latest',key,assemblySha256:assembly.sha256,sourceRevision:'a'.repeat(40),targetRevision:'b'.repeat(40),inputs,authority:{appSchema:'public',authSchema:'auth',capabilities:['reviewed-migration']}};
    const authorityRecipePath=path.join(root,prefix+'authority.json');await writeFile(authorityRecipePath,JSON.stringify(reviewed));
    recipes.set(key.sourceId,publicationRecipe);
@@ -95,14 +96,14 @@ it('one shared bootstrap snapshots two sources and imports a third without snaps
     expect(imported).toMatchObject({key,stage:'imported-unsnapshotted',assemblySha256:assembly.sha256,importResult:{disposition:'created'},history:{pageId:publicationRecipe.history.pageId},identityPlan:{sha256:publicationRecipe.identity.plan.sha256}});
     expect(imported.preparedStorePath).toBeUndefined();expect(imported.pilotInputPath).toBeUndefined();
     await expect(readFile(path.join(context.outputDirectory,'snapshot','database.tar'))).rejects.toThrow();
-    expect((await db.query('SELECT id FROM artifacts WHERE id=$1',[publicationRecipe.history.pageId])).rows).toHaveLength(1);
+    expect((await db.query('SELECT id FROM artifacts WHERE id=$1',[publicationRecipe.history.pageId])).rows).toHaveLength(1);expect(imported.history.owner).toEqual(publicationRecipe.history.owner);expect((await db.query('SELECT deleted_at FROM tokens WHERE id=$1',[prefix+'token'])).rows[0].deleted_at).not.toBeNull();
     continue;
    }
    const imported=await host.importAndPrepare(context);
    expect(imported).toMatchObject({key,stage:'imported',assemblySha256:assembly.sha256});
    const input=JSON.parse(await readFile(imported.pilotInputPath,'utf8'));expect(input.preparedStore.reader.pageId).toBe(publicationRecipe.history.pageId);expect(input.bundleFiles).toEqual([{path:'index.html',sha256:sha(html)},{path:'theme.css',sha256:sha(css)},template.probe]);expect(imported.importResult.disposition).toBe('created');expect(imported.identityPreparation).toMatchObject({transaction:'separate-prerequisite',identities:{createdUsers:1,createdTokens:1}});expect(input.preparedStore.files.some(file=>file.path.startsWith('objects/'))).toBe(true);
   }
- }finally{await rm(root,{recursive:true,force:true});}
+ }finally{for(const id of minted)await revokeToken(id);await rm(root,{recursive:true,force:true});}
 },30000);
 
 it('refuses a nondisposable database before invoking publication or any write',()=>{

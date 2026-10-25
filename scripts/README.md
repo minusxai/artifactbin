@@ -144,3 +144,5 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/ci/linux-acceptance-deps.mjs` | Cache the Linux acceptance job's downloaded deb archives. | `ci.yml` |
 | `scripts/ci/docker-containerd-store.sh` | Switch a CI runner's Docker Engine to the containerd image store, which can import and export BuildKit caches (the company container's Caddy build). | `ci.yml` (`company-container`, `warm-caches`) |
 
+
+For disposable migration QA across mapped owners, set the lifecycle configuration's `runtimeAuthority` to `{mode: "disposable-scoped-tokens", ttlMs: 3600000}`. Set the pipeline authority runtime to the same mode and map each reviewed source owner to `{userId: targetUserId}`; omit token IDs. The local provider provisions credentials after the reviewed identities exist, preserves source token provenance, and revokes its credentials on cleanup. This mode requires local PGlite and local object storage. The private `runtime-actors.json` cleanup receipt contains token ID hashes and expiry/revocation state, never bearer credentials.
