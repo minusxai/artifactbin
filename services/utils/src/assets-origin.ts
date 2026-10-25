@@ -29,7 +29,7 @@ export function isPublicAssetRequest(request: Request, origin: string): boolean 
 
 /** Strip authority-bearing response metadata and refuse upstream redirects. */
 export function publicAssetResponse(response: Response): Response {
-  if (response.status >= 300 && response.status < 400) {
+  if (response.status >= 300 && response.status < 400 && response.status !== 304) {
     void response.body?.cancel();
     return new Response('asset upstream refused', { status: 502, headers: { 'cache-control': 'no-store' } });
   }

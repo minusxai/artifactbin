@@ -368,8 +368,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
-    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method });
-    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404 });
+    // Only the byte validator crosses this anonymous boundary; never credentials.
+    const headers = new Headers();
+    const validator = c.req.header('if-none-match');
+    if (validator !== undefined) headers.set('if-none-match', validator);
+    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method, headers });
+    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404, headers: { 'cache-control': 'no-store' } });
     const response = incoming.pathname.startsWith('/assets/export/')
       ? await exportAssetResponse(request, incoming.pathname.slice('/assets/export/'.length))
       : incoming.pathname.startsWith('/assets/ref/')
