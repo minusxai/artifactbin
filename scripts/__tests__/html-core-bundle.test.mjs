@@ -24,11 +24,13 @@ it('refuses to emit an empty immutable runtime',async()=>{
 it('relocates installed preview helpers and rejects skill-source/build drift',async()=>{
  const root=await mkdtemp(path.join(tmpdir(),'af-preview-bundle-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));
  const source=path.join(root,'services/app/lib/skills/preview-assets.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'throw Error("source compiler must not execute in deployed server")');
- const output=path.join(root,'relocated/preview.mjs'),expected={parser:'export function previewHtml(){}',datasets:'export function createLocalPreviewDatasets(){}',parserSource:'authored parser source'};
+ const output=path.join(root,'relocated/preview.mjs'),expected={parser:'export function previewHtml(){}',datasets:'export function createLocalPreviewDatasets(){}',toolbox:'export const identity="prebuilt-toolbox";',parserSource:'authored parser source'};
  const {prebuiltPreviewAssets}=await import('../build/html-core.mjs');
- await build({stdin:{contents:`export * from ${JSON.stringify(source)};`,resolveDir:root,loader:'ts'},bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltPreviewAssets(root,()=>expected)]});
+ await build({stdin:{contents:`export {buildPreviewParser,buildPreviewDatasets,buildToolboxPlatform} from ${JSON.stringify(source)};`,resolveDir:root,loader:'ts'},bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltPreviewAssets(root,()=>expected)]});
+ await expect(build({entryPoints:[source],bundle:true,write:false,platform:'node',logLevel:'silent',plugins:[prebuiltPreviewAssets(root,()=>({...expected,toolbox:''}))]})).rejects.toThrow('Preview helper assets are empty');
  await rm(path.join(root,'services'),{recursive:true,force:true});const helpers=await import(pathToFileURL(output).href);
  expect(await helpers.buildPreviewParser(expected.parserSource)).toBe(expected.parser);expect(await helpers.buildPreviewDatasets()).toBe(expected.datasets);
+ const toolbox=await helpers.buildToolboxPlatform();expect(toolbox).toBe(expected.toolbox);const installed=path.join(root,'relocated/toolbox.mjs');await writeFile(installed,toolbox);expect((await import(pathToFileURL(installed).href)).identity).toBe('prebuilt-toolbox');
  await expect(helpers.buildPreviewParser('different source')).rejects.toThrow('source differs');
 });
 
