@@ -1,5 +1,5 @@
 import * as nativeHtml from '@/lib/serving/native-html.server';
-import { nativeHtmlPresentation } from '@/lib/serving/native-html-presentation.server';
+import { nativeHtmlStructuralWrapper } from '@/lib/serving/native-html-structural-wrapper';
 import * as artifacts from '@/lib/artifacts';
 import { HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { servesDocument } from '@/lib/serving/custom-domains';
@@ -53,6 +53,10 @@ it('keeps the compiler-owned mx-doc wrapper out of the bare story gutter in read
  expect(fix?.textContent).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc');
  expect(fix?.textContent).toContain('padding-inline:0');
  expect(document.querySelector('[data-af-id="authored"] h1')?.textContent).toBe('Authored heading');
+ const offline=await download(request(`/a/${id}/download`,{token:actor.token}),params(id));expect(offline.status).toBe(200);
+ const offlineDocument=new JSDOM(await offline.text()).window.document,offlineFix=offlineDocument.querySelector('style[data-mx-native-html-presentation]');
+ expect(offlineFix?.textContent).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc');
+ expect(offlineDocument.querySelector('[data-af-id="authored"] h1')?.textContent).toBe('Authored heading');
  const stored=await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id));expect(stored.status).toBe(200);
  expect((await stored.json()).html).not.toContain('data-mx-native-html-presentation');
 });
@@ -78,7 +82,6 @@ import { setServices } from '@/lib/platform';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { EXPORT_PNG } from './export-helpers';
 import type { RenderRequest } from '@artifactbin/contracts';
-import type { ArtifactRow } from '@/lib/artifacts';
 afterEach(()=>setServices({}));
 it('resets only the bare inline story wrapper and preserves authored descendants', async()=>{
  const html='<!doctype html><html><head></head><body>'
@@ -86,8 +89,7 @@ it('resets only the bare inline story wrapper and preserves authored descendants
   +'<main data-mx-story-root><div class="mx-doc" id="unrelated-wrapper"><p>Unrelated</p></div></main>'
   +'<main data-mx-story-root data-mx-inline-story data-mx-styled><div class="mx-doc" id="styled-wrapper"><p>Styled</p></div></main>'
   +'</body></html>';
- const row={id:'Abc12345',user_id:null,visibility:'private',format:'html',title:'Reader',description:null,source:html,version:1} as ArtifactRow;
- const rendered=await nativeHtmlPresentation(html,row);
+ const rendered=nativeHtmlStructuralWrapper(html);
  const document=new JSDOM(rendered).window.document;
  const presentation=document.querySelector('style[data-mx-native-html-presentation]')!;
  expect(presentation).not.toBeNull();
