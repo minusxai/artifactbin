@@ -22,7 +22,7 @@ import type {
 } from "../catalog-contracts";
 import type { NativeHistoryImport } from "../contracts";
 useAppHarness();
-async function fixture() {
+async function fixture(twoTables = false) {
   const owner = await mintAccountToken("synthetic_catalog_owner"),
     viewer = await mintAccountToken("synthetic_catalog_viewer"),
     root = await mkdtemp(path.join(tmpdir(), "native-catalog-publication-")),
@@ -55,14 +55,7 @@ async function fixture() {
       kind: "stored",
       defaultSchema: "public",
       refreshSeconds: 0,
-      tables: [
-        {
-          schema: "public",
-          name: "rows",
-          columns,
-          objectKey: objects[index]!.objectKey,
-        },
-      ],
+      tables: (twoTables ? ["rows", "members"] : ["rows"]).map(name => ({schema:"public",name,columns,objectKey:objects[index]!.objectKey})),
     },
     columns,
     objectKey: objects[index]!.objectKey,
@@ -163,7 +156,7 @@ async function fixture() {
           dependencies: [],
         },
       ],
-      imports: [{ alias: "items", binding: dataId, table: "rows" }],
+      imports: (twoTables ? ["rows", "members"] : ["rows"]).map(table => ({alias:"items",binding:dataId,table})),
     },
     {
       compilerSha256: "a".repeat(64),
@@ -186,17 +179,15 @@ async function fixture() {
       groups: {},
       artifacts: { [dataId]: dataId, [pageId]: pageId },
     },
-    imports: [
-      {
+    imports: (twoTables ? ["rows", "members"] : ["rows"]).map(table => ({
         pageId,
         pageVersion: 1,
         backendId: prepared.link.backendId,
         backendVersion: prepared.link.version,
         alias: "items",
         datasetId: dataId,
-        table: "rows",
-      },
-    ],
+        table,
+      })),
     objects,
     datasets: [
       {
@@ -620,3 +611,6 @@ it("two pages reuse the same exact dataset across distinct import aliases and re
 
  }finally{await rm(f.root,{recursive:true,force:true});}
 });
+
+it("imports and replays two declared tables under the same dataset alias",async()=>{const f=await fixture(true),db=await getDb();try{expect(await importNativeHistory(db,f.history,f.staged)).toBe("created");expect(await importNativeHistory(db,f.history,f.staged)).toBe("unchanged");expect((await db.query("SELECT id FROM artifacts WHERE id=ANY($1::text[])",[[f.dataId,f.page.pageId]])).rows).toHaveLength(2);}finally{await rm(f.root,{recursive:true,force:true});}});
+it.each(["duplicate-pair","mismatched-binding"])("rejects %s in multi-table registration atomically",async(kind)=>{const f=await fixture(true),db=await getDb();try{const projection=structuredClone(f.projection);if(kind==="duplicate-pair")Object.assign(projection.imports[1]!,projection.imports[0]!);else projection.imports[1]!.table="undeclared";const {sha256,...body}=projection;projection.sha256=nativeCatalogDigest(body);const staged=await stageNativeCatalog(projection,f.source,f.sink);f.history.relationSha256=staged.sourceSha256;await expect(importNativeHistory(db,f.history,staged)).rejects.toThrow(/import_registration/);expect((await db.query("SELECT id FROM artifacts WHERE id=ANY($1::text[])",[[f.dataId,f.page.pageId]])).rows).toEqual([]);}finally{await rm(f.root,{recursive:true,force:true});}});
