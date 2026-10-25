@@ -287,6 +287,17 @@ it("rejects a prepared relation proof reused with different persisted HTML", asy
       .rows,
   ).toEqual([]);
 });
+it('retains source block presentation separately from contextual anchor words and reply identity',async()=>{
+ const {db,history,projection,actor}=await fixture();
+ const root=projection.annotations[0]!;root.quote=null;root.range=null;
+ const relations=prepareNativeHistoryRelations(projection);history.relationSha256=relations.sourceSha256;await importNativeHistory(db,history,relations);
+ const row=(await listAnnotationsFor(actor,history.pageId,{status:'all'}))!.find(row=>row.id===root.id)!;
+ expect(row.anchor).toMatchObject({kind:'html-node',presentation:'block',quote:'A quote'});
+ expect(row.quote).toBeNull();expect(row.range).toBeNull();
+ const stored=(await db.query('SELECT id,root_id,html_anchor FROM annotations WHERE artifact_id=$1 ORDER BY id',[history.pageId])).rows;
+ expect(stored.find(r=>r.id===root.id)?.html_anchor).toMatchObject({presentation:'block'});
+ expect(stored.filter(r=>r.root_id===root.id).every(r=>r.html_anchor===null)).toBe(true);
+});
 it('preserves projected multi-node selection parts through the same HTML public comment read',async()=>{
  const {htmlTextFingerprint}=await import('@artifactbin/contracts');
  const {db,history,projection,actor}=await fixture();history.visibility='public';

@@ -2,6 +2,11 @@ import { expect, it } from 'vitest';
 import { parseHtmlNodeAnchor, htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor, validHtmlCommentRange } from '../html-anchor';
 const anchor = (over: Partial<HtmlNodeAnchor> = {}): HtmlNodeAnchor => ({ kind: 'html-node', v: 1, revision: '2', nodeId: 'n1', quote: 'same words', ...over });
+it('decodes explicit block context without accepting conflicting selection coordinates',()=>{
+ expect(parseHtmlNodeAnchor(anchor({presentation:'block'}))?.presentation).toBe('block');
+ for(const bad of [{presentation:'text'},{presentation:'block',range:{start:0,end:1,length:1,fingerprint:'abcd'}},{presentation:'block',segments:[]},{presentation:'block',nodeId:null}])expect(parseHtmlNodeAnchor({...anchor(),...bad})).toBeNull();
+ expect(parseHtmlNodeAnchor(anchor())?.presentation).toBeUndefined();
+});
 it('uses persistent HTML IDs and decoded text without compiler paths', () => {
   const nodes = htmlCommentNodes('<!doctype html><p data-af-id="n1">same <strong>words</strong> &amp; more</p>');
   expect(resolveHtmlCommentAnchor(nodes, anchor())).toEqual({ node: { nodeId: 'n1', text: 'same words & more' }, quoteFound: true });
