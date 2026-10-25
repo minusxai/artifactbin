@@ -38,8 +38,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'html-components', needsMail: false, seconds: 28, timeoutMs: 60_000 },
   // Real Mermaid/WebGL engines: 8s in the local container.
   { name: 'html-rich-components', needsMail: false, serialGroup: 'clipboard', seconds: 8, timeoutMs: 180_000 },
-  // Actual installed archive/private Save: 20s in the local container.
-  { name: 'private-preview-save', needsMail: true, seconds: 20, timeoutMs: 120_000 },
+  // Installed archive/preview, hosted/download and exact direct-library examples: 32s locally.
+  { name: 'private-preview-save', needsMail: true, seconds: 32, timeoutMs: 120_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
