@@ -95,6 +95,56 @@ try {
     check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`candidate no horizontal overflow ${theme} ${viewport.width}px`);
     check(await page.getByRole('tab',{name:'Two',exact:true}).evaluate(node=>{const style=getComputedStyle(node);return style.outlineStyle!=='none' && parseFloat(style.outlineWidth)>0;}),`candidate keyboard focus visible ${theme} ${viewport.width}px`);
   }
+  // A real shadow-root regression: document.activeElement is the host, so Tabs
+  // must consult its ShadowRoot.activeElement for roving focus and already-focused clicks.
+  await mount('<button id="shadow-before">Outside tab list</button>');
+  await page.evaluate(()=>{
+    const host=document.createElement('div');host.id='tabs-shadow-host';
+    const shadow=host.attachShadow({mode:'open'});
+    const tabs=(id,attrs)=>`<af-tabs id="${id}" ${attrs}><af-tabs-list aria-label="${id}"><af-tabs-trigger value="a">A</af-tabs-trigger><af-tabs-trigger value="b">B</af-tabs-trigger><af-tabs-trigger value="c" disabled>Disabled</af-tabs-trigger></af-tabs-list></af-tabs>`;
+    shadow.innerHTML=`<style>af-tabs-list{display:flex}af-tabs-trigger{display:inline-block;padding:8px}</style>${tabs('shadow-auto','value="a"')}${tabs('shadow-manual','default-value="a" activation-mode="manual"')}${tabs('shadow-click','value="a"')}${tabs('shadow-dedupe','value="a"')}`;
+    window.__tabsShadowEvents={};
+    for(const id of ['shadow-auto','shadow-manual','shadow-click','shadow-dedupe']){
+      const root=shadow.querySelector(`#${id}`);window.__tabsShadowEvents[id]=[];
+      root.addEventListener('af-change',event=>window.__tabsShadowEvents[id].push(event.detail.value));
+    }
+    document.body.append(host);
+  });
+  const shadowHost=page.locator('#tabs-shadow-host');
+  const shadowTrigger=(id,value)=>shadowHost.locator(`#${id} af-tabs-trigger[value="${value}"]`);
+  const shadowState=async id=>shadowHost.locator(`#${id}`).evaluate(root=>{
+    const shadow=root.getRootNode();const active=shadow instanceof ShadowRoot?shadow.activeElement:document.activeElement;
+    return {value:root.value,active:active?.getAttribute('value'),tabIndex:active?.tabIndex,events:window.__tabsShadowEvents[root.id].slice()};
+  });
+
+  await page.locator('#shadow-before').focus();
+  await shadowTrigger('shadow-auto','b').focus();
+  let shadowResult=await shadowState('shadow-auto');
+  check(shadowResult.active==='b'&&shadowResult.tabIndex===0,`shadow-root automatic focus keeps the focused trigger as the roving tab stop`);
+  check(shadowResult.events.join(',')==='b'&&shadowResult.value==='a',`shadow-root automatic focus emits one controlled activation intent`);
+  await shadowTrigger('shadow-auto','c').evaluate(node=>node.focus());
+  shadowResult=await shadowState('shadow-auto');
+  check(shadowResult.events.join(',')==='b'&&shadowResult.value==='a',`shadow-root disabled trigger focus does not activate`);
+
+  await page.locator('#shadow-before').focus();
+  await shadowTrigger('shadow-manual','b').focus();
+  shadowResult=await shadowState('shadow-manual');
+  check(shadowResult.active==='b'&&shadowResult.tabIndex===0&&shadowResult.events.length===0&&shadowResult.value==='a',`shadow-root manual focus moves without selection`);
+  await shadowTrigger('shadow-manual','b').click();
+  shadowResult=await shadowState('shadow-manual');
+  check(shadowResult.events.join(',')==='b'&&shadowResult.value==='b',`shadow-root manual click activates the focused trigger once`);
+
+  await shadowTrigger('shadow-click','b').evaluate(node=>node.addEventListener('focusin',event=>event.stopPropagation(),{once:true}));
+  await page.locator('#shadow-before').focus();
+  await shadowTrigger('shadow-click','b').click();
+  shadowResult=await shadowState('shadow-click');
+  check(shadowResult.active==='b'&&shadowResult.events.join(',')==='b',`shadow-root click activates an already-focused trigger when no focusin reaches Tabs`);
+
+  await page.locator('#shadow-before').focus();
+  await shadowTrigger('shadow-dedupe','b').click();
+  shadowResult=await shadowState('shadow-dedupe');
+  check(shadowResult.events.join(',')==='b',`shadow-root pointer focus and click emit one activation intent`);
+
   const focused = locator=>locator.evaluate(node=>node===document.activeElement);
   async function visibleFocus(locator,label) {
     await page.waitForFunction(selector=>{const node=document.querySelector(selector);if(!node)return false;const style=getComputedStyle(node);return node.matches(':focus-visible') && (style.outlineStyle!=='none' && parseFloat(style.outlineWidth)>0 || /0px 0px 0px [2-9](?:\.\d+)?px/.test(style.boxShadow));},await locator.evaluate(node=>{document.querySelectorAll('[data-focus-probe]').forEach(previous=>previous.removeAttribute('data-focus-probe'));node.dataset.focusProbe='yes';return '[data-focus-probe=yes]';}),{timeout:2000});
