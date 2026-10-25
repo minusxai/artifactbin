@@ -239,3 +239,25 @@ describe('CI isolation', () => {
     expect(crowded.flat().sort()).toEqual(['a', 'b', 'x']);
   });
 });
+
+it('overlaps independent file and screenshot journeys while retaining every engine, DPR and file step',async()=>{
+  const code=source('offline-file'),start=code.indexOf('const SCREENSHOT_CASES =');
+  expect(start).toBeGreaterThan(0);
+  const engines=['chromium','firefox','webkit'],fileSteps=[],screenshots=[],closed=[];
+  let release;const barrier=new Promise(resolve=>{release=resolve;});
+  const reading=async engine=>{fileSteps.push([engine,'reading']);await barrier;};
+  const screenshot=async(engine,dpr)=>{screenshots.push([engine,dpr]);if(new Set(screenshots.map(([name])=>name)).size===3)release();};
+  const step=name=>async engine=>{fileSteps.push([engine,name]);};
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const run=new AsyncFunction('ENGINES','screenshotComment','reading','editing','codeViewOnline','editedByAnAgent','engineChoice','connecting','check',code.slice(start));
+  let timer;
+  try{
+    await Promise.race([
+      run(engines.map(engine=>[engine,{launch:async()=>({close:async()=>{closed.push(engine);}})}]),screenshot,reading,...['editing','codeViewOnline','editedByAnAgent','engineChoice','connecting'].map(step),{note:()=>{},done:()=>{}}),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Independent screenshot journey waited for the file journey')),1000);}),
+    ]);
+  }finally{clearTimeout(timer);release();}
+  expect(screenshots.sort()).toEqual([['chromium',1],['chromium',2.2],['firefox',1],['webkit',1]].sort());
+  expect(closed.sort()).toEqual(engines.sort());
+  for(const engine of engines)expect(fileSteps.filter(([name])=>name===engine).map(([,name])=>name)).toEqual(['reading','editing','codeViewOnline','editedByAnAgent','engineChoice','connecting']);
+});

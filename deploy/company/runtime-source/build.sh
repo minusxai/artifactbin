@@ -74,7 +74,7 @@ build_tar() {
   src/tar --show-defaults | grep -F -- "--rsh-command=$original_rsh"
   # Run upstream tests without root so privileged-xattr checks correctly detect unavailable capabilities.
   chown -R nobody:nogroup /tarbuild
-  runuser -u nobody -- make check
+  runuser -u nobody -- make check TESTSUITEFLAGS=-j4
   mkdir -p /tarpkg/DEBIAN /tarpkg/usr/bin /tarpkg/usr/sbin /tarpkg/usr/share/doc/tar /out
   copy_inventory tar /tarpkg
   cp src/tar /tarpkg/usr/bin/tar

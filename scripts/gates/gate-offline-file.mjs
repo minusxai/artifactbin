@@ -1025,13 +1025,18 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
         const at = ({ path, ...time }) => ({ [path.slice(path.lastIndexOf('/') + 1)]: time.sentMs ?? time.elapsedMs });
         check.note(`${name}: saved in ${Date.now() - started}ms; sent ${JSON.stringify(sent.filter(({ path }) => /\/(?:comment-images|annotations)$/.test(path)).map(at))}, answered ${JSON.stringify(writes.map(at))}`);
       } catch (error) {
-        const state = async () => ({ elapsedMs: Date.now() - started, writes: [...writes], sent: [...sent],
-          alerts: await page.getByRole('alert').allTextContents(), status: await page.getByRole('status').allTextContents(),
-          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled().catch(() => null),
-          composer: await page.getByRole('dialog', { name: 'Annotation composer' }).count() });
-        console.error(name, { phase: 'save screenshot comment', ...await state() });
-        const closed = await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0, { timeout: 30000 }).then(() => true, () => false);
-        console.error(name, { phase: 'save screenshot comment, later', closed, ...await state() });
+        // Preserve the actual failed operation before querying a possibly closed or stalled browser.
+        console.error(name, { phase: 'save screenshot comment', elapsedMs: Date.now() - started,
+          error: String(error.message).slice(-4000), writes: [...writes], sent: [...sent] });
+        let diagnosticTimer;
+        try {
+          const state = await Promise.race([
+            page.evaluate(() => ({ alerts: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent),
+              status: [...document.querySelectorAll('[role="status"]')].map(node => node.textContent) })).catch(() => ({ unavailable: true })),
+            new Promise(resolve => { diagnosticTimer = setTimeout(() => resolve({ unavailable: true }), 2000); }),
+          ]);
+          console.error(name, { phase: 'save screenshot comment state', ...state });
+        } finally { clearTimeout(diagnosticTimer); }
         throw error;
       } finally { page.off('response', recordWrite); page.off('request', recordSent); }
       await page.reload();
@@ -1058,18 +1063,26 @@ const SCREENSHOT_CASES = { chromium: [[1, 200, 100], [2.2, 235, 235]], firefox: 
 const started = Date.now();
 await Promise.all(ENGINES.map(async ([engineName, engine]) => {
   const at = Date.now();
-  const browser = await engine.launch();
-  try {
-    await reading(engineName, browser);
-    await editing(engineName, browser);
-    await codeViewOnline(engineName, browser);
-    await editedByAnAgent(engineName, browser);
-    await engineChoice(engineName, browser);
-    await connecting(engineName, browser);
-  } finally {
-    await browser.close();
-  }
-  for (const [dpr, width, height] of SCREENSHOT_CASES[engineName]) await screenshotComment(engineName, dpr, width, height);
+  // The file journey and server-backed screenshot journey share no document, profile, context or port.
+  // Neither waits for the other's mutable fixtures; both retain every assertion under the same gate deadline.
+  await Promise.all([
+    (async () => {
+      const browser = await engine.launch();
+      try {
+        await reading(engineName, browser);
+        await editing(engineName, browser);
+        await codeViewOnline(engineName, browser);
+        await editedByAnAgent(engineName, browser);
+        await engineChoice(engineName, browser);
+        await connecting(engineName, browser);
+      } finally { await browser.close(); }
+      check.note(`${engineName} file journey: ${((Date.now() - at) / 1000).toFixed(1)}s`);
+    })(),
+    (async () => {
+      for (const [dpr, width, height] of SCREENSHOT_CASES[engineName]) await screenshotComment(engineName, dpr, width, height);
+      check.note(`${engineName} screenshot journey: ${((Date.now() - at) / 1000).toFixed(1)}s`);
+    })(),
+  ]);
   check.note(`${engineName} lane: ${((Date.now() - at) / 1000).toFixed(1)}s`);
 }));
 check.note(`three engines in ${((Date.now() - started) / 1000).toFixed(1)}s`);

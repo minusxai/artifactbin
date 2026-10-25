@@ -24,7 +24,7 @@ it('keeps source suites and runtime ABI metadata in the same-base builder',()=>{
  expect(script).toContain('sha256sum -c -');
  expect(script).toMatch(/cd \/patches\n\s*sha256sum -c SHA256SUMS/);
  expect(script).toContain('make check');
- expect(script).toContain('runuser -u nobody -- make check');
+ expect(script).toContain('runuser -u nobody -- make check TESTSUITEFLAGS=-j4');
  expect(script).toContain('--enable-fnmatch');
  expect(script).toContain('timeout 5 src/dash');
  expect(script).toContain('dpkg-shlibdeps -O');
