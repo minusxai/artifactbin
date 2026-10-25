@@ -16,6 +16,51 @@ function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>
 function browserResources(){return {stylesheets:[...document.querySelectorAll('link[rel~="stylesheet"]')].filter(link=>!link.disabled).map(link=>({url:link.href,loaded:link.sheet!==null}))};}
 /** No readiness promise here: diagnose stalled fonts before closing the reader. */
 function browserFontStatus(){return {status:document.fonts.status,loading:[...document.fonts].filter(face=>face.status==='loading').slice(0,30).map(face=>({family:face.family.slice(0,200),style:face.style,weight:face.weight,status:face.status}))};}
+/** Wait for finite animations already running in the actual document frame.
+ * This function is serialized into that frame by Playwright; keep it self-contained. */
+export async function settleFiniteFrameAnimations({timeoutMs=5000}={}) {
+  const startedAtMs=performance.now();
+  const reducedMotion=typeof globalThis.matchMedia==='function'&&globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const connected=target=>!!target&&(document.documentElement?.contains?document.documentElement.contains(target):target.isConnected!==false);
+  const describe=animation=>{
+    const timing=animation.effect?.getComputedTiming?.()??{};
+    return {name:typeof animation.animationName==='string'?animation.animationName:'',playState:animation.playState,duration:Number.isFinite(timing.duration)?timing.duration:null,iterations:timing.iterations===Infinity?'infinite':Number.isFinite(timing.iterations)?timing.iterations:null};
+  };
+  const all=typeof document.getAnimations==='function'?document.getAnimations({subtree:true}):[];
+  const finite=[],infinite=[],detached=[],paused=[];let alreadyFinished=0,alreadyIdle=0;
+  for(const animation of all){
+    const state=animation.playState;
+    if(state==='finished'){alreadyFinished++;continue;}
+    if(state==='idle'){alreadyIdle++;continue;}
+    if(state==='paused'){paused.push(describe(animation));continue;}
+    if(state!=='running'&&state!=='pending')continue;
+    const target=animation.effect?.target;
+    if(!connected(target)){detached.push(describe(animation));continue;}
+    const timing=animation.effect?.getComputedTiming?.()??{};
+    if(timing.iterations===Infinity||timing.duration===Infinity){infinite.push(describe(animation));continue;}
+    finite.push({animation,target,description:describe(animation),outcome:undefined});
+  }
+  let observer;
+  const markDetached=()=>{for(const record of finite)if(record.outcome===undefined&&!connected(record.target)){record.outcome='detached';record.resolve?.();}};
+  const MutationObserverCtor=document.defaultView?.MutationObserver??globalThis.MutationObserver;
+  if(finite.length&&MutationObserverCtor&&document.documentElement){observer=new MutationObserverCtor(markDetached);observer.observe(document.documentElement,{childList:true,subtree:true});}
+  const waits=finite.map(record=>new Promise(resolve=>{
+    record.resolve=resolve;
+    if(record.outcome!==undefined){resolve();return;}
+    Promise.resolve(record.animation.finished).then(()=>{if(record.outcome===undefined)record.outcome='finished';resolve();},()=>{if(record.outcome===undefined)record.outcome='canceled';resolve();});
+  }));
+  let timer;let timedOut=false;
+  try{
+    if(waits.length){
+      const outcome=await Promise.race([Promise.all(waits).then(()=> 'settled'),new Promise(resolve=>{timer=setTimeout(()=>resolve('timeout'),timeoutMs);})]);
+      timedOut=outcome==='timeout';
+      markDetached();
+    }
+  }finally{clearTimeout(timer);observer?.disconnect();}
+  const pending=finite.filter(record=>record.outcome===undefined).map(record=>record.description);
+  const counts={finished:finite.filter(record=>record.outcome==='finished').length,canceled:finite.filter(record=>record.outcome==='canceled').length,detached:detached.length+finite.filter(record=>record.outcome==='detached').length};
+  return {format:'frame-animation-settlement-v1',reducedMotion,startedAtMs,completedAtMs:performance.now(),elapsedMs:performance.now()-startedAtMs,observed:all.length,alreadyFinished,alreadyIdle,paused,infinite,counts,timedOut:timedOut?pending:[]};
+}
 /** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
 function browserState() {
   const visible = node => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
@@ -146,10 +191,10 @@ export function fontByteProof(evidence) {
  * additionally requires a camera of the real app-mounted iframe rectangle.
  * Source revisions are supplied independently, never inferred. */
 /** @param {import('../fixtures/component-baseline/contract').BrowserCaptureTimeouts & Record<string,any>} options */
-export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport',readyTimeoutMs=30000,captureStepTimeoutMs=30000}) {
+export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport',readyTimeoutMs=30000,captureStepTimeoutMs=30000,animationSettleTimeoutMs=5000}) {
   if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
   if(!['viewport','document-frame'].includes(screenshotMode))throw Error('Unknown browser baseline screenshot mode');
-  if([readyTimeoutMs,captureStepTimeoutMs].some(value=>!Number.isSafeInteger(value)||value<=0))throw Error('Reader capture budgets must be finite positive milliseconds');
+  if([readyTimeoutMs,captureStepTimeoutMs,animationSettleTimeoutMs].some(value=>!Number.isSafeInteger(value)||value<=0))throw Error('Reader capture budgets must be finite positive milliseconds');
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
@@ -162,7 +207,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     if(taintedFixtures.has(fixture.id)){const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase:'cleanup-blocked',message:'Prior state cleanup failed; fixture state is not proven restored',diagnostics:{phase:'cleanup-blocked'}};failures.push(failure);throw Error(failure.message);}
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
-    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction,mounted,captureFailure;
+    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction,mounted,captureFailure,animationEvidence;
     const step=async(name,work,budget=captureStepTimeoutMs)=>{
       phase=name;await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-progress.json`),JSON.stringify({phase,fixture:fixture.id,state:state.id,theme,viewport,sourceRevision}));
       let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`Reader ${name} exceeded ${budget}ms`)),budget);})]);}finally{clearTimeout(timer);}
@@ -200,6 +245,12 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       }
       activeAction=undefined;
       await step('paint-ready',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+      animationEvidence=await step('finite-animations',async()=>{
+        animationEvidence=await frame.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(!animationEvidence||animationEvidence.format!=='frame-animation-settlement-v1')throw Error('frame-animation-evidence-invalid');
+        if(animationEvidence.timedOut.length)throw Error(`finite-frame-animations-timeout:${animationEvidence.timedOut.length}`);
+        return animationEvidence;
+      },animationSettleTimeoutMs+1000);
       const resourceEvidence=await step('resources',()=>frame.evaluate(browserResources));resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
       for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
       const localFailures=[...requestFailures,...httpFailures].filter(failure=>['stylesheet','script'].includes(failure.type)&&local(failure.url));
@@ -220,15 +271,18 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       // Raw fixtures retain the whole viewport/top layer. Authorized fixtures
       // explicitly capture the real iframe, preserving its actual dimensions.
       if(screenshotMode==='document-frame'&&typeof mounted.screenshot!=='function')throw Error('Document-frame capture requires the mounted real frame camera');
-      const screenshot=await step('screenshot',()=>screenshotMode==='document-frame'?mounted.screenshot():page.screenshot({fullPage:false,animations:'disabled',caret:'hide'}));
+      const screenshot=await step('screenshot',()=>screenshotMode==='document-frame'?mounted.screenshot():page.screenshot({fullPage:false,caret:'hide'}));
       await writeFile(path.join(output,name),screenshot);
-      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,animationEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } catch(cause){
-      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length,pendingResources:[...fontPending,...stylesheetPending].filter(record=>record.state==='pending').map(record=>({url:diagnosticText(record.url),status:record.status,capturedFrame:record.frame===frame}))};
+      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length,pendingResources:[...fontPending,...stylesheetPending].filter(record=>record.state==='pending').map(record=>({url:diagnosticText(record.url),status:record.status,capturedFrame:record.frame===frame})),...(animationEvidence?{animationEvidence}:{})};
       /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */
       const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase,...(activeAction?{action:activeAction}:{}),message:diagnosticText(cause.message),diagnostics};
       const stem=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-failure`;
-      try{if(page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,animations:'disabled',caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
+      // A failed animation settlement is not a valid visual sample. Preserve
+      // diagnostics, but do not capture a frame whose authored motion is still
+      // in progress.
+      try{if(phase!=='finite-animations'&&page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
       // Snapshot already mounted documents only; do not run readiness again.
       try{if(frame)failure.semantics=await step('failure-snapshot',()=>frame.evaluate(browserState),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
       try{if(frame)diagnostics.fontStatus=await step('failure-font-status',()=>frame.evaluate(browserFontStatus),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.fontStatusError=diagnosticText(error.message);}
