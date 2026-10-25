@@ -228,3 +228,19 @@ it('a direct upload started before a session change cannot send bytes under the 
  bridge.receive({kind:'upload-context',context:{state:'signed-in',scope:'second-account'}});bytes(new ArrayBuffer(5));
  await rejected;expect(events.some(event=>event.kind==='upload-file')).toBe(false);
 });
+it('applies reader appearance through the authenticated frame command session', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [], appOrigin: 'https://platform.example' });
+  const {startFrameBridge} = await import('../browser-reader');
+  const bridge = startFrameBridge({win: window, post() {}, attach: {kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null}});
+  bridges.push(bridge);
+  document.documentElement.setAttribute('data-af-dark', 'false');
+  for (const mode of ['dark', 'light', 'dark'] as const) {
+    bridge.receive({kind: 'send', command: {type: 'mx:reader-mode', mode}});
+    expect(document.documentElement.getAttribute('data-af-dark')).toBe(mode === 'dark' ? 'true' : null);
+    expect(document.documentElement.style.colorScheme).toBe(mode);
+  }
+  bridge.receive({kind: 'send', command: {type: 'mx:reader-mode', mode: 'invalid'}});
+  expect(document.documentElement.getAttribute('data-af-dark')).toBe('true');
+  document.documentElement.removeAttribute('data-af-dark');
+  document.documentElement.style.colorScheme = '';
+});
