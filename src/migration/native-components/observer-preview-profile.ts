@@ -1,0 +1,11 @@
+import type {NativeTypedAnalysis,RetainedJsxNode} from './analyze-contracts.ts';
+/** Exact reviewed query-backed source-preview wrapper, not an arbitrary script grant. */
+export const NATIVE_OBSERVER_PREVIEW_SCRIPT_SHA256='fa9d2c14a9384793d0be12938e8de1036628cb8d311c91378a36ed42f3674979';
+export function admitNativeObserverPreviewProfile(analysis:NativeTypedAnalysis,script:RetainedJsxNode,verifiedScriptSha256:string):void{
+ const nodes:RetainedJsxNode[]=[];const visit=(items:readonly RetainedJsxNode[])=>{for(const node of items){nodes.push(node);if(node.type==='element')visit(node.children);}};visit(analysis.nodes);
+ const attr=(node:RetainedJsxNode,name:string)=>{if(node.type!=='element')return;const attributes=node.attributes.filter(attribute=>attribute.name===name);const value=attributes.length===1?attributes[0]!.value:undefined;return value?.static&&typeof value.json==='string'?value.json:undefined;};
+ const named=(names:readonly string[],expected:readonly string[])=>names.length===expected.length&&new Set(names).size===names.length&&expected.every(name=>names.includes(name));
+ const selected=(tag:string,value:string,options?:string)=>nodes.filter(node=>node.type==='element'&&node.tag===tag&&attr(node,'value')===value&&(!options||attr(node,'options')===options)).length===1;
+ const styled=(tag:string,name:string)=>nodes.filter(node=>node.type==='element'&&node.tag===tag&&(attr(node,'className')??attr(node,'class')??'').split(/\s+/).includes(name)).length===1;
+ if(verifiedScriptSha256!==NATIVE_OBSERVER_PREVIEW_SCRIPT_SHA256||script.type!=='element'||script.tag!=='script'||script.attributes.length||nodes.filter(node=>node.graphKey===script.graphKey).length!==1||nodes.filter(node=>node.type==='element'&&node.tag==='script').length!==1||!named(analysis.flow.values.map(value=>value.name),['path','page','theme'])||analysis.flow.values.some(value=>value.type!=='string')||!named(analysis.flow.queries.map(query=>query.name),['paths','file','pages','page_html'])||analysis.flow.imports.length!==1||analysis.flow.mutations.length||!selected('Select','$path','$paths')||!selected('Select','$page','$pages')||!selected('Segmented','$theme')||!styled('pre','sv-code')||!styled('div','sv-render'))throw Error('Source preview does not match the reviewed hash and binding facts');
+}

@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {parse} from 'acorn';
 import {adaptNativeObserverSource} from './observer-source.ts';
+import {admitNativeSourceFileViewerProfile} from './source-file-viewer-profile.ts';
 import {NATIVE_OBSERVER_PREVIEW_RUNTIME,nativeObserverPreviewResources} from './observer-preview.ts';
 import {NATIVE_OBSERVER_RUNTIME} from './observer-runtime.ts';
 import {nativeDigest} from './selection.ts';
@@ -39,6 +40,7 @@ export const NATIVE_BOOKSHELF_STATE_RUNTIME=String.raw`function installBookshelf
  const subscription=client.watchQuery({query}).subscribe(result=>{if(disposed)return;if(result.errors?.length||!result.data)return;latest=result.data;void flush();});
  return ()=>{disposed=true;latest=undefined;subscription.unsubscribe();};
 }`;
+function fileViewerAuthorJs(analysis:NativeAuthorProgramInput['analysis'],node:RetainedJsxNode,original:string):string{admitNativeSourceFileViewerProfile(analysis,node,hash(original));return observerAuthorJs(analysis,node.graphKey,original);}
 function observerAuthorJs(analysis:NativeAuthorProgramInput['analysis'],sourceNode:string,original:string,preview?:NativeAuthorProgramInput['admission']['preview']):string {
  const identifier='__nativeObserver_'+hash(sourceNode).slice(0,16);
  const previewIdentifier=preview?identifier+'_preview':undefined;
@@ -51,8 +53,8 @@ export function verifyNativeAuthorProgram({analysis,node,receipt}:NativeAuthorPr
  if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==receipt.identities.find(identity=>identity.sourceNode===a.sourceNode)?.afId))return false;
  const scripts=flatten([node]).filter(n=>n.type==='element'&&n.tag==='script');
  if(node.type!=='element'||(a.profile==='ordinary-srcdoc'?node.tag!=='Iframe':node.tag!=='script')||scripts.length!==1)return false;
- try{const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)return false;if((a.profile==='native-query-observer'||a.profile==='native-query-preview')&&receipt.authorJs!==observerAuthorJs(analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined))return false;}catch{return false;}
- return sha256===nativeDigest(body)&&nativeDigest(a.key)===nativeDigest(analysis.key)&&a.sourceSha256===analysis.sourceSha256&&a.analysisSha256===analysis.analysisSha256&&a.compilerSourceSha256===analysis.compilerSourceSha256&&a.sourceNode===node.graphKey&&a.nodeSha256===nativeDigest(node)&&['ordinary-dom-script','bookshelf-local-state','ordinary-srcdoc','native-query-observer','native-query-preview'].includes(a.profile)&&['search','search-and-status'].includes(a.filter)&&/^[a-f0-9]{64}$/.test(a.scriptSha256);
+ try{const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)return false;if(a.profile==='source-file-viewer'&&receipt.authorJs!==fileViewerAuthorJs(analysis,node,original))return false;if((a.profile==='native-query-observer'||a.profile==='native-query-preview')&&receipt.authorJs!==observerAuthorJs(analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined))return false;}catch{return false;}
+ return sha256===nativeDigest(body)&&nativeDigest(a.key)===nativeDigest(analysis.key)&&a.sourceSha256===analysis.sourceSha256&&a.analysisSha256===analysis.analysisSha256&&a.compilerSourceSha256===analysis.compilerSourceSha256&&a.sourceNode===node.graphKey&&a.nodeSha256===nativeDigest(node)&&['ordinary-dom-script','bookshelf-local-state','ordinary-srcdoc','native-query-observer','native-query-preview','source-file-viewer'].includes(a.profile)&&['search','search-and-status'].includes(a.filter)&&/^[a-f0-9]{64}$/.test(a.scriptSha256);
 }
 export function adaptNativeAuthorProgram(input:NativeAuthorProgramInput):NativeAuthorProgramReceipt{
  const a=input.admission,nodes=flatten(input.analysis.nodes),matches=nodes.filter(n=>n.graphKey===a.sourceNode),node=matches[0];
@@ -61,10 +63,11 @@ export function adaptNativeAuthorProgram(input:NativeAuthorProgramInput):NativeA
  const subtree=flatten([node]);const identities=subtree.map(n=>{const bs=input.identity.bindings.filter(b=>b.sourceNode===n.graphKey),b=bs[0];if(bs.length!==1||!b||b.sourceSha256!==a.sourceSha256||b.analysisSha256!==a.analysisSha256)throw Error('Author program identity association mismatch');return {sourceNode:n.graphKey,afId:b.afId,kind:n.type==='element'?'element' as const:'nonvisual' as const};});
  const scripts=subtree.filter(n=>n.type==='element'&&n.tag==='script');if(scripts.length!==1)throw Error('Expected exactly one source script');const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)throw Error('Author program script association mismatch');
  let html='',authorJs='';
- if(a.profile==='ordinary-dom-script'||a.profile==='bookshelf-local-state'||a.profile==='native-query-observer'||a.profile==='native-query-preview'){
+ if(a.profile==='ordinary-dom-script'||a.profile==='bookshelf-local-state'||a.profile==='native-query-observer'||a.profile==='native-query-preview'||a.profile==='source-file-viewer'){
   if(node!==scripts[0]||node.type!=='element'||node.attributes.length)throw Error('Unsupported script wrapper');
   html=`<template data-af-id="${escape(identities[0]!.afId)}"></template>`;
-  if(a.profile==='ordinary-dom-script')authorJs=original;
+  if(a.profile==='source-file-viewer')authorJs=fileViewerAuthorJs(input.analysis,node,original);
+  else if(a.profile==='ordinary-dom-script')authorJs=original;
   else if(a.profile==='native-query-observer'||a.profile==='native-query-preview'){if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==identities[0]!.afId||nativeDigest(a.preview.resources)!==nativeDigest(nativeObserverPreviewResources(input.urls??[]))))throw Error('Preview resource/identity association mismatch');if(a.profile!=='native-query-preview'&&a.preview)throw Error('Unexpected preview capability');authorJs=observerAuthorJs(input.analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined);}
   else {
    const books=sourceBooks(original),fields=input.analysis.flow.values.map(v=>v.name),fieldSet=new Set(fields),groups=fields.filter(k=>k.startsWith('group_')).map(k=>k.slice(6));
