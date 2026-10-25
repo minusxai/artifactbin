@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HEAD_METADATA_TAGS, SVG_NAMESPACE, SVG_TAGS, prepareNativeDocumentMarkup } from './document-markup.ts';
-import type { RetainedJsxNode } from '../analyze-contracts.ts';
+import type { RetainedAttribute, RetainedJsxNode } from '../analyze-contracts.ts';
 
-const attr = (name: string, json: unknown) => ({ name, start: 0, end: 1, value: { static: true as const, json: json as never } });
-const element = (tag: string, attributes: ReturnType<typeof attr>[] = [], children: RetainedJsxNode[] = []): Extract<RetainedJsxNode, { type: 'element' }> => ({
+const attr = (name: string, json: unknown): RetainedAttribute => ({ name, start: 0, end: 1, value: { static: true as const, json: json as never } });
+const element = (tag: string, attributes: RetainedAttribute[] = [], children: RetainedJsxNode[] = []): Extract<RetainedJsxNode, { type: 'element' }> => ({
   type: 'element', tag, isComponent: false, selfClosing: children.length === 0, graphKey: `node-${tag}`, start: 0, end: 4, attributes, children,
 });
 
@@ -49,4 +49,36 @@ test('Helmet metadata is preserved as head-only and blocked outside real head co
   const unsafe = prepareNativeDocumentMarkup(element('meta', [attr('httpEquiv', 'refresh'), attr('content', '0;url=https://example.invalid')]), { inHead: true, svgNamespace: false });
   assert.ok(unsafe.blockers.length > 0);
   assert.ok(unsafe.blockers.some(item => item.code === 'metadata-value-unsupported'));
+});
+
+test('SVG local fragment values require an exact admitted target and reject encoded or external URLs', () => {
+  const ref = element('path', [attr('clipPath', 'url(#clip-local)'), attr('fill', 'url(#paint-local)'), attr('letterSpacing', '0.08em')]);
+  const admitted = prepareNativeDocumentMarkup(ref, { inHead: false, svgNamespace: true, fragmentIds: ['clip-local', 'paint-local'] });
+  assert.deepEqual(admitted.blockers, []);
+  assert.equal(ref.attributes[2]?.name, 'letterSpacing');
+  assert.equal(ref.attributes[2]?.value.static ? ref.attributes[2]?.value.json : undefined, '0.08em');
+
+  const missing = prepareNativeDocumentMarkup(ref, { inHead: false, svgNamespace: true, fragmentIds: ['clip-local'] });
+  assert.ok(missing.blockers.some(item => item.code === 'svg-fragment-target-unresolved' && item.attribute === 'fill'));
+  for (const value of ['url(https://example.invalid/clip.svg#x)', 'url(#clip%2Dlocal)', 'url(#missing)']) {
+    const result = prepareNativeDocumentMarkup(element('path', [attr('clipPath', value)]), { inHead: false, svgNamespace: true, fragmentIds: ['clip-local'] });
+    assert.ok(result.blockers.length > 0, value);
+  }
+});
+
+test('SVG rejects dynamic attributes, control characters and non-finite viewBox values', () => {
+  const dynamic = element('path', [{ name: 'stroke', start: 0, end: 1, value: { static: false, exprType: 'expression', source: 'color' } }]);
+  assert.equal(prepareNativeDocumentMarkup(dynamic, { inHead: false, svgNamespace: true }).blockers[0]?.code, 'svg-dynamic-attribute-unsupported');
+  const control = prepareNativeDocumentMarkup(element('path', [attr('fill', 'red\u0000blue')]), { inHead: false, svgNamespace: true });
+  assert.equal(control.blockers[0]?.code, 'svg-url-or-control-value-unsupported');
+  const infinite = prepareNativeDocumentMarkup(element('svg', [attr('viewBox', '0 0 1e999 4')]), { inHead: false, svgNamespace: false });
+  assert.equal(infinite.blockers[0]?.code, 'svg-viewbox-unsupported');
+  const wrongNamespace = prepareNativeDocumentMarkup(element('svg', [attr('xmlns', 'http://www.w3.org/1999/xhtml')]), { inHead: false, svgNamespace: false });
+  assert.equal(wrongNamespace.blockers[0]?.code, 'svg-namespace-unsupported');
+});
+
+test('refresh metadata is blocked after trimming whitespace', () => {
+  const meta = element('meta', [attr('httpEquiv', '  ReFrEsH  '), attr('content', '0;url=/next')]);
+  const plan = prepareNativeDocumentMarkup(meta, { inHead: true, svgNamespace: false });
+  assert.ok(plan.blockers.some(item => item.code === 'metadata-value-unsupported' && item.attribute === 'httpEquiv'));
 });

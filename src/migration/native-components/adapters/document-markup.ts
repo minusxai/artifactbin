@@ -14,7 +14,8 @@ export const SVG_TAGS: ReadonlySet<string> = new Set([
 export const SVG_ATTRIBUTES: ReadonlySet<string> = new Set([
   'id', 'class', 'className', 'role', 'tabIndex', 'focusable', 'xmlns',
   'viewBox', 'preserveAspectRatio', 'width', 'height', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
-  'cx', 'cy', 'r', 'rx', 'ry', 'fill', 'fillRule', 'fillOpacity', 'stroke',
+  'cx', 'cy', 'r', 'rx', 'ry', 'fill', 'fillRule', 'fillOpacity', 'stroke', 'clipPath', 'mask',
+  'markerStart', 'markerMid', 'markerEnd', 'letterSpacing',
   'strokeWidth', 'strokeOpacity', 'strokeLinecap', 'strokeLinejoin', 'strokeDasharray',
   'strokeDashoffset', 'opacity', 'transform', 'd', 'points', 'pathLength', 'offset',
   'stopColor', 'stopOpacity', 'markerWidth', 'markerHeight', 'markerUnits', 'refX', 'refY',
@@ -32,9 +33,11 @@ const META_ATTRIBUTES: ReadonlySet<string> = new Set([
 const URL_TEXT = /(?:^|[\s"'(])(?:javascript|data|vbscript):|url\s*\(|\\|\/\//i;
 const PATH_DATA = /^[\s,0-9eE+\-.MmZzLlHhVvCcSsQqTtAa]*$/;
 const POINT_DATA = /^[\s,0-9eE+\-.]*$/;
+const FRAGMENT_REFERENCE_ATTRIBUTES: ReadonlySet<string> = new Set(['clipPath', 'fill', 'stroke', 'markerStart', 'markerMid', 'markerEnd', 'mask']);
+const LOCAL_FRAGMENT = /^url\(#([A-Za-z_][A-Za-z0-9_.:-]*)\)$/;
 const VIEWBOX = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)[\s,]+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)[\s,]+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)[\s,]+([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*$/;
 
-export interface NativeDocumentMarkupContext { inHead: boolean; svgNamespace: boolean }
+export interface NativeDocumentMarkupContext { inHead: boolean; svgNamespace: boolean; fragmentIds?: readonly string[] }
 export interface NativeDocumentMarkupPlan {
   node: RetainedJsxNode;
   namespace?: typeof SVG_NAMESPACE;
@@ -75,7 +78,7 @@ export function prepareNativeDocumentMarkup(
           continue;
         }
         const value = staticPrimitive(attribute.value);
-        if (typeof value !== 'string' || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || (attribute.name === 'httpEquiv' && value.toLowerCase() === 'refresh')) {
+        if (typeof value !== 'string' || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || (attribute.name === 'httpEquiv' && value.trim().toLowerCase() === 'refresh')) {
           blockers.push(blocker(node, 'metadata-value-unsupported', 'Metadata values must be static text; refresh directives are unsupported.', attribute.name));
         }
       }
@@ -107,6 +110,15 @@ export function prepareNativeDocumentMarkup(
     if (typeof value === 'string') {
       if (attribute.name === 'xmlns') {
         if (value !== SVG_NAMESPACE) blockers.push(blocker(node, 'svg-namespace-unsupported', 'Only the standard SVG namespace declaration is supported.', attribute.name));
+        continue;
+      }
+      if (FRAGMENT_REFERENCE_ATTRIBUTES.has(attribute.name) && /url\s*\(/i.test(value)) {
+        const reference = LOCAL_FRAGMENT.exec(value);
+        if (!reference) {
+          blockers.push(blocker(node, 'svg-url-or-control-value-unsupported', 'Only an exact local SVG fragment reference is supported.', attribute.name));
+        } else if (!context.fragmentIds?.includes(reference[1]!)) {
+          blockers.push(blocker(node, 'svg-fragment-target-unresolved', 'Local SVG fragment references require an exact admitted target ID.', attribute.name));
+        }
         continue;
       }
       if (hasUnsafeText(value)) {
