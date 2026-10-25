@@ -119,7 +119,7 @@ af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:bor
 af-switch .af-switch-button[data-state=checked]{background:var(--primary,#222)}
 af-switch .af-switch-button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-switch .af-switch-button:disabled{cursor:not-allowed;opacity:.5}
-af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 2px #0000001a;transform:translateX(0);transition:transform .15s}
+af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 2px #0000000d;transform:translateX(0);transition:transform .15s}
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
