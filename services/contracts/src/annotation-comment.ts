@@ -27,6 +27,8 @@ export interface AnnotationAuthor {
  * route is public by id) and never the email or the token.
  */
 export interface AnnotationWireAuthor extends AnnotationAuthor {
+  /** Verified migrated source identity used only to preserve avatar colour, never authorization. */
+  avatar_seed?: string;
   user_id: string | null;
   image: string | null;
 }

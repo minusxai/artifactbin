@@ -274,8 +274,26 @@ describe('reader screenshot contract',()=>{
   it.each(['jsx','html'])('settles the actual frame before either %s camera screenshot',async implementation=>{
     const directory=await setup(),order=[],bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('settled');return noAnimations();}if(fn.name==='browserState')return {text:'Ready',controls:[],rows:[],overflow:0};return {faces:[],used:[],errors:[]};}};
-    const captures=await captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{}})},mount:async()=>({frame,screenshot:async()=>{order.push('screenshot');return bytes;}}),implementation,sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'animation',states:[{id:'initial',actions:[]}]}]});
-    expect(order).toEqual(['settled','screenshot']);expect(captures[0].animationEvidence).toMatchObject({format:'frame-animation-settlement-v1',infinite:[],timedOut:[]});
+    const captures=await captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>({on:()=>{},evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():undefined}),close:async()=>{}})},mount:async()=>({frame,screenshot:async()=>{order.push('screenshot');return bytes;}}),implementation,sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'animation',states:[{id:'initial',actions:[]}]}]});
+    expect(order).toEqual(['settled','settled','screenshot']);expect(captures[0].animationEvidence).toMatchObject({format:'frame-animation-settlement-v1',infinite:[],timedOut:[]});
+  });
+
+  it('waits for parent comment transitions after frame font work before the frame camera',async()=>{
+    const directory=await setup(),order=[],bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    let finishParent;const parentFinished=new Promise(resolve=>{finishParent=resolve;});
+    const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('frame');return noAnimations();}if(fn.name==='browserState')return {text:'Ready',controls:[],rows:[],overflow:0};return {faces:[],used:[],errors:[]};}};
+    const page={on:()=>{},evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('parent-start');await parentFinished;order.push('parent-finished');return {...noAnimations(),observed:1,counts:{finished:1,canceled:0,detached:0}};}}};
+    const task=captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>page,close:async()=>{}})},mount:async()=>({frame,screenshot:async()=>{order.push('screenshot');return bytes;}}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'parent-animation',states:[{id:'initial',actions:[]}]}]});
+    await vi.waitFor(()=>expect(order).toContain('parent-start'));expect(order).not.toContain('screenshot');finishParent();const captures=await task;
+    expect(order.slice(-3)).toEqual(['parent-start','parent-finished','screenshot']);expect(captures[0].animationEvidence.parentDocument.counts.finished).toBe(1);
+  });
+
+  it('rejects unsettled parent transitions with evidence before any camera screenshot',async()=>{
+    const directory=await setup(),screenshot=vi.fn(),timeout={...noAnimations(),observed:1,timedOut:[{name:'top',playState:'running',duration:10000,iterations:1}]};
+    const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+    const page={on:()=>{},screenshot,evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?timeout:undefined};
+    await expect(captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>page,close:async()=>{}})},mount:async()=>({frame,screenshot}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',animationSettleTimeoutMs:10,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'parent-timeout',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('finite-parent-animations-timeout:1');
+    expect(screenshot).not.toHaveBeenCalled();const failure=JSON.parse(await readFile(path.join(directory,'parent-timeout-light-800-initial-jsx-failure.json'),'utf8'));expect(failure.diagnostics.animationEvidence.parentDocument.timedOut).toEqual(timeout.timedOut);
   });
 
   it('rejects a missing linked theme stylesheet even when no font faces were declared',async()=>{
@@ -310,7 +328,7 @@ describe('reader screenshot contract',()=>{
     const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const performAction=vi.fn(async()=>{}),screenshot=vi.fn(async()=>bytes),pageScreenshot=vi.fn(async()=>bytes);
     const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:fn.toString().includes('requestAnimationFrame')?undefined:{faces:[],used:[],errors:[]}};
-    const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:pageScreenshot}),close:async()=>{}})};
+    const browser={newContext:async()=>({newPage:async()=>({on:()=>{},evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():undefined,screenshot:pageScreenshot}),close:async()=>{}})};
     const captures=await captureBrowserBaseline({browser,mount:async()=>({frame,screenshot,performAction}),screenshotMode:'document-frame',implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'identity',states:[{id:'loaded',actions:[{action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]}]}]}]});
     expect(captures).toHaveLength(1);
     expect(performAction).toHaveBeenCalledWith({action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]});

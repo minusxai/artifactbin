@@ -8,7 +8,7 @@ export function captureHtmlRange(node: Element, range: Range): HtmlNodeAnchor['r
   return { start: before.toString().length, end: through.toString().length, length: text.length, fingerprint: htmlTextFingerprint(text) };
 }
 /** Restore exact offsets or a unique quote; repeated text is never guessed. */
-export function resolveHtmlRange(node: Element, anchor: HtmlNodeAnchor): HtmlRangeResolution {
+export function resolveHtmlRange(node: Element, anchor: HtmlNodeAnchor, boundary:{endAffinity?:'forward'}={}): HtmlRangeResolution {
   const text = node.textContent ?? '';
   let start = -1, end = -1;
   if (anchor.range && anchor.range.length === text.length && anchor.range.fingerprint === htmlTextFingerprint(text) && text.slice(anchor.range.start, anchor.range.end).replace(/\s+/g, ' ').trim() === anchor.quote.replace(/\s+/g, ' ').trim()) {
@@ -35,7 +35,11 @@ export function resolveHtmlRange(node: Element, anchor: HtmlNodeAnchor): HtmlRan
   for (let current = walk.nextNode(); current; current = walk.nextNode()) {
     const next = offset + (current.textContent?.length ?? 0);
     if (!first && start >= offset && start < next) { first = current as Text; firstOffset = start - offset; }
-    if (end > offset && end <= next) { last = current as Text; lastOffset = end - offset; break; }
+    if(boundary.endAffinity==='forward'&&end===offset&&next>offset){last=current as Text;lastOffset=0;break;}
+    if (end > offset && end <= next) {
+      last = current as Text; lastOffset = end - offset;
+      if(boundary.endAffinity!=='forward'||end<next)break;
+    }
     offset = next;
   }
   if (!first || !last) return { status: 'missing', range: null };

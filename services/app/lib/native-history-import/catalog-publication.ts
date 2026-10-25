@@ -567,7 +567,7 @@ async function verifyImports(
     if (
       !plan ||
       plan.imports.length !== items.length ||
-      new Set(items.map((i) => i.alias)).size !== items.length ||
+      new Set(items.map((i) => JSON.stringify([i.alias, i.table]))).size !== items.length ||
       items.some(
         (item) =>
           plan.imports.filter(

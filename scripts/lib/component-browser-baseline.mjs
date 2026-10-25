@@ -316,6 +316,18 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       const usedSources=new Set(fontEvidence.used.flatMap(face=>face.sources||[]));
       fontEvidence.errors.push(...resourceErrors.filter(failure=>usedSources.has(failure.url)).map(failure=>failure.error));
       fontEvidence.errors.push(...fontByteProof(fontEvidence).errors);
+      // Font evidence can finish a face load and move the anchor after the
+      // first frame settlement. Parent UI (for example a comment badge) then
+      // transitions outside the iframe yet remains visible in its screenshot.
+      if(screenshotMode==='document-frame'&&page!==frame)await step('reader-animations',async()=>{
+        await page.evaluate(()=>document.fonts?.ready.then(()=>undefined));
+        animationEvidence.frameAfterFonts=await frame.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(animationEvidence.frameAfterFonts?.format!=='frame-animation-settlement-v1')throw Error('frame-animation-evidence-invalid');
+        if(animationEvidence.frameAfterFonts.timedOut.length)throw Error(`finite-frame-animations-timeout:${animationEvidence.frameAfterFonts.timedOut.length}`);
+        animationEvidence.parentDocument=await page.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(animationEvidence.parentDocument?.format!=='frame-animation-settlement-v1')throw Error('parent-animation-evidence-invalid');
+        if(animationEvidence.parentDocument.timedOut.length)throw Error(`finite-parent-animations-timeout:${animationEvidence.parentDocument.timedOut.length}`);
+      },3*animationSettleTimeoutMs+1000);
       await step('paint-settled',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
       const semantics=await step('semantics',()=>frame.evaluate(browserState));
       const name=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}.png`;
@@ -333,7 +345,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       // A failed animation settlement is not a valid visual sample. Preserve
       // diagnostics, but do not capture a frame whose authored motion is still
       // in progress.
-      try{if(phase!=='finite-animations'&&page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
+      try{if(phase!=='finite-animations'&&phase!=='reader-animations'&&page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
       // Snapshot already mounted documents only; do not run readiness again.
       try{if(frame)failure.semantics=await step('failure-snapshot',()=>frame.evaluate(browserState),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
       try{if(frame)diagnostics.fontStatus=await step('failure-font-status',()=>frame.evaluate(browserFontStatus),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.fontStatusError=diagnosticText(error.message);}

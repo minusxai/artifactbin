@@ -291,9 +291,22 @@ it('preserves projected multi-node selection parts through the same HTML public 
  const {htmlTextFingerprint}=await import('@artifactbin/contracts');
  const {db,history,projection,actor}=await fixture();history.visibility='public';
  projection.bindings=[...projection.bindings,{...projection.bindings[0]!,version:3,htmlSha256:history.revisions[1]!.sourceSha256}];
- const root=projection.annotations[0]!;root.anchor={version:3,sourceNamespace:'graph',sourceNodeId:'original-node',quote:'A quote',segments:[{sourceNodeId:'original-node',quote:'A quote',range:{start:0,end:7,length:9,fingerprint:htmlTextFingerprint('A quote 3')}}]};
+ const root=projection.annotations[0]!;root.anchor={version:3,sourceNamespace:'graph',sourceNodeId:'original-node',quote:'A quote',segments:[{sourceNodeId:'original-node',quote:'A quote',endAffinity:'forward',range:{start:0,end:7,length:9,fingerprint:htmlTextFingerprint('A quote 3')}}]};
  const binding=projection.bindings.find(b=>b.version===3)!;root.anchor.sourceNodeId=binding.sourceNodeId;root.anchor.segments![0]!.sourceNodeId=binding.sourceNodeId;
  const relations=prepareNativeHistoryRelations(projection);history.relationSha256=relations.sourceSha256;await importNativeHistory(db,history,relations);
- const rows=await listAnnotationsFor(actor,history.pageId,{status:'all'});expect(rows?.[0]?.anchor).toMatchObject({kind:'html-node',nodeId:'stable',segments:[{nodeId:'stable',quote:'A quote',range:{start:0,end:7}}]});expect(rows?.[0]?.quote_found).toBe(true);
+ const rows=await listAnnotationsFor(actor,history.pageId,{status:'all'});expect(rows?.[0]?.anchor).toMatchObject({kind:'html-node',nodeId:'stable',segments:[{nodeId:'stable',quote:'A quote',endAffinity:'forward',range:{start:0,end:7}}]});expect(rows?.[0]?.quote_found).toBe(true);
  const outsider=await mintAccountToken('synthetic_segment_reader');expect((await listAnnotationsFor(identityForUser(outsider.userId,outsider.id),history.pageId,{status:'all'}))?.[0]?.anchor).toEqual(rows?.[0]?.anchor);
+});
+
+it('preserves the verified original author presentation seed without changing the mapped account',async()=>{
+ const {db,history,projection,actor}=await fixture();history.visibility='public';
+ const root=projection.annotations[0]!;root.retainedContext={sourceAnnotation:{id:root.id,author_kind:'human',author_user_id:'synthetic_original_author'}};
+ projection.annotations[1]!.authorRemote={avatar_seed:'unverified_seed'};
+ const relations=prepareNativeHistoryRelations(projection);history.relationSha256=relations.sourceSha256;await importNativeHistory(db,history,relations);
+ const row=(await listAnnotationsFor(actor,history.pageId,{status:'all'}))!.find(row=>row.id===root.id)!;
+ expect(row.thread[0]!.author.user_id).toBe(root.authorUserId);expect(row.thread[0]!.author.avatar_seed).toBe('synthetic_original_author');
+ const stored=(await db.query('SELECT author_user_id,author_token_id FROM annotations WHERE id=$1',[root.id])).rows[0];expect(stored).toEqual({author_user_id:root.authorUserId,author_token_id:root.authorTokenId});
+ const outsider=await mintAccountToken('synthetic_seed_reader');const publicRow=(await listAnnotationsFor(identityForUser(outsider.userId,outsider.id),history.pageId,{status:'all'}))!.find(row=>row.id===root.id)!;expect(publicRow.thread[0]!.author).toEqual(row.thread[0]!.author);
+ expect(row.thread.find(comment=>comment.id==='reply')!.author.avatar_seed).toBeUndefined();
+ const mismatch=structuredClone(projection);mismatch.annotations[0]!.retainedContext={sourceAnnotation:{id:'different_annotation',author_kind:'human',author_user_id:'synthetic_original_author'}};expect(()=>prepareNativeHistoryRelations(mismatch)).toThrow('native_relation_mismatch');
 });

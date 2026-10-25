@@ -457,6 +457,15 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Annotation thread')).toBeTruthy();
   });
 
+  it('uses a migrated presentation seed for the face while retaining target account identity',async()=>{
+    const author={...FACES.thread[0]!.author,avatar_seed:'synthetic_original_author'};knobs.open=[{...FACES,thread:[{...FACES.thread[0]!,author},...FACES.thread.slice(1)]}];
+    const view=layer({showViewComments:true});await flush();view.runtime.emit({type:'mx:annotation-layout',positions:[{id:FACES.id,rect:{x:10,y:220,width:300,height:40}}]});
+    const preview=await screen.findByLabelText('Open annotation conversation by ada, 4 messages'),card=preview.closest<HTMLElement>('[data-annotation-id]')!;
+    const face=card.querySelector<HTMLElement>('[data-face-initial]')!,standalone=render(()=><Avatar image={null} initial="ada" userId="synthetic_original_author" size={22}/>);
+    expect(face.style.backgroundColor).toBe(standalone.container.querySelector<HTMLElement>('[data-face-initial]')!.style.backgroundColor);
+    expect(author.user_id).toBe(FACES.thread[0]!.author.user_id);
+  });
+
   it('draws each person as their own face — picture over the initial, colour from the account id — and agents as their marks', async () => {
     knobs.open = [FACES];
     const view = layer({ showViewComments: true });

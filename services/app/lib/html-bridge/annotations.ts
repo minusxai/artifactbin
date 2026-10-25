@@ -1,3 +1,4 @@
+import {COMMENT_PRESENTATION} from '../frame-edit/comment-presentation';
 import type { AnnotationRange } from '../document';
 import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { resolveHtmlRange } from './range';
@@ -23,9 +24,14 @@ export function createHtmlAnnotationPainter(doc: Document) {
   overlay.setAttribute('data-af', 'annotation-overlay');
   Object.assign(overlay.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '2147483646' });
   doc.documentElement.append(overlay);
+  type HighlightRegistry={set(name:string,value:unknown):unknown;delete(name:string):unknown};
+  const view=doc.defaultView as unknown as {CSS?:{highlights?:HighlightRegistry};Highlight?:new(...ranges:Range[])=>unknown}|null;
+  const registered=new Set<string>();
+  const clearHighlights=()=>{for(const name of registered)view?.CSS?.highlights?.delete(name);registered.clear();};
   return {
     ownsOverlay:(node:Node)=>node===overlay||overlay.contains(node),
     paint(input: HtmlAnnotationPaint): HtmlAnnotationPosition[] {
+      clearHighlights();
       overlay.replaceChildren();
       return input.pins.map((pin) => {
         const matches = htmlAnchorElements(doc,pin.anchor?.nodeId ?? pin.nodeId ?? pin.path,pin.anchor?.ancestorId);
@@ -33,13 +39,13 @@ export function createHtmlAnnotationPainter(doc: Document) {
         if (!node) return { id: pin.id, status: matches.length ? 'ambiguous' : 'missing', rect: { x: 0, y: 0, width: 0, height: 0 } };
         const ranges: Range[] = [];
         if(pin.anchor?.segments){
-          if(!pin.anchor.segments.length)return {id:pin.id,status:'missing',rect:box(node.getBoundingClientRect())};
+          if(!pin.anchor.segments.length)return {id:pin.id,status:'exact',rect:box(node.getBoundingClientRect())};
           for(const part of pin.anchor.segments){
             const targets=htmlAnchorElements(doc,part.nodeId);
             if(targets.length!==1)return {id:pin.id,status:targets.length?'ambiguous':'missing',rect:box(node.getBoundingClientRect())};
             const target=targets[0]!,text=target.textContent??'',range=part.range;
             if(text.length!==range.length || htmlTextFingerprint(text)!==range.fingerprint || text.slice(range.start,range.end).replace(/\s+/g,' ').trim()!==part.quote.replace(/\s+/g,' ').trim())return {id:pin.id,status:'missing',rect:box(node.getBoundingClientRect())};
-            const partResolved=resolveHtmlRange(target,{...pin.anchor,nodeId:part.nodeId,quote:part.quote,range,segments:undefined});
+            const partResolved=resolveHtmlRange(target,{...pin.anchor,nodeId:part.nodeId,quote:part.quote,range,segments:undefined},{endAffinity:part.endAffinity});
             if(!partResolved.range || partResolved.status!=='exact')return {id:pin.id,status:partResolved.status,rect:box(node.getBoundingClientRect())};
             ranges.push(partResolved.range);
           }
@@ -52,7 +58,15 @@ export function createHtmlAnnotationPainter(doc: Document) {
         const areaRect = area ? { x: nodeRect.x + area.x * nodeRect.width, y: nodeRect.y + area.y * nodeRect.height, width: area.w * nodeRect.width, height: area.h * nodeRect.height } : null;
         const rects = ranges.length ? ranges.flatMap(range=>typeof range.getClientRects==='function'?[...range.getClientRects()]:[]) : areaRect ? [areaRect] : resolved?.range && typeof resolved.range.getClientRects === 'function' ? [...resolved.range.getClientRects()] : [node.getBoundingClientRect()];
         const active = input.openId === pin.id || input.hoverId === pin.id;
-        if (!pin.layoutOnly && (input.mode === 'on' || active)) for (const rect of rects) {
+        const highlightApi=ranges.length && view?.CSS?.highlights && view.Highlight;
+        if(!pin.layoutOnly && (input.mode==='on' || active) && highlightApi){
+          const name='af-imported-comment-'+registered.size;
+          view!.CSS!.highlights!.set(name,new view!.Highlight!(...ranges));registered.add(name);
+          const style=doc.createElement('style');
+          const fill=input.openId===pin.id?COMMENT_PRESENTATION.highlightFill.open:input.hoverId===pin.id?COMMENT_PRESENTATION.highlightFill.hover:COMMENT_PRESENTATION.highlightFill.base;
+          style.textContent=`::highlight(${name}) { background-color: ${fill}; }`;overlay.append(style);
+        }
+        if (!highlightApi && !pin.layoutOnly && (input.mode === 'on' || active)) for (const rect of rects) {
           const mark = doc.createElement('div');
           Object.assign(mark.style, { position: 'fixed', left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px`, background: active ? 'rgba(59,130,246,.20)' : 'rgba(250,204,21,.20)', outline: active ? '1px solid rgba(59,130,246,.6)' : 'none', pointerEvents: 'none' });
           overlay.append(mark);
@@ -61,6 +75,6 @@ export function createHtmlAnnotationPainter(doc: Document) {
         return { id: pin.id, status: 'exact', rect: box(rect) };
       });
     },
-    dispose: () => overlay.remove(),
+    dispose: () => {clearHighlights();overlay.remove();},
   };
 }

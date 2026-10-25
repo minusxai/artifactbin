@@ -1,4 +1,6 @@
+import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
 /** Reviewed operator only. Never activates a deployment or opens a target during dry-run. */
+import {verifyReviewedComparison} from './native-reviewed-comparison.mjs';
 import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -53,10 +55,11 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
   const [encodedContext,imported,comparison]=await Promise.all([bound<NativeHostContext>(head.context),bound<NativeHostPrepared>(head.imported),bound<NativeHostComparison>(head.comparison)]);
   const context=options.decodeContext?options.decodeContext(encodedContext):encodedContext;
   const selectedHead=plan.heads.find(value=>value.key.sourceId===head.sourceId)!;
-  if(!isDeepStrictEqual(context.revision.key,selectedHead.key)||!isDeepStrictEqual(context.assembly.key,selectedHead.key)||imported.stage!=='imported'||!isDeepStrictEqual(imported.key,selectedHead.key)||imported.assemblySha256!==context.assembly.sha256||!hash(imported.historyProjectionSha256)||comparison.status!=='verified')fail('head_scope');
+  if(!isDeepStrictEqual(context.revision.key,selectedHead.key)||!isDeepStrictEqual(context.assembly.key,selectedHead.key)||imported.stage!=='imported'||!isDeepStrictEqual(imported.key,selectedHead.key)||imported.assemblySha256!==context.assembly.sha256||!hash(imported.historyProjectionSha256)||(!head.reviewedDecision&&comparison.status!=='verified'))fail('head_scope');
   const input=await readNativeMigrationHostInputs(context);
   if(input.recipe.inputs.sourceHead.sha256!==selectedHead.canonicalSha256||!isDeepStrictEqual(input.recipe.authority&&{appSchema:input.recipe.authority.appSchema,authSchema:input.recipe.authority.authSchema},{appSchema:targetScope.appSchema,authSchema:targetScope.authSchema})||!isDeepStrictEqual(JSON.parse(Buffer.from(input.files.identity).toString()),identity))fail('head_scope');
-  await verifyNativeMigrationHostComparison({context:{...context,imported},recipe:input.recipe,result:comparison});
+  if(head.reviewedDecision)await verifyReviewedComparison({root,ref:head.reviewedDecision,approvedSha256:options.approvedReviewedDecisionSha256??[],context:{...context,imported},recipe:input.recipe,result:comparison});
+  else await verifyNativeMigrationHostComparison({context:{...context,imported},recipe:input.recipe,result:comparison});
   const capability=JSON.parse(Buffer.from(input.files.authSchemaCapability).toString());
   if(!isDeepStrictEqual(capability.schemas,{appSchema:targetScope.appSchema,authSchema:targetScope.authSchema})||sha(capability.runtime?.origin??'')!==targetScope.originSha256)fail('runtime_scope');
   admitted.push({head,context,input,capability});
@@ -75,10 +78,12 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
   const schemas={appSchema:targetScope.appSchema,authSchema:targetScope.authSchema};
   const origin=(()=>{try{return new URL(target.origin);}catch{return fail('opened_target_scope');}})();
   if(!['http:','https:'].includes(origin.protocol)||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)fail('opened_target_scope');
+  const sink=(options.sinkFactory??createNativeS3ObjectSink)(target.s3);
+  const avatars=await prepareNativeIdentityAvatars(identity,sink);
   const preparation=await target.db.transaction(async tx=>{
    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',['native-prerequisite:'+targetScope.appSchema+':'+identity.plan.sha256]);
    const authority=await authorizeNativeIdentityTransaction(tx,schemas);
-   const preparedIdentities=!options.preparePrerequisites?await writeNativeIdentities(tx,identity,authority):undefined;
+   const preparedIdentities=!options.preparePrerequisites?await writeNativeIdentities(tx,identity,authority,avatars):undefined;
    if(plan.runtimeAuthority){for(const item of admitted){const source=JSON.parse(Buffer.from(item.input.files.sourceHead).toString()),head=source.heads?.find((row:{id:string;version:number})=>row.id===item.context.revision.key.sourceId&&row.version===item.context.revision.key.version),userId=identity.plan.targets.users[head?.user_id]?.userId;if(!userId||item.capability.runtime?.actor?.userId!==userId)fail('runtime_actor');if(!runtimeTokens.has(userId)){const id=await tokenAuthority.mint(tx,userId,plan.runtimeAuthority.ttlMs);createdTokens.push(id);runtimeTokens.set(userId,id);}}}
    if(options.preparePrerequisites)return options.preparePrerequisites(tx,identity,folders,schemas);
    const identities=preparedIdentities!,ancillary=folders?prepareNativeAncillaryFolders(folders,identity.plan,folders.identityGroups??{}):undefined;
@@ -88,7 +93,7 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
   const preparationPath=path.join(options.outputDirectory,'prerequisite-'+batch.sha256+'.json');let priorPreparation:Record<string,unknown>|undefined;try{priorPreparation=JSON.parse(await readFile(preparationPath,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')fail('prerequisite_receipt');}
   if(priorPreparation&&(priorPreparation.planSha256!==plan.sha256||priorPreparation.batchSha256!==batch.sha256||priorPreparation.scopeSha256!==scopeSha256))fail('prerequisite_receipt');
   if(!priorPreparation)await immutable(preparationPath,{format:'native-production-prerequisite-v1',planSha256:plan.sha256,batchSha256:batch.sha256,scopeSha256,transaction:'separate-prerequisite',preparation,...(createdTokens.length?{internalTokenIds:createdTokens}: {})});
-  const sink=(options.sinkFactory??createNativeS3ObjectSink)(target.s3),receipts=[];
+  const receipts=[];
   for(const item of admitted){
    const {context,input,capability,head}=item,reviewedActor=capability.runtime?.actor,actor=plan.runtimeAuthority?{userId:reviewedActor?.userId,tokenId:runtimeTokens.get(reviewedActor?.userId)}:reviewedActor;
    if(!actor||Object.keys(actor).some(key=>!['userId','tokenId'].includes(key))||typeof actor.userId!=='string'||typeof actor.tokenId!=='string')fail('runtime_actor');
@@ -96,32 +101,32 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
    if(sourceHeads?.length!==1||identity.plan.targets.users[sourceHeads[0].user_id]?.userId!==actor.userId||(await target.db.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now())',[actor.tokenId])).rows[0]?.user_id!==actor.userId)fail('runtime_actor');
    const runtimeActor=identityForUser(actor.userId,actor.tokenId!);
    const prepareRuntime:Parameters<typeof target.publication>[0]['prepareRuntime']=(assemblies,runtimeOptions)=>prepareNativeProductRuntime(assemblies,{...runtimeOptions,actor:runtimeActor,origin:target.origin});
-   const publicationPath=path.join(options.outputDirectory,'publication-'+digest(context.revision.key)+'-'+context.assembly.sha256+'-'+head.comparison.sha256+'.json');
-   let publicationReceipt:{format:string;planSha256:string;assemblySha256:string;comparisonSha256:string;recipe:NativeSerializedProductImportRecipe;sha256:string}|undefined;
+   const publicationPath=path.join(options.outputDirectory,'publication-'+digest(context.revision.key)+'-'+context.assembly.sha256+'-'+(head.reviewedDecision?digest({comparisonSha256:head.comparison.sha256,reviewedDecisionSha256:head.reviewedDecision.sha256}):head.comparison.sha256)+'.json');
+   let publicationReceipt:{format:string;planSha256:string;assemblySha256:string;comparisonSha256:string;reviewedDecisionSha256?:string;recipe:NativeSerializedProductImportRecipe;sha256:string}|undefined;
    try{publicationReceipt=JSON.parse(await readFile(publicationPath,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')fail('publication_receipt');}
-   if(publicationReceipt&&(!sealed(publicationReceipt)||publicationReceipt.format!=='native-production-publication-v1'||publicationReceipt.planSha256!==plan.sha256||publicationReceipt.assemblySha256!==context.assembly.sha256||publicationReceipt.comparisonSha256!==head.comparison.sha256))fail('publication_receipt');
+   if(publicationReceipt&&(!sealed(publicationReceipt)||publicationReceipt.format!=='native-production-publication-v1'||publicationReceipt.planSha256!==plan.sha256||publicationReceipt.assemblySha256!==context.assembly.sha256||publicationReceipt.comparisonSha256!==head.comparison.sha256||publicationReceipt.reviewedDecisionSha256!==head.reviewedDecision?.sha256))fail('publication_receipt');
    let raw:NativeProductImportRecipe|NativeSerializedProductImportRecipe;
    if(publicationReceipt)raw=publicationReceipt.recipe;
    else{
     raw=await target.publication({context,reviewedRecipe:input.recipe,files:input.files,prepareRuntime,publicationModules:nativeProductPublicationModules});
     const source=raw.membership?.source,encoded=source?Object.fromEntries(Object.entries(source).map(([key,value])=>[key,value instanceof Uint8Array?{encoding:'base64',data:Buffer.from(value).toString('base64'),sha256:sha(value)}:value])):undefined;
     const recipe={...raw,...(encoded?{membership:{...raw.membership,source:encoded}}:{})} as NativeSerializedProductImportRecipe;
-    const payload={format:'native-production-publication-v1',planSha256:plan.sha256,assemblySha256:context.assembly.sha256,comparisonSha256:head.comparison.sha256,recipe};
+    const payload={format:'native-production-publication-v1',planSha256:plan.sha256,assemblySha256:context.assembly.sha256,comparisonSha256:head.comparison.sha256,...(head.reviewedDecision?{reviewedDecisionSha256:head.reviewedDecision.sha256}:{}),recipe};
     await immutable(publicationPath,{...payload,sha256:digest(payload)});
    }
 
    if(folders&&!isDeepStrictEqual(raw.identityGroups??{},folders.identityGroups??{}))fail('publication_scope');
    if(!isDeepStrictEqual(raw.identity,identity)||!isDeepStrictEqual(raw.schemas,schemas)||raw.history.sourceNamespace!==plan.sourceNamespace||raw.history.sourceId!==head.sourceId||raw.history.headVersion!==context.revision.key.version||raw.history.revisions.length!==1||raw.catalog.projection.datasets.some(dataset=>!datasets.includes(dataset.sourceId)))fail('publication_scope');
    const prepared=await (options.prepareImport??prepareNativeProductImport)(raw,{catalogSink:sink});
-   const file=path.join(options.outputDirectory,'head-'+digest(context.revision.key)+'-'+context.assembly.sha256+'-'+head.comparison.sha256+'.json');
+   const file=path.join(options.outputDirectory,'head-'+digest(context.revision.key)+'-'+context.assembly.sha256+'-'+(head.reviewedDecision?digest({comparisonSha256:head.comparison.sha256,reviewedDecisionSha256:head.reviewedDecision.sha256}):head.comparison.sha256)+'.json');
    let previous:Record<string,unknown>|undefined;try{previous=JSON.parse(await readFile(file,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-   if(previous&&(previous.planSha256!==plan.sha256||previous.scopeSha256!==scopeSha256||previous.assemblySha256!==context.assembly.sha256))fail('receipt_collision');
+   if(previous&&(previous.planSha256!==plan.sha256||previous.scopeSha256!==scopeSha256||previous.assemblySha256!==context.assembly.sha256||previous.reviewedDecisionSha256!==head.reviewedDecision?.sha256))fail('receipt_collision');
    const result=await target.db.transaction(async tx=>{
     for(const id of [...new Set(raw.catalog.projection.datasets.map(dataset=>dataset.targetId))].sort())await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',['native-dataset:'+targetScope.appSchema+':'+id]);
     const written=await prepared.write(tx);await prepared.relations.verify(tx,prepared.history.pageId);if(folders)await prepareNativeAncillaryFolders(folders,identity.plan,folders.identityGroups??{}).verify(tx);
     if(previous&&written.disposition!=='unchanged')fail('receipt_target_diverged');return written;
    });
-   const receipt=previous??{format:'native-production-head-v1',planSha256:plan.sha256,scopeSha256,key:context.revision.key,assemblySha256:context.assembly.sha256,comparisonSha256:head.comparison.sha256,result};
+   const receipt=previous??{format:'native-production-head-v1',planSha256:plan.sha256,scopeSha256,key:context.revision.key,assemblySha256:context.assembly.sha256,comparisonSha256:head.comparison.sha256,...(head.reviewedDecision?{reviewedDecisionSha256:head.reviewedDecision.sha256}:{}),result};
    await immutable(file,receipt);receipts.push({path:file,sha256:sha(await readFile(file)),replayed:!!previous});
   }
   const receipt={format:'native-production-batch-result-v1',planSha256:plan.sha256,batchSha256:batch.sha256,scopeSha256,globalPages:393,globalDatasets:190,batchPages:receipts.length,receipts};

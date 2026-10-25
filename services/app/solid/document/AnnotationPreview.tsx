@@ -74,7 +74,7 @@ function replyParticipants(thread: AnnotationCommentWire[]): Author[] {
 /** A person's face: only a person with no account falls back to their label as the colour key. */
 function PersonFace(props: { author: Author; size: number }): JSX.Element {
   const label = () => authorLabel(props.author);
-  return <Avatar image={props.author.image ?? null} initial={label()} userId={props.author.user_id ?? `label:${label()}`} size={props.size} />;
+  return <Avatar image={props.author.image ?? null} initial={label()} userId={props.author.avatar_seed ?? props.author.user_id ?? `label:${label()}`} size={props.size} />;
 }
 
 function PixelGhost(props: { size: number }): JSX.Element {

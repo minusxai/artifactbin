@@ -80,6 +80,19 @@ function normalized(row: Record<string, unknown>) {
     ]),
   );
 }
+/** Only the independently retained source row supplies migrated presentation identity. */
+function authorPresentation(a:NativeRelationProjection['annotations'][number]):unknown {
+ const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
+ let remote=a.authorRemote;
+ if(record(remote)&&'avatar_seed' in remote){const {avatar_seed:_,...rest}=remote;remote=rest;}
+ if(a.authorKind!=='human'||!record(a.retainedContext)||!('sourceAnnotation' in a.retainedContext))return remote;
+ const source=a.retainedContext.sourceAnnotation;
+ if(!record(source)||source.id!==a.id||source.author_kind!=='human')fail();
+ const seed=(source as Record<string,unknown>).author_user_id;
+ if(seed==null)return remote;
+ if(typeof seed!=='string'||!seed||seed.length>256||/[\u0000-\u001f]/.test(seed))fail();
+ return {...(record(remote)?remote:{}),avatar_seed:seed};
+}
 /** Exact source-node bindings only. A retained but unselected context stays inert in the receipt. */
 export function prepareNativeHistoryRelations(
   input: NativeRelationProjection,
@@ -135,7 +148,7 @@ export function prepareNativeHistoryRelations(
         nodeId: nodeId!,
         quote: a.anchor.quote,
         ...(a.anchor.range ? { range: a.anchor.range } : {}),
-        ...(a.anchor.segments ? { segments: a.anchor.segments.map(part => { const nodeId=bindings.get(bindingKey(a.anchor!.version,a.anchor!.sourceNamespace,part.sourceNodeId)); if(!nodeId)fail(); return {nodeId:nodeId!,quote:part.quote,range:part.range}; }) } : {}),
+        ...(a.anchor.segments ? { segments: a.anchor.segments.map(part => { const nodeId=bindings.get(bindingKey(a.anchor!.version,a.anchor!.sourceNamespace,part.sourceNodeId)); if(!nodeId)fail(); return {nodeId:nodeId!,quote:part.quote,range:part.range,...(part.endAffinity?{endAffinity:part.endAffinity}: {})}; }) } : {}),
       };
     }
     if (anchor && !parseHtmlNodeAnchor(anchor)) fail();
@@ -155,7 +168,7 @@ export function prepareNativeHistoryRelations(
       edited_at: a.editedAt,
       deleted_at: a.deletedAt,
       change_seq: a.changeSeq,
-      author_remote: a.authorRemote,
+      author_remote: authorPresentation(a),
       snippet: a.snippet,
       quote: a.quote,
       range: a.range,

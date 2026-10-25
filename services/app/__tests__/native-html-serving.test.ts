@@ -1,4 +1,5 @@
 import * as nativeHtml from '@/lib/serving/native-html.server';
+import { nativeHtmlStructuralWrapper } from '@/lib/serving/native-html-structural-wrapper';
 import * as artifacts from '@/lib/artifacts';
 import { HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { servesDocument } from '@/lib/serving/custom-domains';
@@ -41,6 +42,29 @@ it('uses original framed chrome without duplicating source in the bootstrap',asy
  expect(answer.body).toMatchObject({surface:{format:'html',runtime:{title:'Native plan',data:{}}}});
  expect(JSON.stringify(answer.body)).not.toContain('<h1');expect(JSON.stringify(answer.body)).not.toContain('document.body.dataset');expect(await framedDocumentSrc(req(),id,site)).not.toBeNull();
 });
+it('keeps the compiler-owned mx-doc wrapper out of the bare story gutter in reader presentation',async()=>{
+ const actor=await mintAccountToken('native-structural-wrapper');
+ const original='<!doctype html><html><head><style data-mx-bare-type>:where([data-mx-story-root]:not([data-mx-styled]))>*{padding-inline:clamp(1rem,5vw,3rem)}:where([data-mx-story-root]:not([data-mx-styled]))>*:first-child{padding-block-start:2.5rem}:where([data-mx-story-root]:not([data-mx-styled]))>*:last-child{padding-block-end:3rem}</style></head><body><div id="mx-story-root" data-mx-inline-story data-mx-story-root><div class="mx-doc"><article data-af-id="authored"><h1>Authored heading</h1></article></div></div></body></html>';
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:original,visibility:'private'}}));
+ expect(created.status,await created.clone().text()).toBe(201);const {id}=await created.json() as {id:string};
+ const rendered=await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id));expect(rendered.status).toBe(200);
+ const document=new JSDOM(await rendered.text()).window.document;
+ const fix=document.querySelector('style[data-mx-native-html-presentation]');
+ expect(fix?.textContent).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc');
+ expect(fix?.textContent).toContain('padding-inline:0');
+ expect(document.querySelector('[data-af-id="authored"] h1')?.textContent).toBe('Authored heading');
+ const offline=await download(request(`/a/${id}/download`,{token:actor.token}),params(id));expect(offline.status).toBe(200);
+ const offlineDocument=new JSDOM(await offline.text()).window.document,offlineFix=offlineDocument.querySelector('style[data-mx-native-html-presentation]');
+ expect(offlineFix?.textContent).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc');
+ expect(offlineDocument.querySelector('[data-af-id="authored"] h1')?.textContent).toBe('Authored heading');
+ for(const renderedDocument of [document,offlineDocument]){
+  const nonce=renderedDocument.querySelector<HTMLScriptElement>('script[data-af="core"]')?.nonce;
+  expect(nonce).toMatch(/^[a-f0-9]{32}$/);
+  expect(renderedDocument.querySelector('meta[data-af="script-policy"]')?.getAttribute('content')).toContain("'nonce-"+nonce+"'");
+ }
+ const stored=await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id));expect(stored.status).toBe(200);
+ expect((await stored.json()).html).not.toContain('data-mx-native-html-presentation');
+});
 it('revalidates only after access admission and admits native code only inside the runner policy',async()=>{
  const {actor,id}=await publish();
  const req=(token?:string,tag?:string)=>markPagesRequest(request(`/a/${id}/raw`,{...(token?{token}:{}),headers:tag?{'if-none-match':tag}:{}}),{id,self:`https://${id}.pages.example.test`,site});
@@ -70,6 +94,25 @@ import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { EXPORT_PNG } from './export-helpers';
 import type { RenderRequest } from '@artifactbin/contracts';
 afterEach(()=>setServices({}));
+it('resets only the bare inline story wrapper and preserves authored descendants', async()=>{
+ const html='<!doctype html><html><head></head><body>'
+  +'<main data-mx-story-root data-mx-inline-story><div class="mx-doc" id="reader-wrapper"><p id="author-content" style="padding-inline:12px">Text</p></div></main>'
+  +'<main data-mx-story-root><div class="mx-doc" id="unrelated-wrapper"><p>Unrelated</p></div></main>'
+  +'<main data-mx-story-root data-mx-inline-story data-mx-styled><div class="mx-doc" id="styled-wrapper"><p>Styled</p></div></main>'
+  +'</body></html>';
+ const rendered=nativeHtmlStructuralWrapper(html);
+ const rerendered=nativeHtmlStructuralWrapper(rendered);
+ const document=new JSDOM(rendered).window.document;
+ const presentation=document.querySelector('style[data-mx-native-html-presentation]')!;
+ expect(presentation).not.toBeNull();
+ const reset=':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc';
+ expect(presentation.textContent).toContain(`${reset}{padding-inline:0;padding-block-start:0;padding-block-end:0}`);
+ expect([...document.querySelectorAll(reset)].map(node=>node.id)).toEqual(['reader-wrapper']);
+ expect(document.querySelector('#author-content')?.getAttribute('style')).toBe('padding-inline:12px');
+ expect(html).not.toContain('data-mx-native-html-presentation');
+ expect(rerendered).toBe(rendered);
+ expect(new JSDOM(rerendered).window.document.querySelectorAll('style[data-mx-native-html-presentation]')).toHaveLength(1);
+});
 it('captures native HTML body through its signed raw URL and keeps private previews private',async()=>{
  const {actor,id}=await publish();const browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_PNG});setServices({browser});
  expect((await exportImage(request(`/a/${id}/export?mode=preview`),params(id))).status).toBe(404);

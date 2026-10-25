@@ -67,6 +67,8 @@ export interface NativeIdentityImport {
   };
   /** Host-selected timestamp for forced revocation; historical token dates remain in the durable ledger. */
   revokedAt: string;
+  /** Optional reviewed object bytes. Keys must equal the verified source user image_key. */
+  avatarObjects?: readonly NativeIdentityAvatarObject[];
 }
 export interface NativeIdentityImportResult {
   createdUsers: number;
@@ -91,3 +93,13 @@ export interface NativeIdentityMigrationSchemas {appSchema:string;authSchema:str
 declare const migrationAuthority:unique symbol;
 /** An opaque authority bound to one actual database transaction. */
 export interface NativeIdentityMigrationAuthority {readonly [migrationAuthority]:true}
+
+interface NativeIdentityAvatarObject {
+ sourceId:string;
+ key:string;
+ sha256:string;
+ base64:string;
+}
+declare const avatarPreparation:unique symbol;
+/** Issued only after immutable object write and digest readback. */
+export interface NativeIdentityAvatarPreparation {readonly [avatarPreparation]:true}
