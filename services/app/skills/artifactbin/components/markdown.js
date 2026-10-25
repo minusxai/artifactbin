@@ -81,6 +81,10 @@ import{a as Zn,b as Gi,c as Xn}from"./chunk-oojm4ctu.js";var ar=Zn((yu,or)=>{"us
 :where(af-markdown .mx-markdown,af-markdown .mx-markdown *){box-sizing:border-box;margin:0;padding:0;border:0 solid}
 :where(af-markdown pre,af-markdown code,af-markdown kbd,af-markdown samp){font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace);font-feature-settings:normal;font-variation-settings:normal;font-size:1em}
 ${xu(Di)}
+/* The original reader's Markdown sheet follows the application preflight, which
+   restores block-code size to its parent. Match that cascade while keeping
+   inline code at the shared Markdown rule's 0.9em. */
+:where(af-markdown pre code){font-size:1em}
 ${ku}
 af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 af-markdown{display:block}
