@@ -13,6 +13,8 @@ char *scanFile = "public-expression-fixture";
 
 int main(int argc, char **argv) {
     assert(argc == 2);
+    /* Match xkbcomp main: rejected expressions must have a diagnostic stream. */
+    assert(uSetErrorFile(NULL));
     XkbInitAtoms(NULL);
     ExprResult result = {0}, element = {0}, field = {0};
     ExprDef *index = NULL;
