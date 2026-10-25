@@ -56,6 +56,16 @@ it("measures columns after detached initialization and remeasures changed row co
   expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
 });
 it("retains a focused row beyond the initial sample while refreshing column measurements", async () => {
+  const observers: MeasuredRows[] = [];
+  class MeasuredRows implements ResizeObserver {
+    targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) { this.targets.add(target); }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+    flush() { this.callback([...this.targets].map(target => ({target,borderBoxSize:[{blockSize:43}],contentRect:{height:43}}) as unknown as ResizeObserverEntry), this); }
+  }
+  vi.stubGlobal("ResizeObserver", MeasuredRows);
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
   el.cellRenderers = {value(context, cell) {
@@ -64,9 +74,13 @@ it("retains a focused row beyond the initial sample while refreshing column meas
   const columns = [{name:"id",type:"number" as const},{name:"value",type:"string" as const}];
   const rows = Array.from({length:200}, (_,id)=>({id,value:`Row ${id}`}));
   el.data = {columns,rows}; document.body.append(el); await Promise.resolve();
+  observers.at(-1)!.flush();
   const viewport = el.querySelector<HTMLElement>("[data-slot=table-scroll]")!;
-  viewport.scrollTop = 100 * 33; viewport.dispatchEvent(new Event("scroll"));
-  const input = el.querySelector<HTMLInputElement>('tr[aria-rowindex="102"] input')!;
+  viewport.scrollTop = 100 * 43; viewport.dispatchEvent(new Event("scroll"));
+  observers.at(-1)!.flush();
+  const input = el.querySelector<HTMLInputElement>('tbody tr[data-row-key] input')!;
+  const rowIndex = Number(input.closest("tr")!.getAttribute("aria-rowindex"));
+  expect(rowIndex).toBeGreaterThan(52);
   expect(input).toBeTruthy(); input.focus();
   const scroll = viewport.scrollTop;
   el.data = {columns,rows:rows.map(row=>({...row}))};
@@ -74,7 +88,7 @@ it("retains a focused row beyond the initial sample while refreshing column meas
   expect(document.activeElement).toBe(input);
   expect(viewport.scrollTop).toBe(scroll);
   await Promise.resolve();
-  expect(el.querySelector('tr[aria-rowindex="102"] input')).toBe(input);
+  expect(el.querySelector(`tr[aria-rowindex="${rowIndex}"] input`)).toBe(input);
   expect(document.activeElement).toBe(input);
   expect(viewport.scrollTop).toBe(scroll);
 });

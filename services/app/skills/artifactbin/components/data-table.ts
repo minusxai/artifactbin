@@ -100,8 +100,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private ids = new Map<string, string>();
   private serial = 0;
   private cellModes = new WeakMap<HTMLElement, unknown>();
-  private invalidateMeasurements() {
-    this.rowHeights.clear();
+  private invalidateMeasurements(retainRowEstimates = false) {
+    if (!retainRowEstimates) this.rowHeights.clear();
     // Observers do not redeliver unchanged retained nodes after a cache reset.
     // Reobserve them during render so every rendered row obtains a fresh size.
     this.rowObserver?.disconnect();
@@ -115,7 +115,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
-    this.invalidateMeasurements();
+    // Keep the current keyed window stable until observers report new heights.
+    this.invalidateMeasurements(true);
     this.columnsNeedMeasurement = true;
     this.showRowCount = Boolean(
       this.value.truncated ||
@@ -547,6 +548,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       td.textContent = (e as Error).message;
       return;
     }
+    const currentKeys = new Set(keys);
+    for (const key of this.rowHeights.keys())
+      if (!currentKeys.has(key)) this.rowHeights.delete(key);
     if (!this.data.rows.length) this.viewport!.scrollTop = 0;
     const columns = resolveColumns(
       parseColumnSpecs(this.columns),

@@ -427,14 +427,19 @@ try {
     const input=table.querySelector('tbody tr[data-row-key] input');
     const rowIndex=Number(input.closest('tr').getAttribute('aria-rowindex'));
     input.focus({preventScroll:true});const scroll=viewport.scrollTop;
+    const snapshot=()=>({connected:input.isConnected,focused:document.activeElement===input,activeTag:document.activeElement?.tagName,scrollTop:viewport.scrollTop,window:[...table.querySelectorAll('tbody tr[data-row-key]')].map(row=>Number(row.getAttribute('aria-rowindex')))});
+    const beforeRefresh=snapshot();
     table.data={columns,rows:rows.map(row=>({...row}))};
+    const afterRefresh=snapshot();
     const immediate=input.isConnected&&document.activeElement===input&&viewport.scrollTop===scroll;
     await settle();
+    const afterSettle=snapshot();
     const retained=input.isConnected&&document.activeElement===input&&viewport.scrollTop===scroll;
-    return {before,after,cells,rowIndex,immediate,retained};
+    return {before,after,cells,rowIndex,immediate,retained,beforeRefresh,afterRefresh,afterSettle};
   });
   check(tableMeasurement.after[0] > tableMeasurement.before[0] + 20,'table remeasures loaded content after an empty same-schema result');
   check(tableMeasurement.after.every((width,index)=>Math.abs(width-tableMeasurement.cells[index])<1),'remeasured table header and body use the same column geometry');
+  check.note(`Table refresh geometry: ${JSON.stringify(tableMeasurement)}`);
   check(tableMeasurement.rowIndex>52&&tableMeasurement.immediate&&tableMeasurement.retained,'table refresh preserves the focused control and scroll position beyond the initial sample');
 
   check(errors.length===0,`candidate has no page errors (${errors.join('; ') || 'none'})`);
