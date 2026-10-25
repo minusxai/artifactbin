@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import {pixelDifference} from './native-pixel-quantization.mjs';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
 /** @param {import('../fixtures/component-baseline/contract').BrowserParityAction} action */
 export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
@@ -266,7 +267,7 @@ export async function compareBrowserBaselines({baseline,candidate,baselineDirect
     let changedPixels=null,diff;
     if(sizeEqual){changedPixels=0;diff=Buffer.alloc(left.data.length);for(let i=0;i<left.data.length;i+=4){const changed=[0,1,2,3].some(channel=>left.data[i+channel]!==right.data[i+channel]);if(changed)changedPixels++;diff[i]=changed?255:Math.round(left.data[i]*.25);diff[i+1]=changed?0:Math.round(left.data[i+1]*.25);diff[i+2]=changed?128:Math.round(left.data[i+2]*.25);diff[i+3]=255;}
       await sharp(diff,{raw:{width:left.info.width,height:left.info.height,channels:4}}).png().toFile(path.join(output,`${key(old).replaceAll('/','-')}-diff.png`));}
-    results.push({key:key(old),sizeEqual,changedPixels,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[]),...(current.resourceEvidence?.errors||[])]});
+    results.push({key:key(old),sizeEqual,changedPixels,pixelDifference:sizeEqual?pixelDifference(left.data,right.data,left.info.width,left.info.height):null,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[]),...(current.resourceEvidence?.errors||[])]});
   }
   for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
   await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
