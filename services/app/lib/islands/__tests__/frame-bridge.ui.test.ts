@@ -224,6 +224,25 @@ describe('the frame bridge', () => {
     expect(loads).toHaveBeenCalledTimes(1);
   });
 
+  it('delivers appearance only through the current trusted parent envelope', async () => {
+    const {frame, frameWin, pageProxy, toFrame} = framedPair();
+    const {bridge, onReady} = parentFor(frame);
+    openDoor(frameWin);
+    await settle(() => onReady.mock.calls.length > 0);
+    const key = (toFrame.find(post => (post.data as {payload?: {kind?: string}}).payload?.kind === 'attach')!.data as {key: string}).key;
+    const controller = made.controllers[0]!;
+    const command = {type: 'mx:reader-mode', mode: 'dark'};
+    const envelope = {type: FRAME_BRIDGE_MESSAGE, key, payload: {kind: 'send', command}};
+    frameWin.dispatchEvent(new frameWin.MessageEvent('message', {data: envelope, origin: APP, source: pageProxy}));
+    dispatchTrusted(frameWin, new frameWin.MessageEvent('message', {data: envelope, origin: PAGES, source: pageProxy}));
+    dispatchTrusted(frameWin, new frameWin.MessageEvent('message', {data: {...envelope, key: 'x'.repeat(36)}, origin: APP, source: pageProxy}));
+    await tick();
+    expect(controller.sent).toEqual([]);
+    bridge.send(command);
+    await settle(() => controller.sent.length === 1);
+    expect(controller.sent).toEqual([command]);
+  });
+
   it('relays the controller\'s three app requests through the page, and refuses anything else', async () => {
     const { frame, frameWin } = framedPair();
     const { appFetch, onReady } = parentFor(frame);

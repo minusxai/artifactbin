@@ -1,3 +1,4 @@
+import {applyHtmlReaderAppearance} from '../html-bridge/reader';
 import {createUploadContext,bindUploadControl} from './upload-context';
 import type {UploadContext} from '@artifactbin/contracts';
 import type {PlatformUploadControl} from './upload-contract';
@@ -175,6 +176,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         else try { current.resolve(JSON.parse(payload.body)); } catch { current.reject(new Error('Invalid remote reply; outcome unknown')); }
       }
       if (payload.kind === 'send') {
+        applyHtmlReaderAppearance(win.document, payload.command);
         const command = payload.command as Partial<HtmlAnnotationPaint> & HtmlCommentViewCommand & { type?: string; annotate?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
