@@ -261,6 +261,19 @@ describe('the app\'s paths', () => {
 });
 
 describe('readable startup discovery', () => {
+  it('serves a product loading state while preserving agent discovery outside the scripted first paint', async () => {
+    const html = await (await app.request(`${BASE}/login`)).text();
+    expect(html.match(/id="root"/g)).toHaveLength(1);
+    expect(html.match(/data-app-startup/g)).toHaveLength(1);
+    const startup = /<main data-app-startup[\s\S]*?<\/main>/.exec(html)![0];
+    expect(startup).toContain('role="status" aria-live="polite">Loading artifactbin…');
+    expect(startup.replace(/<noscript>[\s\S]*?<\/noscript>/g, '')).not.toContain('Agent guide');
+    expect(startup).toContain('<noscript>');
+    expect(html).toContain('<link rel="help"');
+    expect(html).toContain('<meta name="agents"');
+    expect(html).toContain('<!-- Agent guide:');
+  });
+
   it('offers an admitted document content link outside its iframe without a reader ticket', async () => {
     const w = await world();
     const res = await app.request(`${BASE}/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });

@@ -75,6 +75,30 @@ const ownerBar = async (page) => {
 const docHeading = (page) => documentLocator(page).locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 const sessionOf = async (ctx) => (await ctx.cookies(BASE)).some((c) => /better-auth/.test(c.name));
 
+// The server's loading state is useful before app JavaScript and disappears at mount.
+await section('app startup', async () => {
+  for (const [colorScheme, width] of [['light', 1280], ['dark', 390]]) {
+    const page = await browser.newPage({ colorScheme, viewport: { width, height: 844 } });
+    let release;
+    const delayed = new Promise(resolve => { release = resolve; });
+    await page.route(/\.js(?:\?|$)/, async route => { await delayed; await route.continue(); });
+    try {
+      await page.goto(`${BASE}/login`, { waitUntil: 'commit' });
+      const startup = page.locator('[data-app-startup]');
+      await startup.getByRole('status').waitFor();
+      await page.locator('link[rel="stylesheet"]').first().evaluate(link => link.sheet || new Promise(resolve => link.addEventListener('load', resolve, { once: true })));
+      check(await startup.getByRole('status').innerText() === 'Loading artifactbin…', `${colorScheme} ${width}px: loading status paints with app JavaScript delayed`);
+      check(!(await startup.innerText()).includes('Agent guide'), `${colorScheme}: no agent instructions in first paint`);
+      check(await startup.locator('img').evaluate(img => img.complete && img.naturalWidth > 0), `${colorScheme}: product logo loads`);
+      const layout = await startup.evaluate(node => ({ width: document.documentElement.scrollWidth, viewport: innerWidth, font: getComputedStyle(node).fontFamily, theme: document.documentElement.dataset.theme ?? 'light' }));
+      check(layout.width <= layout.viewport && layout.theme === colorScheme && layout.font.includes('Plex'), `${colorScheme}: theme, typography and mobile bounds`);
+      release();
+      await startup.waitFor({ state: 'detached', timeout: 20000 });
+      check(await page.locator('#root').count() === 1 && await page.locator('#root').innerText().then(text => text.trim().length > 0), `${colorScheme}: real app mounts once and removes startup`);
+    } finally { release(); await page.close(); }
+  }
+});
+
 // ── 1. what a crawler gets, and what a browser mounts (was gate-shell-seo) ──
 await section('crawler', async () => {
   const mint = await connectAgent(BASE);
