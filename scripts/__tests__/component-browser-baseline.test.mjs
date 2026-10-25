@@ -213,6 +213,27 @@ describe('reader screenshot contract',()=>{
     }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
   });
 
+  it('discovers animations recursively in nested open shadow roots',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),outerHost=dom.window.document.querySelector('#host'),outer=outerHost.attachShadow({mode:'open'}),innerHost=dom.window.document.createElement('div');outer.append(innerHost);const inner=innerHost.attachShadow({mode:'open'}),nestedHost=dom.window.document.createElement('div');inner.append(nestedHost);const nested= nestedHost.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');nested.append(target);
+    const animation={animationName:'deep-shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    dom.window.document.getAnimations=()=>[];outer.getAnimations=()=>[];inner.getAnimations=()=>[];nested.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(evidence).toMatchObject({shadowRoots:3,uniqueAnimations:1,counts:{finished:1,detached:0},timedOut:[]});
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('observes removal inside an open shadow root while a finite animation is pending',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),host=dom.window.document.querySelector('#host'),shadow=host.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');shadow.append(target);
+    const animation={animationName:'removed-shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:1000,iterations:1})},finished:new Promise(()=>{})};
+    dom.window.document.getAnimations=()=>[];shadow.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const pending=settleFiniteFrameAnimations({timeoutMs:100});target.remove();
+      const evidence=await pending;
+      expect(evidence.counts.detached).toBe(1);expect(evidence.timedOut).toEqual([]);
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
   it('resurveys animations after completion and waits for a chained finite animation',async()=>{
     const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),target=dom.window.document.querySelector('#host');let calls=0,releaseChained;
     const first={animationName:'first',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};

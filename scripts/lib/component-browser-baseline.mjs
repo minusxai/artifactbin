@@ -29,15 +29,24 @@ export async function settleFiniteFrameAnimations({timeoutMs=5000}={}) {
     const timing=animation.effect?.getComputedTiming?.()??{};
     return {name:typeof animation.animationName==='string'?animation.animationName:'',playState:animation.playState,duration:Number.isFinite(timing.duration)?timing.duration:null,iterations:timing.iterations===Infinity?'infinite':Number.isFinite(timing.iterations)?timing.iterations:null};
   };
-  const seen=new Set(),finite=[],infinite=[],detached=[],paused=[],roots=new Set([document]);let alreadyFinished=0,alreadyIdle=0,observed=0,rounds=0;
+  const seen=new Set(),finite=[],infinite=[],detached=[],paused=[],roots=new Set([document]),observedRoots=new Set();let alreadyFinished=0,alreadyIdle=0,observed=0,rounds=0;
   const markDetached=()=>{for(const record of finite)if(record.outcome===undefined&&!connected(record.target)){record.outcome='detached';record.resolve?.();}};
   const MutationObserverCtor=document.defaultView?.MutationObserver??globalThis.MutationObserver;
   const observers=[];
-  if(MutationObserverCtor&&document.documentElement){const observer=new MutationObserverCtor(markDetached);observer.observe(document.documentElement,{childList:true,subtree:true});observers.push(observer);}
+  const observeRoot=root=>{
+    if(!MutationObserverCtor||observedRoots.has(root))return;
+    const target=root===document?document.documentElement:root;
+    if(!target)return;
+    const observer=new MutationObserverCtor(markDetached);observer.observe(target,{childList:true,subtree:true});observers.push(observer);observedRoots.add(root);
+  };
+  observeRoot(document);
   let timedOut=false;
   const remaining=()=>Math.max(0,timeoutMs-(performance.now()-startedAtMs));
   const collect=()=>{
-    for(const root of [...roots])for(const node of root.querySelectorAll?.('*')??[])if(node.shadowRoot&&!roots.has(node.shadowRoot))roots.add(node.shadowRoot);
+    const frontier=[...roots];
+    for(let index=0;index<frontier.length;index++)for(const node of frontier[index].querySelectorAll?.('*')??[])if(node.shadowRoot&&!roots.has(node.shadowRoot)){
+      roots.add(node.shadowRoot);frontier.push(node.shadowRoot);observeRoot(node.shadowRoot);
+    }
     const all=[];
     for(const root of roots)if(typeof root.getAnimations==='function')all.push(...root.getAnimations({subtree:true}));
     observed+=all.length;
@@ -55,8 +64,7 @@ export async function settleFiniteFrameAnimations({timeoutMs=5000}={}) {
       finite.push({animation,target,description:describe(animation),outcome:undefined});
       const root=target.getRootNode?.();
       if(root&&root!==document&&!roots.has(root)&&root.nodeType===11&&root.host){
-        roots.add(root);
-        if(MutationObserverCtor){const observer=new MutationObserverCtor(markDetached);observer.observe(root,{childList:true,subtree:true});observers.push(observer);}
+        roots.add(root);observeRoot(root);
       }
     }
     return finite.filter(record=>record.outcome===undefined);
