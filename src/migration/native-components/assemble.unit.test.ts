@@ -202,3 +202,22 @@ test('verified presentation recipes and default story column retain source conta
  const wrong=structuredClone(input);wrong.presentation!.componentRecipes![0]!.nodeSha256='f'.repeat(64);assert.equal(assembleNativePage(wrong).status,'blocked');
  const changed=structuredClone(input);changed.style!.storyColumn!.attributes.class='wrong' as 'mx-doc';assert.equal(assembleNativePage(changed).status,'blocked');
 });
+
+test('recipe action helpers inside conditional repeats are planned before canonical publication',()=>{
+ const input=fixture(),staticValue=(json:NativeJson)=>({static:true as const,json});
+ const button:RetainedJsxNode={type:'element',tag:'Button',isComponent:true,selfClosing:false,start:0,end:1,graphKey:'choice',attributes:[{start:0,end:1,name:'set',value:staticValue({open:true})}],children:[{type:'text',graphKey:'label',start:0,end:1,value:'Choose'}]};
+ const condition=input.analysis.nodes[0]!;if(condition.type!=='element')throw Error();condition.children=[button];
+ const loop:RetainedJsxNode={type:'element',tag:'For',isComponent:true,selfClosing:false,start:0,end:1,graphKey:'repeat',attributes:[{start:0,end:1,name:'id',value:staticValue('choices')},{start:0,end:1,name:'keyBy',value:staticValue('id')},{start:0,end:1,name:'each',value:{static:false,exprType:'Identifier',source:'$rows',reactive:{kind:'signal',name:'rows'}}}],children:[condition]};
+ input.analysis.nodes=[loop];input.analysis.flow.queries=[{name:'rows',sql:'SELECT 1',start:0,end:1}];input.queries=[{name:'rows',namespace:'ops',document:'query {ops{evaluate{tables{name error columns{name type} rows{cells{text number boolean isNull}}}}}}',values:[],tableName:'rows',responsePath:['ops','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ input.operationCoverage={sourceSha256:input.analysis.sourceSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:'a'.repeat(64),queryOrder:['rows'],blockers:[],operations:[{kind:'query',name:'rows',sourceNode:'$flow',operationSha256:'b'.repeat(64),route:'registered-sqlite-query',dependencies:[],requiredGuarantees:[],status:'attested-plan'}]};
+ input.backends=[{namespace:'ops',url:'https://example.test/backend',descriptorsSha256:nativeDigest({queries:input.queries,mutations:[]}),planSha256:'a'.repeat(64),operations:[{kind:'query',name:'rows',operationSha256:'b'.repeat(64)}]}];
+ const identities:NativeGraphAnalysis['identities'][number][]=[{sourceNode:'$root',parent:null,children:['repeat'],sourceStart:0,sourceEnd:1,astSha256:'ast',nodeSha256:'root'}];
+ const visit=(node:RetainedJsxNode,parent:string)=>{identities.push({sourceNode:node.graphKey,parent,children:node.type==='element'?node.children.map(child=>child.graphKey):[],sourceStart:0,sourceEnd:1,astSha256:'ast',nodeSha256:node.graphKey});if(node.type==='element')node.children.forEach(child=>visit(child,node.graphKey));};visit(loop,'$root');
+ const graph:NativeGraphAnalysis={key:input.analysis.key,documentSha256:input.analysis.documentSha256,sourceSha256:input.analysis.sourceSha256,source:'x',identities,claimedIds:{},components:{},recovery:{kind:'exact',repairedNodes:0}};input.analysis.sourceSpans=identities.map(node=>({sourceNode:node.sourceNode,sourceStart:0,sourceEnd:1}));input.analysis.analysisSha256=nativeDigest(graph);input.identity=bindNativeIdentities([{graph,typed:input.analysis}])[0]!;
+ const css='.inline-flex{display:inline-flex}';input.style={css,sha256:createHash('sha256').update(css).digest('hex'),sourceSha256:input.analysis.sourceSha256};
+ input.presentation=bindNativePresentation(input.analysis,{style:input.style,analysisSha256:input.analysis.analysisSha256,compilerSha256:'a'.repeat(64),inlineStyles:[],resourcePatches:[],componentRecipes:[{sourceNode:'choice',tag:'Button',className:'inline-flex',actionWrapper:'mutation-hint',attributes:{'data-slot':'button'}}]});
+ const result=assembleNativePage(input);assert.equal(result.status,'complete',JSON.stringify(result));if(result.status!=='complete')return;
+ const target=result.bindingTargets.find(target=>target.kind==='loop');assert.ok(target?.kind==='loop');
+ const sourceIds=input.identity.bindings.map(binding=>binding.afId),helpers=target.identity.templateIds.filter(id=>!sourceIds.includes(id));assert.equal(helpers.length,2);assert.equal(new Set(target.identity.templateIds).size,target.identity.templateIds.length);
+ for(const id of helpers)assert.ok(result.html.includes(`data-af-id="${id}"`));assert.ok(sourceIds.every(id=>input.identity.reservedIdentities.some(entry=>entry.afId===id)));
+});

@@ -463,7 +463,7 @@ export function emitNativeBindings(
         block(node.graphKey, "missing-loop-identity-plan");
     } else if (target.kind === "table") {
       try {
-        const proof = nativeTableTarget(node, input.identityBindings ?? []);
+        const proof = nativeTableTarget(node, input.identityBindings ?? [],input.componentRecipes);
         if(!proof || nativeDigest(proof)!==nativeDigest(target))block(node.graphKey,'invalid-table-plan');
       } catch {block(node.graphKey,'invalid-table-plan');}
       const data=node.type==='element'?node.attributes.find(attr=>attr.name==='data')?.value:undefined;

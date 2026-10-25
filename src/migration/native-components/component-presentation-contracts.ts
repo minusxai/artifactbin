@@ -11,3 +11,6 @@ export interface NativeComponentRecipe {
 }
 /** The retained compiler's ordinary story column, even when no outline is eligible. */
 export interface NativeStoryColumn {tag:'div';attributes:{class:'mx-doc'}}
+
+/** Structural helper anchors are owned by the exact source button; never source comment anchors. */
+export interface NativeComponentHelperIdentity {trigger:string;contents:string}

@@ -1,3 +1,4 @@
+import {nativeComponentHelperIds} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
@@ -74,7 +75,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   const proof=binding(node);if(!proof)continue;
   if(node.type==='expression'&&!node.value.static)targets.push({...proof,kind:'text'});
   if(node.type!=='element')continue;
-  try { const table=nativeTableTarget(node,identity.bindings);if(table){targets.push(table);for(const column of table.columns)if(column.template)templateIds.add(column.template.templateId);} } catch {block('table-column-contract',node.graphKey);}
+  try { const table=nativeTableTarget(node,identity.bindings,presentation?.componentRecipes);if(table){targets.push(table);for(const column of table.columns)if(column.template)templateIds.add(column.template.templateId);} } catch {block('table-column-contract',node.graphKey);}
   if(node.control&&typeof node.control==='object'&&!Array.isArray(node.control)&&node.control.kind!=='fragment'){
    const templateId=`native-template-${proof.afId}`;templateIds.add(templateId);targets.push({...proof,kind:'condition',templateId});
   }
@@ -84,7 +85,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
    const children=descendants(node);
    if(children.some(child=>child.type==='element'&&child.tag==='For'))block('nested-loop-unsupported',node.graphKey);
    const templateId=`native-template-${proof.afId}`;templateIds.add(templateId);
-   targets.push({...proof,kind:'loop',templateId,identity:{owner:owner.json,keyBy:keyBy?.static?keyBy.json as string:null,templateIds:children.map(child=>binding(child)?.afId).filter((id):id is string=>!!id),encoding:'archived-instance-v1',domIds:children.flatMap(child=>{const proof=binding(child);return proof?.authoredDomId?[{domId:proof.authoredDomId,templateAfId:proof.afId}]:[];})}});
+   targets.push({...proof,kind:'loop',templateId,identity:{owner:owner.json,keyBy:keyBy?.static?keyBy.json as string:null,templateIds:children.flatMap(child=>{const proof=binding(child);return proof?[proof.afId,...nativeComponentHelperIds(child.graphKey,proof.afId,presentation?.componentRecipes)]:[];}),encoding:'archived-instance-v1',domIds:children.flatMap(child=>{const proof=binding(child);return proof?.authoredDomId?[{domId:proof.authoredDomId,templateAfId:proof.afId}]:[];})}});
   }
   const cellData=literal(node,'data');if((node.tag==='Cell'||node.tag==='Number')&&cellData&&(!cellData.static||typeof cellData.json==='string'&&cellData.json.startsWith('$')))targets.push({...proof,kind:'cell',attribute:'data'});
   if(node.tag==='DataTable'&&literal(node,'data')!==undefined&&!node.children.some(child=>child.type==='element'&&child.tag==='Column'))targets.push({...proof,kind:'property',property:'data',attribute:'data'});
@@ -118,7 +119,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  }
  if(new Set(input.backends.map(b=>b.namespace)).size!==input.backends.length)block('duplicate-backend');
  if(input.viewer&&input.backends.filter(backend=>backend.namespace===input.viewer!.namespace).length!==1)block('viewer-backend-admission');
- const emitted=emitNativeBindings({identityBindings:identity.bindings,cellAdapter:input.cellAdapter,people:input.people,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
+ const emitted=emitNativeBindings({componentRecipes:presentation?.componentRecipes,identityBindings:identity.bindings,cellAdapter:input.cellAdapter,people:input.people,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
  const lowered=lowerNativeComponents({componentRecipes:blockers.length?[]:presentation?.componentRecipes,analysis:input.analysis,authDelegations:input.authDelegations,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});

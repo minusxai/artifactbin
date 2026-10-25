@@ -1,9 +1,11 @@
+import {nativeComponentHelperIds} from './component-presentation.ts';
+import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import { admitDataColumn } from "../conversion/compiled/data-controls.ts";
 import type { RetainedJsxNode } from "./analyze-contracts.ts";
 import type { NativeBindingIdentity, NativeBindingTarget, NativeTableColumn } from "./bindings-contracts.ts";
 
 /** Translate only the retained Column grammar; no inferred columns or row keys. */
-export function nativeTableTarget(node: RetainedJsxNode, bindings: readonly (NativeBindingIdentity & { authoredDomId?: string })[]): Extract<NativeBindingTarget, {kind:"table"}> | null {
+export function nativeTableTarget(node: RetainedJsxNode, bindings: readonly (NativeBindingIdentity & { authoredDomId?: string })[], recipes:readonly NativeComponentRecipe[]=[]): Extract<NativeBindingTarget, {kind:"table"}> | null {
   if (node.type !== "element" || node.tag !== "DataTable" || !node.children.some(child => child.type === "element" && child.tag === "Column")) return null;
   const proof = (node: RetainedJsxNode) => {
     const matches = bindings.filter(binding => binding.sourceNode === node.graphKey);
@@ -34,7 +36,7 @@ export function nativeTableTarget(node: RetainedJsxNode, bindings: readonly (Nat
     if (children.some(child=>child.type==='element'&&['For','DataTable','Column'].includes(child.tag))) throw Error("Nested table cell scope requires separate admission");
     const childBindings = children.map(proof);
     columns.push({ sourceNode: column.graphKey, afId: identity.afId, ...(id ? {domId:id} : {}), spec,
-      ...(hasContent ? {template:{templateId:`native-table-template-${identity.afId}`,templateIds:childBindings.map(child=>child.afId),domIds:childBindings.flatMap(child=>child.authoredDomId?[{domId:child.authoredDomId,templateAfId:child.afId}]:[])}} : {}) });
+      ...(hasContent ? {template:{templateId:`native-table-template-${identity.afId}`,templateIds:childBindings.flatMap(child=>[child.afId,...nativeComponentHelperIds(child.sourceNode,child.afId,recipes)]),domIds:childBindings.flatMap(child=>child.authoredDomId?[{domId:child.authoredDomId,templateAfId:child.afId}]:[])}} : {}) });
   }
   return {...proof(node),kind:'table',owner:attrs.id,rowKey:attrs.rowKey,columns};
 }

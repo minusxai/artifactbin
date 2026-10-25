@@ -1,3 +1,4 @@
+import {nativeComponentHelperIdentity} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
 import type {NativeAuthorProgramReceipt} from './author-program-contracts.ts';
@@ -354,8 +355,10 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
+  const helpers=recipe?.actionWrapper&&proof?nativeComponentHelperIdentity(proof.afId):null;
+  if(helpers&&Object.values(helpers).some(id=>input.identityBindings.some(binding=>binding.afId===id)||input.reservedIdentities?.some(entry=>entry.afId===id)))block('component-helper-collision',node,'Structural helper identities must not reuse source or retired identities');
   const rendered=`<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
-  return recipe?.actionWrapper?`<span data-slot="tooltip-trigger" data-state="closed" class="inline-flex"><span style="display:contents">${rendered}</span></span>`:rendered;
+  return helpers?`<span data-af-id="${helpers.trigger}" data-slot="tooltip-trigger" data-state="closed" class="inline-flex"><span data-af-id="${helpers.contents}" style="display:contents">${rendered}</span></span>`:rendered;
  };
  const body=input.analysis.nodes.map(node=>walk(node)).join('');
  const html=body+templates.join('');

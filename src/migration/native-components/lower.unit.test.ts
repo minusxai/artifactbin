@@ -162,13 +162,21 @@ test('source-bound Button and Card recipes preserve ordinary DOM, exact merged c
  const wrong={...source,componentRecipes:[{...source.componentRecipes![0]!,tag:'Button' as const}]};assert.equal(lowerNativeComponents(wrong).status,'blocked');
 });
 
-test('ordinary source buttons retain native type, disabled and ARIA plus the action flex wrapper without extra identities',()=>{
+test('ordinary source buttons retain native type, disabled and ARIA plus the action flex wrapper with distinct stable structural identities',()=>{
  for(const type of ['button','submit','reset'] as const){
   const node=element('Button',{type,disabled:true,'aria-label':'Choose option','aria-describedby':'help'},[text('Choose')]),source=input([node]);source.authoredStyleSha256=proof;
   source.componentRecipes=[{sourceNode:node.graphKey,tag:'Button',className:'inline-flex flex-col',actionWrapper:'mutation-hint',attributes:{'data-slot':'button','data-size':'default','data-variant':'default'}}];
   const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,new RegExp(`type="${type}"`));assert.match(result.html!,/disabled=""/);assert.match(result.html!,/aria-label="Choose option"/);assert.match(result.html!,/aria-describedby="help"/);
-  assert.match(result.html!,/^<span[^>]*class="inline-flex"><span style="display:contents"><button/);assert.equal([...result.html!.matchAll(/data-af-id=/g)].length,1);
+  assert.match(result.html!,/^<span[^>]*class="inline-flex"><span[^>]*style="display:contents"><button/);assert.equal([...result.html!.matchAll(/data-af-id=/g)].length,3);
+  const ids=[...result.html!.matchAll(/data-af-id="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,3);assert.deepEqual(lowerNativeComponents(source).html,result.html);
  }
  const row=element('Button',{type:'submit'},[text('Act')]),source=input([row]);source.authoredStyleSha256=proof;source.componentRecipes=[{sourceNode:row.graphKey,tag:'Button',className:'inline-flex',attributes:{'data-slot':'button',type:'button'}}];
  assert.match(lowerNativeComponents(source).html!,/type="button"/);
+});
+test('structural helper identities cannot collide with an original or retired source anchor',async()=>{
+ const {nativeComponentHelperIdentity}=await import('./component-presentation.ts');
+ const node=element('Button',{},[text('Act')]),source=input([node]);source.authoredStyleSha256=proof;source.componentRecipes=[{sourceNode:node.graphKey,tag:'Button',className:'inline-flex',actionWrapper:'mutation-hint',attributes:{'data-slot':'button'}}];
+ const helper=nativeComponentHelperIdentity(source.identityBindings[0]!.afId).trigger;
+ source.reservedIdentities=[{afId:helper,sourceNode:'retired-original'}];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(blocker=>blocker.code==='component-helper-collision'));
 });

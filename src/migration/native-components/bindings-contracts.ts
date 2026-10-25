@@ -89,6 +89,7 @@ export interface NativeBindingViewer {
   responsePath: readonly [string, "viewer", "id"];
 }
 export interface NativeBindingsInput {
+  componentRecipes?:readonly import("./component-presentation-contracts.ts").NativeComponentRecipe[];
   people?:import("./person-contracts.ts").NativeBindingPeople;
   cellAdapter?:NativeCellAdapter;
   identityBindings?: readonly (NativeBindingIdentity & {authoredDomId?: string})[];

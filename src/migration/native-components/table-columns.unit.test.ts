@@ -15,3 +15,11 @@ test('column conversion preserves header and exact action cell identity plans',(
 test('column conversion refuses inferred keys, duplicate columns, unproved descendants and unsupported attributes',()=>{
  for(const mutate of [(f:ReturnType<typeof fixture>)=>{if(f.node.type==='element')f.node.attributes=f.node.attributes.filter(a=>a.name!=='rowKey');},(f:ReturnType<typeof fixture>)=>{if(f.node.type==='element')f.node.children.push(f.node.children[0]!);},(f:ReturnType<typeof fixture>)=>{f.bindings.pop();},(f:ReturnType<typeof fixture>)=>{if(f.node.type==='element'&&f.node.children[0]!.type==='element')f.node.children[0]!.attributes.push(...attrs({invented:'yes'}));}]){const f=fixture();mutate(f);assert.throws(()=>nativeTableTarget(f.node,f.bindings));}
 });
+test('custom cell identity plans include only helpers of their exact source-owned action recipe',()=>{
+ const {node,bindings}=fixture();
+ const recipe={sourceNode:'action',tag:'Button' as const,className:'inline-flex',actionWrapper:'mutation-hint' as const,attributes:{'data-slot':'button'}};
+ const plan=nativeTableTarget(node,bindings,[recipe])!,ids=plan.columns[0]!.template!.templateIds;
+ assert.equal(ids.length,3);assert.equal(new Set(ids).size,3);assert.equal(ids[0],'action-id');assert.ok(ids.slice(1).every(id=>/^h_[a-f0-9]{64}$/.test(id)));
+ assert.deepEqual(nativeTableTarget(node,bindings,[{...recipe,sourceNode:'other'}])!.columns[0]!.template!.templateIds,['action-id']);
+ assert.throws(()=>nativeTableTarget(node,bindings,[recipe,recipe]));
+});
