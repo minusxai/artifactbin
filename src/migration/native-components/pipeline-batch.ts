@@ -18,7 +18,7 @@ export async function runNativePipelineBatch(raw:NativePipelineBatchRequest,port
  const prepared=slots.filter((head):head is Omit<NativePipelineBatchHead,'imported'>=>head!==undefined);
  const save=async(result:NativePipelineBatchResult)=>{if(ports.reserve)await writeFile(path.join(await realpath(root),'batch-result.json'),JSON.stringify(result),{flag:'wx',mode:0o600});return result;};
  if(!prepared.length)return save({format:'native-pipeline-batch-result-v1',revisionScope:'latest',status:'blocked',outcomes,heads:[]});
- const openingRequest={...first,output:request.outputDirectory,stage:'import' as const},openingContext={...prepared[0]!.context,outputDirectory:request.outputDirectory};
+ const openingRequest={...prepared[0]!.request,output:request.outputDirectory,stage:'import' as const},openingContext={...prepared[0]!.context,outputDirectory:request.outputDirectory};
  const lifecycle=await ports.open(openingRequest,openingContext,loaded.configuration);
  try{
   const publication=structuredClone(loaded.publication);publication.shared.catalog.sinkDirectory=lifecycle.objectsDirectory;
@@ -26,12 +26,12 @@ export async function runNativePipelineBatch(raw:NativePipelineBatchRequest,port
   if(typeof host.importOnly!=='function')throw Error('native_pipeline_batch_import_only_required');
   const heads:NativePipelineBatchHead[]=[];
   for(const head of prepared){const index=request.requests.findIndex(r=>r.head===head.request.head);let context:NativePipelineHostContext;
-   try{context=ports.authority?await ports.authority(head.request,head.context,loaded.configuration,publication,lifecycle.objectsDirectory):head.context;}catch(error){outcomes[index]={sourceId:head.request.head,status:'authority-failed',code:error instanceof Error?error.message:'native_pipeline_batch_authority'};continue;}
+   try{context=ports.authority?await ports.authority(head.request,head.context,loaded.configuration,publication,lifecycle.objectsDirectory):head.context;}catch(error){outcomes[index]={sourceId:head.request.head,status:'authority-failed',code:error instanceof Error&&/^native_[a-z_]+$/.test(error.message)?error.message:'native_pipeline_batch_authority'};continue;}
    // Unknown post-open import errors remain fatal: this shared fixture may be contaminated.
    const imported=await host.importOnly(context);if(imported.stage!=='imported-unsnapshotted'||nativeDigest(imported.key)!==nativeDigest(context.revision.key)||imported.assemblySha256!==context.assembly.sha256)throw Error('native_pipeline_batch_import_binding');heads.push({...head,context,imported});outcomes[index]={sourceId:head.request.head,status:'imported'};if(ports.reserve)await writeFile(path.join(head.request.output,'host-context.json'),JSON.stringify(encodeNativePipelineContext(context)),{flag:'wx',mode:0o600});}
   if(!heads.length)return save({format:'native-pipeline-batch-result-v1',revisionScope:'latest',status:'blocked',outcomes,heads});
   const snapshot=await ports.snapshot({request,lifecycle,heads,targetRoot:loaded.configuration.targetRoot});
   if(snapshot.heads.length!==heads.length||snapshot.heads.some((saved,index)=>nativeDigest(saved.key)!==nativeDigest(heads[index]!.context.revision.key)||saved.assemblySha256!==heads[index]!.context.assembly.sha256))throw Error('native_pipeline_batch_snapshot_binding');
   return save({format:'native-pipeline-batch-result-v1',revisionScope:'latest',status:heads.length===request.requests.length?'imported':'partial',outcomes,heads,snapshot});
- }catch(error){if(ports.reserve)await writeFile(path.join(root,'batch-interrupted.json'),JSON.stringify({status:'failed',code:error instanceof Error?error.message:'native_pipeline_batch_failed',outcomes:request.requests.map((head,index)=>outcomes[index]??{sourceId:head.head,status:'blocked-after-fatal-import'})}),{flag:'wx',mode:0o600});throw error;}finally{await lifecycle.dispose();}
+ }catch(error){if(ports.reserve)await writeFile(path.join(root,'batch-interrupted.json'),JSON.stringify({status:'failed',code:error instanceof Error&&/^native_[a-z_]+$/.test(error.message)?error.message:'native_pipeline_batch_failed',outcomes:request.requests.map((head,index)=>outcomes[index]??{sourceId:head.head,status:'blocked-after-fatal-import'})}),{flag:'wx',mode:0o600});throw error;}finally{await lifecycle.dispose();}
 }
