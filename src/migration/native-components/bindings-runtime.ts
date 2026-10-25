@@ -12,6 +12,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const rootScope={active:true,cleanups:new Set(),completion:{active:true},ownsCompletion:true},scopes=new Set([rootScope]);
  const disposeScope=scope=>{if(scope.ownsCompletion){scope.completion.active=false;if(scope.completion.key&&completions.get(scope.completion.key)===scope.completion)completions.delete(scope.completion.key);}if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
  const childScope=(parent,retained=false)=>{const child={active:true,cleanups:new Set(),completion:retained?parent.completion:{active:true},ownsCompletion:!retained},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
+ const cellScope=(parent,identity)=>{const child=childScope(parent);child.completion.key=JSON.stringify([parent.completion.key??null,'table',identity.owner,typeof identity.rowKey,identity.rowKey,identity.column]);completions.set(child.completion.key,child.completion);return child;};
  const clearCondition=host=>{const branch=conditions.get(host);if(branch?.scope){disposeScope(branch.scope);branch.scope=null;}host.replaceChildren();};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
@@ -82,7 +83,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     }}
    }
    if(target.kind==='table'){
-    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,childScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
+    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,cellScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
    }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}
