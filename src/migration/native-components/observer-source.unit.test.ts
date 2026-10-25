@@ -20,3 +20,8 @@ test('preview capability is explicit and rewrites only owned script URLs and ifr
  assert.match(result.source,/nativePreview.createScriptUrl\(code\)/);assert.match(result.source,/nativePreview.createFrame\(\)/);assert.match(result.source,/nativePreview.setDocument\(frame,/);assert.doesNotMatch(result.source,/new Blob|URL.createObjectURL|\.srcdoc=/);
  for(const altered of [script.replace("type:'text/javascript'","type:'text/html'"),script.replace('new Blob([code]','new Blob([code,code]'),script+'const extra=new Blob([]);',script+'frame.sandbox="allow-same-origin";',script+'frame.contentWindow.fetch("/private");'])assert.throws(()=>adaptNativeObserverSource(altered,{values:[],queries:['rows']},'nativeObserver','nativePreview'));
 });
+
+test('read-only page imports may omit unused named capabilities without widening the allowed import set',()=>{
+ assert.doesNotThrow(()=>adapt(inlineSource.replace('{query,signal}','{query}')));
+ for(const replacement of ['{query,mutation}','{query as read}','{}','{query,query}'])assert.throws(()=>adapt(inlineSource.replace('{query,signal}',replacement)));
+});
