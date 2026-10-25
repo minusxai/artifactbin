@@ -19,8 +19,10 @@ export interface QueryContext extends QueryIdentity {
 }
 export interface QueryPlan {
   registration: QueryIdentity;
+  /** Trusted live tables explicitly named by the saved source program. */
+  builtins?: readonly "members"[];
   scalars: Record<string, { type: ColumnType; default: Scalar }>;
-  /** Immutable authored rows from the saved, registered program. Never request arguments. */
+  /** Immutable authored rows from the saved program. Column labels are bounded exact row keys, quoted by SQLite; never request arguments. */
   localTables?: readonly {name:string;columns:DatasetColumn[];rows:Row[]}[];
   queries: readonly {
     name: string;
@@ -77,6 +79,8 @@ export interface QueryPorts {
     context: Readonly<QueryContext>,
     signal: AbortSignal,
   ): Promise<{ userId: string | null; now: string; tz: string }>;
+  /** Current authorized document membership, never supplied by query parameters. */
+  members?(context:Readonly<QueryContext>,signal:AbortSignal):Promise<{rows:Row[];verify(signal:AbortSignal):Promise<void>}>;
   /** Source selection must preserve result-only document authority, with viewer filtering, not require raw-read permission. */
   source(
     context: Readonly<QueryContext>,

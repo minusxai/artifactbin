@@ -14,7 +14,7 @@ import {createRetainedRegisteredMutation} from '../retained';
 import type {MutationProgram} from '../contracts';
 useAppHarness();afterEach(()=>{vi.restoreAllMocks();});
 const signal=()=>new AbortController().signal;
-async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedAffected?:number}={expectedAffected:1}){
+async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedAffected?:number}={expectedAffected:1},eventValue=false){
  const owner=await mintAccountToken('mxmx_test_registered_mutation_acceptance'),actor=identityForUser(owner.userId,owner.id);
  const make=async(json:object)=>{const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json}));expect(response.status).toBe(201);return (await response.json()).id as string;};
  const datasetId=await make({dataset:[{body:'seed'},{body:'other'}],visibility:'private'});
@@ -23,6 +23,7 @@ async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedA
  await changeMembership(actor,pageId,{action:'join'});
  const original=await readHtmlPage(actor,pageId),page={...original,version:original.version+1,revision:String(original.version+1)};
  const program:MutationProgram={name:kind,kind,sql:kind==='insert'?'INSERT INTO forms.rows(body) VALUES ($body)':kind==='update'?"UPDATE forms.rows SET body=$body WHERE body='seed' OR $body='__all__'":"DELETE FROM forms.rows WHERE body=$body OR $body='__all__'",target:{datasetId,schema:'forms',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}),reset:['body']};
+ if(eventValue){program.sql=program.sql.replaceAll('$body','$_value');program.values.body!.parameter='_value';}
  const prepared=prepareRegisteredMutationBackend('actions',`backend_${pageId}`,page,program,{compilerSha256:'a'.repeat(64),sourceSha256:'b'.repeat(64)});page.links=[prepared.link];
  const db=await getDb();await db.transaction(async tx=>{await tx.query("UPDATE artifacts SET version=$2,meta=jsonb_set(meta,'{htmlLinks}',$3::jsonb) WHERE id=$1",[pageId,page.version,JSON.stringify(page.links)]);await tx.query('INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) SELECT id,version,title,format,source,meta FROM artifacts WHERE id=$1',[pageId]);await commitRegisteredMutationBackend(tx,page,owner.userId!,prepared);});
  const backend=(await getHtmlBackendVersion(prepared.link.backendId,prepared.link.version))!;
@@ -66,4 +67,10 @@ it('UPDATE remains denied when the source dataset policy permits only read/inser
  if(typeof before.policy_revision!=='number')throw Error('missing fixture policy revision');
  expect(await setDatasetPolicy(f.actor,f.datasetId,{version:2,allow:[{actions:['read','insert','delete'],from:{user:'$owner'}}]},before.policy_revision)).toMatchObject({revision:before.policy_revision+1});
  expect(await f.run('request_update_denied_123456','changed')).toMatchObject({outcome:'rejected',reset:[]});expect(await f.rows()).toEqual([{body:'seed'},{body:'other'}]);expect((await getArtifactById(f.datasetId))!.version).toBe(before.version);
+});
+
+it('source event parameters use the same typed authorized durable transaction without caller SQL or builtin authority',async()=>{
+ const f=await fixture('update',{expectedAffected:1},true),before=(await getArtifactById(f.datasetId))!.version;
+ await expect(f.run('request_event_invalid_123456',5 as unknown as string)).rejects.toThrow('invalid_registered_mutation');expect((await getArtifactById(f.datasetId))!.version).toBe(before);
+ const input='request_event_valid_123456',result=await f.run(input,'event draft');expect(result).toMatchObject({outcome:'committed',affected:1});expect(await f.run(input,'event draft')).toEqual(result);expect((await getArtifactById(f.datasetId))!.version).toBe(before+1);expect(await f.rows()).toEqual([{body:'event draft'},{body:'other'}]);
 });

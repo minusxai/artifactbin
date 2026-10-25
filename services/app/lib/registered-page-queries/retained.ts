@@ -1,3 +1,5 @@
+import {getDb} from '@/lib/platform';
+import {readRegisteredQueryMembers} from './members';
 import {resolveDatasetConnection} from '@/lib/datasets/secrets';
 import {registeredSourceCatalog} from './source-catalog';
 import { SQL_SERVICE_URL } from "@/lib/platform/config";
@@ -21,6 +23,7 @@ import { pageSourceDigest, registeredPlan } from "./registry";
 import type { QueryContext } from "./contracts";
 interface RetainedPorts {
   readPage: typeof readHtmlPage;
+  readMembers:(pageId:string)=>Promise<import("@artifactbin/contracts").Row[]>;
   readDocument: typeof getArtifactById;
   readBackend: typeof getHtmlBackendVersion;
   resolveImport: typeof registeredQueryImportForRow;
@@ -66,6 +69,7 @@ export function createRetainedRegisteredQueries(
 ) {
   const ports: RetainedPorts = {
     readPage: readHtmlPage,
+    readMembers:async pageId=>readRegisteredQueryMembers(await getDb(),pageId,limits.rows+1),
     readDocument: getArtifactById,
     readBackend: getHtmlBackendVersion,
     resolveImport: registeredQueryImportForRow,
@@ -154,6 +158,14 @@ export function createRetainedRegisteredQueries(
       if (context.subject !== actor.userId) return false;
       await document(signal);
       return true;
+    },
+    members:async (_context,signal)=>{
+      await document(signal);
+      const rows=await ports.readMembers(page.pageId),fingerprint=JSON.stringify(rows);
+      signal.throwIfAborted();
+      const verify=async(active:AbortSignal)=>{await document(active);const current=await ports.readMembers(page.pageId);active.throwIfAborted();if(JSON.stringify(current)!==fingerprint)throw Error('query_members_changed');};
+      ports.retainReadFence?.(()=>verify(ports.fenceSignal??new AbortController().signal));
+      return {rows,verify};
     },
     platform: async () => ({
       userId: actor.userId,
