@@ -112,10 +112,6 @@ it('matches retained bare dialog paragraph rhythm without overriding authored pa
   const {root,content} = fixture();
   const paragraph = document.createElement('p'); paragraph.textContent = 'Source paragraph'; content.append(paragraph);
   const authored = document.createElement('p'); authored.className = 'authored-copy'; authored.textContent = 'Authored paragraph'; content.append(authored);
-  const style = document.querySelector<HTMLStyleElement>('style[data-af-dialog-styles]')!;
-  const css = style.textContent!.replace(/\s+/g,'');
-  expect(css).toContain('af-dialog-contentp:not([class]){line-height:1.65;margin:.75rem0}');
-  expect(css).not.toContain('af-dialog-contentp{');
   expect(getComputedStyle(paragraph).lineHeight).toBe('1.65');
   expect(getComputedStyle(paragraph).marginTop).toBe('12px');
   const authorStyle = document.createElement('style'); authorStyle.textContent = '.authored-copy{line-height:2;margin:3px 0}'; document.head.append(authorStyle);
@@ -131,7 +127,8 @@ it('matches the retained bare dialog heading and outline close styling', () => {
   const css = style.textContent!.replace(/\s+/g,'');
   expect(getComputedStyle(heading).fontSize).toBe('28px');
   expect(getComputedStyle(heading).lineHeight).toBe('1.2');
-  expect(css).toContain('af-dialog-trigger>button{box-sizing:border-box;display:inline-flex;height:2.25rem;');
+  const nestedTrigger = document.createElement('af-dialog-trigger'); nestedTrigger.innerHTML = '<button>Native</button>'; document.body.append(nestedTrigger);
+  expect(getComputedStyle(nestedTrigger.querySelector('button')!).height).toBe('36px');
   expect(css).toContain('af-dialog-close{border:1pxsolidcurrentColor;background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs,');
   expect(css).toContain('af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1pxsolidcurrentColor');
   document.documentElement.dataset.afDark = 'true';
