@@ -11,7 +11,7 @@ Use this guide for native HTML comments and browser QA. Read [HTML authoring](ht
 
 - [Comment on a saved HTML node](#comment-on-a-saved-html-node)
 - [Verify the actual HTML in a server browser session](#verify-the-actual-html-in-a-server-browser-session)
-- [Create, update and the local helper](#create-update-and-the-local-helper)
+- [Recovery and limits](#recovery-and-limits)
 
 # Native HTML comments and browser verification
 
@@ -68,53 +68,25 @@ Read the current thread list with `GET /api/artifacts/ID/annotations?status=all`
 
 Keep the bearer in the caller that sends the API request. It does not belong in `code`, page HTML or downloaded files. The page is signed in as the caller unless the session-creation request explicitly sets `viewer:'guest'` or an authorized `viewer:{testuser:'ID'}`. A session's viewer is fixed at creation.
 
+Use `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa.json`. Explicit viewports replace defaults. `--viewer self|guest` creates an isolated fixed-identity server session; never use the user's browser for QA. The helper returns page/console errors, failed requests, HTTP errors, visible text, overflow, task evidence and screenshot paths. Known same-origin view telemetry is separate; functional event streams and GraphQL errors are not silently excluded. Cleanup cancellations do not change captured evidence.
+
+The step file is an async function body receiving document-scoped `page`:
+
 ```js
-const code = `
-const page = await context.newPage();
-const pageErrors = [], failedRequests = [];
-page.on('pageerror', error => pageErrors.push(error.message));
-page.on('requestfailed', request => failedRequests.push({url: request.url(), error: request.failure()?.errorText}));
-await page.setViewportSize({width: 390, height: 844});
-await page.goto('/a/${artifactId}');
-const headingLocator = page.getByRole('heading').first();
-await headingLocator.waitFor();
-const heading = await headingLocator.innerText();
-const body = await page.locator('body').innerText();
-const overflow = await page.locator('html').evaluate(html => {
-  const body = html.ownerDocument.body;
-  const width = Math.max(html.scrollWidth, body.scrollWidth);
-  return {viewport: html.clientWidth, content: width, fits: width <= html.clientWidth + 1};
-});
-// Optional for image-capable reviewers: await output.image(await page.locator('body').screenshot());
-return {heading, body, overflow, pageErrors, failedRequests};
-`;
-const session_id = crypto.randomUUID();
-const execution_id = crypto.randomUUID();
-const submitted = await request('/api/browser-sessions', {method: 'POST', body: {
-  op: 'script', session_id, execution_id, create: true, code
-}});
-const accepted = submitted.session_id === session_id && submitted.execution_id === execution_id;
-if (!accepted) throw Error('Browser session was not accepted');
-let run = submitted;
-try {
-  for (const end = Date.now() + 20000; ['queued', 'running'].includes(run.status) && Date.now() < end;) {
-    await new Promise(resolve => setTimeout(resolve, 250));
-    run = await request('/api/browser-sessions', {method: 'POST', body: {op: 'status', session_id, execution_id}});
-  }
-  if (run.status !== 'completed') throw Error(run.error?.code ?? run.status);
-  const capture = run.result; // inspect the returned heading and text
-} finally {
-  await request('/api/browser-sessions', {method: 'POST', body: {op: 'close', session_id}});
-}
+const before=await page.getByRole('status').innerText();
+await page.getByRole('button',{name:'Refresh'}).click();
+const after=await page.getByRole('status').innerText();
+if(before===after)throw Error('Expected changed test data after refresh');
+return {assertions:['refresh shows changed fixture data'],before,after};
 ```
 
-Poll with `POST /api/browser-sessions` and `{op:'status',session_id,execution_id}` until the same execution is `completed`; inspect `result`, `error` and `attachments`. If the call outcome is uncertain, check that receipt before resubmitting. Close the accepted session with `{op:'close',session_id}` when finished. A changed script requires a new `execution_id`; do not replay a browser action with a new receipt.
+Use disposable test fixtures: hooks can write data. Return the actual assertion evidence; throw on failure. A generic smoke pass proves neither full task behavior, persistence nor permissions. For persistence, change data, reload and assert the changed value. For refusals, use a separate guest session. View screenshots with an image-capable reviewer; capturing an unread image does not establish appearance. Stop once requested behavior and appearance pass at desktop and 390px; fix known defects, then avoid optional polish.
 
-Verify write refusals in a separate guest/test-user session. A shell screenshot alone does not prove document rendering.
+The helper creates one receipt-safe browser session, one execution per viewport, and closes it. The existing API remains `POST /api/browser-sessions` with `{op:'script',session_id,execution_id,create:true,code}`, then `{op:'status',session_id,execution_id}` until complete, and `{op:'close',session_id}`. Credentials stay in the API caller. After an uncertain submission, inspect the same receipt rather than replaying actions. A changed script needs a new execution ID. Direct scripts can return `{pageErrors,failedRequests,overflow,text}` and optionally call `output.image(await page.locator('body').screenshot())`; `page.mainFrame()` reaches reader chrome.
 
-## Create, update and the local helper
+## Recovery and limits
 
-Create with `POST /api/artifacts`; edit with conditional `PUT /api/artifacts/ID` using observed version/state ([HTML publication](html-authoring.md)). `scripts/publish.mjs` sends saved requests; keep body and idempotency key unchanged after an uncertain result, including HTTP 502. Preserve dependency receipts for bundle updates.
+`comment.mjs watch ID --once --output comments.ndjson` establishes now without a cursor. `--cursor CHECKPOINT_OR_LOG` resumes human comments; `--append --output LOG` validates origin/artifact/stream and resumes its flushed checkpoint. Events deduplicate by ID. Only delivered events advance checkpoints; cursor/access failures refuse instead of silently resetting. Agent comments, resolve and reopen are not human-feed events. Each command's `--help` lists write/revision flags.
 
 Session limits: 20 s/script, 65,536 script bytes, 16 executions, eight pages, 30-minute idle expiry. Bound navigation and assertions below the script limit; avoid `networkidle`. A deadline does not identify its cause: return caught errors plus text/network/overflow before expiry; inspect page errors and the awaited condition. After a hard deadline, inspect the same receipt and use a new read-only execution for diagnostics before considering another action. Text/geometry and unread screenshots leave appearance unverified; clicking with unchanged data does not verify refresh or persistence.
 For slide navigation, use the runnable [SlideDeck example](html-examples.md#slide-deck-with-viewer-local-navigation); it retains the selected index in viewer-local Apollo state.

@@ -7,3 +7,5 @@ export interface BundlePlan { backendSources:Readonly<Record<string,string>>; ba
 
 /** Backend namespaces already supplied atomically or retained from trusted page metadata. */
 export interface BundleResolutionContext { resolvedBackendNames?:readonly string[] }
+/** Reverse only admitted scoped asset/dataset bindings; retain canonical node identities byte-for-byte. */
+export interface AuthoringHtmlOptions {server:string;pageId:string;entryPath:string;receipts:readonly ({path:string}&PublicationBundleMapping)[]}

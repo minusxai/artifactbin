@@ -100,7 +100,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
  return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Promise((done,reject)=>server.close(error=>error?reject(error):done()))};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
- const args=process.argv.slice(2);if(args.length===1&&args[0]==='--help'){console.log('Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]\nServes only the selected project on loopback. Stop with Ctrl-C.');process.exit(0);}const root=args.shift();let port=0,runtimeDir;
+ console.error('Deprecated preview.mjs; prefer serve.mjs PROJECT.');const args=process.argv.slice(2);if(args.length===1&&args[0]==='--help'){console.log('Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]\nServes only the selected project on loopback. Stop with Ctrl-C.');process.exit(0);}const root=args.shift();let port=0,runtimeDir;
  try {
   if(!root||root.startsWith('--'))throw Error('Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]');
   while(args.length){const flag=args.shift(),value=args.shift();if(!value)throw Error('Missing option value');if(flag==='--port')port=Number(value);else if(flag==='--runtime-dir')runtimeDir=value;else throw Error('Unknown option');}

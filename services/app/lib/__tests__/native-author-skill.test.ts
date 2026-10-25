@@ -38,9 +38,9 @@ describe('one installable native HTML author skill',()=>{
  });
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
-  for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','PUT /api/artifacts/ID','expectedVersion','expectedState','Idempotency-Key','data-af-id'])expect(root).toContain(value);
+  for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','scripts/read.mjs','scripts/publish.mjs','data-af-id'])expect(root).toContain(value);
   expect(root).toContain('/llms/html-operations');
-  expect(root).toContain('The optional `scripts/publish.mjs` helper prepares new sample artifacts');
+  expect(root).toContain('Keep the `.af.json` companion');
   expect(root).not.toMatch(/afbin |@afbin\/cli|afbin pull|\/prepare|<Helmet>|className=/);
   for(const topic of ['npm-local','commands','publishing-auth','markup','http-document-graph','http-authoring'])expect(publicGuideText(topic,BASE)).toBeNull();
  });
@@ -52,10 +52,10 @@ describe('one installable native HTML author skill',()=>{
   expect(json).toBeTruthy();
   const anchor=JSON.parse(json!);
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
-  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','auto-scopes `page` locators','pageErrors','failedRequests','overflow','return {heading, body, overflow, pageErrors, failedRequests}','scripts/publish.mjs','PUT /api/artifacts/ID'])expect(guide).toContain(value);
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','auto-scopes `page` locators','scripts/check.mjs','overflow','appearance unverified','comment.mjs watch'])expect(guide).toContain(value);
   const browserExample=[...guide.matchAll(/```js\n([\s\S]*?)```/g)][1]?.[1];
-  expect(browserExample).toBeTruthy();
   expect(browserExample).toContain('page.getByRole');
+  expect(browserExample).toContain("throw Error('Expected changed test data after refresh')");
   expect(browserExample).not.toContain('frameLocator(');
   const files=skillPackageFiles(skillTree(),BASE);
   expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
@@ -84,7 +84,10 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['check','publication-bundle','publish','preview'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   const occupied=path.join(dir,'occupied.json');writeFileSync(occupied,'retained');
+   try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'missing.html','--output',occupied,'--json'],{cwd:dir});throw Error('Expected output refusal');}catch(error){const failure=error as {status:number;stdout:Buffer};expect(failure.status).toBe(2);expect(JSON.parse(String(failure.stdout))).toMatchObject({ok:false,code:'output_exists'});}
+   expect(readFileSync(occupied,'utf8')).toBe('retained');
    for(const sample of ['report','csv-dashboard','shared-app']){
     const request=path.join(dir,sample+'.json'),source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
     execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample==='csv-dashboard'?['--dataset-id','REALDATA123']:[])],{cwd:installed});

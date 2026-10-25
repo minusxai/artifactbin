@@ -175,7 +175,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     // the half a caller writes back.
     parent_id: parentOf(row),
     markup:format==='html'?undefined:source,
-    ...(format==='html'?{html:source}:{}),
+    ...(format==='html'?{html:source,dependencyReceipts:(meta as {htmlPublicationDependencies?:unknown[]}).htmlPublicationDependencies??[]}:{}),
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.

@@ -55,4 +55,7 @@ async function main(args){
   const receipt=await sendPublication(saved);process.stdout.write(JSON.stringify(receipt,null,2)+'\n');
  }else throw Error('Choose prepare or send.');
 }
-if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url))main(process.argv.slice(2)).catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1;});
+if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){
+ if(['--prepare','--send'].includes(process.argv[2])){process.stderr.write('Deprecated sample/request flags; prefer publish.mjs FILE or --resume JOURNAL.\n');await main(process.argv.slice(2)).catch(error=>{process.stderr.write(error.message+'\n');process.exitCode=1;});}
+ else{const {runTool}=await import('./toolbox-client.mjs');const {publishCommand}=await import('./toolbox-publish.mjs');await runTool('publish',import.meta.url,publishCommand);}
+}
