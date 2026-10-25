@@ -1,0 +1,9 @@
+# Reviewed RGBA8 comparison
+
+Native migration comparisons default to exact zero-pixel equality. A reviewer can explicitly request `pixelAcceptance: 'rgba8-local-quantization-v1'` when inspecting immutable captures with demonstrated repeat-capture quantization noise. This is a post-capture classification, not a new capture, image normalization, or a general visual equivalence guarantee.
+
+The fixed policy admits at most 16 changed pixels, at most one changed pixel per 100,000 image pixels, no alpha changes, and a maximum RGB channel difference of one on the 0–255 scale. Both limits apply; the policy has no caller-configurable thresholds. Sixteen is a conservative review budget, not an estimated upper bound on renderer variance. Genuine repeated captures can exceed it and remain failures.
+
+Every existing source, fixture, screenshot hash, font, behavior, error, and regression-control check remains required. Quantized states also require exact raw semantic observations. Small color differences alone cannot prove that text or geometry is unchanged: the reviewer must inspect the raw differences and the independent behavioral and repeat-capture evidence. The tests reject changed semantic observations and a concrete 17-pixel geometry shift; they do not claim to detect every conceivable text or geometry change from pixels alone.
+
+The comparator preserves the original screenshots, raw changed-pixel counts, diagnostic diff PNGs, and a separate `migration-pilot-strict-comparison.json`. The classified report records the policy, affected state keys, strict outcome, and digest of its comparison code. The original capture harness hashes keep identifying the code that actually captured the images; the post-capture verifier digest identifies the later classification code. A classification must never be presented as a new browser run or silently replace the strict result.

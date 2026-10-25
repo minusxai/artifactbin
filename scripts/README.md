@@ -128,8 +128,10 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/design-systems.mjs` | Generate the design-system registry and agent references from `design-systems/specs`. | `npm run generate:design-systems` |
 | `scripts/generate-design-system-previews.mjs` | Render the picker and docs thumbnails from the design-system covers. | `npm run generate:design-system-previews` |
 | `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | `services/cli/scripts/generate-teaching.mjs`, `lib/afbin-run.mjs`, tests |
+| `scripts/lib/native-migration-disposable-provider.ts` | Open a reviewed disposable migration lifecycle with isolated local storage. | Migration lifecycle adapter configuration |
+| `scripts/lib/native-migration-production-authority.ts` | Prepare and verify reviewed production migration authority bindings. | Migration operator preparation |
+| `scripts/native-migration-production.mjs` | Plan or apply a reviewed latest-head migration using explicit operator approvals. | Migration operator |
 | `scripts/lib/native-migration-camera.mjs` | Adapt reviewed source-bound recipes to the existing migration capture and comparison contract. | Migration verification callers |
-| `scripts/lib/native-migration-reuse.mjs` | Compare a new target proposal against verified immutable source captures without rerunning them. | Migration verification callers |
 
 ## Release
 

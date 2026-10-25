@@ -54,7 +54,7 @@ try{
    await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});
   }
   await page.getByLabel('Name 1',{exact:true}).fill('Draft retained');await page.evaluate(()=>{window.richFixture.input=document.querySelector('input[aria-label="Name 1"]');});
-  await page.getByRole('button',{name:'Sort by score',exact:true}).click();
+  await page.getByRole('columnheader',{name:'Sort by score',exact:true}).click();
   check(await page.locator('#table tbody tr[data-row-key]').first().locator('td').first().textContent()==='2',`${tag} table ascending sort`);
   check(await page.evaluate(()=>window.richFixture.input===document.querySelector('input[aria-label="Name 1"]')&&window.richFixture.input.value==='Draft retained'),`${tag} keyed editable cell keeps native input and draft`);
   await page.evaluate(()=>{const table=document.querySelector('#table');table.sort=null;table.data={columns:window.richFixture.columns,rows:Array.from({length:5000},(_,id)=>({id,name:'Row '+id,score:id}))};const scroll=table.querySelector('[data-slot=table-scroll]');scroll.scrollTop=72000;scroll.dispatchEvent(new Event('scroll'));});

@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import sharp from 'sharp';
+import {allowsPixelQuantization,PIXEL_QUANTIZATION_POLICY} from './native-pixel-quantization.mjs';
 import {becomeOwner} from './start-doc.mjs';
 import {documentFrame} from '../gates/lib/page-facts.mjs';
 import {loadImportedPilotProbe} from './native-prepared-pilot-probe.mjs';
@@ -54,6 +55,14 @@ export function pilotComparisonIssues(results,control){
  for(const result of results)if(result.error||!result.sizeEqual||result.changedPixels!==0||!result.behaviorEqual||!result.fontBytesEqual||result.baselineErrors?.length||result.candidateErrors?.length||result.fontProofErrors?.length)issues.push('unequal-or-incomplete-paired-state');
  if(!control?.detected)issues.push('styling-regression-control-not-detected');
  return issues;
+}
+/** Explicit reviewer classification is separate from the unchanged strict zero-pixel result.
+ * @returns {import('./native-pixel-quantization-contract').NativePixelComparisonClassification} */
+export function pilotComparisonClassification(results,control,{pixelAcceptance='exact'}={}){
+ if(!['exact',PIXEL_QUANTIZATION_POLICY.id].includes(pixelAcceptance))throw Error('pilot-pixel-acceptance-policy');
+ const strictIssues=pilotComparisonIssues(results,control),acceptedStateKeys=[];
+ const classified=results.map(result=>{if(pixelAcceptance===PIXEL_QUANTIZATION_POLICY.id&&result.rawBehaviorEqual===true&&!pilotComparisonIssues([{...result,changedPixels:0}],{detected:true}).length&&allowsPixelQuantization(result)){acceptedStateKeys.push(result.key);return {...result,changedPixels:0};}return result;});
+ return {strict:{passed:strictIssues.length===0,issues:strictIssues},quantization:{policy:PIXEL_QUANTIZATION_POLICY,acceptedStateKeys},issues:pilotComparisonIssues(classified,control)};
 }
 export async function stylingRegressionEvidence({candidate,regression,directory,regressionDirectory}){
  const control=[];
@@ -115,13 +124,16 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
 }
 
 /** Paired comparison is distinct from capture; private inputs absent never create this proof. */
-export async function compareNativeMigrationPilot({baselineDirectory,candidateDirectory,output}){
+export async function compareNativeMigrationPilot({baselineDirectory,candidateDirectory,output,pixelAcceptance='exact'}){
  const read=async(directory,name)=>JSON.parse(await readFile(path.join(directory,name),'utf8'));
  const [baselineProof,candidateProof,baseline,candidate]=await Promise.all([read(baselineDirectory,'migration-pilot.json'),read(candidateDirectory,'migration-pilot.json'),read(baselineDirectory,'jsx-captures.json'),read(candidateDirectory,'html-captures.json')]);
  if(baselineProof.format!=='native-migration-pilot-capture-v1'||candidateProof.format!==baselineProof.format||baselineProof.implementation!=='jsx'||candidateProof.implementation!=='html'||!hash(baselineProof.gateManifestSha256)||!hash(candidateProof.gateManifestSha256)||['harnessSha256','sourceSha256','documentSha256','canonicalSha256','bundleManifestSha256','theme','viewports','states'].some(key=>baselineProof[key]===undefined||candidateProof[key]===undefined||digest(baselineProof[key])!==digest(candidateProof[key])))throw Error('pilot-unmatched-evidence');
  const results=await compareBrowserBaselines({baseline,candidate,baselineDirectory,candidateDirectory,output});
- const issues=[...baselineProof.issues,...candidateProof.issues,...pilotComparisonIssues(results,candidateProof.control)];
+ const classification=pilotComparisonClassification(results,candidateProof.control,{pixelAcceptance}),strictIssues=[...baselineProof.issues,...candidateProof.issues,...classification.strict.issues],issues=[...baselineProof.issues,...candidateProof.issues,...classification.issues];
  const report={format:'native-migration-pilot-comparison-v1',baselineRevision:baselineProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,baselineGateManifestSha256:baselineProof.gateManifestSha256,candidateGateManifestSha256:candidateProof.gateManifestSha256,pairedStates:results.length,passed:issues.length===0,control:candidateProof.control,issues,results};
+ const strictReport={...report,passed:strictIssues.length===0,issues:strictIssues};
+ await writeFile(path.join(output,'migration-pilot-strict-comparison.json'),JSON.stringify(strictReport,null,2),{mode:0o600});
+ if(pixelAcceptance!=='exact'){report.strict={passed:strictIssues.length===0,issues:strictIssues};report.quantization=classification.quantization;report.comparisonVerifierSha256=digest(await Promise.all(['native-migration-pilot.mjs','component-browser-baseline.mjs','native-pixel-quantization.mjs'].map(async file=>[file,sha(await readFile(new URL(file,import.meta.url)))])));}
  await writeFile(path.join(output,'migration-pilot-comparison.json'),JSON.stringify(report,null,2),{mode:0o600});
  return report;
 }
