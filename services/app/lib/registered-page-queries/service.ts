@@ -1,3 +1,4 @@
+import {MEMBER_COLUMNS} from '@artifactbin/contracts';
 import type { RunInput, QueryOutcome } from "@artifactbin/contracts";
 import {
   QUERY_LIMITS as limits,
@@ -101,6 +102,16 @@ export function createRegisteredPageQueries(
         let rows = prepared.localTables.reduce((count,table)=>count+table.rows.length,0),
           cells = prepared.localTables.reduce((count,table)=>count+table.rows.length*table.columns.length,0);
         const sources: Pick<QuerySource,"verify">[] = [];
+        if(plan.builtins?.includes('members')){
+          if(!ports.members)throw Error('query_members_unavailable');
+          const members=await wait(()=>ports.members!(context,active));
+          const snapshot=structuredClone(members.rows);
+          if(!Array.isArray(snapshot)||snapshot.some(row=>!row||Object.keys(row).length!==2||typeof row.user_id!=='string'||!row.user_id||(row.joined_at!==null&&(typeof row.joined_at!=='string'||!Number.isFinite(Date.parse(row.joined_at))))))throw Error('invalid_query_members');
+          rows+=snapshot.length;cells+=snapshot.length*MEMBER_COLUMNS.length;
+          if(rows>limits.rows||cells>limits.cells)throw Error('query_input_limit');
+          input.tables!._members={columns:structuredClone(MEMBER_COLUMNS),rows:snapshot};
+          sources.push(members);await wait(()=>members.verify(active));
+        }
         const catalogAnswers:Record<string,QueryOutcome>={};
         const catalogs=new Map<string,Awaited<ReturnType<NonNullable<QueryPorts['catalog']>>>>();
         for(const query of prepared.queries){

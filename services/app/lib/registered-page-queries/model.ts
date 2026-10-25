@@ -44,6 +44,7 @@ export function prepare(plan: QueryPlan, request: unknown) {
   )
     throw Error("invalid_query_request");
   if (
+    (plan.builtins!==undefined&&(!Array.isArray(plan.builtins)||plan.builtins.length>1||plan.builtins.some(b=>b!=="members"))) ||
     !Array.isArray(plan.queries) ||
     !Array.isArray(plan.imports) ||
     !record(plan.scalars) ||
@@ -95,7 +96,7 @@ export function prepare(plan: QueryPlan, request: unknown) {
   // schema boundary, so preserve bounded labels verbatim instead of treating
   // them as interpolated identifiers.
   const columnName=(value:unknown):value is string=>typeof value==='string'&&value.length>0&&value.length<=128&&!value.includes('\0')&&!['__proto__','prototype','constructor'].includes(value.toLowerCase());
-  const occupied=new Set(['_me',...plan.queries.map(q=>q.name.toLowerCase()),...Object.keys(plan.scalars).map(s=>s.toLowerCase()),...plan.imports.map(i=>i.alias.toLowerCase())]);
+  const occupied=new Set(['_me','_members',...plan.queries.map(q=>q.name.toLowerCase()),...Object.keys(plan.scalars).map(s=>s.toLowerCase()),...plan.imports.map(i=>i.alias.toLowerCase())]);
   let localRows=0,localCells=0;
   if(!Array.isArray(localTables)||localTables.length+plan.imports.length>limits.tables)throw Error('invalid_query_registry');
   for(const table of localTables){
