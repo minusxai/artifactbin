@@ -37,7 +37,6 @@ const blocker = (node: RetainedJsxNode, code: string, attribute: string, detail:
   code, sourceNode: node.graphKey, tag: node.type === 'element' ? node.tag : undefined, attribute, detail,
 });
 
-const SEPARATOR_RECIPE_CLASS = 'shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px';
 const staticValue = (json: NativeJson): RetainedStaticValue => ({ static: true, json });
 const generatedAttribute = (node: Extract<RetainedJsxNode, { type: 'element' }>, name: string, json: NativeJson): RetainedAttribute => ({
   name, value: staticValue(json), start: node.start, end: node.start,
@@ -95,7 +94,9 @@ function prepareIcon(node: Extract<RetainedJsxNode, { type: 'element' }>): Nativ
   }
   if (size && !size.value.static) blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'Dynamic size cannot be normalized to the observed AfIcon size attribute'));
   if (size?.value.static && typeof size.value.json !== 'string' && typeof size.value.json !== 'number') blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'AfIcon size accepts only a string or finite number'));
-  if (size?.value.static && typeof size.value.json === 'number' && !Number.isFinite(size.value.json)) blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'AfIcon size must be finite'));
+  if (size?.value.static && typeof size.value.json === 'number' && (!Number.isFinite(size.value.json) || size.value.json <= 0)) blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'The target falls back to 16px for nonpositive or nonfinite sizes, while the source forwards the authored SVG size'));
+  if (size?.value.static && typeof size.value.json === 'string' && !/^(?:\d+(?:\.\d+)?)(?:px|em|rem|ch|vw|vh|%)?$/.test(size.value.json.trim())) blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'The target falls back to 16px for size strings outside its accepted positive CSS length grammar'));
+  if (size?.value.static && typeof size.value.json === 'string' && Number.parseFloat(size.value.json) <= 0) blockers.push(blocker(node, 'identity-icon-size-unsupported', 'size', 'The target falls back to 16px for nonpositive sizes, while the source forwards the authored SVG size'));
   if (size?.value.static && (typeof size.value.json === 'string' || typeof size.value.json === 'number') && normalizedSize !== undefined && String(size.value.json).trim() !== normalizedSize) {
     blockers.push(blocker(node, 'identity-icon-size-conflict', 'size', 'Source width/height conflict with the target size property'));
   }
@@ -167,7 +168,6 @@ function prepareSeparator(node: Extract<RetainedJsxNode, { type: 'element' }>): 
     if (defaultNames.has(attribute.name) && !consumed.has(attribute.name)) { consumed.add(attribute.name); continue; }
     output.push(attribute);
   }
-  if (!byName.has('class') && !byName.has('className')) output.push(generatedAttribute(node, 'className', SEPARATOR_RECIPE_CLASS));
   return { node: { ...node, attributes: output }, blockers: [] };
 }
 

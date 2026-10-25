@@ -35,6 +35,30 @@ test('keeps the target icon default at 16px and its default decorative accessibl
   assert.equal(result.node.graphKey, source.graphKey);
 });
 
+test('accepts every literal glyph retained by the selected corpus without rewriting its source identity or styling', () => {
+  const retainedNames = [
+    'arrow-right', 'arrow-right-left', 'badge-dollar-sign', 'bell-ring', 'bold', 'bot', 'camera',
+    'chart-no-axes-column-increasing', 'check', 'chevron-down', 'chevron-right', 'circle-check',
+    'circle-user', 'circle-user-round', 'code', 'copy', 'database', 'ellipsis', 'ellipsis-vertical',
+    'eye-off', 'file-code', 'file-text', 'footprints', 'git-fork', 'hand-coins', 'handshake', 'heart',
+    'history', 'info', 'italic', 'layout-grid', 'link', 'list', 'loader-circle', 'lock', 'lock-keyhole',
+    'mail', 'message-circle', 'minus', 'monitor', 'mouse-pointer-2', 'palette', 'pencil', 'pencil-off',
+    'play', 'plus', 'receipt', 'route', 'scale', 'scroll-text', 'search', 'sliders-vertical',
+    'smartphone', 'square-dashed-mouse-pointer', 'star', 'terminal', 'trash-2', 'upload', 'user-round',
+    'users', 'x', 'zap',
+  ];
+  for (const name of retainedNames) {
+    const source = element('Icon', [['name', name], ['className', 'inline-block size-4 custom'], ['id', `icon-${name}`]]);
+    const result = prepareNativeIdentityDecoration(source);
+    assert.deepEqual(result.blockers, [], name);
+    assert.equal(attr(result.node, 'name'), name);
+    assert.equal(attr(result.node, 'className'), 'inline-block size-4 custom');
+    assert.equal(attr(result.node, 'id'), `icon-${name}`);
+    assert.equal(result.node.graphKey, source.graphKey);
+  }
+  assert.equal(retainedNames.length, 62);
+});
+
 test('preserves the source full-Lucide name resolver fallback contract and rejects invalid names', () => {
   const unknown = prepareNativeIdentityDecoration(element('Icon', [['name', 'not-a-real-glyph']]));
   assert.deepEqual(unknown.blockers, []); // Product iconMarkup uses the same visible CircleQuestionMark fallback.
@@ -85,6 +109,19 @@ test('blocks independent width/height, ambiguous size and duplicate source props
   assert.equal(result.node.type === 'element' ? result.node.attributes.filter(a => a.name === 'width').length : 0, 1);
 });
 
+test('blocks explicit sizes that AfIcon would replace with its 16px fallback', () => {
+  for (const size of [0, -2, Number.NaN, '0', '-1px', 'auto', '1rem ' + 'x']) {
+    const result = prepareNativeIdentityDecoration(element('Icon', [['name', 'check'], ['size', size]]));
+    assert.ok(result.blockers.some(b => b.attribute === 'size' && b.code === 'identity-icon-size-unsupported'), String(size));
+    assert.equal(attr(result.node, 'size'), size);
+  }
+  for (const size of [1, '1px', '1.5rem', '24']) {
+    const result = prepareNativeIdentityDecoration(element('Icon', [['name', 'check'], ['size', size]]));
+    assert.deepEqual(result.blockers, [], String(size));
+    assert.equal(attr(result.node, 'size'), String(size));
+  }
+});
+
 test('normalizes Separator horizontal/decorative defaults to the retained DOM recipe and preserves authored attrs', () => {
   const child: RetainedJsxNode = { type: 'text', value: 'child', graphKey: 'child', start: 40, end: 45 };
   const source = element('Separator', [['id', 'rule'], ['className', 'shrink-0 bg-border custom']], [child]);
@@ -100,9 +137,20 @@ test('normalizes Separator horizontal/decorative defaults to the retained DOM re
   assert.equal(result.node.type === 'element' ? result.node.children[0] : undefined, child);
 });
 
-test('adds the pinned Separator recipe class only when the source did not retain a class attribute', () => {
+test('does not invent Separator classes when the retained source has no class attribute', () => {
   const result = prepareNativeIdentityDecoration(element('Separator'));
-  assert.equal(attr(result.node, 'className'), 'shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px');
+  assert.equal(attr(result.node, 'className'), undefined);
+  assert.equal(attr(result.node, 'class'), undefined);
+});
+
+test('matches the selected corpus Separator shape: id only, with the pinned defaults', () => {
+  const source = element('Separator', [['id', 'retained-separator']]);
+  const result = prepareNativeIdentityDecoration(source);
+  assert.deepEqual(result.blockers, []);
+  assert.deepEqual(names(result.node), ['data-orientation', 'role', 'data-slot', 'id']);
+  assert.deepEqual([attr(result.node, 'data-orientation'), attr(result.node, 'role'), attr(result.node, 'data-slot')], ['horizontal', 'none', 'separator']);
+  assert.equal(attr(result.node, 'id'), 'retained-separator');
+  assert.equal(attr(result.node, 'className'), undefined);
 });
 
 test('uses the exact vertical semantic role and lets explicit spread props override recipe defaults', () => {
