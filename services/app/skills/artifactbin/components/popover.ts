@@ -130,8 +130,8 @@ export class AfPopoverTitle extends HTMLElement {}
 export class AfPopoverDescription extends HTMLElement {}
 export const popoverStyles = `
 af-popover{display:contents}
-af-popover-trigger{cursor:pointer}
-af-popover-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;line-height:inherit;cursor:inherit}
+af-popover-trigger{cursor:pointer;line-height:1.5}
+af-popover-trigger>button{box-sizing:border-box;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;line-height:inherit;cursor:inherit}
 af-popover-trigger[disabled]>button,af-popover-trigger>button:disabled,af-popover-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}
 af-popover-trigger:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-popover-trigger[disabled]{opacity:.5;cursor:default}

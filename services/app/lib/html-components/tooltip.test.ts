@@ -20,12 +20,22 @@ it('styles only a nested native tooltip trigger like its host and preserves keyb
   if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(wrapperStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(wrapperStyle[property]);
  }
  expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
+ expect(wrapperStyle.lineHeight).toBe('1.5'); expect(buttonStyle.lineHeight).toBe('1.5'); expect(buttonStyle.display).toBe('inline-block');
  trigger.focus(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger); expect(content.getAttribute('role')).toBe('tooltip');
 });
 it('leaves a nested native trigger button to its browser focus treatment', () => {
  const {root,trigger}=fixture(); root.style.setProperty('--ring','rgb(1, 2, 3)'); trigger.focus();
  expect(getComputedStyle(trigger).outlineColor).not.toBe('rgb(1, 2, 3)');
  expect(tooltipStyles).not.toContain('af-tooltip-trigger>button:focus-visible');
+});
+it('includes the source tooltip arrow height in the default trigger-to-panel gap', () => {
+ const {root,trigger,content}=fixture();
+ trigger.getBoundingClientRect=()=>({x:100,y:100,left:100,top:100,right:150,bottom:120,width:50,height:20,toJSON:()=>({})});
+ content.getBoundingClientRect=()=>({x:0,y:0,left:0,top:0,right:100,bottom:30,width:100,height:30,toJSON:()=>({})});
+ root.open=true;
+ expect(content.style.top).toBe('59px');
+ expect(tooltipStyles).toContain('af-tooltip-trigger{cursor:pointer;line-height:1.5}');
+ expect(tooltipStyles).not.toContain('af-tooltip-trigger>button{box-sizing:border-box;display:inline-flex');
 });
 it('allows hovering the tooltip itself and preserves controlled/canceled visibility', () => {
  vi.useFakeTimers(); const {root,trigger,content} = fixture('default-open');

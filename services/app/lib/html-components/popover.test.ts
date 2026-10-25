@@ -31,6 +31,7 @@ it('styles only a nested native trigger button like its text-only host and prese
   if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(wrapperStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(wrapperStyle[property]);
  }
  expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
+ expect(wrapperStyle.lineHeight).toBe('1.5'); expect(buttonStyle.lineHeight).toBe('1.5'); expect(buttonStyle.display).toBe('inline-block');
  const unrelated=document.createElement('button'); content.append(unrelated);
  const bareStyle=getComputedStyle(document.createElement('button'));
  expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
