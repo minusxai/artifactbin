@@ -120,11 +120,11 @@ af-switch .af-switch-shell{display:inline-flex;flex-direction:column;gap:.375rem
 af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
 af-switch .af-switch-caption[hidden]{display:none!important}
 af-switch .af-switch-label{display:block}
-af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;transition:background-color .15s;outline:none}
+af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;font:inherit;color:inherit;transition:background-color .15s;outline:none}
 af-switch .af-switch-button[data-state=checked]{background:var(--primary,#222)}
 af-switch .af-switch-button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-switch .af-switch-button:disabled{cursor:not-allowed;opacity:.5}
-af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 2px #0000000d;transform:translateX(0);transition:transform .15s}
+af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 3px 0 rgb(0 0 0 / 10%),0 1px 2px -1px rgb(0 0 0 / 10%);transform:translateX(0);transition:transform .15s}
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
