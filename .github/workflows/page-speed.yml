@@ -10,6 +10,9 @@ on:
   push:
     branches: [ main, artifactbinv3 ]
     paths:
+      # Every merged revision needs exact-SHA release evidence. The remaining patterns
+      # define lab inputs for PR scoping and cached-base byte equivalence.
+      - '**'
       - 'services/app/**'
       - 'services/utils/**'
       - 'services/contracts/**'

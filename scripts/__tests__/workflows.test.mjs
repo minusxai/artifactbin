@@ -275,7 +275,8 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
   });
   it('reads the push trigger paths the workflow declares; pull requests are filtered in the scope job', () => {
     const paths = triggerPaths(readFileSync(path.join(root, '.github/workflows/page-speed.yml'), 'utf8'));
-    expect(paths).toEqual(speed.on.push.paths);
+    expect(paths).toEqual(speed.on.push.paths.filter(pattern => pattern !== '**'));
+    expect(paths).not.toContain('**');
     expect(speed.on.pull_request?.paths).toBeUndefined();
   });
   it('scopes a pull request by the push trigger paths and treats anything unreadable as relevant', () => {
