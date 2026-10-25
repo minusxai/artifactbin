@@ -24,6 +24,19 @@ describe('af-switch', () => {
     expect(root.querySelector('.af-switch-shell')?.lastElementChild?.tagName).toBe('BUTTON');
   });
 
+  it('hides and restores the whole caption without changing switch layout children', () => {
+    const { root } = fixture();
+    const caption = root.querySelector<HTMLElement>('.af-switch-caption')!;
+    expect(caption.hidden).toBe(true);
+    root.setAttribute('label', 'Notifications');
+    expect(caption.hidden).toBe(false);
+    expect(caption.textContent).toBe('Notifications');
+    root.removeAttribute('label');
+    expect(caption.hidden).toBe(true);
+    expect(root.querySelectorAll('.af-switch-caption')).toHaveLength(1);
+    expect(root.querySelectorAll('button[role=switch]')).toHaveLength(1);
+  });
+
   it('renders a labeled native switch and initializes from checked presence or default-checked', () => {
     const { root, button } = fixture('label="Notifications" checked');
     expect(button.tagName).toBe('BUTTON');
