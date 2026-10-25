@@ -194,7 +194,7 @@ test('Mermaid code lives only in the admitted native code attribute and never le
 test('JSX indentation identities preserve adjacent authored siblings and retain nonvisual proof reservations',async()=>{
  const {parseFragment}=await import('parse5');
  const gap=text('\n    '),first=element('div',{className:'stat'},[text('First')]),second=element('div',{className:'stat'},[text('Second')]);
- const source=input([element('section',{},[first,gap,second])]);source.emitTextIdentities=true;
+ const source=input([element('section',{},[first,gap,second])]);source.emitTextIdentities=true;source.authoredStyleSha256=digest;
  source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete');
  const section=parseFragment(result.html!).childNodes[0] as any;const children=section.childNodes.filter((x:any)=>x.tagName);
