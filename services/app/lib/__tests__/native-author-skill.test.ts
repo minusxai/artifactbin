@@ -11,6 +11,7 @@ import {htmlPwaSettings} from '@/lib/html-page';
 import {packOfflineHtmlImages} from '@/lib/export/native-html-media';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {planPublicationBundle} from '@/lib/html-publication-bundle/plan';
+import {parseHtmlNodeAnchor} from '@artifactbin/contracts';
 const BASE='https://example.test';
 describe('one installable native HTML author skill',()=>{
  it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
@@ -29,8 +30,24 @@ describe('one installable native HTML author skill',()=>{
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','PUT /api/artifacts/ID','expectedVersion','expectedState','Idempotency-Key','data-af-id'])expect(root).toContain(value);
+  expect(root).toContain('/llms/html-operations');
+  expect(root).toContain('The optional `scripts/publish.mjs` helper prepares new sample artifacts');
   expect(root).not.toMatch(/afbin |@afbin\/cli|afbin pull|\/prepare|<Helmet>|className=/);
   for(const topic of ['npm-local','commands','publishing-auth','markup','http-document-graph','http-authoring'])expect(publicGuideText(topic,BASE)).toBeNull();
+ });
+ it('publishes a native HTML operations guide with anchors and runner-frame verification',()=>{
+  expect(isPublicSkillTopic('html-operations')).toBe(true);
+  for(const topic of ['http-api','live-sessions','publishing-annotations'])expect(publicGuideText(topic,BASE),topic).toBeNull();
+  const guide=publicGuideText('html-operations',BASE)!;
+  const json=guide.match(/```json\n([\s\S]*?)\n```/)?.[1];
+  expect(json).toBeTruthy();
+  const anchor=JSON.parse(json!);
+  expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.frameLocator','pageErrors','failedRequests','overflow','scripts/publish.mjs','PUT /api/artifacts/ID'])expect(guide).toContain(value);
+  const files=skillPackageFiles(skillTree(),BASE);
+  expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
+  expect(publicGuideText('html-examples',BASE)).toContain('Slide deck with viewer-local navigation');
+  expect(publicGuideText('html-examples',BASE)).toContain('registerSlideDeck');
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

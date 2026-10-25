@@ -32,3 +32,34 @@ Prepare CSV data with `--prepare repairs-data`, send it and save the returned da
 Open the returned page URL with the intended account. Check a whole-page desktop view and a 390px viewport, keyboard focus, labels, overflow and console/network errors. Test each changed control. Validate chart values from the source cells, including empty/missing values. Test an editor’s allowed action and a viewer’s refusal on the shared app. A local filter must stay private in a second browser profile; shared task changes must be visible after a fresh remote read.
 
 Test offline behavior separately: local controls can work; remote writes must report their unavailable outcome. Never call a source receipt visual QA. Report passed checks and any remaining limitation.
+
+## Slide deck with viewer-local navigation
+
+Copy the installed `components/` module graph into the project; the compiled module imports its adjacent chunks. Keep the selected slide index in each viewer's Apollo local state:
+
+```html
+<script src="/af/v1/core.js" data-af="core"></script>
+<script type="application/json" data-af="state">{"index":0}</script>
+<af-slide-deck data-af-id="quarterly-deck" index="0">
+  <af-slide data-af-id="quarterly-intro"><h1>Quarterly review</h1><p>Three measures, one decision.</p></af-slide>
+  <af-slide data-af-id="quarterly-results"><h2>Results</h2><p>Completion rose from 72% to 86%.</p></af-slide>
+  <af-slide data-af-id="quarterly-next"><h2>Next step</h2><p>Keep the weekly review.</p></af-slide>
+</af-slide-deck>
+<script type="module">
+import {client, gql} from "@afbin/apollo";
+import {registerSlideDeck} from "./components/slide-deck.js";
+
+registerSlideDeck();
+const deck = document.querySelector("af-slide-deck");
+const indexQuery = gql`{index}`;
+const subscription = client.watchQuery({query: indexQuery}).subscribe(({data}) => {
+  if (deck.index !== data.index) deck.index = data.index;
+});
+deck.addEventListener("af-change", event => {
+  client.updateQuery({query: indexQuery}, state => ({...state, index: event.detail.value}));
+});
+window.addEventListener("pagehide", () => subscription.unsubscribe(), {once: true});
+</script>
+```
+
+The deck provides keyboard navigation, presentation and print behavior. Slide IDs remain stable when reordered or edited. Check keyboard navigation and print layout in the actual page.
