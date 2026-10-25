@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { parseHtmlNodeAnchor, htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor, validHtmlCommentRange } from '../html-anchor';
 const anchor = (over: Partial<HtmlNodeAnchor> = {}): HtmlNodeAnchor => ({ kind: 'html-node', v: 1, revision: '2', nodeId: 'n1', quote: 'same words', ...over });
 it('uses persistent HTML IDs and decoded text without compiler paths', () => {
@@ -24,4 +24,10 @@ it('validates a dynamic scope without interpreting runtime words as source or ac
  expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="tasks"></ul>'),dynamic)).toEqual({node:{nodeId:'tasks',text:''},quoteFound:false});
  expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="other"></ul>'),dynamic).node).toBeNull();
  expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="tasks"></ul><p data-af-id="task:123">Runtime words</p>'),dynamic).node).toBeNull();
+});
+it('decodes bounded explicit selection segments and rejects malformed parts',()=>{
+ const segment={nodeId:'part',quote:'selected',range:{start:0,end:8,length:8,fingerprint:'abcd'}};
+ const anchor={kind:'html-node',v:1,revision:'3',nodeId:'root',quote:'selected',segments:[segment]};
+ expect(parseHtmlNodeAnchor(anchor)?.segments).toEqual([segment]);expect(parseHtmlNodeAnchor({...anchor,segments:[]} )?.segments).toEqual([]);
+ for(const segments of [[{...segment,range:undefined}],[{...segment,nodeId:null}],[{...segment,extra:true}],Array(257).fill(segment)])expect(parseHtmlNodeAnchor({...anchor,segments})).toBeNull();
 });

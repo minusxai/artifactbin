@@ -31,6 +31,7 @@ export interface NativeAnnotationProjection {
     sourceNodeId: string;
     quote: string;
     range?: HtmlNodeAnchor["range"];
+    segments?: readonly { sourceNodeId: string; quote: string; range: NonNullable<HtmlNodeAnchor["range"]> }[];
   };
 }
 interface NativeAnchorBinding {

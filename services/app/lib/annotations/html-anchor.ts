@@ -43,6 +43,7 @@ export function resolveHtmlCommentAnchor(nodes: ReadonlyMap<string, HtmlCommentN
   // persisted ancestor. The server verifies that ancestor, never invents text.
   const node = anchor.ancestorId ? nodes.has(anchor.nodeId ?? '') ? null : nodes.get(anchor.ancestorId) ?? null : anchor.nodeId ? nodes.get(anchor.nodeId) ?? null : null;
   if (anchor.ancestorId) return {node,quoteFound:anchor.quote ? false : null};
+  if(anchor.segments) return {node,quoteFound:!!node && anchor.segments.length>0 && anchor.segments.every(part=>{const target=nodes.get(part.nodeId);return !!target && validHtmlCommentRange(target,{...anchor,nodeId:part.nodeId,quote:part.quote,range:part.range,segments:undefined});})};
   return { node, quoteFound: anchor.quote ? !!node && validHtmlCommentRange(node, anchor) && canonical(node.text).includes(canonical(anchor.quote)) : null };
 }
 
