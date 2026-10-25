@@ -140,6 +140,14 @@ it('keeps the named file picker accessible while unavailable and delegates the c
   element.disabled = true;
   expect(input.disabled).toBe(true);
 });
+it('retains the upload shell layout spacing while reconciling its children', () => {
+  const element = fixture();
+  const shell = element.querySelector('.af-file-upload-shell');
+  expect(shell).not.toBeNull();
+  expect(shell?.firstElementChild?.classList.contains('af-file-upload-label')).toBe(true);
+  expect(shell?.querySelector('.af-file-upload-drop')).not.toBeNull();
+  expect(getComputedStyle(shell!).gap).toBe('0.75rem');
+});
 it('uses caller helper text as accessible picker guidance with a stable unique ID',()=>{
  const first=fixture(),second=fixture();first.helperText='Sign in to upload files.';
  const input=first.querySelector('input')!,button=first.querySelector('button')!;

@@ -88,7 +88,7 @@ export class AfFileUpload extends HTMLElement {
     if (!this.isConnected) return;
     if (!this.shell) { this.shell = this.ownerDocument.createElement('div'); this.shell.className = 'af-file-upload-shell'; this.prepend(this.shell); }
     const target = this.shell;
-    this.shell = this.ownerDocument.createElement('div');
+    this.shell = this.ownerDocument.createElement('div'); this.shell.className = 'af-file-upload-shell';
     this.setAttribute('aria-busy', String(this.busy));
     const doc = this.ownerDocument;
     const add = (tag: string, text = '', parent: HTMLElement = this.shell!) => { const node = doc.createElement(tag); node.textContent = text; parent.append(node); return node; };
