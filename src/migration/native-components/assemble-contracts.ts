@@ -42,6 +42,7 @@ export interface NativeAssemblyInput {
  cellAdapter?:NativeCellAdapter;
  viewer?: NativeBindingViewer;
  readerTemplate?:NativeReaderTemplateReceipt;
+ markdown?:readonly import("./markdown-contracts.ts").NativeMarkdownReceipt[];
  authorPrograms?: readonly NativeAuthorProgramReceipt[];
  chartMappings?:readonly NativeChartMapping[];
  chartAdapter?:NativeChartAdapter;

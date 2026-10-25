@@ -1,3 +1,4 @@
+import {extractNativeMarkdown} from './markdown-retained.ts';
 import {resolveNativePipelineOperationRecipe} from './pipeline-operation-recipe.ts';
 /** Parameterized compiled JSX → native pipeline. No source-script evaluation or fallback SSR. */
 import {nativeDigest} from './selection.ts';
@@ -40,9 +41,14 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  if(chart.mappings.length){if(!ports.charts)block('chart-adapter-missing');else{const built=await ports.charts(context);include(built.files);context.chartAdapter=built.adapter;}}
  let cellAdapter;
  if(nodes.some(n=>n.type==='element'&&['Cell','Number'].includes(n.tag))){const built=await buildNativeCellAdapter();include(built.files);cellAdapter=built.adapter;}
+ let markdown:readonly import('./markdown-contracts.ts').NativeMarkdownReceipt[]|undefined;
+ if(nodes.some(node=>node.type==='element'&&node.tag==='Markdown')){
+  if(!ports.markdown)block('markdown-adapter-missing');
+  else try{markdown=await ports.markdown(context);}catch(error){if(error instanceof Error&&['native_markdown_source_proof','native_markdown_dynamic_source'].includes(error.message))block('markdown-source-unsupported');else throw error;}
+ }
  let readerTemplate;
  const meta=revision.original.meta as Record<string,unknown>|null|undefined;
- try{if(['doc','editorial','plan'].includes(typeof meta?.template==='string'?meta.template:''))readerTemplate=prepareNativeReaderTemplate({analysis,identity,sourceRecordSha256:revision.rowSha256,template:typeof meta?.template==='string'?meta.template:null,chrome:meta?.chrome!==false});}catch{block('reader-template-unsupported');}
+ try{if(['doc','editorial','plan'].includes(typeof meta?.template==='string'?meta.template:''))readerTemplate=prepareNativeReaderTemplate({analysis,identity,sourceRecordSha256:revision.rowSha256,markdown,template:typeof meta?.template==='string'?meta.template:null,chrome:meta?.chrome!==false});}catch{block('reader-template-unsupported');}
  const profiles=await ports.authorProfiles?.(context)??[];
  const authorPrograms=[];
  for(const node of nodes.filter(n=>n.type==='element'&&n.tag==='script')){
@@ -59,7 +65,7 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  blockers.push(...operations.blockers);
  const authDelegations=nodes.filter(n=>n.type==='element'&&n.tag==='SignIn').map(n=>({sourceNode:n.graphKey,analysisSha256:analysis.analysisSha256,destination:'platform-topbar-sign-in' as const,behavior:'platform-sign-in-replaces-embedded-auth' as const}));
  if(blockers.length){result.blockers=blockers;return result;}
- const input={navigation,analysis,identity,targetRevision:NATIVE_COMPONENT_TARGET,coreUrl:request.coreUrl,style:closure.style,presentation,modules:modules.modules,files:[...files.values()],urls:closure.urls,readerTemplate,chartMappings:chart.mappings,chartAdapter:context.chartAdapter,cellAdapter,authorPrograms,authDelegations,...operations.input};
+ const input={navigation,analysis,identity,targetRevision:NATIVE_COMPONENT_TARGET,coreUrl:request.coreUrl,style:closure.style,presentation,modules:modules.modules,files:[...files.values()],urls:closure.urls,readerTemplate,markdown,chartMappings:chart.mappings,chartAdapter:context.chartAdapter,cellAdapter,authorPrograms,authDelegations,...operations.input};
  // Strip only absent optional fields, preserving authored JSON values and runtime semantics.
  const actual=Object.fromEntries(Object.entries(input).filter(([,v])=>v!==undefined)) as typeof input;
  if(await ports.compiler.fingerprint()!==request.compilerSourceSha256)throw Error('native_typed_compiler_changed');
@@ -137,6 +143,7 @@ export async function nativePipelineFilePorts(request:NativePipelineRequest,extr
  let styleProof:Awaited<ReturnType<typeof nativeStyleCompilerProof>>|undefined;
  const ports:NativePipelinePorts={readRevision:readNativePipelineRevision,compiler:{fingerprint:()=>retainedCompilerFingerprint(request.legacyRoot),extract:document=>externalCompile<RetainedCompilerSnapshot,{document:unknown}>({document},{legacyRoot:request.legacyRoot},'../../native-components/analyze-runner.mts')},
   ...(index.navigation?{navigation:async()=>{const config=index.navigation!,batch=JSON.parse(await readFile(request.manifest,"utf8")) as LatestBatchPreparation;verifyReceipt(batch);if(batch.sha256!==request.manifestSha256||batch.identityPlanSha256!==config.approvedPlanSha256)throw Error("native_navigation_batch_plan");const identityPlan=JSON.parse((await checked(config.identityPlan)).toString());return prepareNativeNavigation({sourceOrigin:config.sourceOrigin,targetOrigin:config.targetOrigin,identityPlan,approvedPlanSha256:config.approvedPlanSha256,imports:await Promise.all(config.imports.map(async entry=>({sourceId:entry.sourceId,targetId:entry.targetId,receiptBytes:await checked(entry.receipt),receiptSha256:entry.receipt.sha256})))});}}:{}),
+  markdown:async context=>{const targetRoot=(await promisify(execFile)('git',['rev-parse','--show-toplevel'],{cwd:request.componentRoot,encoding:'utf8'})).stdout.trim();return (await extractNativeMarkdown({analysis:context.analysis,identity:context.identity},request.legacyRoot,targetRoot)).receipts;},
   styles:async context=>{styleProof??=await nativeStyleCompilerProof(request.legacyRoot);const meta=context.revision.original.meta as Record<string,unknown>|null|undefined;
    const needed=new Set<string>();const discover=(value:unknown)=>{if(typeof value==='string'&&value.startsWith('ref:'))needed.add(value.slice(4));else if(Array.isArray(value))value.forEach(discover);else if(value&&typeof value==='object')Object.values(value).forEach(discover);};discover(context.analysis.nodes);discover(meta?.refs);
    const refRows:Record<string,unknown>[]=[];for(const id of needed){const row=await sharedRow(id);if(row)refRows.push(row);}for(const ref of index.refRows??[])if(ref.sourceIds.some(id=>needed.has(id))){const payload=JSON.parse((await checked(ref)).toString()) as {heads?:Record<string,unknown>[]};if(!Array.isArray(payload.heads))throw Error('native_pipeline_ref_rows');refRows.push(...payload.heads.filter(row=>needed.has(String(row.id))));}

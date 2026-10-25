@@ -73,3 +73,4 @@ test("missing, duplicate, changed source and parser errors reject instead of omi
     assert.throws(() => prepareNativeMarkdown(input));
   }
 });
+test('derived Markdown heading IDs cannot alias an authored DOM anchor',()=>{const input=fixture();input.analysis.nodes.push({type:'element',tag:'div',graphKey:'other',start:0,end:1,isComponent:false,selfClosing:true,children:[],attributes:[{name:'id',start:0,end:1,value:{static:true,json:'native-md-stable-md-heading-0'}}]});assert.throws(()=>prepareNativeMarkdown(input),/collision/);});

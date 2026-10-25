@@ -1,3 +1,5 @@
+import {nativeMarkdownSource} from './markdown.ts';
+import {nativeDigest} from './selection.ts';
 import {nativeComponentHelperIdentity} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
@@ -24,6 +26,7 @@ export interface NativeLowerFormattedReceipt {
   text: string;
 }
 export interface NativeLowerInput {
+ markdown?:readonly import("./markdown-contracts.ts").NativeMarkdownReceipt[];
  componentRecipes?:readonly NativeComponentRecipe[];
   authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
   analysis: NativeTypedAnalysis;
@@ -239,6 +242,15 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(!attribute.value.static){if(admittedTarget(node,'person',attribute.name)||admittedTarget(node,'property',attribute.name)||attribute.name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
    values[attribute.name]=attribute.value.json;
   }
+  if(node.tag==='Markdown'){
+   const entries=input.markdown?.filter(entry=>entry.sourceNode===node.graphKey)??[],receipt=entries[0];
+   const payload=receipt?Object.fromEntries(Object.entries(receipt).filter(([name])=>name!=='sha256')):null;
+   if(entries.length!==1||!receipt||nativeDigest(payload)!==receipt.sha256||receipt.analysisSha256!==input.analysis.analysisSha256||receipt.sourceSha256!==input.analysis.sourceSha256||receipt.nodeSha256!==nativeDigest(node)||receipt.source!==nativeMarkdownSource(node)||receipt.hostAfId!==proof?.afId||receipt.errors.length||!digest(receipt.parserSha256)){block('markdown-source-proof',node,'Markdown needs its exact retained parser, source and host identity receipt');return '';}
+   if('source' in values){block('markdown-source-attribute',node,'Retained Markdown source belongs to its literal child content');return '';}
+   values.source=receipt.source;
+   if(values.id!==undefined&&values.id!==receipt.hostDomId){block('markdown-host-id',node,'Markdown heading scope must preserve authored DOM id');return '';}
+   values.id=receipt.hostDomId;
+  }
   const patch=input.resourcePatches?.find(p=>p.sourceNode===node.graphKey);
   if(patch)Object.assign(values,patch.attributes);
   const serializedStyle=input.serializedStyles?.find(p=>p.sourceNode===node.graphKey);
@@ -341,7 +353,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
   if(node.tag==='style'){if(node.children.some(child=>child.type!=='text'&&!(child.type==='expression'&&child.value.static&&typeof child.value.json==='string')))require('style',node,'Nonliteral CSS needs explicit expression admission');else {const raw=node.children.map(child=>child.type==='text'?child.value:child.type==='expression'&&child.value.static?String(child.value.json):'').join('');if(/<\/style/i.test(raw))block('style-end-tag',node,'Raw style terminator cannot be represented in an HTML raw-text element');else if(/@import|url\s*\(/i.test(raw))require('resource',node,'CSS resource dependencies require exact resource closure admission');else {formatted=raw;for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:child.type==='text'?'text':'nonvisual'});}}}
   let children:string;
-  if(table?.kind==='table'){
+  if(node.tag==='Markdown'){children='';for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:'nonvisual'});}
+  else if(table?.kind==='table'){
    children='';
    for(const child of node.children){
     if(child.type==='text'&&!child.value.trim()){binding(child,'nonvisual');continue;}

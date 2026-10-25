@@ -43,6 +43,7 @@ export interface NativePipelinePorts {
  readRevision(request:NativePipelineRequest):Promise<NativeSelectedRevision>;
  compiler:NativeTypedCompilerPort;
  navigation?(context:NativePipelineContext):Promise<import("./resource-navigation-contracts.ts").NativeNavigationPolicy>;
+ markdown?(context:NativePipelineContext):Promise<readonly import("./markdown-contracts.ts").NativeMarkdownReceipt[]>;
  styles(context:NativePipelineContext):Promise<NativePipelineStyleSnapshot>;
  assets(sources:readonly string[],context:NativePipelineContext):Promise<readonly NativePipelineAsset[]>;
  modules(tags:readonly string[],context:NativePipelineContext):Promise<{modules:NonNullable<NativeAssemblyInput['modules']>;files:readonly NativeAssemblyFile[]}>;

@@ -164,10 +164,13 @@ test("emitted plain DOM behavior scrolls only the exact native heading, marks up
   rows.forEach((row, i) =>
     row.setAttribute("data-af-contents-target", "h" + i),
   );
+  rows[2]!.setAttribute("data-af-contents-target", "h0");
+  rows[2]!.setAttribute("data-af-contents-dom-id", "markdown-host-heading-1");
   const scrolled: unknown[] = [];
   let tops = [400, 500, 900];
   const headings = rows.map((_, i) => ({
     ...make(),
+    id: i === 2 ? "markdown-host-heading-1" : "heading" + i,
     getBoundingClientRect: () => ({ top: tops[i] }),
     scrollIntoView: (options: unknown) => scrolled.push({ i, options }),
   }));

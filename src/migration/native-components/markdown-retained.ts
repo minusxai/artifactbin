@@ -5,7 +5,7 @@ import path from "node:path";
 import { externalCompile } from "../conversion/compiled/index.ts";
 import { resourceSha256 } from "./resources.ts";
 import { nativeDigest } from "./selection.ts";
-import { prepareNativeMarkdown } from "./markdown.ts";
+import { nativeMarkdownSource, prepareNativeMarkdown } from "./markdown.ts";
 import type {
   NativeMarkdownInput,
   NativeMarkdownParse,
@@ -23,6 +23,15 @@ export async function extractNativeMarkdown(
   legacyRoot: string,
   targetRoot?: string,
 ) {
+  const inspect = (nodes: NativeMarkdownInput["analysis"]["nodes"]) => {
+    for (const node of nodes) {
+      if (node.type !== "element") continue;
+      if (node.tag === "Markdown" && nativeMarkdownSource(node) === null)
+        throw Error("native_markdown_dynamic_source");
+      inspect(node.children);
+    }
+  };
+  inspect(input.analysis.nodes);
   const proof = [];
   for (const file of files) {
     const actual = await readFile(path.join(legacyRoot, file));
