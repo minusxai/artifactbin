@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {parse} from 'acorn';
 import {adaptNativeObserverSource} from './observer-source.ts';
+import {NATIVE_OBSERVER_PREVIEW_RUNTIME} from './observer-preview.ts';
 import {NATIVE_OBSERVER_RUNTIME} from './observer-runtime.ts';
 import {nativeDigest} from './selection.ts';
 import {rewriteNativeCss} from './resources.ts';
@@ -38,17 +39,20 @@ export const NATIVE_BOOKSHELF_STATE_RUNTIME=String.raw`function installBookshelf
  const subscription=client.watchQuery({query}).subscribe(result=>{if(disposed)return;if(result.errors?.length||!result.data)return;latest=result.data;void flush();});
  return ()=>{disposed=true;latest=undefined;subscription.unsubscribe();};
 }`;
-function observerAuthorJs(analysis:NativeAuthorProgramInput['analysis'],sourceNode:string,original:string):string {
+function observerAuthorJs(analysis:NativeAuthorProgramInput['analysis'],sourceNode:string,original:string,preview?:NativeAuthorProgramInput['admission']['preview']):string {
  const identifier='__nativeObserver_'+hash(sourceNode).slice(0,16);
- const adapted=adaptNativeObserverSource(original,{values:analysis.flow.values.map(value=>value.name),queries:analysis.flow.queries.map(query=>query.name)},identifier);
+ const previewIdentifier=preview?identifier+'_preview':undefined;
+ const adapted=adaptNativeObserverSource(original,{values:analysis.flow.values.map(value=>value.name),queries:analysis.flow.queries.map(query=>query.name)},identifier,previewIdentifier);
+ if(preview)return `{const ${previewIdentifier}=(${NATIVE_OBSERVER_PREVIEW_RUNTIME})(document,URL,Blob,${json(preview)});const ${identifier}=(${NATIVE_OBSERVER_RUNTIME})(dispose.observe,${json(adapted.plan)},message=>{const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);},${previewIdentifier});const {signal,query,createEffect}=${identifier};try{${adapted.source}\n}catch(error){${identifier}.dispose();throw error;}}`;
  return `{const ${identifier}=(${NATIVE_OBSERVER_RUNTIME})(dispose.observe,${json(adapted.plan)},message=>{const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);});const {signal,query,createEffect}=${identifier};${adapted.source}\n}`;
 }
 export function verifyNativeAuthorProgram({analysis,node,receipt}:NativeAuthorProgramVerification):boolean{
  const {sha256,...body}=receipt,a=receipt.admission;
+ if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==receipt.identities.find(identity=>identity.sourceNode===a.sourceNode)?.afId))return false;
  const scripts=flatten([node]).filter(n=>n.type==='element'&&n.tag==='script');
  if(node.type!=='element'||(a.profile==='ordinary-srcdoc'?node.tag!=='Iframe':node.tag!=='script')||scripts.length!==1)return false;
- try{const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)return false;if(a.profile==='native-query-observer'&&receipt.authorJs!==observerAuthorJs(analysis,node.graphKey,original))return false;}catch{return false;}
- return sha256===nativeDigest(body)&&nativeDigest(a.key)===nativeDigest(analysis.key)&&a.sourceSha256===analysis.sourceSha256&&a.analysisSha256===analysis.analysisSha256&&a.compilerSourceSha256===analysis.compilerSourceSha256&&a.sourceNode===node.graphKey&&a.nodeSha256===nativeDigest(node)&&['ordinary-dom-script','bookshelf-local-state','ordinary-srcdoc','native-query-observer'].includes(a.profile)&&['search','search-and-status'].includes(a.filter)&&/^[a-f0-9]{64}$/.test(a.scriptSha256);
+ try{const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)return false;if((a.profile==='native-query-observer'||a.profile==='native-query-preview')&&receipt.authorJs!==observerAuthorJs(analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined))return false;}catch{return false;}
+ return sha256===nativeDigest(body)&&nativeDigest(a.key)===nativeDigest(analysis.key)&&a.sourceSha256===analysis.sourceSha256&&a.analysisSha256===analysis.analysisSha256&&a.compilerSourceSha256===analysis.compilerSourceSha256&&a.sourceNode===node.graphKey&&a.nodeSha256===nativeDigest(node)&&['ordinary-dom-script','bookshelf-local-state','ordinary-srcdoc','native-query-observer','native-query-preview'].includes(a.profile)&&['search','search-and-status'].includes(a.filter)&&/^[a-f0-9]{64}$/.test(a.scriptSha256);
 }
 export function adaptNativeAuthorProgram(input:NativeAuthorProgramInput):NativeAuthorProgramReceipt{
  const a=input.admission,nodes=flatten(input.analysis.nodes),matches=nodes.filter(n=>n.graphKey===a.sourceNode),node=matches[0];
@@ -57,11 +61,11 @@ export function adaptNativeAuthorProgram(input:NativeAuthorProgramInput):NativeA
  const subtree=flatten([node]);const identities=subtree.map(n=>{const bs=input.identity.bindings.filter(b=>b.sourceNode===n.graphKey),b=bs[0];if(bs.length!==1||!b||b.sourceSha256!==a.sourceSha256||b.analysisSha256!==a.analysisSha256)throw Error('Author program identity association mismatch');return {sourceNode:n.graphKey,afId:b.afId,kind:n.type==='element'?'element' as const:'nonvisual' as const};});
  const scripts=subtree.filter(n=>n.type==='element'&&n.tag==='script');if(scripts.length!==1)throw Error('Expected exactly one source script');const original=scriptText(scripts[0]!);if(hash(original)!==a.scriptSha256)throw Error('Author program script association mismatch');
  let html='',authorJs='';
- if(a.profile==='ordinary-dom-script'||a.profile==='bookshelf-local-state'||a.profile==='native-query-observer'){
+ if(a.profile==='ordinary-dom-script'||a.profile==='bookshelf-local-state'||a.profile==='native-query-observer'||a.profile==='native-query-preview'){
   if(node!==scripts[0]||node.type!=='element'||node.attributes.length)throw Error('Unsupported script wrapper');
   html=`<template data-af-id="${escape(identities[0]!.afId)}"></template>`;
   if(a.profile==='ordinary-dom-script')authorJs=original;
-  else if(a.profile==='native-query-observer')authorJs=observerAuthorJs(input.analysis,node.graphKey,original);
+  else if(a.profile==='native-query-observer'||a.profile==='native-query-preview'){if(a.profile==='native-query-preview'&&(!a.preview||a.preview.sourceNodeId!==identities[0]!.afId||nativeDigest(a.preview.resources)!==nativeDigest(input.urls??[])))throw Error('Preview resource/identity association mismatch');if(a.profile!=='native-query-preview'&&a.preview)throw Error('Unexpected preview capability');authorJs=observerAuthorJs(input.analysis,node.graphKey,original,a.profile==='native-query-preview'?a.preview:undefined);}
   else {
    const books=sourceBooks(original),fields=input.analysis.flow.values.map(v=>v.name),fieldSet=new Set(fields),groups=fields.filter(k=>k.startsWith('group_')).map(k=>k.slice(6));
    if(fields.some(k=>!/^[_A-Za-z][_A-Za-z0-9]*$/.test(k))||new Set(fields).size!==fields.length||!['search','surprise','empty',...(a.filter==='search-and-status'?['filter']:[]),...books.flatMap(b=>['visible_'+b.id,'open_'+b.id]),...books.map(b=>'group_'+b.group)].every(k=>fieldSet.has(k)))throw Error('Incomplete bookshelf local state declarations');

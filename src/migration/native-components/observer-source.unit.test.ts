@@ -12,3 +12,11 @@ test('inline click callbacks retain capture and the actual event; inline effects
 test('listener and effect admission rejects asynchronous, dynamic, cleanup and extra capabilities',()=>{
  for(const text of [inlineSource.replace('(event)=>','async(event)=>'),inlineSource.replace('(event)=>','(...events)=>'),inlineSource.replace(",true);",",{capture:true});"),inlineSource.replace(",true);",",capture);"),inlineSource.replace("'click'","'keydown'"),inlineSource.replace('createEffect(()=>{','createEffect(async()=>{'),inlineSource.replace('createEffect(()=>{','createEffect((previous)=>{'),inlineSource.replace("const data=rows();","return ()=>{};const data=rows();"),inlineSource.replace("const data=rows();","return rows();const data=rows();"),inlineSource+'new Blob([]);',inlineSource+'rows.refetch();',inlineSource+"signal('$days')(2);"])assert.throws(()=>adapt(text));
 });
+
+test('preview capability is explicit and rewrites only owned script URLs and iframe document operations',()=>{
+ const script=inlineSource+`const blobs=[];const code='document.body.dataset.ready="yes";';const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));blobs.push(url);blobs.forEach((url)=>URL.revokeObjectURL(url));const frame=document.createElement('iframe');frame.srcdoc='<p>Preview</p>';`;
+ assert.throws(()=>adapt(script));
+ const result=adaptNativeObserverSource(script,{values:[],queries:['rows']},'nativeObserver','nativePreview');
+ assert.match(result.source,/nativePreview.createScriptUrl\(code\)/);assert.match(result.source,/nativePreview.createFrame\(\)/);assert.match(result.source,/nativePreview.setDocument\(frame,/);assert.doesNotMatch(result.source,/new Blob|URL.createObjectURL|\.srcdoc=/);
+ for(const altered of [script.replace("type:'text/javascript'","type:'text/html'"),script.replace('new Blob([code]','new Blob([code,code]'),script+'const extra=new Blob([]);',script+'frame.sandbox="allow-same-origin";',script+'frame.contentWindow.fetch("/private");'])assert.throws(()=>adaptNativeObserverSource(altered,{values:[],queries:['rows']},'nativeObserver','nativePreview'));
+});
