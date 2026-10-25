@@ -108,6 +108,31 @@ it('styles a nested native close button like the text-only close control without
   expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
   expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
 });
+it('matches retained bare dialog paragraph rhythm without overriding authored paragraph styles', () => {
+  const {root,content} = fixture();
+  const paragraph = document.createElement('p'); paragraph.textContent = 'Source paragraph'; content.append(paragraph);
+  const authored = document.createElement('p'); authored.className = 'authored-copy'; authored.textContent = 'Authored paragraph'; content.append(authored);
+  expect(getComputedStyle(paragraph).lineHeight).toBe('1.65');
+  expect(getComputedStyle(paragraph).marginTop).toBe('12px');
+  const authorStyle = document.createElement('style'); authorStyle.textContent = '.authored-copy{line-height:2;margin:3px 0}'; document.head.append(authorStyle);
+  expect(getComputedStyle(authored).lineHeight).toBe('2');
+  expect(getComputedStyle(authored).marginTop).toBe('3px');
+  authorStyle.remove(); root.remove();
+});
+
+it('keeps enabled dialog triggers hoverable and prevents disabled activation', async () => {
+  const {root,trigger,native} = fixture();
+  const nested = document.createElement('button'); nested.textContent = 'Native'; trigger.replaceChildren(nested); await tick();
+  nested.dispatchEvent(new MouseEvent('mouseover',{bubbles:true})); nested.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));
+  expect(nested.matches(':hover')).toBe(true);
+  expect(getComputedStyle(nested).height).toBe('36px');
+  nested.click(); expect(native.open).toBe(true);
+  root.open = false; trigger.setAttribute('disabled',''); await tick();
+  expect(nested.disabled).toBe(true); expect(getComputedStyle(nested).opacity).toBe('0.5');
+  nested.click(); expect(native.open).toBe(false);
+  root.remove();
+});
+
 it('matches the retained bare dialog heading and outline close styling', () => {
   const {root,content} = fixture();
   const heading = document.createElement('h2'); heading.textContent = 'Bare heading'; content.append(heading);
@@ -115,6 +140,8 @@ it('matches the retained bare dialog heading and outline close styling', () => {
   const css = style.textContent!.replace(/\s+/g,'');
   expect(getComputedStyle(heading).fontSize).toBe('28px');
   expect(getComputedStyle(heading).lineHeight).toBe('1.2');
+  const nestedTrigger = document.createElement('af-dialog-trigger'); nestedTrigger.innerHTML = '<button>Native</button>'; document.body.append(nestedTrigger);
+  expect(getComputedStyle(nestedTrigger.querySelector('button')!).height).toBe('36px');
   expect(css).toContain('af-dialog-close{border:1pxsolidcurrentColor;background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs,');
   expect(css).toContain('af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1pxsolidcurrentColor');
   document.documentElement.dataset.afDark = 'true';
