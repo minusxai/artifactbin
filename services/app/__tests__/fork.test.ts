@@ -15,6 +15,7 @@
  * applied after the copy; the reply is create-shaped plus `forked_from`.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import {nativeResponseIdentity} from './native-response-identity';
 import { agentCookie, useAppHarness, setSession } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
@@ -348,7 +349,9 @@ describe('the fork credit line', () => {
     // nothing here for a reader to tell the two apart with.
     await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
     expect(await credit(copy.id)).toEqual(said);
-    expect(await served(copy.id)).toBe(html);
+    const deleted=nativeResponseIdentity(await served(copy.id)),privateSource=nativeResponseIdentity(html);
+    expect(deleted.nonce).not.toBe(privateSource.nonce);
+    expect(deleted.html).toBe(privateSource.html);
   });
 
   it('a document nobody forked keeps the credits it always had', async () => {
