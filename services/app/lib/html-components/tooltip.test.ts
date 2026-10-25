@@ -87,3 +87,25 @@ it('preserves an existing interactive child without nesting a generated button',
   expect(host.querySelector('button button,button a,button input')).toBeNull();
  }
 });
+
+it('unwraps its generated button when interactive content arrives and preserves the new control', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger><span>i</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';document.body.append(host);await Promise.resolve();
+ const wrapper=host.querySelector('af-tooltip-trigger')!;
+ const generated=wrapper.querySelector('button')!;
+ const icon=generated.firstElementChild!;
+ const authored=document.createElement('button');authored.textContent='Help';generated.append(authored);await Promise.resolve();await Promise.resolve();
+ expect(wrapper.querySelectorAll('button')).toHaveLength(1);expect(wrapper.querySelector('button')).toBe(authored);
+ expect(wrapper.contains(icon)).toBe(true);expect(generated.isConnected).toBe(false);expect(wrapper.hasAttribute('tabindex')).toBe(false);
+ authored.focus();expect((host as AfTooltip).open).toBe(true);
+});
+it('retains authored focusable and button-role children without a default button or duplicate tab stop', async () => {
+ for(const content of ['<span tabindex="0">Help</span>','<span role="button" tabindex="0">Help</span>']){
+  const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger>'+content+'</af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';const control=host.querySelector('span')!;document.body.append(host);await Promise.resolve();await Promise.resolve();
+  expect(host.querySelector('button')).toBeNull();expect(host.querySelector('af-tooltip-trigger')!.hasAttribute('tabindex')).toBe(false);
+  expect(host.querySelector('span')).toBe(control);control.focus();expect((host as AfTooltip).open).toBe(true);
+ }
+});
+it('respects an explicitly focusable trigger wrapper', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger tabindex="0" role="button"><span>Help</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';document.body.append(host);await Promise.resolve();
+ expect(host.querySelector('button')).toBeNull();const wrapper=host.querySelector<HTMLElement>('af-tooltip-trigger')!;wrapper.focus();expect((host as AfTooltip).open).toBe(true);
+});

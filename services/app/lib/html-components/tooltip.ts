@@ -7,6 +7,8 @@ export interface TooltipTriggerContract { readonly control: HTMLElement | undefi
 export interface TooltipClock { setTimeout(callback: () => void, delay: number): number; clearTimeout(id: number): void; now?(): number }
 export interface TooltipProviderContract { delayDuration: number; skipDelayDuration: number }
 const closedAt = new WeakMap<Node,number>();
+const interactiveTrigger = 'button,a[href],input,select,textarea,[tabindex],[role="button"],[role="link"],[contenteditable]:not([contenteditable="false"])';
+const automaticWrapperTabs = new WeakSet<HTMLElement>();
 function duration(value: string | null, fallback: number): number { const n = value === null ? fallback : Number(value); return Number.isFinite(n) ? Math.max(0,n) : fallback; }
 /** Keyboard-accessible help with a hoverable content region and a short exit grace period. */
 export class AfTooltip extends HTMLElement implements TooltipContract {
@@ -46,7 +48,7 @@ export class AfTooltip extends HTMLElement implements TooltipContract {
  }
  attributeChangedCallback(): void { this.sync(); }
  private own(tag: string): HTMLElement[] { return [...this.querySelectorAll<HTMLElement>(tag)].filter(n => n.closest('af-tooltip') === this); }
- private trigger(): HTMLElement | undefined { const wrapper = this.own('af-tooltip-trigger')[0]; return wrapper?.querySelector<HTMLElement>('button,a[href],input,select,textarea') ?? wrapper; }
+ private trigger(): HTMLElement | undefined { const wrapper = this.own('af-tooltip-trigger')[0]; return wrapper?.querySelector<HTMLElement>(interactiveTrigger) ?? wrapper; }
  private disabled(): boolean { const trigger = this.trigger(); return !trigger || trigger.matches(':disabled,[disabled],[aria-disabled="true"]') || !!trigger.closest('af-tooltip-trigger[disabled]'); }
  private clear(): void { if(this.timer !== undefined) this.clock.clearTimeout(this.timer); this.timer = undefined; }
  private request(value: boolean): void {
@@ -109,8 +111,8 @@ export class AfTooltip extends HTMLElement implements TooltipContract {
   if(wrapper) {
    if(!this.wrapperTabs.has(wrapper)) this.wrapperTabs.set(wrapper,wrapper.getAttribute('tabindex'));
    const authored = this.wrapperTabs.get(wrapper) ?? null;
-   if(trigger === wrapper) wrapper.tabIndex = Number(authored ?? 0);
-   else if(authored === null) wrapper.removeAttribute('tabindex'); else wrapper.setAttribute('tabindex',authored);
+   if(trigger === wrapper) { if(authored === null) automaticWrapperTabs.add(wrapper); wrapper.tabIndex = Number(authored ?? 0); }
+   else { automaticWrapperTabs.delete(wrapper); if(authored === null) wrapper.removeAttribute('tabindex'); else wrapper.setAttribute('tabindex',authored); }
   }
   if(panel) {
    identifyFloating(panel); panel.setAttribute('role','tooltip'); panel.hidden = !this.open; panel.toggleAttribute('inert',!this.open); panel.dataset.state = this.open ? 'open' : 'closed';
@@ -130,21 +132,27 @@ export class AfTooltipProvider extends HTMLElement implements TooltipProviderCon
  set skipDelayDuration(value: number) { this.setAttribute('skip-delay-duration',String(value)); }
 }
 export class AfTooltipTrigger extends HTMLElement implements TooltipTriggerContract {
- static observedAttributes = ['disabled'];
+ static observedAttributes = ['disabled','tabindex','role','contenteditable'];
  private generated: HTMLButtonElement | undefined;
  private observer = new MutationObserver(() => this.ensureControl());
- get control(): HTMLElement | undefined { return this.querySelector<HTMLElement>('button,a[href],input,select,textarea') ?? undefined; }
+ get control(): HTMLElement | undefined { return this.querySelector<HTMLElement>(interactiveTrigger) ?? undefined; }
  connectedCallback(): void { this.observer.observe(this,{childList:true,subtree:true}); this.ensureControl(); }
  disconnectedCallback(): void { this.observer.disconnect(); }
- attributeChangedCallback(): void { if(this.generated) this.generated.disabled = this.hasAttribute('disabled'); }
+ attributeChangedCallback(): void { if(this.isConnected) this.ensureControl(); }
  private ensureControl(): void {
-  if(!this.control && this.childNodes.length) {
+  const explicitWrapper = this.hasAttribute('tabindex') && !automaticWrapperTabs.has(this) || this.matches('[role="button"],[role="link"],[contenteditable]:not([contenteditable="false"])');
+  const authoredControl = [...this.querySelectorAll(interactiveTrigger)].some(node => node !== this.generated);
+  if(this.generated && (explicitWrapper || authoredControl)) {
+   this.generated.replaceWith(...this.generated.childNodes);
+   this.generated = undefined;
+  }
+  if(!explicitWrapper && !this.control && this.childNodes.length) {
    this.generated = this.ownerDocument.createElement('button');
    this.generated.type = 'button';
    this.generated.append(...this.childNodes);
    this.append(this.generated);
   }
-  this.attributeChangedCallback();
+  if(this.generated) this.generated.disabled = this.hasAttribute('disabled');
  }
 }
 export class AfTooltipContent extends HTMLElement {}
