@@ -43,6 +43,14 @@ it('keeps the floating panel text rhythm and border inherited from its source st
  expect(panelStyle.lineHeight).toBe('1.5');
  expect(popoverStyles).toContain('border:1px solid currentColor');
 });
+it('applies the source bare-paragraph rhythm only to unclassed panel paragraphs', () => {
+ const {content}=fixture(); const bare=document.createElement('p'); bare.textContent='Bare paragraph';
+ const authored=document.createElement('p'); authored.className='authored'; authored.style.lineHeight='2'; authored.style.marginBlock='0.5em';
+ content.append(bare,authored);
+ expect(getComputedStyle(bare).lineHeight).toBe('1.65');
+ expect(popoverStyles).toContain('margin-block:.75em;max-width:68ch;line-height:1.65');
+ expect(getComputedStyle(authored).lineHeight).toBe('2');
+});
 it('leaves a nested native trigger button to its browser focus treatment', () => {
  const {root,trigger} = fixture(); root.style.setProperty('--ring','rgb(1, 2, 3)'); trigger.focus();
  expect(getComputedStyle(trigger).outlineColor).not.toBe('rgb(1, 2, 3)');

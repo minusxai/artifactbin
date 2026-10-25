@@ -136,6 +136,7 @@ af-popover-trigger[disabled]>button,af-popover-trigger>button:disabled,af-popove
 af-popover-trigger:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-popover-trigger[disabled]{opacity:.5;cursor:default}
 af-popover-content{box-sizing:border-box;position:fixed;inset:auto;margin:0;z-index:50;width:18rem;max-width:calc(100vw - 1rem);max-height:calc(100svh - 1rem);overflow:auto;border:1px solid currentColor;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:1rem;line-height:1.5;background:var(--popover,var(--background));color:var(--popover-foreground,var(--foreground));box-shadow:var(--shadow-md,0 4px 6px -1px rgb(0 0 0 / 10%),0 2px 4px -2px rgb(0 0 0 / 10%))}
+:where(af-popover-content) :where(p):not([class]){margin-block:.75em;max-width:68ch;line-height:1.65}
 af-popover-content[hidden]{display:none!important}
 af-popover-header{display:flex;flex-direction:column;gap:.25rem;font-size:.875rem}
 af-popover-title{display:block;font-weight:500}
