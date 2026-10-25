@@ -65,6 +65,16 @@ persistent isolated session whose worker keeps its browser, context and pages ac
 {error:"sessions_unavailable"}` when the composition supplied no `sessions` implementation. Leases, execution
 receipts and script serialisation live in `src/sessions.ts`; see [docs/mx-sessions.md](../../docs/mx-sessions.md).
 
+Scripted-session SSE supports the canonical `/a/ID/events` and recipient `/api/my/people/events` catch-up endpoints through finite real
+response segments over the credential-blind IPC bridge; other SSE endpoints refuse visibly.
+Each segment waits at least 250 ms and flushes only at a complete SSE frame boundary; an idle or
+incomplete stream without a boundary after 1.5 seconds fails visibly. Bytes, event names, IDs, retry
+fields and keepalives are preserved, within the existing response byte cap. The upstream subscription
+is cancelled at the boundary, on refusal or on session close. Supplied `Last-Event-ID` headers are forwarded, but Chromium's intercepted native reconnects do not
+expose that header. The app's reconnecting stream instead uses `?since` and canonical-head catch-up; the recipient inbox sends an initial refresh wakeup on every connection. Thus live
+updates remain observable across the short reconnect gap, with finite-session transport latency.
+This is not an unlimited streaming tunnel; silent custom streams must emit complete keepalive frames.
+
 Entry points: `@artifactbin/browser` is the contract, the client and the server shell (no Playwright); `./local`
 is the Chromium and the ONLY entry that loads Playwright — one browser, launched on first use, closed after a
 minute idle, renders serialised.

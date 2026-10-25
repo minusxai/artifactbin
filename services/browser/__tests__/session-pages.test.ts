@@ -9,6 +9,9 @@
  * request addressed exactly as the app does; the worker, its routing and its browser are the shipped ones.
  */
 import { afterEach, expect, it } from 'vitest';
+import {build} from 'esbuild';
+import {inspectPage} from '../../app/skills/artifactbin/scripts/check.mjs';
+import {fileURLToPath} from 'node:url';
 import { FORWARDED_HOST, type Actor } from '@artifactbin/contracts';
 import { createSessionProcess } from '../src/session-process';
 import type { SessionWorker } from '../src/sessions';
@@ -92,3 +95,52 @@ it('refuses a frame that tries to leave the session origins', async () => {
   expect(out.error).toBeUndefined();
   expect(seen.map(entry => entry.url)).toEqual([`${BASE}/a/doc1`]);
 }, 60_000);
+
+
+it('delivers successive real SSE segments through the isolated worker, catches up a gap and closes subscriptions',async()=>{
+ const runtime=(await build({entryPoints:[fileURLToPath(new URL('../../app/lib/http/live-stream.ts',import.meta.url))],bundle:true,write:false,format:'iife',globalName:'LiveRuntime'})).outputFiles[0]!.text;
+ const owner:Actor={credential:'bearer',userId:'usr_owner'};
+ let revision=1,active=0,appActive=0,peak=0,cancelled=0;
+ const seen:Array<{url:string;cursor:string|null;actor:Actor}>=[];
+ const request=async(request:Request,actor:Actor)=>{
+  const url=new URL(request.url);
+  if(url.pathname.endsWith('/events')){
+   seen.push({url:url.href,cursor:request.headers.get('last-event-id'),actor});
+   if(actor!==owner)return new Response('not found',{status:404});
+   return new Response(new ReadableStream({start(controller){active++;if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive++;peak=Math.max(peak,active);controller.enqueue(new TextEncoder().encode(`: connected\r\n\r\nretry: 50\r\nid: ${revision}\r\nevent: update\r\ndata: ${revision}\r\n\r\n`));},cancel(){active--;if(url.pathname.startsWith('/a/')&&!url.searchParams.has('native'))appActive--;cancelled++;}}),{headers:{'content-type':'text/event-stream'}});
+  }
+  return new Response(`<!doctype html><body><p id="value">0</p><script>${runtime};window.values=[];let current=0;window.live=LiveRuntime.openLiveStream({url:'/a/abc123/events',events:{update(data){const value=Number(data);if(value>current){current=value;window.values.push(value);document.querySelector('#value').textContent=String(value);}}}});window.native=new EventSource('/a/abc123/events?native=1');window.nativeValues=[];window.native.addEventListener('update',e=>window.nativeValues.push({data:e.data,id:e.lastEventId}));</script></body>`,{headers:{'content-type':'text/html'}});
+ };
+ worker=await createSessionProcess(owner,{baseURL:BASE,request,sandbox:{mode:'none'}});
+ const first=await worker.run(`const page=await context.newPage();const failures=[];page.on('requestfailed',r=>failures.push(r.url()));page.on('pageerror',e=>failures.push(e.message));page.on('console',m=>{if(m.type()==='error')failures.push(m.text())});globalThis.testPage=page;globalThis.failures=failures;await page.goto('/a/doc1');await page.locator('#value').filter({hasText:'1'}).waitFor();return await page.evaluate(()=>window.values);`);
+ expect(first.error).toBeUndefined();expect(first.result).toEqual([1]);
+ // No upstream stream is open here: revision 2 happens in the transport gap.
+ expect(appActive).toBe(0);revision=2;
+ const second=await worker.run(`await testPage.locator('#value').filter({hasText:'2'}).waitFor();return {values:await testPage.evaluate(()=>window.values),failures};`);
+ expect(second.error).toBeUndefined();expect(second.result).toEqual({values:[1,2],failures:[]});
+ revision=3;
+ const third=await worker.run(`await testPage.locator('#value').filter({hasText:'3'}).waitFor();await new Promise(r=>setTimeout(r,500));return {values:await testPage.evaluate(()=>window.values),failures};`);
+ expect(third.error).toBeUndefined();expect(third.result).toEqual({values:[1,2,3],failures:[]});
+ const native=await worker.run(`return await testPage.evaluate(()=>window.nativeValues)`);
+ expect(native.error).toBeUndefined();
+ expect(native.result).toEqual(expect.arrayContaining([{data:'1',id:'1'},{data:'2',id:'2'},{data:'3',id:'3'}]));
+ expect(seen.some(item=>new URL(item.url).searchParams.get('since')==='1')).toBe(true);
+ expect(seen.filter(item=>new URL(item.url).searchParams.has('native')).length).toBeGreaterThan(1);
+ expect(peak).toBeLessThanOrEqual(2);
+ for(const width of [1280,390]){
+ const smoke=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:${width},height:800}},async page=>{await page.locator('#value').waitFor();await page.reload();await page.locator('#value').filter({hasText:'3'}).waitFor();return {reload:true};});}finally{await checkPage.close();}`);
+ expect(smoke.error).toBeUndefined();
+ const evidence=smoke.result as {failedRequests:unknown[];consoleErrors:string[];pageErrors:string[];httpErrors:unknown[]};
+ expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);expect(evidence.pageErrors).toEqual([]);expect(evidence.httpErrors).toEqual([]);
+ await new Promise(resolve=>setTimeout(resolve,300));expect(active).toBeLessThanOrEqual(2);
+ }
+ expect(peak).toBeLessThanOrEqual(6);expect(seen.length).toBeLessThan(50);
+ await worker.close();worker=undefined;
+ await new Promise(resolve=>setTimeout(resolve,100));expect(active).toBe(0);expect(cancelled).toBe(seen.length);
+ const total=seen.length;await new Promise(resolve=>setTimeout(resolve,350));expect(seen).toHaveLength(total);
+ // The same stream endpoint keeps the guest permission refusal; no owner grant enters the worker.
+ const guest:Actor={credential:'none'};
+ worker=await createSessionProcess(guest,{baseURL:BASE,request,sandbox:{mode:'none'}});
+ const refused=await worker.run(`const page=await context.newPage();await page.goto('/');return await page.evaluate(async()=>{window.live.close();window.native.close();return (await fetch('/a/abc123/events')).status});`);
+ expect(refused.error).toBeUndefined();expect(refused.result).toBe(404);expect(seen.at(-1)!.actor).toBe(guest);
+},30_000);
