@@ -92,7 +92,26 @@ export function auditFastSource(source, file) {
         && expression.argumentExpression.name.text === 'type'
         && node.arguments.length === 4
         && node.arguments.every((argument, index) => ts.isIdentifier(argument) && argument.text === ['node', 'context', 'walkNode', 'walkReducer'][index]);
-      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch) reasons.push(`${file}: computed callable capability`);
+      // Acorn's sole computed callback applies caller-supplied parser plugins to
+      // a parser class. Only this exact Parser.extend site is admitted; callers
+      // remain transitively audited, and our runtime URL analyzer uses no plugins.
+      let owner = node.parent;
+      while (owner && !ts.isFunctionLike(owner)) owner = owner.parent;
+      const assignment = owner?.parent;
+      const acornPluginDispatch = ts.isCallExpression(node)
+        && /(?:^|\/)node_modules\/acorn\/dist\/acorn\.mjs$/.test(normalizedFile)
+        && owner && ts.isFunctionExpression(owner)
+        && assignment && ts.isBinaryExpression(assignment)
+        && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        && ts.isPropertyAccessExpression(assignment.left)
+        && ts.isIdentifier(assignment.left.expression) && assignment.left.expression.text === 'Parser'
+        && assignment.left.name.text === 'extend'
+        && ts.isElementAccessExpression(expression)
+        && ts.isIdentifier(expression.expression) && expression.expression.text === 'plugins'
+        && ts.isIdentifier(expression.argumentExpression) && expression.argumentExpression.text === 'i'
+        && node.arguments.length === 1
+        && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === 'cls';
+      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch && !acornPluginDispatch) reasons.push(`${file}: computed callable capability`);
     }
     ts.forEachChild(node, visit);
   }

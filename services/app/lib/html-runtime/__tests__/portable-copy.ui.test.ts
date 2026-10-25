@@ -36,3 +36,13 @@ it('adopts normalized publication identities only on explicit save of unchanged 
  expect(readPortableDocument(preserved).source).toBe(edited);
  expect(new DOMParser().parseFromString(preserved,'text/html').querySelector('h1')?.getAttribute('data-af-id')).toBeNull();
 });
+it('retains emitted platform nonce and regenerates exact initial script admission across repeated portable saves',()=>{
+ const source='<html><head></head><body><script>author()</script><h1>Original</h1></body></html>',nonce='emittedPlatformNonce123456';
+ document.head.innerHTML='<script data-af="runtime" type="application/json">{"offline":true,"pageId":"p","backends":[]}</script><script data-af="apollo" type="application/json">"module"</script><script data-af="reader" type="application/json">"reader"</script><script data-af="core" nonce="'+nonce+'">boot()</script>';
+ const saved=serializePortableCopy({document,sourceBytes:source,portable:{version:1,source}}),copy=new DOMParser().parseFromString(saved,'text/html');
+ expect(copy.head.firstElementChild?.getAttribute('data-af')).toBe('script-policy');
+ expect(copy.querySelector<HTMLScriptElement>('script[data-af="core"]')?.nonce).toBe(nonce);
+ expect(copy.querySelector('meta[data-af="script-policy"]')?.getAttribute('content')).toContain("'nonce-"+nonce+"'");
+ expect(readPortableDocument(saved).source).toBe(source);
+ expect(serializePortableCopy({document:copy,sourceBytes:saved,portable:readPortableDocument(saved)})).toBe(saved);
+});

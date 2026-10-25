@@ -57,6 +57,11 @@ it('keeps the compiler-owned mx-doc wrapper out of the bare story gutter in read
  const offlineDocument=new JSDOM(await offline.text()).window.document,offlineFix=offlineDocument.querySelector('style[data-mx-native-html-presentation]');
  expect(offlineFix?.textContent).toContain(':where([data-mx-story-root][data-mx-inline-story]:not([data-mx-styled]))>.mx-doc');
  expect(offlineDocument.querySelector('[data-af-id="authored"] h1')?.textContent).toBe('Authored heading');
+ for(const renderedDocument of [document,offlineDocument]){
+  const nonce=renderedDocument.querySelector<HTMLScriptElement>('script[data-af="core"]')?.nonce;
+  expect(nonce).toMatch(/^[a-f0-9]{32}$/);
+  expect(renderedDocument.querySelector('meta[data-af="script-policy"]')?.getAttribute('content')).toContain("'nonce-"+nonce+"'");
+ }
  const stored=await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id));expect(stored.status).toBe(200);
  expect((await stored.json()).html).not.toContain('data-mx-native-html-presentation');
 });
@@ -64,6 +69,12 @@ it('revalidates only after access admission and admits native code only inside t
  const {actor,id}=await publish();
  const req=(token?:string,tag?:string)=>markPagesRequest(request(`/a/${id}/raw`,{...(token?{token}:{}),headers:tag?{'if-none-match':tag}:{}}),{id,self:`https://${id}.pages.example.test`,site});
  const first=await raw(req(actor.token),params(id));expect(first.status).toBe(200);const tag=first.headers.get('etag');expect(tag).toBeTruthy();
+ expect(tag).toMatch(/^W\//);
+ const firstNonce=new JSDOM(await first.text()).window.document.querySelector<HTMLScriptElement>('script[data-af="core"]')!.nonce;
+ const next=await raw(req(actor.token),params(id));expect(next.headers.get('etag')).toBe(tag);
+ const nextNonce=new JSDOM(await next.text()).window.document.querySelector<HTMLScriptElement>('script[data-af="core"]')!.nonce;
+ expect(firstNonce).toMatch(/^[a-f0-9]{32}$/);expect(nextNonce).not.toBe(firstNonce);
+ expect((await raw(req(actor.token,tag!.replace(/^W\//,'')),params(id))).status).toBe(304);
  const csp=first.headers.get('content-security-policy')!;expect(csp).toMatch(/script-src[^;]*'unsafe-inline'/);expect(csp).toMatch(/script-src[^;]*blob:/);expect(csp).toContain('frame-ancestors https://app.example.test');expect(csp).not.toMatch(/(?:^|;)\s*sandbox(?:;|\s|$)/);
  expect((await raw(req(actor.token,tag!),params(id))).status).toBe(304);expect((await raw(req(undefined,tag!),params(id))).status).toBe(404);
 });

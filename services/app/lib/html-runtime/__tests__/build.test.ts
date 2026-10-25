@@ -106,14 +106,14 @@ it('marks overflowing tables in the native HTML core and updates the fade at the
 it('leaves hosted top-level captures untouched and boots portable and raw local pages',async()=>{
  const assets=await buildHtmlAssets();
  for(const {offline,privatePreview} of [{offline:false,privatePreview:false},{offline:true,privatePreview:false},{offline:undefined,privatePreview:false},{offline:true,privatePreview:true}]) {
-  const blobs:string[]=[];let imports:Record<string,string>|undefined;const listeners:string[]=[];
+  const blobs:string[]=[];let imports:Record<string,string>|undefined,mapNonce:string|undefined;const listeners:string[]=[];
   const blocks:Record<string,string>={...(offline===undefined?{}:{runtime:JSON.stringify({pageId:'p',revision:'1',backends:[],offline})}),...(offline?{reader:JSON.stringify(assets.reader),apollo:JSON.stringify(assets.apollo)}:{})};
   const win={};const location={href:'https://page.example/report',pathname:'/report'};
-  const document={readyState:'loading',addEventListener(event:string){listeners.push(event);},documentElement:{setAttribute(){},hasAttribute(name:string){return privatePreview&&name==='data-af-private-preview';}},querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(node:{textContent:string}){imports=JSON.parse(node.textContent).imports;}}};
+  const document={readyState:'loading',addEventListener(event:string){listeners.push(event);},documentElement:{setAttribute(){},hasAttribute(name:string){return privatePreview&&name==='data-af-private-preview';}},querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',nonce:'platform-render-nonce',after(node:{textContent:string;nonce?:string}){imports=JSON.parse(node.textContent).imports;mapNonce=node.nonce;}}};
   const LocalURL=class extends URL {static createObjectURL(blob:Blob){const value=URL.createObjectURL(blob);blobs.push(value);return value;}};
   try {
    runInNewContext(assets.core,{document,location,window:Object.assign(win,{parent:win}),URL:LocalURL,Blob});
-   expect(listeners).toEqual(['DOMContentLoaded']);
+   expect(listeners).toEqual(['DOMContentLoaded']);expect(mapNonce).toBe('platform-render-nonce');
    expect(imports?.['@afbin/reader']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/v1\/reader\/[a-f0-9]{64}$/);
    expect(imports?.['@afbin/apollo']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/v1\/apollo\/[a-f0-9]{64}$/);
    if(offline){expect(await (await fetch(imports!['@afbin/reader']!)).text()).toBe(assets.reader);expect(await (await fetch(imports!['@afbin/apollo']!)).text()).toBe(assets.apollo);}

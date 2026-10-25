@@ -43,7 +43,7 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   const source=input.row.source??'';
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
   const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
-  const assembly={portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine}:{})};
+  const assembly={platformScriptNonce:randomUUID().replaceAll('-',''),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */

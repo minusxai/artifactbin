@@ -5,14 +5,14 @@ import {initSync,parse as parseImports} from 'es-module-lexer';
 import parseCss from 'css-tree/parser';
 import walkCss from 'css-tree/walker';
 initSync();
-/** Literal HTML, CSS URL/@import and module references for publication snapshots; runtime-computed URLs need a manifest.
- * Module imports must be literals, matching the server publication contract. */
+import {admitRuntimeModuleImports} from '../../../lib/html-publication-bundle/runtime-module-imports.ts';
+/** Shared server admission distinguishes literal project dependencies from closed runtime URL adapters. */
 export function publicationLocalReferences(source,contentType){
- const moduleReferences=text=>parseImports(text)[0].flatMap(item=>{
+ const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(text):[];return imports.flatMap(item=>{
   if(item.d===-2)return [];
-  if(item.n===undefined)throw Error('Computed module imports cannot be discovered; use literal imports. Other runtime-loaded files must be listed in the publication manifest.');
+  if(item.n===undefined){if(runtime.some(entry=>entry.importStart===item.ss))return [];throw Error('Computed module imports cannot be discovered; use literal imports. Other runtime-loaded files must be listed in the publication manifest.');}
   return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[];
- });
+ });};
  if(contentType==='text/javascript')return moduleReferences(source);
  if(contentType==='text/css'){const references=[];walkCss(parseCss(source),function(node){if(node.type==='Url'||node.type==='String'&&this.atrule?.name.toLowerCase()==='import')references.push(node.value);});return references;}
  const references=[];

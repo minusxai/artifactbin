@@ -1,3 +1,4 @@
+import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { recoverPortableSource,recoverPortableRendering,portableRenderedDigest } from './portable-source';
 import { portableScript } from './portable';
@@ -29,6 +30,8 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
   if(!source&&(name==='chrome'||name==='portable-engine'))continue;
   if(!source) throw new Error(`Portable HTML is missing its ${name} module`);
   const copy=target.importNode(source,true);
+  // Browsers hide a connected script's nonce content attribute; copy its IDL value.
+  if(name==='core'&&(source as HTMLScriptElement).nonce)(copy as HTMLScriptElement).nonce=(source as HTMLScriptElement).nonce;
   if(name==='runtime') {
    const config=JSON.parse(copy.textContent??'{}');
    delete config.appOrigin;
@@ -45,6 +48,14 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
   fragments.push(copy);
  }
  target.head.prepend(block,...fragments);
+ // New portable files keep their emitted platform nonce. Older cores without
+ // nonce forwarding retain their original behavior rather than breaking imports.
+ const core=target.querySelector<HTMLScriptElement>('script[data-af="core"]');
+ if(core?.nonce){
+  for(const previous of target.querySelectorAll(`meta[data-af="${INLINE_SCRIPT_POLICY}"]`))previous.remove();
+  const admission=admitInitialInlineScripts(target.documentElement.outerHTML,core.nonce),policy=target.createElement('meta');
+  policy.setAttribute('data-af',INLINE_SCRIPT_POLICY);policy.httpEquiv='Content-Security-Policy';policy.content=admission.policy;target.head.prepend(policy);
+ }
  return (source.match(/^\s*(<!doctype[^>]*>)/i)?.[1]??'')+target.documentElement.outerHTML;
 }
 
