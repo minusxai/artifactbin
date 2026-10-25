@@ -112,21 +112,8 @@ export default defineConfig({
           // independent; a file that leaves process-level state behind must clean it up itself.
           isolate: false,
           include: API_INCLUDE,
-          exclude: [...API_EXCLUDE, ...API_MOCKING, 'services/app/__tests__/native-runtime-bridge.test.ts'],
+          exclude: [...API_EXCLUDE, ...API_MOCKING],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
-        },
-      },
-      {
-        // This route test deliberately exercises a PDF larger than the inline HTML bundle cap.
-        // Keep its upload tier at the normal 50 MB default while the rest of the API suite retains
-        // its small 20 KB PDF limit for fast size-boundary tests.
-        extends: true,
-        test: {
-          name: 'api-native-runtime-bridge',
-          environment: 'node',
-          include: ['services/app/__tests__/native-runtime-bridge.test.ts'],
-          setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
-          env: { PDF__MAX_BYTES: '50000000', FILES__MAX_BYTES: '50000000' },
         },
       },
       {

@@ -1,4 +1,4 @@
-import {it,expect} from 'vitest';
+import {it,expect,vi} from 'vitest';
 import {createHash} from 'node:crypto';
 import {useAppHarness,mintAccountToken,request} from './harness';
 import {GET as raw} from '@/app/a/[id]/raw/route';
@@ -13,6 +13,12 @@ import {prepareNativeRuntimeBundle} from '@/lib/native-runtime-bridge';
 import {rewriteNativeRuntimePdfLinks} from '@/lib/native-runtime-bridge/pdf-source';
 import type {NativeRuntimeAssembly} from '@/lib/native-runtime-bridge/contracts';
 import {sniffAssetType} from '@/lib/web-ingest/sniff';
+// This file exercises the real upload path with a 4.35 MB PDF. Use the regular
+// production tier limits here; the API size-boundary tests keep their small caps.
+vi.mock('@/lib/platform/config',async importOriginal=>{
+ const actual=await importOriginal<typeof import('@/lib/platform/config')>();
+ return {...actual,MAX_PDF_BYTES:50_000_000,MAX_FILE_BYTES:50_000_000};
+});
 useAppHarness();
 const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 const stable=(value:unknown):unknown=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>[k,stable(v)])):value;
