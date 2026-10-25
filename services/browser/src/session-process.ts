@@ -40,20 +40,65 @@ function scriptedFontOrigin(url: URL): boolean {
   return url.protocol === 'https:' && !url.username && !url.password && !url.port && FONT_ORIGINS.has(url.origin);
 }
 
-async function sessionResponse(response: Response): Promise<{ status: number; headers: Record<string, string>; body: string }> {
-  // Streams cannot be materialized indefinitely through this bounded bridge.
-  if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
+/** Finite real SSE windows keep the credential-blind IPC bridge bounded. Only complete
+ * frames cross it; platform consumers reconnect with cursor/canonical catch-up. */
+async function sessionResponse(response: Response, signal?: AbortSignal, catchupStream = false): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  const streaming = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() === 'text/event-stream';
+  if(streaming && !catchupStream) {
+    void response.body?.cancel().catch(() => {});
+    throw new Error('Scripted SSE requires a platform catch-up endpoint');
+  }
   const reader = response.body?.getReader();
   const chunks: Uint8Array[] = []; let size = 0;
-  if (reader) for (;;) {
-    const next = await reader.read(); if (next.done) break;
-    size += next.value.length;
-    if (size > SESSION_LIMITS.outputBytes) { await reader.cancel(); throw new Error('Response limit exceeded'); }
-    chunks.push(next.value);
+  let lineBytes = 0, previousCR = false, boundary = false, windowElapsed = false;
+  let windowTimer: ReturnType<typeof setTimeout> | undefined, deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const closed = new Promise<never>((_, reject) => {
+    abort = () => reject(signal?.reason ?? new Error('Session closed'));
+    signal?.addEventListener('abort', abort, {once:true});
+    if(signal?.aborted)abort();
+  });
+  const window = streaming ? new Promise<'window'>(resolve => { windowTimer = setTimeout(() => {windowElapsed = true;resolve('window');},250); }) : undefined;
+  const deadline = streaming ? new Promise<never>((_, reject) => { deadlineTimer = setTimeout(() => reject(new Error('Stream did not yield a complete SSE frame within the session response deadline')),1500); }) : undefined;
+  try {
+    if(streaming && !reader)throw new Error('Stream ended without a complete SSE frame');
+    if (reader) for (;;) {
+      // Retain the same outstanding read across the window boundary; never race two reads.
+      const pending = reader.read();
+      let next = await Promise.race([pending,closed,...(deadline?[deadline]:[]),...(!windowElapsed&&window?[window]:[])]);
+      if(next === 'window') {
+        if(boundary)break;
+        next = await Promise.race([pending,closed,deadline!]);
+      }
+      if(next.done) {
+        if(streaming && !boundary)throw new Error('Stream ended without a complete SSE frame');
+        if(streaming && !windowElapsed)await Promise.race([window!,closed,deadline!]);
+        break;
+      }
+      size += next.value.length;
+      if (size > SESSION_LIMITS.outputBytes) throw new Error('Response limit exceeded');
+      chunks.push(next.value);
+      if(streaming) {
+        // SSE accepts LF, CRLF and CR line endings. Scan bytes, so split UTF-8 and
+        // split CRLF remain untouched in the returned wire bytes.
+        for(const byte of next.value) {
+          if(previousCR && byte === 10) {previousCR=false;continue;}
+          previousCR=false;
+          if(byte === 10 || byte === 13) {boundary=lineBytes===0;lineBytes=0;previousCR=byte===13;}
+          else {lineBytes++;boundary=false;}
+        }
+        if(windowElapsed && boundary)break;
+      }
+    }
+    const out = new Headers(response.headers);
+    for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
+    return { status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') };
+  } finally {
+    clearTimeout(windowTimer);clearTimeout(deadlineTimer);
+    if(abort)signal?.removeEventListener('abort',abort);
+    // Invoke cancellation even when a stalled producer does not settle its cancel promise.
+    void reader?.cancel().catch(() => {});
   }
-  const out = new Headers(response.headers);
-  for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
-  return { status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') };
 }
 
 /**
@@ -68,10 +113,12 @@ async function sessionResponse(response: Response): Promise<{ status: number; he
 export async function forwardSessionFetch(
   message: Record<string, unknown>,
   actor: Actor,
-  options: Pick<SessionProcessOptions, 'baseURL' | 'request' | 'pagesHost'> & { jar?: PagesCookieJar },
+  options: Pick<SessionProcessOptions, 'baseURL' | 'request' | 'pagesHost'> & { jar?: PagesCookieJar; signal?: AbortSignal },
   run: (task: () => Promise<void>) => Promise<void> = task => task(),
 ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
   if (JSON.stringify(message).length > 100000) throw new Error('Request size limit exceeded');
+  options.signal?.throwIfAborted();
+  const signal = options.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000);
   const url = new URL(String(message.url));
   const origins = sessionOrigins(options.baseURL, options.pagesHost);
   const fontRequest = scriptedFontOrigin(url);
@@ -82,9 +129,9 @@ export async function forwardSessionFetch(
     relay.searchParams.set('url', url.href);
     const request = new Request(relay, { method: 'GET', headers: {
       [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: relay.host, [FORWARDED_PROTO]: relay.protocol.slice(0, -1),
-    }, signal: AbortSignal.timeout(10000) });
+    }, signal });
     let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
-    await run(async () => { fetched = await sessionResponse(await options.request(request, actor)); });
+    await run(async () => { fetched = await sessionResponse(await options.request(request, actor),signal); });
     return fetched!;
   }
   // Drop cookies, authorization, actor and hop-by-hop headers from arbitrary script traffic.
@@ -92,10 +139,10 @@ export async function forwardSessionFetch(
   // The host the page addressed, as a proxy names it (FORWARDED_HOST): the hop to the app may be a socket
   // that loses `Host`, and a pages request is answered by which host it named.
   const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1', [FORWARDED_HOST]: url.host, [FORWARDED_PROTO]: url.protocol.slice(0, -1) });
-  for (const name of ['accept', 'content-type', 'range', 'if-none-match']) if (supplied.has(name)) headers.set(name, supplied.get(name)!);
+  for (const name of ['accept', 'content-type', 'range', 'if-none-match', 'last-event-id']) if (supplied.has(name)) headers.set(name, supplied.get(name)!);
   const body = typeof message.body === 'string' ? Buffer.from(message.body, 'base64') : undefined;
   if (body && body.length > SESSION_LIMITS.scriptBytes) throw new Error('Request body limit exceeded');
-  const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal: AbortSignal.timeout(10000) });
+  const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal });
   let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
   await run(async () => {
     const response = await sessionRequest(request, async next => {
@@ -106,7 +153,7 @@ export async function forwardSessionFetch(
       options.jar?.store(at, answer);
       return answer;
     }, origins.allows);
-    fetched = await sessionResponse(response);
+    fetched = await sessionResponse(response,signal,(/^\/a\/[A-Za-z0-9]{6,12}\/events$/.test(url.pathname)||url.pathname==='/api/my/people/events'));
   });
   return fetched!;
 }
@@ -166,6 +213,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
   let child: ChildProcess | undefined;
   let stopped = false;
   const requests = createSessionRequestQueue();
+  const lifetime = new AbortController();
   const jar = createPagesCookieJar(sessionOrigins(options.baseURL, options.pagesHost), options.pagesHost);
   const browserArgs = sessionBrowserArgs(options.pagesHost);
   const closedListeners = new Set<() => void>();
@@ -173,6 +221,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     if (stopped) return;
     stopped = true;
     requests.close();
+    lifetime.abort(new Error('Session closed'));
     for (const listener of closedListeners) listener();
     closedListeners.clear();
     if (child?.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already exited. */ } }
@@ -226,7 +275,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
         if (message.type === 'fatal') rejectTask?.(new Error(String(message.error)));
         if (message.type === 'result') { resolveTask?.(message.value as Parameters<NonNullable<typeof resolveTask>>[0]); resolveTask = undefined; rejectTask = undefined; }
         if (message.type !== 'fetch' || stopped) return;
-        try { send({ type: 'fetched', id: message.id, ...await forwardSessionFetch(message, actor, { ...options, jar }, requests.run) }); }
+        try { send({ type: 'fetched', id: message.id, ...await forwardSessionFetch(message, actor, { ...options, jar, signal:lifetime.signal }, requests.run) }); }
         catch (error) { send({ type: 'fetched', id: message.id, error: String((error as Error).message).slice(0, 500) }); }
       };
       child!.stdout!.setEncoding('utf8');
