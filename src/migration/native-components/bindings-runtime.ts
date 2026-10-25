@@ -22,7 +22,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const observe=listener=>{if(disposed){listener({active:false,values:{},queries:{}});return()=>{};}observers.add(listener);listener(observerSnapshot());return()=>observers.delete(listener);};
  const renderPerson=(${NATIVE_PERSON_RUNTIME})(client,doc,at,plan,projectPerson);
  const error=message=>{if(disposed)return;const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);};
- const read=(expr,row)=>evaluate(expr,{values:{...values,...tables,...(viewerReady?{'_me.id':viewerId}:{})},row});
+ const read=(expr,row)=>evaluate(expr,{values:{...values,...(plan.viewer&&!viewerReady?Object.fromEntries(plan.queries.map(query=>[query.name,null])):tables),...(viewerReady?{'_me.id':viewerId}:{})},row});
  const bindingId=node=>node.getAttribute?.('data-native-binding-id')||node.getAttribute?.('data-af-id');
  const all=root=>[...(bindingId(root)?[root]:[]),...(root.querySelectorAll?.('[data-af-id],[data-native-binding-id]')??[])];
  const lookup=(root,id)=>{const found=all(root).filter(node=>bindingId(node)===id);if(found.length>1)throw Error('Duplicate binding identity');return found[0];};
@@ -53,16 +53,16 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
    if(target.kind==='cell'){
     let state=cells.get(host);if(!state){const child=document.createElement('span');host.replaceChildren(child);state={child,rows:null};cells.set(host,state);}
     const name=target.expression.name,busy=!!tablePending[name],current=tables[name]??null;
-    if(current!==null||!busy)state.rows=current;
-    state.child.textContent=formatCell(state.rows,target.format);
+    if(plan.viewer&&!viewerReady)state.rows=null;else if(state.subject!==viewerId||current!==null||!busy)state.rows=current;
+    state.subject=viewerId;state.child.textContent=formatCell(state.rows,target.format);
     state.child.setAttribute('aria-label',state.rows===null?'Number placeholder':'Live number');
     host.setAttribute('aria-busy',busy?'true':'false');
     if(busy)host.setAttribute('class','mx-busy-inline');else if(target.authorClass!==null)host.setAttribute('class',target.authorClass);else host.removeAttribute('class');
    }
    if(target.kind==='property'){
-    const binding=target.writeback;let projection=target.property==='data'?tableData[target.expression.name]??null:read(target.expression,row);
+    const binding=target.writeback;let projection=target.property==='data'?(plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null):read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
-    if(target.property==='options'){const table=tableData[target.expression.name],columns=table?.columns??[],value=columns[0]?.name,label=columns[1]?.name;projection=table&&value?table.rows.map(row=>({value:String(row[value]??''),label:label?String(row[label]??row[value]??''):String(row[value]??'')})):[];}
+    if(target.property==='options'){const table=plan.viewer&&!viewerReady?null:tableData[target.expression.name],columns=table?.columns??[],value=columns[0]?.name,label=columns[1]?.name;projection=table&&value?table.rows.map(row=>({value:String(row[value]??''),label:label?String(row[label]??row[value]??''):String(row[value]??'')})):[];}
     host[target.property]=projection;
     if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
      const change=async event=>{if(disposed||failed||!scope.active||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;
@@ -82,7 +82,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     }}
    }
    if(target.kind==='table'){
-    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,childScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
+    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,childScope,disposeScope});tableBindings.set(host,table);}table.update(plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null,scope);
    }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}
@@ -131,13 +131,13 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   try{
    for(const query of plan.queries){const selected={};for(const field of query.values)selected[field.name]=own(values,field.name);const variables={...(query.values.length?{values:selected}:{}),only:[query.tableName]},signature=JSON.stringify(variables),prior=subscriptions.get(query.name);if(prior?.signature===signature)continue;
     if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=true;tableErrors[query.name]=null;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
-    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;tablePending[query.name]=!!result.loading;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;tableErrors[query.name]=result.loading?null:'Query unavailable';}else {tableErrors[query.name]=null;const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=false;tableErrors[query.name]='Query unavailable';render();error(cause.message);}});
+    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;tablePending[query.name]=!!result.loading;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;tableErrors[query.name]=result.loading?null:'Query unavailable';}else {tableErrors[query.name]=null;const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=false;tableErrors[query.name]='Query unavailable';render();error(cause.message);}});
    }
    render();
   }catch(cause){failed=true;stopQueries();error(cause.message);}
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
- if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true}).subscribe(result=>{if(disposed)return;viewerReady=false;try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');viewerId=id;viewerReady=true;render();}catch(cause){render();error(cause.message);}});
+ if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(result=>{if(disposed)return;const previousReady=viewerReady,previousId=viewerId;viewerReady=false;const clearProtected=()=>{for(const query of plan.queries){tables[query.name]=null;tableData[query.name]=null;}};try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){if(previousReady)clearProtected();render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');if(previousReady&&previousId!==id)clearProtected();viewerId=id;viewerReady=true;render();}catch(cause){clearProtected();render();error(cause.message);}});
  const dispose=()=>{if(disposed)return;disposed=true;for(const listener of [...observers])listener({active:false,values:{},queries:{}});observers.clear();localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();committedResets.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
  return Object.assign(dispose,{observe});
 }`;
