@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import type {TokenHoldingActor} from '@/lib/accounts';
-import {getOwnedArtifactFor,reserveIds} from '@/lib/artifacts';
+import {getOwnedArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
 import {json} from '@/lib/http';
 import {planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,existingPageId?:string,resolvedBackendNames:readonly string[]=[]):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
@@ -18,7 +18,21 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
  const reserved=await reserveIds(actor,createHash('sha256').update(key+'_bundle_ids').digest('hex'),request?.headers.get('X-Artifactbin-Account'));
  const pageId=existingPageId??body.reserved_id??reserved[99];
  const assetAddress=(id:string,revision:string)=>`/a/${pageId}/assets?dependency=${id}&revision=${revision}`;
- let position=0;
+ const dependencyKey=(path:string)=>createHash('sha256').update(key+'_'+Buffer.from(path).toString('base64url')).digest('hex');
+ const paths=[...new Set([...plan.dependencies.map(dependency=>dependency.path),...Object.keys(bundle.mappings??{})])].sort();
+ // Older requests allocated IDs in traversal order. Recover those exact IDs before
+ // assigning unused slots, then let each normal create validate its complete payload.
+ const recorded=await recoverCreationIds(actor,base,paths.map(dependencyKey),request?.headers.get('X-Artifactbin-Account'));
+ const used=new Set([...recorded.values(),...Object.values(bundle.mappings??{}).map(mapping=>mapping.id)]),reservedByPath=new Map<string,string>();
+ for(const [index,path] of paths.entries()){
+  const existing=recorded.get(dependencyKey(path));if(existing){reservedByPath.set(path,existing);continue;}
+  if(bundle.mappings?.[path])continue;
+  const preferred=reserved[index];
+  const id=preferred&&preferred!==reserved[99]&&!used.has(preferred)?preferred:reserved.find(candidate=>candidate!==reserved[99]&&!used.has(candidate));
+  if(!id)throw Error('Dependency ID allocation exhausted');
+  used.add(id);reservedByPath.set(path,id);
+ }
+
  const result=await publishBundleDependencies(plan,key,{
   async reuse(_path,mapping){
    if(!mapping||!['asset','dataset'].includes(mapping.kind)||!/^[A-Za-z0-9]{6,128}$/.test(mapping.id)||!/^\d+$/.test(mapping.revision))throw Error('Invalid dependency mapping');
@@ -36,7 +50,7 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
   async create(input){
    const requestKey=createHash('sha256').update(input.key).digest('hex');
    const headers=new Headers(request?.headers);headers.set('Idempotency-Key',requestKey);
-   const dependencyBody:Record<string,unknown>={reserved_id:reserved[position++],visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8')}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
+   const dependencyBody:Record<string,unknown>={reserved_id:reservedByPath.get(input.path),visibility:body.visibility??'unlisted',...(body.shares?{shares:body.shares}:{}),...(body.destination?{destination:body.destination}:{}),...(input.kind==='dataset'?{dataset:Buffer.from(input.base64,'base64').toString('utf8')}:{file:{filename:input.path.split('/').at(-1),contentType:input.contentType,base64:input.base64}})};
    const response=await create(dependencyBody,new Request(base+'/api/artifacts',{method:'POST',headers}));
    const saved=await response.json() as Record<string,unknown>;if(!response.ok||typeof saved.id!=='string')throw Error(typeof saved.error==='string'?saved.error:'Dependency publication failed');
    const revision=String(saved.version??1);return {id:saved.id,revision,state:typeof saved.state==='string'?saved.state:undefined,address:input.kind==='dataset'?'ref:'+saved.id:assetAddress(saved.id,revision)};

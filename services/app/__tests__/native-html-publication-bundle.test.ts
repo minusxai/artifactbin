@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {it,expect} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST} from '@/app/api/artifacts/route';
@@ -218,4 +219,33 @@ it('admits linked CSS only through this native raw page asset endpoint',async()=
  const html=await raw.text();expect(html).toContain('rel="stylesheet"');expect(html).toContain(`/a/${saved.id}/assets?dependency=`);
  const css=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='theme.css');
  const served=await assetGet(request(`/a/${saved.id}/assets?dependency=${css.id}&revision=1&version=1`,{headers:{Origin:'null'}}),params);expect(served.status).toBe(200);expect(served.headers.get('content-type')).toBe('text/css');expect(served.headers.get('access-control-allow-origin')).toBe('*');expect(await served.text()).toContain(`/a/${saved.id}/assets?dependency=`);
+});
+it('repairs a failed middle dependency with returned mappings without reassigning successful reserved IDs',async()=>{
+ const actor=await mintAccountToken('bundle-middle-repair');
+ const html='<img src="first.svg"><object data="middle.exe"></object><img src="last.svg">';
+ const sources=[file('first.svg','<svg>first</svg>','image/svg+xml'),file('middle.exe','middle','application/octet-stream'),file('last.svg','<svg>last</svg>','image/svg+xml')];
+ const send=(files:typeof sources,mappings?:Record<string,unknown>)=>POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_middle_repair_01'},json:{html:html.replace('middle.exe',files[1]!.path),publicationBundle:{entryPath:'index.html',files,...(mappings?{mappings}:{})}}}));
+ const failed=await send(sources);const partial=await failed.json();expect(failed.status).toBe(409);expect(partial.dependencyReceipts.map((entry:{path:string})=>entry.path)).toEqual(['first.svg','last.svg']);
+ const mappings=Object.fromEntries(partial.dependencyReceipts.map(({path,...entry}:{path:string})=>[path,entry]));
+ const repaired=await send(sources.map(source=>source.path==='middle.exe'?{...source,path:'middle.txt',contentType:'text/plain'}:source),mappings);const saved=await repaired.json();expect(repaired.status,JSON.stringify(saved)).toBe(201);
+ expect(saved.dependencyReceipts.filter((entry:{path:string})=>entry.path!=='middle.txt')).toEqual(partial.dependencyReceipts);
+ const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(4);
+});
+
+it('continues dependency writes begun by the previous traversal-order allocator',async()=>{
+ const {reserveIds}=await import('@/lib/artifacts');
+ const actor=await mintAccountToken('bundle-previous-allocation');
+ const {identityForUser}=await import('@/lib/accounts');
+ const identity=identityForUser(actor.userId,actor.id);
+ const key='bundle_previous_allocation_01',hash=(value:string)=>createHash('sha256').update(value).digest('hex');
+ const reserved=await reserveIds(identity,hash(key+'_bundle_ids'));
+ const sources=[file('z.svg','<svg>z</svg>','image/svg+xml'),file('a.svg','<svg>a</svg>','image/svg+xml')];
+ const previous=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':hash(key+'_'+Buffer.from('z.svg').toString('base64url'))},json:{reserved_id:reserved[0],visibility:'unlisted',file:{filename:'z.svg',contentType:sources[0]!.contentType,base64:sources[0]!.base64}}}));const staged=await previous.json();expect(previous.status,JSON.stringify(staged)).toBe(201);
+ const resumed=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':key},json:{html:'<img src="z.svg"><img src="a.svg">',publicationBundle:{entryPath:'index.html',files:sources}}}));const saved=await resumed.json();expect(resumed.status,JSON.stringify(saved)).toBe(201);
+ expect(saved.dependencyReceipts.find((entry:{path:string})=>entry.path==='z.svg').id).toBe(staged.id);
+ const altered=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':key},json:{html:'<img src="z.svg"><img src="a.svg">',publicationBundle:{entryPath:'index.html',files:[file('z.svg','<svg>different</svg>','image/svg+xml'),sources[1]]}}}));const refused=await altered.json();expect(altered.status).toBe(409);expect(refused.details).toContain('idempotency_mismatch');
+ const other=await mintAccountToken('bundle-previous-other-owner');
+ const independent=await POST(request('/api/artifacts',{method:'POST',token:other.token,headers:{'Idempotency-Key':key},json:{html:'<img src="z.svg"><img src="a.svg">',publicationBundle:{entryPath:'index.html',files:sources}}}));const owned=await independent.json();expect(independent.status,JSON.stringify(owned)).toBe(201);expect(owned.dependencyReceipts.every((entry:{id:string})=>!saved.dependencyReceipts.some((original:{id:string})=>original.id===entry.id))).toBe(true);
+
+ const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(6);
 });
