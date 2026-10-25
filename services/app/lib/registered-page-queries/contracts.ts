@@ -102,7 +102,9 @@ export const QUERY_LIMITS = Object.freeze({
   queries: 64,
   params: 240,
   sqlBytes: 64000,
+  /** Serialized materialized SQL input and internal dependency-answer work budget. */
   inputBytes: 8 * 1024 * 1024,
+  /** Serialized returned table-name/outcome record, after the requested projection. */
   outputBytes: 1024 * 1024,
   wallMs: 20000,
 });

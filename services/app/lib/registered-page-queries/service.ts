@@ -123,8 +123,9 @@ export function createRegisteredPageQueries(
           const outcome=await wait(()=>source.execute(query.sql,prepared.params,prepared.paramTypes,active));
           if('error' in outcome||outcome.truncated||outcome.rows.length>limits.rows||outcome.rows.length*outcome.columns.length>limits.cells)throw Error('invalid_query_output');
           catalogAnswers[query.name]=structuredClone(outcome);
-          if(Buffer.byteLength(JSON.stringify(catalogAnswers))>limits.outputBytes)throw Error('invalid_query_output');
           input.tables![query.name]=structuredClone(outcome);
+          // Catalog answers are SQL materialization, including unreturned dependencies.
+          if(Buffer.byteLength(JSON.stringify(input))>limits.inputBytes)throw Error('query_input_limit');
           await wait(()=>source.verify(active));
         }
         input.queries=prepared.queries.filter(query=>!query.source).map(query=>({name:query.name,sql:query.sql}));
@@ -208,7 +209,7 @@ export function createRegisteredPageQueries(
         if (
           !answer ||
           typeof answer !== "object" ||
-          Buffer.byteLength(JSON.stringify(answer)) > limits.outputBytes
+          Buffer.byteLength(JSON.stringify(answer)) > limits.inputBytes
         )
           throw Error("invalid_query_output");
         for (const query of prepared.queries) {
@@ -231,12 +232,16 @@ export function createRegisteredPageQueries(
           )
             throw Error("invalid_query_output");
         }
+        // The response budget belongs to the exact returned record, not its hidden dependencies.
+        const projected = Object.fromEntries(
+          prepared.only.map((name) => [name, answer[name]!]),
+        );
+        if (Buffer.byteLength(JSON.stringify(projected)) > limits.outputBytes)
+          throw Error("invalid_query_output");
         for (const source of sources) await wait(() => source.verify(active));
         if (!(await wait(() => ports.authorize(context, identity, active))))
           throw Error("denied");
-        return Object.fromEntries(
-          prepared.only.map((name) => [name, answer[name]!]),
-        );
+        return projected;
       } finally {
         cancelDeadline();
         signal?.removeEventListener("abort", forward);

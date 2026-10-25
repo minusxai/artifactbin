@@ -1,5 +1,6 @@
 import { createSqliteSql } from "@artifactbin/sql/sqlite";
 import { it, expect } from "vitest";
+import {QUERY_LIMITS} from "../contracts";
 import { createRegisteredPageQueries } from "../service";
 import type {
   QueryPlan,
@@ -394,4 +395,36 @@ it("rejects invalid saved table names, collisions, cells and excessive data befo
  for(const localTables of [[{...good,name:'_me'}],[{...good,name:'total'}],[{...good,name:'amount'}],[good,{...good,name:'ITEMS'}],[good,good],[{...good,columns:[...good.columns,...good.columns]}],[{...good,columns:[{name:'A label',type:'string' as const},{name:'a LABEL',type:'string' as const}],rows:[{'A label':'x','a LABEL':'y'}]}],[{...good,columns:[{name:'label\0tail',type:'string' as const}],rows:[{'label\0tail':'x'}]}],[{...good,columns:[{name:'x'.repeat(129),type:'string' as const}],rows:[{['x'.repeat(129)]:'x'}]}],[{...good,rows:[{amount:'wrong'}]}],[{...good,rows:[{amount:2,extra:1}]}],[{...good,rows:Array.from({length:10001},()=>({amount:1}))}]]){
   const f=fixture();f.ports.registry=async()=>({...plan,localTables});await expect(f.run(validRequest)).rejects.toThrow();expect(f.calls).toEqual([]);
  }
+});
+
+
+it('sizes the requested result rather than duplicating hidden dependency results in the response budget',async()=>{
+ const f=fixture(),sql=createSqliteSql();let internalBytes=0;
+ f.ports.registry=async()=>({...plan,queries:[{name:'first',sql:"select printf('%.*c',600000,'x') as payload",dependencies:[]},{name:'total',sql:'select * from first',dependencies:['first']}]});
+ f.ports.execute=input=>({result:sql.run(input).then(answer=>{internalBytes=Buffer.byteLength(JSON.stringify(answer));return answer;}),cancelAndDrain:async()=>{}});
+ const result=await f.run(validRequest);expect(internalBytes).toBeGreaterThan(QUERY_LIMITS.outputBytes);expect(Object.keys(result)).toEqual(['total']);expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(QUERY_LIMITS.outputBytes);await expect(f.run({values:{},only:['first','total']})).rejects.toThrow('invalid_query_output');
+});
+it('materializes catalog dependencies within the input budget without charging unreturned tables to the response',async()=>{
+ const f=fixture(),sql=createSqliteSql();let verified=0;
+ f.ports.registry=async()=>({...plan,queries:[{name:'first',sql:'select first',source:'catalog',dependencies:[]},{name:'second',sql:'select second',source:'catalog',dependencies:[]},{name:'total',sql:'select (select length(payload) from first)+(select length(payload) from second) as amount',dependencies:['first','second']}]});
+ f.ports.catalog=async()=>({verify:async()=>{verified++;},execute:async()=>({columns:[{name:'payload',type:'string'}],rows:[{payload:'x'.repeat(600000)}]})});
+ f.ports.execute=input=>({result:sql.run(input),cancelAndDrain:async()=>{}});
+ expect(await f.run(validRequest)).toMatchObject({total:{rows:[{amount:1200000}]}});expect(verified).toBeGreaterThanOrEqual(5);
+ f.ports.catalog=async()=>({verify:async()=>{},execute:async()=>({columns:[{name:'payload',type:'string'}],rows:[{payload:'x'.repeat(QUERY_LIMITS.inputBytes)}]})});
+ await expect(f.run(validRequest)).rejects.toThrow('query_input_limit');
+});
+const outcome=(length:number)=>({columns:[{name:'payload',type:'string' as const}],rows:[{payload:'x'.repeat(length)}]});
+it('enforces exact serialized returned-record byte boundaries',async()=>{
+ const f=fixture(),overhead=Buffer.byteLength(JSON.stringify({total:outcome(0)}));let length=QUERY_LIMITS.outputBytes-overhead;
+ f.ports.execute=()=>({result:Promise.resolve({total:outcome(length)}),cancelAndDrain:async()=>{}});
+ expect(Buffer.byteLength(JSON.stringify(await f.run(validRequest)))).toBe(QUERY_LIMITS.outputBytes);length++;
+ await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');
+});
+it('bounds all internal dependency answers independently of the smaller response projection',async()=>{
+ const f=fixture();f.ports.registry=async()=>({...plan,queries:[{name:'first',sql:'select 1',dependencies:[]},{name:'total',sql:'select 1 from first',dependencies:['first']}]});
+ const total={columns:[],rows:[]},overhead=Buffer.byteLength(JSON.stringify({first:outcome(0),total}));let length=QUERY_LIMITS.inputBytes-overhead;
+ f.ports.execute=()=>({result:Promise.resolve({first:outcome(length),total}),cancelAndDrain:async()=>{}});
+ expect(await f.run(validRequest)).toEqual({total});length++;
+ await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');
+ for(const invalid of [{columns:[],rows:[],truncated:true},{columns:[],rows:Array(QUERY_LIMITS.rows+1).fill({})},{columns:Array.from({length:500},(_,i)=>({name:'c'+i,type:'string' as const})),rows:Array(2001).fill({})},{columns:[],rows:[null]}]){f.ports.execute=()=>({result:Promise.resolve({first:invalid,total}) as ReturnType<QueryPorts["execute"]>["result"],cancelAndDrain:async()=>{}});await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');}
 });
