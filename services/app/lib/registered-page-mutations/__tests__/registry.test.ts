@@ -33,3 +33,16 @@ it('GraphQL applies immutable scalar defaults when defaulted non-null inputs are
  const invalid=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:null}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async()=>{calls++;return null;},signal:new AbortController().signal});
  expect(invalid.errors?.length).toBeGreaterThan(0);expect(calls).toBe(1);
 });
+
+it('keeps legacy registration bytes and exposes only the opt-in nullable refusal enum through GraphQL',async()=>{
+ const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
+ expect(registeredMutationSchema(program)).toBe('input Values {body:String!} type Outcome {requestId:String! outcome:String! revision:String affected:Int reset:[String!]!} type Mutation {run(requestId:String!,values:Values!):Outcome!}');
+ expect(registeredMutationDescriptor('actions',program).document).not.toContain('reason');
+ const declared:MutationProgram={...program,refusalReasons:'conflict-v1'},prepared=prepareRegisteredMutationBackend('actions','backend',page,declared,{compilerSha256:digest,sourceSha256:digest}),saved={...page,links:[prepared.link]},record={...prepared.backend,...prepared.link,pageId:page.pageId,ownerId:'owner',secretBindings:[]};
+ const plan=registeredMutationPlan(saved,prepared.link,record)!;expect(plan.refusalReasons).toBe('conflict-v1');
+ const schema=composePageSchema([{name:'actions',fileId:'backend',version:prepared.link.version,typeDefs:prepared.backend.typeDefs}]),descriptor=registeredMutationDescriptor('actions',declared);
+ for(const reason of ['row_changed','row_not_unique',null]){
+  const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_reason_123456',values:{body:'x'}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async()=>({requestId:'request_reason_123456',outcome:'rejected',revision:null,affected:null,reset:[],reason}),signal:new AbortController().signal});
+  expect(result.errors).toBeUndefined();expect(result.data).toMatchObject({actions:{run:{reason}}});
+ }
+});

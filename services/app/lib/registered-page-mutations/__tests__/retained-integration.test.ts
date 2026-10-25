@@ -22,7 +22,7 @@ async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedA
  const pageId=await make({html:'<html><body>Registered actions</body></html>',visibility:'private'});
  await changeMembership(actor,pageId,{action:'join'});
  const original=await readHtmlPage(actor,pageId),page={...original,version:original.version+1,revision:String(original.version+1)};
- const program:MutationProgram={name:kind,kind,sql:kind==='insert'?'INSERT INTO forms.rows(body) VALUES ($body)':kind==='update'?"UPDATE forms.rows SET body=$body WHERE body='seed' OR $body='__all__'":"DELETE FROM forms.rows WHERE body=$body OR $body='__all__'",target:{datasetId,schema:'forms',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}),reset:['body']};
+ const program:MutationProgram={name:kind,kind,refusalReasons:'conflict-v1',sql:kind==='insert'?'INSERT INTO forms.rows(body) VALUES ($body)':kind==='update'?"UPDATE forms.rows SET body=$body WHERE body='seed' OR $body='__all__'":"DELETE FROM forms.rows WHERE body=$body OR $body='__all__'",target:{datasetId,schema:'forms',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}),reset:['body']};
  if(eventValue){program.sql=program.sql.replaceAll('$body','$_value');program.values.body!.parameter='_value';}
  const prepared=prepareRegisteredMutationBackend('actions',`backend_${pageId}`,page,program,{compilerSha256:'a'.repeat(64),sourceSha256:'b'.repeat(64)});page.links=[prepared.link];
  const db=await getDb();await db.transaction(async tx=>{await tx.query("UPDATE artifacts SET version=$2,meta=jsonb_set(meta,'{htmlLinks}',$3::jsonb) WHERE id=$1",[pageId,page.version,JSON.stringify(page.links)]);await tx.query('INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) SELECT id,version,title,format,source,meta FROM artifacts WHERE id=$1',[pageId]);await commitRegisteredMutationBackend(tx,page,owner.userId!,prepared);});
@@ -37,7 +37,7 @@ it('real insert/delete commit exactly one row and replay durable requests withou
 });
 it('expectedAffected mismatch preserves rows and revision and has no successful receipt',async()=>{
  const f=await fixture('delete'),before=(await getArtifactById(f.datasetId))!.version;
- for(const body of ['missing','__all__']){const requestId=`request_mismatch_${body}_1234567890`;const result=await f.run(requestId,body);expect(result).toMatchObject({outcome:'rejected',reset:[]});expect(await f.run(requestId,body)).toEqual(result);}
+ for(const body of ['missing','__all__']){const requestId=`request_mismatch_${body}_1234567890`;const result=await f.run(requestId,body);expect(result).toMatchObject({outcome:'rejected',reset:[],reason:body==='missing'?'row_changed':'row_not_unique'});expect(await f.run(requestId,body)).toEqual(result);}
  expect((await getArtifactById(f.datasetId))!.version).toBe(before);expect(await f.rows()).toEqual([{body:'seed'},{body:'other'}]);const receipts=await f.db.query<{response:{status:number}}>('SELECT response FROM mutation_receipts');expect(receipts.rows.length).toBe(2);expect(receipts.rows.every(row=>row.response.status===409)).toBe(true);
 });
 it('a page source change at the final transaction boundary refuses without saving data',async()=>{
