@@ -159,7 +159,7 @@ interface AnnotationRowDb {
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
   author_transport: AnnotationAuthor['transport'];
-  author_remote: {sessionId:string;color:RemoteColor;harness?:string}|null;
+  author_remote: {sessionId?:string;color?:RemoteColor;harness?:string;avatar_seed?:string}|null;
   /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
   author_image_key: string | null;
   status: 'open' | 'resolved';
