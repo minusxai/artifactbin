@@ -73,9 +73,13 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
       }catch{ /* Unparseable/external stylesheet evidence stays unproved. */ }
     }
     const requested=new Map();
-    const add=(element,text)=>{
-      if(!text.trim()||!element.getClientRects().length)return;
+    const add=(element,text,textNode)=>{
+      if(!text.trim())return;
       const css=document.defaultView.getComputedStyle(element);if(css.visibility==='hidden')return;
+      // display:contents identity spans have no element box; their text still paints.
+      let visible=!!element.getClientRects().length;
+      if(!visible&&textNode&&css.display==='contents'){const range=document.createRange();try{range.selectNodeContents(textNode);visible=!!range.getClientRects().length;}finally{range.detach();}}
+      if(!visible)return;
       const family=clean(css.fontFamily.split(',')[0]);const key=[family,css.fontStyle,css.fontWeight].join('|');
       const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
     };
@@ -83,7 +87,7 @@ export function fontLoadingEvidence(externalStylesheets=[]) {
     for(let index=0;index<textRoots.length;index++){
       const root=textRoots[index];if(!root||seenTextRoots.has(root))continue;seenTextRoots.add(root);
       const walk=document.createTreeWalker(root,document.defaultView.NodeFilter.SHOW_TEXT);
-      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'');
+      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'',node);
       try{for(const input of root.querySelectorAll?.('input,textarea')||[])if(input.value)add(input,input.value);}catch{}
       try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)textRoots.push(element.shadowRoot);}catch{}
     }
