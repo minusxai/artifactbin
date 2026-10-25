@@ -21,9 +21,76 @@ it("preserves caller column header identities through sorting and removes stale 
   expect(header.hasAttribute("data-af-id")).toBe(false);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());
+});
+it("measures columns after detached initialization and remeasures changed row content", async () => {
+  let widths = [180, 96];
+  vi.spyOn(HTMLTableCellElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLTableCellElement) {
+    const width = this.isConnected ? widths[this.cellIndex] ?? 0 : 0;
+    return { width, height: 20, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 20, toJSON() {} };
+  });
+  const el = document.createElement("af-data-table") as AfDataTable;
+  const columns = [{name: "person", type: "string" as const}, {name: "amount", type: "number" as const}];
+  el.data = {columns, rows: []};
+  await Promise.resolve();
+  document.body.append(el);
+  await Promise.resolve();
+  expect(el.querySelector("thead tr")!.getAttribute("style")).toContain("minmax(180px, 1fr) minmax(96px, 1fr)");
+  widths = [249, 113];
+  el.data = {columns, rows: [{person: "A longer resolved person", amount: 12}]};
+  await Promise.resolve();
+  const header = el.querySelector<HTMLElement>("thead tr")!;
+  const row = el.querySelector<HTMLElement>("tbody tr[data-row-key]")!;
+  expect(header.style.gridTemplateColumns).toBe("minmax(249px, 1fr) minmax(113px, 1fr)");
+  expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+  widths = [210, 101];
+  el.data = {columns, rows: [{person: "Changed", amount: 13}]};
+  widths = [230, 105];
+  el.data = {columns, rows: [{person: "Latest", amount: 14}]};
+  await Promise.resolve();
+  expect(el.querySelector("tbody tr[data-row-key]")).toBe(row);
+  expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(105px, 1fr)");
+  expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+});
+it("retains a focused row beyond the initial sample while refreshing column measurements", async () => {
+  const observers: MeasuredRows[] = [];
+  class MeasuredRows implements ResizeObserver {
+    targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) { this.targets.add(target); }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+    flush() { this.callback([...this.targets].map(target => ({target,borderBoxSize:[{blockSize:43}],contentRect:{height:43}}) as unknown as ResizeObserverEntry), this); }
+  }
+  vi.stubGlobal("ResizeObserver", MeasuredRows);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.rowKey = "id";
+  el.cellRenderers = {value(context, cell) {
+    if (!cell.firstChild) { const input = document.createElement("input"); input.value = String(context.row.value); cell.append(input); }
+  }};
+  const columns = [{name:"id",type:"number" as const},{name:"value",type:"string" as const}];
+  const rows = Array.from({length:200}, (_,id)=>({id,value:`Row ${id}`}));
+  el.data = {columns,rows}; document.body.append(el); await Promise.resolve();
+  observers.at(-1)!.flush();
+  const viewport = el.querySelector<HTMLElement>("[data-slot=table-scroll]")!;
+  viewport.scrollTop = 100 * 43; viewport.dispatchEvent(new Event("scroll"));
+  observers.at(-1)!.flush();
+  const input = el.querySelector<HTMLInputElement>('tbody tr[data-row-key] input')!;
+  const rowIndex = Number(input.closest("tr")!.getAttribute("aria-rowindex"));
+  expect(rowIndex).toBeGreaterThan(52);
+  expect(input).toBeTruthy(); input.focus();
+  const scroll = viewport.scrollTop;
+  el.data = {columns,rows:rows.map(row=>({...row}))};
+  expect(input.isConnected).toBe(true);
+  expect(document.activeElement).toBe(input);
+  expect(viewport.scrollTop).toBe(scroll);
+  await Promise.resolve();
+  expect(el.querySelector(`tr[aria-rowindex="${rowIndex}"] input`)).toBe(input);
+  expect(document.activeElement).toBe(input);
+  expect(viewport.scrollTop).toBe(scroll);
 });
 it("uses a shared measured grid for its virtual header and body rows", async () => {
   const page = document.createElement("div");
@@ -596,11 +663,13 @@ it("remeasures retained keyed rows after data replacement and subsequent viewpor
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   const retained = el.querySelector("tbody tr[data-row-key]");
   el.data = {...data, rows: data.rows.map(row => ({...row}))};
+  await Promise.resolve(); // Natural column layout precedes the virtual window.
   rowObserver.flush();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
   expect(el.querySelector("tbody tr[data-row-key]")).toBe(retained);
   rowHeight = 53;
   el.data = {...data, rows: data.rows.map(row => ({...row, extra: "taller content"}))};
+  await Promise.resolve();
   rowObserver.flush();
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(20);
   const viewport = el.querySelector("[data-slot=table-scroll]")!;

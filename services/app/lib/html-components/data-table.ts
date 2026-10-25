@@ -33,7 +33,8 @@ export interface TableColumnIdentity {
 }
 interface DataTableContract {
   /** Replacing data retains keyed DOM, but invalidates and remeasures its geometry
-   * even when the observed rows have not resized. Header line height follows its font scale. */
+   * even when the observed rows have not resized. Column measurement waits for a connected
+   * table and repeats when its data changes. Header line height follows its font scale. */
   data: TableData;
   columns: unknown;
   columnIdentities: Readonly<Record<string, TableColumnIdentity>>;
@@ -90,6 +91,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private measuredHeaderWidths: number[] | null = null;
   private columnSignature = "";
   private virtualized = false;
+  private columnsNeedMeasurement = false;
   private virtualizationPending = false;
   private footer?: HTMLDivElement;
   private rows = new Map<string, HTMLTableRowElement>();
@@ -98,8 +100,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private ids = new Map<string, string>();
   private serial = 0;
   private cellModes = new WeakMap<HTMLElement, unknown>();
-  private invalidateMeasurements() {
-    this.rowHeights.clear();
+  private invalidateMeasurements(retainRowEstimates = false) {
+    if (!retainRowEstimates) this.rowHeights.clear();
     // Observers do not redeliver unchanged retained nodes after a cache reset.
     // Reobserve them during render so every rendered row obtains a fresh size.
     this.rowObserver?.disconnect();
@@ -113,7 +115,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
-    this.invalidateMeasurements();
+    // Keep the current keyed window stable until observers report new heights.
+    this.invalidateMeasurements(true);
+    this.columnsNeedMeasurement = true;
     this.showRowCount = Boolean(
       this.value.truncated ||
         (this.value.totalRows ?? 0) > this.value.rows.length,
@@ -544,6 +548,9 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       td.textContent = (e as Error).message;
       return;
     }
+    const currentKeys = new Set(keys);
+    for (const key of this.rowHeights.keys())
+      if (!currentKeys.has(key)) this.rowHeights.delete(key);
     if (!this.data.rows.length) this.viewport!.scrollTop = 0;
     const columns = resolveColumns(
       parseColumnSpecs(this.columns),
@@ -856,9 +863,41 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       td.colSpan = Math.max(1, columns.length);
       td.textContent = this.pending ? "loading rows…" : "no rows";
     }
-    if (!this.virtualized && !this.virtualizationPending) {
+    if (this.virtualized && this.columnsNeedMeasurement) {
+      // Measure the retained window in natural table layout. A spacer preserves the
+      // scroll extent while positioning the same live nodes outside normal flow;
+      // no focused control or renderer is cloned, removed, or recreated.
+      const viewport = this.viewport!, scrollTop = viewport.scrollTop;
+      const spacer = document.createElement("div");
+      spacer.style.height = `${viewport.scrollHeight}px`;
+      spacer.setAttribute("aria-hidden", "true");
+      const elements: HTMLElement[] = [viewport, table, table.tHead!, head, body, ...Array.from(body.rows)];
+      const styles = elements.map(element => element.style.cssText);
+      viewport.append(spacer);
+      try {
+        viewport.style.position = "relative";
+        table.style.cssText += ";display:table;position:absolute;top:0;left:0;width:100%";
+        table.tHead!.style.display = "table-header-group";
+        head.style.cssText = "display:table-row";
+        body.style.cssText = "display:table-row-group";
+        for (const row of Array.from(body.rows)) row.style.cssText = "display:table-row";
+        const widths = columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
+        if (widths.some(width => width > 0)) this.measuredHeaderWidths = widths;
+      } finally {
+        elements.forEach((element, index) => { element.style.cssText = styles[index]!; });
+        spacer.remove();
+        viewport.scrollTop = scrollTop;
+      }
+      this.columnsNeedMeasurement = false;
+      this.render();
+      return;
+    }
+    if (!this.virtualized) {
       const widths = columns.map((_, index) => head.cells[index]?.getBoundingClientRect().width ?? 0);
       if (widths.some((width) => width > 0)) this.measuredHeaderWidths = widths;
+      this.columnsNeedMeasurement = false;
+    }
+    if (!this.virtualized && !this.virtualizationPending) {
       this.virtualizationPending = true;
       queueMicrotask(() => {
         this.virtualizationPending = false;
