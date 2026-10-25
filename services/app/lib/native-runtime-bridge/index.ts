@@ -4,7 +4,7 @@ import {fileContentType} from '@artifactbin/contracts';
 import {getOwnedArtifactFor} from '@/lib/artifacts';
 import {objectStore} from '@/lib/object-store';
 import {planPublicationBundle} from '@/lib/html-publication-bundle';
-import type {PublicationBundleMapping} from '@/lib/html-publication-bundle/contracts';
+import type {PublicationBundle} from '@/lib/html-publication-bundle';
 import {createArtifactFromBody,preparePublicationBundle} from '@/lib/publish/publish';
 import type {NativeRuntimeAssembly,NativeRuntimeBundleDependency,NativeRuntimePreparationOptions,NativeRuntimePreparation} from './contracts';
 import {importNativeRuntimePdfs,rewriteNativeRuntimePdfLinks,type NativeRuntimePdfImport} from './pdf-source';
@@ -12,6 +12,7 @@ export type {NativeRuntimeAssembly,NativeRuntimePreparationOptions,NativeRuntime
 const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 const validSha=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const invalid=()=>Error('native_runtime_invalid');
+type PublicationBundleMapping=NonNullable<PublicationBundle['mappings']>[string];
 export async function prepareNativeRuntimeBundle(assembly:NativeRuntimeAssembly,options:NativeRuntimePreparationOptions):Promise<NativeRuntimePreparation>{
  const {result,key}=assembly;
  if(result.status!=='complete'||typeof result.html!=='string'||!validSha(result.htmlSha256)||sha(result.html)!==result.htmlSha256||!Array.isArray(result.files)||!validSha(assembly.sha256)||!key.sourceNamespace||!key.sourceId||!Number.isSafeInteger(key.version)||key.version<1||!/^[A-Za-z0-9]{6,128}$/.test(options.pageId)||!options.actor.userId||!options.actor.tokenId)throw invalid();

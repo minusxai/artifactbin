@@ -10,6 +10,7 @@ import {importNativeHistory} from '@/lib/native-history-import';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {readHtmlPage} from '@/lib/html-publication';
 import {prepareNativeRuntimeBundle} from '@/lib/native-runtime-bridge';
+import {rewriteNativeRuntimePdfLinks} from '@/lib/native-runtime-bridge/pdf-source';
 import type {NativeRuntimeAssembly} from '@/lib/native-runtime-bridge/contracts';
 import {sniffAssetType} from '@/lib/web-ingest/sniff';
 useAppHarness();
@@ -80,7 +81,7 @@ function sourcePdf(bytes=4_350_759){
 function pdfAssembly(bytes=sourcePdf()):NativeRuntimeAssembly{
  const path='assets/'+sha(bytes)+'.pdf',sourceReceipt={source:'ref:SourcePdf',sourceId:'SourcePdf',version:1,sourceRowSha256:'b'.repeat(64),kind:'pdf' as const,target:'./'+path,name:'Reviewed source PDF',bytes:bytes.length,pages:1};
  const receipt={...sourceReceipt,sha256:digest(sourceReceipt)};
- const html=`<html><body><a href="./${path}">Open source PDF</a><a href="https://example.test/reading">Original external link</a></body></html>`;
+ const html=`<html><body><a href="./${path}">Open source PDF</a><a href='./${path}?download=1#page=2'>Quoted source PDF</a><a href=./${path}?mode=raw#page=3>Unquoted source PDF</a><a href="https://example.test/reading">Original external link</a><template><a href='./${path}?template=1#page=4'>Template PDF</a></template></body></html>`;
  return {key:{sourceNamespace:'source',sourceId:'page',version:3},sha256:'a'.repeat(64),input:{fileReceipts:[receipt]},result:{status:'complete',html,htmlSha256:sha(html),files:[{path,bytes,sha256:sha(bytes)}]}};
 }
 it('publishes source PDF bytes through the validated PDF tier and maps the owned versioned receipt into the page',async()=>{
@@ -89,6 +90,9 @@ it('publishes source PDF bytes through the validated PDF tier and maps the owned
  expect(sniffAssetType(Buffer.from(input.result.files![0]!.bytes))).toBe('application/pdf');
  const prepared=await prepareNativeRuntimeBundle(input,options),dependency=prepared.dependencies.find(d=>d.path===input.result.files![0]!.path)!;
  expect(prepared.html).toContain(`/a/RuntimePdf/assets?dependency=${dependency.id}&amp;revision=${dependency.revision}`);
+ expect(prepared.html).toContain(`&amp;download=1#page=2`);
+ expect(prepared.html).toContain(`&amp;mode=raw#page=3`);
+ expect(prepared.html).toContain(`&amp;template=1#page=4`);
  expect(prepared.html).toContain('href="https://example.test/reading"');
  expect(dependency).toMatchObject({kind:'asset',sha256:input.result.files![0]!.sha256,sourceAssets:[{sourceId:'SourcePdf',sourceVersion:1,sourceRowSha256:'b'.repeat(64),sourceReceiptSha256:input.input!.fileReceipts![0]!.sha256,name:'Reviewed source PDF',bytes:input.result.files![0]!.bytes.length,pages:1}]});
  expect(prepared.objects).toContainEqual(expect.objectContaining({path:input.result.files![0]!.path,id:dependency.id,revision:dependency.revision,sha256:input.result.files![0]!.sha256,bytes:input.result.files![0]!.bytes.length,contentType:'application/pdf'}));
@@ -99,6 +103,10 @@ it('publishes source PDF bytes through the validated PDF tier and maps the owned
  const context={params:Promise.resolve({id:options.pageId})},url=`/a/${options.pageId}/assets?dependency=${dependency.id}&revision=${dependency.revision}&version=3`;
  expect((await asset(request(url,{token:other.token}),context)).status).toBe(404);
  const response=await asset(request(url,{token:owner.token}),context);expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('application/pdf');expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(input.result.files![0]!.bytes));
+});
+it('rejects authored query keys that could replace the mapped asset identity',()=>{
+ const imported={path:'assets/source.pdf',id:'SourceAsset',revision:'1',objectKey:'object',sha256:'a'.repeat(64),bytes:100,sourceAssets:[]};
+ expect(()=>rewriteNativeRuntimePdfLinks('<a href="./assets/source.pdf?dependency=other#page=1">PDF</a>','RuntimePdf',[imported])).toThrow('native_runtime_pdf_link_query_conflict');
 });
 it('rejects malformed source PDF bytes before staging any artifact',async()=>{
  const owner=await mintAccountToken('native_runtime_bad_pdf_owner'),actor={...identityForUser(owner.userId,owner.id),tokenId:owner.id},input=pdfAssembly(Buffer.from('not a PDF'));

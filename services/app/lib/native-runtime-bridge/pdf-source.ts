@@ -74,17 +74,21 @@ export function rewriteNativeRuntimePdfLinks(html:string,pageId:string,imports:r
   if('tagName'in node&&node.tagName==='a'){
    const href=node.attrs.find(attr=>attr.name==='href')?.value,location=node.sourceCodeLocation?.attrs?.href;
    if(href&&location&&!/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(href)){
-    const suffixAt=href.search(/[?#]/),pathPart=suffixAt<0?href:href.slice(0,suffixAt),suffix=suffixAt<0?'':href.slice(suffixAt);
-    try{
-     const decoded=decodeURIComponent(pathPart),resolved=path.posix.normalize(path.posix.join(path.posix.dirname('index.html'),decoded)),address=addresses.get(resolved);
+    const suffixAt=href.search(/[?#]/),pathPart=suffixAt<0?href:href.slice(0,suffixAt);
+    let decoded:string;try{decoded=decodeURIComponent(pathPart);}catch{decoded='';}
+    if(decoded){
+     const resolved=path.posix.normalize(path.posix.join(path.posix.dirname('index.html'),decoded)),address=addresses.get(resolved);
      if(address){
-      const raw=html.slice(location.startOffset,location.endOffset),equals=raw.indexOf('='),leading=raw.slice(equals+1).search(/\S/),quote=raw[equals+1+leading];
-      const start=location.startOffset+equals+1+leading+(quote==='"'||quote==="'"?1:0),end=quote==='"'||quote==="'"?html.indexOf(quote,start):location.endOffset;
-      edits.push({start,end,value:(address+suffix).replaceAll('&','&amp;').replaceAll('"','&quot;')});
+      const target=new URL(address,'https://asset.invalid'),source=new URL(href,'https://source.invalid/');
+      for(const [name,value] of source.searchParams){if(['dependency','revision','version'].includes(name))throw Error('native_runtime_pdf_link_query_conflict');target.searchParams.append(name,value);}
+      target.hash=source.hash;
+      const serialized=(target.pathname+target.search+target.hash).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','%3C').replaceAll('>','%3E');
+      edits.push({start:location.startOffset,end:location.endOffset,value:`href="${serialized}"`});
      }
-    }catch{/* An invalid/nonlocal href is navigation and remains unchanged. */}
+    }
    }
   }
+  if('tagName'in node&&node.tagName==='template'&&'content'in node)for(const child of node.content.childNodes)visit(child);
   if('childNodes'in node)for(const child of node.childNodes)visit(child);
  };
  visit(document);
