@@ -8,6 +8,7 @@ import type {PublicationBundle} from '@/lib/html-publication-bundle';
 import {createArtifactFromBody,preparePublicationBundle} from '@/lib/publish/publish';
 import type {NativeRuntimeAssembly,NativeRuntimeBundleDependency,NativeRuntimePreparationOptions,NativeRuntimePreparation} from './contracts';
 import {importNativeRuntimePdfs,rewriteNativeRuntimePdfLinks,type NativeRuntimePdfImport} from './pdf-source';
+import {verifyNativeRuntimeObjects} from './verify-objects';
 export type {NativeRuntimeAssembly,NativeRuntimePreparationOptions,NativeRuntimePreparation} from './contracts';
 const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
 const validSha=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
@@ -39,18 +40,13 @@ export async function prepareNativeRuntimeBundle(assembly:NativeRuntimeAssembly,
  const publishedHtml=rewriteNativeRuntimePdfLinks(prepared.body.html,options.pageId,pdfImports);
  const dependencies=(prepared.receipts as NativeRuntimeBundleDependency[]).map(dependency=>{const pdf=pdfImports.find(item=>item.path===dependency.path);return pdf?{...dependency,sourceAssets:pdf.sourceAssets}:dependency;});
  const addresses=new Map(dependencies.map(dependency=>[dependency.path,`/a/${options.pageId}/assets?dependency=${dependency.id}&revision=${dependency.revision}`]));
- const objects:NativeRuntimePreparation['objects'][number][]=[];
- for(const dependency of plan.dependencies){
+ const verification=plan.dependencies.map(dependency=>{
   const receipt=dependencies.find(item=>item.path===dependency.path);
   if(!receipt||receipt.kind!=='asset')throw invalid();
-  const row=await getOwnedArtifactFor(options.actor,receipt.id);
-  if(!row||row.format!=='file'||String(row.version)!==receipt.revision)throw invalid();
-  const meta=row.meta as {objectKey?:unknown;sha256?:unknown;bytes?:unknown;contentType?:unknown};
   const expected=/^(?:text\/css|(?:text|application)\/javascript)$/.test(dependency.contentType)?Buffer.from(plan.rewrite(Buffer.from(dependency.bytes).toString('utf8'),dependency.path,addresses)):Buffer.from(dependency.bytes);
-  if(typeof meta.objectKey!=='string'||meta.sha256!==sha(expected)||meta.bytes!==expected.byteLength||meta.contentType!==dependency.contentType)throw invalid();
-  const actual=await objectStore().get(meta.objectKey);if(!actual.equals(expected))throw invalid();
-  objects.push({path:dependency.path,id:receipt.id,revision:receipt.revision,objectKey:meta.objectKey,sha256:sha(actual),bytes:actual.byteLength,contentType:dependency.contentType});
- }
+  return {path:dependency.path,id:receipt.id,revision:receipt.revision,expected,contentType:dependency.contentType};
+ });
+ const objects=[...await verifyNativeRuntimeObjects(verification,{readOwned:id=>getOwnedArtifactFor(options.actor,id),readObject:key=>objectStore().get(key)})];
  for(const imported of pdfImports){const receipt=dependencies.find(dependency=>dependency.path===imported.path);if(!receipt||receipt.id!==imported.id||receipt.revision!==imported.revision||receipt.kind!=='asset'||receipt.sha256!==imported.sha256)throw Error('native_runtime_pdf_receipt_binding');objects.push({path:imported.path,id:imported.id,revision:imported.revision,objectKey:imported.objectKey,sha256:imported.sha256,bytes:imported.bytes,contentType:'application/pdf'});}
  const receipt={pageId:options.pageId,key:{...key},assemblySha256:assembly.sha256,sourceHtmlSha256:result.htmlSha256,html:publishedHtml,htmlSha256:sha(publishedHtml),fileDigests,dependencies,objects};
  return {...receipt,assetsSha256:sha(JSON.stringify(receipt))};
