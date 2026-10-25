@@ -189,3 +189,22 @@ test('Markdown uses exact native source property and preserves original identity
 test('ordinary SVG retains namespace-sensitive attributes and text without HTML identity spans',()=>{const source=input([element('svg',{viewBox:'0 0 20 20'},[element('path',{d:'M0 0 L20 20',strokeWidth:2,fill:'none'}),element('text',{x:2,y:4,fontSize:12},[text('A < B')])])]);source.analysis.nodes.forEach(n=>{if(n.type==='element')n.isComponent=false;});source.emitTextIdentities=true;const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));assert.match(result.html!,/viewBox="0 0 20 20"/);assert.match(result.html!,/stroke-width="2"/);assert.match(result.html!,/font-size="12"/);assert.match(result.html!,/>A &lt; B<\/text>/);assert.doesNotMatch(result.html!,/<span/);});
 test('metadata stays in authored Helmet and native compound tabs retain exact default selection',()=>{const source=input([element('Helmet',{},[element('meta',{name:'description',content:'A < B'})]),element('Tabs',{defaultValue:'one'},[element('TabsList',{},[element('TabsTrigger',{value:'one'},[text('One')])]),element('TabsContent',{value:'one'},[text('Panel')])])]);const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));assert.match(result.headHtml!,/<meta[^>]*name="description" content="A &lt; B">/);assert.doesNotMatch(result.html!,/<meta/);assert.match(result.html!,/<af-tabs[^>]*default-value="one"/);assert.deepEqual(result.modules.map(m=>m.name),['tabs']);assert.equal(lowerNativeComponents(input([element('meta',{name:'description',content:'body'})])).status,'blocked');});
 test('Mermaid code lives only in the admitted native code attribute and never leaks literal source UI',()=>{const source=input([element('Mermaid',{title:'Map'},[text('graph TD; A-->B')])]);source.emitTextIdentities=true;const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));assert.match(result.html!,/code="graph TD; A--&gt;B"/);assert.match(result.html!,/><\/af-mermaid>/);assert.doesNotMatch(result.html!,/<span/);});
+
+
+test('JSX indentation identities preserve adjacent authored siblings and retain nonvisual proof reservations',async()=>{
+ const {parseFragment}=await import('parse5');
+ const gap=text('\n    '),first=element('div',{className:'stat'},[text('First')]),second=element('div',{className:'stat'},[text('Second')]);
+ const source=input([element('section',{},[first,gap,second])]);source.emitTextIdentities=true;
+ source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');
+ const section=parseFragment(result.html!).childNodes[0] as any;const children=section.childNodes.filter((x:any)=>x.tagName);
+ assert.deepEqual(children.map((x:any)=>x.tagName),['div','div']);
+ assert.equal(children[0].attrs.find((x:any)=>x.name==='class').value,'stat');assert.equal(children[1].attrs.find((x:any)=>x.name==='class').value,'stat');
+ const reserved=source.identityBindings.find(x=>x.sourceNode===gap.graphKey)!;assert.ok(result.identities.some(x=>x.sourceNode===gap.graphKey&&x.afId===reserved.afId&&x.kind==='nonvisual'));
+ source.reservedIdentities=[{afId:reserved.afId,sourceNode:'removed-owner'}];assert.equal(lowerNativeComponents(source).status,'blocked');
+});
+test('significant inline spaces and authored multiline text remain exact identity-bearing text',()=>{
+ const spaces=text(' '),prose=text('Line one\n  Line two'),source=input([element('p',{},[spaces,prose])]);source.emitTextIdentities=true;
+ source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/span>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,2);
+});
