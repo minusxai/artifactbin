@@ -16,7 +16,7 @@ const state = createViewerState({
   initial: carried.state ?? initial ?? {}, replaceInitial: !!carried.state,
   storage: { read: () => localStorage.getItem(key), write: (json) => localStorage.setItem(key, json) },
   observe(listener) { const changed = (event: StorageEvent) => { if (event.key === key) listener(); }; addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
-  ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => navigator.locks.request(key, work) } : {}),
+  ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => Promise.resolve(navigator.locks.request(key, work)) } : {}),
 });
 export const client=createClient({backends:()=>config.backends??[],state,remote});
 

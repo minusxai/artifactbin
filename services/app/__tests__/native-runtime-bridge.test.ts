@@ -4,6 +4,7 @@ import {useAppHarness,mintAccountToken,request} from './harness';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as asset} from '@/app/a/[id]/assets/route';
 import {identityForUser} from '@/lib/accounts';
+import {reserveIds} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {importNativeHistory} from '@/lib/native-history-import';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
@@ -24,7 +25,13 @@ it('stages exact component and resource closures through normal publication and 
  const owner=await mintAccountToken('synthetic_runtime_owner');
  const actor={...identityForUser(owner.userId,owner.id),tokenId:owner.id};
  const input=assembly(),options={pageId:'RuntimePage',actor,origin:'http://localhost:3000',visibility:'private' as const};
+ const fileDigests=input.result.files!.map(({path,sha256})=>({path,sha256}));
+ const legacyRequestKey=sha(JSON.stringify({kind:'native-runtime-v1',key:input.key,assemblySha256:input.sha256,pageId:options.pageId,sourceHtmlSha256:input.result.htmlSha256,fileDigests,owner:{userId:actor.userId,tokenId:actor.tokenId},visibility:options.visibility,shares:[]}));
+ const legacyReservedIds=await reserveIds(actor,sha(legacyRequestKey+'_bundle_ids'));
  const prepared=await prepareNativeRuntimeBundle(input,options);
+ expect(prepared.dependencies.map(dependency=>dependency.id)).toEqual(legacyReservedIds.slice(0,prepared.dependencies.length));
+ const {assetsSha256,...legacyReceipt}=prepared;
+ expect(assetsSha256).toBe(sha(JSON.stringify(legacyReceipt)));
  expect(prepared.sourceHtmlSha256).toBe(input.result.htmlSha256);
  expect(prepared.fileDigests).toEqual(input.result.files!.map(({path,sha256})=>({path,sha256})));
  expect(prepared.dependencies).toHaveLength(5);
@@ -73,7 +80,7 @@ function sourcePdf(bytes=4_350_759){
 function pdfAssembly(bytes=sourcePdf()):NativeRuntimeAssembly{
  const path='assets/'+sha(bytes)+'.pdf',sourceReceipt={source:'ref:SourcePdf',sourceId:'SourcePdf',version:1,sourceRowSha256:'b'.repeat(64),kind:'pdf' as const,target:'./'+path,name:'Reviewed source PDF',bytes:bytes.length,pages:1};
  const receipt={...sourceReceipt,sha256:digest(sourceReceipt)};
- const html=`<html><body><object data="./${path}" type="application/pdf">Open source PDF</object></body></html>`;
+ const html=`<html><body><a href="./${path}">Open source PDF</a><a href="https://example.test/reading">Original external link</a></body></html>`;
  return {key:{sourceNamespace:'source',sourceId:'page',version:3},sha256:'a'.repeat(64),input:{fileReceipts:[receipt]},result:{status:'complete',html,htmlSha256:sha(html),files:[{path,bytes,sha256:sha(bytes)}]}};
 }
 it('publishes source PDF bytes through the validated PDF tier and maps the owned versioned receipt into the page',async()=>{
@@ -82,6 +89,7 @@ it('publishes source PDF bytes through the validated PDF tier and maps the owned
  expect(sniffAssetType(Buffer.from(input.result.files![0]!.bytes))).toBe('application/pdf');
  const prepared=await prepareNativeRuntimeBundle(input,options),dependency=prepared.dependencies.find(d=>d.path===input.result.files![0]!.path)!;
  expect(prepared.html).toContain(`/a/RuntimePdf/assets?dependency=${dependency.id}&amp;revision=${dependency.revision}`);
+ expect(prepared.html).toContain('href="https://example.test/reading"');
  expect(dependency).toMatchObject({kind:'asset',sha256:input.result.files![0]!.sha256,sourceAssets:[{sourceId:'SourcePdf',sourceVersion:1,sourceRowSha256:'b'.repeat(64),sourceReceiptSha256:input.input!.fileReceipts![0]!.sha256,name:'Reviewed source PDF',bytes:input.result.files![0]!.bytes.length,pages:1}]});
  expect(prepared.objects).toContainEqual(expect.objectContaining({path:input.result.files![0]!.path,id:dependency.id,revision:dependency.revision,sha256:input.result.files![0]!.sha256,bytes:input.result.files![0]!.bytes.length,contentType:'application/pdf'}));
  const db=await getDb(),row=(await db.query<any>('SELECT id,version,format,user_id,token_id,visibility,title,meta FROM artifacts WHERE id=$1',[dependency.id])).rows[0];
