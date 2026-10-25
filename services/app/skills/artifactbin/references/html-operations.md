@@ -64,7 +64,7 @@ Read the current thread list with `GET /api/artifacts/ID/annotations?status=all`
 
 ## Verify the actual HTML in a server browser session
 
-`POST /api/browser-sessions` runs a Playwright function body in an isolated persistent browser. `/a/ID` is the reader shell; authored HTML is inside its sandboxed `iframe[data-mx-document-frame]`. Browser-session locator, role, evaluation and action methods on `page` auto-target the document frame after navigation. Use `page.getByRole(...)` and `page.locator(...)` directly; `page.frameLocator(...)` would double-scope it. Use `page.mainFrame()` for reader chrome; navigation and full-page screenshots still use the reader page.
+`POST /api/browser-sessions` runs Playwright in an isolated browser. `/a/ID` is the reader shell, with authored HTML in its sandboxed `iframe[data-mx-document-frame]`. The session worker auto-scopes `page` locators, evaluation and actions to that frame. Use `page.getByRole(...)` and `page.locator(...)`; `page.frameLocator(...)` double-scopes. Use `page.mainFrame()` for reader chrome; navigation and full-page screenshots still use the shell.
 
 Keep the bearer in the caller that sends the API request. It does not belong in `code`, page HTML or downloaded files. The page is signed in as the caller unless the session-creation request explicitly sets `viewer:'guest'` or an authorized `viewer:{testuser:'ID'}`. A session's viewer is fixed at creation.
 
@@ -110,7 +110,7 @@ try {
 
 Poll with `POST /api/browser-sessions` and `{op:'status',session_id,execution_id}` until the same execution is `completed`; inspect `result`, `error` and `attachments`. If the call outcome is uncertain, check that receipt before resubmitting. Close the accepted session with `{op:'close',session_id}` when finished. A changed script requires a new `execution_id`; do not replay a browser action with a new receipt.
 
-Use accessible roles and names for the authored document, inspect page errors and failed requests, and check a narrow viewport. The session's automatic frame scope means these locators inspect the document; use `page.mainFrame()` if the reader shell itself is the subject. A screenshot of the reader shell alone does not prove the authored document rendered. For authorized writes, run as the right account; use a separate guest or test-user session to verify refused actions.
+Use accessible roles, inspect page errors and failed requests, and check a narrow viewport. Locators inspect the document; use `page.mainFrame()` for reader chrome. A shell screenshot alone does not prove document rendering. For writes, use the right account; verify refusals with a separate guest or test-user session.
 
 ## Create, update and the local helper
 
