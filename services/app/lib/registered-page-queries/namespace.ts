@@ -97,7 +97,7 @@ export function registeredQueryDescriptor(
     tableName: name,
     responsePath: [namespace, "evaluate", "tables"] as const,
     decode: "registered-page-table-cells-v1" as const,
-    document: `query RegisteredQuery(${values.length ? `$values: ${namespace}__Values!, ` : ""}$only: [${namespace}__QueryName!]!) { ${namespace} { evaluate(${values.length ? "values: $values, " : ""}only: $only) { tables { name error columns { name type } rows { cells { text number boolean isNull } } } } } }`,
+    document: `query RegisteredQuery(${values.length ? `$values: ${namespace}__Values!, ` : ""}$only: [${namespace}__QueryName!]!) { ${namespace} { evaluate(${values.length ? "values: $values, " : ""}only: $only) { tables { name error columns { name type } rows { cells { text number boolean } } } } } }`,
   };
 }
 
