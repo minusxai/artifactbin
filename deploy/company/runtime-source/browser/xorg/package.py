@@ -70,6 +70,23 @@ def check_xi_boundaries(path):
     return found
 
 
+def derive_dependencies(command, objects, cwd):
+    # check_output keeps a nonzero dependency-tool exit fatal. An empty -O
+    # result is legitimate only for ELF payloads without DT_NEEDED entries.
+    result = subprocess.check_output(command, cwd=cwd, text=True)
+    values = [line.split('=', 1)[1] for line in result.splitlines()
+              if line.startswith('shlibs:Depends=')]
+    assert len(values) <= 1, 'Duplicate shlibs dependency result'
+    if not values:
+        assert not result.strip(), 'Unexpected dependency-tool output'
+    dependencies = values[0].strip() if values else ''
+    if not dependencies:
+        for obj in objects:
+            dynamic = subprocess.check_output(['readelf', '--dynamic', '--wide', str(obj)], text=True)
+            assert not re.search(r'\(NEEDED\)', dynamic), f'Missing derived dependencies for linked ELF: {obj}'
+    return dependencies
+
+
 for captured in sorted(profile.iterdir()):
     if not captured.is_dir():
         continue
@@ -185,11 +202,9 @@ for package, root in roots.items():
     objects = [path for path in root.rglob('*') if elf(path)]
     dependencies = ''
     if objects:
-        result = subprocess.check_output(['dpkg-shlibdeps', '-O', '-x' + package,
+        dependencies = derive_dependencies(['dpkg-shlibdeps', '-O', '-x' + package,
             '-l' + str(stage / 'usr/lib' / triplet), '-L' + str(local_shlibs)] +
-            ['-e' + str(path) for path in objects], cwd=work, text=True)
-        dependencies = next(line.split('=', 1)[1] for line in result.splitlines() if line.startswith('shlibs:Depends='))
-        assert dependencies, package
+            ['-e' + str(path) for path in objects], objects, work)
         for path in objects:
             if source == 'x11-xkb-utils' and '/' + str(path.relative_to(root)) != '/usr/bin/xkbcomp':
                 # Preserve the recorded byte identity of untouched bundle tools.

@@ -194,3 +194,7 @@ it('binds the XML postbuild driver and runs its build-before-test failure fixtur
  expect(xorg).toMatch(/apt-get install[^\n]* gettext /);
  expect(readFileSync(new URL('browser/xorg/build.sh',source),'utf8')).toContain('command -v xgettext');
 });
+
+it('fails closed on linked Xorg ELF dependency omissions while accepting a dependency-free shim',()=>{
+ execFileSync('python3',[new URL('browser/xorg/test-dependency-output.py',source).pathname]);
+});
