@@ -19,9 +19,9 @@ export const NATIVE_OBSERVER_PREVIEW_RUNTIME=String.raw`function installPreview(
   revokeScriptUrl:revoke,
   createFrame:()=>{ensure();const frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts allow-popups');frame.setAttribute('credentialless','');frame.setAttribute('referrerpolicy','no-referrer');frame.setAttribute('data-af-id',plan.sourceNodeId+'-preview-'+(++serial));frames.add(frame);return frame;},
   setDocument:(frame,html)=>{ensure();if(!frames.has(frame))throw Error('Unowned preview frame');if(typeof html!=='string')throw Error('Invalid preview document');let mapped=html;for(const resource of [...plan.resources].sort((a,b)=>b.source.length-a.source.length))mapped=mapped.split(resource.source).join(resource.target);
-   const references=[...mapped.matchAll(/(?:\b(?:src|href|poster)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^\s)'";]+))/gi)].map(match=>match[1]||match[2]);
+   const references=[...mapped.matchAll(/(?:\b(?:src|poster)\s*=\s*["']([^"']+)["']|<link\b[^>]*\bhref\s*=\s*["']([^"']+)["']|url\(\s*["']?([^\s)'";]+))/gi)].map(match=>match[1]||match[2]||match[3]);
    if(references.some(value=>!value.startsWith('#')&&!value.startsWith('data:')&&!urls.has(value)&&!allowed.has(value)))throw Error('Unadmitted preview resource');
-   if(/\bref:[A-Za-z0-9]|["']\/a\//.test(mapped))throw Error('Unadmitted preview resource');
+   if(/\bhref\s*=\s*["']ref:/.test(mapped))throw Error('Unadmitted preview navigation');
    const policy='<meta http-equiv="Content-Security-Policy" content="'+attr(csp)+'">';
    frame.srcdoc='<!doctype html>'+policy+mapped;
   },reset,dispose

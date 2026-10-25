@@ -11,3 +11,5 @@ test('normal page disposal removes its exact handler and owned preview state; pe
  const frame={setAttribute:()=>{},remove:()=>{}};const document={baseURI:'https://runner.invalid/',defaultView:view,createElement:()=>frame};
  const api=Function('return ('+NATIVE_OBSERVER_PREVIEW_RUNTIME+')')()(document,{createObjectURL:()=> 'blob:test',revokeObjectURL:(url:string)=>revoked.push(url)},Blob,{sourceNodeId:'node',resources:[]});api.createScriptUrl('source');hide({persisted:true});assert.deepEqual(revoked,[]);hide({persisted:false});assert.equal(removed,hide);assert.deepEqual(revoked,['blob:test']);
 });
+
+test('authored anchor navigation remains literal while undeclared stylesheet loads fail closed',()=>{const h=harness(),frame=h.api.createFrame();h.api.setDocument(frame,'<a href="https://example.org/guide" target="_blank">Guide</a><a href="/a/document">Read</a>');assert.match(frame.srcdoc,/https:\/\/example.org\/guide/);assert.match(frame.srcdoc,/href="\/a\/document"/);assert.throws(()=>h.api.setDocument(frame,'<link rel="stylesheet" href="https://unknown.invalid/style.css">'),/resource/);});
