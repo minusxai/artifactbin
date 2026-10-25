@@ -4,12 +4,12 @@ import {validateMutationProgram} from './model';
 export function registeredMutationSchema(program:MutationProgram):string {
  validateMutationProgram(program);
  const fields=Object.entries(program.values).map(([name,spec])=>`${name}:${spec.type==='number'?'Float':spec.type==='boolean'?'Boolean':'String'}${spec.nullable?'':'!'}${Object.hasOwn(spec,'default')?` = ${JSON.stringify(spec.default)}`:''}`);
- return `${fields.length?`input Values {${fields.join(' ')}}`:''} type Outcome {requestId:String! outcome:String! revision:String affected:Int reset:[String!]!} type Mutation {run(requestId:String!${fields.length?',values:Values!':''}):Outcome!}`;
+ return `${program.refusalReasons?'enum RefusalReason {row_changed row_not_unique} ':''}${fields.length?`input Values {${fields.join(' ')}}`:''} type Outcome {requestId:String! outcome:String! revision:String affected:Int reset:[String!]!${program.refusalReasons?' reason:RefusalReason':''}} type Mutation {run(requestId:String!${fields.length?',values:Values!':''}):Outcome!}`;
 }
 export function registeredMutationDescriptor(namespace:string,program:MutationProgram){
  if(!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(namespace))throw Error('invalid_mutation_descriptor');validateMutationProgram(program);
  const values=Object.entries(program.values).map(([name,spec])=>({name,type:spec.type,nullable:spec.nullable}));
- return {name:program.name,namespace,values,outcomePath:[namespace,'run'],reset:[...program.reset],document:`mutation RegisteredMutation($requestId:String!${values.length?`,$values:${namespace}__Values!`:''}) {${namespace} {run(requestId:$requestId${values.length?',values:$values':''}) {requestId outcome revision affected reset}}}`};
+ return {name:program.name,namespace,values,outcomePath:[namespace,'run'],reset:[...program.reset],document:`mutation RegisteredMutation($requestId:String!${values.length?`,$values:${namespace}__Values!`:''}) {${namespace} {run(requestId:$requestId${values.length?',values:$values':''}) {requestId outcome revision affected reset${program.refusalReasons?' reason':''}}}}`};
 }
 export function registeredMutationInvoker(context:MutationContext,plan:RegisteredMutationPlan,execute:(context:MutationContext,plan:RegisteredMutationPlan,input:unknown,signal:AbortSignal)=>Promise<RegisteredMutationOutcome>){
  return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{

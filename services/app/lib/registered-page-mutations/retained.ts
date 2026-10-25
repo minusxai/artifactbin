@@ -50,7 +50,7 @@ export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPage
    signal.throwIfAborted();if(!doc||!dataset||!document)throw unavailable();
    await pinMutationContext(receipt as MutationReceipt,{registration:registered.registration,operation:registered.name,params});
    const result=await mutateDataset(dataset,actor,registered.sql,params,{target:{schema:registered.target.schema,table:registered.target.table},document,receipt:receipt as MutationReceipt,expectedState:artifactState(dataset),expectedAffected:registered.expectedAffected,paramTypes:Object.fromEntries([...Object.values(registered.values).map(value=>[value.parameter,value.type] as const),...registered.builtins.map(value=>[value.parameter,'string' as const])])});
-   return isMutationRefused(result)?{outcome:'rejected',revision:null,affected:null}:{outcome:'committed',revision:String(result.row.version),affected:result.affected};
+   return isMutationRefused(result)?{outcome:'rejected',revision:null,affected:null,...(result.reason==='row_changed'||result.reason==='row_not_unique'?{reason:result.reason}:{})}:{outcome:'committed',revision:String(result.row.version),affected:result.affected};
   },
  };
  const execute=createRegisteredMutationService(ports);

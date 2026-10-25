@@ -28,3 +28,16 @@ it('preserves explicit and absent affected-row contracts, accepting zero or mult
  for(const affected of [0,2]){const h=harness();h.setResult({outcome:'committed',revision:'2',affected});const unrestricted={...plan};delete unrestricted.expectedAffected;const result=await createRegisteredMutationService(h.ports)(context,unrestricted,{requestId:'request_count_123456',values:{body:'x'}},new AbortController().signal);expect(result).toMatchObject({affected,reset:['body']});}
  const h=harness();h.setResult({outcome:'committed',revision:'2',affected:2});await expect(createRegisteredMutationService(h.ports)(context,plan,{requestId:'request_count_123456',values:{body:'x'}},new AbortController().signal)).rejects.toThrow('invalid_committed_mutation_receipt');
 });
+
+ it('replays only declared bounded conflict reasons and never leaks other refusal diagnostics',async()=>{
+  for(const reason of ['row_changed','row_not_unique','private SQL detail'] as const){
+   const h=harness();h.ports.commit=async()=>{return {outcome:'rejected',revision:null,affected:null,reason} as Awaited<ReturnType<RegisteredMutationPorts['commit']>>;};
+   const run=createRegisteredMutationService(h.ports),input={requestId:'request_reason_123456',values:{body:'x'}},registered={...plan,refusalReasons:'conflict-v1' as const};
+   const first=await run(context,registered,input,new AbortController().signal);
+   expect(first.reason).toBe(reason==='private SQL detail'?undefined:reason);
+   expect(await run(context,registered,input,new AbortController().signal)).toEqual(first);
+   expect(first.reset).toEqual([]);
+  }
+  const h=harness();h.ports.commit=async()=>({outcome:'rejected',revision:null,affected:null,reason:'row_changed'});
+  expect(await createRegisteredMutationService(h.ports)(context,plan,{requestId:'request_legacy_123456',values:{body:'x'}},new AbortController().signal)).not.toHaveProperty('reason');
+ });
