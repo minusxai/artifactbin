@@ -76,7 +76,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-accounts-and-workspace.mjs` | Guest start, OAuth consent, login, claim, fork, folders and CLI acceptance. | `gates.mjs` |
 | `scripts/gates/gate-collab-roles.mjs` | Delivery follows the link's role for owner, signed-in stranger and visitor. | `gates.mjs` |
 | `scripts/gates/gate-comments.mjs` | The owner pins feedback to a node; the agent answers. | `gates.mjs` |
-| `scripts/gates/gate-component-baseline.mjs` | Verify the reader's component asset and baseline evidence. | `gates.mjs` |
+| `scripts/gates/gate-component-baseline.mjs` | Verify the reader's component asset and baseline evidence. Native migration pilots use exact local app/reader trustworthy origins for production-equivalent secure-context APIs and record `browser-context.json` on both sides. | `gates.mjs` |
 | `scripts/gates/gate-data-journey.mjs` | A dataset becomes numbers on a page that re-runs its own queries. | `gates.mjs` |
 | `scripts/gates/gate-datasets-in-documents.mjs` | Editable cells that write real rows, under every sharing permission. | `gates.mjs` |
 | `scripts/gates/gate-exports.mjs` | What the exporter photographs, checked as pixels. | `gates.mjs` |
