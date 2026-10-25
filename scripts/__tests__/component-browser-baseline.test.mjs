@@ -3,10 +3,14 @@ import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
 import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
+import {verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
+import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
+const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -56,8 +60,25 @@ describe('default candidate reader gate',()=>{
 });
 
 let actualArchive;
+async function loadCandidateArchive(){
+  const {GET}=await import('../../services/app/app/skills/artifactbin.zip/route.ts');
+  const response=await GET(new Request('https://example.test/skills/artifactbin.zip'));
+  expect(response.status).toBe(200);
+  return new Uint8Array(await response.arrayBuffer());
+}
 async function candidateArchive(){
-  if(!actualArchive)actualArchive=(async()=>{const {GET}=await import('../../services/app/app/skills/artifactbin.zip/route.ts');const response=await GET(new Request('https://example.test/skills/artifactbin.zip'));expect(response.status).toBe(200);return new Uint8Array(await response.arrayBuffer());})();
+  if(!actualArchive)actualArchive=(async()=>{
+    let archive=await loadCandidateArchive();
+    try{await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});}
+    catch(error){
+      if(!/^(?:Missing component build proof|Stale component build:|Served component module closure differs from build|Served component bytes differ from build:)/.test(error.message))throw error;
+      // Preserve actual ZIP validation while refreshing only a missing or stale component build.
+      execFileSync(process.execPath,[path.join(repo,'scripts/build/build-html-components.mjs')],{cwd:repo,stdio:'pipe'});
+      archive=await loadCandidateArchive();
+      await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});
+    }
+    return archive;
+  })();
   return actualArchive;
 }
 const archiveContents=new WeakMap();
