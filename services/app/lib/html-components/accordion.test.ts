@@ -187,7 +187,7 @@ describe('native authored accordion', () => {
     const wrapper=button.parentElement!; const replacement=wrapper.ownerDocument.createElement('section'); replacement.append(button); wrapper.replaceWith(replacement);
     await tick();
     expect(button.querySelectorAll(':scope > svg[data-af-accordion-icon]')).toHaveLength(1);
-    expect(accordionStyles).toContain('af-accordion-trigger button[aria-expanded="true"]>.af-accordion-icon');
+    expect(accordionStyles).not.toContain('rotate(180deg)');
     expect(accordionStyles).not.toContain('af-accordion-trigger[aria-expanded="true"] .af-accordion-icon');
   });
   it('registers elements and styles idempotently', () => {
@@ -206,7 +206,10 @@ describe('accordion appearance', () => {
     expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
     expect(icon.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(icon.getAttribute('stroke-linecap')).toBe('round');
-    expect(accordionStyles).toContain('rotate(180deg)');
+    expect(accordionStyles).toContain('transform:translateY(.125rem);color:var(--muted-foreground,currentColor);transition:transform .2s');
+    expect(accordionStyles).not.toContain('rotate(180deg)');
+    items[0]!.querySelector('button')!.click();
+    expect(items[0]!.querySelector('svg[data-af-accordion-icon] path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(accordionStyles).toContain('box-shadow:0 0 0 3px color-mix(in oklab');
     root.remove();
   });
