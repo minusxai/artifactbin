@@ -89,6 +89,19 @@ it('shows a visible selected-option checkmark and moves it with selection', () =
   expect(marker('Alpha')).toBeNull();
   expect(marker('Beta')).not.toBeNull();
 });
+it('aligns the Select control and gives the focused search a translucent ring', () => {
+  const root = fixture();
+  expect(getComputedStyle(root).verticalAlign).toBe('top');
+  const label = root.querySelector<HTMLElement>('.af-select-label')!;
+  expect(getComputedStyle(label).display).toBe('flex');
+  expect(getComputedStyle(label).alignItems).toBe('baseline');
+  const styles = document.querySelector<HTMLStyleElement>('[data-af-select-styles]')!.textContent!;
+  expect(styles).toContain('font:inherit;line-height:1.5');
+  trigger(root).click();
+  const search = root.querySelector<HTMLInputElement>('[role=searchbox]')!;
+  expect(document.activeElement).toBe(search);
+  expect(styles).toContain('af-select button:focus-visible,af-select input:focus-visible{outline:none;outline-offset:0;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,light-dark(#777,#aaa)) 50%,transparent)}');
+});
 it('normalizes malformed options and keeps typed duplicate values separate', () => {
   const root = fixture(); root.setAttribute('options', 'null'); root.options = null as never;
   trigger(root).click(); expect(root.querySelectorAll('[role=option]')).toHaveLength(0);
