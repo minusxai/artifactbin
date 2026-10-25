@@ -5,9 +5,12 @@ export interface NativeContentsEntry {
   title: string;
   sourceNode: string;
   afId: string;
+  /** Exact existing af-markdown generated heading DOM id; host identity remains afId. */
+  domId?: string;
 }
 export interface NativeReaderTemplateInput {
   analysis: NativeTypedAnalysis;
+  markdown?: readonly import("./markdown-contracts.ts").NativeMarkdownReceipt[];
   identity: NativeIdentityRevision;
   /** Digest of exact retained revision record carrying meta.template, not a current-head substitute. */
   sourceRecordSha256: string;

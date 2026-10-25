@@ -1,4 +1,5 @@
 /** Source-bound port of the retained reader's outline recipe; no compiler/runtime dependency. */
+import { prepareNativeMarkdown } from "./markdown.ts";
 import { nativeDigest } from "./selection.ts";
 import type { RetainedJsxNode } from "./analyze-contracts.ts";
 import type {
@@ -45,11 +46,34 @@ export function prepareNativeReaderTemplate(
     for (const node of nodes) {
       if (node.type !== "element") continue;
       if (node.isComponent && node.tag === "Slide") continue;
-      // Markdown is not an admitted native component. Never silently manufacture its heading identities.
-      if (node.tag === "Markdown")
-        throw Error(
-          "Reader template Markdown heading identities are not admitted",
+      if (node.tag === "Markdown") {
+        const supplied = input.markdown ?? [];
+        const parserSha256 = supplied[0]?.parserSha256 ?? "";
+        if (supplied.some((item) => item.parserSha256 !== parserSha256))
+          throw Error("Reader Markdown parser proof");
+        const verified = prepareNativeMarkdown({
+          analysis: input.analysis,
+          identity: input.identity,
+          parsed: supplied,
+          parserSha256,
+        });
+        if (nativeDigest(verified) !== nativeDigest(supplied))
+          throw Error("Reader Markdown receipt proof");
+        const receipt = verified.find(
+          (item) => item.sourceNode === node.graphKey,
         );
+        if (!receipt) throw Error("Reader Markdown source missing");
+        receipt.headings.forEach((heading, index) => {
+          if (heading.level !== 1 || input.template === "doc")
+            entries.push({
+              ...heading,
+              sourceNode: node.graphKey,
+              afId: receipt.hostAfId,
+              domId: `${receipt.hostDomId}-heading-${index}`,
+            });
+        });
+        continue;
+      }
       const tag = node.tag.toLowerCase();
       if (
         !node.isComponent &&
@@ -146,7 +170,7 @@ export const NATIVE_CONTENTS_AUTHOR_JS = `
  const root=document.querySelector('[data-af-reader-template]');if(!root)return;
  const win=document.defaultView;if(!win)return;
  const rows=()=>[...root.querySelectorAll('.mx-outline-row[data-af-contents-target]')];
- const heading=row=>[...root.querySelectorAll('.mx-doc [data-af-id]')].find(node=>node.getAttribute('data-af-id')===row.getAttribute('data-af-contents-target'));
+ const heading=row=>{const domId=row.getAttribute('data-af-contents-dom-id');return domId?[...root.querySelectorAll('.mx-doc [id]')].find(node=>node.id===domId):[...root.querySelectorAll('.mx-doc [data-af-id]')].find(node=>node.getAttribute('data-af-id')===row.getAttribute('data-af-contents-target'));};
  const mark=()=>{const list=rows();let active=0;const line=win.innerHeight/3;list.forEach((row,i)=>{const node=heading(row);if(node&&node.getBoundingClientRect().top<=line)active=i;});list.forEach((row,i)=>{if(i===active)row.setAttribute('aria-current','true');else row.removeAttribute('aria-current');});};
  root.addEventListener('click',event=>{const row=event.target?.closest?.('.mx-outline-row[data-af-contents-target]');if(row&&root.contains(row))heading(row)?.scrollIntoView({behavior:'smooth',block:'start'});});
  win.addEventListener('scroll',mark,{passive:true});win.addEventListener('resize',mark);
@@ -167,7 +191,7 @@ export function renderNativeReaderTemplate(
           entry.level === 2
             ? `Go to section ${section}: ${entry.title}`
             : `Go to ${entry.title}`;
-        return `<button type="button" class="${entry.level === 3 ? "mx-outline-row mx-outline-sub" : "mx-outline-row"}" aria-label="${escape(label)}" data-af-contents-target="${escape(entry.afId)}">${escape(entry.title)}</button>`;
+        return `<button type="button" class="${entry.level === 3 ? "mx-outline-row mx-outline-sub" : "mx-outline-row"}" aria-label="${escape(label)}" data-af-contents-target="${escape(entry.afId)}"${entry.domId ? ` data-af-contents-dom-id="${escape(entry.domId)}"` : ""}>${escape(entry.title)}</button>`;
       })
       .join("");
     html = `<div class="${receipt.template === "plan" ? "mx-reading mx-reading--plan" : "mx-reading"}"><nav class="mx-outline" aria-label="Contents"${receipt.entries.length ? "" : " hidden"}><div class="mx-outline-label">Contents</div>${rows}</nav>${column}</div>`;

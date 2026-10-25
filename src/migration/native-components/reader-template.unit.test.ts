@@ -230,3 +230,67 @@ test("emitted plain DOM behavior scrolls only the exact native heading, marks up
   timers.shift()!();
   assert.equal(rows[2]!.getAttribute("aria-current"), "true");
 });
+
+test("source-bound Markdown outline follows existing native heading IDs and preserves host identity", async () => {
+  const { prepareNativeMarkdown } = await import("./markdown.ts");
+  const input = fixture("doc");
+  const node = {
+    type: "element",
+    tag: "Markdown",
+    graphKey: "markdown",
+    isComponent: true,
+    start: 0,
+    end: 1,
+    selfClosing: false,
+    attributes: [],
+    children: [
+      {
+        type: "expression",
+        graphKey: "source",
+        start: 0,
+        end: 1,
+        source: "",
+        value: { static: true, json: "# Title\n## Section" },
+      },
+    ],
+  } as RetainedJsxNode;
+  input.analysis.nodes = [node];
+  input.identity.bindings = [
+    { ...input.identity.bindings[0]!, sourceNode: "markdown", afId: "md-host" },
+  ];
+  const markdown = prepareNativeMarkdown({
+    analysis: input.analysis,
+    identity: input.identity,
+    parserSha256: "a".repeat(64),
+    parsed: [
+      {
+        sourceNode: "markdown",
+        source: "# Title\n## Section",
+        html: "<h1>Title</h1><h2>Section</h2>",
+        headings: [
+          { level: 1, title: "Title" },
+          { level: 2, title: "Section" },
+        ],
+        errors: [],
+      },
+    ],
+  });
+  const receipt = prepareNativeReaderTemplate({ ...input, markdown });
+  assert.deepEqual(
+    receipt.entries.map((e) => [e.afId, e.domId]),
+    [
+      ["md-host", "native-md-md-host-heading-0"],
+      ["md-host", "native-md-md-host-heading-1"],
+    ],
+  );
+  assert.match(
+    renderNativeReaderTemplate(receipt, "").html,
+    /data-af-contents-dom-id="native-md-md-host-heading-1"/,
+  );
+  assert.throws(() =>
+    prepareNativeReaderTemplate({
+      ...input,
+      markdown: [{ ...markdown[0]!, source: "tampered" }],
+    }),
+  );
+});
