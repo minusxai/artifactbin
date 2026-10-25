@@ -33,6 +33,7 @@ export interface HtmlAssemblyInput {
   /** Canonical source and nonsecret published identity carried by downloaded files. */
   portable?: PortableDocument;
   /** Embedded assets work without a network; connection is a separate explicit capability. */
+  /** Portable HTML is emitted as UTF-8 with an early in-document encoding declaration. */
   offline?: boolean;
 }
 

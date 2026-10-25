@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { precompressFile } from './precompress.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-/** @typedef {{package:string,version:string,entry:string,aliases?:Record<string,{package:string,version:string}>}} LibrarySpec */
+/** @typedef {{package:string,version:string,entry:string,bundledPackages?:Record<string,string>,aliases?:Record<string,{package:string,version:string}>}} LibrarySpec */
 /** @type {Record<string, LibrarySpec>} */
 const registry = JSON.parse(readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
 const require = createRequire(import.meta.url);
@@ -16,6 +16,9 @@ const packageSpec = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 const dependencies = {...packageSpec.dependencies,...packageSpec.devDependencies};
 for (const [name, spec] of Object.entries(registry)) {
   if (dependencies[spec.package] !== spec.version) throw new Error(`${name}: registry and dependency versions must match`);
+  for(const [dependency,version] of Object.entries(spec.bundledPackages ?? {})) {
+    if(dependencies[dependency] !== version) throw new Error(`${name}: bundled dependency versions must match`);
+  }
   const alias = {};
   for(const [source,target] of Object.entries(spec.aliases ?? {})) {
     // Pinned VL imports exactly four utility reexports from Vega. Redirect those

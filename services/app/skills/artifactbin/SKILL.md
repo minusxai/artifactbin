@@ -24,7 +24,7 @@ For HTML comment anchors and server-side browser verification, read [HTML operat
 
 ## Optional HTML components
 
-Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. These are 25 roots plus `af-slide`, not automatic platform tags.
+Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. The 24 UI elements below require explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain available for compatibility; new diagrams and maps use the direct libraries.
 
 | Purpose | Retained elements |
 |---|---|
@@ -32,11 +32,19 @@ Copy the installed `components/` module graph into the project and import its co
 | [Navigation/disclosure](references/html-components.md#controls-and-composition) | `af-tabs`, `af-accordion`, `af-collapsible` |
 | [Overlays](references/html-components.md#controls-and-composition) | `af-dialog`, `af-popover`, `af-tooltip` |
 | [Identity/status](references/html-components.md#content-and-data) | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
-| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-mermaid`, `af-isometric` |
-| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload`, `af-deck-gl` |
+| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-isometric` |
+| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload` |
 | [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
 
-Native HTML pages can author charts directly with the separately shipped Vega and Vega-Lite modules; see [Data visualization](references/dataviz.md). No HTML `Chart` custom element is shipped. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
+For native HTML visualizations, use the direct library APIs rather than a custom chart or map element. Choose the guide that fits the work:
+
+| Need | Guide |
+|---|---|
+| Analytical charts or custom chart layouts | [Vega and Vega-Lite](references/dataviz.md) |
+| Interactive maps and geospatial layers | [deck.gl](references/maps.md) |
+| Flowcharts, sequences and other diagrams | [Mermaid](references/diagrams.md) |
+
+The guides give the exact shipped ESM imports, theming, resizing, cleanup and offline limits. Existing `af-mermaid` and `af-deck-gl` elements remain documented for pages that already use those compatibility components. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
 ## Preserve the document
 
@@ -54,6 +62,8 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
 - [HTML comments and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
+- [Diagrams](references/diagrams.md): direct Mermaid rendering, themes, lifecycle and offline behavior.
+- [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data limits.
 - [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
 - [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.
@@ -207,6 +217,8 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
     - [templates-scrolly.md](references/templates-scrolly.md) — Scrollytelling
   - [design-systems.md](references/design-systems.md) — Choose one visual system
   - [dataviz.md](references/dataviz.md) — Native chart authoring
+  - [maps.md](references/maps.md) — Native deck.gl map authoring
+  - [diagrams.md](references/diagrams.md) — Native Mermaid diagram authoring
     - [system-almanac.md](references/system-almanac.md) — Almanac system
     - [system-arcade.md](references/system-arcade.md) — Arcade system
     - [system-broadsheet.md](references/system-broadsheet.md) — Broadsheet system

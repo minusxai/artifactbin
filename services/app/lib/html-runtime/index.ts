@@ -25,6 +25,13 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     });
   };
   removeCore(document);
+  if(input.offline){
+    // file:// has no HTTP Content-Type. Declare encoding inside the first 1024
+    // bytes, before embedded code, so browser decoding preserves its CSP hashes.
+    head.childNodes=head.childNodes.filter(node=>!('attrs'in node&&node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='charset'||attr.name==='http-equiv'&&attr.value.toLowerCase()==='content-type')));
+    const charset=parseFragment('<meta charset="utf-8">').childNodes[0]!;
+    charset.parentNode=head;head.childNodes.unshift(charset);
+  }
   const savedNodeIds: string[] = [];
   const collect = (node: DefaultTreeAdapterMap['node']) => {
     if ('attrs' in node) { const id = node.attrs.find(attr=>attr.name==='data-af-id')?.value; if(id) savedNodeIds.push(id); }
@@ -47,7 +54,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
   const portable=input.offline&&input.apollo?`<script type="application/json" data-af="apollo">${JSON.stringify(input.apollo).replace(/</g,'\\u003c')}</script>`:'';
   const portableReader=input.offline&&input.reader?`<script type="application/json" data-af="reader">${JSON.stringify(input.reader).replace(/</g,'\\u003c')}</script>`:'';
-  const canonical=input.offline?portableScript(input.portable?{...input.portable,renderedDigest:portableRenderedDigest(input.html)}:{version:1,source:input.html}):'';
+  const canonical=input.offline?portableScript(input.portable?{...input.portable,renderedDigest:portableRenderedDigest(serialize(document))}:{version:1,source:input.html,renderedDigest:portableRenderedDigest(serialize(document))}):'';
   const chrome=input.offline&&input.chrome?`<script type="application/json" data-af="chrome">${JSON.stringify(input.chrome).replace(/</g,'\\u003c')}</script>`:'';
   const engine=input.offline&&input.portableEngine?`<script type="application/json" data-af="portable-engine">${JSON.stringify(input.portableEngine).replace(/</g,'\\u003c')}</script>`:'';
   const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}${engine}<script data-af="core">${safeCore}</script>`);
@@ -61,6 +68,10 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const policy=parseFragment('<meta>').childNodes[0] as DefaultTreeAdapterMap['element'];
   policy.attrs=[{name:'data-af',value:INLINE_SCRIPT_POLICY},{name:'http-equiv',value:'Content-Security-Policy'},{name:'content',value:admission.policy}];
   policy.parentNode=head;head.childNodes.unshift(policy);
+  if(input.offline){
+    const charset=head.childNodes.find(node=>'attrs'in node&&node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='charset'))!;
+    head.childNodes=head.childNodes.filter(node=>node!==charset);head.childNodes.unshift(charset);
+  }
   return serialize(document);
 }
 /** Downloads use the same native renderer, with no platform origin or remote capability. */

@@ -146,3 +146,5 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 
 For disposable migration QA across mapped owners, set the lifecycle configuration's `runtimeAuthority` to `{mode: "disposable-scoped-tokens", ttlMs: 3600000}`. Set the pipeline authority runtime to the same mode and map each reviewed source owner to `{userId: targetUserId}`; omit token IDs. The local provider provisions credentials after the reviewed identities exist, preserves source token provenance, and revokes its credentials on cleanup. This mode requires local PGlite and local object storage. The private `runtime-actors.json` cleanup receipt contains token ID hashes and expiry/revocation state, never bearer credentials.
+
+| `scripts/fixtures/direct-visual-libraries.mjs` | Exercise direct Mermaid and deck.gl APIs through preview, hosted pages and offline files. | `local-preview.mjs` |
