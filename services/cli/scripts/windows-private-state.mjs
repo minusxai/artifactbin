@@ -18,6 +18,7 @@ const launch=(file,args)=>{
  const at=performance.now();let paths=null,bytes=0;
  try{const index=Array.isArray(args)?args.indexOf('-EncodedCommand'):-1;if(index>=0){const script=Buffer.from(String(args[index+1]),'base64').toString('utf16le');bytes=script.length;
   const list=script.match(/\\$paths=@\\(((?:'(?:[^']|'')*',?)*)\\)/);if(list)paths=[...list[1].matchAll(/'((?:[^']|'')*)'/g)].map(match=>match[1].replace(/''/g,"'"));}}catch{}
+ log({event:'powershell-start',at,path_count:paths?.length??null,bytes});
  let ended=false;return ()=>{if(ended)return;ended=true;log({event:'powershell',at,ms:performance.now()-at,paths,bytes});};
 };
 for(const name of ['execFile','execFileSync','spawn','spawnSync','exec','execSync']){const original=cp[name];if(typeof original!=='function')continue;
@@ -39,13 +40,14 @@ export async function powershellLaunchCounter(){
   // NODE_OPTIONS reads backslashes as escapes, so the preload is named with forward slashes.
   env:label=>({NODE_OPTIONS:`${process.env.NODE_OPTIONS??''} --require "${counter.replaceAll('\\','/')}"`.trim(),AFBIN_SPAWN_LOG:log(label)}),
   count:async label=>(await events(label)).filter(event=>event.event==='powershell').length,
-  timeline:async label=>{
+  timeline:async(label,{includeDirectories=true}={})=>{
    const all=await events(label),pid=all.find(event=>event.event==='boot')?.pid,own=all.filter(event=>event.pid===pid);
    const boot=own.find(event=>event.event==='boot')?.at,exit=own.find(event=>event.event==='exit')?.at,launches=own.filter(event=>event.event==='powershell');
+   const pending=own.filter(event=>event.event==='powershell-start'&&!launches.some(done=>done.at===event.at));
    const launched=launches.reduce((sum,event)=>sum+event.ms,0);
-   return {startup_ms:round(boot),before_launch_ms:launches.length?round(launches[0].at-boot):null,launch_ms:launches.map(event=>round(event.ms)),
+   return {in_flight:pending.length,startup_ms:round(boot),before_launch_ms:launches.length?round(launches[0].at-boot):null,launch_ms:launches.map(event=>round(event.ms)),
     rest_ms:exit===undefined||boot===undefined?null:round(exit-boot-launched),process_ms:round(exit),
-    launches:launches.map(event=>({paths:event.paths?.length??null,script_chars:event.bytes,directories:event.paths}))};
+    launches:launches.map(event=>({paths:event.paths?.length??null,script_chars:event.bytes,...(includeDirectories?{directories:event.paths}:{})}))};
   },
   close:()=>rm(directory,{recursive:true,force:true}),
  };

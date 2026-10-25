@@ -10,6 +10,12 @@ import {pathToFileURL} from 'node:url';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {inspectBundle} from '../ci/npm-provenance.mjs';
 const artifactTimeout=()=>Error('Current-attempt artifact timed out');
+/** Each dependency gets 180s, bounded by the original required-check chain's eight minutes. */
+export function artifactDeadline(startedAt,now=Date.now()){
+ const started=Date.parse(startedAt);
+ if(!Number.isFinite(started))throw Error('Invalid workflow start time');
+ return Math.min(now+180000,started+480000);
+}
 export const MAX_ARTIFACT_ARCHIVE_BYTES=128*1024*1024;
 // The five supported compiler payloads make the signed candidate 142MB expanded;
 // keep transfer and decompression separately bounded instead of treating valid gzip as corruption.
@@ -154,9 +160,10 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   else [output,failedFile,downloadName]=rest;
   const artifactName=waitOnly?(output??'afbin-npm-release'):(downloadName??'afbin-npm-release');
   if(!/^[\w.-]+\/[\w.-]+$/.test(repo??'')||!/^\d+$/.test(run??'')||!/^\d+$/.test(attempt??'')||(!waitOnly&&!extract&&!extractCandidate&&!output)||! /^[\w.-]+$/.test(artifactName)||(extract&&(!memberName||!extractedPath))||(extractCandidate&&(!/^\d+\.\d+\.\d+$/.test(candidateVersion??'')||!/^[a-f0-9]{40}$/.test(candidateSha??'')||!['true','false'].includes(requireSignedCandidate)||!extractedPath)))throw Error('Pass repository, run, attempt and output zip (or --wait-only; --extract needs a member; --extract-candidate needs exact version, source and destination)');
-  const deadline=Date.now()+180000;
+  let deadline=Date.now()+180000;
   const api=async(path)=>JSON.parse(await requestCurrentArtifact(['api',`/repos/${repo}/actions/${path}`],{deadline}));
   const current=await api(`runs/${run}/attempts/${attempt}`);
+  deadline=Math.min(deadline,artifactDeadline(current.run_started_at));
   const artifact=await waitForCurrentArtifact({deadline,artifactName,startedAt:current.run_started_at,jobs:()=>api(`runs/${run}/attempts/${attempt}/jobs?per_page=100`),artifacts:()=>api(`runs/${run}/artifacts?per_page=100`),childFailed:()=>Boolean(failedFile&&existsSync(failedFile))});
   if(waitOnly){
    console.log(`Ready: same-run, same-attempt npm artifact ${artifact.id}`);

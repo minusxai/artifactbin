@@ -13,7 +13,7 @@ assert.ok(process.argv[2],'Pass the installed npm afbin.mjs path.');
 const directory=await mkdtemp(join(tmpdir(),'afbin native terminal '));
 const boundedAppend=(previous,value)=>`${previous}${value}`.slice(-8192);
 const diagnosticText=value=>String(value??'').replaceAll('test-terminal-only','[redacted]').slice(-2000);
-let registeredMs,sentAt,launches,worker,output='',outputTail='',exitReceipt,registration,startupReceipt,lastExchange,workerSpawned=false,workerDisconnected=false,workerMessages=0,exchangeCount=0,nativeReady=false;
+let registeredMs,sentAt,launches,worker,output='',outputTail='',exitReceipt,registration,startupReceipt,startupPhase,lastExchange,workerSpawned=false,workerDisconnected=false,workerMessages=0,exchangeCount=0,nativeReady=false;
 const server=createServer(async(req,res)=>{
  try{
   assert.equal(req.headers.authorization,'Bearer test-terminal-only');
@@ -51,14 +51,14 @@ lines.once('line',line=>{
  });
  let stdout='',stderr='';worker.stdout.on('data',data=>{stdout=boundedAppend(stdout,data);});worker.stderr.on('data',data=>{stderr=boundedAppend(stderr,data);});
  worker.once('spawn',()=>{workerSpawned=true;});worker.once('disconnect',()=>{workerDisconnected=true;});
- worker.on('message',message=>{workerMessages++;if(message.error)stderr=boundedAppend(stderr,message.error);else startupReceipt=message;});
+ worker.on('message',message=>{workerMessages++;if(message.error)stderr=boundedAppend(stderr,message.error);else if(message.type==='remote-startup')startupPhase=message.phase;else startupReceipt=message;});
  const completion=new Promise((yes,no)=>{
   const deadline=setTimeout(async()=>{
    const diagnostic={stdout:diagnosticText(stdout),stderr:diagnosticText(stderr),relayOutput:diagnosticText(output),exitReceipt,lastExchange,
     lineReceived:await readFile(join(directory,'line-received'),'utf8').catch(()=>null),
     inputReceived:await readFile(join(directory,'input-received'),'utf8').catch(()=>null),
     registrationReceived:Boolean(registration),registrationManaged:registration?.managed??null,registrationName:registration?.name??null,
-    startupReceipt:startupReceipt?{status:startupReceipt.status,pid:startupReceipt.pid}:null,exchangeCount,registeredMs:registeredMs??null,powershell:launches?await launches.count('worker'):null,
+    startupPhase:startupPhase??null,powershellTimeline:launches?await launches.timeline('worker',{includeDirectories:false}):null,startupReceipt:startupReceipt?{status:startupReceipt.status,pid:startupReceipt.pid}:null,exchangeCount,registeredMs:registeredMs??null,powershell:launches?await launches.count('worker'):null,
     workerSpawned,workerDisconnected,workerMessages,workerExitCode:worker.exitCode,workerSignalCode:worker.signalCode};
    worker.kill();no(new Error(`Native CLI worker did not exit naturally after 20s: ${JSON.stringify(diagnostic)}`));
   },20000);

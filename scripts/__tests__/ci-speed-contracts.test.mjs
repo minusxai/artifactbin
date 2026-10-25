@@ -312,7 +312,7 @@ it('downloads a specifically named artifact only from the current attempt and ve
  const directory=mkdtempSync(join(tmpdir(),'afbin-named-artifact-'));
  const calls=join(directory,'calls'),gh=join(directory,'gh'),output=join(directory,'seed.zip'),badOutput=join(directory,'bad-seed.zip'),failure=join(directory,'failed.json');
  writeFileSync(gh,`#!${process.execPath}
-const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');if(path.endsWith('/zip'))process.stdout.write(process.env.TAMPER?'bad':'abc');else if(path.endsWith('/attempts/2'))console.log(JSON.stringify({run_started_at:'2026-10-06T00:00:00Z'}));else if(path.includes('/jobs?'))console.log(JSON.stringify({jobs:[{name:'CLI npm pack',status:'in_progress'}]}));else console.log(JSON.stringify({artifacts:[{id:123,name:'afbin-npm-dependency-seed-Windows-X64',created_at:'2026-10-06T00:01:00Z',size_in_bytes:process.env.TOO_LARGE?134217729:88463544,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'}]}));
+const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');if(path.endsWith('/zip'))process.stdout.write(process.env.TAMPER?'bad':'abc');else if(path.endsWith('/attempts/2'))console.log(JSON.stringify({run_started_at:new Date(Date.now()-60000).toISOString()}));else if(path.includes('/jobs?'))console.log(JSON.stringify({jobs:[{name:'CLI npm pack',status:'in_progress'}]}));else console.log(JSON.stringify({artifacts:[{id:123,name:'afbin-npm-dependency-seed-Windows-X64',created_at:new Date().toISOString(),size_in_bytes:process.env.TOO_LARGE?134217729:88463544,digest:'sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'}]}));
 `);chmodSync(gh,0o755);
  try{
   const {MAX_ARTIFACT_ARCHIVE_BYTES}=await import('../lib/ci-artifact-wait.mjs');
@@ -348,9 +348,9 @@ it('prepares consumer prerequisites beside the candidate wait and the candidate 
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
  const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'));
  expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
- // The seed downloads in the background from before the wait and is collected after the candidate.
+ // The seed depends on the candidate; only its transfer overlaps candidate extraction.
  const seed=steps.findIndex(step=>step.name==="Download and verify this attempt's platform seed");
- expect(seed).toBeLessThan(waiting);expect(steps[seed].run).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &\n$/);
+ expect(seed).toBeGreaterThan(waiting);expect(steps[seed].run).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &\n$/);
  const seedWait=steps.findIndex(step=>step.name==="Wait for this attempt's platform seed");
  expect(seedWait).toBeGreaterThan(waiting);
  expect(seedWait).toBeLessThan(steps.findIndex(step=>step.name==='Same-tarball native npm and warmed offline acceptance'));
@@ -384,7 +384,7 @@ it('wait-only CLI checks exact attempt and accepts readiness without downloading
  const calls=join(directory,'calls');
  const gh=join(directory,'gh');
  writeFileSync(gh,`#!${process.execPath}
-const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');console.log(JSON.stringify(path.endsWith('/attempts/2')?{run_started_at:'2026-10-06T00:00:00Z'}:path.includes('/jobs?')?{jobs:[{name:'CLI npm pack',status:'in_progress'}]}:{artifacts:[{id:123,name:'afbin-npm-release',created_at:'2026-10-06T00:01:00Z'}]}));
+const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.stringify(calls)},path+'\\n');console.log(JSON.stringify(path.endsWith('/attempts/2')?{run_started_at:new Date(Date.now()-60000).toISOString()}:path.includes('/jobs?')?{jobs:[{name:'CLI npm pack',status:'in_progress'}]}:{artifacts:[{id:123,name:'afbin-npm-release',created_at:new Date().toISOString()}]}));
 `);chmodSync(gh,0o755);
  try{
   const result=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-artifact-wait.mjs',import.meta.url)),'--wait-only','minusxai/artifactbin','100','2'],{encoding:'utf8',env:{...process.env,PATH:directory+':'+process.env.PATH}});
@@ -510,4 +510,49 @@ it('bounds expanded candidates independently from compressed transfer bytes',asy
  expect(()=>validateCandidateCompression(compressed,{maxExpandedBytes:32})).toThrow(/expanded.*limit/);
  expect(()=>validateCandidateCompression(compressed.subarray(0,compressed.length-4))).toThrow(/truncated or invalid/);
  expect(()=>validateCandidateCompression(compressed,{maxExpandedBytes:MAX_CANDIDATE_EXPANDED_BYTES+1})).toThrow(/bound/);
+});
+
+it('bounds each prerequisite by180s and never resets the original eight-minute chain',async()=>{
+ const {artifactDeadline}=await import('../lib/ci-artifact-wait.mjs');
+ const start='2026-10-25T00:00:00Z',at=Date.parse(start);
+ expect(artifactDeadline(start,at)).toBe(at+180000);
+ expect(artifactDeadline(start,at+177000)).toBe(at+357000);
+ expect(artifactDeadline(start,at+400000)).toBe(at+480000);
+ expect(artifactDeadline(start,at+490000)).toBe(at+480000);
+ expect(()=>artifactDeadline('invalid',at)).toThrow('Invalid workflow start');
+});
+it('records a failed background seed under runner errexit and propagates its original exit',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'seed-status-'));
+ try{
+  const steps=workflow().jobs.cli.steps,launch=steps.find(step=>step.name==="Download and verify this attempt's platform seed").run;
+  const wait=steps.find(step=>step.name==="Wait for this attempt's platform seed").run;
+  const node=join(directory,'node');writeFileSync(node,'#!/bin/sh\necho original-seed-failure >&2\nexit 17\n');chmodSync(node,0o755);
+  const command=launch.replace(/\$\{\{[^}]+\}\}/g,'fixture')+'\n'+wait;
+  const result=spawnSync('bash',['-e','-o','pipefail','-c',command],{encoding:'utf8',timeout:5000,env:{...process.env,RUNNER_TEMP:directory,PATH:directory+':'+process.env.PATH}});
+  expect(result.status,result.stderr).toBe(17);expect(result.stdout).toContain('original-seed-failure');
+  expect(readFileSync(join(directory,'platform-seed.status'),'utf8').trim()).toBe('17');
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('reports an in-flight PowerShell launch without exposing directory paths or commands',async()=>{
+ const {powershellLaunchCounter}=await import('../../services/cli/scripts/windows-private-state.mjs');
+ const {spawn}=await import('node:child_process');
+ const directory=mkdtempSync(join(tmpdir(),'spawn-counter-')),counter=await powershellLaunchCounter();let child;
+ try{
+  const executable=join(directory,'powershell-fixture');writeFileSync(executable,'#!/bin/sh\nsleep 1\n');chmodSync(executable,0o755);
+  child=spawn(process.execPath,['-e',`require('node:child_process').execFile(process.argv[1],[],error=>{if(error)process.exitCode=1;});`,executable],{env:{...process.env,...counter.env('trace')},stdio:'ignore'});
+  const completion=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
+  let timeline;const deadline=Date.now()+5000;
+  do{timeline=await counter.timeline('trace',{includeDirectories:false});if(timeline.in_flight===1)break;await new Promise(resolve=>setTimeout(resolve,10));}while(Date.now()<deadline);
+  expect(timeline.in_flight).toBe(1);expect(await counter.count('trace')).toBe(0);
+  expect(await completion).toBe(0);expect(await counter.count('trace')).toBe(1);
+  timeline=await counter.timeline('trace',{includeDirectories:false});expect(timeline.in_flight).toBe(0);
+  expect(JSON.stringify(timeline)).not.toContain(directory);expect(timeline.launches[0]).not.toHaveProperty('directories');
+ }finally{child?.kill();await counter.close();rmSync(directory,{recursive:true,force:true});}
+});
+it('times out at the original chain deadline even when a later prerequisite starts',async()=>{
+ const {artifactDeadline,waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
+ const startedAt='2026-10-25T00:00:00Z',start=Date.parse(startedAt);let now=start+470000,calls=0;
+ await expect(waitForCurrentArtifact({startedAt,deadline:artifactDeadline(startedAt,now),now:()=>now,sleep:async(ms)=>{now+=ms;},jobs:async()=>({jobs:[]}),artifacts:async()=>{calls++;return{artifacts:[]};}})).rejects.toThrow('artifact timed out');
+ expect(now).toBe(start+480000);expect(calls).toBe(2);
 });

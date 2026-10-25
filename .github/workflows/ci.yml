@@ -1440,16 +1440,7 @@ jobs:
         run: |
           echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
           echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
-      # The platform seed follows the release by seconds: fetch it IN THE BACKGROUND from before the candidate wait,
-      # through the same verifying waiter (every stream redirected, or the runner would hold this step open).
-      # "Wait for this attempt's platform seed" collects it.
-      - name: Download and verify this attempt's platform seed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          ( node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" > "$RUNNER_TEMP/platform-seed.log" 2>&1; echo $? > "$RUNNER_TEMP/platform-seed.status" ) < /dev/null > /dev/null 2>&1 &
-      # Tooling and the seed download prepare while this run packs the candidate.
+      # Independent tooling prepares while this run packs the candidate.
       # The shared bounded waiter rejects other attempts and failed producers.
       - name: Wait for this attempt's packed candidate
         env:
@@ -1458,6 +1449,15 @@ jobs:
         # Bash on every runner: Windows' default PowerShell would read "$CANDIDATE" as its own empty variable.
         shell: bash
         run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "$CANDIDATE"
+      # The seed depends on the release: start its bounded background transfer after candidate readiness,
+      # through the same verifying waiter (every stream redirected, or the runner would hold this step open).
+      # "Wait for this attempt's platform seed" collects it.
+      - name: Download and verify this attempt's platform seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ( set +e; node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" > "$RUNNER_TEMP/platform-seed.log" 2>&1; echo $? > "$RUNNER_TEMP/platform-seed.status" ) < /dev/null > /dev/null 2>&1 &
       - name: Download the verified exact-version CLI candidate
         env:
           GH_TOKEN: ${{ github.token }}
