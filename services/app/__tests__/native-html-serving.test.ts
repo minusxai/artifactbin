@@ -90,6 +90,7 @@ it('resets only the bare inline story wrapper and preserves authored descendants
   +'<main data-mx-story-root data-mx-inline-story data-mx-styled><div class="mx-doc" id="styled-wrapper"><p>Styled</p></div></main>'
   +'</body></html>';
  const rendered=nativeHtmlStructuralWrapper(html);
+ const rerendered=nativeHtmlStructuralWrapper(rendered);
  const document=new JSDOM(rendered).window.document;
  const presentation=document.querySelector('style[data-mx-native-html-presentation]')!;
  expect(presentation).not.toBeNull();
@@ -98,6 +99,8 @@ it('resets only the bare inline story wrapper and preserves authored descendants
  expect([...document.querySelectorAll(reset)].map(node=>node.id)).toEqual(['reader-wrapper']);
  expect(document.querySelector('#author-content')?.getAttribute('style')).toBe('padding-inline:12px');
  expect(html).not.toContain('data-mx-native-html-presentation');
+ expect(rerendered).toBe(rendered);
+ expect(new JSDOM(rerendered).window.document.querySelectorAll('style[data-mx-native-html-presentation]')).toHaveLength(1);
 });
 it('captures native HTML body through its signed raw URL and keeps private previews private',async()=>{
  const {actor,id}=await publish();const browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_PNG});setServices({browser});
