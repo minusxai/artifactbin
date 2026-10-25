@@ -48,3 +48,16 @@ test('source-bound read-only query script uses native observer state and cleans 
  next({active:false,values:{},queries:{}});assert.equal(stopped,true);assert.equal(listeners.size,0);const before=status.textContent;next({active:true,values:{days:3},queries:{}});assert.equal(status.textContent,before);
  const {sha256,...body}=receipt;const changed={...body,authorJs:body.authorJs+'changed'};assert.equal(verifyNativeAuthorProgram({analysis:input.analysis,node:input.analysis.nodes[0]!,receipt:{...changed,sha256:nativeDigest(changed)}}),false);
 });
+
+test('preview author profile binds child capability to exact identity and resource receipts',()=>{
+ const source=`import {signal,query} from 'page';import {createEffect} from 'solid-js';const page=query('$page');const host=document.querySelector('#preview');let blobs=[];createEffect(()=>{blobs.forEach(url=>URL.revokeObjectURL(url));blobs=[];const rows=page();if(!rows.length){host.textContent='';return;}const code=rows[0].script;const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));blobs.push(url);const frame=document.createElement('iframe');frame.srcdoc='<p>Preview</p>';host.textContent='';host.appendChild(frame);});`;
+ const input=fixture(source);input.analysis.flow.values=[];input.analysis.flow.queries=[{name:'page',start:0,end:1}];input.admission.profile='native-query-preview';input.admission.preview={sourceNodeId:'af-0',resources:[]};
+ const receipt=adaptNativeAuthorProgram(input);assert.equal(verifyNativeAuthorProgram({analysis:input.analysis,node:input.analysis.nodes[0]!,receipt}),true);assert.match(receipt.authorJs,/sandbox/);assert.doesNotMatch(receipt.authorJs,/new Blob\(/);assert.throws(()=>adaptNativeAuthorProgram({...input,admission:{...input.admission,preview:{sourceNodeId:'other',resources:[]}}}),/association/);assert.throws(()=>adaptNativeAuthorProgram({...input,admission:{...input.admission,preview:{sourceNodeId:'af-0',resources:[{source:'ref:a',target:'/assets/a',sha256:'a'.repeat(64)}]}}}),/association/);
+ const frames:any[]=[],revoked:string[]=[],host={textContent:'',appendChild:()=>{}};let next:any,count=0;
+ const document={baseURI:'https://runner.invalid/document',querySelector:()=>host,createElement:(tag:string)=>{assert.equal(tag,'iframe');const frame={setAttribute:()=>{},srcdoc:'',removed:false,remove(){this.removed=true;}};frames.push(frame);return frame;}};
+ const URL={createObjectURL:()=>`blob:owned-${++count}`,revokeObjectURL:(url:string)=>revoked.push(url)};
+ vm.runInNewContext(receipt.authorJs,{document,URL,Blob,dispose:{observe:(callback:any)=>{next=callback;return()=>{};}}});
+ next({active:true,values:{},queries:{page:{rows:[{script:'one'}],loading:false,error:null}}});assert.equal(frames.length,1);assert.match(frames[0].srcdoc,/Preview/);
+ next({active:true,values:{},queries:{page:{rows:[{script:'two'}],loading:false,error:null}}});assert.equal(frames[0].removed,true);assert.deepEqual(revoked,['blob:owned-1']);
+ next({active:false,values:{},queries:{}});assert.equal(frames[1].removed,true);assert.deepEqual(revoked,['blob:owned-1','blob:owned-2']);const before=frames.length;next({active:true,values:{},queries:{page:{rows:[{script:'late'}]}}});assert.equal(frames.length,before);
+});
