@@ -21,3 +21,12 @@ test('host capabilities stay host-only while explicit schema or namespace substi
  await assert.rejects(callback(invocation),/namespace/);assert.equal(staged,0);
  invocation.reviewedRecipe.authority.authSchema='decoy';await assert.rejects(callback(invocation),/authority_binding/);assert.equal(staged,0);
 });
+test('reviewed raw relation capture binds before staging without a precomputed target projection',async()=>{
+ const f=fixture('first');const raw=Buffer.from(JSON.stringify({annotations:[{id:'source-note',artifact_id:'first',body:'Retained source note'}],members:[]}));
+ const configuration={selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256,relations:{encoding:'base64',data:raw.toString('base64'),sha256:hash(raw.toString())},shared:{schemas:{appSchema:'app',authSchema:'accounts'},identity:{plan:{sourceNamespace:'fixture'}}}} as Parameters<typeof createNativePipelinePublication>[0];
+ const callback=createNativePipelinePublication(configuration);let staged=0;
+ const invocation={context:{assembly:{sha256:'assembly',key:f.revision.key,result:{html:'<html></html>'}},revision:f.revision},reviewedRecipe:{assemblySha256:'assembly',authority:{appSchema:'app',authSchema:'accounts'}},files:{comments:Buffer.from(JSON.stringify({annotations:[]})),compiledHtml:Buffer.from('<html></html>'),sourceHead:Buffer.from('{}')},prepareRuntime:async()=>{staged++;throw Error('unexpected');}} as unknown as Parameters<typeof callback>[0];
+ await assert.rejects(callback(invocation),/raw_relations/);assert.equal(staged,0);
+ invocation.files.comments=raw;await assert.rejects(callback(invocation),/canonical_file_digest/);assert.equal(staged,0);
+ invocation.files.compiledHtml=Buffer.from('<html>substituted</html>');await assert.rejects(callback(invocation),/compiled_html/);assert.equal(staged,0);
+});

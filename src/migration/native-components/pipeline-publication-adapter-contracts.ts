@@ -10,6 +10,7 @@ export interface NativePipelinePublicationConfiguration {
 export interface NativePipelinePublicationInvocation {
  context:NativePipelineHostContext;
  reviewedRecipe:{assemblySha256:string;authority:{appSchema:string;authSchema:string}};
+ /** comments is the exact raw source relation capture, never a pre-staged target projection. */
  files:{sourceHead:Uint8Array;comments:Uint8Array;compiledHtml:Uint8Array};
  publicationModules:NativeV3PublicationModules;
  prepareRuntime(assemblies:readonly NativeV3AssemblyReceipt[],options:{pageId:string;visibility:'public'|'private'|'unlisted';shares:readonly {email:string;role:'viewer'|'commenter'|'editor'}[]}):Promise<{prepareBundle:NonNullable<NativeV3PublicationHost['prepareBundle']>}>;
