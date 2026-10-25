@@ -120,16 +120,16 @@ it('matches retained bare dialog paragraph rhythm without overriding authored pa
   authorStyle.remove(); root.remove();
 });
 
-it('applies the source primary-button hover treatment to enabled dialog triggers only', () => {
-  const {root,trigger} = fixture();
-  const style = document.querySelector<HTMLStyleElement>('style[data-af-dialog-styles]')!;
-  const css = style.textContent!.replace(/\s+/g,'');
-  expect(css).toContain('af-dialog-trigger:not([disabled]):hover,af-dialog-trigger:not([disabled])>button:not(:disabled):not([aria-disabled="true"]):hover{background:color-mix(inoklab,var(--primary,#171717)90%,transparent)}');
-  const nested = document.createElement('button'); nested.textContent = 'Native'; trigger.replaceChildren(nested);
+it('keeps enabled dialog triggers hoverable and prevents disabled activation', async () => {
+  const {root,trigger,native} = fixture();
+  const nested = document.createElement('button'); nested.textContent = 'Native'; trigger.replaceChildren(nested); await tick();
   nested.dispatchEvent(new MouseEvent('mouseover',{bubbles:true})); nested.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));
   expect(nested.matches(':hover')).toBe(true);
-  trigger.setAttribute('disabled','');
-  expect(css).toContain('af-dialog-trigger[disabled]>button');
+  expect(getComputedStyle(nested).height).toBe('36px');
+  nested.click(); expect(native.open).toBe(true);
+  root.open = false; trigger.setAttribute('disabled',''); await tick();
+  expect(nested.disabled).toBe(true); expect(getComputedStyle(nested).opacity).toBe('0.5');
+  nested.click(); expect(native.open).toBe(false);
   root.remove();
 });
 
