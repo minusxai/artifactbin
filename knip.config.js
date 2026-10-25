@@ -46,6 +46,9 @@ export default {
       ignoreDependencies: [
         // scripts/lib/type-check.mjs runs its platform binary by path.
         '@typescript/native-preview',
+        // Hoists the already-required scenegraph 5.3.0 graph once across Vega's
+        // parser, labels and view transforms; Vega retains its required 5.2.1.
+        'vega-scenegraph',
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',
       ],
