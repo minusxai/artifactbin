@@ -53,8 +53,13 @@ it('matches the original popup width, left anchor, weekday labels and default na
  expect(getComputedStyle(day).width).toBe('32px'); expect(getComputedStyle(day).height).toBe('32px');
  expect(getComputedStyle(ordinaryDay).backgroundColor).toBe('rgba(0, 0, 0, 0)');
  const styles=document.querySelector<HTMLStyleElement>('style[data-af-date-picker-styles]')?.textContent ?? '';
+ expect(styles).toContain('af-date-picker .af-date-label{display:block;color:var(--muted-foreground,#777);font-size:.6875rem;font-weight:500;line-height:1.5');
+ expect(styles).toContain('af-date-picker .af-date-grid abbr{display:flex;width:2rem;height:2rem;align-items:center;justify-content:center;text-decoration:none;font-size:.6875rem;font-weight:500;line-height:1.5');
  expect(styles).toContain('af-date-picker .af-date-grid [data-date]{background:transparent}');
  expect(styles).toContain('af-date-picker .af-date-grid [data-date][aria-pressed=true]{background:var(--primary,#222)');
+ expect(styles).toContain('af-date-picker .af-date-trigger:focus-visible{outline:none;outline-offset:0;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}');
+ expect(styles).toContain('af-date-picker .af-date-navigation{display:flex;align-items:center;gap:.25rem}');
+ expect(styles).toContain('@media(hover:hover){af-date-picker .af-date-trigger:hover{background-color:color-mix(in srgb,var(--muted,#eee) 40%,transparent);background-color:color-mix(in oklab,var(--muted,#eee) 40%,transparent)}}');
  const header=popup.querySelector<HTMLElement>('.af-date-header')!;
  expect(header.firstElementChild?.textContent).toBe('June 2024');
  expect(header.lastElementChild?.querySelector('[aria-label="Previous month"]')).not.toBeNull();

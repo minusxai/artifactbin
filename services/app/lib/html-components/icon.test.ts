@@ -31,9 +31,10 @@ describe('af-icon', () => {
     root.setAttribute('size','1.25em'); expect(svg.getAttribute('width')).toBe('1.25em');
     root.setAttribute('stroke-width','3'); expect(svg.getAttribute('stroke-width')).toBe('3');
   });
-  it('keeps inline icons on the same text baseline as the original SVG', () => {
-    const {root, svg} = fixture('name="circle-check" aria-label="Completed"');
+  it('keeps the stable host box, named SVG semantics, and source text baseline', () => {
+    const {root, svg} = fixture('data-af-id="icon-anchor" name="circle-check" aria-label="Completed"');
     expect(svg.getAttribute('width')).toBe('16');
+    expect(root.dataset.afId).toBe('icon-anchor');
     expect(getComputedStyle(root).display).toBe('inline-block');
     expect(getComputedStyle(root).verticalAlign).toBe('-0.125em');
     expect(getComputedStyle(svg).display).toBe('block');

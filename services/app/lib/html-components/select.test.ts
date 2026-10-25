@@ -25,7 +25,10 @@ it('selects typed options, emits cancelable intent, and respects controlled valu
 it('filters, supports nullable choice and keyboard search', () => {
   const root = fixture(); root.setAttribute('placeholder', 'All');
   trigger(root).dispatchEvent(new KeyboardEvent('keydown', { key: 't', bubbles: true }));
-  expect(root.querySelector('[role=searchbox]')?.getAttribute('aria-label')).toBe('Search Pick');
+  const search=root.querySelector<HTMLInputElement>('[role=searchbox]');
+  expect(search?.getAttribute('aria-label')).toBe('Search Pick');
+  expect(search?.parentElement?.classList.contains('af-select-search')).toBe(true);
+  expect(root.querySelector('[role=listbox]')?.parentElement?.classList.contains('af-select-popup')).toBe(true);
   root.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   expect(root.value).toBe(2);
   trigger(root).click(); option(root, 'All').click(); expect(root.value).toBe(null);
@@ -81,10 +84,26 @@ it('shows a visible selected-option checkmark and moves it with selection', () =
   const marker = (text: string) => option(root, text).querySelector<SVGSVGElement>('[data-selected-indicator]');
   expect(marker('Alpha')).not.toBeNull();
   expect(marker('Alpha')?.getAttribute('aria-hidden')).toBe('true');
+  expect(marker('Alpha')?.querySelector('path')?.getAttribute('d')).toBe('M20 6 9 17l-5-5');
   expect(marker('Beta')).toBeNull();
   option(root, 'Beta').click(); trigger(root).click();
   expect(marker('Alpha')).toBeNull();
   expect(marker('Beta')).not.toBeNull();
+});
+it('aligns the Select control and gives the focused search a translucent ring', () => {
+  const root = fixture();
+  expect(getComputedStyle(root).verticalAlign).toBe('top');
+  const label = root.querySelector<HTMLElement>('.af-select-label')!;
+  expect(getComputedStyle(label).display).toBe('flex');
+  expect(getComputedStyle(label).alignItems).toBe('baseline');
+  const styles = document.querySelector<HTMLStyleElement>('[data-af-select-styles]')!.textContent!;
+  expect(styles).toContain('font:inherit;line-height:1.5');
+  expect(styles).toContain('@media(hover:hover){af-select .af-select-trigger:hover{background-color:color-mix(in srgb,var(--muted,light-dark(#eee,#444)) 40%,transparent);background-color:color-mix(in oklab,var(--muted,light-dark(#eee,#444)) 40%,transparent)}}');
+  trigger(root).click();
+  const search = root.querySelector<HTMLInputElement>('[role=searchbox]')!;
+  expect(document.activeElement).toBe(search);
+  expect(styles).toContain('af-select button:focus-visible,af-select input:focus-visible{outline:none;outline-offset:0;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,light-dark(#777,#aaa)) 50%,transparent)}');
+  expect(styles).toContain('af-select .af-select-trigger:focus-visible{box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,light-dark(#777,#aaa)) 50%,transparent),0 1px 2px #0000000d}');
 });
 it('normalizes malformed options and keeps typed duplicate values separate', () => {
   const root = fixture(); root.setAttribute('options', 'null'); root.options = null as never;

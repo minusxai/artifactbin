@@ -123,6 +123,9 @@ it('keeps the supported signed-out or unbound state unavailable until an adapter
 // Retained FileUpload uses a visually clipped input, not a hidden accessibility node.
 it('keeps the named file picker accessible while unavailable and delegates the chooser when enabled', () => {
   const element = fixture(); element.setAttribute('label', 'Screenshots');
+  expect(element.querySelector('.af-file-upload-label')?.textContent).toBe('Screenshots');
+  expect(element.querySelector('.af-file-upload-help')?.textContent).toBe('Uploads unavailable.');
+  expect(element.querySelector('.af-file-upload-help')?.id).toBeTruthy();
   const input = element.querySelector('input')!;
   expect(input.hidden).toBe(false);
   expect(input.tabIndex).toBe(-1);
@@ -136,6 +139,14 @@ it('keeps the named file picker accessible while unavailable and delegates the c
   expect(click).toHaveBeenCalledOnce();
   element.disabled = true;
   expect(input.disabled).toBe(true);
+});
+it('retains the upload shell layout spacing while reconciling its children', () => {
+  const element = fixture();
+  const shell = element.querySelector('.af-file-upload-shell');
+  expect(shell).not.toBeNull();
+  expect(shell?.firstElementChild?.classList.contains('af-file-upload-label')).toBe(true);
+  expect(shell?.querySelector('.af-file-upload-drop')).not.toBeNull();
+  expect(getComputedStyle(shell!).gap).toBe('0.75rem');
 });
 it('uses caller helper text as accessible picker guidance with a stable unique ID',()=>{
  const first=fixture(),second=fixture();first.helperText='Sign in to upload files.';

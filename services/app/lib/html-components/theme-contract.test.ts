@@ -77,6 +77,23 @@ it('keeps control captions and select typography consistent with retained contro
  expect(parseFloat(declaration('af-select input','font-size'))).toBe(.875);
  expect(declaration('af-select .af-select-trigger','height')).toBe('2.25rem');
 });
+it('matches the retained Select popup spacing and checkmark dimensions',()=>{
+ expect(declaration('af-select .af-select-popup','padding')).toBe('0px');
+ expect(declaration('af-select .af-select-search','padding')).toBe('0.375rem');
+ expect(declaration('af-select .af-select-search','border-bottom')).toContain('1px solid');
+ expect(declaration('af-select [role=listbox]','padding')).toBe('0.25rem');
+ expect(declaration('af-select [role=option] [data-selected-indicator]','width')).toBe('14px');
+ expect(declaration('af-select [role=option] [data-selected-indicator]','height')).toBe('14px');
+});
+it('matches the retained FileUpload stacked layout and typography',()=>{
+ expect(declaration('af-file-upload .af-file-upload-shell','gap')).toBe('0.75rem');
+ expect(declaration('af-file-upload .af-file-upload-label','font-size')).toBe('0.875rem');
+ expect(declaration('af-file-upload .af-file-upload-label','font-weight')).toBe('500');
+ expect(declaration('af-file-upload .af-file-upload-drop','flex-direction')).toBe('column');
+ expect(declaration('af-file-upload .af-file-upload-drop','align-items')).toBe('flex-start');
+ expect(declaration('af-file-upload .af-file-upload-drop','gap')).toBe('0.5rem');
+ expect(declaration('af-file-upload .af-file-upload-help','font-size')).toBe('0.75rem');
+});
 it('keeps overlay elevation a black shadow in light and dark themes',()=>{
  for(const selector of ['af-popover-content','af-tooltip-content','dialog[data-af-dialog-native]']){
   const shadow=declaration(selector,'box-shadow');expect(shadow).not.toContain('--foreground');expect(shadow).toContain('rgb(0 0 0 / 10%)');
