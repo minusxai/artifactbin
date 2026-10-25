@@ -257,6 +257,12 @@ async function selectHeading(page, length) {
     selection.removeAllRanges();
     selection.setBaseAndExtent(text, 0, text, length);
   }, { id: headingId, length });
+  // Observe the exact focused selection before sending one edit; never
+  // repeat focus or selection when readiness fails.
+  await expect.poll(() => page.evaluate(({id,length}) => {
+    const heading=document.getElementById(id),editor=heading?.closest('.ProseMirror'),selection=getSelection();
+    return Boolean(editor?.isContentEditable&&editor.contains(document.activeElement)&&heading.contains(selection?.anchorNode)&&heading.contains(selection?.focusNode)&&selection.toString()===heading.textContent.slice(0,length));
+  },{id:headingId,length})).toBe(true);
 }
 async function answerName(page, name) {
   const dialog = page.getByRole('dialog', { name: 'What should we call you?' });
@@ -415,7 +421,14 @@ async function editing(engineName, browser) {
       await selectHeading(page, 'Regional'.length);
       // One edit transaction keeps WebKit's selection stable while the offline editor rerenders.
       await page.keyboard.insertText('Quarterly');
-      await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible();
+      try { await expect(page.getByRole('heading', { name: 'Quarterly sales' })).toBeVisible(); }
+      catch(error){
+        try { check.note(`${name}: heading edit state ${JSON.stringify(await page.evaluate(id=>{
+          const heading=document.getElementById(id),editor=heading?.closest('.ProseMirror'),selection=getSelection();
+          return {heading:heading?.textContent?.slice(0,100),selection:selection?.toString().slice(0,100),editable:Boolean(editor?.isContentEditable),focused:Boolean(editor?.contains(document.activeElement))};
+        },headingId))}`); } catch { check.note(`${name}: heading edit diagnostics unavailable`); }
+        throw error;
+      }
       await expect(page.getByRole('status').filter({ hasText: 'Unsaved changes' })).toBeVisible({ timeout: 10_000 });
       await expect(saveButton(page)).toBeEnabled();
     });

@@ -23,10 +23,15 @@ function validateIdentity(identity){
  assert.match(identity.base??'',/^[A-Za-z0-9._:/-]+@sha256:[a-f0-9]{64}$/);
  assert.ok(Number.isFinite(Date.parse(identity.workflow_started_at)),'Invalid workflow start');
 }
-/** Source operations retain 300s; late starts share the original required-chain 480s boundary. */
-export function sourceDeadline(startedAt,now=Date.now()){
+/** Core defaults remain 300s/480s. Explicit consumers bind their existing phase clock and budgets. */
+export function sourceDeadline(startedAt,now=Date.now(),budget){
  const started=Date.parse(startedAt);assert.ok(Number.isFinite(started),'Invalid workflow start');
- return Math.min(now+300_000,started+480_000);
+ assert.ok(Number.isSafeInteger(now)&&now>=started,'Invalid source operation clock');
+ if(budget===undefined)return Math.min(now+300_000,started+480_000);
+ const {operation_started_at:operationStart,operation_ms:operationMs,chain_ms:chainMs}=budget;
+ assert.ok(Number.isSafeInteger(operationStart)&&operationStart>=started&&operationStart<=now,'Invalid original source operation start');
+ for(const value of [operationMs,chainMs])assert.ok(Number.isSafeInteger(value)&&value>0&&value<=600_000,'Invalid source budget (maximum supported contract 600 seconds)');
+ return Math.min(operationStart+operationMs,started+chainMs);
 }
 /** Hash exactly the caller's tracked source/recipe inputs, including modes and relative paths. */
 export function sourceInputHash(root,paths){
@@ -122,11 +127,11 @@ async function currentPages(path,key,{request,deadline}){
  throw Error('Current-attempt pagination exceeds bound');
 }
 /** Outer GitHub SHA256 + attempt timestamps, inner source identity and per-file hashes. */
-export async function collectCurrentSourceArtifacts({repository,run,attempt,identities,artifactName,jobName,deadline:providedDeadline,request=requestCurrentArtifact,now=Date.now,pause=sleep}){
+export async function collectCurrentSourceArtifacts({repository,run,attempt,identities,artifactName,jobName,deadline:providedDeadline,budget,request=requestCurrentArtifact,now=Date.now,pause=sleep}){
  const components=Object.keys(identities);assert.ok(components.length>0);
- const startedAt=identities[components[0]].workflow_started_at,deadline=providedDeadline??sourceDeadline(startedAt,now());
+ const startedAt=identities[components[0]].workflow_started_at,policyDeadline=sourceDeadline(startedAt,now(),budget),deadline=providedDeadline??policyDeadline;
  for(const component of components){const identity=identities[component];validateIdentity(identity);assert.equal(identity.component,component);assert.equal(identity.repository,repository);assert.equal(identity.run_id,run);assert.equal(identity.run_attempt,attempt);assert.equal(identity.workflow_started_at,startedAt,'Source operation workflow start mismatch');}
- assert.ok(deadline<=sourceDeadline(startedAt,now()),'Source deadline cannot extend the original operation');
+ assert.ok(Number.isSafeInteger(deadline)&&deadline>0&&deadline<=policyDeadline,'Source deadline cannot extend the original operation');
  const result=new Map();
  while(result.size<components.length){
   if(now()>=deadline)throw Error('Current-attempt source artifacts timed out');

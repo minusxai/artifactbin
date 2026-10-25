@@ -181,3 +181,16 @@ void ippDelete(ipp_t *request){}
   execFileSync(executable,['631']);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
+
+it('binds the XML postbuild driver and runs its build-before-test failure fixtures',()=>{
+ const directory=new URL('browser/xml/',source);
+ for(const line of readFileSync(new URL('postbuild-check-SHA256SUMS',directory),'utf8').trim().split('\n')){
+  const [digest,name]=line.trim().split(/\s+/);
+  expect(createHash('sha256').update(readFileSync(new URL(name,directory))).digest('hex'),name).toBe(digest);
+ }
+ execFileSync('python3',[new URL('test-upstream-driver.py',directory).pathname]);
+ const docker=readFileSync(new URL('../../deploy/company/Dockerfile',import.meta.url),'utf8');
+ const xorg=docker.split('FROM browser-runtime-profile AS browser-xorg')[1].split('FROM browser-runtime-profile AS browser-payloads')[0];
+ expect(xorg).toMatch(/apt-get install[^\n]* gettext /);
+ expect(readFileSync(new URL('browser/xorg/build.sh',source),'utf8')).toContain('command -v xgettext');
+});

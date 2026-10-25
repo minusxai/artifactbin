@@ -778,7 +778,7 @@ describe('GitHub CI adapter', () => {
 
 describe('required CI result', () => {
   const plan = () => planCi(['services/cli/src/runner.ts'], { cliRelease: true });
-  const results = (p) => ({ ...Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped'])), 'cli-pack': p.cliPack ? 'success' : 'skipped', 'company-container': p.companyContainer ? 'success' : 'skipped' });
+  const results = (p) => ({ ...Object.fromEntries(CI_JOBS.map((j) => [j, p.jobs[j] ? 'success' : 'skipped'])), 'cli-pack': p.cliPack ? 'success' : 'skipped', 'company-container': p.companyContainer ? 'success' : 'skipped', 'company-source': p.companyContainer ? 'success' : 'skipped' });
 
   it('accepts intentional skips and successful selected jobs', () => {
     const p = plan();
@@ -790,6 +790,7 @@ describe('required CI result', () => {
       expect(checkCiResults(p, { ...results(p), cli: status })).toContain('cli');
     }
     expect(checkCiResults(p, { ...results(p), api: 'failure' })).toContain('api');
+    for (const status of ['failure', 'cancelled', 'skipped', undefined]) expect(checkCiResults(p, { ...results(p), 'company-source': status })).toContain('company-source');
   });
 });
 

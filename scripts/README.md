@@ -146,3 +146,6 @@ Run one with `node scripts/gate-container.mjs <name>`.
 |---|---|---|
 | `scripts/compiled-backfill.ts` | Recompile selected stored document versions on a running server. | an operator, by hand |
 | `scripts/audit-author-scripts.ts` | Read-only: list live documents whose current Helmet script no longer builds (`id, visibility, version, error`, `--json`). | an operator, by hand |
+
+| `scripts/ci/company-source-artifacts.mjs` | Produce and admit exact current-attempt source components with required producer success, payload hashes and original deadlines. | `ci.yml` Company source matrix and hosting check |
+| `scripts/ci/verify-browser-container.mjs` | Refuse restored browser startup until the created container ownership and chosen CPU, memory and swap limits are verified. | Company restore pre-start hook |

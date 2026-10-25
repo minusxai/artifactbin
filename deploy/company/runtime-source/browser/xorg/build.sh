@@ -6,6 +6,8 @@ profile=${XORG_PROFILE:-/xorg-profile}
 stage=${XORG_STAGE:-/xorg-stage}
 out=${XORG_OUT:-/out}
 [ -f "$profile/packages.tsv" ] || { echo 'Capture the runtime profile before builder apt installs' >&2; exit 1; }
+# libXpm's enabled translation targets invoke xgettext.
+command -v xgettext >/dev/null || { echo 'Missing builder gettext tool: xgettext' >&2; exit 1; }
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
 export CFLAGS="$(dpkg-buildflags --get CFLAGS)"
 export CPPFLAGS="$(dpkg-buildflags --get CPPFLAGS)"

@@ -20,13 +20,7 @@ cd /xml-source/libxml2
 export DEB_BUILD_PROFILES=nopython
 export DEB_BUILD_OPTIONS=parallel=2
 dpkg-buildpackage -B -us -uc
-# The upstream W3C driver succeeds with zero cases when its relative fixture is
-# absent. Debian's out-of-tree build links test/result, but not this directory.
-ln -s ../../xmlconf builddir/main/xmlconf
-(cd builddir/main && ./runxmlconf) > "$out/xml-conformance.log" 2>&1
-grep -q '^Total 2269 tests, 15 errors, 0 leaks$' "$out/xml-conformance.log"
-grep -q '^15 errors were expected$' "$out/xml-conformance.log"
-(cd builddir/main && ./testcatalog)
+sh "$recipe/run-upstream-tests.sh" "$PWD/builddir/main" "$out"
 package=$(find .. -maxdepth 1 -name 'libxml2_*_*.deb' -print)
 test -n "$package"
 dpkg-deb -x "$package" /xml-runtime

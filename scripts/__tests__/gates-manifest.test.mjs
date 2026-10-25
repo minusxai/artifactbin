@@ -265,10 +265,10 @@ it('overlaps independent file and screenshot journeys while retaining every engi
 it('waits for the mounted contenteditable heading before focusing and selecting its exact text',async()=>{
   const code=source('offline-file'),start=code.indexOf('async function selectHeading('),end=code.indexOf('async function answerName(',start);
   const events=[],text={data:'Regional sales'};let mounted=false;
-  const editor={get isContentEditable(){return mounted;},focus(){if(!mounted)throw Error('Focused before editor mount');events.push('focus');}};
-  const heading={closest:()=>editor};
+  const editor={get isContentEditable(){return mounted;},focus(){if(!mounted)throw Error('Focused before editor mount');events.push('focus');document.activeElement=editor;},contains:node=>node===editor};
+  const heading={closest:()=>editor,textContent:text.data,contains:node=>node===text};
   const document={getElementById:id=>{expect(id).toBe('fixture-heading');return heading;},createTreeWalker:()=>({nextNode:()=>text})};
-  const selection={removeAllRanges:()=>events.push('clear'),setBaseAndExtent:(...args)=>events.push(args)};
+  const selection={removeAllRanges:()=>events.push('clear'),setBaseAndExtent:(...args)=>{events.push(args);selection.anchorNode=args[0];selection.focusNode=args[2];selection.toString=()=>text.data.slice(args[1],args[3]);}};
   const page={bringToFront:async()=>events.push('front'),evaluate:async(fn,arg)=>fn(arg)};
   const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
   const run=new AsyncFunction('expect','headingId','document','NodeFilter','getSelection','page',code.slice(start,end)+'await selectHeading(page,8);');

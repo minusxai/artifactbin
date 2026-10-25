@@ -86,3 +86,15 @@ it('rejects repeated API identities across pages instead of counting duplicates 
  const request=async args=>JSON.stringify(args[1].includes('/jobs')?{jobs:[{id:101,name:'producer',status:'completed',conclusion:'success'}]}:{total_count:101,artifacts:args[1].endsWith('&page=2')?[{id:1,name:'duplicate'}]:Array.from({length:100},(_,i)=>({id:i+1,name:'other-'+i}))});
  await expect(collectCurrentSourceArtifacts({repository:identity.repository,run:identity.run_id,attempt:identity.run_attempt,identities:{[identity.component]:identity},artifactName:()=> 'artifact',jobName:()=> 'producer',request,now:()=>Date.parse(identity.workflow_started_at)})).rejects.toThrow('Duplicate current-attempt item identity');
 });
+
+it('uses explicit consumer budgets anchored to the original phase and workflow clocks',async()=>{
+ const start=Date.parse(identity.workflow_started_at);
+ const server={operation_started_at:start+20_000,operation_ms:420_000,chain_ms:480_000};
+ const pagegi={operation_started_at:start,operation_ms:600_000,chain_ms:600_000};
+ expect(sourceDeadline(identity.workflow_started_at,start+100_000,server)).toBe(start+440_000);
+ expect(sourceDeadline(identity.workflow_started_at,start+430_000,server)).toBe(start+440_000);
+ expect(sourceDeadline(identity.workflow_started_at,start+590_000,pagegi)).toBe(start+600_000);
+ for(const patch of [{operation_ms:Infinity},{chain_ms:0},{operation_ms:2.5},{operation_started_at:start+101_000}])expect(()=>sourceDeadline(identity.workflow_started_at,start+100_000,{...server,...patch})).toThrow();
+ const request=async()=>{throw Error('must not request');};
+ await expect(collectCurrentSourceArtifacts({repository:identity.repository,run:identity.run_id,attempt:identity.run_attempt,identities:{[identity.component]:identity},artifactName:()=> 'artifact',jobName:()=> 'producer',budget:server,deadline:start+441_000,request,now:()=>start+100_000})).rejects.toThrow('deadline');
+});
