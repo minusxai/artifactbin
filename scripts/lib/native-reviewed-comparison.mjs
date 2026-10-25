@@ -20,7 +20,7 @@ export async function verifyReviewedComparison({root,ref,approvedSha256,context,
   if(typeof cameraPath!=='string')fail();const camera=JSON.parse(await readFile(cameraPath,'utf8'));
   if(camera.format!=='native-migration-camera-recipe-v1'||typeof camera.paths?.input!=='string'||sha(await readFile(camera.paths.input))!==[d.sourceCameraInput,d.targetCameraInput][i].sha256)fail();
   const input=inputs[i],implementation=i?'html':'jsx',revision=i?recipe.targetRevision:recipe.sourceRevision;
-  if(input.implementation!==implementation||!isDeepStrictEqual(input.key,recipe.key)||input[i?'candidateRevision':'originalRevision']!==revision||input.canonicalSha256!==recipe.inputs.sourceHead.sha256||input.bundleFiles?.find(f=>f.path==='index.html')?.sha256!==recipe.inputs.compiledHtml.sha256)fail();
+  if(input.implementation!==implementation||!isDeepStrictEqual(input.key,recipe.key)||input[i?'candidateRevision':'originalRevision']!==revision||input.canonicalSha256!==recipe.inputs.sourceHead.sha256||!hash(d.sourceCameraHtmlSha256)||input.bundleFiles?.find(f=>f.path==='index.html')?.sha256!==(i?recipe.inputs.compiledHtml.sha256:d.sourceCameraHtmlSha256))fail();
   for(const field of ['sourceSha256','documentSha256','harnessSha256','canonicalSha256'])if(!hash(input[field])||inputs[0][field]!==inputs[1][field])fail();
   if(Array.isArray(evidence)){
    // A reviewed successful initial subset does not assert that a failed full pilot passed.
