@@ -286,6 +286,35 @@ describe('bounded independent reader capture',()=>{
 
 
 describe('used font evidence',()=>{
+  const genericFontFamilies=['serif','sans-serif','cursive','fantasy','monospace','system-ui','ui-serif','ui-sans-serif','ui-monospace','ui-rounded','emoji','math','fangsong'];
+  it.each(genericFontFamilies)('does not require a declared face for generic family %s',async family=>{
+    const dom=new JSDOM('<p>Visible generic text</p>',{url:'http://localhost/reader'});
+    const root=dom.window.document.documentElement,paragraph=dom.window.document.querySelector('p');
+    root.style.setProperty('--font-body',family);paragraph.style.fontFamily=family;
+    const original=globalThis.document,fonts=[];fonts.ready=Promise.resolve();fonts.load=vi.fn();
+    Object.defineProperty(dom.window.document,'fonts',{value:fonts});
+    dom.window.HTMLElement.prototype.getClientRects=()=>[{}];globalThis.document=dom.window.document;
+    try{
+      const evidence=await fontLoadingEvidence();
+      expect(evidence.errors).toEqual([]);
+      expect(evidence.used).toMatchObject([{family,generic:true,declared:false,sources:[]}]);
+      expect(fonts.load).not.toHaveBeenCalled();
+      expect(fontByteProof(evidence)).toMatchObject({used:[],errors:[]});
+    }finally{globalThis.document=original;dom.window.close();}
+  });
+  it('still rejects a missing custom font selected by a theme',async()=>{
+    const dom=new JSDOM('<p>Visible custom font text</p>',{url:'http://localhost/reader'});
+    const root=dom.window.document.documentElement,paragraph=dom.window.document.querySelector('p');
+    root.style.setProperty('--font-body','Missing Theme Typeface');paragraph.style.fontFamily='Missing Theme Typeface';
+    const original=globalThis.document,fonts=[];fonts.ready=Promise.resolve();fonts.load=vi.fn();
+    Object.defineProperty(dom.window.document,'fonts',{value:fonts});
+    dom.window.HTMLElement.prototype.getClientRects=()=>[{}];globalThis.document=dom.window.document;
+    try{
+      const evidence=await fontLoadingEvidence();
+      expect(evidence.errors).toContain('Used theme font Missing Theme Typeface has no declared font face');
+      expect(evidence.used).toMatchObject([{family:'Missing Theme Typeface',generic:false,declared:false,sources:[]}]);
+    }finally{globalThis.document=original;dom.window.close();}
+  });
   it.each([false,true])('binds stylesheet body waits to the inspected frame (blocked reader=%s)',async blockedReader=>{
     const output=await setup(),body=Buffer.from('font bytes'),fontSha256=createHash('sha256').update(body).digest('hex');
     const parentFrame={},handlers=new Map();let targetFrame,inspectedStylesheets;
