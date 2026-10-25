@@ -30,6 +30,8 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
   if(!source&&(name==='chrome'||name==='portable-engine'))continue;
   if(!source) throw new Error(`Portable HTML is missing its ${name} module`);
   const copy=target.importNode(source,true);
+  // Browsers hide a connected script's nonce content attribute; copy its IDL value.
+  if(name==='core'&&(source as HTMLScriptElement).nonce)(copy as HTMLScriptElement).nonce=(source as HTMLScriptElement).nonce;
   if(name==='runtime') {
    const config=JSON.parse(copy.textContent??'{}');
    delete config.appOrigin;

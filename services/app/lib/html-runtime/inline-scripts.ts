@@ -31,13 +31,7 @@ function executableType(node: DefaultTreeAdapterMap["element"]): boolean {
   )
     .trim()
     .toLowerCase();
-  const essence = kind.split(";")[0]!.trim();
-  return (
-    scriptTypes.has(kind) ||
-    (kind.includes(";") &&
-      !["", "module", "importmap"].includes(essence) &&
-      scriptTypes.has(essence))
-  );
+  return scriptTypes.has(kind);
 }
 const hash = (source: string) =>
   `'sha256-${btoa(

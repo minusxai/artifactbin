@@ -65,9 +65,9 @@ it("admits a validated platform nonce without granting it to authored handlers",
   expect(html).not.toContain('<script nonce="' + nonce + '">author()');
 });
 
-it("preserves JavaScript MIME parameters and legacy language while inactive types cannot grant script admission", () => {
+it("preserves legacy language while parameterized and inactive types cannot grant script admission", () => {
   const admitted = admitInitialInlineScripts(
     '<script type="text/javascript; charset=utf-8">mime()</script><script language="javascript">legacy()</script><script language="json">inactive()</script><script type="module; invalid">inactiveModule()</script>',
   );
-  expect(admitted.scriptHashes).toEqual([hash("mime()"), hash("legacy()")]);
+  expect(admitted.scriptHashes).toEqual([hash("legacy()")]);
 });
