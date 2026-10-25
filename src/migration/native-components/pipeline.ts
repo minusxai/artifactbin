@@ -12,6 +12,8 @@ import {closeNativeStyles} from './styles.ts';
 import {prepareNativeReaderTemplate} from './reader-template.ts';
 import {adaptNativeAuthorProgram} from './author-programs.ts';
 import {resourceSha256} from './resources.ts';
+import {nativeRetainedFontUrls,prepareNativeRetainedFont} from './resource-fonts.ts';
+import type {NativeRetainedFontManifest} from './resource-fonts-contracts.ts';
 import {buildNativeCellAdapter} from './cell-build.ts';
 import type {RetainedJsxNode} from './analyze-contracts.ts';
 import type {NativeAssemblyFile} from './assemble-contracts.ts';
@@ -138,9 +140,9 @@ export async function nativePipelineFilePorts(request:NativePipelineRequest,extr
    return extractNativeStyleSnapshot({document:context.revision.original.document,sourceSha256:context.analysis.sourceSha256,analysisSha256:context.analysis.analysisSha256,compiledCss:typeof meta?.compiledCss==='string'?meta.compiledCss:null,cssCompileVersion:typeof meta?.cssCompileVersion==='string'?meta.cssCompileVersion:null,theme:typeof meta?.theme==='string'?meta.theme:null,colorMode:meta?.colorMode==='light'||meta?.colorMode==='dark'?meta.colorMode:null,refRows},request.legacyRoot,styleProof);
   },assets:async sources=>{const needed=new Set(sources),assets:import('./resources.ts').NativeResourceAsset[]=[];
    for(const ref of index.assets)if(ref.sources.some(source=>needed.has(source)))assets.push({sources:ref.sources,bytes:await checked(ref),sha256:ref.sha256,extension:ref.extension,provenanceSha256:ref.provenanceSha256});
-   let fontManifest:{families:Record<string,{url:string}[]>}|undefined,fontProvenance='';
+   let fontManifest:Uint8Array|undefined,fontUrls:readonly string[]|undefined;
    for(const source of needed){if(assets.some(a=>a.sources.includes(source)))continue;
-    if(source.startsWith('/fonts/')){const manifest=await readFile(path.join(request.legacyRoot,'services/app/lib/data/story/story-font-manifest.json'));fontManifest??=JSON.parse(manifest.toString()) as typeof fontManifest;fontProvenance=resourceSha256(manifest);if(!Object.values(fontManifest!.families).flat().some(f=>f.url===source)||!/^\/fonts\/[A-Za-z0-9_.-]+\.woff2$/.test(source))continue;const bytes=await readFile(path.join(request.legacyRoot,'services/app/public',source)),sha256=resourceSha256(bytes),prefix=/\.([a-f0-9]{8})\.woff2$/.exec(source)?.[1];if(!prefix||!sha256.startsWith(prefix))throw Error('native_pipeline_font_digest');assets.push({sources:[source],bytes,sha256,extension:'woff2',provenanceSha256:fontProvenance});continue;}
+    if(source.startsWith('/fonts/')){fontManifest??=await readFile(path.join(request.legacyRoot,'services/app/lib/data/story/story-font-manifest.json'));fontUrls??=nativeRetainedFontUrls(JSON.parse(new TextDecoder().decode(fontManifest)) as NativeRetainedFontManifest);if(!fontUrls.includes(source))continue;const bytes=await readFile(path.join(request.legacyRoot,'services/app/public',source)),asset=prepareNativeRetainedFont(fontManifest,source,bytes);if(asset)assets.push(asset);continue;}
     const ref=/^ref:([A-Za-z0-9_-]+)$/.exec(source),raw=/^\/a\/([A-Za-z0-9_-]+)\/raw\?v=(\d+)(?:&w=(\d+))?$/.exec(source),id=ref?.[1]??raw?.[1];if(!id)continue;const row=await sharedRow(id);if(!row||raw&&Number(raw[2])!==row.version)continue;const meta=row.meta as Record<string,unknown>|undefined;const key=raw?.[3]&&Number(raw[3])===meta?.smallWidth?meta?.smallObjectKey:raw?.[3]?undefined:meta?.objectKey;if(typeof key!=='string')continue;const object=shared?.objects.find(o=>o.objectKey===key);if(!object)continue;const bytes=await checked(object);if(bytes.length!==object.bytes)throw Error('native_pipeline_asset_size');assets.push({sources:[source],bytes,sha256:object.sha256,extension:extension(meta?.contentType),provenanceSha256:nativeDigest(row)});
    }return assets;},
   modules:tags=>collectNativePipelineModules(tags,request.componentRoot),
