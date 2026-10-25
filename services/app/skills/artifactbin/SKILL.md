@@ -32,8 +32,8 @@ Copy the installed `components/` module graph into the project and import its co
 | [Navigation/disclosure](references/html-components.md#controls-and-composition) | `af-tabs`, `af-accordion`, `af-collapsible` |
 | [Overlays](references/html-components.md#controls-and-composition) | `af-dialog`, `af-popover`, `af-tooltip` |
 | [Identity/status](references/html-components.md#content-and-data) | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
-| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-mermaid`, `af-isometric` |
-| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload`, `af-deck-gl` |
+| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-isometric` |
+| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload` |
 | [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
 
 For native HTML visualizations, use the direct library APIs rather than a custom chart or map element. Choose the guide that fits the work:
