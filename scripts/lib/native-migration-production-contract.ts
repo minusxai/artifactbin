@@ -20,7 +20,7 @@ export interface NativeProductionPlan {
 /** Execution batches are disjoint subsets of the immutable global 393/190 scope. */
 export interface NativeProductionBatch {
  format:'native-production-batch-v1';id:string;planSha256:string;batchSourceIds:readonly string[];
- heads:readonly {sourceId:string;context:NativeHostFile;imported:NativeHostFile;comparison:NativeHostFile}[];
+ heads:readonly {sourceId:string;context:NativeHostFile;imported:NativeHostFile;comparison:NativeHostFile;reviewedDecision?:NativeHostFile}[];
  sha256:string;
 }
 /** @public Reviewed operator lifecycle boundary. */
@@ -31,6 +31,7 @@ export interface NativeProductionTarget {
 }
 /** Provider and injection seams are host-only. Defaults use actual product transactions and conditional S3. */
 export interface NativeProductionOptions {
+ approvedReviewedDecisionSha256?:readonly string[];
  decodeContext?:(wire:unknown)=>import('./native-migration-host-contract').NativeHostContext;
  planPath:string;batchPath:string;receiptRoot:string;outputDirectory:string;
  apply?:boolean;approvedPlanSha256?:string;
