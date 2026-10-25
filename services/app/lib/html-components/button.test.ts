@@ -66,9 +66,18 @@ describe('native af-button', () => {
 
   it('matches outline border and dark surface recipe tokens', () => {
     const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
-    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:currentColor');
+    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
     expect(style.textContent).toContain('html[data-af-dark="true"] af-button>button[data-variant=outline]');
     expect(style.textContent).toContain('color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)');
+  });
+
+  it('uses borders only for the outline variant and matches its source current-color edge', () => {
+    const plain=fixture().button, outline=fixture('variant="outline"').button;
+    expect(getComputedStyle(plain).borderTopWidth).toBe('0px');
+    expect(getComputedStyle(outline).borderTopWidth).toBe('1px');
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
+    expect(css).toContain('gap:.5rem;border:0 solid transparent');
+    expect(css).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
   });
 
   it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {
