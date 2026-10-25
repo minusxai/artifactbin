@@ -97,4 +97,8 @@ describe('af-input', () => {
     expect(label.htmlFor).toBe(root.querySelector('input')!.id);
     expect(label.textContent).toBe('Search'); expect(label.classList.contains('af-visually-hidden')).toBe(true);
   });
+  it('uses the authored 1.5 line-height for visible field labels', () => {
+    const root=input('<af-input label="Full name"></af-input>');
+    expect(getComputedStyle(root.querySelector('label')!).lineHeight).toBe('1.5');
+  });
 });

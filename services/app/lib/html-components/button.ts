@@ -90,7 +90,7 @@ af-button>button:disabled{pointer-events:none;opacity:.5;cursor:default}
 af-button>button[data-variant=default]:hover{background:color-mix(in srgb,var(--primary,#171717) 90%,transparent)}
 af-button>button[data-variant=destructive]{color:#fff;background:var(--destructive,#dc2626)}
 af-button>button[data-variant=destructive]:hover{background:color-mix(in srgb,var(--destructive,#dc2626) 90%,transparent)}
-af-button>button[data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:var(--border,#d4d4d4);box-shadow:0 1px 2px rgb(0 0 0 / .05)}
+af-button>button[data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:currentColor;box-shadow:0 1px 2px rgb(0 0 0 / .05)}
 af-button>button[data-variant=outline]:hover{background:var(--accent,#f5f5f5);color:var(--accent-foreground,#171717)}
 af-button>button[data-variant=secondary]{background:var(--secondary,#f5f5f5);color:var(--secondary-foreground,#262626)}
 af-button>button[data-variant=secondary]:hover{background:color-mix(in srgb,var(--secondary,#f5f5f5) 80%,transparent)}

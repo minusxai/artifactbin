@@ -66,7 +66,7 @@ describe('native af-button', () => {
 
   it('matches outline border and dark surface recipe tokens', () => {
     const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
-    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:var(--border,#d4d4d4)');
+    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:currentColor');
     expect(style.textContent).toContain('html[data-af-dark="true"] af-button>button[data-variant=outline]');
     expect(style.textContent).toContain('color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)');
   });
