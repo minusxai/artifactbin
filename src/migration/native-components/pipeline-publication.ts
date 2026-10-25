@@ -4,7 +4,7 @@ import { planMigration } from "../import.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { nativeDigest } from "./selection.ts";
 import { resolveNativeIdentityComment } from "./identity.ts";
-import { mapNativeCommentAuthorIdentity } from "./comment-author-provenance.ts";
+import { mapNativeCommentAuthorIdentity, mapNativeCommentImageActorIdentity } from "./comment-author-provenance.ts";
 import {
   projectNativeV3Publication,
   projectNativeV3RelationBindings,
@@ -90,6 +90,19 @@ export async function prepareNativePublication(
   for (const [key, value] of Object.entries(raw))
     if (Array.isArray(value)) tables[key] = value;
   tables.artifact_versions = [];
+  const annotationIds = new Set((tables.annotations ?? [])
+    .filter(a => a.artifact_id === page.sourceId).map(a => a.id));
+  const images = (tables.annotation_images ?? tables.comment_images ?? [])
+    .filter(a => annotationIds.has(a.annotation_id))
+    .map(a => ({
+      id: a.id,
+      annotationId: a.annotation_id,
+      ...mapNativeCommentImageActorIdentity(shared.targets, a.user_id, a.token_id),
+      metadata: a.metadata,
+      bytes: Number(a.bytes),
+      ready: a.ready,
+      expiresAt: a.expires_at,
+    }));
   const plan = await planMigration(
     {
       schemaVersion: 1,
@@ -145,14 +158,6 @@ export async function prepareNativePublication(
   const actualHost = await host.prepare(input.assemblies, planned);
   const history = projectNativeV3Publication(projection, actualHost),
     bindings = projectNativeV3RelationBindings(projection, history, actualHost);
-  const mapped = (kind: "users" | "tokens", value: unknown): string | null => {
-    if (value === null || value === undefined) return null;
-    const found = shared.targets[kind][String(value)];
-    if (!found) fail("comment_identity_missing");
-    return kind === "users"
-      ? (found as { userId: string }).userId
-      : (found as { tokenId: string }).tokenId;
-  };
   const annotations = (tables.annotations ?? []).filter(
     (a) => a.artifact_id === page.sourceId,
   );
@@ -281,19 +286,6 @@ export async function prepareNativePublication(
       },
     };
   });
-  const annotationIds = new Set(annotations.map((a) => a.id));
-  const images = (tables.annotation_images ?? tables.comment_images ?? [])
-    .filter((a) => annotationIds.has(a.annotation_id))
-    .map((a) => ({
-      id: a.id,
-      annotationId: a.annotation_id,
-      tokenId: mapped("tokens", a.token_id),
-      userId: mapped("users", a.user_id),
-      metadata: a.metadata,
-      bytes: Number(a.bytes),
-      ready: a.ready,
-      expiresAt: a.expires_at,
-    }));
   const imports: NativePublicationCatalogImport[] = history.revisions.flatMap(
     (revision) =>
       revision.queries.flatMap((prepared) => {

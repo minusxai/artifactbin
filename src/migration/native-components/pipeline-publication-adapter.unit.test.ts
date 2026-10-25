@@ -1,6 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
 import {createNativePipelinePublication,selectNativePipelinePublicationPage} from './pipeline-publication-adapter.ts';
 import {nativeDigest} from './selection.ts';
+import {prepareNativePublication,encodeNativePublicationBytes} from './pipeline-publication.ts';
+test('an unmapped selected comment-image actor is rejected before any host is prepared',async()=>{
+ const key={sourceNamespace:'fixture',sourceId:'page',version:1},row={id:'page',version:1,document:{}};
+ const targets={actors:{},users:{owner:{userId:'mapped-owner',email:null}},tokens:{}};
+ const input={selection:{sourceNamespace:'fixture',page:{sourceId:'page',headVersion:1,revisions:[{key,original:row,rowSha256:nativeDigest(row),documentSha256:nativeDigest(row.document)}]}},assemblies:[{key,input:{analysis:{documentSha256:nativeDigest(row.document)}},result:{status:'complete'}}],shared:{targets,maps:{pages:{}},identity:{approvedPlanSha256:'approved',plan:{sha256:'approved',sourceNamespace:'fixture',targets,artifactIds:{}}}},relations:encodeNativePublicationBytes(Buffer.from(JSON.stringify({annotations:[{id:'note',artifact_id:'page'}],comment_images:[{id:'image',annotation_id:'note',user_id:'owner',token_id:'unmapped-token'}]})))} as unknown as Parameters<typeof prepareNativePublication>[0];
+ let prepared=0;
+ await assert.rejects(prepareNativePublication(input,{prepare:async()=>{prepared++;throw Error('unexpected-host');}} as Parameters<typeof prepareNativePublication>[1]),/native_publication_comment_identity_missing/);
+ assert.equal(prepared,0);
+});
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 function fixture(id:string){const row={id,version:1,document:{},meta:{}};const raw=JSON.stringify({snapshot:{},heads:[row],versions:[]});const receipt={id,path:'page.json',bytes:Buffer.byteLength(raw),sha256:hash(raw),expectedVersion:1,distinctRevisions:1,archivedRows:0};const manifest=JSON.stringify({receipts:[receipt],failures:[]});return {bytes:Buffer.from(raw),manifest:{encoding:'base64' as const,data:Buffer.from(manifest).toString('base64'),sha256:hash(manifest)},revision:{key:{sourceNamespace:'fixture',sourceId:id,version:1},original:row,matchingArchives:[],rowSha256:nativeDigest(row),documentSha256:nativeDigest(row.document)}};}
 test('shared publication selection binds two unrelated heads without retaining their mutable state',async()=>{for(const id of ['first','second']){const f=fixture(id);const page=await selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256},f.bytes,f.revision);assert.equal(page.sourceId,id);assert.equal(page.revisions.length,1);assert.equal(page.revisions[0]?.rowSha256,f.revision.rowSha256);}});

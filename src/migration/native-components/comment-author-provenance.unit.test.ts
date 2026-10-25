@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mapNativeCommentAuthorIdentity } from "./comment-author-provenance.ts";
+import { mapNativeCommentAuthorIdentity, mapNativeCommentImageActorIdentity } from "./comment-author-provenance.ts";
 import type { NativeV3IdentityMaps } from "./v3-publication-contracts.ts";
 
 const targets: NativeV3IdentityMaps = {
@@ -12,6 +12,17 @@ const targets: NativeV3IdentityMaps = {
     "source-token-test": { tokenId: "target-token-test" },
   },
 };
+
+test('a mapped image owner retains the noncredential blank token required by the image row',()=>{
+ assert.deepEqual(mapNativeCommentImageActorIdentity(targets,'source-user-test',''),{tokenId:'',userId:'target-user-test'});
+});
+test('image ownership never invents a token or an account mapping',()=>{
+ for(const user of [null,undefined,'unmapped-user'])assert.throws(()=>mapNativeCommentImageActorIdentity(targets,user,''),/comment_identity_missing/);
+ assert.throws(()=>mapNativeCommentImageActorIdentity(targets,'source-user-test',null),/comment_image_token_missing/);
+ assert.throws(()=>mapNativeCommentImageActorIdentity(targets,'source-user-test','unmapped-token'),/comment_identity_missing/);
+ assert.deepEqual(mapNativeCommentImageActorIdentity(targets,null,'source-token-test'),{tokenId:'target-token-test',userId:null});
+ assert.deepEqual(mapNativeCommentImageActorIdentity(targets,'source-user-test','source-token-test'),{tokenId:'target-token-test',userId:'target-user-test'});
+});
 
 test("blank legacy comment token is absent when the actual user is mapped", () => {
   assert.deepEqual(
