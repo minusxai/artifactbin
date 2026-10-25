@@ -24,5 +24,13 @@ count=$(docker compose exec -T postgres psql -U artifactbin -d artifactbin -Atc 
 docker compose run -T --rm --no-deps --entrypoint sh volume-init -c 'test -z "$(ls -A /data)"' || { echo 'Artifact volume is not empty; restore refused' >&2; exit 1; }
 docker compose exec -T postgres pg_restore -U artifactbin -d artifactbin --exit-on-error <"$source/database.dump"
 docker compose run -T --rm --no-deps --entrypoint tar volume-init -C /data -xzf - <"$source/artifacts.tar.gz"
-docker compose up -d
+# An optional verification command may refuse a newly created app before it starts.
+# It receives only this project's container ID; no command string is evaluated.
+if [ -n "${RESTORE__BEFORE_START:-}" ]; then
+ docker compose create app
+ "$RESTORE__BEFORE_START" "$(docker compose ps --all -q app)"
+ docker compose up -d --no-recreate
+else
+ docker compose up -d
+fi
 printf '%s\n' 'Restore completed. Verify owner login, a private document and CLI read before reopening access.' >&2

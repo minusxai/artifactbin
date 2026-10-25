@@ -70,3 +70,29 @@ it('backs up an older deployment context without a shared npm helper',()=>fixtur
  const contents=execFileSync('tar',['-tzf',join(snapshot,'configuration.tar.gz')],{encoding:'utf8'});
  expect(contents).toContain('Dockerfile');expect(contents).not.toContain('patch-npm.mjs');expect(contents).not.toContain('runtime-source');
 }));
+
+it('verifies the precreated restored app before startup and stops on verification failure',()=>fixture((root,env)=>{
+ const first=join(root,'first'),snapshot=join(root,'snapshot');configuration(first,false);mkdirSync(snapshot);
+ execFileSync('tar',['-czf',join(snapshot,'configuration.tar.gz'),'.'],{cwd:first});
+ for(const name of ['database.dump','artifacts.tar.gz'])writeFileSync(join(snapshot,name),'snapshot');
+ writeFileSync(join(root,'bin/docker'),`#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$TRACE"
+case "$*" in
+ *'SELECT count('* ) printf '0\\n' ;;
+ 'compose ps --all -q app') printf 'task-created-restored-id\\n' ;;
+ 'inspect task-created-restored-id') printf '[{"Id":"task-created-restored-id","Config":{"Labels":{"afbin.remediation.owner":"task-owner"}},"HostConfig":{"NanoCpus":%s,"Memory":6000000000,"MemorySwap":6000000000}}]\\n' "$NANO_CPUS" ;;
+esac
+`,{mode:0o755});
+ const hook=new URL('../ci/verify-browser-container.mjs',import.meta.url).pathname;
+ for(const hookStatus of [0,7]){
+  const restored=join(root,'restored-'+hookStatus),trace=join(root,'trace-'+hookStatus);mkdirSync(restored);
+  copyFileSync(new URL('restore.sh',bundle),join(restored,'restore.sh'));
+  const execute=()=>execFileSync('sh',['restore.sh',snapshot],{cwd:restored,env:{...env,TRACE:trace,NANO_CPUS:hookStatus===0?'2000000000':'5000000000',RESTORE__BEFORE_START:hook,BROWSER__CONTAINER_OWNER:'task-owner',BROWSER__CPU_CAP:'2',BROWSER__OWNER_RECEIPT:join(root,'receipt-'+hookStatus+'.json')}});
+  if(hookStatus===0)execute();else expect(execute).toThrow();
+  const operations=readFileSync(trace,'utf8').trim().split('\n'),verification=operations.indexOf('inspect task-created-restored-id');
+  expect(verification).toBeGreaterThan(operations.indexOf('compose create app'));
+  if(hookStatus===0)expect(operations.indexOf('compose up -d --no-recreate')).toBeGreaterThan(verification);
+  else expect(operations.some(operation=>operation==='compose up -d'||operation==='compose up -d --no-recreate')).toBe(false);
+ }
+}));

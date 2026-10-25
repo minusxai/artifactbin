@@ -173,13 +173,13 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     ...(affected.size || scannerContracts ? ['scripts/'] : []),
     ...[...affected].filter((module) => module !== 'cli').map((module) => `services/${module}/`),
   ].sort();
-  const companyContainer = cliRelease || paths.some(path => path.startsWith('deploy/company/'));
+  const companyContainer = cliRelease || paths.some(path => path.startsWith('deploy/company/') || ['scripts/ci/company-source-artifacts.mjs','scripts/lib/source-artifacts.mjs'].includes(path));
   return { full, cliRelease, cliPack: jobs.cli || companyContainer, companyContainer, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
 }
 
 /** A selected job must succeed; only an unselected job may be skipped. */
 export function checkCiResults(plan, results) {
-  return [...CI_JOBS, ...(plan.cliPack ? ['cli-pack'] : []), ...(plan.companyContainer ? ['company-container'] : [])].filter((job) =>
+  return [...CI_JOBS, ...(plan.cliPack ? ['cli-pack'] : []), ...(plan.companyContainer ? ['company-source','company-container'] : [])].filter((job) =>
     results[job] !== 'success' && !(plan.jobs[job] === false && results[job] === 'skipped'));
 }
 

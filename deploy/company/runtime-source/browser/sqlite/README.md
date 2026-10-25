@@ -21,3 +21,7 @@ Final verification requires the exact replacement package version, SHA256 equali
 ## Evidence and limits
 
 `clean-patch-proof.json` binds all zero-fuzz patch applications from clean checksum-verified source to the host-tested source. `host-validation.json` records macOS arm64 upstream session tests and ASAN/UBSAN native checks. Host proof does not establish Debian packaging or final Linux functionality. No local Docker build was performed; consumer hosted Linux gates remain mandatory.
+
+Receipt packaging correction: `prepare.py` retains receipt inputs in the source root and extends the original Debian install target immediately after `$(MAKE) install DESTDIR=$(DESTDIR)`. That target stages all receipt files beneath `debian/tmp/usr/share/sqlite-runtime`; `.install` selects `usr/share/sqlite-runtime` relative to that actual dh_install source root. Initial dpkg clean cannot discard source inputs. Host `python3 test-packaging.py` executes the inserted real install commands, deletes DESTDIR and repeats, then checks selection, bytes and modes. This regression uses the retained exact source replay under `clean-patch-proof` and is review-only, not a required consumer input. Actual corrected Linux packaging remains required.
+
+The non-amalgamation testfixture deduplicates overlapping TESTSRC/TESTSRC2 inputs with GNU make sort, retains all unique sources, and links the existing .libs/libsqlite3.a archive last to avoid shared non-test core interposition. All three session suites remain mandatory.

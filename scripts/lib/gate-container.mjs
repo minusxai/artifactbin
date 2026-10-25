@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 
 /** What a container asks for unless told otherwise: the shape of one CI gate runner (4 vCPUs). */
 export const DEFAULT_CPUS = 4;
-export const DEFAULT_MEMORY = '8g';
+export const DEFAULT_MEMORY = '6000000000';
 
 /** Where things live inside the container. */
 export const INSIDE = Object.freeze({ src: '/src', work: '/work', deps: '/deps', builds: '/builds' });
@@ -33,7 +33,7 @@ export const BUILD_VOLUME = 'afbin-gate-builds';
 /** How many builds the volume keeps; the least recently used beyond this are removed. */
 export const BUILD_CACHE_ENTRIES = 4;
 
-const usage = 'usage: node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate-name ...>';
+const usage = 'usage: node scripts/gate-container.mjs [--cpus 4] [--memory 6000000000] [--servers N] <gate-name ...>';
 
 /**
  * A build's key: CI's build key (scripts/lib/ci-plan.mjs `buildKey`, the index's blob ids for every build
@@ -48,7 +48,7 @@ export function buildCacheKey({ buildKey, changes, deps }) {
 }
 
 /**
- * `--cpus 4 --memory 8g --servers 2 hydration full-kit` → options. `--flag=value` works too.
+ * `--cpus 4 --memory 6000000000 --servers 2 hydration full-kit` → options. `--flag=value` works too.
  * `servers` defaults to one per two CPUs, which is CI's two servers on a four-vCPU runner.
  * @param {string[]} argv
  */
@@ -70,7 +70,8 @@ export function parseArgs(argv) {
   const cpus = Number(options.cpus);
   if (!(cpus > 0)) throw new Error(`--cpus must be a positive number (got ${JSON.stringify(options.cpus)})`);
   options.cpus = cpus;
-  if (!/^\d+(?:\.\d+)?[bkmg]?$/i.test(String(options.memory))) throw new Error(`--memory must be a size like 8g (got ${JSON.stringify(options.memory)})`);
+  if (!/^\d+(?:\.\d+)?[bkmg]?$/i.test(String(options.memory))) throw new Error(`--memory must be a size like 6000000000 (got ${JSON.stringify(options.memory)})`);
+  if(cpus>4||String(options.memory)!=='6000000000')throw Error('Browser containers require at most --cpus 4 and --memory 6000000000');
   const servers = options.servers === undefined ? Math.max(1, Math.floor(cpus / 2)) : Number(options.servers);
   if (!Number.isInteger(servers) || servers < 1) throw new Error(`--servers must be a whole number of at least 1 (got ${JSON.stringify(options.servers)})`);
   options.servers = servers;
@@ -161,10 +162,12 @@ export function containerName(worktree, pid) {
  *   shape of CI's per-run secret.
  */
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
+  if(!Number.isFinite(Number(cpus))||Number(cpus)<=0||Number(cpus)>4||Number(memory)!==6000000000)throw Error('Browser containers require at most 4 CPUs and 6000000000 bytes with no swap');
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
     '--label', 'afbin.gate-container=1',
+    '--label', `afbin.remediation.owner=${name}`,
     '--privileged', '--cgroupns=private',
     '--cpus', String(cpus),
     '--memory', String(memory), '--memory-swap', String(memory),

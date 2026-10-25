@@ -10,27 +10,30 @@
  * containerd store); `--prepare-only` builds that image (warming the cache) and stops.
  */
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
 import {mkdtemp,cp,readFile,writeFile,readdir,rm,mkdir,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {initializeCompany} from './init.mjs';
+import {browserCpuCap,verifyBrowserContainer} from '../../scripts/lib/browser-container-policy.mjs';
 const bundle=fileURLToPath(new URL('.',import.meta.url));
 const separator=process.argv.indexOf('--'),options=process.argv.slice(2,separator<0?undefined:separator),fetchCommand=separator<0?[]:process.argv.slice(separator+1);
 const flag=name=>{const index=options.indexOf(name);if(index<0)return false;options.splice(index,1);return true;};
 const value=name=>{const index=options.indexOf(name);if(index<0)return undefined;const [,given]=options.splice(index,2);assert.ok(given,`${name} needs a value`);return resolve(given);};
-const prepareOnly=flag('--prepare-only'),saveCaddyCache=flag('--save-caddy-cache'),caddyCache=value('--caddy-cache');
+const sourceComponents=flag('--source-components'),prepareOnly=flag('--prepare-only'),saveCaddyCache=flag('--save-caddy-cache'),caddyCache=value('--caddy-cache');
 assert.ok(options.length<=1&&!options.some(option=>option.startsWith('--')),'Usage: ci-smoke.mjs <candidate-dir> [--caddy-cache <dir> [--save-caddy-cache]] [--prepare-only] [-- <fetch command>]');
 const candidate=resolve(options[0]??'npm-candidate');
 const DNS_MODULE='github.com/caddy-dns/route53@v1.6.2';
 const scratch=await mkdtemp(join(tmpdir(),'company-container-')),first=join(scratch,'first'),restored=join(scratch,'restored');
 const env={...process.env,AFBIN_PACKAGE:'/packages/afbin.tgz',COMPOSE_FILE:'compose.yaml:ci.override.yaml'};
-const projects=new Map([[first,'afbin-company-ci-first'],[restored,'afbin-company-ci-restored']]);
+const containerOwner='afbin-ci-'+randomUUID();
+const browserCpus=browserCpuCap(Number(execFileSync('docker',['info','--format','{{.NCPU}}'],{encoding:'utf8',timeout:15000}).trim()));
+const projects=new Map([[first,containerOwner+'-first'],[restored,containerOwner+'-restored']]);
 const commandEnv=directory=>({...env,...(projects.has(directory)?{COMPOSE_PROJECT_NAME:projects.get(directory)}:{})});
-function run(directory,program,args,{capture=false,timeout=180_000}={}){
- return execFileSync(program,args,{cwd:directory,env:commandEnv(directory),stdio:capture?['ignore','pipe','inherit']:'inherit',encoding:'utf8',timeout,maxBuffer:8*1024*1024});
+function run(directory,program,args,{capture=false,timeout=180_000,env:extra={}}={}){
+ return execFileSync(program,args,{cwd:directory,env:{...commandEnv(directory),...extra},stdio:capture?['ignore','pipe','inherit']:'inherit',encoding:'utf8',timeout,maxBuffer:8*1024*1024});
 }
 /** The same command without blocking this process, so independent phases overlap. */
 function runAsync(directory,program,args,{timeout=180_000,env:extra={}}={}){
@@ -42,6 +45,13 @@ function runAsync(directory,program,args,{timeout=180_000,env:extra={}}={}){
  });
 }
 function compose(directory,args,options){return run(directory,'docker',['compose',...args],options);}
+async function verifiedBrowser(id){
+ const [info]=JSON.parse(run(first,'docker',['inspect',id],{capture:true}));
+ const receipt=verifyBrowserContainer(info,{owner:containerOwner,id,cpus:browserCpus});
+ await writeFile(join(scratch,'browser-owner-'+id+'.json'),JSON.stringify(receipt)+'\n');
+ console.log('Verified browser container: '+JSON.stringify(receipt));
+}
+
 function composeAsync(directory,args,options){return runAsync(directory,'docker',['compose',...args],options);}
 /** Every independent phase finishes (no orphaned build or download) before the first failure is reported. */
 async function together(...phases){
@@ -75,11 +85,20 @@ async function configureFixture(directory,{caddyCache:cached=false}={}){
  await writeFile(join(directory,'ci.override.yaml'),`services:
   caddy:
     profiles: [external]${cache}
-  postgres:
+${sourceComponents?`  volume-init:
+    build:
+      args:
+        RUNTIME_PACKAGES: afbin-runtime-packages-ci
+`:''}  postgres:
     healthcheck:
       start_period: 60s
       start_interval: 1s
   app:
+    cpus: ${browserCpus}
+    mem_limit: 6000000000
+    memswap_limit: 6000000000
+    labels:
+      afbin.remediation.owner: ${containerOwner}
     environment:
       NODE_EXTRA_CA_CERTS: /fixture-ca/cert.pem
     volumes:
@@ -128,7 +147,9 @@ try{
   prepareOnly?caddy:deployment.then(()=>together(
    composeAsync(first,['build','smtpfixture'],{timeout:300_000}),
    // Build and test the runtime source packages while the exact candidate is being packed.
-   runAsync(first,'docker',['build','--target','runtime-packages','-t','afbin-runtime-packages-ci','.'],{timeout:300_000}),
+   sourceComponents
+    ? runAsync(process.cwd(),process.execPath,['scripts/ci/company-source-artifacts.mjs','collect',join(scratch,'source-components')],{timeout:300_000})
+    : runAsync(first,'docker',['build','--target','runtime-packages','-t','afbin-runtime-packages-ci','.'],{timeout:300_000}),
    composeAsync(first,['pull','--quiet','postgres'],{timeout:300_000}),
   )),
   prepareOnly?Promise.resolve():mkdir(restored).then(()=>configureFixture(restored)),
@@ -149,7 +170,9 @@ async function acceptance(){
  assert.equal(tarballs.length,1,'One exact cli-pack tarball is required; no registry fallback');
  await cp(join(candidate,tarballs[0]),join(first,'packages/afbin.tgz'));
  compose(first,['build','volume-init'],{timeout:300_000});
- compose(first,['up','-d','--wait','--wait-timeout','90','app']);
+ compose(first,['create','app']);
+ await verifiedBrowser(compose(first,['ps','--all','-q','app'],{capture:true}).trim());
+ compose(first,['up','-d','--no-recreate','--wait','--wait-timeout','90','app']);
  const osInventory=compose(first,['exec','-T','app','dpkg-query','-W','-f=${binary:Package}\t${Version}\n'],{capture:true});
  const evidence=process.env.RUNNER_TEMP??scratch;
  await writeFile(join(evidence,'company-os-packages.tsv'),osInventory);
@@ -164,7 +187,9 @@ async function acceptance(){
  try{run(first,'docker',['cp',`${proofContainer}:/test-tools/.`,tools]);}
  finally{run(first,'docker',['rm',proofContainer]);}
  const appImage=compose(first,['images','-q','app'],{capture:true}).trim();
- await runAsync(first,'docker',['run','--rm','--network','none','--entrypoint','node','--mount',`type=bind,src=${tools},dst=/test-tools,readonly`,appImage,'/test-tools/check-browser-libraries.mjs'],{timeout:60_000});
+ const probeId=run(first,'docker',['create',`--cpus=${browserCpus}`,'--memory=6000000000','--memory-swap=6000000000','--label',`afbin.remediation.owner=${containerOwner}`,'--network','none','--entrypoint','node','--mount',`type=bind,src=${tools},dst=/test-tools,readonly`,appImage,'/test-tools/check-browser-libraries.mjs'],{capture:true}).trim();
+ try{await verifiedBrowser(probeId);await runAsync(first,'docker',['start','--attach',probeId],{timeout:60_000});}
+ finally{run(first,'docker',['rm','-f',probeId]);}
 
 
  const uid=compose(first,['exec','-T','app','node','-p','process.getuid()'],{capture:true});assert.notEqual(uid.trim(),'0');
@@ -184,8 +209,12 @@ async function acceptance(){
  compose(first,['stop','app']);
  // Recovery starts with the restore script and test-only SMTP fixtures; all build inputs come from the backup.
  await cp(join(bundle,'restore.sh'),join(restored,'restore.sh'));
- run(restored,'sh',['restore.sh',backup],{timeout:180_000});
- compose(restored,['up','-d','--wait','--wait-timeout','90','app']);
+ const restoreVerifier=fileURLToPath(new URL('../../scripts/ci/verify-browser-container.mjs',import.meta.url));
+ run(restored,'sh',['restore.sh',backup],{timeout:180_000,env:{RESTORE__BEFORE_START:restoreVerifier,BROWSER__CONTAINER_OWNER:containerOwner,BROWSER__CPU_CAP:String(browserCpus),BROWSER__OWNER_RECEIPT:join(scratch,'restored-browser-owner.json')}});
+ compose(restored,['up','-d','--no-recreate','--wait','--wait-timeout','90','app']);
+ const restoredOwner=JSON.parse(await readFile(join(scratch,'restored-browser-owner.json'),'utf8'));
+ assert.equal(compose(restored,['ps','-q','app'],{capture:true}).trim(),restoredOwner.id,'Restore starts the exact preverified container');
+ await verifiedBrowser(restoredOwner.id);
  assert.equal(databaseMarker(restored),marker);assert.equal(artifactMarker(restored),marker);
  assert.deepEqual(await readFile(join(restored,'config/server.env')),config,'Persistent auth secret and database configuration survived restore');
  assert.deepEqual(await readFile(join(restored,'backup.sh')),await readFile(join(bundle,'backup.sh')),'The recovered deployment retains its backup helper');

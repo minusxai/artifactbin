@@ -114,7 +114,7 @@ From repo root.
 - `npm test` — affected api/node/ui/islands + CLI tests, ≤50 files; exit 2 means PR CI, never widen.
   `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge
   only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).
-- `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, PRE-MERGE
+- `node scripts/gate-container.mjs [--cpus 4] [--memory 6000000000] <gate ...>` — **SLOW, PRE-MERGE
   ONLY, NEVER AFTER AN EDIT**: named browser gates in a Linux container, built (CI's gate build, reused
   until a build input changes) and served as CI does.
   `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).

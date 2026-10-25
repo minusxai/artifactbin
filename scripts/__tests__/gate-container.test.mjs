@@ -12,19 +12,22 @@ import {
   buildCacheKey, checkGates, containerName, depsVolume, dockerfile, dockerRunArgs, imageTag, parseArgs,
 } from '../lib/gate-container.mjs';
 import { gateNamesOnDisk } from '../gates.manifest.mjs';
+import {browserCpuCap,verifyBrowserContainer} from '../lib/browser-container-policy.mjs';
 
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
 
 describe('parseArgs', () => {
-  it('defaults to one CI runner’s shape: 4 CPUs, 8g, two servers', () => {
+  it('defaults to one CI runner’s shape: 4 CPUs, 6000000000 bytes, two servers', () => {
     expect(parseArgs(['hydration'])).toEqual({ cpus: DEFAULT_CPUS, memory: DEFAULT_MEMORY, servers: 2, gates: ['hydration'], inside: false });
     expect(DEFAULT_CPUS).toBe(4);
   });
 
   it('reads both flag spellings, derives servers from CPUs, and accepts gate file names', () => {
-    expect(parseArgs(['--cpus', '6', '--memory=12g', 'scripts/gates/gate-fonts.mjs', 'gate-web-assets', 'fonts']))
-      .toMatchObject({ cpus: 6, memory: '12g', servers: 3, gates: ['fonts', 'web-assets'] });
+    expect(parseArgs(['--cpus', '4', '--memory=6000000000', 'scripts/gates/gate-fonts.mjs', 'gate-web-assets', 'fonts']))
+      .toMatchObject({ cpus: 4, memory: '6000000000', servers: 2, gates: ['fonts', 'web-assets'] });
     expect(parseArgs(['--cpus=1', 'a']).servers).toBe(1);
+    expect(()=>parseArgs(['--cpus=5','a'])).toThrow(/at most/);
+    expect(() => parseArgs(['--memory=6g', 'a'])).toThrow(/6000000000/);
     expect(parseArgs(['--servers', '4', 'a']).servers).toBe(4);
     expect(parseArgs(['--inside', '--servers', '2', 'a', 'b'])).toMatchObject({ inside: true, gates: ['a', 'b'] });
     expect(parseArgs(['--inside', '--build-key', 'a'.repeat(32), 'a']).buildKey).toBe('a'.repeat(32));
@@ -100,7 +103,7 @@ describe('image and dependency volume', () => {
 describe('dockerRunArgs', () => {
   const args = dockerRunArgs({
     name: containerName('/Users/me/projects/Proof Tree_A', 4242), image: 'afbin-gate:pw1-abc', volume: 'afbin-gate-deps-1', buildKey: 'b'.repeat(32),
-    worktree: '/Users/me/projects/tree', cpus: 4, memory: '8g', servers: 2, gates: ['hydration', 'fonts'],
+    worktree: '/Users/me/projects/tree', cpus: 4, memory: '6000000000', servers: 2, gates: ['hydration', 'fonts'],
   });
   const value = (flag) => args[args.indexOf(flag) + 1];
 
@@ -115,8 +118,8 @@ describe('dockerRunArgs', () => {
 
   it('applies the quota, removes itself, keeps stdin open and publishes no port', () => {
     expect(value('--cpus')).toBe('4');
-    expect(value('--memory')).toBe('8g');
-    expect(value('--memory-swap')).toBe('8g');
+    expect(value('--memory')).toBe('6000000000');
+    expect(value('--memory-swap')).toBe('6000000000');
     expect(args).toContain('--rm');
     expect(args).toContain('-i');
     expect(args.some((arg) => arg === '-p' || arg.startsWith('--publish') || arg === '--network=host' || arg === 'host')).toBe(false);
@@ -127,4 +130,21 @@ describe('dockerRunArgs', () => {
     expect(args.filter((_, i) => args[i - 1] === '-e')).toEqual(['DATASET__ALLOW_PRIVATE_NETWORKS=true']);
   });
 
+});
+
+it('verifies browser identity, team ownership, exact decimal quotas and disabled swap',()=>{
+ const info={Id:'created-by-this-invocation',Config:{Labels:{'afbin.remediation.owner':'task-owner'}},HostConfig:{NanoCpus:4000000000,Memory:6000000000,MemorySwap:6000000000}};
+ expect(verifyBrowserContainer(info,{owner:'task-owner',id:info.Id})).toMatchObject({memory_bytes:6000000000,cpus:4});
+ expect(()=>verifyBrowserContainer(info,{owner:'another-agent',id:info.Id})).toThrow('ownership');
+ expect(()=>verifyBrowserContainer(info,{owner:'task-owner',id:'old-container'})).toThrow('identity');
+ for(const [key,value] of [['NanoCpus',2000000000],['Memory',6*1024**3],['MemorySwap',-1]])expect(()=>verifyBrowserContainer({...info,HostConfig:{...info.HostConfig,[key]:value}},{owner:'task-owner',id:info.Id})).toThrow();
+});
+
+it('uses the available positive CPU capacity with four as a ceiling',()=>{
+ expect(browserCpuCap(2)).toBe(2);expect(browserCpuCap(8)).toBe(4);
+ for(const value of [0,-1,0.5,2.5,NaN,Infinity])expect(()=>browserCpuCap(value)).toThrow();
+ const info={Id:'task-id',Config:{Labels:{'afbin.remediation.owner':'task'}},HostConfig:{NanoCpus:2000000000,Memory:6000000000,MemorySwap:6000000000}};
+ expect(verifyBrowserContainer(info,{owner:'task',id:'task-id',cpus:2}).cpus).toBe(2);
+ expect(()=>verifyBrowserContainer(info,{owner:'task',id:'task-id',cpus:4})).toThrow('CPU quota');
+ for(const cpus of [0,0.5,2.5,5,Infinity])expect(()=>verifyBrowserContainer(info,{owner:'task',id:'task-id',cpus})).toThrow('chosen browser CPU cap');
 });

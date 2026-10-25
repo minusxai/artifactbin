@@ -5,7 +5,7 @@ import {planCi,checkCiResults} from '../lib/ci-plan.mjs';
 it('company container changes produce an exact package and cannot pass with skipped or failed acceptance',()=>{
  const plan=planCi(['deploy/company/Dockerfile']);
  expect(plan.companyContainer).toBe(true);expect(plan.cliPack).toBe(true);
- const results={...Object.fromEntries(Object.entries(plan.jobs).map(([job,selected])=>[job,selected?'success':'skipped'])),'cli-pack':'success','company-container':'skipped'};
+ const results={...Object.fromEntries(Object.entries(plan.jobs).map(([job,selected])=>[job,selected?'success':'skipped'])),'cli-pack':'success','company-source':'success','company-container':'skipped'};
  expect(checkCiResults(plan,results)).toContain('company-container');
  results['company-container']='failure';expect(checkCiResults(plan,results)).toContain('company-container');
  results['company-container']='success';expect(checkCiResults(plan,results)).toEqual([]);
@@ -25,6 +25,7 @@ it('workflow waits for exact package, runs real Compose acceptance and blocks ro
  expect(smoke.env.GH_TOKEN).toBe('${{ github.token }}');
  expect(job.steps.some(step=>step.uses?.startsWith('actions/download-artifact'))).toBe(false);
  expect(workflow.jobs.test.needs).toContain('company-container');
+ expect(workflow.jobs.test.needs).toContain('company-source');
  expect(workflow.jobs.test.needs).toContain('cli-pack');
  // The universal tarball is published right after the signed release, before the seed transfers and archives.
  const pack=workflow.jobs['cli-pack'].steps,release=pack.findIndex(step=>step.with?.name==='afbin-npm-release');
@@ -83,4 +84,22 @@ it('backs up artifacts without the re-installable Chromium download and proves t
  expect(restored.indexOf("compose(restored,['exec','-T','app','afbin','setup','--service','chromium','--json']")).toBeGreaterThan(0);
  expect(restored).toContain("screenshot('/data/data/restored-browser.png')");
  expect(readFileSync(new URL('../../deploy/company/README.md',import.meta.url),'utf8')).toContain('leaves out `/data/chromium`');
+});
+
+it('requires every isolated source producer in the unchanged original workflow chain',()=>{
+ const workflow=yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
+ const producer=workflow.jobs['company-source'];
+ expect(producer.needs).toEqual(['plan']);expect(producer.if).toBe("needs.plan.outputs.company-container == 'true'");
+ expect(producer.strategy['fail-fast']).toBe(false);
+ expect(producer.strategy.matrix.component).toEqual(['runtime-pcre2','runtime-tar','runtime-dash','runtime-expat','runtime-coreutils','runtime-ncurses','browser-xml','browser-cups','browser-sqlite','browser-xorg']);
+ expect(producer.steps.find(step=>step.run?.includes(' produce ')).run).toContain('"${{ matrix.component }}"');
+ expect(producer.steps.some(step=>step.if==='always()'&&step.with?.path.endsWith('/source-status.json'))).toBe(true);
+ const plan=planCi(['scripts/lib/source-artifacts.mjs']);expect(plan.companyContainer).toBe(true);
+ const results={...Object.fromEntries(Object.entries(plan.jobs).map(([job,selected])=>[job,selected?'success':'skipped'])),'cli-pack':'success','company-container':'success','company-source':'failure'};
+ expect(checkCiResults(plan,results)).toContain('company-source');
+ results['company-source']='skipped';expect(checkCiResults(plan,results)).toContain('company-source');
+ results['company-source']='success';expect(checkCiResults(plan,results)).toEqual([]);
+ const smoke=readFileSync(new URL('../../deploy/company/ci-smoke.mjs',import.meta.url),'utf8');
+ expect(smoke).toContain("'collect',join(scratch,'source-components')");expect(smoke).toContain('RUNTIME_PACKAGES: afbin-runtime-packages-ci');
+ expect(smoke).toContain('{timeout:300_000}');
 });
