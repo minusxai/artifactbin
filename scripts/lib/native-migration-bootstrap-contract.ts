@@ -13,3 +13,15 @@ export interface NativeMigrationBootstrapOptions {
  /** Existing gate owns browser/server lifecycle. Inject its actual camera, never fixture captures. */
  captureAndCompare(input:NativeHostContext&{imported:NativeHostPrepared;baselineRecipePath:string;candidateRecipePath:string}):Promise<NativeHostComparison>;
 }
+
+/** A committed actual import with no database dump, candidate bundle, or camera claim. */
+export interface NativeMigrationImportOnlyResult {
+ stage:'imported-unsnapshotted';
+ key:NativeHostContext['revision']['key'];assemblySha256:string;historyProjectionSha256:string;
+ importResult:NonNullable<NativeHostPrepared['importResult']>;
+ history:Awaited<ReturnType<typeof import('./native-migration-product-host').prepareNativeProductImport>>['history'];
+ identityPlan:NativeProductImportRecipe['identity']['plan'];datasetIds:readonly string[];
+ reviewedRecipe:NativeHostRecipe;
+ identityPreparation:{transaction:'separate-prerequisite';identityPlanSha256:string;identities:NonNullable<NativeHostPrepared['importResult']>['identities']};
+ identityPreparationPath:string;
+}

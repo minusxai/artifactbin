@@ -63,12 +63,12 @@ it('runs actual adapters for two unrelated reviewed source identities, verifies 
  }finally{await rm(root,{recursive:true,force:true});}
 },30000);
 
-it('one shared bootstrap imports and snapshots two source recipes through the same actual product modules',async()=>{
+it('one shared bootstrap snapshots two sources and imports a third without snapshot through the actual product modules',async()=>{
  const root=await mkdtemp(path.join(tmpdir(),'native-bootstrap-'));
  try{
   const db=await getDb(),recipes=new Map();
   const host=createNativeProductMigrationHost({db,objectsDirectory:LOCAL_OBJECT_DIR,publication:async({context,prepareRuntime,publicationModules})=>{const recipe=recipes.get(context.revision.key.sourceId);if(!recipe)throw Error('missing reviewed source recipe');const html=recipe.history.revisions[0].page.html;expect(publicationModules.commentNodeIds(html)).toContain('stable');const runtime=await prepareRuntime([context.assembly],{pageId:recipe.history.pageId,visibility:recipe.history.visibility,shares:recipe.history.shares});const receipt=runtime.prepareBundle(context.assembly,recipe.history.pageId);expect(receipt.assemblySha256).toBe(context.assembly.sha256);const canonical=publicationModules.canonicalizeHtmlPage(receipt.html,{previousHtml:recipe.history.revisions[0].page.html,ledger:recipe.history.revisions[0].ledger});recipe.history.revisions[0].page.html=canonical.html;recipe.history.revisions[0].page.nextNodeId=canonical.ledger.nextNodeId;recipe.history.revisions[0].ledger=canonical.ledger;recipe.history.revisions[0].sourceSha256=pageSourceDigest(canonical.html);recipe.history.revisions[0].htmlPublicationDependencies=receipt.dependencies;return recipe;},captureAndCompare:async()=>{throw Error('actual camera lifecycle belongs to the gate');}});
-  for(const prefix of ['BootstrapFirst','BootstrapSecond']){
+  for(const prefix of ['BootstrapFirst','BootstrapSecond','BootstrapImportOnly']){
    const publicationRecipe=await fixture(prefix,root);publicationRecipe.catalog.sinkDirectory=LOCAL_OBJECT_DIR;
    const key={sourceNamespace:prefix,sourceId:publicationRecipe.history.sourceId,version:3};
    const css=Buffer.from('p{color:rgb(12,34,56)}');const html=publicationRecipe.history.revisions[0].page.html.replace('</head>','<link rel="stylesheet" href="./theme.css"></head>'),assembly={key,sha256:sha(prefix+'assembly'),result:{status:'complete',html,htmlSha256:sha(html),files:[{path:'theme.css',bytes:css,sha256:sha(css)}]}};
@@ -88,6 +88,15 @@ it('one shared bootstrap imports and snapshots two source recipes through the sa
     await expect(host.importAndPrepare(context)).rejects.toThrow();expect((await db.query('SELECT id FROM users WHERE id=$1',[prefix+'user'])).rows).toEqual([]);
     await writeFile(path.join(root,folderPath),'changed');await expect(host.importAndPrepare(context)).rejects.toThrow('input-digest');
     delete reviewed.inputs.ancillaryFolders;await writeFile(authorityRecipePath,JSON.stringify(reviewed));
+   }
+   if(prefix==='BootstrapImportOnly'){
+    delete context.candidateRecipePath;
+    const imported=await host.importOnly(context);
+    expect(imported).toMatchObject({key,stage:'imported-unsnapshotted',assemblySha256:assembly.sha256,importResult:{disposition:'created'},history:{pageId:publicationRecipe.history.pageId},identityPlan:{sha256:publicationRecipe.identity.plan.sha256}});
+    expect(imported.preparedStorePath).toBeUndefined();expect(imported.pilotInputPath).toBeUndefined();
+    await expect(readFile(path.join(context.outputDirectory,'snapshot','database.tar'))).rejects.toThrow();
+    expect((await db.query('SELECT id FROM artifacts WHERE id=$1',[publicationRecipe.history.pageId])).rows).toHaveLength(1);
+    continue;
    }
    const imported=await host.importAndPrepare(context);
    expect(imported).toMatchObject({key,stage:'imported',assemblySha256:assembly.sha256});
