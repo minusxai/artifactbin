@@ -3,6 +3,7 @@ import type { AnnotationRange } from '../document';
 import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { resolveHtmlRange } from './range';
 interface HtmlAnnotationPin { id: string; nodeId?: string | null; path: string; anchor?: HtmlNodeAnchor; layoutOnly?: boolean; range?: AnnotationRange | null }
+/** Block threads sharing one resolved node share one visual outline; positions remain per thread. */
 export interface HtmlAnnotationPaint { pins: readonly HtmlAnnotationPin[]; mode: 'off' | 'on'; openId: string | null; hoverId: string | null }
 export interface HtmlAnnotationPosition { id: string; status: 'exact' | 'missing' | 'ambiguous'; rect: { x: number; y: number; width: number; height: number } }
 const box = (rect: { x: number; y: number; width: number; height: number }) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
@@ -33,6 +34,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
     paint(input: HtmlAnnotationPaint): HtmlAnnotationPosition[] {
       clearHighlights();
       overlay.replaceChildren();
+      const blockMarks = new Map<Element, {mark: HTMLElement; active: boolean}>();
       return input.pins.map((pin) => {
         const matches = htmlAnchorElements(doc,pin.anchor?.nodeId ?? pin.nodeId ?? pin.path,pin.anchor?.ancestorId);
         const node = matches.length === 1 ? matches[0]! : null;
@@ -42,11 +44,16 @@ export function createHtmlAnnotationPainter(doc: Document) {
         if(pin.anchor?.presentation==='block'){
           const rect=box(node.getBoundingClientRect()),active=input.openId===pin.id||input.hoverId===pin.id;
           if(!pin.layoutOnly&&(input.mode==='on'||active)){
-            const mark=doc.createElement('div');
-            mark.style.cssText=active?COMMENT_PRESENTATION.blockStyle.activeCss:COMMENT_PRESENTATION.blockStyle.baseCss;
+            let painted=blockMarks.get(node);
+            if(!painted){
+              const mark=doc.createElement('div');
+              painted={mark,active};blockMarks.set(node,painted);overlay.append(mark);
+            }
+            painted.active ||= active;
+            const mark=painted.mark;
+            mark.style.cssText=painted.active?COMMENT_PRESENTATION.blockStyle.activeCss:COMMENT_PRESENTATION.blockStyle.baseCss;
             Object.assign(mark.style,{position:'fixed',left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`,background:'transparent',pointerEvents:'none'});
-            if(active)mark.style.boxShadow=COMMENT_PRESENTATION.blockStyle.activeInset;
-            overlay.append(mark);
+            if(painted.active)mark.style.boxShadow=COMMENT_PRESENTATION.blockStyle.activeInset;
           }
           return {id:pin.id,status:'exact',rect};
         }

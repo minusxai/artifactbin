@@ -110,3 +110,18 @@ it('positions migrated comments from the original forward inline endpoint',()=>{
  const positions=painter.paint({pins:[{id:'comment',path:'p',anchor}],mode:'on',openId:null,hoverId:null});
  expect(positions[0]).toMatchObject({status:'exact',rect:{x:10,y:19,width:80,height:40}});painter.dispose();
 });
+
+it('shares a block outline by node while preserving thread positions and mixed text highlights',()=>{
+ document.body.innerHTML='<section data-af-id="a">context</section><section data-af-id="b">other</section>';
+ for(const [i,node]of [...document.querySelectorAll('section')].entries())vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(i*100,20,80,40));
+ vi.spyOn(Range.prototype,'getClientRects').mockReturnValue([new DOMRect(0,20,20,10)] as unknown as DOMRectList);
+ const block=(id:string,nodeId:string)=>({id,path:nodeId,anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId,quote:'',presentation:'block' as const}});
+ const painter=createHtmlAnnotationPainter(document),pins=[block('one','a'),block('two','a'),block('three','b')],input={pins,mode:'on' as const,openId:null,hoverId:null};
+ const positions=painter.paint(input);expect(positions.map(p=>p.id)).toEqual(['one','two','three']);expect(positions[0]?.rect).toEqual(positions[1]?.rect);
+ const marks=()=>[...document.querySelectorAll('[data-af="annotation-overlay"] div')] as HTMLElement[];
+ expect(marks()).toHaveLength(2);
+ painter.paint({...input,openId:'two'});expect(marks()).toHaveLength(2);expect(marks()[0]?.style.outline).toBe('1px solid rgba(245, 158, 11, 0.85)');
+ painter.paint({...input,pins:[pins[0]!,{id:'text',path:'a',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'a',quote:'context'}}]});expect(marks()).toHaveLength(2);
+ painter.paint({...input,pins:[pins[1]!]});expect(marks()).toHaveLength(1);expect(marks()[0]?.style.outline).toBe('1px solid rgba(245, 158, 11, .15)');
+ document.querySelector('[data-af-id="a"]')!.remove();expect(painter.paint({...input,pins:[pins[0]!]})[0]?.status).toBe('missing');expect(marks()).toHaveLength(0);painter.dispose();
+});
