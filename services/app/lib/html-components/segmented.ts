@@ -217,7 +217,7 @@ af-segmented[data-orientation=vertical] .af-segmented-options{flex-direction:col
 af-segmented .af-segmented-options>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;transition:background-color .15s,color .15s}
 af-segmented .af-segmented-options>button[data-segment-option][data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
 af-segmented .af-segmented-options>button[data-segment-option]:not([data-state=active]):hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
-af-segmented .af-segmented-options>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-segmented .af-segmented-options>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-segmented .af-segmented-options>button[data-segment-option]:disabled{cursor:not-allowed;opacity:.5}
 `;
 export function registerSegmented(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {

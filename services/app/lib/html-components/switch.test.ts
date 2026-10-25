@@ -100,4 +100,9 @@ describe('af-switch', () => {
     registerSwitch();
     expect((host.firstElementChild as AfSwitch).checked).toBe(true);
   });
+  it('uses the same two pixel focus ring recipe as the source switch', () => {
+    const styles = document.querySelector<HTMLStyleElement>('style[data-af-switch-styles]')!.textContent!;
+    expect(styles).toContain('focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab');
+    expect(styles).toContain(',0 1px 2px #0000000d');
+  });
 });

@@ -212,7 +212,8 @@ describe('native authored tabs', () => {
     expect(getComputedStyle(list).height).toBe('36px');
   });
   it('implements the source ring as a two pixel focus ring without an outline offset', () => {
-    expect(tabsStyles).toContain('outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px');
+    expect(tabsStyles).toContain('outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab');
+    expect(tabsStyles).toContain(',0 1px 2px #0000000d');
     expect(tabsStyles).not.toContain('outline:2px solid color-mix');
     expect(tabsStyles.indexOf('af-tabs-trigger:focus-visible')).toBeGreaterThan(tabsStyles.indexOf('af-tabs-trigger[data-state=active]'));
   });

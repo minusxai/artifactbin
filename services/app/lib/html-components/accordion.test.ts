@@ -171,6 +171,25 @@ describe('native authored accordion', () => {
     root.append(extra); await tick(); const extraTrigger=extra.querySelector<HTMLElement>('af-accordion-trigger')!; extraTrigger.click(); expect(root.value).toBe('c');
     root.remove(); document.body.append(root); await tick(); let count=0; root.addEventListener('af-change',()=>count++); triggers[0]!.click(); expect(count).toBe(1);
   });
+  it('keeps generated chevrons with their owning trigger through nested controls and reparenting', async () => {
+    const nestedMarkup='<af-accordion-trigger><span><af-accordion><af-accordion-item value="inner"><af-accordion-trigger><button>Inner</button></af-accordion-trigger><af-accordion-content>Nested content</af-accordion-content></af-accordion-item></af-accordion></span></af-accordion-trigger>';
+    const nested=fixture('default-value="outer"',nestedMarkup,['outer']);
+    const [outerTrigger,innerTrigger]=[...nested.root.querySelectorAll<HTMLElement>('af-accordion-trigger')];
+    const outerIcon=outerTrigger!.querySelector(':scope > svg[data-af-accordion-icon]');
+    const innerButton=innerTrigger!.querySelector('button')!;
+    const innerIcon=innerButton.querySelector(':scope > svg[data-af-accordion-icon]');
+    expect(outerIcon).not.toBeNull(); expect(innerIcon).not.toBeNull(); expect(outerIcon!.parentElement).toBe(outerTrigger);
+    expect(innerIcon!.parentElement).toBe(innerButton); expect(outerTrigger!.querySelectorAll(':scope > svg[data-af-accordion-icon]')).toHaveLength(1);
+
+    const wrapped=fixture('', '<af-accordion-trigger><span><button>Toggle</button></span></af-accordion-trigger>', ['a']);
+    const trigger=wrapped.triggers[0]!; const button=trigger.querySelector('button')!;
+    expect(button.querySelectorAll(':scope > svg[data-af-accordion-icon]')).toHaveLength(1);
+    const wrapper=button.parentElement!; const replacement=wrapper.ownerDocument.createElement('section'); replacement.append(button); wrapper.replaceWith(replacement);
+    await tick();
+    expect(button.querySelectorAll(':scope > svg[data-af-accordion-icon]')).toHaveLength(1);
+    expect(accordionStyles).toContain('af-accordion-trigger button[aria-expanded="true"]>.af-accordion-icon');
+    expect(accordionStyles).not.toContain('af-accordion-trigger[aria-expanded="true"] .af-accordion-icon');
+  });
   it('registers elements and styles idempotently', () => {
     registerAccordion(); expect(document.querySelectorAll('style[data-af-accordion-styles]')).toHaveLength(1);
   });
@@ -188,6 +207,7 @@ describe('accordion appearance', () => {
     expect(icon.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(icon.getAttribute('stroke-linecap')).toBe('round');
     expect(accordionStyles).toContain('rotate(180deg)');
+    expect(accordionStyles).toContain('box-shadow:0 0 0 3px color-mix(in oklab');
     root.remove();
   });
 

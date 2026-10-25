@@ -142,7 +142,7 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
   }
 
   private ensureChevron(trigger: AfAccordionTrigger): void {
-    const control = trigger.querySelector('button') ?? trigger;
+    const control = this.focusControl(trigger);
     if (control.querySelector(':scope > svg[data-af-accordion-icon]')) return;
     const svg = this.ownerDocument.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('fill','none'); svg.setAttribute('stroke','currentColor');
@@ -221,9 +221,9 @@ af-accordion-item{display:block;border-bottom:1px solid currentColor}
 af-accordion-trigger{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
 af-accordion-trigger:has(>button){display:contents}
 af-accordion-trigger>button{box-sizing:border-box;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left!important;font:inherit;font-family:var(--font-display,inherit);font-size:.875rem;font-weight:500;line-height:1.25rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));background:transparent;color:inherit;cursor:pointer}
-af-accordion-trigger .af-accordion-icon{pointer-events:none;flex:none;width:1rem;height:1rem;transform:translateY(.125rem);color:var(--muted-foreground,currentColor);transition:transform .2s}
-af-accordion-trigger[aria-expanded="true"] .af-accordion-icon,af-accordion-trigger>button[aria-expanded="true"] .af-accordion-icon{transform:translateY(.125rem) rotate(180deg)}
-af-accordion-trigger:focus-visible,af-accordion-trigger>button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-accordion-trigger>.af-accordion-icon,af-accordion-trigger button>.af-accordion-icon{pointer-events:none;flex:none;width:1rem;height:1rem;transform:translateY(.125rem);color:var(--muted-foreground,currentColor);transition:transform .2s}
+af-accordion-trigger[aria-expanded="true"]>.af-accordion-icon,af-accordion-trigger button[aria-expanded="true"]>.af-accordion-icon{transform:translateY(.125rem) rotate(180deg)}
+af-accordion-trigger:focus-visible,af-accordion-trigger>button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#777) 50%,transparent)}
 af-accordion-trigger[aria-disabled=true],af-accordion-trigger>button[aria-disabled=true],af-accordion-trigger>button:disabled{opacity:.5;cursor:default}
 af-accordion-content{display:block;overflow:hidden;font-size:.875rem;line-height:1.25rem}
 af-accordion-content[hidden]{display:none!important}

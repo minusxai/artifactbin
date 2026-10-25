@@ -158,7 +158,7 @@ af-tabs-list[data-orientation=vertical]>af-tabs-trigger{width:100%;justify-conte
 af-tabs-trigger[disabled]{opacity:.5;cursor:default;pointer-events:none}
 af-tabs-trigger[data-state=inactive]:hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
 af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
-af-tabs-trigger:focus-visible{z-index:10;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ring,#777) 50%,transparent)}
+af-tabs-trigger:focus-visible{z-index:10;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-tabs-trigger>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
 af-tabs-list[data-variant=line]{background:transparent;gap:.25rem;border-radius:0}
 af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:none}

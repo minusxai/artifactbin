@@ -170,4 +170,8 @@ describe('native authored collapsible', () => {
     trigger.click(); expect(content.hidden).toBe(true);
     root.remove();
   });
+  it('leaves focus styling to the native button and only supplies the browser ring for a custom trigger', () => {
+    expect(collapsibleStyles).toContain('af-collapsible-trigger:not(:has(>button)):focus-visible{outline:auto;outline-offset:0}');
+    expect(collapsibleStyles).not.toContain('af-collapsible-trigger>button:focus-visible');
+  });
 });
