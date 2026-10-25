@@ -46,13 +46,13 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   subscription.unsubscribe();
   bridge.receive({ kind: 'send', command: { type: 'mx:data', datasets: ['dataset1'] } });
   expect(invalidations).toHaveLength(1);
-  const watched:any[]=[];const watch=runtime.client.watchQuery({query:runtime.gql`{orders{total}}`,clearOnRefresh:true}).subscribe(result=>watched.push(result));
+  const watched:any[]=[];const watch=runtime.client.watchQuery({query:runtime.gql`{orders{total}}`,clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(result=>watched.push(result));
   const settle=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};await settle();
   const first=events.filter(event=>event.kind==='fetch').at(-1)!;
   expect(watched.at(-1)).toEqual({data:{orders:null},loading:true});
   bridge.receive({kind:'fetch-result',call:first.call as number,status:200,headers:{},body:JSON.stringify({data:{orders:{total:12}}})});await settle();
   expect(watched.at(-1)).toEqual({data:{orders:{total:12}},loading:false});
-  bridge.receive({kind:'send',command:{type:'mx:data',datasets:['dataset1']}});expect(watched.at(-1)).toEqual({data:{orders:null},loading:true});await settle();
+  bridge.receive({kind:'send',command:{type:'mx:data',datasets:['dataset1']}});expect(watched.at(-1)).toEqual({data:{orders:{total:12}},loading:true});await settle();
   const again=events.filter(event=>event.kind==='fetch').at(-1)!;expect(again.call).not.toBe(first.call);
   bridge.receive({kind:'fetch-result',call:again.call as number,status:200,headers:{},body:JSON.stringify({data:{orders:null},errors:[{message:'Access unavailable'}]})});await settle();
   expect(watched.at(-1)).toMatchObject({data:{orders:null},loading:false,errors:[{message:'Access unavailable'}]});

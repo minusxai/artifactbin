@@ -13,7 +13,7 @@ import type {PresencePaint} from '../html-presence/contract';
 import {followAppLinks} from '@/lib/islands/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
-import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
+import {RemoteUnreachable,type RemotePort,type QueryInvalidation} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
 /** Portable remote access stays read-only regardless of connection state; local preview datasets are separate. */
@@ -35,14 +35,14 @@ function pendingPortableConnection():boolean {
 }
 const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
-  subscribe(listener){const subscription=onBackendChange(()=>listener());return()=>subscription.unsubscribe();},
+  subscribe(listener){const subscription=onBackendChange((_names,reason)=>listener(reason));return()=>subscription.unsubscribe();},
   online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
-const invalidationListeners = new Set<(names: readonly string[]) => void>();
+const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInvalidation) => void>();
 /** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
-export function onBackendChange(listener: (names: readonly string[]) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
+export function onBackendChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
@@ -177,7 +177,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       if (payload.kind === 'send') {
         const command = payload.command as Partial<HtmlAnnotationPaint> & HtmlCommentViewCommand & { type?: string; annotate?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
-        if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names); } catch { /* One subscriber cannot stop the others. */ } }
+        if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
         if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? htmlSelection(win, target, config.revision, config.savedNodeIds) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }

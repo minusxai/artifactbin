@@ -52,3 +52,18 @@ it('a synchronous state notification that closes setup cleans state without acqu
  const sub=client.watchQuery({query:gql`{filter records{value}}`}).subscribe(()=>{throw Error('view failed');});
  sub.unsubscribe();expect(stops).toBe(1);expect(remoteSubscriptions).toBe(0);
 });
+
+it('retains protected rows and viewer only for same-session data refresh and clears before authority reread',async()=>{
+ const f=fixture(),seen:QueryResult[]=[];
+ const sub=f.client.watchQuery({query:gql`{records{value}}`,clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(result=>seen.push(result));
+ f.jobs.shift()!.resolve({data:{records:{value:'owner rows'}}});await tick();
+ const mutation=f.client.mutate({mutation:gql`mutation {records{save}}`});
+ f.jobs.shift()!.resolve({data:{records:{save:true}},extensions:{outcomes:{'records.save':'committed'}}});await mutation;
+ expect(seen.at(-1)).toEqual({data:{records:{value:'owner rows'}},loading:true});
+ // An authority invalidation fences the already-running data read before it can restore old rows.
+ f.notify();expect(seen.at(-1)).toEqual({data:{records:null},loading:true});
+ f.jobs.shift()!.resolve({data:{records:{value:'stale owner'}}});await tick();
+ expect(seen.at(-1)?.data.records).toBeNull();
+ f.jobs.shift()!.resolve({data:{records:{value:'new subject'}}});await tick();
+ expect(seen.at(-1)).toEqual({data:{records:{value:'new subject'}},loading:false});sub.unsubscribe();
+});
