@@ -6,13 +6,12 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const requestId=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);};
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},tableErrors={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
- const cells=new WeakMap(),completions=new Map(),committedResets=new Set();
+ const cells=new WeakMap(),committedResets=new Set();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
- const rootScope={active:true,cleanups:new Set(),completion:{active:true},ownsCompletion:true},scopes=new Set([rootScope]);
- const disposeScope=scope=>{if(scope.ownsCompletion){scope.completion.active=false;if(scope.completion.key&&completions.get(scope.completion.key)===scope.completion)completions.delete(scope.completion.key);}if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
- const childScope=(parent,retained=false)=>{const child={active:true,cleanups:new Set(),completion:retained?parent.completion:{active:true},ownsCompletion:!retained},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
- const cellScope=(parent,identity)=>{const child=childScope(parent);child.completion.key=JSON.stringify([parent.completion.key??null,'table',identity.owner,typeof identity.rowKey,identity.rowKey,identity.column]);completions.set(child.completion.key,child.completion);return child;};
+ const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
+ const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
+ const childScope=parent=>{const child={active:true,cleanups:new Set()},cleanup=()=>disposeScope(child);parent.cleanups.add(cleanup);child.cleanups.add(()=>parent.cleanups.delete(cleanup));scopes.add(child);return child;};
  const clearCondition=host=>{const branch=conditions.get(host);if(branch?.scope){disposeScope(branch.scope);branch.scope=null;}host.replaceChildren();};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
@@ -83,18 +82,18 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     }}
    }
    if(target.kind==='table'){
-    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,cellScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
+    let table=tableBindings.get(host);if(!table){table=createTable(host,target,{clone,render,childScope,disposeScope});tableBindings.set(host,table);}table.update(tableData[target.expression.name]??null,scope);
    }
    if(target.kind==='condition'){
     let branch=conditions.get(host);if(!branch){branch={nodes:clone(target.templateId,context),scope:null};conditions.set(host,branch);}
-    const yes=!!read(target.expression,row);if(yes){if(!branch.scope?.active)branch.scope=childScope(scope,true);if(!host.childNodes.length)host.append(...branch.nodes);render(host,row,{...context,scope:branch.scope},target.sourceNode);}else clearCondition(host);
+    const yes=!!read(target.expression,row);if(yes){if(!branch.scope?.active)branch.scope=childScope(scope);if(!host.childNodes.length)host.append(...branch.nodes);render(host,row,{...context,scope:branch.scope},target.sourceNode);}else clearCondition(host);
    }
    if(target.kind==='loop'){
     const rows=read(target.expression,row)??[],durable=target.identity.keyBy!==null;if(!Array.isArray(rows)||rows.length>10000)throw Error('Repeat source must be bounded rows');
     let state=loops.get(host);if(!state){state=new Map();loops.set(host,state);scope.cleanups.add(()=>{for(const item of state.values()){disposeScope(item.context.scope);item.host.remove();}state.clear();loops.delete(host);});}const keys=new Set(),desired=[];
     for(const [index,entry]of rows.entries()){const key=durable?own(entry,target.identity.keyBy):index;if(!(typeof key==='number'&&Number.isFinite(key)||typeof key==='string'&&key.length<=256&&!/[\u0000-\u001f]/.test(key)))throw Error('Missing stable row key');const encoded=JSON.stringify([typeof key,key]);if(keys.has(encoded))throw Error('Duplicate stable row key');keys.add(encoded);desired.push({entry,key,encoded});}
     for(const [key,item]of state)if(!keys.has(key)){disposeScope(item.context.scope);item.host.remove();state.delete(key);}
-    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope=childScope(scope);rowScope.completion.key=JSON.stringify([context?.ids??null,target.identity.owner,encoded]);completions.set(rowScope.completion.key,rowScope.completion);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
+    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope=childScope(scope);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
 
    }
    if(target.kind==='action'){
@@ -108,7 +107,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
       if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||plan.viewer&&viewerReady&&requestOwners.get(request)!==viewerId)return;
       if(receipt.outcome==='rejected')throw Error('Mutation rejected; local values were retained');
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
-      if(receipt.reset.length){committedResets.add({request,mutation,scope});await flushCommittedResets();}
+      if(receipt.reset.length){committedResets.add({request,mutation});await flushCommittedResets();}
      }
     }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context?.ids&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
     host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);if(disposed)pending.delete(host);topActions.delete(action);actions.delete(host);});
@@ -117,14 +116,13 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   notifyObservers();void flushCommittedResets().catch(cause=>error(cause.message));
  }
  function flushCommittedResets(){
+  // Confirmed writes reset viewer values; mounted rows never own those values.
   const updates=[];
-  for(const task of committedResets){const {request,mutation,scope}=task;
+  for(const task of committedResets){const {request,mutation}=task;
    if(disposed||plan.viewer&&viewerReady&&requestOwners.get(request)!==viewerId){committedResets.delete(task);continue;}
-   if(plan.viewer&&!viewerReady||Object.values(tablePending).some(Boolean))continue;
+   if(plan.viewer&&!viewerReady)continue;
    committedResets.delete(task);
-   const live=()=>scope.completion.active||scope.completion.key&&completions.get(scope.completion.key)?.active;
-   if(!live())continue;
-   updates.push(client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!live()||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return data;const next={...data};for(const name of mutation.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;}));
+   updates.push(client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))return data;const next={...data};for(const name of mutation.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;}));
   }
   return Promise.all(updates);
  }

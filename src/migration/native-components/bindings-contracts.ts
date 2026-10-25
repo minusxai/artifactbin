@@ -18,6 +18,7 @@ export interface NativeRegisteredBindingMutation {
   values: readonly { name: string; type: string; nullable?: boolean; source?: {kind: "row"; field: string} }[];
   /** Registered operation outcome object; only outcome=committed may reset. */
   outcomePath: readonly string[];
+  /** A confirmed write resets viewer values, independently of the originating row or mounted control. */
   reset: readonly string[];
 }
 /** A saved historical action has no wire operation and no write backend. */

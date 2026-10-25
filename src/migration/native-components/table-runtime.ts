@@ -1,6 +1,3 @@
-/** A completion belongs to an exact table/typed row/column, independently of DOM mounting. */
-export interface NativeTableCellCompletionIdentity {owner:string;rowKey:string|number;column:string}
-export interface NativeTableCellCompletionPort<Scope> {cellScope(parent:Scope,identity:NativeTableCellCompletionIdentity):Scope}
 /** Caller-owned native cell renderers. Cached nodes retain unresolved action identity
  * through virtualisation; only their active subscriptions/listeners are scoped. */
 export const NATIVE_TABLE_RUNTIME = String.raw`function createTable(host,target,ports){
@@ -18,7 +15,7 @@ export const NATIVE_TABLE_RUNTIME = String.raw`function createTable(host,target,
    const wrapper=host.ownerDocument.createElement('span');wrapper.style.display='contents';
    item={wrapper,context:{ids,domIds,domBindings,durable:true},scope:null};wrapper.append(...ports.clone(column.template.templateId,item.context));cells.set(encoded,item);
   }
-  if(!item.scope?.active)item.scope=ports.cellScope(parent,{owner:target.owner,rowKey:key,column:column.spec.col});
+  if(!item.scope?.active)item.scope=ports.childScope(parent);
   ports.render(item.wrapper,cell.row,{...item.context,scope:item.scope});
   if(existing.firstChild!==item.wrapper)existing.replaceChildren(item.wrapper);
  };
