@@ -75,7 +75,12 @@ describe('installable shared skill folder',()=>{
   try{
    const zip=path.join(dir,'artifactbin.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
    execFileSync('unzip',['-q','-n',zip,'-d',dir]);
-   for(const [name,text] of Object.entries(expected).filter(([name])=>name!=='scripts/preview-html.mjs'))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   for(const [name,text] of Object.entries(expected).filter(([name])=>!['scripts/preview-html.mjs','scripts/toolbox-config.mjs','scripts/toolbox-platform.mjs'].includes(name)))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   const config=await import(pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-config.mjs')).href);
+   expect(config.default).toBe(origin);
+   const platform=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs')).href);
+   expect(platform.getOperationAST(platform.parse('query { __typename }')).operation).toBe('query');
+   expect(typeof platform.inspectPublicationBundle).toBe('function');
    const parser=readFileSync(path.join(dir,'artifactbin/scripts/preview-html.mjs'),'utf8');
    expect(parser).not.toMatch(/from\s*["']parse5/);
    const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');

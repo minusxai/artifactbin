@@ -34,6 +34,8 @@ describe('skill-first HTTP onboarding',()=>{
   }
   for(const [file,text] of Object.entries(files)){
    expect(text,file).not.toMatch(/@afbin\/cli|chat\/(?:install|ensure-node)/);
+   // Only Markdown documents contain authored Markdown links; scripts may generate them.
+   if(!file.endsWith('.md'))continue;
    for(const [,target] of text.matchAll(/\]\(([^)]+\.md)(?:#[^)]*)?\)/g)){
     const key=target.startsWith('references/')?target:target==='../SKILL.md'?'SKILL.md':file.startsWith('references/')?'references/'+target:target;
     expect(files,key).toHaveProperty(key);

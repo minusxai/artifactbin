@@ -12,6 +12,8 @@ Server: [[ base ]]. Reuse this origin’s saved credentials; [authentication](re
 
 For an existing page, read its canonical `html`, `version` and `state`, preserve `data-af-id` identities, edit the HTML and publish to the same ID. For new work, choose the content and one design system, build a complete useful first version, publish and share its returned URL before extending it. A URL-only request gets the URL alone.
 
+Direct HTTP: create with `POST /api/artifacts`; replace with `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable `Idempotency-Key`. On 409, read the new head and reconcile; never attach it to stale source.
+
 ## Author and publish
 
 [[ authorCommands ]]

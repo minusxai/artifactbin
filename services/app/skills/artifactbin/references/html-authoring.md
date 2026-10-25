@@ -8,13 +8,13 @@ Use an email-authenticated bearer ([authentication](http-auth.md)). JSON uses `C
 
 ## Script workflow
 
-`publish.mjs FILE` discovers HTML dependencies (CSS, fonts, images, modules, datasets and declared backend TypeScript). JSON/CSV publishes datasets; recognized media publishes assets. `--root` bounds files; `--manifest` accepts `{ "manifest": ["extra.json"] }`. `--dry-run` plans without writes. Backend TypeScript publishes through its declaring page.
+`publish.mjs FILE` discovers CSS, fonts, images, modules, datasets and declared backend TypeScript. JSON/CSV publishes datasets; media publishes assets. `--root` bounds files; `--manifest` accepts `{ "manifest": ["extra.json"] }`. `--dry-run` plans without writes. Backend TypeScript publishes through its declaring page.
 
 Edit with `read.mjs ID --output page.html`, retain `page.html.af.json`, then `publish.mjs page.html`. Canonical IDs and observed version/state survive. Publish returns a fresh pair beside the input; use it for the next edit. Historical, missing or mismatched baselines refuse updates. Never attach a fresh head to stale bytes. `--artifact ID --baseline FILE` requires the matching pair. Explicit `--create` recovers exported source as a new identity; lost HTML markers plus companion defeat detection. Data/media identity lives only in the companion.
 
 Credential-free journals live outside the project (`--request FILE` or private store default). `--resume FILE` reuses the exact saved origin/method/body/key without rereading source. Retain partial dependency receipts. No force overwrite exists.
 
-`read.mjs list` discovers one page. `read.mjs ID` returns canonical JSON; dataset source outputs require `.json`. `export.mjs ID --format html|png|jpg --output FILE` saves portable HTML or image; image-only `--slide N` is supported, version/viewport flags are not. Each script’s offline `--help` lists all flags and exits.
+`read.mjs list` discovers one page. `read.mjs ID` returns canonical JSON; dataset source outputs require `.json`. `export.mjs ID --format html|png|jpg --output FILE` saves portable HTML or image; image-only `--slide N` is supported, version/viewport flags are not. See offline `--help` for all flags.
 
 ## Create
 
@@ -26,7 +26,7 @@ Credential-free journals live outside the project (`--request FILE` or private s
 
 Send an `Idempotency-Key` (16–128 letters, digits, underscores or hyphens). Save it once with the complete body outside the page, exclusively (`writeFile` with `flag:"wx"`). Reuse an existing intent; never overwrite it or replace its key after uncertainty. Success returns identity, `url` and canonical `html`; share that URL.
 
-The server inserts the core first and assigns stable `data-af-id` identities. Initial inline scripts/handlers are admitted by exact code; inserting new inline code after rendering is blocked. Use authored scripts or assign DOM handlers from them. See [runtime](html-runtime.md).
+The server inserts the core first and assigns stable `data-af-id`s. Initial inline scripts/handlers are admitted by exact code; inserting new inline code after rendering is blocked. Use authored scripts or assign DOM handlers from them. See [runtime](html-runtime.md).
 
 ## Edit the same page
 
@@ -59,7 +59,7 @@ Runner `csp-connect` requests use `/a/PAGE_ID/fetch?url=ENCODED_HTTPS_URL`. The 
 
 ## Installable page presentation
 
-Declare static install metadata directly in `<head>`; scripts, templates and body metadata do not count.
+Declare static install metadata in `<head>`, outside scripts and templates:
 
 ```html
 <meta name="artifactbin:pwa-enabled" content="true">
@@ -76,11 +76,11 @@ The platform owns manifest, app identity, scope/start URL `/a/ID/app/` and worke
 
 ## Slides and image capture
 
-Mark author-owned slide containers explicitly, and style their layout with normal CSS:
+Mark slide containers and style them with CSS:
 
 ```html
 <section data-af-slide><h1>Garden review</h1><p>September results</p></section>
 <section data-af-slide><h2>Next month</h2><p>Repair the gate.</p></section>
 ```
 
-Use `GET /a/ID/export?format=png&slide=N` (or `format=jpg`). Rendering starts at a 1200×630 viewport; slide images crop to the selected element, so dimensions follow its layout. Reader chrome reduces page height; inspect the image for clipping or author navigation inside the slide. An export's `slide=N` selects the Nth visible marked element in document order, starting at 1; hidden miniatures do not count. Missing slides return HTTP 404 `slide_not_found` and the visible count. Whole-page export captures the full HTML body. The marker declares capture boundaries; it does not create navigation or presentation controls. Preserve each slide's canonical `data-af-id` when editing.
+Use `GET /a/ID/export?format=png&slide=N` (or `format=jpg`). Rendering starts at a 1200×630 viewport; slide images crop to the selected element, so dimensions follow its layout. Reader chrome reduces page height; inspect the image for clipping or author navigation inside the slide. An export's `slide=N` selects the Nth visible marked element in document order, starting at 1; hidden miniatures do not count. Missing slides return HTTP 404 `slide_not_found` and the visible count. Whole-page export captures the full HTML body. The marker sets capture boundaries, not navigation. Preserve each slide's canonical `data-af-id` when editing.
