@@ -55,6 +55,29 @@ it("measures columns after detached initialization and remeasures changed row co
   expect(header.style.gridTemplateColumns).toBe("minmax(230px, 1fr) minmax(105px, 1fr)");
   expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
 });
+it("retains a focused row beyond the initial sample while refreshing column measurements", async () => {
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.rowKey = "id";
+  el.cellRenderers = {value(context, cell) {
+    if (!cell.firstChild) { const input = document.createElement("input"); input.value = String(context.row.value); cell.append(input); }
+  }};
+  const columns = [{name:"id",type:"number" as const},{name:"value",type:"string" as const}];
+  const rows = Array.from({length:200}, (_,id)=>({id,value:`Row ${id}`}));
+  el.data = {columns,rows}; document.body.append(el); await Promise.resolve();
+  const viewport = el.querySelector<HTMLElement>("[data-slot=table-scroll]")!;
+  viewport.scrollTop = 100 * 33; viewport.dispatchEvent(new Event("scroll"));
+  const input = el.querySelector<HTMLInputElement>('tr[aria-rowindex="102"] input')!;
+  expect(input).toBeTruthy(); input.focus();
+  const scroll = viewport.scrollTop;
+  el.data = {columns,rows:rows.map(row=>({...row}))};
+  expect(input.isConnected).toBe(true);
+  expect(document.activeElement).toBe(input);
+  expect(viewport.scrollTop).toBe(scroll);
+  await Promise.resolve();
+  expect(el.querySelector('tr[aria-rowindex="102"] input')).toBe(input);
+  expect(document.activeElement).toBe(input);
+  expect(viewport.scrollTop).toBe(scroll);
+});
 it("uses a shared measured grid for its virtual header and body rows", async () => {
   const page = document.createElement("div");
   page.setAttribute("data-mx-story-root", "");

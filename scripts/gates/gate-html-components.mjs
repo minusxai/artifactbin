@@ -418,10 +418,24 @@ try {
     await settle();
     const after = widths();
     const cells = [...table.querySelectorAll('tbody tr[data-row-key] td')].map(cell => cell.getBoundingClientRect().width);
-    return {before,after,cells};
+    table.rowKey = 'id';
+    table.cellRenderers = {person(context,cell) { if (!cell.firstChild) { const input=document.createElement('input');input.value=context.row.person;cell.append(input); } }};
+    const rows=Array.from({length:200},(_,id)=>({id,person:`Person ${id}`,amount:id}));
+    table.data={columns,rows}; await settle();
+    const viewport=table.querySelector('[data-slot=table-scroll]');
+    viewport.scrollTop=4000;viewport.dispatchEvent(new Event('scroll'));await settle();
+    const input=table.querySelector('tbody tr[data-row-key] input');
+    const rowIndex=Number(input.closest('tr').getAttribute('aria-rowindex'));
+    input.focus({preventScroll:true});const scroll=viewport.scrollTop;
+    table.data={columns,rows:rows.map(row=>({...row}))};
+    const immediate=input.isConnected&&document.activeElement===input&&viewport.scrollTop===scroll;
+    await settle();
+    const retained=input.isConnected&&document.activeElement===input&&viewport.scrollTop===scroll;
+    return {before,after,cells,rowIndex,immediate,retained};
   });
   check(tableMeasurement.after[0] > tableMeasurement.before[0] + 20,'table remeasures loaded content after an empty same-schema result');
   check(tableMeasurement.after.every((width,index)=>Math.abs(width-tableMeasurement.cells[index])<1),'remeasured table header and body use the same column geometry');
+  check(tableMeasurement.rowIndex>52&&tableMeasurement.immediate&&tableMeasurement.retained,'table refresh preserves the focused control and scroll position beyond the initial sample');
 
   check(errors.length===0,`candidate has no page errors (${errors.join('; ') || 'none'})`);
   const evidence=JSON.stringify({candidateBundleSha256:createHash('sha256').update(bundle).digest('hex'),reference:{kind:'recorded-react-ssr',sha256:oracleHash,fixtures:tabsParityFixtures().map(fixture=>({id:fixture.id,oldJsx:fixture.oldJsx,newHtml:fixture.newHtml}))},families:componentBrowserFixtures.map(fixture=>({family:fixture.family,evidence:fixture.evidence})),viewports:[800,390],screenshots:'candidate-only; old-browser visual comparison not yet captured',themes:'fixture token pairs, not every product design system'},null,2);
