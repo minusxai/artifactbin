@@ -6,7 +6,7 @@ import {it,expect,beforeEach,vi} from 'vitest';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
 import {exportAssetUrl} from '@/lib/export/assets';
-import {getDb} from '@/lib/platform';
+import {getDb,mintExportKey} from '@/lib/platform';
 import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
 import {mintToken} from '@/lib/accounts';
@@ -121,6 +121,15 @@ it('serves a scoped exported image through both app and proxy asset-origin bound
  for(const fetch of [app.fetch,proxy.fetch]){
   const response=await fetch(new Request(url));expect(response.status).toBe(200);expect(await response.text()).toBe('image bytes');
   expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  const etag=response.headers.get('etag')!;
+  const cached=await fetch(new Request(url,{headers:{'if-none-match':etag,cookie:'session=secret',authorization:'Bearer secret'}}));
+  expect(cached.status).toBe(304);expect(await cached.text()).toBe('');
+  expect(cached.headers.get('cache-control')).toMatch(/^private, max-age=\d+, must-revalidate$/);
+  const malformed=await fetch(new Request(url.replace(/key=.*/,'key=bad')));
+  expect(malformed.status).toBe(404);expect(malformed.headers.get('cache-control')).toBe('no-store');
+  const expired=new URL(url);expired.searchParams.set('key',mintExportKey(`export-asset:${id}`,-1));
+  const denied=await fetch(new Request(expired,{headers:{'if-none-match':etag}}));
+  expect(denied.status).toBe(404);expect(denied.headers.get('cache-control')).toBe('no-store');
   expect((await fetch(new Request(url+'&key=duplicate'))).status).toBe(404);
   expect((await fetch(new Request(url.split('?')[0]!))).status).toBe(404);
  }
