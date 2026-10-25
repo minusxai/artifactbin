@@ -158,6 +158,14 @@ async function acceptance(){
   "dpkg-query -W tar dash libpcre2-8-0 libexpat1 coreutils ncurses-bin libtinfo6; test \"$(dpkg-query -W -f='${Version}' tar)\" = 1.35+fedora10-1+runtime1; test \"$(dpkg-query -W -f='${Version}' dash)\" = 0.5.12+libcfnmatch-1+runtime1; test \"$(dpkg-query -W -f='${Version}' libpcre2-8-0)\" = 10.49-1+runtime1; dpkg --compare-versions \"$(dpkg-query -W -f='${Version}' libexpat1)\" eq 2.9.0+security20261023-1+runtime1; test \"$(dpkg-query -W -f='${Version}' coreutils)\" = 9.12-1+runtime1; test \"$(dpkg-query -W -f='${Version}' ncurses-bin)\" = 6.6-1+runtime1; test \"$(dpkg-query -W -f='${Version}' libtinfo6)\" = 6.6-1+runtime1; timeout 5 dash -c 'value=$(printf \"%050000d\" 0 | tr 0 .); case \"$value\" in *.*.*.*.*.tar.gz) exit 1;; *) printf \"libc matcher stress passed\\n\";; esac'"
  ],{capture:true});
  console.log('Installed runtime package proof: '+runtimePackages.trim());
+ // Proof executables stay in the source output image, never in the shipped app.
+ const tools=join(scratch,'native-runtime-tools');await mkdir(tools);
+ const proofContainer=run(first,'docker',['create','afbin-runtime-packages-ci','/unused'],{capture:true}).trim();
+ try{run(first,'docker',['cp',`${proofContainer}:/test-tools/.`,tools]);}
+ finally{run(first,'docker',['rm',proofContainer]);}
+ const appImage=compose(first,['images','-q','app'],{capture:true}).trim();
+ await runAsync(first,'docker',['run','--rm','--network','none','--entrypoint','node','--mount',`type=bind,src=${tools},dst=/test-tools,readonly`,appImage,'/test-tools/check-browser-libraries.mjs'],{timeout:60_000});
+
 
  const uid=compose(first,['exec','-T','app','node','-p','process.getuid()'],{capture:true});assert.notEqual(uid.trim(),'0');
  compose(first,['exec','-T','app','node','-e',"fetch('http://127.0.0.1:7445/api/auth/email-otp/send-verification-otp',{method:'POST',headers:{'content-type':'application/json',origin:'https://company.example.com'},body:JSON.stringify({email:'mxmx_test_owner@example.com',type:'sign-in'})}).then(r=>{if(!r.ok)throw Error('SMTP email-code request failed:'+r.status)}).catch(e=>{console.error(e.message);process.exit(1)})"]);

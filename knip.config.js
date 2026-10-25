@@ -22,6 +22,9 @@ export default {
         // CI.smtp.Dockerfile starts this private SMTP sink by path.
         'deploy/company/ci-smtp-fixture.mjs',
         'deploy/company/patch-npm.mjs',
+        // Mounted by the Company container acceptance gate, not shipped in the app.
+        'deploy/company/runtime-source/browser/check-browser-libraries.mjs',
+        'deploy/company/runtime-source/browser/write-payload-manifest.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests, the offline gate's preview build, the backfill and the author-script audit.
@@ -38,6 +41,8 @@ export default {
       project: ['**/*.{ts,tsx,mjs,js,jsx,css}'],
       // vitest.config.ts setup files: resolved by the services/app workspace, which owns them.
       ignoreUnresolved: [/^\.\/services\/app\/test\/setup\//],
+      // Debian runtime package inventory used by the final-image native acceptance probe.
+      ignoreBinaries: ['dpkg-query', 'dpkg-deb'],
       ignoreDependencies: [
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',

@@ -1,0 +1,40 @@
+Upstream76fe08d97de88bfaef2f7d5cd27f11954cc5bee2 +e89a8aae4c9b40cdafcf66b3f9e57c62db37bb55 bounds and allocation guard, adapted to2.9.14 context.
+
+--- a/xmlregexp.c
++++ b/xmlregexp.c
+@@ -58,7 +58,9 @@
+     xmlRegexpErrCompile(ctxt, str);
+ #define NEXT ctxt->cur++
+ #define CUR (*(ctxt->cur))
+-#define NXT(index) (ctxt->cur[index])
++#define NXT(index) \
++    (((size_t)(ctxt->cur + index - ctxt->string) < ctxt->len) \
++      ? ctxt->cur[index] : 0)
+ 
+ #define CUR_SCHAR(s, l) xmlStringCurrentChar(NULL, s, &l)
+ #define NEXTL(l) ctxt->cur += l;
+@@ -248,6 +250,7 @@
+ struct _xmlAutomata {
+     xmlChar *string;
+     xmlChar *cur;
++    size_t len;
+ 
+     int error;
+     int neg;
+@@ -721,8 +724,14 @@
+     if (ret == NULL)
+ 	return(NULL);
+     memset(ret, 0, sizeof(xmlRegParserCtxt));
+-    if (string != NULL)
+-	ret->string = xmlStrdup(string);
++    if (string != NULL) {
++        ret->string = xmlStrdup(string);
++        if (ret->string == NULL) {
++            xmlFree(ret);
++            return(NULL);
++        }
++        ret->len = strlen((const char *) ret->string);
++    }
+     ret->cur = ret->string;
+     ret->neg = 0;
+     ret->negs = 0;

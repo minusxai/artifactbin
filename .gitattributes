@@ -1,3 +1,5 @@
 # Upstream patch payloads retain their verified original whitespace and checksums.
 deploy/company/runtime-source/tar-patches/*.patch -whitespace
 deploy/company/runtime-source/expat-patches/*.patch -whitespace
+deploy/company/runtime-source/browser/xml/patches/*.patch -whitespace
+deploy/company/runtime-source/browser/sqlite/patches/* -whitespace

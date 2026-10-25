@@ -86,3 +86,51 @@ esac
   execFileSync('test',['-x',join(destination,'DEBIAN/preinst')]);
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
+
+it('preserves the IPP request identity and rejects malformed native requests',async()=>{
+ const {ippResponse}=await import('../../deploy/company/runtime-source/browser/check-browser-libraries.mjs');
+ const request=Buffer.from([2,0,0,11,0x12,0x34,0x56,0x78,3]);
+ const response=ippResponse(request);
+ expect([...response.subarray(0,8)]).toEqual([2,0,0,0,0x12,0x34,0x56,0x78]);
+ let offset=9;const attributes=[];
+ while(response[offset]!==3){
+  if(response[offset]===4){offset++;continue;}
+  const tag=response[offset++],nameLength=response.readUInt16BE(offset);offset+=2;
+  const name=response.subarray(offset,offset+nameLength).toString();offset+=nameLength;
+  const valueLength=response.readUInt16BE(offset);offset+=2;
+  const value=response.subarray(offset,offset+valueLength).toString();offset+=valueLength;
+  attributes.push([tag,name,value]);
+ }
+ expect(attributes).toEqual([[0x47,'attributes-charset','utf-8'],[0x48,'attributes-natural-language','en'],[0x42,'printer-name','fixture']]);
+ expect(()=>ippResponse(Buffer.alloc(7))).toThrow('Complete IPP header');
+ expect(()=>ippResponse(Buffer.from([2,0,0,2,0,0,0,1]))).toThrow('Get-Printer-Attributes');
+ expect(()=>ippResponse(Buffer.from([9,0,0,11,0,0,0,1]))).toThrow('Supported IPP version');
+});
+it('binds selective browser source inputs to their reviewed manifests',()=>{
+ const browser=new URL('browser/',source);
+ const sqlite=JSON.parse(readFileSync(new URL('sqlite/consumer-manifest.json',browser),'utf8'));
+ for(const [name,digest] of Object.entries(sqlite))expect(createHash('sha256').update(readFileSync(new URL('sqlite/'+name,browser))).digest('hex'),name).toBe(digest);
+ for(const family of ['xml/patches','cups']){
+  const directory=new URL(family+'/',browser);
+  for(const line of readFileSync(new URL('SHA256SUMS',directory),'utf8').trim().split('\n')){
+   const [digest,name]=line.trim().split(/\s+/);
+   expect(createHash('sha256').update(readFileSync(new URL(name,directory))).digest('hex'),name).toBe(digest);
+  }
+ }
+});
+
+it('binds rebuilt ELF bytes and excludes package documentation from the native manifest',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'native-manifest-'));
+ try{
+  const bin=join(directory,'bin'),packages=join(directory,'packages'),output=join(directory,'manifest.json');mkdirSync(bin);mkdirSync(packages);
+  writeFileSync(join(packages,'fixture.deb'),'fixture archive');
+  writeFileSync(join(bin,'dpkg-deb'),`#!/bin/sh
+mkdir -p "$3/usr/lib" "$3/usr/share/doc"
+printf '\\177ELFrebuilt-native-payload' > "$3/usr/lib/libfixture.so.1"
+printf 'package documentation' > "$3/usr/share/doc/fixture"
+`,{mode:0o755});
+  execFileSync(process.execPath,[new URL('browser/write-payload-manifest.mjs',source).pathname,packages,output],{env:{...process.env,PATH:bin+':'+process.env.PATH}});
+  const bytes=Buffer.concat([Buffer.from([0x7f]),Buffer.from('ELFrebuilt-native-payload')]);
+  expect(JSON.parse(readFileSync(output,'utf8'))).toEqual({'/usr/lib/libfixture.so.1':createHash('sha256').update(bytes).digest('hex')});
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});

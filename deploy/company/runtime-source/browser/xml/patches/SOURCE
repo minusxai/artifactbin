@@ -1,0 +1,6 @@
+Build baseline: Debian libxml2 2.12.7+dfsg+really2.9.14-2.1+deb13u3, all40distribution patches applied.
+Six unchanged Canonical backports from official Ubuntu noble2.9.14+dfsg-1.3ubuntu3.10 source tar (hash/provenance adjacent), rebuilt against Debian, never Ubuntu binaries.
+76781 productionNULLguard unchanged; patch context adapts absent comparison.
+Regexp bounds fix76fe08d and allocationfollowup e89a8aa applied together; context adapted to2.9.14 parser struct.
+86139 equivalent nonpositive lengthguard already present;86141 affects newboundsfix allocation only, absent original2.9.14 strlen code.
+Host sanitizer proof omits optional compression/ICU/Python and uses configure --disable-maintainer-mode; not Linux package/ABI proof. Debian recipe must autoreconf and preserve Debian buildflags/features/fulltest fixtures.

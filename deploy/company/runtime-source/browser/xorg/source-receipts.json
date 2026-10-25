@@ -1,0 +1,76 @@
+{
+  "libx11": {
+    "name": "libX11",
+    "version": "1.8.14",
+    "url": "https://www.x.org/releases/individual/lib/libX11-1.8.14.tar.xz",
+    "sha256": "bbc78c46217174655c2b32b138ad119f3ac15f50808b4d0b3a2677a4b1afc950",
+    "changelog_sha256": "61932c4542bbe4ba3b950da5503e6fa99a2b4d45b0b6ce021de29d1132ca3817",
+    "signature_status": "Checksum-pinned canonical HTTPS release archive; detached signature not verified.",
+    "announced_sha256_verified": true,
+    "announcement": "https://lists.x.org/archives/xorg-announce/2026-October/003753.html"
+  },
+  "libxi": {
+    "name": "libXi",
+    "version": "1.8.4",
+    "url": "https://www.x.org/releases/individual/lib/libXi-1.8.4.tar.xz",
+    "sha256": "ddd6057b89a91903bc2f884d55c8467440906945e482c36547260dff28661afc",
+    "changelog_sha256": "383fe582ec5003f777347dcd3fb9c33c08216fef3f65ba4557e3e4801c16e967",
+    "signature_status": "Checksum-pinned canonical HTTPS release archive; detached signature not verified.",
+    "announced_sha256_verified": true,
+    "announcement": "https://lists.x.org/archives/xorg-announce/2026-October/003754.html"
+  },
+  "libxpm": {
+    "name": "libXpm",
+    "version": "3.5.20",
+    "url": "https://www.x.org/releases/individual/lib/libXpm-3.5.20.tar.xz",
+    "sha256": "c064ead03e4dde78afdeb121fe0b644d25c550444cf903fbdc537f1a78f3ef74",
+    "changelog_sha256": "d9ffeff46a5cc14559fae94439d256ff10cbdba13d995401e6b89a0c77d30742",
+    "signature_status": "Checksum-pinned canonical HTTPS release archive; detached signature not verified.",
+    "announced_sha256_verified": true,
+    "announcement": "https://lists.x.org/archives/xorg-announce/2026-October/003755.html"
+  },
+  "libxrender": {
+    "name": "libXrender",
+    "version": "0.9.13",
+    "url": "https://www.x.org/releases/individual/lib/libXrender-0.9.13.tar.xz",
+    "sha256": "3fe88c609df6782e1e7af2e4de36b2563d70cd70ff7dcb1cda561ad64912bb64",
+    "changelog_sha256": "10a9fc502974150fac385aaccaeff8bee9b2949dcb4d3ea27047920c9ee2aa27",
+    "signature_status": "Checksum-pinned canonical HTTPS release archive; detached signature not verified.",
+    "announced_sha256_verified": true,
+    "announcement": "https://lists.x.org/archives/xorg-announce/2026-October/003756.html"
+  },
+  "xorg-server": {
+    "name": "xorg-server",
+    "version": "21.1.25",
+    "url": "https://www.x.org/releases/individual/xserver/xorg-server-21.1.25.tar.xz",
+    "sha256": "6ad4e3c7b59a309b32c92e5c15ce1267110f9e13f1ac78da62361a628da1a0eb",
+    "changelog_sha256": "17c8aadfcf4ce96aae311aae4f17f1d8732087d0c7b7e1fb4fde9ea094c1b9d2",
+    "signature_status": "Checksum-pinned canonical HTTPS release archive; detached signature not verified.",
+    "announced_sha256_verified": true,
+    "announcement": "https://lists.x.org/archives/xorg-announce/2026-October/003748.html"
+  },
+  "x11-xkb-utils": {
+    "name": "xkbcomp",
+    "version": "1.5.0",
+    "url": "https://www.x.org/releases/individual/app/xkbcomp-1.5.0.tar.xz",
+    "sha256": "2ac31f26600776db6d9cd79b3fcd272263faebac7eb85fb2f33c7141b8486060",
+    "changelog_sha256": "c5ac1cbeebc65b87c4b9635006737efe1e51a4756b923a784a8f10b389eb3329",
+    "announcement": "https://lists.x.org/archives/xorg-announce/2025-December/003645.html",
+    "announced_sha256_verified": true,
+    "signature_status": "Checksum-pinned canonical HTTPS archive; detached signature not verified.",
+    "package_policy": "Transparent xkbcomp1.5.0 backport into original x11-xkb-utils package; other installed utilities retained byte-for-byte with hashes, not relabeled as new upstream component releases.",
+    "fixes": {
+      "CVE-2018-15853": "da836764573298c53c625c6c237ab5211b2d3adf",
+      "CVE-2018-15859": "895e080b237e346a43a31edf9dee6143c2abf230",
+      "CVE-2018-15861": "c342635409cd687da0eda323ef4f165b11565052",
+      "CVE-2018-15863": "fa10dbc2ca8bcb45bcecb433520de755e628ca91"
+    },
+    "baseline": {
+      "url": "https://deb.debian.org/debian/pool/main/x/x11-xkb-utils/x11-xkb-utils_7.7+9.tar.xz",
+      "sha256": "27ae7efb512f3b816c66b7c7290f28de4ae811972e06c5e27a9124d2eab766d4",
+      "published_checksum": "https://deb.debian.org/debian/pool/main/x/x11-xkb-utils/x11-xkb-utils_7.7+9.dsc",
+      "component": "xkbcomp1.4.7 verifiedconfigure.ac",
+      "signature_status": "Published Debian source-control SHA256 matched; detached signature not verified."
+    }
+  }
+}

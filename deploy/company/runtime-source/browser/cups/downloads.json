@@ -1,0 +1,14 @@
+[
+  {
+    "name": "cups-2.4.20-source.tar.gz",
+    "browser_download_url": "https://github.com/OpenPrinting/cups/releases/download/v2.4.20/cups-2.4.20-source.tar.gz",
+    "digest": "sha256:ab4d9cd7f3e58060091d2b24972223d6401675f11c49b65abf4f6ef31dea22ff",
+    "size": 8164882
+  },
+  {
+    "name": "cups-2.4.20-source.tar.gz.sig",
+    "browser_download_url": "https://github.com/OpenPrinting/cups/releases/download/v2.4.20/cups-2.4.20-source.tar.gz.sig",
+    "digest": "sha256:dc7dea724dc952b200d97a356c3deff4326095ebb3e3027f9cae1e8222116197",
+    "size": 119
+  }
+]
