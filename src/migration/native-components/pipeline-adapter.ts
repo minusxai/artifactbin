@@ -89,7 +89,7 @@ export async function createNativePipelineAdapter(request:NativePipelineRequest,
  }};
 }
 /** Materialize operator authority only after exact source/assembly admission, before opening a destination. */
-export async function materializeNativePipelineAuthority(request:NativePipelineRequest,context:NativePipelineHostContext,configuration:NativePipelineAdapterConfiguration,publication:NativePipelinePublicationConfiguration):Promise<NativePipelineHostContext>{
+export async function materializeNativePipelineAuthority(request:NativePipelineRequest,context:NativePipelineHostContext,configuration:NativePipelineAdapterConfiguration,publication:NativePipelinePublicationConfiguration,options:{objectsDirectory?:string}={}):Promise<NativePipelineHostContext>{
  const authority=configuration.authority;
  if(!authority||!/^([a-f0-9]{40})$/.test(authority.sourceRevision)||!authority.capabilities.length||authority.capabilities.some(c=>typeof c!=='string'||!c)||(!authority.runtime.actor&&!authority.runtime.runtimeActorBySourceUserId)||typeof authority.runtime.origin!=='string')throw Error('native_pipeline_adapter_authority_configuration');
  if(nativeDigest(context.assembly.key)!==nativeDigest(context.revision.key)||context.revision.key.sourceId!==request.head||context.assembly.result.status!=='complete'||!context.assembly.result.html)throw Error('native_pipeline_adapter_assembly_binding');
@@ -116,8 +116,10 @@ export async function materializeNativePipelineAuthority(request:NativePipelineR
  const expected=path.resolve(context.outputDirectory,'operator-inputs','authority.json');
  const directory=path.join(await realpath(context.outputDirectory),'operator-inputs'),authorityPath=path.join(directory,'authority.json');
  if(path.resolve(context.authorityRecipePath)!==expected)throw Error('native_pipeline_adapter_authority_output');
- const values:Record<string,Uint8Array>={sourceHead:canonical,compiledHtml:Buffer.from(context.assembly.result.html),datasetCatalog:Buffer.from(JSON.stringify({...publication.shared.catalog,sinkDirectory:path.join(await realpath(context.outputDirectory),'disposable-target','objects')})),identity:Buffer.from(JSON.stringify(publication.shared.identity)),authSchemaCapability:Buffer.from(JSON.stringify({schemas:publication.shared.schemas,runtime:{actor:runtimeActor,origin:authority.runtime.origin}})),membership:Buffer.from(JSON.stringify(membership)),comments:rawRelations,...(ancillary?{ancillaryFolders:ancillary.bytes}:{})};
  const receiptRoot=await realpath(context.receiptRoot);if(!directory.startsWith(receiptRoot+path.sep))throw Error('native_pipeline_adapter_output_scope');
+ const objectsDirectory=options.objectsDirectory??path.join(await realpath(context.outputDirectory),'disposable-target','objects');
+ if(!path.isAbsolute(objectsDirectory)||!objectsDirectory.startsWith(receiptRoot+path.sep)||!objectsDirectory.endsWith(path.sep+'disposable-target'+path.sep+'objects'))throw Error('native_pipeline_adapter_objects_scope');
+ const values:Record<string,Uint8Array>={sourceHead:canonical,compiledHtml:Buffer.from(context.assembly.result.html),datasetCatalog:Buffer.from(JSON.stringify({...publication.shared.catalog,sinkDirectory:objectsDirectory})),identity:Buffer.from(JSON.stringify(publication.shared.identity)),authSchemaCapability:Buffer.from(JSON.stringify({schemas:publication.shared.schemas,runtime:{actor:runtimeActor,origin:authority.runtime.origin}})),membership:Buffer.from(JSON.stringify(membership)),comments:rawRelations,...(ancillary?{ancillaryFolders:ancillary.bytes}:{})};
  await mkdir(directory,{mode:0o700});const inputs:Record<string,{path:string;sha256:string}>={};
  for(const [name,bytes]of Object.entries(values)){
   const file=path.join(directory,name+'.input');if(!file.startsWith(receiptRoot+path.sep))throw Error('native_pipeline_adapter_output_scope');
