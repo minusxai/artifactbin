@@ -14,15 +14,15 @@ import {createRetainedRegisteredMutation} from '../retained';
 import type {MutationProgram} from '../contracts';
 useAppHarness();afterEach(()=>{vi.restoreAllMocks();});
 const signal=()=>new AbortController().signal;
-async function fixture(kind:'insert'|'delete'='insert'){
+async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedAffected?:number}={expectedAffected:1}){
  const owner=await mintAccountToken('mxmx_test_registered_mutation_acceptance'),actor=identityForUser(owner.userId,owner.id);
  const make=async(json:object)=>{const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json}));expect(response.status).toBe(201);return (await response.json()).id as string;};
  const datasetId=await make({dataset:[{body:'seed'},{body:'other'}],visibility:'private'});
- await setDatasetPolicy(actor,datasetId,{version:2,allow:[{actions:['read','insert','delete'],from:{user:'$owner'}}]},0);
+ await setDatasetPolicy(actor,datasetId,{version:2,allow:[{actions:['read','insert','update','delete'],from:{user:'$owner'}}]},0);
  const pageId=await make({html:'<html><body>Registered actions</body></html>',visibility:'private'});
  await changeMembership(actor,pageId,{action:'join'});
  const original=await readHtmlPage(actor,pageId),page={...original,version:original.version+1,revision:String(original.version+1)};
- const program:MutationProgram={name:kind,kind,sql:kind==='insert'?'INSERT INTO forms.rows(body) VALUES ($body)':"DELETE FROM forms.rows WHERE body=$body OR $body='__all__'",target:{datasetId,schema:'forms',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
+ const program:MutationProgram={name:kind,kind,sql:kind==='insert'?'INSERT INTO forms.rows(body) VALUES ($body)':kind==='update'?"UPDATE forms.rows SET body=$body WHERE body='seed' OR $body='__all__'":"DELETE FROM forms.rows WHERE body=$body OR $body='__all__'",target:{datasetId,schema:'forms',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}),reset:['body']};
  const prepared=prepareRegisteredMutationBackend('actions',`backend_${pageId}`,page,program,{compilerSha256:'a'.repeat(64),sourceSha256:'b'.repeat(64)});page.links=[prepared.link];
  const db=await getDb();await db.transaction(async tx=>{await tx.query("UPDATE artifacts SET version=$2,meta=jsonb_set(meta,'{htmlLinks}',$3::jsonb) WHERE id=$1",[pageId,page.version,JSON.stringify(page.links)]);await tx.query('INSERT INTO artifact_versions(artifact_id,version,title,format,source,meta) SELECT id,version,title,format,source,meta FROM artifacts WHERE id=$1',[pageId]);await commitRegisteredMutationBackend(tx,page,owner.userId!,prepared);});
  const backend=(await getHtmlBackendVersion(prepared.link.backendId,prepared.link.version))!;
@@ -51,4 +51,19 @@ it('grant revocation at the final transaction boundary refuses without saving da
 });
 it('the real adapter refuses a saved historical registration after its page head advances',async()=>{
  const f=await fixture();await f.db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[f.pageId]);await expect(f.run('request_historical_1234567890','added')).rejects.toThrow();expect(await f.rows()).toHaveLength(2);expect((await f.db.query('SELECT response FROM mutation_receipts')).rows).toHaveLength(0);
+});
+
+it('real UPDATE uses dataset policies and exact count rollback, and unrestricted source counts replay zero/multiple rows',async()=>{
+ const update=await fixture('update'),before=(await getArtifactById(update.datasetId))!.version;
+ expect(await update.run('request_update_many_123456','__all__')).toMatchObject({outcome:'rejected',reset:[]});expect((await getArtifactById(update.datasetId))!.version).toBe(before);
+ const input='request_update_one_123456';const committed=await update.run(input,'changed');expect(committed).toMatchObject({outcome:'committed',affected:1,reset:['body']});expect(await update.run(input,'changed')).toEqual(committed);expect(await update.rows()).toEqual([{body:'changed'},{body:'other'}]);
+ const unrestricted=await fixture('delete',{}),version=(await getArtifactById(unrestricted.datasetId))!.version;
+ const removed=await unrestricted.run('request_delete_many_123456','__all__');expect(removed).toMatchObject({outcome:'committed',affected:2});expect(await unrestricted.run('request_delete_many_123456','__all__')).toEqual(removed);expect((await getArtifactById(unrestricted.datasetId))!.version).toBe(version+1);
+ expect(await unrestricted.run('request_delete_zero_123456','missing')).toMatchObject({outcome:'committed',affected:0});expect(await unrestricted.rows()).toEqual([]);
+});
+it('UPDATE remains denied when the source dataset policy permits only read/insert/delete',async()=>{
+ const f=await fixture('update'),before=(await getArtifactById(f.datasetId))!;
+ if(typeof before.policy_revision!=='number')throw Error('missing fixture policy revision');
+ expect(await setDatasetPolicy(f.actor,f.datasetId,{version:2,allow:[{actions:['read','insert','delete'],from:{user:'$owner'}}]},before.policy_revision)).toMatchObject({revision:before.policy_revision+1});
+ expect(await f.run('request_update_denied_123456','changed')).toMatchObject({outcome:'rejected',reset:[]});expect(await f.rows()).toEqual([{body:'seed'},{body:'other'}]);expect((await getArtifactById(f.datasetId))!.version).toBe(before.version);
 });
