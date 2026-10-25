@@ -2,6 +2,7 @@ import {it,expect} from 'vitest';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import path from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
 import {preparedPilotStoreDigest as digest} from '../lib/native-prepared-pilot-store.mjs';
+import {verifyNativeMigrationHostComparison} from '../lib/native-migration-host.mjs';
 import {runNativeProductionMigration} from '../lib/native-migration-production';
 const sha=value=>createHash('sha256').update(value).digest('hex');
 async function fixture(run){
@@ -33,8 +34,14 @@ async function ready(x){
  await x.put('authority.json',recipe);
  const context={revision:{key},assembly,receiptRoot:x.root,outputDirectory:path.join(x.root,'prior-disposable'),authorityRecipePath:path.join(x.root,'authority.json')};
  const imported={key,assemblySha256:assembly.sha256,stage:'imported',historyProjectionSha256:sha('history')};
- const report={format:'native-migration-pilot-comparison-v1',passed:true,pairedStates:1,control:{detected:true},issues:[],results:[{changedPixels:0,sizeEqual:true,behaviorEqual:true,fontBytesEqual:true,baselineErrors:[],candidateErrors:[],fontProofErrors:[]}]};
- const reportRef=await x.put('comparison-report.json',report);await x.put('baseline.json',{});await x.put('candidate.json',{});
+ const common={key,sourceSha256:sha('source'),documentSha256:sha('document'),canonicalSha256:inputs.sourceHead.sha256,harnessSha256:sha('harness'),gateManifestSha256:sha('gate'),theme:'light',viewports:[{width:390,height:844}],states:[{id:'initial',actions:[]}],bundleFiles:[{path:'index.html',sha256:sha(html)}]};
+ const proofCommon={format:'native-migration-pilot-capture-v1',...common,bundleManifestSha256:digest(common.bundleFiles),states:['initial'],issues:[]};delete proofCommon.key;delete proofCommon.bundleFiles;
+ const baseline={...proofCommon,implementation:'jsx',sourceRevision:recipe.sourceRevision},candidate={...proofCommon,implementation:'html',sourceRevision:recipe.targetRevision};
+ const baselineInput=await x.put('baseline-input.json',{...common,implementation:'jsx',originalRevision:recipe.sourceRevision}),candidateInput=await x.put('candidate-input.json',{...common,implementation:'html',candidateRevision:recipe.targetRevision});
+ for(const [name,input,proof] of [['baseline',baselineInput,baseline],['candidate',candidateInput,candidate]]){await x.put(name+'.json',proof);await x.put(name+'-camera.json',{format:'native-migration-camera-recipe-v1',paths:{input:path.join(x.root,input.path),output:x.root}});}
+ context.baselineRecipePath=path.join(x.root,'baseline-camera.json');context.candidateRecipePath=path.join(x.root,'candidate-camera.json');
+ const report={format:'native-migration-pilot-comparison-v1',baselineRevision:recipe.sourceRevision,candidateRevision:recipe.targetRevision,baselineGateManifestSha256:common.gateManifestSha256,candidateGateManifestSha256:common.gateManifestSha256,passed:true,pairedStates:1,control:{detected:true},issues:[],results:[{changedPixels:0,sizeEqual:true,behaviorEqual:true,fontBytesEqual:true,baselineErrors:[],candidateErrors:[],fontProofErrors:[]}]};
+ const reportRef=await x.put('comparison-report.json',report);
  const comparison={key,assemblySha256:assembly.sha256,status:'verified',comparisonPath:path.join(x.root,reportRef.path),comparisonSha256:reportRef.sha256,baselineEvidencePath:path.join(x.root,'baseline.json'),candidateEvidencePath:path.join(x.root,'candidate.json')};
  x.batch.planSha256=x.plan.sha256;x.batch.batchSourceIds=[key.sourceId];x.batch.heads=[{sourceId:key.sourceId,context:await x.put('context.json',context),imported:await x.put('imported.json',imported),comparison:await x.put('comparison.json',comparison)}];await x.saveBatch();
  return {key,identity,context,userId,tokenId,report,comparison};
@@ -65,4 +72,13 @@ it('rejects changed gates and protected prefix overlap before opening, and requi
  await expect(runNativeProductionMigration(options)).rejects.toThrow('comparison');expect(opened).toBe(0);
  x.plan.target.objectPrefix='live/nested';await x.savePlan();await expect(runNativeProductionMigration(options)).rejects.toThrow('target_scope');expect(opened).toBe(0);
  x.plan.target.objectPrefix='migration/run';await x.savePlan();x.batch.planSha256=x.plan.sha256;x.batch.batchSourceIds=['source1'];await x.saveBatch();await expect(runNativeProductionMigration(options)).rejects.toThrow('batch');expect(opened).toBe(0);
+}));
+
+it('normal paired proof admission binds the actual source, head, revisions and assembled HTML',()=>fixture(async x=>{
+ const data=await ready(x),recipe=JSON.parse(await readFile(data.context.authorityRecipePath,'utf8'));
+ const verify=()=>verifyNativeMigrationHostComparison({context:data.context,recipe,result:data.comparison});
+ expect(await verify()).toMatchObject({status:'verified'});
+ const cases=[['baseline.json',{}],['candidate.json',{}],['baseline.json',{sourceSha256:sha('other-source')}],['candidate.json',{canonicalSha256:sha('other-head')}],['candidate.json',{sourceRevision:'c'.repeat(40)}],['candidate.json',{bundleManifestSha256:sha('other-assembly')}],['candidate-input.json',{key:{...data.key,sourceId:'other'}}],['candidate-input.json',{bundleFiles:[{path:'index.html',sha256:sha('other-html')}]}],['candidate.json',{issues:['render failed']}],['candidate.json',{states:['unrelated']}]];
+ for(const [name,change] of cases){const before=await readFile(path.join(x.root,name));const original=JSON.parse(before);await x.put(name,Object.keys(change).length?{...original,...change}:{});await expect(verify()).rejects.toThrow(/normal-proof/);await writeFile(path.join(x.root,name),before);}
+ expect(await verify()).toMatchObject({status:'verified'});
 }));

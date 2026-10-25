@@ -54,6 +54,19 @@ export async function verifyNativeMigrationHostComparison({context,recipe,result
    const [baselineBytes,candidateBytes]=await Promise.all([readFile(result.baselineEvidencePath),readFile(result.candidateEvidencePath)]);
    if(result.status==='verified'){
     if(!['native-migration-pilot-comparison-v1','native-migration-pilot-reused-source-comparison-v1'].includes(report.format)||report.passed!==true||!(report.pairedStates>0)||report.issues?.length!==0||!Array.isArray(report.results)||report.results.length!==report.pairedStates||pilotComparisonIssues(report.results,report.control).length)fail('comparison');
+    if(report.format==='native-migration-pilot-comparison-v1'){
+     const proofs=[JSON.parse(baselineBytes),JSON.parse(candidateBytes)];
+     const cameras=await Promise.all([context.baselineRecipePath,context.imported?.cameraRecipePath??context.candidateRecipePath].map(async file=>JSON.parse(await readFile(file,'utf8'))));
+     const inputs=await Promise.all(cameras.map(async camera=>{if(camera.format!=='native-migration-camera-recipe-v1'||typeof camera.paths?.input!=='string')fail('normal-proof');return JSON.parse(await readFile(camera.paths.input,'utf8'));}));
+     for(const [index,proof] of proofs.entries()){
+      const input=inputs[index],implementation=index?'html':'jsx',revision=index?recipe.targetRevision:recipe.sourceRevision;
+      const artifacts=input.bundleFiles?.filter(file=>file.path!==input.probe?.path);
+      if(proof.format!=='native-migration-pilot-capture-v1'||proof.implementation!==implementation||input.implementation!==implementation||proof.sourceRevision!==revision||input[index?'candidateRevision':'originalRevision']!==revision||!isDeepStrictEqual(input.key,recipe.key)||input.canonicalSha256!==recipe.inputs.sourceHead.sha256||input.bundleFiles?.find(file=>file.path==='index.html')?.sha256!==context.assembly.result.htmlSha256||!Array.isArray(artifacts)||!hash(proof.bundleManifestSha256)||proof.bundleManifestSha256!==digest(artifacts)||!Array.isArray(proof.issues)||proof.issues.length)fail('normal-proof');
+      for(const field of ['harnessSha256','gateManifestSha256','sourceSha256','documentSha256','canonicalSha256'])if(!hash(input[field])||proof[field]!==input[field])fail('normal-proof');
+      if(!Array.isArray(input.states)||!input.states.length||!Array.isArray(input.viewports)||!input.viewports.length||!isDeepStrictEqual(proof.states,input.states.map(state=>state.id))||!isDeepStrictEqual(proof.viewports,input.viewports)||proof.theme!==input.theme||report.pairedStates!==input.states.length*input.viewports.length||input.preparedStore&&proof.preparedStoreSha256!==input.preparedStore.sha256||input.probe&&proof.probeSha256!==input.probe.sha256)fail('normal-proof');
+     }
+     if(['harnessSha256','sourceSha256','documentSha256','canonicalSha256','bundleManifestSha256','theme','viewports','states'].some(field=>!isDeepStrictEqual(proofs[0][field],proofs[1][field]))||report.baselineRevision!==proofs[0].sourceRevision||report.candidateRevision!==proofs[1].sourceRevision||report.baselineGateManifestSha256!==proofs[0].gateManifestSha256||report.candidateGateManifestSha256!==proofs[1].gateManifestSha256)fail('normal-proof');
+    }
     if(report.format==='native-migration-pilot-reused-source-comparison-v1'){
      const reuse=report.reuse,baseline=JSON.parse(baselineBytes),candidate=JSON.parse(candidateBytes);
      if(report.sourceCaptureReused!==true||report.sourceCaptureRerun!==false||!reuse||!['baselineInputSha256','candidateInputSha256','baselineProofSha256','baselineCapturesSha256'].every(key=>hash(reuse[key]))||![report.previousProposalSha256,report.newProposalSha256].every(hash)||sha(baselineBytes)!==reuse.baselineProofSha256||report.previousProposalSha256!==baseline.bundleManifestSha256||report.newProposalSha256!==candidate.bundleManifestSha256||baseline.implementation!=='jsx'||candidate.implementation!=='html')fail('reuse-proof');
