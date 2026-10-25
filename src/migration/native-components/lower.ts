@@ -37,6 +37,7 @@ export interface NativeLowerInput {
   authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
   analysis: NativeTypedAnalysis;
   authorPrograms?:readonly NativeAuthorProgramReceipt[];
+  /** Emits identities for visible text; JSX indentation-only multiline text keeps its proved ID as nonvisual without inserting an element that changes CSS sibling selectors. */
   emitTextIdentities?: boolean;
   admittedBindings?: readonly NativeBindingTarget[];
   admittedDeclarations?: readonly {kind:string;name:string;analysisSha256:string}[];
@@ -160,6 +161,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
  const walk=(node:RetainedJsxNode,ancestors:readonly string[]=[],depth=0):string=>{
   if(depth>128){block('tree-depth-limit',node,'Typed tree exceeds the bounded lowering depth');return '';}
   if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
+  // JSX indentation-only multiline text renders no text node. Preserve its proved reservation without inserting a CSS-visible sibling element.
+  if(node.type==='text'&&input.emitTextIdentities&&/^[\t\n\r ]*$/.test(node.value)&&/[\n\r]/.test(node.value)&&!ancestors.includes('title')&&!ancestors.includes('svg')){binding(node,'nonvisual');return '';}
   if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
   if(node.type==='expression'){
    if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
