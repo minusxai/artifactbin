@@ -1,3 +1,4 @@
+import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {portableRenderedDigest} from './portable-source';
 import { portableScript } from './portable';
 import { parse, parseFragment, serialize, type DefaultTreeAdapterMap } from 'parse5';
@@ -18,6 +19,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const removeCore = (node: DefaultTreeAdapterMap['node']) => {
     if (!('childNodes' in node)) return;
     node.childNodes = node.childNodes.filter((child) => {
+      if ('attrs' in child && child.nodeName === 'meta' && child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY)) return false;
       if ('attrs' in child && child.nodeName === 'script' && child.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core' || attr.name === 'src' && attr.value === '/af/v1/core.js')) { coreId ??= child.attrs.find((attr) => attr.name === 'data-af-id')?.value; return false; }
       removeCore(child); return true;
     });
@@ -51,9 +53,14 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${portableReader}${chrome}${engine}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
+    if ('attrs' in node && node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core') && input.platformScriptNonce) node.attrs.push({name:'nonce',value:input.platformScriptNonce});
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });
   }
   head.childNodes.unshift(...boot.childNodes);
+  const admission=admitInitialInlineScripts(serialize(document),input.platformScriptNonce);
+  const policy=parseFragment('<meta>').childNodes[0] as DefaultTreeAdapterMap['element'];
+  policy.attrs=[{name:'data-af',value:INLINE_SCRIPT_POLICY},{name:'http-equiv',value:'Content-Security-Policy'},{name:'content',value:admission.policy}];
+  policy.parentNode=head;head.childNodes.unshift(policy);
   return serialize(document);
 }
 /** Downloads use the same native renderer, with no platform origin or remote capability. */

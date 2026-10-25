@@ -141,12 +141,13 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   });
   const responseHeaders = (etag: string | null) => ({
     ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
-    ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
+    // The per-render script nonce changes bytes, while these facts retain semantic identity.
+    ...(etag ? { ETag: `W/${etag}`, 'Cache-Control': REVALIDATE } : {}),
   });
   if (header.format === 'html' && metadataOnly) {
     const etag = revalidated ? await validator(header) : null;
     const held = etag && matchingTag(asked, etag);
-    if (held) return notModified(held);
+    if (held) return notModified(`W/${held}`);
     if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
   }
 
@@ -163,7 +164,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       if(at)policy=await policyFor(row);
       const etag = revalidated && !at ? await validator(artifact) : null;
       const held = etag && matchingTag(asked, etag);
-      if (held) return notModified(held);
+      if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
       if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });

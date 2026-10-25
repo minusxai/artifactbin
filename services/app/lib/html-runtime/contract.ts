@@ -21,6 +21,8 @@ export interface HtmlAssemblyInput {
   config: HtmlRuntimeConfig;
   /** Self-contained classic JS. Runs before every authored script. */
   core: string;
+  /** Fresh per-render, page-local admission for generated platform core/importmap only. */
+  platformScriptNonce?: string;
   /** Author module carried only by portable exports; hosted pages fetch its immutable asset on import. */
   apollo?: string;
   /** Reader module embedded only in self-contained portable exports. */

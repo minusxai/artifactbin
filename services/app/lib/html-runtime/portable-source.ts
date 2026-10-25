@@ -1,7 +1,8 @@
+import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
 import { readPortableDocument,hasPortableDocument } from './portable';
-const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','core']);
+const generated=new Set(['runtime','apollo','reader','portable','chrome','portable-engine','core',INLINE_SCRIPT_POLICY]);
 /** Recover author bytes from an explicitly selected disk file, never the running DOM. */
 export function recoverPortableRendering(fileBytes:string):string {
  if(!hasPortableDocument(fileBytes))return fileBytes;
@@ -9,7 +10,7 @@ export function recoverPortableRendering(fileBytes:string):string {
  const document=parse(fileBytes,{sourceCodeLocationInfo:true});
  const spans:{start:number;end:number;replacement:string}[]=[];
  const walk=(node:DefaultTreeAdapterMap['node'])=>{
-  if('attrs' in node && node.nodeName==='script' && generated.has(node.attrs.find(attr=>attr.name==='data-af')?.value??'')) {
+  if('attrs' in node && (node.nodeName==='script'||node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY)) && generated.has(node.attrs.find(attr=>attr.name==='data-af')?.value??'')) {
    const location=node.sourceCodeLocation;
    if(!location)throw new Error('Portable bootstrap has no source location');
    const core=node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core');
@@ -26,7 +27,7 @@ export function recoverPortableRendering(fileBytes:string):string {
 /** Compare normalized parser output while ignoring only the replaceable core loader. */
 export function portableRenderedDigest(html:string):string {
  const doc=parse(html);
- const clean=(node:DefaultTreeAdapterMap['node'])=>{if('childNodes' in node){node.childNodes=node.childNodes.filter(child=>!('attrs' in child&&child.nodeName==='script'&&child.attrs.some(attr=>attr.name==='src'&&attr.value==='/af/v1/core.js'||attr.name==='data-af'&&attr.value==='core')));for(const child of node.childNodes)clean(child);}};
+ const clean=(node:DefaultTreeAdapterMap['node'])=>{if('childNodes' in node){node.childNodes=node.childNodes.filter(child=>!('attrs' in child&&(child.nodeName==='script'||child.nodeName==='meta'&&child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY))&&child.attrs.some(attr=>attr.name==='src'&&attr.value==='/af/v1/core.js'||attr.name==='data-af'&&(attr.value==='core'||attr.value===INLINE_SCRIPT_POLICY))));for(const child of node.childNodes)clean(child);}};
  clean(doc);return sha256Hex(serialize(doc));
 }
 export function recoverPortableSource(fileBytes:string):string {
