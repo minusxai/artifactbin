@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { useAppHarness, mintAccountToken } from "@/__tests__/harness";
+import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
 import type { Queryable } from "@/lib/platform/db";
 import { identityForUser } from "@/lib/accounts";
@@ -19,6 +19,7 @@ import type { NativeHistoryImport, NativeHistoryRevision } from "../contracts";
 import { listAnnotationsFor } from "@/lib/annotations/store";
 import { prepareNativeHistoryRelations } from "../relations";
 import { importNativeHistory, writeNativeHistory } from "../index";
+import { artifactPageAnswer } from "@/lib/serving/artifact-page";
 useAppHarness();
 it("writes a large latest-only lifetime ledger in bounded statements and verifies every reservation on replay", async () => {
   const {db,input} = await fixture();
@@ -48,7 +49,7 @@ it("writes a large latest-only lifetime ledger in bounded statements and verifie
   // The createArtifact genesis reservation and one complete ledger batch are bounded independently of ID count.
   expect(writes.length).toBeLessThanOrEqual(2);
 });
-async function fixture() {
+async function fixture(pageId = "TestHistory") {
   const owner = await mintAccountToken("synthetic_history_owner"),
     db = await getDb();
   const revisions: NativeHistoryRevision[] = [1, 3].map((version) => {
@@ -56,7 +57,7 @@ async function fixture() {
       `<html><head></head><body><p data-af-id="stable">Version ${version}</p></body></html>`,
     );
     const page = {
-      pageId: "TestHistory",
+      pageId,
       version,
       revision: String(version),
       html: canonical.html,
@@ -70,7 +71,7 @@ async function fixture() {
     };
     const query = prepareRegisteredQueryBackend(
       "queries",
-      "history_queries",
+      `history_${pageId}_queries`,
       page,
       {
         scalars: {},
@@ -83,7 +84,7 @@ async function fixture() {
     );
     const mutation = prepareRegisteredMutationBackend(
       "actions",
-      "history_actions",
+      `history_${pageId}_actions`,
       page,
       {
         name: "save",
@@ -122,7 +123,7 @@ async function fixture() {
     sourceId: "old-source",
     selectionSha256: "d".repeat(64),
     projectionSha256: "e".repeat(64),
-    pageId: "TestHistory",
+    pageId,
     owner: { userId: owner.userId!, tokenId: owner.id },
     visibility: "private",
     linkRole: "viewer",
@@ -169,6 +170,50 @@ it("publishes sparse immutable histories with real registry helpers and replays 
       writeNativeHistory(tx, { ...input, projectionSha256: "f".repeat(64) }),
     ),
   ).rejects.toThrow("native_import_collision");
+});
+it("preserves validated legacy template metadata on native HTML imports and rejects unknown templates", async () => {
+  const { db, input, actor } = await fixture();
+  input.revisions[1]!.template = "doc";
+  expect(await importNativeHistory(db, input)).toBe("created");
+  const current = (await db.query<{meta: Record<string, unknown> }>(
+    "SELECT meta FROM artifacts WHERE id=$1", [input.pageId],
+  )).rows[0]!;
+  const version = (await db.query<{meta: Record<string, unknown> }>(
+    "SELECT meta FROM artifact_versions WHERE artifact_id=$1 AND version=3", [input.pageId],
+  )).rows[0]!;
+  expect(current.meta.template).toBe("doc");
+  expect(version.meta.template).toBe("doc");
+  const page = await artifactPageAnswer(
+    request(`/a/${input.pageId}`, { actor: { credential: "session", userId: actor.userId!, email: actor.email ?? undefined } }),
+    input.pageId,
+  );
+  expect(page.body).toMatchObject({ surface: { format: "html", template: "doc" } });
+
+  await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{template}','\"landing\"'::jsonb) WHERE id=$1", [input.pageId]);
+  await expect(importNativeHistory(db, input)).rejects.toThrow("native_import_collision");
+  await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{template}','\"doc\"'::jsonb) WHERE id=$1", [input.pageId]);
+
+  input.revisions[1]!.template = "not-a-template";
+  await expect(importNativeHistory(db, input)).rejects.toThrow("native_import_invalid");
+  const unchanged = (await db.query<{meta: Record<string, unknown> }>(
+    "SELECT meta FROM artifacts WHERE id=$1", [input.pageId],
+  )).rows[0]!;
+  expect(unchanged.meta.template).toBe("doc");
+});
+it("distinguishes absent and explicitly null source template metadata", async () => {
+  for (const [pageId, value, expected] of [
+    ["TestTemplateAbsent", undefined, undefined],
+    ["TestTemplateNull", null, null],
+  ] as const) {
+    const { db, input } = await fixture(pageId);
+    if (value !== undefined) input.revisions[1]!.template = value;
+    expect(await importNativeHistory(db, input)).toBe("created");
+    const row = (await db.query<{meta: Record<string, unknown> }>(
+      "SELECT meta FROM artifacts WHERE id=$1", [pageId],
+    )).rows[0]!;
+    expect(Object.hasOwn(row.meta, "template")).toBe(value !== undefined);
+    expect(row.meta.template).toBe(expected);
+  }
 });
 it("rejects changed source and incomplete head selection without leaving rows", async () => {
   const { db, input } = await fixture();

@@ -12,6 +12,7 @@ import {
   registeredMutationPlan,
 } from "@/lib/registered-page-mutations";
 import type { NativeHistoryImport, NativeImportRelations } from "./contracts";
+import { STORY_TEMPLATE_NAMES } from "@/lib/validation/atlas-schemas";
 const fail = () => Error("native_import_invalid");
 /** Final lifetime reservation state, including identities absent from authored HTML. */
 interface SourceIdentity {
@@ -67,6 +68,8 @@ export async function writeNativeHistory(
       r.page.version < 1 ||
       r.page.revision !== String(r.page.version) ||
       r.sourceSha256 !== pageSourceDigest(r.page.html) ||
+      (r.template !== undefined && r.template !== null &&
+        (typeof r.template !== "string" || !STORY_TEMPLATE_NAMES.includes(r.template as never))) ||
       canonical.html !== r.page.html ||
       r.page.nextNodeId !== r.ledger.nextNodeId ||
       !Number.isSafeInteger(r.ledger.nextNodeId) ||
@@ -166,6 +169,7 @@ export async function writeNativeHistory(
   const first = revisions[0]!;
   const revisionMeta = (r: (typeof revisions)[number]) => ({
     htmlIdentity: r.ledger, htmlLinks: r.page.links, nativeImport: receipt,
+    ...(r.template === undefined ? {} : { template: r.template }),
     ...(r.htmlPublicationDependencies === undefined ? {} : {htmlPublicationDependencies: r.htmlPublicationDependencies}),
   });
   interface StoredRevision {

@@ -14,6 +14,8 @@ export interface NativeHistoryRevision {
   sourceSha256: string;
   title: string | null;
   description: string | null;
+  /** Legacy page template retained as reader metadata while the target remains native HTML. */
+  template?: string | null;
   createdAt: string;
   actorUserId: string | null;
   actorTokenId: string | null;
