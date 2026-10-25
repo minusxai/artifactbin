@@ -63,6 +63,25 @@ export interface BrowserParityCapture {
   errors: string[];
   assertionErrors: string[];
   resourceEvidence?: { stylesheets: Array<{ url: string; loaded: boolean }>; errors: string[] };
+  animationEvidence?: {
+    format: 'frame-animation-settlement-v1';
+    policy: 'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence';
+    shadowCoverage: 'open-shadow-roots-only';
+    shadowRoots: number;
+    reducedMotion: boolean;
+    startedAtMs: number;
+    completedAtMs: number;
+    elapsedMs: number;
+    observed: number;
+    uniqueAnimations: number;
+    rounds: number;
+    alreadyFinished: number;
+    alreadyIdle: number;
+    paused: Array<{ name: string; playState: string; duration: number | null; iterations: number | 'infinite' | null }>;
+    infinite: Array<{ name: string; playState: string; duration: number | null; iterations: number | 'infinite' | null }>;
+    counts: { finished: number; canceled: number; detached: number };
+    timedOut: Array<{ name: string; playState: string; duration: number | null; iterations: number | 'infinite' | null }>;
+  };
   fontEvidence: { faces: unknown[]; used: unknown[]; resources: unknown[]; errors: string[] };
 }
 
@@ -103,4 +122,5 @@ export interface BaselineSeededIdentity {
 export interface BrowserCaptureTimeouts {
   readyTimeoutMs?: number;
   captureStepTimeoutMs?: number;
+  animationSettleTimeoutMs?: number;
 }

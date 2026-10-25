@@ -7,12 +7,13 @@ import {execFileSync} from 'node:child_process';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
-import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
+import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof, settleFiniteFrameAnimations } from '../lib/component-browser-baseline.mjs';
 import {verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
 import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
 const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
+const noAnimations=()=>({format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:0,reducedMotion:false,startedAtMs:0,completedAtMs:0,elapsedMs:0,observed:0,uniqueAnimations:0,rounds:1,alreadyFinished:0,alreadyIdle:0,paused:[],infinite:[],counts:{finished:0,canceled:0,detached:0},timedOut:[]});
 async function capture(directory,implementation,color,overrides={}){
   const screenshot=`${implementation}.png`;
   const bytes=await sharp({create:{width:2,height:2,channels:4,background:color}}).png().toBuffer();
@@ -175,12 +176,114 @@ describe('actual fixture publication payloads',()=>{
 });
 
 describe('reader screenshot contract',()=>{
+  it('waits for finite document animations and records completion, cancellation, reduced motion, and infinite motion',async()=>{
+    const dom=new JSDOM('<div id="a"></div>',{url:'http://localhost/reader'}),target=dom.window.document.querySelector('#a');
+    const make=(finished,iterations=1)=>({animationName:'fade-up',playState:'running',effect:{target,getComputedTiming:()=>({duration:100,iterations})},finished});
+    const finished=make(Promise.resolve()),canceled=make(Promise.reject(Error('animation canceled'))),infinite=make(new Promise(()=>{}),Infinity);
+    dom.window.document.getAnimations=()=>[finished,canceled,infinite];
+    const oldDocument=globalThis.document,oldMatchMedia=globalThis.matchMedia;
+    globalThis.document=dom.window.document;globalThis.matchMedia=()=>({matches:true});
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:50});
+      expect(evidence).toMatchObject({format:'frame-animation-settlement-v1',reducedMotion:true,counts:{finished:1,canceled:1,detached:0},infinite:[{name:'fade-up',playState:'running',iterations:'infinite'}],timedOut:[]});
+      expect(evidence.elapsedMs).toBeGreaterThanOrEqual(0);
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;if(oldMatchMedia)globalThis.matchMedia=oldMatchMedia;else delete globalThis.matchMedia;dom.window.close();}
+  });
+
+  it('does not wait for a detached target, including a target detached while finite animation is running',async()=>{
+    const dom=new JSDOM('<div id="before"></div><div id="during"></div>',{url:'http://localhost/reader'}),doc=dom.window.document;
+    const before=doc.querySelector('#before'),during=doc.querySelector('#during');let release;
+    const animation=target=>({animationName:'fade-up',playState:'running',effect:{target,getComputedTiming:()=>({duration:100,iterations:1})},finished:new Promise(resolve=>{if(target===during)release=resolve;else resolve();})});
+    const animations=[animation(before),animation(during)];doc.getAnimations=()=>animations;const oldDocument=globalThis.document;globalThis.document=doc;
+    try{
+      const pending=settleFiniteFrameAnimations({timeoutMs:100});during.remove();
+      const evidence=await pending;expect(evidence.counts.detached).toBe(1);expect(evidence.counts.finished).toBe(1);expect(evidence.timedOut).toEqual([]);
+      release?.();
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('settles finite animations targeting connected shadow-root elements',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),host=dom.window.document.querySelector('#host'),shadow=host.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');shadow.append(target);
+    const animation={animationName:'shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    dom.window.document.getAnimations=()=>[];shadow.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(target.isConnected).toBe(true);
+      expect(evidence).toMatchObject({policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:1,uniqueAnimations:1,counts:{finished:1,detached:0},timedOut:[]});
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('discovers animations recursively in nested open shadow roots',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),outerHost=dom.window.document.querySelector('#host'),outer=outerHost.attachShadow({mode:'open'}),innerHost=dom.window.document.createElement('div');outer.append(innerHost);const inner=innerHost.attachShadow({mode:'open'}),nestedHost=dom.window.document.createElement('div');inner.append(nestedHost);const nested= nestedHost.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');nested.append(target);
+    const animation={animationName:'deep-shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    dom.window.document.getAnimations=()=>[];outer.getAnimations=()=>[];inner.getAnimations=()=>[];nested.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(evidence).toMatchObject({shadowRoots:3,uniqueAnimations:1,counts:{finished:1,detached:0},timedOut:[]});
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('observes removal inside an open shadow root while a finite animation is pending',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),host=dom.window.document.querySelector('#host'),shadow=host.attachShadow({mode:'open'}),target=dom.window.document.createElement('span');shadow.append(target);
+    const animation={animationName:'removed-shadow-fade',playState:'running',effect:{target,getComputedTiming:()=>({duration:1000,iterations:1})},finished:new Promise(()=>{})};
+    dom.window.document.getAnimations=()=>[];shadow.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const pending=settleFiniteFrameAnimations({timeoutMs:100});target.remove();
+      const evidence=await pending;
+      expect(evidence.counts.detached).toBe(1);expect(evidence.timedOut).toEqual([]);
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('resurveys animations after completion and waits for a chained finite animation',async()=>{
+    const dom=new JSDOM('<div id="host"></div>',{url:'http://localhost/reader'}),target=dom.window.document.querySelector('#host');let calls=0,releaseChained;
+    const first={animationName:'first',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:Promise.resolve()};
+    const chained={animationName:'chained',playState:'running',effect:{target,getComputedTiming:()=>({duration:10,iterations:1})},finished:new Promise(resolve=>{releaseChained=resolve;})};
+    dom.window.document.getAnimations=()=>{calls++;if(calls===2)releaseChained();return calls<2?[first]:[first,chained];};
+    const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:100});
+      expect(calls).toBeGreaterThanOrEqual(3);
+      expect(evidence).toMatchObject({uniqueAnimations:2,counts:{finished:2,detached:0},timedOut:[]});
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('reports finite-animation timeout instead of finishing or freezing an animation',async()=>{
+    const dom=new JSDOM('<div id="a"></div>',{url:'http://localhost/reader'}),target=dom.window.document.querySelector('#a');
+    const animation={animationName:'stuck',playState:'running',effect:{target,getComputedTiming:()=>({duration:10000,iterations:1})},finished:new Promise(()=>{})};
+    dom.window.document.getAnimations=()=>[animation];const oldDocument=globalThis.document;globalThis.document=dom.window.document;
+    try{
+      const evidence=await settleFiniteFrameAnimations({timeoutMs:10});
+      expect(evidence.timedOut).toEqual([{name:'stuck',playState:'running',duration:10000,iterations:1}]);
+      expect(animation.playState).toBe('running');
+    }finally{if(oldDocument)globalThis.document=oldDocument;else delete globalThis.document;dom.window.close();}
+  });
+
+  it('fails the capture with source-bound timeout evidence before taking a screenshot',async()=>{
+    const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer(),screenshot=vi.fn(async()=>bytes);
+    const timeout={...noAnimations(),observed:1,timedOut:[{name:'stuck',playState:'running',duration:10000,iterations:1}]};
+    const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?timeout:fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{stylesheets:[]}};
+    const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot}),close:async()=>{}})};
+    await expect(captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,animationSettleTimeoutMs:10,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'timeout',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('finite-frame-animations-timeout:1');
+    expect(screenshot).not.toHaveBeenCalled();
+    const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));
+    expect(status.failures[0]).toMatchObject({phase:'finite-animations',message:expect.stringContaining('finite-frame-animations-timeout:1')});
+    const failure=JSON.parse(await readFile(path.join(directory,'timeout-light-800-initial-html-failure.json'),'utf8'));
+    expect(failure.diagnostics.animationEvidence).toMatchObject({timedOut:timeout.timedOut,startedAtMs:0,completedAtMs:0});
+  });
+
+  it.each(['jsx','html'])('settles the actual frame before either %s camera screenshot',async implementation=>{
+    const directory=await setup(),order=[],bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const frame={url:()=> 'http://fixture.lvh.me/reader',evaluate:async fn=>{if(fn.name==='settleFiniteFrameAnimations'){order.push('settled');return noAnimations();}if(fn.name==='browserState')return {text:'Ready',controls:[],rows:[],overflow:0};return {faces:[],used:[],errors:[]};}};
+    const captures=await captureBrowserBaseline({browser:{newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{}})},mount:async()=>({frame,screenshot:async()=>{order.push('screenshot');return bytes;}}),implementation,sourceRevision:'a'.repeat(40),output:directory,screenshotMode:'document-frame',themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'animation',states:[{id:'initial',actions:[]}]}]});
+    expect(order).toEqual(['settled','screenshot']);expect(captures[0].animationEvidence).toMatchObject({format:'frame-animation-settlement-v1',infinite:[],timedOut:[]});
+  });
+
   it('rejects a missing linked theme stylesheet even when no font faces were declared',async()=>{
     const directory=await setup(),dom=new JSDOM('<html><head><link rel="stylesheet" href="/a/Page123/assets?dependency=Missing"></head><body>Ready</body></html>',{url:'http://app.lvh.me/a/Page123/raw'});
     const saved=Object.getOwnPropertyDescriptor(globalThis,'document');globalThis.document=dom.window.document;
     try{
       const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-      const frame={url:()=> 'http://app.lvh.me/a/Page123/raw',evaluate:async fn=>fn.name==='browserResources'?fn():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+      const frame={url:()=> 'http://app.lvh.me/a/Page123/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserResources'?fn():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
       const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
       const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'theme',states:[{id:'initial',actions:[]}]}]});
       expect(captures[0].fontEvidence.faces).toEqual([]);expect(candidateCaptureIssues(captures)).toContain('Stylesheet did not load: http://app.lvh.me/a/Page123/assets');
@@ -206,21 +309,22 @@ describe('reader screenshot contract',()=>{
   it('captures a real mounted document frame only in explicit frame mode',async()=>{
     const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const performAction=vi.fn(async()=>{}),screenshot=vi.fn(async()=>bytes),pageScreenshot=vi.fn(async()=>bytes);
-    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:fn.toString().includes('requestAnimationFrame')?undefined:{faces:[],used:[],errors:[]}};
     const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:pageScreenshot}),close:async()=>{}})};
     const captures=await captureBrowserBaseline({browser,mount:async()=>({frame,screenshot,performAction}),screenshotMode:'document-frame',implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'identity',states:[{id:'loaded',actions:[{action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]}]}]}]});
+    expect(captures).toHaveLength(1);
     expect(performAction).toHaveBeenCalledWith({action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]});
-    expect(screenshot).toHaveBeenCalledOnce();expect(pageScreenshot).not.toHaveBeenCalled();
+    expect(screenshot).toHaveBeenCalledOnce();expect(screenshot).toHaveBeenCalledWith();expect(pageScreenshot).not.toHaveBeenCalled();
     expect(captures[0].screenshotMode).toBe('document-frame');
   });
 
   it('captures the configured page viewport rather than cropping the html element',async()=>{
     const directory=await setup();const calls=[];
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]},locator:()=>{throw Error('Element screenshot would clip native top-layer UI');}};
+    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]},locator:()=>{throw Error('Element screenshot would clip native top-layer UI');}};
     const browser={newContext:async options=>({newPage:async()=>({on:()=>{},screenshot:async screenshotOptions=>{calls.push({viewport:options.viewport,...screenshotOptions});return bytes;}}),close:async()=>{}})};
     const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'dialog',states:[{id:'open',actions:[]}]}]});
-    expect(calls).toEqual(expect.arrayContaining([{viewport:{width:800,height:600},fullPage:false,animations:'disabled',caret:'hide'},{viewport:{width:390,height:844},fullPage:false,animations:'disabled',caret:'hide'}]));
+    expect(calls).toEqual(expect.arrayContaining([{viewport:{width:800,height:600},fullPage:false,caret:'hide'},{viewport:{width:390,height:844},fullPage:false,caret:'hide'}]));
     expect(captures.every(capture=>capture.screenshotMode==='viewport')).toBe(true);
   });
 });
@@ -258,7 +362,7 @@ describe('browser semantic collection',()=>{
     Object.assign(globalThis,{document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),innerWidth:800});
     try {
       const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-      const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?fn():{faces:[],used:[],errors:[]}};
+      const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?fn():{faces:[],used:[],errors:[]}};
       const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
       const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'controls',states:[{id:'initial',actions:[]}]}]});
       expect(captures[0].semantics.controls).toEqual(expect.arrayContaining([expect.objectContaining({role:'checkbox',name:'Accept terms',checked:'true'}),expect.objectContaining({role:'switch',name:'Notifications',checked:'true'}),expect.objectContaining({role:'button',name:'Later',pressed:'true'}),expect.objectContaining({role:'file-input',name:'Attachment'})]));
@@ -272,7 +376,7 @@ describe('bounded independent reader capture',()=>{
     let releaseFirst;const secondScreenshot=new Promise(resolve=>{releaseFirst=resolve;});
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
     const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);if(id===1)releaseFirst();return bytes;}}),close:async()=>{active--;}};}};
-    const mount=async({page})=>{if(page.id===0)await secondScreenshot;return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
+    const mount=async({page})=>{if(page.id===0)await secondScreenshot;return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
     const captures=await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount,implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]});
     expect(peak).toBe(2);expect(active).toBe(0);expect(completed[0]).toBe(1);expect(captures.map(capture=>capture.semantics.text)).toEqual(['0','1','2','3']);
   });
@@ -321,6 +425,7 @@ describe('used font evidence',()=>{
     const emit=(type,response)=>{for(const handler of handlers.get(type)||[])handler(response);};
     const response=(type,url,frame,content)=>({request:()=>({resourceType:()=>type}),url:()=>url,status:()=>200,frame:()=>frame,headers:()=>({'content-type':type==='stylesheet'?'text/css':'font/woff2'}),text:async()=>content,body:async()=>{await new Promise(resolve=>setTimeout(resolve,10));return body;}});
     const frame={url:()=> 'http://localhost/reader',evaluate:async(fn,...args)=>{
+      if(fn.name==='settleFiniteFrameAnimations')return noAnimations();
       if(fn.name==='fontLoadingEvidence'){
         inspectedStylesheets=args[0];
         emit('response',response('font','http://localhost/font.woff2',targetFrame,''));
@@ -489,7 +594,7 @@ it('persists successful partial captures and a diagnostic failed state before re
   await writeFile(path.join(directory,'html-captures.json'),'[{"state":"stale prior run"}]');
   const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
   const browser={newContext:async()=>{const id=sequence++;return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{closed++;}};}};
-  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Completed',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Completed',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
   await expect(captureBrowserBaseline({browser,mount:async({page})=>{if(page.id===1)throw Error('actual state failed');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('one/light/390/initial: actual state failed');
   const partial=JSON.parse(await readFile(path.join(directory,'html-partial-captures.json'),'utf8'));
   expect(partial).toHaveLength(3);expect(partial[0].semantics.text).toBe('Completed');
@@ -504,7 +609,7 @@ it('captures later independent fixture groups after early failure and rejects th
   const directory=await setup();let sequence=0,active=0,peak=0,closed=0;
   const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
   const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{active--;closed++;}};}};
-  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Later independent success',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Later independent success',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
   let failure;
   try{await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount:async({page})=>{if(page.id===0)throw Error('early failure');if(page.id===2)throw Error('second failure');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'first',states:[{id:'initial',actions:[]}]},{id:'later',states:[{id:'initial',actions:[]}]}]});}catch(error){failure=error;}
   expect(failure).toBeInstanceOf(AggregateError);expect(failure.errors).toHaveLength(2);expect(failure.message).toContain('early failure');expect(failure.message).toContain('second failure');
@@ -519,7 +624,7 @@ it('captures later independent fixture groups after early failure and rejects th
 it('captures only the explicit retained theme and viewport plan for a private migration pilot',async()=>{
  const directory=await setup(),contexts=[];
  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
- const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+ const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
  const browser={newContext:async options=>{contexts.push(options);return {newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}};}};
  const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:1280,height:900}],fixtures:[{id:'pilot',states:[{id:'initial',actions:[]}]}]});
  expect(captures).toHaveLength(1);expect(contexts).toHaveLength(1);expect(contexts[0]).toMatchObject({colorScheme:'light',viewport:{width:1280,height:900}});
@@ -551,7 +656,7 @@ it('bounds a stuck readiness hook, records its phase, and closes the context to 
 it('bounds an unresolved font evaluation and retains the specific camera phase',async()=>{
  const directory=await setup();let cancel,closed=0;
  const blocked=new Promise((_,reject)=>{cancel=()=>reject(Error('context closed'));});
- const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Present',controls:[],rows:[],overflow:0}:blocked};
+ const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='settleFiniteFrameAnimations'?noAnimations():fn.name==='browserState'?{text:'Present',controls:[],rows:[],overflow:0}:blocked};
  const browser={newContext:async()=>({newPage:async()=>({on:()=>{}}),close:async()=>{closed++;cancel();}})};
  const run=captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,captureStepTimeoutMs:20,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'bounded-font',states:[{id:'initial',actions:[]}]}]});
  try{const error=await Promise.race([run.catch(error=>error),new Promise(resolve=>setTimeout(()=>resolve(Error('missing bounded font wait')),200))]);expect(error.message).toContain('Reader fonts-ready exceeded 20ms');expect(closed).toBe(1);const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));expect(status.failures[0]).toMatchObject({phase:'fonts-ready'});}finally{cancel();await run.catch(()=>{});}
