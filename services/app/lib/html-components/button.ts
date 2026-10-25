@@ -84,16 +84,16 @@ function isSize(value: string | null): value is ButtonSize {
 /** Semantic-token styling for the recipes supported by the author contract. */
 const buttonStyles = `
 af-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
-af-button>button{box-sizing:border-box;display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;gap:.5rem;border:0 solid transparent;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;white-space:nowrap;cursor:pointer;transition:all .15s;outline:none;color:var(--primary-foreground,#fff);background:var(--primary,#171717)}
+af-button>button{box-sizing:border-box;display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;gap:.5rem;border:0 solid currentColor;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;white-space:nowrap;cursor:pointer;transition:all .15s;outline:none;color:var(--primary-foreground,#fff);background:var(--primary,#171717)}
 af-button>button:focus-visible{border-color:var(--ring,#737373);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)}
 af-button>button:disabled{pointer-events:none;opacity:.5;cursor:default}
-af-button>button[data-variant=default]:hover{background:color-mix(in srgb,var(--primary,#171717) 90%,transparent)}
+af-button>button[data-variant=default]:hover{background:color-mix(in oklab,var(--primary,#171717) 90%,transparent)}
 af-button>button[data-variant=destructive]{color:#fff;background:var(--destructive,#dc2626)}
-af-button>button[data-variant=destructive]:hover{background:color-mix(in srgb,var(--destructive,#dc2626) 90%,transparent)}
+af-button>button[data-variant=destructive]:hover{background:color-mix(in oklab,var(--destructive,#dc2626) 90%,transparent)}
 af-button>button[data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor;box-shadow:0 1px 2px rgb(0 0 0 / .05)}
 af-button>button[data-variant=outline]:hover{background:var(--accent,#f5f5f5);color:var(--accent-foreground,#171717)}
 af-button>button[data-variant=secondary]{background:var(--secondary,#f5f5f5);color:var(--secondary-foreground,#262626)}
-af-button>button[data-variant=secondary]:hover{background:color-mix(in srgb,var(--secondary,#f5f5f5) 80%,transparent)}
+af-button>button[data-variant=secondary]:hover{background:color-mix(in oklab,var(--secondary,#f5f5f5) 80%,transparent)}
 af-button>button[data-variant=ghost]{color:var(--foreground,#171717);background:transparent}
 af-button>button[data-variant=ghost]:hover{background:var(--accent,#f5f5f5);color:var(--accent-foreground,#171717)}
 af-button>button[data-variant=link]{color:var(--primary,#171717);background:transparent;text-underline-offset:4px}
@@ -112,10 +112,10 @@ af-button>button[data-size=sm]:has(>svg){padding-inline:.625rem}
 af-button>button[data-size=lg]:has(>svg){padding-inline:1rem}
 af-button>button>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
 af-button>button[data-size=xs]>svg,af-button>button[data-size=icon-xs]>svg{width:.75rem;height:.75rem}
-html[data-af-dark="true"] af-button>button[data-variant=outline]{border-color:var(--input,#d4d4d4);background:color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)}
-html[data-af-dark="true"] af-button>button[data-variant=outline]:hover{background:color-mix(in srgb,var(--input,#d4d4d4) 50%,transparent)}
-html[data-af-dark="true"] af-button>button[data-variant=ghost]:hover{background:color-mix(in srgb,var(--accent,#f5f5f5) 50%,transparent)}
-html[data-af-dark="true"] af-button>button[data-variant=destructive]{background:color-mix(in srgb,var(--destructive,#dc2626) 60%,transparent)}
+html[data-af-dark="true"] af-button>button[data-variant=outline]{border-color:var(--input,#d4d4d4);background:color-mix(in oklab,var(--input,#d4d4d4) 30%,transparent)}
+html[data-af-dark="true"] af-button>button[data-variant=outline]:hover{background:color-mix(in oklab,var(--input,#d4d4d4) 50%,transparent)}
+html[data-af-dark="true"] af-button>button[data-variant=ghost]:hover{background:color-mix(in oklab,var(--accent,#f5f5f5) 50%,transparent)}
+html[data-af-dark="true"] af-button>button[data-variant=destructive]{background:color-mix(in oklab,var(--destructive,#dc2626) 60%,transparent)}
 html[data-af-dark="true"] af-button>button:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)}
  `;
 
