@@ -59,3 +59,16 @@ it('reveals only a unique scoped target and leaves stale anchors missing', () =>
  revealHtmlAnnotation(document,pin);expect(reveal).toHaveBeenCalledOnce();
  inside.remove();revealHtmlAnnotation(document,pin);expect(outside.scrollIntoView).not.toHaveBeenCalled();
 });
+it('restores all exact migrated nested and sibling parts, while stale or duplicate identities paint nothing', async () => {
+ const {htmlTextFingerprint}=await import('@artifactbin/contracts');
+ document.body.innerHTML='<p data-af-id="p">one <b data-af-id="b">two</b> end</p><p data-af-id="next">next words</p>';
+ vi.spyOn(Range.prototype,'getClientRects').mockReturnValue([new DOMRect(10,20,30,10)] as unknown as DOMRectList);
+ const part=(nodeId:string,quote:string,start:number,end:number)=>{const text=document.querySelector(`[data-af-id="${nodeId}"]`)!.textContent!;return {nodeId,quote,range:{start,end,length:text.length,fingerprint:htmlTextFingerprint(text)}};};
+ const segments=[part('p','one ',0,4),part('b','two',0,3),part('next','next',0,4)];
+ const anchor={kind:'html-node' as const,v:1 as const,revision:'3',nodeId:'p',quote:'one two next',segments};
+ const painter=createHtmlAnnotationPainter(document), paint=()=>painter.paint({pins:[{id:'root',path:'p',anchor}],mode:'on',openId:null,hoverId:null});
+ expect(paint()[0]?.status).toBe('exact');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(3);
+ document.querySelector('b')!.textContent='changed';expect(paint()[0]?.status).toBe('missing');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
+ document.querySelector('b')!.textContent='two';document.body.insertAdjacentHTML('beforeend','<p data-af-id="next">next words</p>');expect(paint()[0]?.status).toBe('ambiguous');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
+ painter.dispose();
+});

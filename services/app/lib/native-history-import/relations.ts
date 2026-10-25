@@ -135,6 +135,7 @@ export function prepareNativeHistoryRelations(
         nodeId: nodeId!,
         quote: a.anchor.quote,
         ...(a.anchor.range ? { range: a.anchor.range } : {}),
+        ...(a.anchor.segments ? { segments: a.anchor.segments.map(part => { const nodeId=bindings.get(bindingKey(a.anchor!.version,a.anchor!.sourceNamespace,part.sourceNodeId)); if(!nodeId)fail(); return {nodeId:nodeId!,quote:part.quote,range:part.range}; }) } : {}),
       };
     }
     if (anchor && !parseHtmlNodeAnchor(anchor)) fail();
