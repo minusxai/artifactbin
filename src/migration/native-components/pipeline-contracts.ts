@@ -42,6 +42,7 @@ export interface NativePipelineHost {
 export interface NativePipelinePorts {
  readRevision(request:NativePipelineRequest):Promise<NativeSelectedRevision>;
  compiler:NativeTypedCompilerPort;
+ navigation?(context:NativePipelineContext):Promise<import("./resource-navigation-contracts.ts").NativeNavigationPolicy>;
  styles(context:NativePipelineContext):Promise<NativePipelineStyleSnapshot>;
  assets(sources:readonly string[],context:NativePipelineContext):Promise<readonly NativePipelineAsset[]>;
  modules(tags:readonly string[],context:NativePipelineContext):Promise<{modules:NonNullable<NativeAssemblyInput['modules']>;files:readonly NativeAssemblyFile[]}>;
@@ -61,6 +62,7 @@ export interface NativePipelineResult {
 export interface NativePipelineFileReference {path:string;sha256:string}
 /** Explicit shared receipt inventory; authored pages never receive these filesystem paths. */
 export interface NativePipelineReceiptIndex {
+ navigation?:{sourceOrigin:string;identityPlan:NativePipelineFileReference;approvedPlanSha256:string;imports:readonly {sourceId:string;targetId:string;receipt:NativePipelineFileReference}[]};
  format:'native-conversion-inputs-v1';componentRevision:string;
  sharedPreparation?:NativePipelineFileReference & {verified:NativePipelineFileReference;sourceRoot:string};
  assets:readonly (NativePipelineFileReference & {sources:readonly string[];extension:string;provenanceSha256:string})[];

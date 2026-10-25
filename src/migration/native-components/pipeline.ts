@@ -12,6 +12,7 @@ import {closeNativeStyles} from './styles.ts';
 import {prepareNativeReaderTemplate} from './reader-template.ts';
 import {adaptNativeAuthorProgram} from './author-programs.ts';
 import {resourceSha256} from './resources.ts';
+import {prepareNativeNavigation} from './resource-navigation.ts';
 import {nativeRetainedFontUrls,prepareNativeRetainedFont} from './resource-fonts.ts';
 import type {NativeRetainedFontManifest} from './resource-fonts-contracts.ts';
 import {buildNativeCellAdapter} from './cell-build.ts';
@@ -29,9 +30,10 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  const chart=mapNativeCharts(analysis);blockers.push(...chart.blockers);
  const context:NativePipelineContext={request,revision,graph,analysis,identity,chartMappings:chart.mappings};
  const files=new Map<string,NativeAssemblyFile>();const include=(items:readonly NativeAssemblyFile[])=>{for(const file of items){if(!/^(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+$/.test(file.path)||file.path.split('/').some(s=>s==='.'||s==='..')||resourceSha256(file.bytes)!==file.sha256)throw Error('native_pipeline_file');const prior=files.get(file.path);if(prior&&prior.sha256!==file.sha256)throw Error('native_pipeline_file_collision');files.set(file.path,file);}};
+ const navigation=await ports.navigation?.(context);
  const snapshot=await ports.styles(context);result.style=snapshot;
- const empty=closeNativeStyles(snapshot,{sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:snapshot.compilerSha256},[]);
- const assets=await ports.assets([...empty.missing,...empty.external],context),closure=closeNativeStyles(snapshot,{sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:snapshot.compilerSha256},assets);
+ const empty=closeNativeStyles(snapshot,{sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:snapshot.compilerSha256},[],navigation);
+ const assets=await ports.assets([...empty.missing,...empty.external],context),closure=closeNativeStyles(snapshot,{sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:snapshot.compilerSha256},assets,navigation);
  for(const source of closure.missing){void source;block('resource-missing');}include(closure.files);
  const presentation=bindNativePresentation(analysis,closure);
  const modules=await ports.modules([...new Set(nodes.filter(n=>n.type==='element').map(n=>n.tag))],context);include(modules.files);
@@ -57,7 +59,7 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  blockers.push(...operations.blockers);
  const authDelegations=nodes.filter(n=>n.type==='element'&&n.tag==='SignIn').map(n=>({sourceNode:n.graphKey,analysisSha256:analysis.analysisSha256,destination:'platform-topbar-sign-in' as const,behavior:'platform-sign-in-replaces-embedded-auth' as const}));
  if(blockers.length){result.blockers=blockers;return result;}
- const input={analysis,identity,targetRevision:NATIVE_COMPONENT_TARGET,coreUrl:request.coreUrl,style:closure.style,presentation,modules:modules.modules,files:[...files.values()],urls:closure.urls,readerTemplate,chartMappings:chart.mappings,chartAdapter:context.chartAdapter,cellAdapter,authorPrograms,authDelegations,...operations.input};
+ const input={navigation,analysis,identity,targetRevision:NATIVE_COMPONENT_TARGET,coreUrl:request.coreUrl,style:closure.style,presentation,modules:modules.modules,files:[...files.values()],urls:closure.urls,readerTemplate,chartMappings:chart.mappings,chartAdapter:context.chartAdapter,cellAdapter,authorPrograms,authDelegations,...operations.input};
  // Strip only absent optional fields, preserving authored JSON values and runtime semantics.
  const actual=Object.fromEntries(Object.entries(input).filter(([,v])=>v!==undefined)) as typeof input;
  if(await ports.compiler.fingerprint()!==request.compilerSourceSha256)throw Error('native_typed_compiler_changed');
@@ -134,6 +136,7 @@ export async function nativePipelineFilePorts(request:NativePipelineRequest,extr
  const extension=(contentType:unknown)=>{const table:Record<string,string>={'image/webp':'webp','image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/svg+xml':'svg','image/avif':'avif','application/pdf':'pdf','application/zip':'zip','text/plain':'txt','text/csv':'csv','application/json':'json','application/octet-stream':'bin','video/mp4':'mp4','audio/mpeg':'mp3'};if(typeof contentType!=='string'||!table[contentType])throw Error('native_pipeline_asset_content_type');return table[contentType]!;};
  let styleProof:Awaited<ReturnType<typeof nativeStyleCompilerProof>>|undefined;
  const ports:NativePipelinePorts={readRevision:readNativePipelineRevision,compiler:{fingerprint:()=>retainedCompilerFingerprint(request.legacyRoot),extract:document=>externalCompile<RetainedCompilerSnapshot,{document:unknown}>({document},{legacyRoot:request.legacyRoot},'../../native-components/analyze-runner.mts')},
+  ...(index.navigation?{navigation:async()=>{const config=index.navigation!,identityPlan=JSON.parse((await checked(config.identityPlan)).toString());return prepareNativeNavigation({sourceOrigin:config.sourceOrigin,identityPlan,approvedPlanSha256:config.approvedPlanSha256,imports:await Promise.all(config.imports.map(async entry=>({sourceId:entry.sourceId,targetId:entry.targetId,receiptBytes:await checked(entry.receipt),receiptSha256:entry.receipt.sha256})))});}}:{}),
   styles:async context=>{styleProof??=await nativeStyleCompilerProof(request.legacyRoot);const meta=context.revision.original.meta as Record<string,unknown>|null|undefined;
    const needed=new Set<string>();const discover=(value:unknown)=>{if(typeof value==='string'&&value.startsWith('ref:'))needed.add(value.slice(4));else if(Array.isArray(value))value.forEach(discover);else if(value&&typeof value==='object')Object.values(value).forEach(discover);};discover(context.analysis.nodes);discover(meta?.refs);
    const refRows:Record<string,unknown>[]=[];for(const id of needed){const row=await sharedRow(id);if(row)refRows.push(row);}for(const ref of index.refRows??[])if(ref.sourceIds.some(id=>needed.has(id))){const payload=JSON.parse((await checked(ref)).toString()) as {heads?:Record<string,unknown>[]};if(!Array.isArray(payload.heads))throw Error('native_pipeline_ref_rows');refRows.push(...payload.heads.filter(row=>needed.has(String(row.id))));}

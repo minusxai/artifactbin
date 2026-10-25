@@ -137,7 +137,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind});return value;
  };
  const admittedTarget=(node:RetainedJsxNode,kind:NativeBindingTarget['kind'],attribute?:string):NativeBindingTarget|undefined=>{
-  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||(t.kind==='property'||t.kind==='cell'||t.kind==='person')&&t.attribute===attribute))??[];
+  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||(t.kind==='property'||t.kind==='cell'||t.kind==='person'||t.kind==='url')&&t.attribute===attribute))??[];
   if(!targets.length)return;
   const t=targets[0],proof=input.identityBindings.find(b=>b.sourceNode===node.graphKey);
   if(targets.length!==1||!t||!proof||t.afId!==proof.afId||t.analysisSha256!==proof.analysisSha256||t.sourceSha256!==proof.sourceSha256||t.sourceStart!==proof.sourceStart||t.sourceEnd!==proof.sourceEnd||t.proofSha256!==proof.proofSha256){block('adapter-identity-mismatch',node,'Adapter target must match the exact graph identity receipt');return;}
@@ -302,6 +302,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if((node.tag==='Grid'&&['cols','rowHeight','mode','gap'].includes(name))||(node.tag==='GridItem'&&['x','y','w','h','minHeight','colSpan','rowSpan'].includes(name)))continue;
    if(name==='variant'&&rule?.kind==='semantic'){require('style',node,'Semantic variant requires its original token/style translation',name);continue;}
    if(name==='href'||name==='src'||name==='poster'){
+    if(admittedTarget(node,'url',name))continue;
     if(typeof value!=='string'){block('invalid-url',node,'URL attributes require literal strings',name);continue;}
     if(value.startsWith('#')){attrs[name]=value;continue;}
     if(name==='src'&&!node.isComponent&&['img','source'].includes(node.tag.toLowerCase())&&validDataImage(value)){attrs[name]=value;continue;}

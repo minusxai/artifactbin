@@ -59,6 +59,7 @@ export interface NativeTableColumn {
 export type NativeBindingTarget = NativeBindingIdentity &
   (
     | { kind: "text" }
+    | {kind:"url";attribute:"href"|"src"|"poster"}
     | {kind:"person";attribute:"userId"}
     | {kind:"cell";attribute:"data"}
     | {
@@ -90,6 +91,8 @@ export interface NativeBindingViewer {
   responsePath: readonly [string, "viewer", "id"];
 }
 export interface NativeBindingsInput {
+  navigation?:import("./resource-navigation-contracts.ts").NativeNavigationPolicy;
+  urls?:readonly {source:string;target:string;sha256:string}[];
   componentRecipes?:readonly import("./component-presentation-contracts.ts").NativeComponentRecipe[];
   people?:import("./person-contracts.ts").NativeBindingPeople;
   cellAdapter?:NativeCellAdapter;

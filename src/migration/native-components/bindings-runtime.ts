@@ -2,7 +2,7 @@
  * runtime extension, source evaluation, network authority or shared-state cache. */
 import {NATIVE_PERSON_RUNTIME} from './person-runtime.ts';
 import { NATIVE_TABLE_RUNTIME } from './table-runtime.ts';
-export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell,projectPerson){
+export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell,projectPerson,projectUrl){
  const requestId=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);};
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},tableErrors={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
@@ -59,6 +59,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     host.setAttribute('aria-busy',busy?'true':'false');
     if(busy)host.setAttribute('class','mx-busy-inline');else if(target.authorClass!==null)host.setAttribute('class',target.authorClass);else host.removeAttribute('class');
    }
+   if(target.kind==='url'){const url=projectUrl(read(target.expression,row),target.attribute,plan.navigation,plan.urls);if(url===null)host.removeAttribute(target.attribute);else host.setAttribute(target.attribute,url);}
    if(target.kind==='property'){
     const binding=target.writeback;let projection=target.property==='data'?(plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null):read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}

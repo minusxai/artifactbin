@@ -1,3 +1,5 @@
+import {projectNativeUrl,verifyNativeNavigation} from './resource-navigation.ts';
+import type {NativeNavigationPolicy} from './resource-navigation-contracts.ts';
 import type {NativeComponentRecipe,NativeStoryColumn} from './component-presentation-contracts.ts';
 import {nativeDigest} from './selection.ts';
 import {closeNativeResources,rewriteNativeCss,resourceSha256,type NativeResourceAsset,type NativeResourceClosure} from './resources.ts';
@@ -21,10 +23,12 @@ export interface NativeStyleClosure extends NativeResourceClosure {
  inlineStyles:readonly {sourceNode:string;css:string}[];
  resourcePatches:readonly {sourceNode:string;attributes:Record<string,string>}[];
 }
-export function closeNativeStyles(snapshot:NativeStyleSnapshot,expected:{sourceSha256:string;analysisSha256:string;compilerSha256:string},assets:readonly NativeResourceAsset[]):NativeStyleClosure {
+export function closeNativeStyles(snapshot:NativeStyleSnapshot,expected:{sourceSha256:string;analysisSha256:string;compilerSha256:string},assets:readonly NativeResourceAsset[],navigation?:NativeNavigationPolicy):NativeStyleClosure {
  if(snapshot.sourceSha256!==expected.sourceSha256||snapshot.analysisSha256!==expected.analysisSha256||snapshot.compilerSha256!==expected.compilerSha256||!snapshot.sourceFiles.length||snapshot.sourceFiles.some(file=>!/^([a-f0-9]{64})$/.test(file.sha256)))throw Error('Style source/compiler association mismatch');
- const sources=[...(snapshot.presentationUrls??[]),...snapshot.sheets.flatMap(sheet=>rewriteNativeCss(sheet.css,[]).urls),...snapshot.inlineStyles.flatMap(style=>rewriteNativeCss(style.css,[]).urls)];
- const closure=closeNativeResources(sources,assets),files=[...closure.files];
+ if(navigation&&!verifyNativeNavigation(navigation))throw Error('native_navigation_policy');
+ const navigations=(snapshot.presentationUrls??[]).flatMap(source=>{if(!navigation||!source.startsWith("/a/")&&!source.startsWith(navigation.sourceOrigin+"/a/"))return [];const target=projectNativeUrl(source,"href",navigation);return target?[{source,target,sha256:resourceSha256(navigation.sha256+"\n"+source+"\n"+target)}]:[];});
+ const sources=[...(snapshot.presentationUrls??[]).filter(source=>!navigations.some(entry=>entry.source===source)),...snapshot.sheets.flatMap(sheet=>rewriteNativeCss(sheet.css,[]).urls),...snapshot.inlineStyles.flatMap(style=>rewriteNativeCss(style.css,[]).urls)];
+ const closure=closeNativeResources(sources,assets);closure.urls.push(...navigations);const files=[...closure.files];
  const sheets=snapshot.sheets.map(sheet=>{
   // Sheets live in assets/, so their references must resolve beside them.
   const css=rewriteNativeCss(sheet.css,closure.urls.map(url=>({...url,target:url.target.startsWith('./assets/')?'./'+url.target.slice(9):url.target}))).css;

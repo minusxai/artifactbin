@@ -45,3 +45,7 @@ test('source story column and exact component recipes survive resource closure a
  assert.deepEqual(closed.style.storyColumn,storyColumn);assert.deepEqual(closed.componentRecipes,componentRecipes);
  assert.notEqual(closed.style.rootSha256,closeNativeStyles(snapshot,snapshot,[asset]).style.rootSha256);
 });
+test('reviewed navigation receipts preserve original links without fabricating resource files',async()=>{
+ const {prepareNativeNavigation}=await import('./resource-navigation.ts'),{nativeDigest}=await import('./selection.ts');const identityPlan={artifactIds:{pending:'future'}},policy=prepareNativeNavigation({sourceOrigin:'https://original.example',identityPlan,approvedPlanSha256:nativeDigest(identityPlan),imports:[]});
+ const result=closeNativeStyles({...snapshot,presentationUrls:['/a/pending','/a/outside']},snapshot,[asset],policy);assert.deepEqual(result.missing,[]);assert.equal(result.urls.find(url=>url.source==='/a/pending')?.target,'https://original.example/a/pending');assert.equal(result.files.length,4);assert.throws(()=>closeNativeStyles(snapshot,snapshot,[asset],{...policy,sourceOrigin:'https://changed.example'}),/navigation/);
+});

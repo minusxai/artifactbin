@@ -180,3 +180,6 @@ test('structural helper identities cannot collide with an original or retired so
  source.reservedIdentities=[{afId:helper,sourceNode:'retired-original'}];
  const result=lowerNativeComponents(source);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(blocker=>blocker.code==='component-helper-collision'));
 });
+test('row URL attributes remain absent until exact typed URL adapter admission',()=>{
+ const source=input([element('a',{href:'$_row.source'})]);const unbound=lowerNativeComponents(source);assert.equal(unbound.status,'requires-adapter');const binding=source.identityBindings[0]!;source.admittedBindings=[{...binding,kind:'url',attribute:'href'}];const bound=lowerNativeComponents(source);assert.equal(bound.status,'complete');assert.doesNotMatch(bound.html!,/href=|\$_row/);source.admittedBindings=[{...binding,kind:'url',attribute:'src'}];assert.equal(lowerNativeComponents(source).status,'requires-adapter');
+});

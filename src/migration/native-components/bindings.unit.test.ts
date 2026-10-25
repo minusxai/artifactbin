@@ -1626,3 +1626,15 @@ test('read-only authored table declarations coexist with registered queries with
  const result=emitNativeBindings(source);assert.equal(result.status,'complete');assert.equal(Object.hasOwn(result.localDefaults,'items'),false);
  source.analysis.flow.values[2]!.rows=[{amount:'wrong'}];const invalid=emitNativeBindings(source);assert.equal(invalid.status,'blocked');assert.ok(invalid.blockers.some(b=>b.code==='invalid-local-table'));
 });
+
+test('row URL bindings update keyed anchors and remove unsafe stale URLs',async()=>{
+ const loop=el('url-loop','For',{id:'url-loop',keyBy:'id',each:'$rows'}),anchor=el('url-anchor','a',{href:'$_row.title'});
+ if(loop.type!=='element')throw Error();loop.attributes.find(attr=>attr.name==='each')!.value={static:false,exprType:'Identifier',source:'$rows',reactive:{kind:'signal',name:'rows'}};
+ const source=input([loop,anchor],[{kind:'loop',sourceNode:'url-loop',afId:'url-loop',templateId:'url-template',identity:{owner:'url-loop',keyBy:'id',templateIds:['url-anchor'],encoding:'archived-instance-v1'}},{kind:'url',sourceNode:'url-anchor',afId:'url-anchor',attribute:'href'}]);
+ source.queries=[query];source.analysis.flow.queries=[{name:'rows',sql:'select source',start:0,end:1}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('div',{'data-af-id':'url-loop'});doc.body.append(host);doc.template('url-template',[new Element('a',{'data-af-id':'url-anchor'})]);const port=client({open:false,filter:null}),runtime=await execute(result.authorJs,port,doc);
+ const response=(url:string)=>{const value=answer('one');value.data.records.evaluate.tables[0]!.rows[0]!.cells[1]!.text=url;return value;};
+ try{port.remotes[0]!.next(response('https://example.com/one'));const anchor=host.children[0]!.children[0]!;assert.equal(anchor.getAttribute('href'),'https://example.com/one');port.remotes[0]!.next(response('javascript:alert(1)'));assert.equal(host.children[0]!.children[0],anchor);assert.equal(anchor.getAttribute('href'),null);port.remotes[0]!.next(response('mailto:hello@example.com'));assert.equal(anchor.getAttribute('href'),'mailto:hello@example.com');}finally{await runtime.close();}
+ const unsupported=emitNativeBindings(input([anchor],[{kind:'url',sourceNode:'url-anchor',afId:'url-anchor',attribute:'href'}]));assert.equal(unsupported.status,'blocked');
+});
