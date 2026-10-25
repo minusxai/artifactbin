@@ -66,9 +66,36 @@ describe('native af-button', () => {
 
   it('matches outline border and dark surface recipe tokens', () => {
     const style = document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!;
-    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border-color:var(--border,#d4d4d4)');
+    expect(style.textContent).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
     expect(style.textContent).toContain('html[data-af-dark="true"] af-button>button[data-variant=outline]');
-    expect(style.textContent).toContain('color-mix(in srgb,var(--input,#d4d4d4) 30%,transparent)');
+    expect(style.textContent).toContain('color-mix(in oklab,var(--input,#d4d4d4) 30%,transparent)');
+  });
+
+  it('uses the authored 3px 50-percent focus ring in light and dark themes', () => {
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
+    expect(css).toContain('box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)');
+    expect(css).toContain('html[data-af-dark="true"] af-button>button:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)');
+  });
+
+  it('uses the source Oklab opacity recipes for translucent button variants', () => {
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
+    for (const rule of [
+      'color-mix(in oklab,var(--primary,#171717) 90%,transparent)',
+      'color-mix(in oklab,var(--destructive,#dc2626) 90%,transparent)',
+      'color-mix(in oklab,var(--secondary,#f5f5f5) 80%,transparent)',
+      'color-mix(in oklab,var(--input,#d4d4d4) 30%,transparent)',
+      'color-mix(in oklab,var(--input,#d4d4d4) 50%,transparent)',
+      'color-mix(in oklab,var(--accent,#f5f5f5) 50%,transparent)',
+    ]) expect(css).toContain(rule);
+  });
+
+  it('uses borders only for the outline variant and matches its source current-color edge', () => {
+    const plain=fixture().button, outline=fixture('variant="outline"').button;
+    expect(getComputedStyle(plain).borderTopWidth).toBe('0px');
+    expect(getComputedStyle(outline).borderTopWidth).toBe('1px');
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-button-styles]')!.textContent!;
+    expect(css).toContain('gap:.5rem;border:0 solid currentColor');
+    expect(css).toContain('data-variant=outline]{color:var(--foreground,#171717);background:var(--background,#fff);border:1px solid currentColor');
   });
 
   it('reflects disabled, busy and accessible label attributes and blocks programmatic activation', () => {
