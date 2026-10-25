@@ -128,6 +128,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/design-systems.mjs` | Generate the design-system registry and agent references from `design-systems/specs`. | `npm run generate:design-systems` |
 | `scripts/generate-design-system-previews.mjs` | Render the picker and docs thumbnails from the design-system covers. | `npm run generate:design-system-previews` |
 | `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | `services/cli/scripts/generate-teaching.mjs`, `lib/afbin-run.mjs`, tests |
+| `scripts/lib/native-migration-camera.mjs` | Adapt reviewed source-bound recipes to the existing migration capture and comparison contract. | Migration verification callers |
 
 ## Release
 

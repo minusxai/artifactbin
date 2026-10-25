@@ -241,9 +241,10 @@ describe('native upload trusted context',()=>{
   const key=(posted.mock.calls[0][0] as {key:string}).key;
   const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:PAGES,source:frame.contentWindow}));send({kind:'ready',nonce:'native'});
   send({kind:'upload-file',call:2,datasetId:'Dataset123',filename:'sample.txt',contentType:'text/plain',requestId:'upload-request-123',bytes:new Uint8Array([1,2]),editId:'forged',authorization:'Bearer forged'});
-  for(let i=0;i<6;i++)await Promise.resolve();
-  expect(fetcher).toHaveBeenCalledTimes(1);const [path,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];expect(path).toBe('/a/Page123/datasets/Dataset123/files');expect(init.headers).toEqual({'Content-Type':'text/plain','X-Filename':'sample.txt','X-Edit-Id':'trusted-edit','Idempotency-Key':'upload-request-123'});expect(init.credentials).toBe('same-origin');
-  await vi.waitFor(()=>expect(posted.mock.calls.some(([message])=>(message as {payload?:{status?:number}}).payload?.status===403)).toBe(true));
+  await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1));
+  const [path,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];expect(path).toBe('/a/Page123/datasets/Dataset123/files');expect(init.headers).toEqual({'Content-Type':'text/plain','X-Filename':'sample.txt','X-Edit-Id':'trusted-edit','Idempotency-Key':'upload-request-123'});expect(init.credentials).toBe('same-origin');
+  await vi.waitFor(()=>expect(posted.mock.calls.some(([message])=>{const payload=(message as {payload?:{kind?:string;call?:number;status?:number}}).payload;return payload?.kind==='fetch-result'&&payload.call===2&&payload.status===403;})).toBe(true));
+  expect(fetcher).toHaveBeenCalledTimes(1);
  });
  it('refuses archived uploads without making a request',async()=>{
   const frame=document.createElement('iframe');document.body.append(frame);const posted=vi.spyOn(frame.contentWindow!,'postMessage');const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
