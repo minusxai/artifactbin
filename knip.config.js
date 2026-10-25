@@ -23,6 +23,7 @@ export default {
         'scripts/ci/{fast-check,fast-tests,fast-budget}.mjs', 'vitest.fast.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
+        'scripts/native-migration-production.mjs', // Reviewed operator entry; dry-run by default.
         // CI.smtp.Dockerfile starts this private SMTP sink by path.
         'deploy/company/ci-smtp-fixture.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name

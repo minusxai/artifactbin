@@ -11,6 +11,7 @@ import type {prepareNativeProductImport} from './native-migration-product-host';
 export interface NativeProductionPlan {
  format:'native-production-plan-v1';revisionScope:'latest';sourceNamespace:string;
  selectionManifest:NativeHostFile;datasetCensus:NativeHostFile;identity:NativeHostFile;ancillaryFolders?:NativeHostFile;
+ runtimeAuthority?:{mode:'scoped-internal-tokens';ttlMs:number};
  heads:readonly {key:NativeHostKey;canonicalSha256:string}[];
  batches:readonly {id:string;sourceIds:readonly string[]}[];
  target:{appSchema:string;authSchema:string;bucketSha256:string;objectPrefix:string;originSha256:string;protectedSchemas:readonly string[];protectedObjects:readonly {bucketSha256:string;prefix:string}[]};
@@ -30,10 +31,12 @@ export interface NativeProductionTarget {
 }
 /** Provider and injection seams are host-only. Defaults use actual product transactions and conditional S3. */
 export interface NativeProductionOptions {
+ decodeContext?:(wire:unknown)=>import('./native-migration-host-contract').NativeHostContext;
  planPath:string;batchPath:string;receiptRoot:string;outputDirectory:string;
  apply?:boolean;approvedPlanSha256?:string;
  openTarget(plan:NativeProductionPlan):Promise<NativeProductionTarget>;
  runtimeBinding?:{db:Db|Promise<Db>;storage:{bucket:string;prefix:string};backend:'s3'|'local'};
+ tokenAuthority?:{mint(tx:Queryable,userId:string,ttlMs:number):Promise<string>;revoke(id:string):Promise<void>};
  sinkFactory?:(config:S3Config)=>NativeImmutableObjectSink;
  prepareImport?:typeof prepareNativeProductImport;
  preparePrerequisites?:(tx:Queryable,identity:NativeIdentityImport,folders:NativeAncillaryFolderRecipe|undefined,schemas:{appSchema:string;authSchema:string})=>Promise<unknown>;
