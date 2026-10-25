@@ -31,6 +31,7 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('outline:2px solid var(--ring,Highlight)');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('min-width: 6em');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('padding: .5em .75em');
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain(':where(af-markdown .mx-markdown code){font-size:1em}');
  expect(getComputedStyle(el.querySelector('table')!).overflowX).toBe('auto');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('af-markdown .mx-markdown > :first-child{margin-block-start:0}');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('padding:1rem;background:var(--muted');
@@ -78,5 +79,6 @@ it('preserves reader preflight and bare prose rhythm without shifting code for i
  const quote=getComputedStyle(el.querySelector('blockquote')!),pre=getComputedStyle(el.querySelector('pre')!),copy=getComputedStyle(el.querySelector('button')!),cell=getComputedStyle(el.querySelector('td')!),table=getComputedStyle(el.querySelector('table')!);
  expect(parseFloat(quote.marginLeft)).toBe(0);expect(quote.maxWidth).toBe('544px');expect(quote.borderInlineStart).toBe('3px solid currentcolor');
  expect(pre.fontSize).toBe('16px');expect(pre.maxWidth).toBe('544px');expect(copy.position).toBe('absolute');expect(copy.opacity).toBe('0');
+ expect(el.querySelector('pre code')?.className).toMatch(/^language-/);
  expect(cell.paddingTop).toBe('6.4px');expect(table.width).toBe('fit-content');expect(table.maxWidth).toBe('100%');expect(el.querySelector('button')!.textContent).toBe('Copy code');
 });
