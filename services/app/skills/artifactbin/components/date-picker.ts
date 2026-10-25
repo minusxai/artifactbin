@@ -2,6 +2,7 @@ import { floatingVisibility, identifyFloating, positionFloating, topFloating } f
 import { inBounds, localToday, monthGrid, moveMonth, validDate, type CalendarMonth } from './date-calendar';
 export interface AfDatePickerChangeDetail { value: string | null }
 interface DatePickerClock { clock: () => Date }
+/** An explicit aria-label names the trigger verbatim; its current value is a description. */
 export interface AfDatePickerContract {
   label: string;
   value: string | null;
@@ -120,7 +121,11 @@ export class AfDatePicker extends HTMLElement implements DatePickerClock, AfDate
     const visibleLabel=this.getAttribute('label') ?? '';
     if(visibleLabel) { this.labelNode!.textContent=visibleLabel; if(this.labelNode!.parentElement!==this) this.insertBefore(this.labelNode!,this.trigger); }
     else this.labelNode?.remove();
-    this.valueNode!.textContent=this.value ?? this.getAttribute('placeholder') ?? 'Pick a date'; this.trigger.setAttribute('aria-label',`${label}: ${this.value ?? 'Pick a date'}`);
+    this.valueNode!.textContent=this.value ?? this.getAttribute('placeholder') ?? 'Pick a date';
+    const explicitLabel=this.getAttribute('aria-label');
+    this.trigger.setAttribute('aria-label',explicitLabel ?? `${label}: ${this.value ?? 'Pick a date'}`);
+    if(explicitLabel!==null)this.trigger.setAttribute('aria-description',this.valueNode!.textContent);
+    else this.trigger.removeAttribute('aria-description');
     this.trigger.disabled=this.disabled; this.trigger.setAttribute('aria-readonly',String(this.locked)); this.trigger.setAttribute('aria-expanded',String(this.open));
     this.popup.hidden=!this.open; this.popup.setAttribute('aria-label',`${label} calendar`); if(!this.open) { if(typeof this.popup.hidePopover==='function' && this.popup.matches(':popover-open')) this.popup.hidePopover(); return; }
     this.popup.replaceChildren();

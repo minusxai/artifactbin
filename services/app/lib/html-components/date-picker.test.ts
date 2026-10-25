@@ -24,7 +24,7 @@ it('renders the authored visible label and a decorative calendar icon without ch
  expect(icon?.querySelector('rect')?.getAttribute('x')).toBe('3');
  root.setAttribute('aria-label','Deadline');
  expect(root.querySelector('.af-date-label')?.textContent).toBe('Due date');
- expect(trigger.getAttribute('aria-label')).toBe('Deadline: 2024-06-15');
+ expect(trigger.getAttribute('aria-label')).toBe('Deadline');
  root.label='Ship date';
  expect(root.querySelector('.af-date-label')?.textContent).toBe('Ship date');
  root.removeAttribute('label');
@@ -126,4 +126,22 @@ it('disables year boundary overflow and reconnects without duplicate change list
  root.setAttribute('disabled',''); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
  root.removeAttribute('disabled'); root.remove(); document.body.append(root); let count=0; root.addEventListener('af-change',()=>count++);
  root.querySelector<HTMLButtonElement>('button')!.click(); root.querySelector<HTMLButtonElement>('[aria-label="Clear date"]')!.click(); expect(count).toBe(1); expect(root.value).toBe(null);
+});
+
+it('keeps explicit names stable while exposing the current value separately',()=>{
+ const root=fixture('label="Due date" aria-label="Choose deadline" placeholder="No date"');
+ const trigger=root.querySelector<HTMLButtonElement>('.af-date-trigger')!;
+ expect(trigger.getAttribute('aria-label')).toBe('Choose deadline');
+ expect(trigger.getAttribute('aria-description')).toBe('No date');
+ root.value='2026-10-25';
+ expect(trigger.getAttribute('aria-label')).toBe('Choose deadline');
+ expect(trigger.getAttribute('aria-description')).toBe('2026-10-25');
+ root.value=null;
+ expect(trigger.getAttribute('aria-label')).toBe('Choose deadline');
+ expect(trigger.getAttribute('aria-description')).toBe('No date');
+ root.setAttribute('aria-label','Revised deadline');
+ expect(trigger.getAttribute('aria-label')).toBe('Revised deadline');
+ root.removeAttribute('aria-label');
+ expect(trigger.getAttribute('aria-label')).toBe('Due date: Pick a date');
+ expect(trigger.hasAttribute('aria-description')).toBe(false);
 });
