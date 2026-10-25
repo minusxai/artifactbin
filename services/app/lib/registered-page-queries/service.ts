@@ -85,6 +85,7 @@ export function createRegisteredPageQueries(
         });
         const input: RunInput = {
           tables: {
+            ...Object.fromEntries(prepared.localTables.map(table=>[table.name,{columns:table.columns,rows:table.rows}])),
             _me: {
               columns: [{ name: "id", type: "user" }],
               rows: [{ id: platform.userId }],
@@ -97,8 +98,8 @@ export function createRegisteredPageQueries(
           limit: limits.rows,
           timeoutMs: 5000,
         };
-        let rows = 0,
-          cells = 0;
+        let rows = prepared.localTables.reduce((count,table)=>count+table.rows.length,0),
+          cells = prepared.localTables.reduce((count,table)=>count+table.rows.length*table.columns.length,0);
         const sources: Pick<QuerySource,"verify">[] = [];
         const catalogAnswers:Record<string,QueryOutcome>={};
         const catalogs=new Map<string,Awaited<ReturnType<NonNullable<QueryPorts['catalog']>>>>();

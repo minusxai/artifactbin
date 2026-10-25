@@ -11,7 +11,7 @@ describe('registered immutable page mutations',()=>{
  it('never resets rejected/unknown writes and preserves the same operation identity',async()=>{for(const outcome of ['rejected','unknown'] as const){const h=harness();h.setResult({outcome,revision:null,affected:null});const result=await createRegisteredMutationService(h.ports)(context,plan,{requestId:'request_1234567890',values:{body:'x'}},new AbortController().signal);expect(result.reset).toEqual([]);expect(result.outcome).toBe(outcome);}});
  it('rejects stale page/source identity and conflicting same-key values',async()=>{const h=harness(),run=createRegisteredMutationService(h.ports),signal=new AbortController().signal;await expect(run({...context,pageVersion:2},plan,{requestId:'request_1234567890',values:{body:'x'}},signal)).rejects.toThrow();await run(context,plan,{requestId:'request_1234567890',values:{body:'x'}},signal);await expect(run(context,plan,{requestId:'request_1234567890',values:{body:'y'}},signal)).rejects.toThrow('idempotency_mismatch');});
  it('scopes request identities by credential and operation, not only public request IDs',async()=>{const h=harness(),run=createRegisteredMutationService(h.ports),input={requestId:'request_1234567890',values:{body:'x'}},signal=new AbortController().signal;await run(context,plan,input,signal);await run({...context,callerKey:'other-credential'},plan,input,signal);await run(context,{...plan,name:'other'},input,signal);expect(h.commits()).toBe(3);});
- it('reports exact supported pilot shapes and refuses unsupported registration rather than silently omitting',()=>{expect(()=>validateMutationProgram(plan)).not.toThrow();expect(()=>validateMutationProgram({...plan,expectedAffected:2} as unknown as RegisteredMutationPlan)).toThrow();expect(()=>validateMutationProgram({...plan,kind:'update'} as unknown as RegisteredMutationPlan)).toThrow();});
+ it('reports exact supported pilot shapes and refuses unsupported registration rather than silently omitting',()=>{expect(()=>validateMutationProgram(plan)).not.toThrow();expect(()=>validateMutationProgram({...plan,expectedAffected:2})).not.toThrow();expect(()=>validateMutationProgram({...plan,kind:'update'})).not.toThrow();for(const expectedAffected of [-1,0.5,NaN])expect(()=>validateMutationProgram({...plan,expectedAffected})).toThrow();});
 });
 
 it('retains compiler SQL parameter identifiers for row arguments and server actor/clock bindings',async()=>{
@@ -22,4 +22,9 @@ it('retains compiler SQL parameter identifiers for row arguments and server acto
  expect(observed).toEqual({_row__id:'retained-row',_me__id:'server-user',_now:'2026-01-01T00:00:00.000Z'});
  expect(()=>validateMutationProgram({...registered,name:'_hidden'})).toThrow('unsupported_registered_mutation');
  expect(()=>validateMutationProgram({...registered,values:{row_id:{type:'string',nullable:false,parameter:'_row.id'}}})).toThrow('unsupported_registered_mutation');
+});
+
+it('preserves explicit and absent affected-row contracts, accepting zero or multiple committed rows only when declared',async()=>{
+ for(const affected of [0,2]){const h=harness();h.setResult({outcome:'committed',revision:'2',affected});const unrestricted={...plan};delete unrestricted.expectedAffected;const result=await createRegisteredMutationService(h.ports)(context,unrestricted,{requestId:'request_count_123456',values:{body:'x'}},new AbortController().signal);expect(result).toMatchObject({affected,reset:['body']});}
+ const h=harness();h.setResult({outcome:'committed',revision:'2',affected:2});await expect(createRegisteredMutationService(h.ports)(context,plan,{requestId:'request_count_123456',values:{body:'x'}},new AbortController().signal)).rejects.toThrow('invalid_committed_mutation_receipt');
 });

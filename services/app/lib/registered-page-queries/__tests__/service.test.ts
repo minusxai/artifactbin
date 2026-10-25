@@ -374,3 +374,18 @@ it('drains direct catalog work before returning cancellation',async()=>{
  const run=createRegisteredPageQueries(f.ports).execute(context,validRequest,abort.signal);await ready;abort.abort(Error('stop_catalog'));
  await Promise.resolve();expect(settled).toBe(false);finish();await expect(run).rejects.toThrow('stop_catalog');expect(settled).toBe(true);
 });
+
+it("queries immutable saved local tables with scalar filters and dependencies without accepting replacement rows", async()=>{
+ const f=fixture(),sql=createSqliteSql();
+ f.ports.registry=async()=>({...plan,localTables:[{name:'items',columns:[{name:'amount',type:'number'},{name:'label',type:'string'}],rows:[{amount:2,label:null},{amount:5,label:'kept'}]}],queries:[{name:'filtered',sql:'select amount from items where amount >= $amount',dependencies:[]},{name:'total',sql:'select sum(amount) as amount from filtered',dependencies:['filtered']}]});
+ f.ports.execute=input=>({result:sql.run(input),cancelAndDrain:async()=>{}});
+ expect(await f.run({values:{amount:3},only:['total']})).toMatchObject({total:{rows:[{amount:5}]}});
+ await expect(f.run({values:{},only:['total'],localTables:[]})).rejects.toThrow('invalid_query_request');
+ await expect(f.run({values:{items:[]},only:['total']})).rejects.toThrow('invalid_query_request');
+});
+it("rejects invalid saved table names, collisions, cells and excessive data before execution",async()=>{
+ const good={name:'items',columns:[{name:'amount',type:'number' as const}],rows:[{amount:2}]};
+ for(const localTables of [[{...good,name:'_me'}],[{...good,name:'total'}],[{...good,name:'amount'}],[good,{...good,name:'ITEMS'}],[good,good],[{...good,columns:[...good.columns,...good.columns]}],[{...good,rows:[{amount:'wrong'}]}],[{...good,rows:[{amount:2,extra:1}]}],[{...good,rows:Array.from({length:10001},()=>({amount:1}))}]]){
+  const f=fixture();f.ports.registry=async()=>({...plan,localTables});await expect(f.run(validRequest)).rejects.toThrow();expect(f.calls).toEqual([]);
+ }
+});

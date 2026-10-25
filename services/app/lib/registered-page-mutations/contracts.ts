@@ -2,13 +2,14 @@ import type {Scalar} from '@artifactbin/contracts';
 /** Server-only registration. SQL, dataset identity and parameters never enter the public descriptor. */
 export interface MutationProgram {
  name:string;
- kind:'insert'|'delete';
+ kind:'insert'|'update'|'delete';
  sql:string;
  target:{datasetId:string;schema:string;table:string};
  /** SQL parameter identifiers retain compiler underscores; public value and operation names keep their own grammar. */
  values:Record<string,{type:'string'|'number'|'boolean';nullable:boolean;parameter:string;default?:Scalar}>;
  builtins:readonly {name:'_me.id'|'_now'|'_tz';parameter:string}[];
- expectedAffected:1;
+ /** Source-declared exact affected count; absence preserves the source's unrestricted count. Never caller input. */
+ expectedAffected?:number;
  reset:readonly string[];
 }
 interface MutationIdentity {pageId:string;pageVersion:number;sourceSha256:string;backendId:string;backendVersion:string}

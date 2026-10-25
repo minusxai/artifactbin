@@ -268,3 +268,11 @@ it("emits a portable public descriptor with no SQL, binding IDs or platform over
       .document,
   ).not.toContain("$values");
 });
+it('binds immutable local table bytes to the saved backend envelope',()=>{
+ const authored={scalars:{},imports:[],localTables:[{name:'items',columns:[{name:'amount',type:'number' as const}],rows:[{amount:3}]}],queries:[{name:'total',sql:'select sum(amount) as amount from items',dependencies:[]}]};
+ const prepared=prepareRegisteredQueryBackend('queries','backend',page,authored,{compilerSha256:'a'.repeat(64),sourceSha256:'b'.repeat(64),sqlEngineSha256:'c'.repeat(64)});
+ authored.localTables[0]!.rows[0]!.amount=99;
+ const saved={...page,links:[prepared.link]},backend={...prepared.backend,backendId:prepared.link.backendId,version:prepared.link.version,pageId:page.pageId,ownerId:'owner',secretBindings:[]};
+ expect(registeredPlan(saved,prepared.link,backend)?.localTables?.[0]?.rows).toEqual([{amount:3}]);
+ expect(()=>registeredPlan(saved,prepared.link,{...backend,compiled:backend.compiled.replace('"amount":3','"amount":4')})).toThrow();
+});

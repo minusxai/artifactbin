@@ -89,6 +89,25 @@ export function prepare(plan: QueryPlan, request: unknown) {
       throw Error("invalid_query_registry");
     aliases.add(relation.alias + "." + relation.table);
   }
+  const localTables = plan.localTables ?? [];
+  const sqlName=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value)&&!['__proto__','prototype','constructor'].includes(value.toLowerCase());
+  const occupied=new Set(['_me',...plan.queries.map(q=>q.name.toLowerCase()),...Object.keys(plan.scalars).map(s=>s.toLowerCase()),...plan.imports.map(i=>i.alias.toLowerCase())]);
+  let localRows=0,localCells=0;
+  if(!Array.isArray(localTables)||localTables.length+plan.imports.length>limits.tables)throw Error('invalid_query_registry');
+  for(const table of localTables){
+    if(!record(table)||Object.keys(table).some(k=>!['name','columns','rows'].includes(k))||!sqlName(table.name)||occupied.has(table.name.toLowerCase())||!Array.isArray(table.columns)||!table.columns.length||!Array.isArray(table.rows))throw Error('invalid_query_registry');
+    occupied.add(table.name.toLowerCase());
+    const columns=new Set<string>();
+    for(const column of table.columns){
+      if(!record(column)||Object.keys(column).some(k=>!['name','type'].includes(k))||!sqlName(column.name)||columns.has(column.name.toLowerCase())||typeof column.type!=='string'||!['string','number','boolean','date','timestamp','user'].includes(column.type))throw Error('invalid_query_registry');
+      columns.add(column.name.toLowerCase());
+    }
+    const keys=new Set(table.columns.map(c=>c.name));
+    for(const row of table.rows)if(!record(row)||Object.keys(row).some(k=>!keys.has(k))||table.columns.some(c=>!typed(row[c.name]??null,c.type)))throw Error('invalid_query_registry');
+    localRows+=table.rows.length;localCells+=table.rows.length*table.columns.length;
+    if(localRows>limits.rows||localCells>limits.cells)throw Error('query_input_limit');
+  }
+  if(Buffer.byteLength(JSON.stringify(localTables))>limits.inputBytes)throw Error('query_input_limit');
   const ordered: QueryPlan["queries"][number][] = [],
     visiting = new Set<string>(),
     done = new Set<string>();
@@ -116,6 +135,7 @@ export function prepare(plan: QueryPlan, request: unknown) {
   return {
     params,
     paramTypes,
+    localTables: structuredClone(localTables),
     only: [...request.only] as string[],
     queries: ordered
       .filter((q) => needed.has(q.name))

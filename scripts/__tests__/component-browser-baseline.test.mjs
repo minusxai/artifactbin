@@ -269,9 +269,10 @@ describe('browser semantic collection',()=>{
 describe('bounded independent reader capture',()=>{
   it('runs at most two contexts and returns fixture order despite completion order',async()=>{
     const directory=await setup();let active=0,peak=0,sequence=0;const completed=[];
+    let releaseFirst;const secondScreenshot=new Promise(resolve=>{releaseFirst=resolve;});
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
-    const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);return bytes;}}),close:async()=>{active--;}};}};
-    const mount=async({page})=>{if(page.id===0)await new Promise(resolve=>setTimeout(resolve,20));return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
+    const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);if(id===1)releaseFirst();return bytes;}}),close:async()=>{active--;}};}};
+    const mount=async({page})=>{if(page.id===0)await secondScreenshot;return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}}};};
     const captures=await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount,implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]});
     expect(peak).toBe(2);expect(active).toBe(0);expect(completed[0]).toBe(1);expect(captures.map(capture=>capture.semantics.text)).toEqual(['0','1','2','3']);
   });
