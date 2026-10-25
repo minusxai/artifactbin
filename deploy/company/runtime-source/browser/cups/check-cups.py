@@ -18,7 +18,11 @@ server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Fixture);thread=threading
 try:
  subprocess.run([args.client,str(server.server_port)],check=True,timeout=15)
  library=args.library or Path('/usr/lib')/sysconfig.get_config_var('MULTIARCH')/'libcups.so.2'
- lib=ctypes.CDLL(str(library));lib.cupsUserAgent.restype=ctypes.c_char_p
+ lib=ctypes.CDLL(str(library))
+ # ctypes runs in this process; child IPP client initialization is not shared.
+ # Normal public configuration access initializes default user-agent policy.
+ lib.cupsUser.restype=ctypes.c_char_p;assert lib.cupsUser()
+ lib.cupsUserAgent.restype=ctypes.c_char_p
  assert b'CUPS/2' in lib.cupsUserAgent()
  if not args.library:
   provenance=json.loads(Path('/usr/share/doc/libcups2t64/runtime-source.json').read_text())

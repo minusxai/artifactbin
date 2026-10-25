@@ -7,8 +7,6 @@
 #include <string.h>
 int main(int argc,char **argv) {
   if(argc!=2)return 2;
-  const char *agent=cupsUserAgent();
-  if(!agent||!strstr(agent,"CUPS/2"))return 8;
   char scheme[32],user[64],host[256],resource[256];int port=0;
   if(httpSeparateURI(HTTP_URI_CODING_ALL,"ipp://localhost:631/printers/fixture",scheme,sizeof(scheme),user,sizeof(user),host,sizeof(host),&port,resource,sizeof(resource))!=HTTP_URI_STATUS_OK)return 3;
   if(strcmp(scheme,"ipp")||strcmp(host,"localhost")||port!=631||strcmp(resource,"/printers/fixture"))return 4;
@@ -24,5 +22,8 @@ int main(int argc,char **argv) {
   int good=ippGetStatusCode(response)==IPP_STATUS_OK&&value&&!strcmp(value,"fixture");
   ippDelete(response);httpClose(http);
   if(!good)return 7;
+  /* Normal request initializes CUPS defaults before inspecting user agent. */
+  const char *agent=cupsUserAgent();
+  if(!agent||!strstr(agent,"CUPS/2"))return 8;
   puts("PASS normal IPP shared-library request/response and URI parsing");return 0;
 }

@@ -134,3 +134,50 @@ printf 'package documentation' > "$3/usr/share/doc/fixture"
   expect(JSON.parse(readFileSync(output,'utf8'))).toEqual({'/usr/lib/libfixture.so.1':createHash('sha256').update(bytes).digest('hex')});
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
+
+it('checks CUPS client defaults only after its successful ordinary request',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'cups-lifecycle-'));
+ try{
+  const headers=join(directory,'cups');mkdirSync(headers);
+  const header=`#ifndef FIXTURE_CUPS_H
+#define FIXTURE_CUPS_H
+#include <sys/socket.h>
+typedef struct {int unused;} http_t;
+typedef struct {int unused;} ipp_t;
+typedef struct {int unused;} ipp_attribute_t;
+enum {HTTP_URI_CODING_ALL,HTTP_URI_STATUS_OK,HTTP_ENCRYPTION_NEVER,IPP_OP_GET_PRINTER_ATTRIBUTES,IPP_TAG_OPERATION,IPP_TAG_URI,IPP_TAG_KEYWORD,IPP_TAG_NAME,IPP_STATUS_OK};
+const char *cupsUserAgent(void);
+int httpSeparateURI(int,const char *,char *,int,char *,int,char *,int,int *,char *,int);
+http_t *httpConnect2(const char *,int,void *,int,int,int,int,void *);
+void httpClose(http_t *);
+ipp_t *ippNewRequest(int);
+ipp_attribute_t *ippAddString(ipp_t *,int,int,const char *,const char *,const char *);
+ipp_t *cupsDoRequest(http_t *,ipp_t *,const char *);
+ipp_attribute_t *ippFindAttribute(ipp_t *,const char *,int);
+const char *ippGetString(ipp_attribute_t *,int,const char **);
+int ippGetStatusCode(ipp_t *);
+void ippDelete(ipp_t *);
+#endif
+`;
+  for(const name of ['cups.h','http.h','ipp.h'])writeFileSync(join(headers,name),header);
+  const stub=join(directory,'client.c');writeFileSync(stub,`#include <cups/cups.h>
+#include <string.h>
+static int initialized;
+static http_t http;static ipp_t response;static ipp_attribute_t attribute;
+const char *cupsUserAgent(void){return initialized?"CUPS/2.4.20 IPP/2.1":"";}
+int httpSeparateURI(int coding,const char *uri,char *scheme,int sl,char *user,int ul,char *host,int hl,int *port,char *resource,int rl){strcpy(scheme,"ipp");strcpy(host,"localhost");strcpy(resource,"/printers/fixture");*port=631;return HTTP_URI_STATUS_OK;}
+http_t *httpConnect2(const char *host,int port,void *addr,int family,int encryption,int blocking,int timeout,void *cancel){return &http;}
+void httpClose(http_t *client){}
+ipp_t *ippNewRequest(int operation){return &response;}
+ipp_attribute_t *ippAddString(ipp_t *request,int group,int tag,const char *name,const char *language,const char *value){return &attribute;}
+ipp_t *cupsDoRequest(http_t *client,ipp_t *request,const char *resource){initialized=1;return &response;}
+ipp_attribute_t *ippFindAttribute(ipp_t *request,const char *name,int tag){return &attribute;}
+const char *ippGetString(ipp_attribute_t *attr,int index,const char **language){return "fixture";}
+int ippGetStatusCode(ipp_t *request){return IPP_STATUS_OK;}
+void ippDelete(ipp_t *request){}
+`);
+  const executable=join(directory,'check-ipp');
+  execFileSync('cc',['-I'+directory,new URL('browser/cups/check-ipp.c',source).pathname,stub,'-o',executable]);
+  execFileSync(executable,['631']);
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
