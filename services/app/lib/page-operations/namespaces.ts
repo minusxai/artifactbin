@@ -31,7 +31,7 @@ import {
   type TypeNode,
 } from "graphql";
 import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject, PageMutationOutcome as Outcome, PageResolverRole as PageRole, PageNamespaceSource as NamespaceSource, PageSchema, PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
-import { FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
+import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 import {
   BACKEND_PLATFORM_SDL,
@@ -56,7 +56,6 @@ const ROLE_RANK: Record<PageRole, number> = { VIEWER: 1, EDITOR: 2, OWNER: 3 };
 const MAX_SOURCES = 64;
 const MAX_COMPOSED_BYTES = 1048576;
 const MAX_VARIABLE_BYTES = 65536;
-const MAX_RESULT_BYTES = 1048576;
 
 const TYPE_DEFINITIONS = new Set<string>([
   Kind.OBJECT_TYPE_DEFINITION,
@@ -462,10 +461,10 @@ export async function executePageOperation(
   let errors = result.errors ? plainErrors(result.errors) : undefined;
   if (
     data &&
-    new TextEncoder().encode(JSON.stringify(data)).length > MAX_RESULT_BYTES
+    new TextEncoder().encode(JSON.stringify(data)).length > PAGE_OPERATION_RESULT_BYTES
   ) {
     data = null;
-    errors = [{ message: "The selected result is larger than 1 MiB" }];
+    errors = [{ message: "The selected result is larger than 4 MiB" }];
   }
   const response: RemoteResponse = { data };
   if (errors?.length) response.errors = errors;

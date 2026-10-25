@@ -400,7 +400,7 @@ it("rejects invalid saved table names, collisions, cells and excessive data befo
 
 it('sizes the requested result rather than duplicating hidden dependency results in the response budget',async()=>{
  const f=fixture(),sql=createSqliteSql();let internalBytes=0;
- f.ports.registry=async()=>({...plan,queries:[{name:'first',sql:"select printf('%.*c',600000,'x') as payload",dependencies:[]},{name:'total',sql:'select * from first',dependencies:['first']}]});
+ f.ports.registry=async()=>({...plan,queries:[{name:'first',sql:`select printf('%.*c',${Math.floor(QUERY_LIMITS.outputBytes*0.6)},'x') as payload`,dependencies:[]},{name:'total',sql:'select * from first',dependencies:['first']}]});
  f.ports.execute=input=>({result:sql.run(input).then(answer=>{internalBytes=Buffer.byteLength(JSON.stringify(answer));return answer;}),cancelAndDrain:async()=>{}});
  const result=await f.run(validRequest);expect(internalBytes).toBeGreaterThan(QUERY_LIMITS.outputBytes);expect(Object.keys(result)).toEqual(['total']);expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(QUERY_LIMITS.outputBytes);await expect(f.run({values:{},only:['first','total']})).rejects.toThrow('invalid_query_output');
 });
@@ -427,4 +427,27 @@ it('bounds all internal dependency answers independently of the smaller response
  expect(await f.run(validRequest)).toEqual({total});length++;
  await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');
  for(const invalid of [{columns:[],rows:[],truncated:true},{columns:[],rows:Array(QUERY_LIMITS.rows+1).fill({})},{columns:Array.from({length:500},(_,i)=>({name:'c'+i,type:'string' as const})),rows:Array(2001).fill({})},{columns:[],rows:[null]}]){f.ports.execute=()=>({result:Promise.resolve({first:invalid,total}) as ReturnType<QueryPorts["execute"]>["result"],cancelAndDrain:async()=>{}});await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');}
+});
+
+it('returns bounded multi-megabyte authored data without truncating rows or cells', async () => {
+  const f = fixture();
+  const rows = Array.from({ length: 600 }, (_, part) => ({
+    part,
+    chunk: 'x'.repeat(4000),
+  }));
+  const answer = {
+    total: {
+      columns: [
+        { name: 'part', type: 'number' as const },
+        { name: 'chunk', type: 'string' as const },
+      ],
+      rows,
+    },
+  };
+  f.ports.execute = () => ({
+    result: Promise.resolve(answer),
+    cancelAndDrain: async () => {},
+  });
+  expect(Buffer.byteLength(JSON.stringify(answer))).toBeGreaterThan(1024 * 1024);
+  expect(await f.run(validRequest)).toEqual(answer);
 });
