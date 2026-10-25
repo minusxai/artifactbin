@@ -60,7 +60,8 @@ export function createNativeProductMigrationHost(rawOptions:NativeMigrationBoots
   stage:async({context,recipe,files}:{context:NativeHostContext;recipe:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['reviewedRecipe'];files:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['files']})=>{
    const capability=JSON.parse(Buffer.from(files.authSchemaCapability).toString('utf8'));
    const schemas={appSchema:recipe.authority.appSchema,authSchema:recipe.authority.authSchema};
-   if(!isDeepStrictEqual(capability.schemas,schemas)||!capability.runtime?.actor||typeof capability.runtime.actor.userId!=='string'||!capability.runtime.actor.userId||typeof capability.runtime.actor.tokenId!=='string'||!capability.runtime.actor.tokenId||Object.keys(capability.runtime.actor).some(key=>!['userId','tokenId'].includes(key)))throw Error('native_bootstrap_runtime_authority');
+   const disposable=capability.runtime?.mode==='disposable-scoped-tokens';
+   if(!isDeepStrictEqual(capability.schemas,schemas)||!capability.runtime?.actor||typeof capability.runtime.actor.userId!=='string'||!capability.runtime.actor.userId||(disposable?(!options.runtimeActors||Object.keys(capability.runtime.actor).some(key=>key!=='userId')):(capability.runtime.mode!==undefined||typeof capability.runtime.actor.tokenId!=='string'||!capability.runtime.actor.tokenId||Object.keys(capability.runtime.actor).some(key=>!['userId','tokenId'].includes(key)))))throw Error('native_bootstrap_runtime_authority');
    const origin=new URL(capability.runtime.origin);if(!['http:','https:'].includes(origin.protocol)||!['localhost','127.0.0.1','lvh.me','app.lvh.me'].includes(origin.hostname)&&!origin.hostname.endsWith('.lvh.me')||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)throw Error('native_bootstrap_runtime_origin');
    const identity=JSON.parse(Buffer.from(files.identity).toString('utf8')) as NativeIdentityImport;
    if(identity.plan?.sourceNamespace!==context.revision.key.sourceNamespace)throw Error('native_bootstrap_identity_binding');
@@ -69,10 +70,11 @@ export function createNativeProductMigrationHost(rawOptions:NativeMigrationBoots
    const ancillaryInput=files.ancillaryFolders?JSON.parse(Buffer.from(files.ancillaryFolders).toString('utf8')) as NativeAncillaryFolderRecipe:undefined;
    const ancillary=ancillaryInput?prepareNativeAncillaryFolders(ancillaryInput,identity.plan,ancillaryInput.identityGroups??{}):undefined;
    const prerequisite=await options.db.transaction(async tx=>{const imported=await writeNativeIdentities(tx,identity,await authorizeNativeIdentityTransaction(tx,schemas));
-    const owner=(await tx.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1',[capability.runtime.actor.tokenId])).rows[0];
-    if(owner?.user_id!==capability.runtime.actor.userId)throw Error('native_bootstrap_runtime_actor');
-    const folders=ancillary?await ancillary.apply(tx):undefined;await ancillary?.verify(tx);return {identities:imported,folders};});
-   const runtimeActor=identityForUser(capability.runtime.actor.userId,capability.runtime.actor.tokenId);
+    const actor=disposable?await options.runtimeActors!.provision(tx,capability.runtime.actor.userId):capability.runtime.actor;
+    const owner=(await tx.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now())',[actor.tokenId])).rows[0];
+    if(actor.userId!==capability.runtime.actor.userId||owner?.user_id!==actor.userId)throw Error('native_bootstrap_runtime_actor');
+    const folders=ancillary?await ancillary.apply(tx):undefined;await ancillary?.verify(tx);return {identities:imported,folders,actor};});
+   const runtimeActor=identityForUser(prerequisite.actor.userId,prerequisite.actor.tokenId);
    const prepareRuntime:Parameters<NativeMigrationBootstrapOptions['publication']>[0]['prepareRuntime']=(assemblies,preparedOptions)=>{if('actor' in preparedOptions||'origin' in preparedOptions)throw Error('native_bootstrap_runtime_override');return prepareNativeProductRuntime(assemblies,{...preparedOptions,actor:runtimeActor,origin:origin.origin});};
    const identityPreparation={format:'native-migration-identity-preparation-v1',production:false,transaction:'separate-prerequisite' as const,identityPlanSha256:identity.plan.sha256,identities:prerequisite.identities,...(prerequisite.folders?{ancillaryFolders:{sourceSha256:ancillary!.sourceSha256,...prerequisite.folders}}:{})};
    await mkdir(context.outputDirectory,{recursive:true,mode:0o700});const identityPreparationPath=path.join(context.outputDirectory,'identity-preparation.json');await writeFile(identityPreparationPath,JSON.stringify(identityPreparation),{flag:'wx',mode:0o600});

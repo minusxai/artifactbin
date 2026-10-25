@@ -7,6 +7,7 @@ import type {nativeProductPublicationModules} from './native-migration-bootstrap
 /** One bridge per converter, shared by every selected source; never a page-specific staging script. */
 export interface NativeMigrationBootstrapOptions {
  db:Db;
+ runtimeActors?:import("./native-migration-disposable-actors-contract").NativeDisposableRuntimeActorPort;
  objectsDirectory:string;
  fixtureAuthSecret?:string;
  publication(input:{context:NativeHostContext;reviewedRecipe:NativeHostRecipe;files:NativeHostFiles;prepareRuntime(assemblies:readonly NativeRuntimeAssembly[],options:Omit<NativeRuntimePreparationOptions,'actor'|'origin'>):ReturnType<typeof prepareNativeProductRuntime>;publicationModules:typeof nativeProductPublicationModules}):Promise<NativeProductImportRecipe|NativeSerializedProductImportRecipe>;

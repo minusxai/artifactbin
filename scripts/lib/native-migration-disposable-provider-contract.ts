@@ -11,6 +11,7 @@ export interface NativeDisposableLifecycleConfiguration {
  camera:
   |{kind:'disabled'}
   |{kind:'gate-container';original:{root:string;revision:string};cpus:4;memory:'8g'};
+ runtimeAuthority?:{mode:"disposable-scoped-tokens";ttlMs:number};
  maxFileBytes?:number;
  sha256:string;
 }
@@ -22,6 +23,7 @@ export interface NativeDisposableContext {outputDirectory:string;receiptRoot:str
 /** One process per selected key; application configuration is immutable after its first import. */
 export interface NativeDisposableLifecycle {
  db:Db;objectsDirectory:string;fixtureAuthSecret:string;
+ runtimeActors?:import("./native-migration-disposable-actors-contract").NativeDisposableRuntimeActorPort;
  captureAndCompare:NativeMigrationBootstrapOptions['captureAndCompare'];
  dispose():Promise<void>;
 }

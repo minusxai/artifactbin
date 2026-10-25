@@ -26,6 +26,7 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
  if(request.stage==='assemble'||!configuration.lifecycleConfiguration||path.resolve(request.receiptRoot)!==path.resolve(context.receiptRoot)||path.resolve(request.output)!==path.resolve(context.outputDirectory))throw Error('native_disposable_configuration');
  const reference=await checked(request.receiptRoot,configuration.lifecycleConfiguration),settings=JSON.parse(reference.bytes.toString()) as NativeDisposableLifecycleConfiguration,{sha256,...body}=settings;
  if(settings.format!=='native-disposable-lifecycle-v1'||digest(body)!==sha256||!['reviewed-target-identities','prepared-store'].includes(settings.fixture?.kind)||!['disabled','gate-container'].includes(settings.camera?.kind))throw Error('native_disposable_configuration');
+ if(settings.runtimeAuthority&&(settings.runtimeAuthority.mode!=='disposable-scoped-tokens'||settings.fixture.kind!=='reviewed-target-identities'||!Number.isSafeInteger(settings.runtimeAuthority.ttlMs)||settings.runtimeAuthority.ttlMs<3600000||settings.runtimeAuthority.ttlMs>21600000))throw Error('native_disposable_runtime_authority');
  if(settings.maxFileBytes!==undefined&&(!Number.isSafeInteger(settings.maxFileBytes)||settings.maxFileBytes<1))throw Error('native_disposable_configuration');
  if(settings.fixture.kind==='reviewed-target-identities'&&(settings.fixture.schemas.appSchema!=='public'||!/^[_a-z][_a-z0-9]*$/.test(settings.fixture.schemas.authSchema)))throw Error('native_disposable_schema_scope');
  const origin=localOrigin(settings.origin),targetRoot=await realpath(configuration.targetRoot);await revision(targetRoot,configuration.targetRevision);
@@ -35,8 +36,8 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
  const bundle=settings.fixture.kind==='prepared-store'?await contained(request.receiptRoot,settings.fixture.bundle):undefined;
  await mkdir(context.outputDirectory,{recursive:true,mode:0o700});const outputRoot=await realpath(context.outputDirectory),storage=path.join(outputRoot,'disposable-target'),objects=path.join(storage,'objects');
  // Exclusive creation owns exactly this tree; a busy or leftover lifecycle is never reused or erased.
- await mkdir(storage,{mode:0o700});let closed=false,reset:undefined|(()=>Promise<void>);
- const cleanup=async()=>{if(closed)return;closed=true;try{await reset?.();}finally{await rm(storage,{recursive:true,force:true});}};
+ await mkdir(storage,{mode:0o700});let closed=false,reset:undefined|(()=>Promise<void>),runtimeActors:Awaited<ReturnType<typeof import('./native-migration-disposable-actors').createNativeDisposableRuntimeActors>>|undefined;
+ const cleanup=async()=>{if(closed)return;closed=true;try{if(runtimeActors)await writeFile(path.join(outputRoot,'runtime-actors.json'),JSON.stringify(await runtimeActors.dispose()),{flag:'wx',mode:0o600});}finally{try{await reset?.();}finally{await rm(storage,{recursive:true,force:true});}}};
  try{
   let databaseUrl='pglite://'+path.join(storage,'database'),secret=randomBytes(32).toString('hex');
   if(snapshotInput&&bundle){
@@ -72,9 +73,10 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
     }
    });
   }
+  if(settings.runtimeAuthority&&identity)runtimeActors=await (await import('./native-migration-disposable-actors')).createNativeDisposableRuntimeActors({db,storageRoot:storage,origin,ttlMs:settings.runtimeAuthority.ttlMs,identity});
   const captureAndCompare:NativeDisposableLifecycle['captureAndCompare']=settings.camera.kind==='gate-container'
    ? (await import('./native-migration-disposable-camera')).createNativeDisposableCamera({targetRoot,targetRevision:configuration.targetRevision,original:settings.camera.original})
    : async()=>{throw Error('native_disposable_camera_disabled');};
-  return {db,objectsDirectory:objects,fixtureAuthSecret:secret,captureAndCompare,dispose:cleanup};
+  return {db,objectsDirectory:objects,fixtureAuthSecret:secret,...(runtimeActors?{runtimeActors}:{}),captureAndCompare,dispose:cleanup};
  }catch(error){await cleanup();throw error;}
 }
