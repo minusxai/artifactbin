@@ -9,6 +9,8 @@ export interface HtmlNodeAnchor {
   kind: 'html-node'; v: 1; revision: string; nodeId: string | null; quote: string;
   /** Runtime-created identity scoped to this persisted source ancestor. */
   ancestorId?: string;
+  /** Verified migrated whole-node comment; quote is context, never a text selection. */
+  presentation?: 'block';
   /** Trusted migrated selection parts. Empty means the original selection is stale. */
   segments?: HtmlAnnotationSegment[];
   range?: { start: number; end: number; length: number; fingerprint: string };
@@ -22,8 +24,12 @@ export function parseHtmlNodeAnchor(value: unknown): HtmlNodeAnchor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   const text = (s: unknown, max: number): s is string => typeof s === 'string' && s.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(s);
-  if (Object.keys(v).some(k => !['kind','v','revision','nodeId','quote','range','ancestorId','segments'].includes(k)) || v.kind !== 'html-node' || v.v !== 1 || !text(v.revision,256) || !v.revision || !(v.nodeId === null || text(v.nodeId,256) && !!v.nodeId) || !text(v.quote,32768)) return null;
+  if (Object.keys(v).some(k => !['kind','v','revision','nodeId','quote','range','ancestorId','segments','presentation'].includes(k)) || v.kind !== 'html-node' || v.v !== 1 || !text(v.revision,256) || !v.revision || !(v.nodeId === null || text(v.nodeId,256) && !!v.nodeId) || !text(v.quote,32768)) return null;
   const anchor: HtmlNodeAnchor = { kind:'html-node',v:1,revision:v.revision,nodeId:v.nodeId,quote:v.quote };
+  if(v.presentation!==undefined){
+    if(v.presentation!=='block'||v.nodeId===null||v.range!==undefined||v.segments!==undefined)return null;
+    anchor.presentation='block';
+  }
   if (v.ancestorId !== undefined) {
     if (!text(v.ancestorId,256) || !v.ancestorId || v.nodeId === null || v.ancestorId === v.nodeId) return null;
     anchor.ancestorId=v.ancestorId;

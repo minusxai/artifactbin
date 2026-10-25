@@ -1,9 +1,13 @@
 import { COMMENT_ACTIONS_CSS } from './comment-actions-presentation';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 
+const blockOutline = 'outline: 1px solid rgba(245, 158, 11, .15); outline-offset: 3px;';
+const blockInset = 'inset 0 0 0 9999px rgba(245, 158, 11, .08)';
+
 /** Shared inert comment chrome for markup and opaque managed frames.
  * The bootstrap serializes this data; no parent DOM or executable author capability crosses realms. */
 export const COMMENT_PRESENTATION = {
+  blockStyle: { baseCss: blockOutline, activeCss: SELECTION_PRESENTATION.selectedCss, activeInset: blockInset },
   actionsCss: COMMENT_ACTIONS_CSS,
   icons: {select: ['M5 3a2 2 0 0 0-2 2', 'M19 3a2 2 0 0 1 2 2', 'M21 9V7', 'M3 9V7', 'M3 13v2', 'M3 19a2 2 0 0 0 2 2', 'M7 3h2', 'M13 3h2', 'M7 21h2', 'm12 12 4 10 1.7-4.3L22 16Z'], edit: [
           'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
@@ -14,11 +18,11 @@ export const COMMENT_PRESENTATION = {
   `.mx-taking-screenshot [data-mx-selection-actions], .mx-taking-screenshot [data-mx-annotate-band], .mx-taking-screenshot [data-mx-annotation-area] { visibility: hidden !important; }`,
   `.mx-taking-screenshot [data-mx-annotated], .mx-taking-screenshot [data-mx-annotate-selected], .mx-taking-screenshot [data-mx-annotate-pick-hover] { outline: none !important; }`,
   // Annotation paint must never replace an authored background or image.
-  `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .15); outline-offset: 3px; }`,
+  `[data-mx-annotated]:not([data-mx-annotation-ranged]) { ${blockOutline} }`,
   `[data-mx-annotation-open]:not([data-mx-annotation-ranged]), [data-mx-annotation-hover]:not([data-mx-annotation-ranged]) { ${SELECTION_PRESENTATION.selectedCss} }`,
   `[data-mx-annotate-selected] { ${SELECTION_PRESENTATION.selectedCss} }`,
   // Transient inset paint preserves authored backgrounds/images and disappears during capture.
-  `:root:not(.mx-taking-screenshot) :is([data-mx-annotation-open], [data-mx-annotation-hover], [data-mx-annotate-selected]):not([data-mx-annotation-ranged]) { box-shadow: inset 0 0 0 9999px rgba(245, 158, 11, .08) !important; }`,
+  `:root:not(.mx-taking-screenshot) :is([data-mx-annotation-open], [data-mx-annotation-hover], [data-mx-annotate-selected]):not([data-mx-annotation-ranged]) { box-shadow: ${blockInset} !important; }`,
   // The pick: a crosshair everywhere, and an outline on the block under it. The
   // doubled attribute is deliberate — it out-specifies the edit session's own
   // `[data-mx-edit-hover]` when both stamp the same node while editing.

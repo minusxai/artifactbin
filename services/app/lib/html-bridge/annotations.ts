@@ -37,6 +37,19 @@ export function createHtmlAnnotationPainter(doc: Document) {
         const matches = htmlAnchorElements(doc,pin.anchor?.nodeId ?? pin.nodeId ?? pin.path,pin.anchor?.ancestorId);
         const node = matches.length === 1 ? matches[0]! : null;
         if (!node) return { id: pin.id, status: matches.length ? 'ambiguous' : 'missing', rect: { x: 0, y: 0, width: 0, height: 0 } };
+        // A migrated block's quote is retained context, not a text selection.
+        // Identity alone locates it even when its words changed or repeat.
+        if(pin.anchor?.presentation==='block'){
+          const rect=box(node.getBoundingClientRect()),active=input.openId===pin.id||input.hoverId===pin.id;
+          if(!pin.layoutOnly&&(input.mode==='on'||active)){
+            const mark=doc.createElement('div');
+            mark.style.cssText=active?COMMENT_PRESENTATION.blockStyle.activeCss:COMMENT_PRESENTATION.blockStyle.baseCss;
+            Object.assign(mark.style,{position:'fixed',left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`,background:'transparent',pointerEvents:'none'});
+            if(active)mark.style.boxShadow=COMMENT_PRESENTATION.blockStyle.activeInset;
+            overlay.append(mark);
+          }
+          return {id:pin.id,status:'exact',rect};
+        }
         const ranges: Range[] = [];
         if(pin.anchor?.segments){
           if(!pin.anchor.segments.length)return {id:pin.id,status:'exact',rect:box(node.getBoundingClientRect())};

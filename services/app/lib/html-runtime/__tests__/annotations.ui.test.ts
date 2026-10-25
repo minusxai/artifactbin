@@ -2,6 +2,19 @@ import {htmlTextFingerprint} from '@artifactbin/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHtmlAnnotationPainter } from '../../html-bridge/annotations';
 afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.querySelectorAll('[data-af="annotation-overlay"]').forEach((node) => node.remove()); window.getSelection()?.removeAllRanges(); });
+it('paints migrated block context as an original node outline, including changed or repeated words',()=>{
+ document.body.innerHTML='<section data-af-id="block">context context</section>';
+ const node=document.querySelector('section')!;vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(10,20,200,80));
+ const painter=createHtmlAnnotationPainter(document),anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'block',quote:'context',presentation:'block' as const};
+ const input={pins:[{id:'block-thread',path:'block',anchor}],mode:'on' as const,openId:null,hoverId:null};
+ expect(painter.paint(input)[0]).toEqual({id:'block-thread',status:'exact',rect:{x:10,y:20,width:200,height:80}});
+ const mark=()=>document.querySelector('[data-af="annotation-overlay"] div') as HTMLElement;
+ expect(mark().style.outline).toBe('1px solid rgba(245, 158, 11, .15)');expect(mark().style.outlineOffset).toBe('3px');expect(mark().style.background).toBe('transparent');
+ node.textContent='edited context';expect(painter.paint(input)[0]?.status).toBe('exact');
+ painter.paint({...input,openId:'block-thread'});expect(mark().style.outline).toBe('1px solid rgba(245, 158, 11, 0.85)');expect(mark().style.boxShadow).toContain('rgba(245, 158, 11, .08)');
+ painter.paint({...input,mode:'off'});expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
+ expect(node.outerHTML).toBe('<section data-af-id="block">edited context</section>');painter.dispose();
+});
 it('paints exact text highlights without changing authored text or native selection', () => {
   document.body.innerHTML = '<p data-af-id="n1">one <b>two</b> three</p>';
   const selected = document.createRange(); selected.selectNodeContents(document.querySelector('b')!); window.getSelection()!.addRange(selected);

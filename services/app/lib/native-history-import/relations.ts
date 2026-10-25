@@ -147,6 +147,7 @@ export function prepareNativeHistoryRelations(
         revision: String(a.anchor.version),
         nodeId: nodeId!,
         quote: a.anchor.quote,
+        ...(a.quote === null && a.range === null && !a.anchor.range && a.anchor.segments === undefined ? {presentation: 'block' as const} : {}),
         ...(a.anchor.range ? { range: a.anchor.range } : {}),
         ...(a.anchor.segments ? { segments: a.anchor.segments.map(part => { const nodeId=bindings.get(bindingKey(a.anchor!.version,a.anchor!.sourceNamespace,part.sourceNodeId)); if(!nodeId)fail(); return {nodeId:nodeId!,quote:part.quote,range:part.range,...(part.endAffinity?{endAffinity:part.endAffinity}: {})}; }) } : {}),
       };
