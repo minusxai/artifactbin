@@ -627,3 +627,30 @@ it('rejects a changed prior token alongside a new mapping without writing the ne
  await expect(importNativeIdentities(db,extraProvenance(fixture()))).rejects.toThrow('native_identity_token_replay_changed');
  expect((await db.query("SELECT id FROM tokens WHERE id='source_token_new'")).rows).toEqual([]);expect((await db.query("SELECT source_id FROM native_identity_imports WHERE source_id='source_token_new'")).rows).toEqual([]);
 });
+
+it.each(['missing','existing','concurrent','replay'] as const)('preserves verified legacy avatar bytes while respecting %s destination photos',async mode=>{
+ const {prepareNativeIdentityAvatars}=await import('../avatars');
+ const db=await getDb();
+ await db.query("INSERT INTO users(id,email,kind,created_at,image_key)VALUES('existing_account','person@example.test','account','2020-01-01T00:00:00Z',$1)",[mode==='existing'?'avatar/existing/image':null]);
+ const target=JSON.parse(JSON.stringify((await db.query<NativeIdentityUser>('SELECT id,email,kind,parent_user_id,merged_into_user_id,expires_at,created_at,name,username,image_key FROM users WHERE id=$1',['existing_account'])).rows[0]));
+ const input=fixture(),bytes=Buffer.from('synthetic-avatar'),source={...sourceUser,image_key:'avatar/source/image'};
+ input.sourceInventory={users:[source],tokens:[]};input.targetInventory={users:[target]};
+ input.plan.sourceInventorySha256=digest(input.sourceInventory);input.plan.targetInventorySha256=digest(input.targetInventory);
+ input.plan.users=[{sourceId:source.id,targetId:target.id,action:'reuse-verified-email',sourceRowSha256:digest(source),targetRowSha256:digest(target)}];
+ input.plan.targets={users:{[source.id]:{userId:target.id,email:source.email}},actors:{[source.email!]:{userId:target.id}},tokens:{}};input.plan.createUsers=[];input.plan.tokens=[];
+ input.avatarObjects=[{sourceId:source.id,key:source.image_key,sha256:createHash('sha256').update(bytes).digest('hex'),base64:bytes.toString('base64')}];resign(input);
+ const objects=new Map<string,Uint8Array>(),sink={get:async(key:string)=>Buffer.from(objects.get(key)!),putIfAbsent:async(key:string,b:Uint8Array)=>{if(objects.has(key))return 'exists' as const;objects.set(key,b);return 'created' as const;}};
+ const staged=await prepareNativeIdentityAvatars(input,sink);
+ expect(Buffer.from(objects.get(source.image_key)!)).toEqual(bytes);
+ await db.transaction(tx=>provisionNativeIdentityAuthCompanion(tx,{id:target.id,email:source.email!,name:null,provisionedAt:input.revokedAt}));
+ if(mode==='concurrent')await db.query("UPDATE users SET image_key='avatar/concurrent/image' WHERE id=$1",[target.id]);
+ const run=()=>db.transaction(async tx=>writeWithAuthority(tx,input,await authorizeNativeIdentityTransaction(tx,fixtureSchemas),staged));
+ await run();
+ if(mode==='replay'){await run();await db.query("UPDATE users SET image_key='avatar/new-profile/image' WHERE id=$1",[target.id]);await run();}
+ expect((await db.query('SELECT id,image_key FROM users')).rows).toEqual([{id:target.id,image_key:mode==='existing'?'avatar/existing/image':mode==='concurrent'?'avatar/concurrent/image':mode==='replay'?'avatar/new-profile/image':source.image_key}]);
+ expect((await db.query('SELECT * FROM tokens')).rows).toHaveLength(0);
+ if(mode==='replay'){await db.query('UPDATE users SET image_key=NULL WHERE id=$1',[target.id]);await run();expect((await db.query('SELECT image_key FROM users')).rows[0].image_key).toBeNull();}
+ await expect(prepareNativeIdentityAvatars(input,{...sink,get:async()=>Buffer.from('wrong')})).rejects.toThrow('native_identity_avatar_object');
+ await expect(prepareNativeIdentityAvatars(input,{...sink,putIfAbsent:async()=>{throw Error('object-unavailable');}})).rejects.toThrow('object-unavailable');
+ await expect(prepareNativeIdentityAvatars({...input,avatarObjects:input.avatarObjects!.map(o=>({...o,key:'avatar/unrelated/image'}))},sink)).rejects.toThrow('native_identity_avatar_source');
+});

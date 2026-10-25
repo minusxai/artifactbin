@@ -1,3 +1,5 @@
+import {createNativeLocalObjectSink} from '../../services/app/lib/native-history-import/catalog-staging';
+import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
 /** Shared actual host composition. Converter projection is the only injected source adapter. */
 import type {PGlite} from '@electric-sql/pglite';
 import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
@@ -69,7 +71,8 @@ export function createNativeProductMigrationHost(rawOptions:NativeMigrationBoots
    if(heads?.length!==1||identity.plan.targets.users[heads[0].user_id]?.userId!==capability.runtime.actor.userId)throw Error('native_bootstrap_runtime_source_authority');
    const ancillaryInput=files.ancillaryFolders?JSON.parse(Buffer.from(files.ancillaryFolders).toString('utf8')) as NativeAncillaryFolderRecipe:undefined;
    const ancillary=ancillaryInput?prepareNativeAncillaryFolders(ancillaryInput,identity.plan,ancillaryInput.identityGroups??{}):undefined;
-   const prerequisite=await options.db.transaction(async tx=>{const imported=await writeNativeIdentities(tx,identity,await authorizeNativeIdentityTransaction(tx,schemas));
+   const avatars=await prepareNativeIdentityAvatars(identity,await createNativeLocalObjectSink(options.objectsDirectory));
+   const prerequisite=await options.db.transaction(async tx=>{const imported=await writeNativeIdentities(tx,identity,await authorizeNativeIdentityTransaction(tx,schemas),avatars);
     const actor=disposable?await options.runtimeActors!.provision(tx,capability.runtime.actor.userId):capability.runtime.actor;
     const owner=(await tx.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now())',[actor.tokenId])).rows[0];
     if(actor.userId!==capability.runtime.actor.userId||owner?.user_id!==actor.userId)throw Error('native_bootstrap_runtime_actor');

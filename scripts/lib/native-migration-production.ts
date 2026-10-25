@@ -1,3 +1,4 @@
+import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
 /** Reviewed operator only. Never activates a deployment or opens a target during dry-run. */
 import {verifyReviewedComparison} from './native-reviewed-comparison.mjs';
 import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
@@ -77,10 +78,12 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
   const schemas={appSchema:targetScope.appSchema,authSchema:targetScope.authSchema};
   const origin=(()=>{try{return new URL(target.origin);}catch{return fail('opened_target_scope');}})();
   if(!['http:','https:'].includes(origin.protocol)||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash)fail('opened_target_scope');
+  const sink=(options.sinkFactory??createNativeS3ObjectSink)(target.s3);
+  const avatars=await prepareNativeIdentityAvatars(identity,sink);
   const preparation=await target.db.transaction(async tx=>{
    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',['native-prerequisite:'+targetScope.appSchema+':'+identity.plan.sha256]);
    const authority=await authorizeNativeIdentityTransaction(tx,schemas);
-   const preparedIdentities=!options.preparePrerequisites?await writeNativeIdentities(tx,identity,authority):undefined;
+   const preparedIdentities=!options.preparePrerequisites?await writeNativeIdentities(tx,identity,authority,avatars):undefined;
    if(plan.runtimeAuthority){for(const item of admitted){const source=JSON.parse(Buffer.from(item.input.files.sourceHead).toString()),head=source.heads?.find((row:{id:string;version:number})=>row.id===item.context.revision.key.sourceId&&row.version===item.context.revision.key.version),userId=identity.plan.targets.users[head?.user_id]?.userId;if(!userId||item.capability.runtime?.actor?.userId!==userId)fail('runtime_actor');if(!runtimeTokens.has(userId)){const id=await tokenAuthority.mint(tx,userId,plan.runtimeAuthority.ttlMs);createdTokens.push(id);runtimeTokens.set(userId,id);}}}
    if(options.preparePrerequisites)return options.preparePrerequisites(tx,identity,folders,schemas);
    const identities=preparedIdentities!,ancillary=folders?prepareNativeAncillaryFolders(folders,identity.plan,folders.identityGroups??{}):undefined;
@@ -90,7 +93,7 @@ async function executeNativeProductionMigration(options:NativeProductionOptions)
   const preparationPath=path.join(options.outputDirectory,'prerequisite-'+batch.sha256+'.json');let priorPreparation:Record<string,unknown>|undefined;try{priorPreparation=JSON.parse(await readFile(preparationPath,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')fail('prerequisite_receipt');}
   if(priorPreparation&&(priorPreparation.planSha256!==plan.sha256||priorPreparation.batchSha256!==batch.sha256||priorPreparation.scopeSha256!==scopeSha256))fail('prerequisite_receipt');
   if(!priorPreparation)await immutable(preparationPath,{format:'native-production-prerequisite-v1',planSha256:plan.sha256,batchSha256:batch.sha256,scopeSha256,transaction:'separate-prerequisite',preparation,...(createdTokens.length?{internalTokenIds:createdTokens}: {})});
-  const sink=(options.sinkFactory??createNativeS3ObjectSink)(target.s3),receipts=[];
+  const receipts=[];
   for(const item of admitted){
    const {context,input,capability,head}=item,reviewedActor=capability.runtime?.actor,actor=plan.runtimeAuthority?{userId:reviewedActor?.userId,tokenId:runtimeTokens.get(reviewedActor?.userId)}:reviewedActor;
    if(!actor||Object.keys(actor).some(key=>!['userId','tokenId'].includes(key))||typeof actor.userId!=='string'||typeof actor.tokenId!=='string')fail('runtime_actor');

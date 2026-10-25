@@ -1,3 +1,4 @@
+import {nativeIdentityAvatarObject} from './avatars';
 import {writeDisabledNativeIdentityTokens} from './token-batch';
 import {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction,nativeIdentityMigrationScope} from './auth-companions';
 export {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction} from './auth-companions';
@@ -9,6 +10,7 @@ import type {
   NativeIdentityImportDb,
   NativeIdentityImportResult,
   NativeIdentityUser,
+  NativeIdentityAvatarPreparation,
 } from "./contracts";
 import {
   nativeIdentityDigest,
@@ -37,6 +39,7 @@ export async function writeNativeIdentities(
   tx: Queryable,
   raw: NativeIdentityImport,
   authority:NativeIdentityMigrationAuthority,
+  avatars?:NativeIdentityAvatarPreparation,
 ): Promise<NativeIdentityImportResult> {
   // Capture caller-owned input before the first await, so it cannot change during a transaction.
   const input = plain(raw);
@@ -109,15 +112,29 @@ export async function writeNativeIdentities(
         ? proof.targets.get(mapping.targetId)!
         : input.plan.createUsers.find((u) => u.sourceId === mapping.sourceId)!;
     const expectedSha = nativeIdentityDigest(storedUser(expected));
+    const avatar=nativeIdentityAvatarObject(input,mapping.sourceId,avatars);
+    // This optional amendment permits only image changes; all other reviewed columns remain exact.
+    const missingAvatar=avatar&&mapping.action==='reuse-verified-email'&&!expected.image_key;
+    const currentSha=()=>nativeIdentityDigest(storedUser(plain(missingAvatar&&current?{...current,image_key:null}:current!)));
+    const backfill=async()=>{if(missingAvatar&&current&&!current.image_key){
+      await tx.query('UPDATE users SET image_key=$1 WHERE id=$2 AND image_key IS NULL',[avatar.key,mapping.targetId]);
+    }};
     const authCompanion=expected.kind==='account'&&expected.email?{id:mapping.targetId,email:expected.email,name:expected.name??null,provisionedAt:input.revokedAt}:undefined;
     if (prior) {
       verifyLedger(prior, mapping);
       if (
         !current ||
         prior.target_sha256 !== expectedSha ||
-        nativeIdentityDigest(storedUser(plain(current))) !== expectedSha
+        currentSha() !== expectedSha
       )
         throw Error("native_identity_replay_changed");
+      if(missingAvatar){
+        if(prior.original_state.avatarObject&&JSON.stringify(prior.original_state.avatarObject)!==JSON.stringify(avatar))throw Error('native_identity_avatar_replay');
+        if(!prior.original_state.avatarObject){
+          await backfill();
+          await tx.query("UPDATE native_identity_imports SET original_state=original_state || $1::jsonb WHERE source_namespace=$2 AND kind='user' AND source_id=$3",[JSON.stringify({avatarObject:avatar}),ns,mapping.sourceId]);
+        }
+      }
       if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,authority,'verify-existing');
       result.replayed++;
       continue;
@@ -125,7 +142,7 @@ export async function writeNativeIdentities(
     if (mapping.action === "reuse-verified-email") {
       if (
         !current ||
-        nativeIdentityDigest(storedUser(plain(current))) !== expectedSha
+        currentSha() !== expectedSha
       )
         throw Error("native_identity_target_changed");
       result.reusedUsers++;
@@ -155,13 +172,15 @@ export async function writeNativeIdentities(
       ).rows[0];
       if (
         !current ||
-        nativeIdentityDigest(storedUser(plain(current))) !== expectedSha
+        currentSha() !== expectedSha
       )
         throw Error("native_identity_create_verification_failed");
       result.createdUsers++;
     }
     if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,authority,mapping.action==='reuse-verified-email'?'verify-existing':'create-or-preserve');
+    await backfill();
     await save("user", mapping, expectedSha, {
+      ...(missingAvatar?{avatarObject:avatar}:{}),
       sourceUser: storedUser(proof.users.get(mapping.sourceId)!),
     });
   }
