@@ -10,7 +10,9 @@ const sha=value=>createHash('sha256').update(value).digest('hex');
 const inside=(root,file)=>file!==root&&!path.relative(root,file).startsWith('..')&&!path.isAbsolute(path.relative(root,file));
 const names=['sourceHead','compiledHtml','datasetCatalog','identity','authSchemaCapability','membership','comments'];
 const fail=code=>{throw Error('native-host-'+code);};
-async function admitted(context){
+/** @param {import('./native-migration-host-contract').NativeHostContext} context
+ * @returns {Promise<{recipe:import('./native-migration-host-contract').NativeHostRecipe,files:import('./native-migration-host-contract').NativeHostFiles,context:import('./native-migration-host-contract').NativeHostContext}>} */
+export async function readNativeMigrationHostInputs(context){
  const root=await realpath(context.receiptRoot),recipePath=await realpath(context.authorityRecipePath);
  if(!inside(root,recipePath))fail('recipe-path');
  const recipe=JSON.parse(await readFile(recipePath,'utf8'));
@@ -27,7 +29,7 @@ async function admitted(context){
 export function createNativeMigrationHost({ports}){
  return {
   async importAndPrepare(context){
-   const input=await admitted(context),staged=await ports.stage(input);
+   const input=await readNativeMigrationHostInputs(context),staged=await ports.stage(input);
    const result=await ports.transaction(input.recipe.authority,async tx=>{const imported=await ports.importHistory(tx,staged);if(!hash(imported?.historyProjectionSha256))fail('import-proof');await ports.verify(tx,staged);return imported;});
    await mkdir(context.outputDirectory,{recursive:true,mode:0o700});
    const snapshot=await ports.snapshot(staged,context),output=await realpath(context.outputDirectory);
@@ -35,10 +37,17 @@ export function createNativeMigrationHost({ports}){
    return {...snapshot,key:input.recipe.key,assemblySha256:input.recipe.assemblySha256,stage:'imported',historyProjectionSha256:result.historyProjectionSha256,importResult:result};
   },
   async captureAndCompare(context){
-   const {recipe}=await admitted(context),imported=context.imported;
+   const {recipe}=await readNativeMigrationHostInputs(context),imported=context.imported;
    if(imported?.stage!=='imported'||!hash(imported.historyProjectionSha256)||!isDeepStrictEqual(imported.key,recipe.key)||imported.assemblySha256!==recipe.assemblySha256)fail('binding');
    if(!context.baselineRecipePath||!context.candidateRecipePath)fail('capture-recipes');
    const result=await ports.captureAndCompare(context);
+   return verifyNativeMigrationHostComparison({context,recipe,result});
+  },
+ };
+}
+
+/** Read-only proof admission, shared with the explicitly gated production operator. */
+export async function verifyNativeMigrationHostComparison({context,recipe,result}){
    if(!isDeepStrictEqual(result?.key,recipe.key)||result.assemblySha256!==recipe.assemblySha256||!['verified','difference','environment-blocked'].includes(result.status)||!hash(result.comparisonSha256))fail('comparison');
    let report;try{const bytes=await readFile(result.comparisonPath);if(sha(bytes)!==result.comparisonSha256)fail('comparison-digest');report=JSON.parse(bytes);}catch{fail('comparison');}
    if(!result.baselineEvidencePath||!result.candidateEvidencePath)fail('comparison');
@@ -61,6 +70,4 @@ export function createNativeMigrationHost({ports}){
     }
    }
    return result;
-  },
- };
 }

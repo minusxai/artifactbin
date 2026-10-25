@@ -3,6 +3,7 @@
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {prepareNativeRuntimeBundle} from '../../services/app/lib/native-runtime-bridge';
+import type {NativeImmutableObjectSink} from '../../services/app/lib/native-history-import/catalog-contracts';
 import type {NativeRuntimeAssembly,NativeRuntimePreparationOptions} from '../../services/app/lib/native-runtime-bridge/contracts';
 import {writeNativeHistory} from '../../services/app/lib/native-history-import';
 import {prepareNativeHistoryRelations} from '../../services/app/lib/native-history-import/relations';
@@ -14,7 +15,7 @@ import {nativeCatalogDigest} from '../../services/app/lib/native-history-import/
 import {authorizeNativeIdentityTransaction,writeNativeIdentities} from '../../services/app/lib/native-identity-import';
 import type {NativeProductImportRecipe,NativeSerializedProductImportRecipe,NativeProductImportDb} from './native-migration-product-host-contract';
 /** Snapshot input before awaits; branded authorities are reconstructed from reviewed raw evidence. */
-export async function prepareNativeProductImport(raw:NativeProductImportRecipe|NativeSerializedProductImportRecipe){
+export async function prepareNativeProductImport(raw:NativeProductImportRecipe|NativeSerializedProductImportRecipe,options:{catalogSink?:NativeImmutableObjectSink}={}){
  const recipe=structuredClone(raw) as NativeProductImportRecipe;
  for(const field of ['capture','selectionManifest','canonicalSource','headWitness','refreshManifest'] as const){
   const value=raw.membership.source[field];if(value===undefined)continue;
@@ -31,7 +32,7 @@ export async function prepareNativeProductImport(raw:NativeProductImportRecipe|N
  const membership=prepareNativeArtifactRelations(recipe.membership);
  const annotations=prepareNativeHistoryRelations(recipe.relations,membership);
  const source=await canonicalNativeObjectSource(catalog.root,catalog.ledgerPath,catalog.receipts);
- const sink=await createNativeLocalObjectSink(catalog.sinkDirectory);
+ const sink=options.catalogSink??await createNativeLocalObjectSink(catalog.sinkDirectory);
  const stagedCatalog=await stageNativeCatalog(catalog.projection,source.source,sink);
  const relations={sourceSha256:nativeCatalogDigest({annotations:annotations.sourceSha256,catalog:stagedCatalog.sourceSha256}),headMetadata:annotations.headMetadata,
   apply:async(tx:Parameters<typeof writeNativeHistory>[0],id:string)=>{await annotations.apply(tx,id);await stagedCatalog.apply(tx,id);},
