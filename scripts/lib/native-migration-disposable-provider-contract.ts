@@ -25,3 +25,15 @@ export interface NativeDisposableLifecycle {
  captureAndCompare:NativeMigrationBootstrapOptions['captureAndCompare'];
  dispose():Promise<void>;
 }
+
+/** Original evidence is immutable; the new candidate reference is bound after the actual import snapshot exists. */
+export type NativeDisposableSourceReuse=Omit<import('./native-migration-reuse-contract').NativeSourceCaptureReuse,'candidateInputPath'|'candidateInputSha256'>&{candidateInputPath?:string;candidateInputSha256?:string};
+export interface NativeDisposableCameraPorts {
+ read(file:string):Promise<Uint8Array>;
+ resolve(file:string):Promise<string>;
+ output(directory:string):Promise<void>;
+ run(input:{root:string;revision:string;paths:{input:string;canonical:string;recovery:string;bundle:string;output:string};logPath:string}):Promise<void>;
+ preflightReuse(input:{baselineDirectory:string;reuse:import('./native-migration-reuse-contract').NativeSourceCaptureReuse}):Promise<unknown>;
+ compare(input:{baselineDirectory:string;candidateDirectory:string;output:string}):Promise<{passed:boolean}>;
+ compareReuse(input:{baselineDirectory:string;candidateDirectory:string;output:string;reuse:import('./native-migration-reuse-contract').NativeSourceCaptureReuse}):Promise<{passed:boolean}>;
+}

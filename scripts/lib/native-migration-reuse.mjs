@@ -7,10 +7,7 @@ import {compareBrowserBaselines} from './component-browser-baseline.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const digest=value=>sha(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v));
 const artifacts=input=>input.bundleFiles.filter(file=>file.path!==input.probe?.path);
-/** @param {{baselineDirectory:string,candidateDirectory:string,output:string,reuse:import('./native-migration-reuse-contract').NativeSourceCaptureReuse}} options */
-export async function compareReusedNativeMigrationPilot({baselineDirectory,candidateDirectory,output,reuse}){
  const bound=async(file,expected)=>{const bytes=await readFile(file);if(!/^[a-f0-9]{64}$/.test(expected)||sha(bytes)!==expected)throw Error('pilot-reuse-digest');return JSON.parse(bytes);};
- const [oldInput,newInput,oldProof,baseline,candidateProof,candidate]=await Promise.all([bound(reuse.baselineInputPath,reuse.baselineInputSha256),bound(reuse.candidateInputPath,reuse.candidateInputSha256),bound(path.join(baselineDirectory,'migration-pilot.json'),reuse.baselineProofSha256),bound(path.join(baselineDirectory,'jsx-captures.json'),reuse.baselineCapturesSha256),readFile(path.join(candidateDirectory,'migration-pilot.json'),'utf8').then(JSON.parse),readFile(path.join(candidateDirectory,'html-captures.json'),'utf8').then(JSON.parse)]);
  const validate=(input,proof,captures,implementation)=>{
   if(input.implementation!==implementation||proof.implementation!==implementation||proof.format!=='native-migration-pilot-capture-v1'||proof.sourceRevision!==input[implementation==='jsx'?'originalRevision':'candidateRevision']||proof.bundleManifestSha256!==digest(artifacts(input))||proof.preparedStoreSha256!==input.preparedStore?.sha256||proof.probeSha256!==input.probe?.sha256)throw Error('pilot-reuse-own-binding');
   for(const key of ['harnessSha256','gateManifestSha256','sourceSha256','documentSha256','canonicalSha256','theme','viewports'])if(digest(proof[key])!==digest(input[key]))throw Error('pilot-reuse-own-binding');
@@ -19,9 +16,21 @@ export async function compareReusedNativeMigrationPilot({baselineDirectory,candi
   for(const capture of captures){const key=JSON.stringify([capture.theme,capture.viewport,capture.state]);if(capture.fixture!=='native-migration-head'||capture.fixtureHash!==fixtureHash||capture.implementation!==implementation||capture.sourceRevision!==proof.sourceRevision||!keys.delete(key))throw Error('pilot-reuse-capture-binding');}if(keys.size)throw Error('pilot-reuse-missing-captures');
   return fixtureHash;
  };
- validate(oldInput,oldProof,baseline,'jsx');const nextHash=validate(newInput,candidateProof,candidate,'html');
+/** Read and validate immutable original evidence before spending a candidate browser lane. */
+export async function readNativeSourceCaptureReuse({baselineDirectory,reuse}){
+ const [oldInput,newInput,oldProof,baseline]=await Promise.all([bound(reuse.baselineInputPath,reuse.baselineInputSha256),bound(reuse.candidateInputPath,reuse.candidateInputSha256),bound(path.join(baselineDirectory,'migration-pilot.json'),reuse.baselineProofSha256),bound(path.join(baselineDirectory,'jsx-captures.json'),reuse.baselineCapturesSha256)]);
+ validate(oldInput,oldProof,baseline,'jsx');
  const extra=reuse.additionalCandidateAssertions;if(extra&&(extra.probeSha256!==newInput.probe?.sha256||!Array.isArray(extra.ids)||!extra.ids.length||new Set(extra.ids).size!==extra.ids.length||extra.ids.some(id=>typeof id!=='string'||!id.trim())))throw Error('pilot-reuse-candidate-assertions');
  for(const key of ['key','rowSha256','sourceSha256','documentSha256','canonicalSha256','recoverySha256','harnessSha256','originalRevision','theme','viewports','states'])if(digest(oldInput[key])!==digest(newInput[key]))throw Error('pilot-reuse-source-changed');
+ if(!Array.isArray(oldProof.issues)||oldProof.issues.length)throw Error('pilot-reuse-source-issues');
+ for(const capture of baseline){if(typeof capture.screenshot!=='string'||path.isAbsolute(capture.screenshot)||capture.screenshot.split(/[\\/]/).some(part=>!part||part==='.'||part==='..'))throw Error('pilot-reuse-image-path');if(sha(await readFile(path.join(baselineDirectory,capture.screenshot)))!==capture.screenshotSha256)throw Error('pilot-reuse-image-digest');}
+ return {oldInput,newInput,oldProof,baseline};
+}
+/** @param {{baselineDirectory:string,candidateDirectory:string,output:string,reuse:import('./native-migration-reuse-contract').NativeSourceCaptureReuse}} options */
+export async function compareReusedNativeMigrationPilot({baselineDirectory,candidateDirectory,output,reuse}){
+ const {oldInput,newInput,oldProof,baseline}=await readNativeSourceCaptureReuse({baselineDirectory,reuse});
+ const [candidateProof,candidate]=await Promise.all([readFile(path.join(candidateDirectory,'migration-pilot.json'),'utf8').then(JSON.parse),readFile(path.join(candidateDirectory,'html-captures.json'),'utf8').then(JSON.parse)]);
+ const nextHash=validate(newInput,candidateProof,candidate,'html'),extra=reuse.additionalCandidateAssertions;
  // Only the derived target-proposal fixture binding changes, in memory. Original bytes stay untouched.
  const results=await compareBrowserBaselines({baseline:baseline.map(capture=>({...capture,fixtureHash:nextHash})),candidate,baselineDirectory,candidateDirectory,output});
  const issues=[...oldProof.issues,...candidateProof.issues,...pilotComparisonIssues(results,candidateProof.control)];

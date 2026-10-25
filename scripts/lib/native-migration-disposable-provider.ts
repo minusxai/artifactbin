@@ -2,7 +2,7 @@
 import {readFile,writeFile,mkdir,lstat,realpath,rm} from 'node:fs/promises';
 import {createHash,randomBytes} from 'node:crypto';
 import {execFile} from 'node:child_process';
-import {promisify,isDeepStrictEqual} from 'node:util';
+import {promisify} from 'node:util';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
@@ -29,7 +29,7 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
  if(settings.maxFileBytes!==undefined&&(!Number.isSafeInteger(settings.maxFileBytes)||settings.maxFileBytes<1))throw Error('native_disposable_configuration');
  if(settings.fixture.kind==='reviewed-target-identities'&&(settings.fixture.schemas.appSchema!=='public'||!/^[_a-z][_a-z0-9]*$/.test(settings.fixture.schemas.authSchema)))throw Error('native_disposable_schema_scope');
  const origin=localOrigin(settings.origin),targetRoot=await realpath(configuration.targetRoot);await revision(targetRoot,configuration.targetRevision);
- if(settings.camera.kind==='gate-container'){await revision(await realpath(settings.camera.original.root),settings.camera.original.revision);if(settings.camera.cpus!==4||settings.camera.memory!=='8g')throw Error('native_disposable_camera_resources');}
+ if(settings.camera.kind==='gate-container'&&(settings.camera.cpus!==4||settings.camera.memory!=='8g'))throw Error('native_disposable_camera_resources');
  const identity=settings.fixture.kind==='reviewed-target-identities'?JSON.parse((await checked(request.receiptRoot,settings.fixture.identity)).bytes.toString()) as NativeIdentityImport:undefined;
  const snapshotInput=settings.fixture.kind==='prepared-store'?await checked(request.receiptRoot,settings.fixture.input):undefined;
  const bundle=settings.fixture.kind==='prepared-store'?await contained(request.receiptRoot,settings.fixture.bundle):undefined;
@@ -72,22 +72,9 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
     }
    });
   }
-  const captureAndCompare:NativeDisposableLifecycle['captureAndCompare']=async input=>{
-   if(settings.camera.kind!=='gate-container')throw Error('native_disposable_camera_disabled');
-   const roots=[await realpath(settings.camera.original.root),targetRoot],revisions=[settings.camera.original.revision,configuration.targetRevision],recipes=await Promise.all([input.baselineRecipePath,input.candidateRecipePath].map(async file=>JSON.parse(await readFile(file,'utf8'))));
-   for(const [index,recipe] of recipes.entries()){
-    if(recipe.format!=='native-migration-camera-recipe-v1')throw Error('native_disposable_camera_recipe');
-    const pilot=JSON.parse(await readFile(recipe.paths.input,'utf8'));
-    if(pilot.implementation!==(index?'html':'jsx')||!isDeepStrictEqual(pilot.key,input.revision.key)||!isDeepStrictEqual(pilot.key,input.assembly.key)||input.imported.assemblySha256!==input.assembly.sha256||pilot.bundleFiles?.find((file:{path:string})=>file.path==='index.html')?.sha256!==input.assembly.result.htmlSha256)throw Error('native_disposable_camera_binding');
-    await revision(roots[index]!,revisions[index]!);await mkdir(recipe.paths.output,{recursive:true,mode:0o700});
-    const env={...process.env,NATIVE_MIGRATION_PILOT__INPUT:recipe.paths.input,NATIVE_MIGRATION_PILOT__CANONICAL:recipe.paths.canonical,NATIVE_MIGRATION_PILOT__RECOVERY:recipe.paths.recovery,NATIVE_MIGRATION_PILOT__BUNDLE:recipe.paths.bundle,NATIVE_MIGRATION_PILOT__OUTPUT:recipe.paths.output};
-    let log='';try{const result=await execute(process.execPath,['scripts/gate-container.mjs','--cpus','4','--memory','8g','--servers','1','component-baseline'],{cwd:roots[index],env,maxBuffer:32*1024*1024});log=result.stdout+'\n'+result.stderr;}catch(error){const failure=error as {stdout?:string;stderr?:string};log=(failure.stdout??'')+'\n'+(failure.stderr??'');throw Error('native_disposable_camera_failed');}finally{await writeFile(path.join(input.outputDirectory,index?'candidate-gate.log':'baseline-gate.log'),log,{mode:0o600});}
-   }
-   const {compareNativeMigrationPilot}=await import('./native-migration-pilot.mjs');
-   const output=path.join(input.outputDirectory,'comparison');await mkdir(output,{recursive:true,mode:0o700});
-   const report=await compareNativeMigrationPilot({baselineDirectory:recipes[0].paths.output,candidateDirectory:recipes[1].paths.output,output});const comparisonPath=path.join(output,'migration-pilot-comparison.json');
-   return {key:input.revision.key,assemblySha256:input.assembly.sha256,status:report.passed?'verified':'difference',comparisonPath,comparisonSha256:sha(await readFile(comparisonPath)),baselineEvidencePath:path.join(recipes[0].paths.output,'migration-pilot.json'),candidateEvidencePath:path.join(recipes[1].paths.output,'migration-pilot.json')};
-  };
+  const captureAndCompare:NativeDisposableLifecycle['captureAndCompare']=settings.camera.kind==='gate-container'
+   ? (await import('./native-migration-disposable-camera')).createNativeDisposableCamera({targetRoot,targetRevision:configuration.targetRevision,original:settings.camera.original})
+   : async()=>{throw Error('native_disposable_camera_disabled');};
   return {db,objectsDirectory:objects,fixtureAuthSecret:secret,captureAndCompare,dispose:cleanup};
  }catch(error){await cleanup();throw error;}
 }
