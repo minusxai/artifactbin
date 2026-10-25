@@ -70,3 +70,13 @@ describe('af-textarea', () => {
     expect(controlledEvents).toEqual([{value:'reflected'}]); expect(controlledNative.value).toBe('reflected');
   });
 });
+
+// Retained control shell: 11px label and 14px field both use normal (1.5) leading.
+it('keeps label and multiline row leading at the retained control proportions',()=>{
+ const root=textarea('<af-textarea label="Notes" rows="4"></af-textarea>'),native=root.querySelector('textarea')!,label=root.querySelector('label')!;
+ const field=getComputedStyle(native),caption=getComputedStyle(label);
+ expect(caption.fontSize).toBe('11px');expect(caption.lineHeight).toBe('1.5');
+ expect(field.fontSize).toBe('14px');expect(field.lineHeight).toBe('1.5');
+ expect(parseFloat(field.fontSize)*parseFloat(field.lineHeight)*native.rows).toBe(84);
+ expect(getComputedStyle(root).gap).toBe('0.375rem');
+});
