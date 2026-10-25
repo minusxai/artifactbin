@@ -64,7 +64,7 @@ Read the current thread list with `GET /api/artifacts/ID/annotations?status=all`
 
 ## Verify the actual HTML in a server browser session
 
-`POST /api/browser-sessions` runs a Playwright function body in an isolated persistent browser. The page route `/a/ID` is the Artifactbin reader shell; the authored HTML is inside its sandboxed `iframe[data-mx-document-frame]`. Use the frame locator for page content. The outer `page` is for reader chrome and full-reader screenshots.
+`POST /api/browser-sessions` runs a Playwright function body in an isolated persistent browser. `/a/ID` is the reader shell; authored HTML is inside its sandboxed `iframe[data-mx-document-frame]`. Browser-session locator, role, evaluation and action methods on `page` auto-target the document frame after navigation. Use `page.getByRole(...)` and `page.locator(...)` directly; `page.frameLocator(...)` would double-scope it. Use `page.mainFrame()` for reader chrome; navigation and full-page screenshots still use the reader page.
 
 Keep the bearer in the caller that sends the API request. It does not belong in `code`, page HTML or downloaded files. The page is signed in as the caller unless the session-creation request explicitly sets `viewer:'guest'` or an authorized `viewer:{testuser:'ID'}`. A session's viewer is fixed at creation.
 
@@ -76,16 +76,16 @@ page.on('pageerror', error => pageErrors.push(error.message));
 page.on('requestfailed', request => failedRequests.push({url: request.url(), error: request.failure()?.errorText}));
 await page.setViewportSize({width: 390, height: 844});
 await page.goto('/a/${artifactId}');
-const documentFrame = page.frameLocator('iframe[data-mx-document-frame]');
-await documentFrame.getByRole('heading').first().waitFor();
-const heading = await documentFrame.getByRole('heading').first().innerText();
-const body = await documentFrame.locator('body').innerText();
-const overflow = await documentFrame.locator('html').evaluate(html => {
+const headingLocator = page.getByRole('heading').first();
+await headingLocator.waitFor();
+const heading = await headingLocator.innerText();
+const body = await page.locator('body').innerText();
+const overflow = await page.locator('html').evaluate(html => {
   const body = html.ownerDocument.body;
   const width = Math.max(html.scrollWidth, body.scrollWidth);
   return {viewport: html.clientWidth, content: width, fits: width <= html.clientWidth + 1};
 });
-await output.image(await documentFrame.locator('body').screenshot());
+await output.image(await page.locator('body').screenshot());
 return {heading, body, overflow, pageErrors, failedRequests};
 `;
 const session_id = crypto.randomUUID();
@@ -110,7 +110,7 @@ try {
 
 Poll with `POST /api/browser-sessions` and `{op:'status',session_id,execution_id}` until the same execution is `completed`; inspect `result`, `error` and `attachments`. If the call outcome is uncertain, check that receipt before resubmitting. Close the accepted session with `{op:'close',session_id}` when finished. A changed script requires a new `execution_id`; do not replay a browser action with a new receipt.
 
-Use accessible roles and names inside the document frame, inspect page errors and failed requests, and check a narrow viewport. A screenshot of the reader shell alone does not prove the authored document rendered. For authorized writes, run as the right account; use a separate guest or test-user session to verify refused actions.
+Use accessible roles and names for the authored document, inspect page errors and failed requests, and check a narrow viewport. The session's automatic frame scope means these locators inspect the document; use `page.mainFrame()` if the reader shell itself is the subject. A screenshot of the reader shell alone does not prove the authored document rendered. For authorized writes, run as the right account; use a separate guest or test-user session to verify refused actions.
 
 ## Create, update and the local helper
 
