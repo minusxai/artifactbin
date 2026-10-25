@@ -6,3 +6,8 @@ export interface NativeObserverSnapshot {
 }
 export type NativeBindingObserve=(next:(snapshot:NativeObserverSnapshot)=>void)=>()=>void;
 export interface NativeObserverScriptPlan {values:readonly string[];queries:readonly string[]}
+
+/** Admitted click callbacks retain the native Event and an optional literal capture flag. */
+export interface NativeObserverListener {
+ host:EventTarget; event:'click'; handler:(event:Event)=>void; capture?:boolean;
+}
