@@ -25,6 +25,7 @@ import { nativeHtml } from './lib/native-surface.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
+import { pagesServer } from './lib/pages-server.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -121,7 +122,13 @@ async function deckLeg(browser) {
 
 /** Real Chromium cache behavior, including navigation and an explicit refresh. */
 async function thumbnailCacheLeg(browser) {
-  const doc=await publish({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:red">First thumbnail</main>')});
+  // HTTP asset hosts deliberately use byte delivery for CLI safety. This
+  // isolated server uses same-origin grants, exercising the HTTPS redirect
+  // delivery path without replacing browser responses or disabling its cache.
+  const server=await pagesServer(undefined,'thumbnail-cache'),base=server.app;
+  const start=await startDocument(base);
+  const published=await fetch(`${base}/api/artifacts/${start.id}`,{method:'PUT',headers:{Authorization:`Bearer ${start.token}`,'Content-Type':'application/json'},body:JSON.stringify({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:red">First thumbnail</main>')})});
+  const doc={...start,status:published.status};
   if(doc.status!==200)throw new Error(`thumbnail seed failed: ${doc.status}`);
   const context=await browser.newContext(),page=await context.newPage();
   const cdp=await context.newCDPSession(page),cached=new Set(),assets=new Set();
@@ -130,12 +137,12 @@ async function thumbnailCacheLeg(browser) {
   cdp.on('Network.responseReceived',event=>{if(event.response.fromDiskCache)cached.add(event.requestId);});
   cdp.on('Network.requestWillBeSent',event=>{if(new URL(event.request.url).pathname.startsWith('/assets/export/'))assets.add(event.requestId);});
   const load=async(query='')=>{
-    await page.goto(`${BASE}/a/${doc.id}/raw?chrome=0`,{waitUntil:'load'});
+    await page.goto(`${base}/a/${doc.id}/raw?chrome=0`,{waitUntil:'load'});
     await page.evaluate(async(src)=>{
       const image=new Image();image.id='cache-proof';image.width=320;image.height=180;
       const loaded=new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('thumbnail failed'));});
       image.src=src;document.body.replaceChildren(image);await loaded;
-    },`${BASE}/a/${doc.id}/export?format=jpg&mode=card${query}`);
+    },`${base}/a/${doc.id}/export?format=jpg&mode=card${query}`);
     return page.locator('#cache-proof').screenshot();
   };
   try {
@@ -146,11 +153,11 @@ async function thumbnailCacheLeg(browser) {
     // A mint-window boundary can rotate the grant on the second navigation.
     if(![...assets].some(id=>cached.has(id)))await load();
     check([...assets].some(id=>cached.has(id)),'Chromium reuses the private asset cache across navigation');
-    const changed=await fetch(`${BASE}/api/artifacts/${doc.id}`,{method:'PUT',headers:{Authorization:`Bearer ${doc.token}`,'Content-Type':'application/json'},body:JSON.stringify({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:blue">Changed thumbnail</main>')})});
+    const changed=await fetch(`${base}/api/artifacts/${doc.id}`,{method:'PUT',headers:{Authorization:`Bearer ${doc.token}`,'Content-Type':'application/json'},body:JSON.stringify({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:blue">Changed thumbnail</main>')})});
     check(changed.status===200,'thumbnail source edit succeeds');
     const after=await load('&refresh=1');
     check(!before.equals(after),'explicit refresh displays changed thumbnail pixels instead of the cached image');
-  } finally {await context.close();}
+  } finally {await context.close();server.stop();}
 }
 
 async function downloadLeg(browser) {
