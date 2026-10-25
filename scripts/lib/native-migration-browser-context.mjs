@@ -9,5 +9,5 @@ export function nativeMigrationBrowserContext(base,pageIds){
  if(!Array.isArray(pageIds)||pageIds.some(id=>typeof id!=='string'||!/^[-_A-Za-z0-9]{1,31}$/.test(id)))throw Error('native_browser_reader_id');
  const readers=[...new Set(pageIds)].map(id=>`${url.protocol}//${Buffer.from(id,'utf8').toString('hex')}.lvh.me${url.port?':'+url.port:''}`).sort();
  const origins=[url.origin,...readers];
- return {policy:'exact-local-trustworthy-origins-v1',origins,args:url.protocol==='http:'?['--unsafely-treat-insecure-origin-as-secure='+origins.join(',')]:[]};
+ return {policy:'exact-local-trustworthy-origins-v1',channel:'chromium',origins,args:url.protocol==='http:'?['--unsafely-treat-insecure-origin-as-secure='+origins.join(',')]:[]};
 }
