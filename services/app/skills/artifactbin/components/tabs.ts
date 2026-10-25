@@ -155,10 +155,10 @@ af-tabs-list{box-sizing:border-box;display:inline-flex;align-items:center;justif
 af-tabs-list[data-orientation=vertical]{height:fit-content;flex-direction:column}
 af-tabs-trigger{box-sizing:border-box;position:relative;display:inline-flex;flex:1;align-items:center;justify-content:center;gap:.375rem;height:calc(100% - 1px);cursor:pointer;border:1px solid transparent;padding:4px 8px;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));font-family:inherit;font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;color:var(--muted-foreground,#555);transition:background-color .15s,color .15s,box-shadow .15s}
 af-tabs-list[data-orientation=vertical]>af-tabs-trigger{width:100%;justify-content:flex-start}
-af-tabs-trigger:focus-visible{z-index:10;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
 af-tabs-trigger[disabled]{opacity:.5;cursor:default;pointer-events:none}
 af-tabs-trigger[data-state=inactive]:hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
 af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
+af-tabs-trigger:focus-visible{z-index:10;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-tabs-trigger>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
 af-tabs-list[data-variant=line]{background:transparent;gap:.25rem;border-radius:0}
 af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:none}

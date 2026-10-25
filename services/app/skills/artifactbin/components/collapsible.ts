@@ -146,9 +146,9 @@ export const collapsibleStyles = `
 af-collapsible{display:block}
 af-collapsible-trigger{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;cursor:pointer;font-family:inherit;color:inherit}
 af-collapsible-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;margin:0;padding:0;border:0;border-radius:0;background:transparent;font:inherit;line-height:inherit;color:inherit;cursor:inherit}
-af-collapsible-trigger:focus-visible,af-collapsible-trigger>button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-collapsible-trigger:not(:has(>button)):focus-visible{outline:auto;outline-offset:0}
 af-collapsible-trigger[aria-disabled=true],af-collapsible-trigger>button[aria-disabled=true],af-collapsible-trigger>button:disabled{opacity:.5;cursor:default}
-af-collapsible-content{display:block;overflow:hidden}
+af-collapsible-content{display:block}
 af-collapsible-content[hidden]{display:none!important}
 `;
 

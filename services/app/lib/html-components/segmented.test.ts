@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfSegmented, registerSegmented, type SegmentedOption } from './segmented';
+import { AfSegmented, registerSegmented, segmentedStyles, type SegmentedOption } from './segmented';
 
 registerSegmented();
 afterEach(() => document.body.replaceChildren());
@@ -109,5 +109,36 @@ describe('native authored segmented control', () => {
     expect(buttons(control)[1]).toBe(options[1]); registerSegmented();
     expect(document.querySelectorAll('style[data-af-segmented-styles]')).toHaveLength(1);
     let events = 0; control.addEventListener('af-change', () => events++); buttons(control)[2]!.click(); expect(events).toBe(1);
+  });
+  it('matches the source control shell alignment and caption line-height recipe', () => {
+    const control = fixture(); const label = control.querySelector<HTMLElement>('.af-segmented-label')!;
+    expect(getComputedStyle(control).verticalAlign).toBe('top');
+    expect(getComputedStyle(label).fontSize).toBe('11px');
+    expect(getComputedStyle(label).fontWeight).toBe('500');
+    expect(getComputedStyle(label).lineHeight).toBe('1.5');
+    expect(label.parentElement?.classList.contains('af-segmented-caption')).toBe(true);
+    expect(segmentedStyles).toContain('af-segmented .af-segmented-caption{display:flex;align-items:baseline;gap:.75rem;');
+    expect(segmentedStyles).toContain('font-size:.875rem;line-height:1.25rem;transition:background-color');
+    expect(segmentedStyles).toContain('background:color-mix(in oklab,var(--muted,#eee) 40%,transparent)');
+    expect(segmentedStyles).not.toContain('color-mix(in srgb,var(--muted,#eee)');
+    expect(segmentedStyles).toContain('focus-visible{z-index:1;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab');
+  });
+
+  it('hides the caption when unlabeled and reuses serialized nested caption markup', () => {
+    const control = document.createElement('af-segmented') as AfSegmented;
+    control.innerHTML = '<span class="af-segmented-caption"><span class="af-segmented-label">Old</span></span><div data-segment-options></div>';
+    control.options = ['S', 'M'];
+    document.body.append(control);
+    const caption = control.querySelector<HTMLElement>('.af-segmented-caption')!;
+    const label = caption.querySelector('.af-segmented-label');
+    expect(caption.hidden).toBe(true);
+    expect(control.querySelectorAll('.af-segmented-caption')).toHaveLength(1);
+    expect(control.querySelectorAll('.af-segmented-label')).toHaveLength(1);
+    control.setAttribute('label', 'Size');
+    expect(caption.hidden).toBe(false);
+    expect(label?.textContent).toBe('Size');
+    control.removeAttribute('label');
+    expect(caption.hidden).toBe(true);
+    expect(control.querySelectorAll('button[data-segment-option]')).toHaveLength(2);
   });
 });

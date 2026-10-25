@@ -15,6 +15,28 @@ function fixture(attrs = '', content = '') {
 }
 
 describe('af-switch', () => {
+  it('uses the source story label line-height while inheriting the page font', () => {
+    const style = document.querySelector('style[data-af-switch-styles]')?.textContent ?? '';
+    expect(style).toContain('af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;');
+    expect(style).toContain('af-switch .af-switch-label{display:block}');
+    const { root } = fixture('label="Notifications"');
+    expect(root.querySelector('.af-switch-caption')?.firstElementChild).toBe(root.querySelector('.af-switch-label'));
+    expect(root.querySelector('.af-switch-shell')?.lastElementChild?.tagName).toBe('BUTTON');
+  });
+
+  it('hides and restores the whole caption without changing switch layout children', () => {
+    const { root } = fixture();
+    const caption = root.querySelector<HTMLElement>('.af-switch-caption')!;
+    expect(caption.hidden).toBe(true);
+    root.setAttribute('label', 'Notifications');
+    expect(caption.hidden).toBe(false);
+    expect(caption.textContent).toBe('Notifications');
+    root.removeAttribute('label');
+    expect(caption.hidden).toBe(true);
+    expect(root.querySelectorAll('.af-switch-caption')).toHaveLength(1);
+    expect(root.querySelectorAll('button[role=switch]')).toHaveLength(1);
+  });
+
   it('renders a labeled native switch and initializes from checked presence or default-checked', () => {
     const { root, button } = fixture('label="Notifications" checked');
     expect(button.tagName).toBe('BUTTON');
@@ -94,5 +116,12 @@ describe('af-switch', () => {
     document.body.append(host);
     registerSwitch();
     expect((host.firstElementChild as AfSwitch).checked).toBe(true);
+  });
+  it('uses the same two pixel focus ring recipe as the source switch', () => {
+    const styles = document.querySelector<HTMLStyleElement>('style[data-af-switch-styles]')!.textContent!;
+    expect(styles).toContain('focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab');
+    expect(styles).toContain(',0 1px 2px #0000000d');
+    expect(styles).toContain('background:var(--background,#fff);box-shadow:0 1px 3px 0 rgb(0 0 0 / 10%),0 1px 2px -1px rgb(0 0 0 / 10%)');
+    expect(styles).toContain('background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;font:inherit;color:inherit');
   });
 });

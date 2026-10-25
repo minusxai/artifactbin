@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfCollapsible, registerCollapsible } from './collapsible';
+import { AfCollapsible, collapsibleStyles, registerCollapsible } from './collapsible';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-collapsible><af-collapsible-trigger>Open</af-collapsible-trigger><af-collapsible-content>Body</af-collapsible-content></af-collapsible>';
@@ -162,5 +162,16 @@ describe('native authored collapsible', () => {
     expect(getComputedStyle(trigger).display).toBe('inline-flex');
     expect(getComputedStyle(content).display).toBe('none');
     trigger.click(); expect(getComputedStyle(content).display).toBe('block');
+  });
+  it('does not introduce clipping absent from the source disclosure content', () => {
+    const {root,trigger,content} = fixture('default-open');
+    expect(getComputedStyle(content).overflow).not.toBe('hidden');
+    expect(collapsibleStyles).not.toContain('af-collapsible-content{display:block;overflow:hidden}');
+    trigger.click(); expect(content.hidden).toBe(true);
+    root.remove();
+  });
+  it('leaves focus styling to the native button and only supplies the browser ring for a custom trigger', () => {
+    expect(collapsibleStyles).toContain('af-collapsible-trigger:not(:has(>button)):focus-visible{outline:auto;outline-offset:0}');
+    expect(collapsibleStyles).not.toContain('af-collapsible-trigger>button:focus-visible');
   });
 });

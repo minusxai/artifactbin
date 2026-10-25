@@ -7,6 +7,7 @@ export class AfSwitch extends HTMLElement {
   static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled', 'read-only', 'readonly'];
 
   private shell?: HTMLDivElement;
+  private caption?: HTMLSpanElement;
   private labelNode?: HTMLSpanElement;
   private button?: HTMLButtonElement;
   private thumb?: HTMLSpanElement;
@@ -65,8 +66,11 @@ export class AfSwitch extends HTMLElement {
     const doc = this.ownerDocument;
     this.shell = doc.createElement('div');
     this.shell.className = 'af-switch-shell';
+    this.caption = doc.createElement('span');
+    this.caption.className = 'af-switch-caption';
     this.labelNode = doc.createElement('span');
     this.labelNode.className = 'af-switch-label';
+    this.caption.append(this.labelNode);
     this.button = doc.createElement('button');
     this.button.type = 'button';
     this.button.className = 'af-switch-button';
@@ -75,7 +79,7 @@ export class AfSwitch extends HTMLElement {
     this.thumb.className = 'af-switch-thumb';
     this.thumb.setAttribute('aria-hidden', 'true');
     this.button.append(this.thumb);
-    this.shell.append(this.labelNode, this.button);
+    this.shell.append(this.caption, this.button);
     this.prepend(this.shell);
     this.button.addEventListener('click', this.activate);
   }
@@ -95,10 +99,10 @@ export class AfSwitch extends HTMLElement {
   };
 
   private update(): void {
-    if (!this.button || !this.labelNode) return;
+    if (!this.button || !this.labelNode || !this.caption) return;
     const label = this.getAttribute('label') ?? '';
     this.labelNode.textContent = label;
-    this.labelNode.hidden = !label;
+    this.caption.hidden = !label;
     const accessibleName = this.getAttribute('aria-label') || label;
     if (accessibleName) this.button.setAttribute('aria-label', accessibleName);
     else this.button.removeAttribute('aria-label');
@@ -113,13 +117,14 @@ export class AfSwitch extends HTMLElement {
 const switchStyles = `
 af-switch{display:inline-flex;vertical-align:top}
 af-switch .af-switch-shell{display:inline-flex;flex-direction:column;gap:.375rem;align-items:flex-start}
-af-switch .af-switch-label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.25;color:var(--muted-foreground,#555)}
-af-switch .af-switch-label[hidden]{display:none}
-af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;transition:background-color .15s;outline:none}
+af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
+af-switch .af-switch-caption[hidden]{display:none!important}
+af-switch .af-switch-label{display:block}
+af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;font:inherit;color:inherit;transition:background-color .15s;outline:none}
 af-switch .af-switch-button[data-state=checked]{background:var(--primary,#222)}
-af-switch .af-switch-button:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-switch .af-switch-button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-switch .af-switch-button:disabled{cursor:not-allowed;opacity:.5}
-af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 2px #0000001a;transform:translateX(0);transition:transform .15s}
+af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 3px 0 rgb(0 0 0 / 10%),0 1px 2px -1px rgb(0 0 0 / 10%);transform:translateX(0);transition:transform .15s}
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
