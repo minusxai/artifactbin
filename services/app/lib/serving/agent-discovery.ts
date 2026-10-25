@@ -6,10 +6,11 @@ export { AGENT_HELP_TITLE, agentDiscovery, type AgentDiscovery } from '../platfo
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="agents" content="${escapeHtml(help.instruction)}">`;
 }
-/** Readable startup help, replaced when the app mounts. Padding keeps it below
- * the app bar and behind a server-drawn document frame during startup. */
+/** First-paint app contract: one replaceable startup region, a named loading
+ * status and a retry link that works without app JavaScript. Agent guidance is
+ * confined to noscript; head and tail discovery remain available to agents. */
 export function agentDiscoveryBody(help:AgentDiscovery):string{
- return `<main data-app-startup class="px-6 pt-16"><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></main>`;
+ return `<main data-app-startup class="app-startup"><div class="app-startup-brand"><img src="/logo-128.png" alt="" width="28" height="28"><span>artifactbin</span></div><p role="status" aria-live="polite">Loading artifactbin…</p><p class="app-startup-retry">Taking a while? <a href="">Reload</a></p><noscript><p>Enable JavaScript to open artifactbin.</p><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></noscript></main>`;
 }
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{

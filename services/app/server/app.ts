@@ -64,8 +64,8 @@ import { fontPreloadTags } from '@/lib/page-styles';
 function withAgentDiscovery(html: string, origin: string): string {
   const help = agentDiscovery(origin);
   const tags = agentDiscoveryHead(help);
-  // Real body text survives readers that discard metadata and comments. The app
-  // replaces this startup fallback when it mounts; it contains no document data.
+  // Paint a product loading state before app JavaScript arrives. The app replaces
+  // it on mount; agent discovery remains in the head, tail and noscript help.
   html = html.replace(/<div id="root">/i, (open) => `${open}${agentDiscoveryBody(help)}`);
   const open = /<head(?:\s[^>]*)?>/i.exec(html);
   if (open) return `${html.slice(0, open.index + open[0].length)}${tags}${html.slice(open.index + open[0].length)}`;
