@@ -135,3 +135,18 @@ it('serves a scoped exported image through both app and proxy asset-origin bound
   expect((await fetch(new Request(url.split('?')[0]!))).status).toBe(404);
  }
 });
+
+
+it('keeps signed exports private and refusals uncacheable on the canonical app origin too',async()=>{
+ const id='11111111-1111-4111-8111-111111111111',key=`exports/objects/${id}.jpg`,body=Buffer.from('private export bytes');
+ await objectStore().put(key,body,'image/jpeg');
+ await(await getDb()).query('INSERT INTO export_images(id,artifact_id,object_key,mime,bytes,width,height) VALUES($1,$2,$3,$4,$5,1,1)',[id,'abc123',key,'image/jpeg',body.length]);
+ const app=createAppServer({indexHtml:async()=>'<head></head>'}),url=new URL(exportAssetUrl(id,'https://example.test'));
+ url.host='example.test';
+ const response=await app.fetch(new Request(url));expect(response.status).toBe(200);expect(await response.text()).toBe('private export bytes');
+ expect(response.headers.get('cache-control')).toMatch(/^private, max-age=\d+, must-revalidate$/);
+ const cached=await app.fetch(new Request(url,{headers:{'if-none-match':response.headers.get('etag')!}}));
+ expect(cached.status).toBe(304);expect(cached.headers.get('cache-control')).toMatch(/^private, max-age=\d+, must-revalidate$/);
+ url.searchParams.set('key','bad');
+ const refused=await app.fetch(new Request(url));expect(refused.status).toBe(404);expect(refused.headers.get('cache-control')).toBe('no-store');
+});
