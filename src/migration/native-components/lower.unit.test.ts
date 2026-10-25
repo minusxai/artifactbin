@@ -204,7 +204,7 @@ test('JSX indentation identities preserve adjacent authored siblings and retain 
  source.reservedIdentities=[{afId:reserved.afId,sourceNode:'removed-owner'}];assert.equal(lowerNativeComponents(source).status,'blocked');
 });
 test('significant inline spaces and authored multiline text remain exact identity-bearing text',()=>{
- const spaces=text(' '),prose=text('Line one\n  Line two'),source=input([element('p',{},[spaces,prose])]);source.emitTextIdentities=true;
+ const spaces=text(' '),crOnly=text(' \r '),prose=text('Line one\n  Line two'),source=input([element('p',{},[spaces,crOnly,prose])]);source.emitTextIdentities=true;
  source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
- const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/span>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,2);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/span>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,3);assert.match(result.html!,/> \r <\/span>/);
 });

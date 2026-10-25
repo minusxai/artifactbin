@@ -162,7 +162,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(depth>128){block('tree-depth-limit',node,'Typed tree exceeds the bounded lowering depth');return '';}
   if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
   // JSX indentation-only multiline text renders no text node. Preserve its proved reservation without inserting a CSS-visible sibling element.
-  if(node.type==='text'&&input.emitTextIdentities&&/^[\t\n\r ]*$/.test(node.value)&&/[\n\r]/.test(node.value)&&!ancestors.includes('title')&&!ancestors.includes('svg')){binding(node,'nonvisual');return '';}
+  if(node.type==='text'&&input.emitTextIdentities&&/^[\t\n\r ]*$/.test(node.value)&&/\n/.test(node.value)&&!ancestors.includes('title')&&!ancestors.includes('svg')){binding(node,'nonvisual');return '';}
   if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
   if(node.type==='expression'){
    if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
