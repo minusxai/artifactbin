@@ -415,16 +415,21 @@ describe('used font evidence',()=>{
 describe('component gate resource acceptance',()=>{
   it('rejects missing stylesheets in explicit input and default candidate validation',async()=>{
     const output=await setup(),config=path.join(output,'run.json'),prior=process.env.COMPONENT_BASELINE__INPUT;
+    const archive=await candidateArchive(),originalFetch=globalThis.fetch;
     const broken={fixture:'theme',state:'initial',errors:[],assertionErrors:[],fontEvidence:{errors:[]},resourceEvidence:{errors:['Stylesheet did not load: /theme.css']},semantics:{text:'Ready',controls:[],overflow:0}};
     vi.doMock('../gates/lib/browser.mjs',()=>({launchChromium:async()=>({close:async()=>{}})}));
     vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],compareBrowserBaselines,candidateCaptureIssues}));
+    vi.stubGlobal('fetch',async(input,init)=>{
+      const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
+      return new URL(url).pathname==='/skills/artifactbin.zip'?new Response(archive,{status:200}):originalFetch(input,init);
+    });
     process.env.COMPONENT_BASELINE__INPUT=config;
     try{
       for(const defaultCandidateValidation of [false,true]){
         await writeFile(config,JSON.stringify({implementation:'html',sourceRevision:'a'.repeat(40),output,entries:[],defaultCandidateValidation}));
         await expect(import('../gates/gate-component-baseline.mjs?resource-acceptance='+defaultCandidateValidation)).rejects.toThrow('Reader capture failures: Stylesheet did not load: /theme.css');
       }
-    }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
+    }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.unstubAllGlobals();vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
   });
 });
 
