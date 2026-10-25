@@ -14,11 +14,13 @@ For an existing page, read its canonical `html`, `version` and `state`, preserve
 
 ## Author and publish
 
-1. Read [native HTML publication](references/html-authoring.md). Create with `POST /api/artifacts` and `{"html":"<complete HTML>","visibility":"unlisted"}`. Updates use `PUT /api/artifacts/ID` with `html`, the observed `expectedVersion` and `expectedState`. Send one durable `Idempotency-Key` per intended write; retry an uncertain request with the same body and key.
+1. Read [native HTML publication](references/html-authoring.md). Create with `POST /api/artifacts` and `{"html":"<complete HTML>","visibility":"unlisted"}`. Updates use `PUT /api/artifacts/ID` with `html`, the observed `expectedVersion` and `expectedState`. Send one durable `Idempotency-Key` per intended write; retry an uncertain request with the same body and key. The optional `scripts/publish.mjs` helper prepares new sample artifacts; use the conditional `PUT` flow for edits.
 2. Read [state and JavaScript](references/html-runtime.md), including explicit field declarations for saved comment views. All page state goes through `client` from `@afbin/apollo`. Top-level local state is private to each viewer’s browser. Shared data lives behind declared dataset/backend namespaces. Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files.
 3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Keep `design-systems/` and the packaged `fonts/` inside the project root; link `./design-systems/NAME.css` from root-level HTML (adjust for subfolders). Preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; optional native components below need explicit registration.
 4. For a CSV/dashboard read [datasets](references/html-datasets.md). For a shared app read [backend files](references/html-backends.md) before modeling identity or writes. A readable page grants no dataset write access. Use authenticated account identity, never a name typed into a form, to authorize actions.
 5. Verify the actual published page at desktop and 390px. Exercise changed controls and inspect errors. Check values, comparisons and charts against returned data; label sample or assumed data. Share what passed and anything still unverified. Publication accepts source; it does not prove appearance.
+
+For HTML comment anchors and server-side browser verification, read [HTML operations](references/html-operations.md). It describes the native HTML anchor contract and how to inspect the sandboxed document frame.
 
 ## Optional HTML components
 
@@ -50,6 +52,7 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
 - [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
+- [HTML comments and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
 - [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
@@ -166,6 +169,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
 [% endif %]
   - [http-auth.md](references/http-auth.md) — HTTP sign-in, storage and refresh
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
+  - [html-operations.md](references/html-operations.md) — Native HTML comments and runner-frame browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
   - [http-document-graph.md](references/http-document-graph.md) — Advanced graph updates
   - [local-files.md](references/local-files.md) — Local preview, source comparison and deliberate saving

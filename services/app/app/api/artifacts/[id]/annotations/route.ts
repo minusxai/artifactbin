@@ -8,10 +8,9 @@ import { canAnnotate, parseHtmlNodeAnchor } from '@artifactbin/contracts';
  * GET /api/artifacts/:id/annotations — the annotation list, anchors in
  * CURRENT coordinates. `?status=open` (default) | `resolved` | `all`.
  *
- * This is the history/debug view; the primary read is the artifact GET
- * itself, which inlines the open set — an agent never needs a second call to
- * see the feedback. Uniform 404 for an unreachable id, like every scoped
- * read.
+ * Comments are sidecar relations. Read the artifact and its annotations
+ * separately; page GET returns only the document source and current revision.
+ * Uniform 404 for an unreachable id, like every scoped read.
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
