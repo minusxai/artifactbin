@@ -41,6 +41,52 @@ describe('native authored tabs', () => {
     triggers[0]!.click();
     expect(root.value).toBe('b');
   });
+  it('automatically selects an enabled trigger on focus and emits one intent per keyboard move', () => {
+    const {root, triggers} = fixture('value="a"');
+    const events: string[] = [];
+    root.addEventListener('af-change', event => events.push((event as CustomEvent).detail.value));
+
+    triggers[1]!.focus();
+    expect(events).toEqual(['b']);
+    expect(root.value).toBe('a');
+    triggers[0]!.focus();
+    expect(events).toEqual(['b']);
+    triggers[1]!.click();
+    expect(events).toEqual(['b', 'b']);
+    root.value = 'b';
+
+    triggers[1]!.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true}));
+    expect(document.activeElement).toBe(triggers[0]);
+    expect(events).toEqual(['b', 'b', 'a']);
+  });
+  it('does not activate disabled triggers on focus and retains manual activation', () => {
+    const automatic = fixture('default-value="a"');
+    automatic.triggers[2]!.focus();
+    expect(automatic.root.value).toBe('a');
+
+    const manual = fixture('default-value="a" activation-mode="manual"');
+    manual.triggers[1]!.focus();
+    expect(manual.root.value).toBe('a');
+  });
+  it('does not duplicate focus-then-click or reentrant activation intents', () => {
+    const pointer = fixture('value="a"');
+    const pointerIntents: string[] = [];
+    pointer.root.addEventListener('af-change', event => pointerIntents.push((event as CustomEvent).detail.value));
+    pointer.triggers[1]!.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+    pointer.triggers[1]!.focus();
+    pointer.triggers[1]!.dispatchEvent(new MouseEvent('click', {bubbles:true, detail:1}));
+    expect(pointerIntents).toEqual(['b']);
+
+    const reentrant = fixture('value="a"');
+    reentrant.triggers[1]!.focus();
+    let count = 0;
+    reentrant.root.addEventListener('af-change', () => {
+      count++;
+      if (count === 1) reentrant.triggers[1]!.click();
+    });
+    reentrant.triggers[1]!.click();
+    expect(count).toBe(1);
+  });
   it('separates manual focus from selection and respects RTL, boundaries and disabled tabs', () => {
     const {root, triggers} = fixture('default-value="a" activation-mode="manual" dir="rtl" loop="false"');
     triggers[0]!.focus();
