@@ -1,4 +1,5 @@
 import {build} from 'esbuild';
+import {initSync,parse as parseModuleImports} from 'es-module-lexer';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -32,7 +33,7 @@ it('keeps hosted literal imports and renders native plus compiled specs from the
  const resources=await referencedLibraryResources(authored,[],baseUrl);expect(resources).toHaveLength(2);
  const packed=await packOfflineDependencies({html:authored,baseUrl,resources});expect(packed.embeddedUrls).toHaveLength(2);
  const downloaded=downloadableHtml({html:packed.html,core:'/* core */',apollo:'export {};',reader:'export {};',config:{pageId:'PAGE12',revision:'1',backends:[]}});
- const module=authorModule(downloaded);expect(module).not.toContain('from "/libraries/');
+ let module=authorModule(downloaded);const payload=JSON.parse(packed.html.match(/<script type="application\/json" data-af="offline-modules">([\s\S]*?)<\/script>/)![1]!);for(const [key,value]of Object.entries(payload))module=module.replaceAll(JSON.stringify(key),JSON.stringify("data:text/javascript;base64,"+Buffer.from(value as string).toString("base64")));expect(module).not.toContain('from "/libraries/');
  const blocked=vi.fn(()=>{throw Error('eval blocked');});vi.stubGlobal('Function',blocked);
  try{const rendered=await import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(module).toString('base64')}`);expect(rendered.output).toHaveLength(2);for(const svg of rendered.output)expect(svg).toContain('<svg');expect(rendered.output[0]).toContain('#16a085');expect(rendered.output[1]).toContain('A');expect(blocked).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
 });
@@ -54,5 +55,5 @@ it('reads the deployed public directory after bundling relocates import.meta.url
 it('packs direct Mermaid and deck.gl imports from admitted project modules without network dependencies',async()=>{
  const html='<script type="module" data-af-id="chart-script">import mermaid from "/libraries/mermaid-12.0.0/index.js";import {Deck} from "/libraries/deck-gl-9.4.0/index.js";console.log(mermaid,Deck);</script>';
  const resources=await referencedLibraryResources(html,[],baseUrl);expect(resources.map(r=>r.url)).toEqual(['/libraries/deck-gl-9.4.0/index.js','/libraries/mermaid-12.0.0/index.js']);
- const packed=await packOfflineDependencies({html,baseUrl,resources});expect(packed.embeddedUrls).toHaveLength(2);expect(authorModule(packed.html)).not.toMatch(/from ["']\/libraries\//);expect(authorModule(packed.html)).toContain('startOnLoad');
+ const packed=await packOfflineDependencies({html,baseUrl,resources});expect(packed.embeddedUrls).toHaveLength(2);initSync();const imports=parseModuleImports(authorModule(packed.html))[0].map(item=>item.n);expect(imports.length).toBe(2);expect(imports.every(url=>url?.startsWith('@afbin/offline/'))).toBe(true);const payload=JSON.parse(packed.html.match(/<script type="application\/json" data-af="offline-modules">([\s\S]*?)<\/script>/)![1]!);for(const resource of resources)expect(imports.some(url=>payload[url!]===new TextDecoder().decode(resource.bytes))).toBe(true);
 });
