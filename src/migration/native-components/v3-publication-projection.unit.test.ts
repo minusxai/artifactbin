@@ -847,6 +847,17 @@ test("latest human-owned pages retain an absent creator token without fabricatin
   assert.equal(output.revisions.length,1);
   assert.equal(input.planned.original.token_id,null);
 });
+test("latest human-owned pages retain the source empty creator-token sentinel without fabricating credentials", () => {
+  const {input,host}=latestFixture();
+  for(const revision of input.selection.page.revisions){revision.original.token_id="";revision.rowSha256=nativeDigest(revision.original);}
+  for(const receipt of input.assemblies){receipt.sourceRowSha256=input.selection.page.revisions.find(r=>r.key.version===receipt.key.version)!.rowSha256;const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);}
+  input.plannedSha256=sha(canonicalMigrationValue(input.planned));
+  input.targetIdentitySha256=nativeDigest(input.targets);
+  const output=projectNativeV3Publication(input,host);
+  assert.deepEqual(output.owner,{userId:"usr_target",tokenId:null});
+  assert.equal(output.revisions.length,1);
+  assert.equal(input.planned.original.token_id,"");
+});
 test("an absent creator token never substitutes for an unmapped human owner", () => {
   const {input,host,events}=fixture();
   input.planned.original.token_id=null;

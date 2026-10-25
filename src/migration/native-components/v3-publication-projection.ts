@@ -319,7 +319,7 @@ export function projectNativeV3Publication(
   const targetOwner = input.targets.actors[ownerActor.id]!;
   const sourceToken = input.planned.original.token_id;
   const token = sourceToken ? input.targets.tokens[sourceToken] : undefined;
-  if (sourceToken !== null && !token?.tokenId) invalid("creator_token_missing");
+  if (sourceToken !== null && sourceToken !== "" && !token?.tokenId) invalid("creator_token_missing");
   const sourceUser = (id: unknown) => {
     if (id === null || id === undefined) return null;
     const target = input.targets.users[String(id)];
