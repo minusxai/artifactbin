@@ -81,6 +81,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   private error = "";
   private table?: HTMLTableElement;
   private viewport?: HTMLDivElement;
+  private viewportObserver?: ResizeObserver;
   private footer?: HTMLDivElement;
   private rows = new Map<string, HTMLTableRowElement>();
   private comparisonRows = new Map<string, HTMLTableRowElement>();
@@ -249,6 +250,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     this.loader.cancel();
     ++this.requestEpoch;
     this.pending = false;
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = undefined;
   }
   attributeChangedCallback(
     name: string,
@@ -366,6 +369,10 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         )
           void this.loadMore();
       });
+    }
+    if (!this.viewportObserver && typeof ResizeObserver !== "undefined") {
+      this.viewportObserver = new ResizeObserver(() => this.render());
+      this.viewportObserver.observe(this.viewport!);
     }
     const table = this.table,
       body = table.tBodies[0]!,
@@ -573,7 +580,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     const window = tableWindow(
       ordered.length,
       this.viewport!.scrollTop,
-      parseTableHeight(this.height),
+      this.viewport!.clientHeight || parseTableHeight(this.height),
       TABLE_ROW_HEIGHT,
     );
     const active = new Set<string>();

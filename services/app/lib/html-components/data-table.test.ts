@@ -20,6 +20,7 @@ it("preserves caller column header identities through sorting and removes stale 
   expect(header.hasAttribute("data-af-id")).toBe(false);
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());
 });
@@ -79,6 +80,39 @@ it("fills a GridItem without turning standalone height into a forced fill", () =
   expect(getComputedStyle(filled.querySelector("[data-slot=table-scroll]")!).flexGrow).toBe("1");
   expect(getComputedStyle(standalone).height).not.toBe("100%");
   expect(standalone.getAttribute("height")).toBe("166");
+});
+it("windows rows against the measured scroll viewport and refreshes after resize", () => {
+  let onResize: ResizeObserverCallback | undefined;
+  let disconnected = false;
+  class TestResizeObserver implements ResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      onResize = callback;
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {
+      disconnected = true;
+    }
+  }
+  vi.stubGlobal("ResizeObserver", TestResizeObserver);
+
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.height = 420;
+  el.data = {
+    columns: [{ name: "value", type: "number" }],
+    rows: Array.from({ length: 100 }, (_, value) => ({ value })),
+  };
+  document.body.append(el);
+  const viewport = el.querySelector("[data-slot=table-scroll]")!;
+  Object.defineProperty(viewport, "clientHeight", {
+    configurable: true,
+    value: 33,
+  });
+  onResize?.([], {} as ResizeObserver);
+
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(13);
+  el.remove();
+  expect(disconnected).toBe(true);
 });
 it("retains keyed rows and controls while cycling sort with accessible column headers", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
