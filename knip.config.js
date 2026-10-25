@@ -30,6 +30,8 @@ export default {
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
+        // Explicit fast local framed-browser regression (not part of browser-free PR unit jobs).
+        'scripts/__tests__/native-migration-browser-context.browser.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',

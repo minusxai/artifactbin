@@ -5,6 +5,7 @@ describe('native migration local browser context',()=>{
   const value=nativeMigrationBrowserContext('http://app.lvh.me:3030',['sample','mapped','sample']);
   expect(value.origins).toEqual(['http://app.lvh.me:3030','http://6d6170706564.lvh.me:3030','http://73616d706c65.lvh.me:3030']);
   expect(value.args).toEqual(['--unsafely-treat-insecure-origin-as-secure='+value.origins.join(',')]);
+  expect(value.channel).toBe('chromium');
   expect(value.policy).toBe('exact-local-trustworthy-origins-v1');
  });
  it('rejects remote, wildcard, credentialed and non-origin configuration',()=>{
