@@ -4,6 +4,7 @@ import { planMigration } from "../import.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { nativeDigest } from "./selection.ts";
 import { resolveNativeIdentityComment } from "./identity.ts";
+import { mapNativeCommentAuthorIdentity } from "./comment-author-provenance.ts";
 import {
   projectNativeV3Publication,
   projectNativeV3RelationBindings,
@@ -223,14 +224,18 @@ export async function prepareNativePublication(
       (r) => r.key.version === root.anchor_version,
     );
     const attachment = rootAnchor(root);
+    const author = mapNativeCommentAuthorIdentity(
+      shared.targets,
+      a.author_user_id,
+      a.author_token_id,
+    );
     const fields = {
       id: a.id,
       revision: a.revision,
       rootId: a.root_id,
       body: a.body,
       authorKind: a.author_kind,
-      authorTokenId: mapped("tokens", a.author_token_id),
-      authorUserId: mapped("users", a.author_user_id),
+      ...author,
       authorLabel: a.author_label,
       authorTransport: a.author_transport,
       status: a.status,
