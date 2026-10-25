@@ -7,10 +7,12 @@ export interface NativeHostKey {sourceNamespace:string;sourceId:string;version:n
 export interface NativeHostRecipe {
  format:'native-migration-host-v1';revisionScope:'latest';
  key:NativeHostKey;assemblySha256:string;sourceRevision:string;targetRevision:string;
- inputs:Record<'sourceHead'|'compiledHtml'|'datasetCatalog'|'identity'|'authSchemaCapability'|'membership'|'comments',NativeHostFile>;
+ inputs:Record<'sourceHead'|'compiledHtml'|'datasetCatalog'|'identity'|'authSchemaCapability'|'membership'|'comments',NativeHostFile>&{ancillaryFolders?:NativeHostFile};
  /** Explicit reviewed authority. Empty capability sets cannot authorize migration. */
  authority:{appSchema:string;authSchema:string;capabilities:readonly string[]};
 }
+/** @public Digest-bound host inputs; folder evidence is optional and independently reviewed. */
+export type NativeHostFiles=Record<Exclude<keyof NativeHostRecipe['inputs'],'ancillaryFolders'>,Uint8Array>&{ancillaryFolders?:Uint8Array};
 /** @public Host adapter contract. */
 export interface NativeHostContext {
  revision:{key:NativeHostKey};assembly:{key:NativeHostKey;sha256:string;result:{htmlSha256:string}};
@@ -30,7 +32,7 @@ export interface NativeHostComparison {
 /** Product adapters own staging, transaction authority, readback and the existing actual-reader camera.
  * The host never manufactures authority, source HTML, datasets or camera evidence. */
 export interface NativeMigrationHostPorts<Staged,Tx> {
- stage(input:{recipe:NativeHostRecipe;files:Record<keyof NativeHostRecipe['inputs'],Uint8Array>;context:NativeHostContext}):Promise<Staged>;
+ stage(input:{recipe:NativeHostRecipe;files:NativeHostFiles;context:NativeHostContext}):Promise<Staged>;
  transaction<T>(authority:NativeHostRecipe['authority'],work:(tx:Tx)=>Promise<T>):Promise<T>;
  importHistory(tx:Tx,staged:Staged):Promise<NonNullable<NativeHostPrepared['importResult']>>;
  verify(tx:Tx,staged:Staged):Promise<void>;

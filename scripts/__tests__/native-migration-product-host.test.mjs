@@ -82,7 +82,14 @@ it('one shared bootstrap imports and snapshots two source recipes through the sa
    const reviewed={format:'native-migration-host-v1',revisionScope:'latest',key,assemblySha256:assembly.sha256,sourceRevision:'a'.repeat(40),targetRevision:'b'.repeat(40),inputs,authority:{appSchema:'public',authSchema:'auth',capabilities:['reviewed-migration']}};
    const authorityRecipePath=path.join(root,prefix+'authority.json');await writeFile(authorityRecipePath,JSON.stringify(reviewed));
    recipes.set(key.sourceId,publicationRecipe);
-   const imported=await host.importAndPrepare({revision:{key},assembly,receiptRoot:root,outputDirectory:path.join(root,prefix+'output'),authorityRecipePath,candidateRecipePath:cameraPath});
+   const context={revision:{key},assembly,receiptRoot:root,outputDirectory:path.join(root,prefix+'output'),authorityRecipePath,candidateRecipePath:cameraPath};
+   if(prefix==='BootstrapFirst'){
+    const folderPath=prefix+'folder.json';await writeFile(path.join(root,folderPath),'{}');reviewed.inputs.ancillaryFolders={path:folderPath,sha256:sha('{}')};await writeFile(authorityRecipePath,JSON.stringify(reviewed));
+    await expect(host.importAndPrepare(context)).rejects.toThrow();expect((await db.query('SELECT id FROM users WHERE id=$1',[prefix+'user'])).rows).toEqual([]);
+    await writeFile(path.join(root,folderPath),'changed');await expect(host.importAndPrepare(context)).rejects.toThrow('input-digest');
+    delete reviewed.inputs.ancillaryFolders;await writeFile(authorityRecipePath,JSON.stringify(reviewed));
+   }
+   const imported=await host.importAndPrepare(context);
    expect(imported).toMatchObject({key,stage:'imported',assemblySha256:assembly.sha256});
    const input=JSON.parse(await readFile(imported.pilotInputPath,'utf8'));expect(input.preparedStore.reader.pageId).toBe(publicationRecipe.history.pageId);expect(input.bundleFiles).toEqual([{path:'index.html',sha256:sha(html)},{path:'theme.css',sha256:sha(css)},template.probe]);expect(imported.importResult.disposition).toBe('created');expect(imported.identityPreparation).toMatchObject({transaction:'separate-prerequisite',identities:{createdUsers:1,createdTokens:1}});expect(input.preparedStore.files.some(file=>file.path.startsWith('objects/'))).toBe(true);
   }

@@ -19,7 +19,7 @@ async function admitted(context){
  const authority=recipe.authority;
  if(!authority||![authority.appSchema,authority.authSchema].every(v=>typeof v==='string'&&/^[a-z_][a-z0-9_]{0,62}$/.test(v))||authority.appSchema===authority.authSchema||!Array.isArray(authority.capabilities)||!authority.capabilities.length||authority.capabilities.some(v=>typeof v!=='string'||!v))fail('authority');
  const files={};
- for(const name of names){const file=recipe.inputs?.[name];if(!file||!hash(file.sha256)||typeof file.path!=='string'||path.isAbsolute(file.path))fail('input');const target=await realpath(path.resolve(root,file.path));if(!inside(root,target))fail('input-path');const bytes=await readFile(target);if(sha(bytes)!==file.sha256)fail('input-digest');files[name]=bytes;}
+ for(const name of [...names,...(recipe.inputs?.ancillaryFolders===undefined?[]:['ancillaryFolders'])]){const file=recipe.inputs?.[name];if(!file||!hash(file.sha256)||typeof file.path!=='string'||path.isAbsolute(file.path))fail('input');const target=await realpath(path.resolve(root,file.path));if(!inside(root,target))fail('input-path');const bytes=await readFile(target);if(sha(bytes)!==file.sha256)fail('input-digest');files[name]=bytes;}
  if(!hash(context.assembly.result?.htmlSha256)||sha(files.compiledHtml)!==context.assembly.result.htmlSha256)fail('compiled-html-binding');
  return {recipe,files,context};
 }
