@@ -20,6 +20,7 @@
  * the SPA never mounts and every gate times out. A base URL means DRIVE THAT
  * SERVER; each booted host uses isolated application storage.
  */
+import {loadNativeMigrationCaptureBatch} from './lib/native-migration-batch-camera.mjs';
 import {prepareImportedPilotStore} from './lib/native-prepared-pilot-store.mjs';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { PAGES_HOST } from './gates/lib/browser.mjs';
@@ -122,7 +123,11 @@ async function bootServer(index, mailOutbox, authSecret) {
   }
   const port = await claimFreePort();
   const base = `http://app.${PAGES_HOST}:${port}`;
-  const prepared = process.env.NATIVE_MIGRATION_PILOT__INPUT ? await prepareImportedPilotStore({inputPath:process.env.NATIVE_MIGRATION_PILOT__INPUT,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,scratch:path.join(scratch,`imported-${index}`)}) : undefined;
+  const batchRoot=process.env.NATIVE_MIGRATION_BATCH__ROOT;
+  if(batchRoot&&servers!==1)throw Error('Native migration batch requires exactly one server');
+  const batch=batchRoot?await loadNativeMigrationCaptureBatch({root:batchRoot,output:process.env.NATIVE_MIGRATION_BATCH__OUTPUT}):undefined;
+  const batchFirst=batch?.entries[0].paths;
+  const prepared = batchFirst ? await prepareImportedPilotStore({inputPath:batchFirst.input,bundle:batchFirst.bundle,scratch:path.join(scratch,`imported-${index}`)}) :process.env.NATIVE_MIGRATION_PILOT__INPUT ? await prepareImportedPilotStore({inputPath:process.env.NATIVE_MIGRATION_PILOT__INPUT,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,scratch:path.join(scratch,`imported-${index}`)}) : undefined;
   const objects = prepared?.objects ?? path.join(scratch, `objects-${index}`);
   mkdirSync(objects, { recursive: true });
   const child = spawn(process.execPath, [BUNDLE], {
