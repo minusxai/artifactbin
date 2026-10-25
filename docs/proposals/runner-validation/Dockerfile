@@ -22,7 +22,7 @@ COPY --from=runtime-ncurses /out/ /out/
 FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS build
 COPY deploy/company/patch-npm.mjs /tmp/patch-npm.mjs
 RUN apt-get update && apt-get upgrade -y && npm install --global --no-audit --no-fund npm@11.19.1 && node /tmp/patch-npm.mjs && rm -rf /var/lib/apt/lists/* /root/.npm /tmp/patch-npm.mjs
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /validation
 COPY docs/proposals/runner-validation/package.json docs/proposals/runner-validation/package-lock.json ./
 COPY scripts/lib/esbuild-toolchain.mjs /toolchain/scripts/lib/esbuild-toolchain.mjs

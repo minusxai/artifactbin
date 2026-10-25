@@ -5,7 +5,7 @@
  * conventions — roles, aria idrefs that resolve, data-state/data-orientation/data-slot, closed content
  * rendered hidden — and behaves the same on interaction. Classes come from the compile-time recipes.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { IslandProvider } from '../context';
@@ -18,7 +18,10 @@ import { Dialog, DialogTrigger, DialogContent, DialogClose } from '../kit/dialog
 import { Collapsible, CollapsibleContent, CollapsibleTrigger, Popover, PopoverTrigger, PopoverContent, Tooltip, TooltipTrigger, TooltipContent, Avatar, AvatarImage, AvatarFallback } from '../kit/disclosure';
 import { RECIPES, cn } from '../kit/recipes';
 
-const mount = (view: () => import('solid-js').JSX.Element, portal: HTMLElement | null = null) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={{ ...fakeIsland(), trustedPortal: () => portal }}>{view()}</IslandProvider>, host); return { host, dispose }; };
+const mountedRoots = new Set<() => void>();
+afterEach(() => { for (const dispose of mountedRoots) dispose(); mountedRoots.clear(); });
+
+const mount = (view: () => import('solid-js').JSX.Element, portal: HTMLElement | null = null) => { const host = document.createElement('div'); const dispose = render(() => <IslandProvider value={{ ...fakeIsland(), trustedPortal: () => portal }}>{view()}</IslandProvider>, host); mountedRoots.add(dispose); return { host, dispose: () => { mountedRoots.delete(dispose); dispose(); } }; };
 const cls = (tag: string, props: Record<string, unknown> = {}) => cn(RECIPES[tag]!(props));
 
 describe('basic', () => {

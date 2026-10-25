@@ -1,5 +1,6 @@
 /** Installs a source-built compiler from this package's integrity-checked payload, never the network. */
 import {createHash,randomUUID} from 'node:crypto';
+import {setTimeout as pause} from 'node:timers/promises';
 import {readFile,copyFile,chmod,access,rename,rm,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
@@ -18,6 +19,17 @@ export async function compilerPayload(directory,version,target){
  const path=join(directory,file),bytes=await readFile(path);
  if(compilerIntegrity(bytes)!==entry.integrity)throw new Error(`Compiler integrity mismatch: ${version}/${target}`);
  return path;
+}
+
+/** npm runs package postinstalls concurrently; Windows may briefly hold esbuild.exe open. */
+export async function replaceCompiler(source,destination,{platform=process.platform,move=rename,wait=pause}={}){
+ for(let attempt=0;;attempt++){
+  try{return await move(source,destination);}
+  catch(error){
+   if(platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(error.code)||attempt>=19)throw error;
+   await wait(100);
+  }
+ }
 }
 
 export async function installCompiler(packageRoot,assets,{platform=process.platform,arch=process.arch,diagnosticsPath=process.env.ARTIFACTBIN_COMPILER_DIAGNOSTICS}={}){
@@ -51,7 +63,7 @@ export async function installCompiler(packageRoot,assets,{platform=process.platf
   try{
    operation='copy compiler executable';await copyFile(source,temporary);
    operation='set compiler permissions';await chmod(temporary,0o755);
-   operation='replace compiler executable';await rename(temporary,destination);
+   operation='replace compiler executable';await replaceCompiler(temporary,destination,{platform});
   }catch(error){primaryError=error;throw error;}
   finally{try{await rm(temporary,{force:true});}catch(error){if(!primaryError)throw error;}}
  }

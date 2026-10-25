@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
-import {COMPILER_TARGETS,compilerIntegrity,compilerPayload,installCompiler} from '../../services/cli/scripts/prepare-esbuild.mjs';
+import {COMPILER_TARGETS,compilerIntegrity,compilerPayload,installCompiler,replaceCompiler} from '../../services/cli/scripts/prepare-esbuild.mjs';
 const require=createRequire(import.meta.url);
 
 async function fixture(run){
@@ -82,3 +82,18 @@ it('preserves the Windows JavaScript launcher while replacing the platform execu
  expect(await readFile(join(packageRoot,'bin/esbuild'),'utf8')).toBe(launcher);
  expect(await readFile(join(root,'node_modules/@esbuild/win32-x64/esbuild.exe'))).toEqual(await readFile(binary));
 }));
+
+it('retries only bounded Windows executable locks and preserves permanent replacement failures',async()=>{
+ const locked=Object.assign(new Error('locked executable'),{code:'EPERM'});
+ let attempts=0,waits=0;
+ await replaceCompiler('verified.tmp','esbuild.exe',{platform:'win32',move:async()=>{if(++attempts<3)throw locked;},wait:async(ms)=>{expect(ms).toBe(100);waits++;}});
+ expect(attempts).toBe(3);expect(waits).toBe(2);
+ attempts=0;waits=0;
+ await expect(replaceCompiler('verified.tmp','esbuild.exe',{platform:'win32',move:async()=>{attempts++;throw locked;},wait:async()=>{waits++;}})).rejects.toBe(locked);
+ expect(attempts).toBe(20);expect(waits).toBe(19);
+ for(const [platform,code]of [['linux','EPERM'],['win32','ENOENT']]){
+  const failure=Object.assign(new Error(code),{code});let calls=0;
+  await expect(replaceCompiler('verified.tmp','esbuild.exe',{platform,move:async()=>{calls++;throw failure;},wait:async()=>{throw Error('Unexpected retry');}})).rejects.toBe(failure);
+  expect(calls).toBe(1);
+ }
+});
