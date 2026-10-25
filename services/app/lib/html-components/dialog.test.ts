@@ -115,6 +115,7 @@ it('matches the retained bare dialog heading and outline close styling', () => {
   const css = style.textContent!.replace(/\s+/g,'');
   expect(getComputedStyle(heading).fontSize).toBe('28px');
   expect(getComputedStyle(heading).lineHeight).toBe('1.2');
+  expect(css).toContain('af-dialog-trigger>button{box-sizing:border-box;display:inline-flex;height:2.25rem;');
   expect(css).toContain('af-dialog-close{border:1pxsolidcurrentColor;background:var(--background);color:var(--foreground);box-shadow:var(--shadow-xs,');
   expect(css).toContain('af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1pxsolidcurrentColor');
   document.documentElement.dataset.afDark = 'true';
