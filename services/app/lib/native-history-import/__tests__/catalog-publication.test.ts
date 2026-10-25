@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createSqliteSql } from "@artifactbin/sql/sqlite";
@@ -12,6 +12,7 @@ import { executeCatalog } from "@/lib/datasets/execute";
 import { createRetainedRegisteredQueries } from "@/lib/registered-page-queries/retained";
 import { prepareRegisteredQueryBackend } from "@/lib/registered-page-queries/registry";
 import { importNativeHistory } from "../index";
+import { nativeCatalogDatasetIdentity } from "../catalog-publication";
 import { stageNativeCatalog } from "../catalog-objects";
 import { createNativeLocalObjectSink } from "../catalog-staging";
 import { nativeCatalogBytes, nativeCatalogDigest } from "../catalog-digest";
@@ -597,4 +598,25 @@ it("preserves exact source policy audit and rejects omitted history or replay ta
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
+});
+
+it("two pages reuse the same exact dataset across distinct import aliases and reachable projections", async()=>{
+ const f=await fixture(),db=await getDb(),counts:Record<string,{datasetSelects:number;catalogLocks:number}>={};let phase="first";
+ const measured={transaction:<T>(work:(tx:import("@/lib/platform/db").Queryable)=>Promise<T>)=>db.transaction(tx=>work({query:async<T>(sql:string,values:unknown[]=[])=>{const count=counts[phase]??={datasetSelects:0,catalogLocks:0};if(values[0]===f.dataId){if(sql.startsWith("SELECT")&&sql.includes("FROM "))count.datasetSelects++;if(sql.includes("native-catalog:"))count.catalogLocks++;}return tx.query<T>(sql,values);}}))};
+ try{
+  expect(await importNativeHistory(measured,f.history,f.staged)).toBe("created");
+  const page={...structuredClone(f.page),pageId:"CatalogOtherPage",links:[] as typeof f.page.links};
+  const prepared=prepareRegisteredQueryBackend("queries","catalog_second_backend",page,{scalars:{},queries:[{name:"visible",sql:"SELECT owner, amount FROM records.rows WHERE owner = (SELECT id FROM _me)",dependencies:[]}],imports:[{alias:"records",binding:f.dataId,table:"rows"}]},{compilerSha256:"a".repeat(64),sourceSha256:"b".repeat(64),sqlEngineSha256:"c".repeat(64)});page.links=[prepared.link];
+  const projection=structuredClone(f.projection);projection.imports=[{pageId:page.pageId,pageVersion:1,backendId:prepared.link.backendId,backendVersion:prepared.link.version,alias:"records",datasetId:f.dataId,table:"rows"}];const{sha256,...payload}=projection;projection.sha256=nativeCatalogDigest(payload);
+  expect(projection.sha256).not.toBe(f.projection.sha256);
+  const staged=await stageNativeCatalog(projection,f.source,f.sink),history={...structuredClone(f.history),sourceId:"other-page",pageId:page.pageId,projectionSha256:"f".repeat(64),relationSha256:staged.sourceSha256};history.revisions[0]!.page=page;history.revisions[0]!.queries=[prepared];
+  phase="second";expect(await importNativeHistory(measured,history,staged)).toBe("created");phase="replay";expect(await importNativeHistory(measured,history,staged)).toBe("unchanged");
+  expect(counts).toEqual({first:{datasetSelects:11,catalogLocks:1},second:{datasetSelects:11,catalogLocks:1},replay:{datasetSelects:5,catalogLocks:0}});
+  const originalIdentity=nativeCatalogDatasetIdentity(f.projection,f.projection.datasets[0]!,f.projection.datasets[0]!.versions[0]!);
+  expect(nativeCatalogDatasetIdentity({...projection,datasets:[...projection.datasets,{...projection.datasets[0]!,sourceId:"unrelated",targetId:"UnrelatedData"}]},projection.datasets[0]!,projection.datasets[0]!.versions[0]!)).toEqual(originalIdentity);
+  await db.query("UPDATE artifacts SET title='divergent' WHERE id=$1",[f.dataId]);await expect(importNativeHistory(db,history,staged)).rejects.toThrow("native_catalog_collision");
+  await writeFile(path.join(f.root,projection.objects[1]!.targetKey),Buffer.from("[]"));
+  await expect(stageNativeCatalog(projection,f.source,f.sink)).rejects.toThrow(/native_catalog_object/);
+
+ }finally{await rm(f.root,{recursive:true,force:true});}
 });

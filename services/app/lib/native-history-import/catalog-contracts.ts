@@ -121,3 +121,9 @@ export interface NativeStagedCatalog extends NativeImportRelations {
   apply(tx: Queryable, pageId: string): Promise<void>;
   verify(tx: Queryable, pageId: string): Promise<void>;
 }
+
+/** Dataset row identity excludes page-specific import aliases and reachable catalog subsets. */
+export interface NativeCatalogDatasetIdentity {
+ sourceNamespace:string;sourceId:string;selectionSha256:string;sourceManifestSha256:string;objectManifestSha256:string;
+ datasetProjectionSha256:string;datasetSourceSha256:string;versionSourceSha256:string;
+}

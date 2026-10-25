@@ -7,6 +7,7 @@ import { nativeCatalogDigest } from "./catalog-digest";
 import { validateNativeCatalogDatasetSelection, validateNativeCatalogRevisionScope } from "./catalog-selection";
 import type {
   NativeCatalogProjection,
+  NativeCatalogDatasetIdentity,
   NativeCatalogDataset,
   NativeCatalogVersion,
 } from "./catalog-contracts";
@@ -183,25 +184,36 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
     }
   }
 }
-const receipt = (
+export const nativeCatalogDatasetIdentity = (
   p: NativeCatalogProjection,
   d: NativeCatalogDataset,
   v: NativeCatalogVersion,
-) => ({
+): NativeCatalogDatasetIdentity => {
+ const keys=new Set(d.versions.flatMap(version=>catalogKeys(version.meta)));
+ const datasetProjectionSha256=nativeCatalogDigest({
+  identityPlanSha256:p.identityPlanSha256??null,
+  identities:p.identities,
+  dataset:d,
+  objects:p.objects.filter(object=>keys.has(object.objectKey)).sort((a,b)=>a.objectKey.localeCompare(b.objectKey)),
+  typedUserRemaps:(p.typedUserRemaps??[]).filter(remap=>remap.sourceId===d.sourceId),
+  externalConnections:(p.externalConnections??[]).filter(connection=>connection.datasetSourceId===d.sourceId),
+ });
+ return {
   sourceNamespace: p.sourceNamespace,
   sourceId: d.sourceId,
   selectionSha256: p.selectionSha256,
   sourceManifestSha256: p.sourceManifestSha256,
   objectManifestSha256: p.objectManifestSha256,
-  projectionSha256: p.sha256,
+  datasetProjectionSha256,
   datasetSourceSha256: d.sourceSha256,
   versionSourceSha256: v.sourceSha256,
-});
+ };
+};
 const meta = (
   p: NativeCatalogProjection,
   d: NativeCatalogDataset,
   v: NativeCatalogVersion,
-) => ({ ...v.meta, nativeCatalogImport: receipt(p, d, v) });
+) => ({ ...v.meta, nativeCatalogImport: nativeCatalogDatasetIdentity(p, d, v) });
 const archive = (
   p: NativeCatalogProjection,
   d: NativeCatalogDataset,
