@@ -332,8 +332,13 @@ export function projectNativeV3Publication(
       invalid("actor_user_missing");
     return target.userId;
   };
-  const sourceTokenId = (id: unknown) => {
+  const sourceTokenId = (id: unknown, userId: unknown) => {
     if (id === null || id === undefined) return null;
+    // Empty legacy attribution is not a credential; keep the mapped human actor.
+    if (id === "") {
+      if (sourceUser(userId) !== null) return null;
+      invalid("actor_token_missing");
+    }
     const target = input.targets.tokens[String(id)];
     if (!target || !input.maps.tokens[String(id)])
       invalid("actor_token_missing");
@@ -345,7 +350,7 @@ export function projectNativeV3Publication(
       (r) => r.key.version === receipt.key.version,
     )!.original;
     sourceUser(row.actor_user_id);
-    sourceTokenId(row.actor_token_id);
+    sourceTokenId(row.actor_token_id, row.actor_user_id);
     if (
       typeof row.created_at !== "string" ||
       !Number.isFinite(Date.parse(row.created_at))
@@ -473,7 +478,7 @@ export function projectNativeV3Publication(
       description: typeof row.description === "string" ? row.description : null,
       createdAt: String(row.created_at),
       actorUserId: sourceUser(row.actor_user_id),
-      actorTokenId: sourceTokenId(row.actor_token_id),
+      actorTokenId: sourceTokenId(row.actor_token_id, row.actor_user_id),
       queries,
       mutations,
     });

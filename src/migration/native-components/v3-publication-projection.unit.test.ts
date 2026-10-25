@@ -867,3 +867,24 @@ test("an absent creator token never substitutes for an unmapped human owner", ()
   assert.throws(()=>projectNativeV3Publication(input,host),/account_owner_required/);
   assert.equal(events.length,0);
 });
+
+function setLatestRevisionActor(input:NativeV3ProjectionInput,userId:unknown,tokenId:unknown) {
+  for(const revision of input.selection.page.revisions){revision.original.actor_user_id=userId;revision.original.actor_token_id=tokenId;revision.rowSha256=nativeDigest(revision.original);}
+  for(const receipt of input.assemblies){receipt.sourceRowSha256=input.selection.page.revisions.find(r=>r.key.version===receipt.key.version)!.rowSha256;const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);}
+  input.plannedSha256=sha(canonicalMigrationValue(input.planned));
+}
+test("latest revision maps a blank legacy actor token to absence with verified user provenance",()=>{
+  const {input,host}=latestFixture();setLatestRevisionActor(input,"old-user","");
+  const before=structuredClone(input),output=projectNativeV3Publication(input,host);
+  assert.equal(output.revisions.length,1);
+  assert.equal(output.revisions[0]!.actorUserId,"usr_target");
+  assert.equal(output.revisions[0]!.actorTokenId,null);
+  assert.equal(output.revisions[0]!.createdAt,"2020-01-03T00:00:00.000Z");
+  assert.deepEqual(input,before);
+});
+test("blank revision actor tokens never mask absent or unmapped users before target preparation",()=>{
+  for(const userId of [null,undefined,"unknown-user"]){const {input,host,events}=latestFixture();setLatestRevisionActor(input,userId,"");assert.throws(()=>projectNativeV3Publication(input,host),/actor_(?:token|user)_missing/);assert.deepEqual(events,[]);}
+});
+test("mapped revision users never excuse an unmapped nonempty actor token",()=>{
+  const {input,host,events}=latestFixture();setLatestRevisionActor(input,"old-user","unknown-token");assert.throws(()=>projectNativeV3Publication(input,host),/actor_token_missing/);assert.deepEqual(events,[]);
+});

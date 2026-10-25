@@ -187,6 +187,7 @@ export interface NativeV3HistoryImport {
     description: string | null;
     createdAt: string;
     actorUserId: string | null;
+    /** A blank legacy token is absent only when actorUserId is a verified mapped user. */
     actorTokenId: string | null;
     queries: NativeV3PreparedBackend[];
     mutations: NativeV3PreparedBackend[];
