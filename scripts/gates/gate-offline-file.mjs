@@ -78,7 +78,15 @@ const expected=await build({stdin:{contents:authorModule,sourcefile:`${BASE}/a/$
 }}]});
 const canonical=async source=>(await transform(source,{loader:'js',minify:true,target:'es2022',legalComments:'none'})).code;
 const expectedCode=await canonical(expected.outputFiles.find(file=>file.path.endsWith('.js')).text),downloadDocument=new JSDOM(chartHtml);
-const downloadedModules=await Promise.all([...downloadDocument.window.document.querySelectorAll('script[type="module"]')].filter(script=>!script.src).map(script=>canonical(script.textContent)));
+const embedded=JSON.parse(downloadDocument.window.document.querySelector('script[data-af="offline-modules"]')?.textContent||'{}');
+const identities=new Map([...registered].map(([url,bytes])=>['@afbin/offline/'+createHash('sha256').update(url).update('\0').update(bytes).digest('hex'),url]));
+check(Object.keys(embedded).length===registered.size&&Object.entries(embedded).every(([key,source])=>identities.has(key)&&Buffer.from(source).equals(registered.get(identities.get(key)))),'download embeds each exact registered library once under its canonical content-bound identity');
+const downloadedModules=await Promise.all([...downloadDocument.window.document.querySelectorAll('script[type="module"]')].filter(script=>!script.src).map(async script=>{
+ const rebuilt=await build({stdin:{contents:script.textContent,sourcefile:`${BASE}/a/${chartId}/raw`,loader:'js'},bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',legalComments:'none',logLevel:'silent',outdir:'/offline',plugins:[{name:'embedded-executable-inputs',setup(builder){
+  builder.onResolve({filter:/.*/},args=>{const url=identities.get(args.path);if(!url||!Object.hasOwn(embedded,args.path))throw Error('Unadmitted embedded executable');return {path:url,namespace:'registered'};});
+  builder.onLoad({filter:/.*/,namespace:'registered'},args=>{const key=[...identities].find(([,url])=>url===args.path)?.[0];return {contents:embedded[key],loader:'js'};});
+ }}]});return canonical(rebuilt.outputFiles.find(file=>file.path.endsWith('.js')).text);
+}));
 downloadDocument.window.close();
 check(downloadedModules.includes(expectedCode),`download executable matches exact registered-input transform (SHA256 ${createHash('sha256').update(expectedCode).digest('hex')})`);
 

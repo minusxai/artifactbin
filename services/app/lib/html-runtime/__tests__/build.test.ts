@@ -131,3 +131,16 @@ it('ships shared offline chrome within explicit code and style byte budgets',asy
  expect(JSON.parse(/data-af="portable-engine">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.portableEngine);
  expect(assets.core).toContain('@afbin/portable');
 });
+
+it('installs shared offline modules in the core single import map and preserves portable source',async()=>{
+ const {JSDOM}=await import('jsdom');const {packOfflineDependencies}=await import('../../offline-dependencies');const {recoverPortableSource}=await import('../portable-source');
+ const source='<script type="module">import value from "./shared.js";console.log(value);</script>',library='export default {};';
+ const packed=await packOfflineDependencies({html:source,baseUrl:'https://example.test/',resources:[{url:'./shared.js',contentType:'text/javascript',bytes:new TextEncoder().encode(library)}]});
+ const core=await buildHtmlCore(),html=downloadableHtml({html:packed.html,core,apollo:'export {};',reader:'export {};',platformScriptNonce:'test-nonce-1234567890',portable:{version:1,source},config:{pageId:'p',revision:'1',backends:[]}});
+ expect(recoverPortableSource(html)).toBe(source);const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://example.test/'}),win=dom.window,blobs:string[]=[],revoked:string[]=[];
+ win.URL.createObjectURL=()=>{const url='blob:module-'+blobs.length;blobs.push(url);return url;};win.URL.revokeObjectURL=url=>revoked.push(url);
+ Object.defineProperty(win,'parent',{value:{}});const coreElement=win.document.querySelector('script[data-af="core"]')!;Object.defineProperty(win.document,'currentScript',{value:coreElement});win.eval(core);
+ const maps=win.document.querySelectorAll('script[type="importmap"]');expect(maps).toHaveLength(1);expect(maps[0]!.getAttribute('nonce')).toBe('test-nonce-1234567890');const imports=JSON.parse(maps[0]!.textContent!).imports;
+ expect(imports['@afbin/apollo']).toMatch(/^blob:/);expect(imports['@afbin/reader']).toMatch(/^blob:/);const shared=Object.entries(imports).filter(([key])=>key.startsWith('@afbin/offline/'));expect(shared).toHaveLength(1);
+ win.dispatchEvent(new win.PageTransitionEvent('pagehide',{persisted:true}));expect(revoked).toEqual([]);win.dispatchEvent(new win.PageTransitionEvent('pagehide',{persisted:false}));expect(revoked).toEqual([shared[0]![1]]);dom.window.close();
+});

@@ -1,3 +1,4 @@
+import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies/contracts';
 import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {portableRenderedDigest} from './portable-source';
 import { portableScript } from './portable';
@@ -64,6 +65,10 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });
   }
   head.childNodes.unshift(...boot.childNodes);
+  // The single core import map must see the inert table before it executes.
+  // Keep it in the rendered source so portable-source digest validation binds it.
+  if(input.offline){const modules=head.childNodes.filter(node=>'attrs'in node&&node.nodeName==='script'&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value===OFFLINE_MODULES_BLOCK));head.childNodes=[...modules,...head.childNodes.filter(node=>!modules.includes(node))];}
+
   const admission=admitInitialInlineScripts(serialize(document),input.platformScriptNonce);
   const policy=parseFragment('<meta>').childNodes[0] as DefaultTreeAdapterMap['element'];
   policy.attrs=[{name:'data-af',value:INLINE_SCRIPT_POLICY},{name:'http-equiv',value:'Content-Security-Policy'},{name:'content',value:admission.policy}];

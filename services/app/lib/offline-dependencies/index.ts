@@ -75,8 +75,7 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  let html=input.html;for(const edit of edits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+edit.text+html.slice(edit.end);if(extraCss)html=/<\/head\s*>/i.test(html)?html.replace(/<\/head\s*>/i,extraCss+'</head>'):extraCss+html;if(Object.keys(embeddedModules).length){
   const modules:OfflineEmbeddedModules=embeddedModules;
   const payload=JSON.stringify(modules).replace(/</g,'\\u003c');
-  const loader=`(()=>{const own=document.currentScript,modules=JSON.parse(own.previousElementSibling.textContent),imports={};for(const [key,source]of Object.entries(modules))imports[key]=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const map=document.createElement('script');map.type='importmap';const nonce=document.querySelector('script[data-af="core"]')?.nonce;if(nonce)map.nonce=nonce;map.textContent=JSON.stringify({imports});own.after(map);addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(imports))URL.revokeObjectURL(url);});})();`;
-  const bootstrap=`<script type="application/json" data-af="${OFFLINE_MODULES_BLOCK}">${payload}</script><script data-af="offline-module-loader">${loader}</script>`;
+  const bootstrap=`<script type="application/json" data-af="${OFFLINE_MODULES_BLOCK}">${payload}</script>`;
   const rendered=parse(html,{sourceCodeLocationInfo:true}),root=rendered.childNodes.find(node=>node.nodeName==='html');
   const head=root&&'childNodes'in root?root.childNodes.find(node=>node.nodeName==='head'):undefined;
   const location=head?.sourceCodeLocation;const at=location&&'startTag'in location?location.startTag?.endOffset??0:0;
