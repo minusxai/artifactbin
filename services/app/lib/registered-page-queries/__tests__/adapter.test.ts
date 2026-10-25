@@ -289,3 +289,48 @@ it('binds immutable local table bytes to the saved backend envelope',()=>{
  expect(registeredPlan(saved,prepared.link,backend)?.localTables?.[0]?.rows).toEqual([{amount:3}]);
  expect(()=>registeredPlan(saved,prepared.link,{...backend,compiled:backend.compiled.replace('"amount":3','"amount":4')})).toThrow();
 });
+
+
+it('preserves a multi-megabyte registered table through the complete typed GraphQL operation', async () => {
+  const { createRegisteredPageQueries } = await import('../service');
+  const { registeredQuerySchema } = await import('../namespace');
+  const context = {
+    pageId: 'page', pageVersion: 3, backendId: 'large-backend',
+    backendVersion: 'one', sourceSha256: 'a'.repeat(64), subject: 'viewer',
+  };
+  const columns = [
+    { name: 'part', type: 'number' as const },
+    { name: 'chunk', type: 'string' as const },
+  ];
+  const rows = Array.from({ length: 600 }, (_, part) => ({ part, chunk: 'x'.repeat(4000) }));
+  const plan = {
+    registration: context, scalars: {}, imports: [],
+    localTables: [{ name: 'chunks', columns, rows }],
+    queries: [{ name: 'payload', sql: 'select part, chunk from chunks order by part', dependencies: [] }],
+  };
+  const sql = createSqliteSql();
+  const adapter = createRegisteredPageQueries({
+    registry: async () => plan,
+    authorize: async () => true,
+    platform: async () => ({ userId: 'viewer', now: '2026-01-01T00:00:00Z', tz: 'UTC' }),
+    source: async () => { throw Error('unexpected_source'); },
+    execute: input => ({ result: sql.run(input), cancelAndDrain: async () => {} }),
+  });
+  const descriptor = registeredQueryDescriptor('queries', plan, 'payload');
+  const result = await executePageOperation({
+    schema: composePageSchema([{
+      name: 'queries', fileId: context.backendId, version: context.backendVersion,
+      typeDefs: registeredQuerySchema(plan),
+    }]),
+    caller: { pageId: 'page', subject: 'viewer', role: 'VIEWER' },
+    request: { query: descriptor.document, variables: { only: ['payload'] } },
+    signal: new AbortController().signal,
+    invoke: registeredQueryInvoker(page, context, adapter.execute),
+  });
+  expect(result.errors).toBeUndefined();
+  type Table = { error: string | null; columns: typeof columns; rows: Array<{ cells: [{ number: number }, { text: string }] }> };
+  const table = (result.data as { queries: { evaluate: { tables: Table[] } } }).queries.evaluate.tables[0]!;
+  expect(table.error).toBeNull();
+  expect(table.columns).toEqual(columns);
+  expect(table.rows.map(row => ({ part: row.cells[0].number, chunk: row.cells[1].text }))).toEqual(rows);
+});
