@@ -196,12 +196,12 @@ describe('native authored accordion', () => {
 });
 
 describe('accordion appearance', () => {
-  it('uses the authored recipe line-height without adding un-authored panel padding', () => {
+  it('matches the captured accordion content line-height and bottom spacing recipe', () => {
     const {root,items,contents} = fixture('default-value="a"', '<af-accordion-trigger><button>Toggle</button></af-accordion-trigger>', ['a']);
     const button = items[0]!.querySelector('button')!;
     expect(getComputedStyle(button).lineHeight).toBe('20px');
     expect(getComputedStyle(contents[0]!).lineHeight).toBe('20px');
-    expect(parseFloat(getComputedStyle(contents[0]!).paddingBottom)).toBe(0);
+    expect(parseFloat(getComputedStyle(contents[0]!).paddingBottom)).toBe(16);
     const icon = button.querySelector('svg[data-af-accordion-icon]')!;
     expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
     expect(icon.querySelector('path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');

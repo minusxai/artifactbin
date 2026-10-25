@@ -225,7 +225,7 @@ af-accordion-trigger>.af-accordion-icon,af-accordion-trigger button>.af-accordio
 af-accordion-trigger[aria-expanded="true"]>.af-accordion-icon,af-accordion-trigger button[aria-expanded="true"]>.af-accordion-icon{transform:translateY(.125rem) rotate(180deg)}
 af-accordion-trigger:focus-visible,af-accordion-trigger>button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#777) 50%,transparent)}
 af-accordion-trigger[aria-disabled=true],af-accordion-trigger>button[aria-disabled=true],af-accordion-trigger>button:disabled{opacity:.5;cursor:default}
-af-accordion-content{display:block;overflow:hidden;font-size:.875rem;line-height:1.25rem}
+af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.875rem;line-height:1.25rem}
 af-accordion-content[hidden]{display:none!important}
 `;
 
