@@ -34,6 +34,40 @@ export interface TableTemplate {
   template: HTMLTemplateElement;
 }
 export const TABLE_ROW_HEIGHT = 33;
+export interface MeasuredTableWindow {
+  start: number;
+  end: number;
+  total: number;
+  offsets: number[];
+}
+/** Variable-height virtual window, using the source table's 33px estimate until
+ * a rendered row has been measured. Offsets are absolute within the full body. */
+export function measuredTableWindow(
+  heights: readonly number[],
+  offset: number,
+  viewportHeight: number,
+  overscan = 12,
+  estimate = TABLE_ROW_HEIGHT,
+): MeasuredTableWindow {
+  const safeHeights = heights.map((height) =>
+    Number.isFinite(height) && height > 0 ? height : estimate,
+  );
+  const offsets = new Array<number>(safeHeights.length);
+  let total = 0;
+  for (let i = 0; i < safeHeights.length; i++) {
+    offsets[i] = total;
+    total += safeHeights[i]!;
+  }
+  const top = Math.max(0, Number.isFinite(offset) ? offset : 0);
+  const bottom = top + Math.max(0, Number.isFinite(viewportHeight) ? viewportHeight : 0);
+  let first = safeHeights.findIndex((height, index) => offsets[index]! + height > top);
+  if (first < 0) first = Math.max(0, safeHeights.length - 1);
+  let last = first;
+  while (last < safeHeights.length && offsets[last]! < bottom) last++;
+  const start = Math.max(0, first - overscan);
+  const end = Math.min(safeHeights.length, last + overscan);
+  return { start, end, total, offsets };
+}
 export function nextTableSort(
   sort: SortSpec | null,
   col: string,

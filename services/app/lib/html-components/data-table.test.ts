@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/story-surface/bare-typography";
 import { STORY_TABLE_CSS } from "@/lib/page-styles/chrome-css";
 import { AfDataTable, registerDataTable } from "./data-table";
+import { measuredTableWindow } from "./table-model";
 registerDataTable();
 it("preserves caller column header identities through sorting and removes stale mappings", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
@@ -24,7 +25,7 @@ afterEach(() => {
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());
 });
-it("keeps its virtual table in native table layout under document table styling", () => {
+it("uses a shared measured grid for its virtual header and body rows", async () => {
   const page = document.createElement("div");
   page.setAttribute("data-mx-story-root", "");
   const style = document.createElement("style");
@@ -38,7 +39,78 @@ it("keeps its virtual table in native table layout under document table styling"
   };
   page.append(el);
   document.body.append(page);
-  expect(getComputedStyle(el.querySelector("table")!).display).not.toBe("block");
+  await Promise.resolve();
+  const table = el.querySelector("table")!;
+  const header = table.tHead!.rows[0]!;
+  const row = table.tBodies[0]!.querySelector<HTMLTableRowElement>("tr[data-row-key]")!;
+  expect(getComputedStyle(table).display).toBe("block");
+  expect(getComputedStyle(header).display).toBe("grid");
+  expect(getComputedStyle(row).display).toBe("grid");
+  expect(row.style.position).toBe("absolute");
+  expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+});
+it("uses measured row heights when selecting and positioning a virtual window", () => {
+  const layout = measuredTableWindow([43, 43, 44, 43, 43], 44, 86, 1);
+  expect(layout.offsets).toEqual([0, 43, 86, 130, 173]);
+  expect(layout.total).toBe(216);
+  expect(layout.start).toBe(0);
+  expect(layout.end).toBe(4);
+});
+it("shrinks the virtual range after rendered rows report their actual heights", async () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  class MeasuredResizeObserver implements ResizeObserver {
+    constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal("ResizeObserver", MeasuredResizeObserver);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.height = 420;
+  el.data = {
+    columns: [{ name: "value", type: "number" }],
+    rows: Array.from({ length: 100 }, (_, value) => ({ value })),
+  };
+  document.body.append(el);
+  await Promise.resolve();
+  const rows = [...el.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-key]")];
+  expect(rows).toHaveLength(25);
+  const entries = rows.map((target) => ({
+    target,
+    contentRect: { height: 43 },
+    borderBoxSize: [{ blockSize: 43 }],
+  }) as unknown as ResizeObserverEntry);
+  callbacks.at(-1)?.(entries, {} as ResizeObserver);
+  expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(22);
+  expect(el.querySelector<HTMLTableRowElement>("tbody tr[data-row-key]")?.style.transform).toBe("translateY(0px)");
+});
+it("remeasures changed columns and restores virtual grid layout after comparison mode", async () => {
+  const tableDisplaysAtMeasurement: string[] = [];
+  const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.tagName === "TH") tableDisplaysAtMeasurement.push(getComputedStyle(this.closest("table")!).display);
+    const width = this.textContent === "id" ? 48 : this.textContent === "value" ? 112 : 80;
+    return { width, height: 20, top: 0, right: width, bottom: 20, left: 0, x: 0, y: 0, toJSON() {} } as DOMRect;
+  });
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.data = {
+    columns: [{ name: "id", type: "number" }, { name: "value", type: "number" }],
+    rows: Array.from({ length: 60 }, (_, id) => ({ id, value: id * 2 })),
+  };
+  document.body.append(el);
+  await Promise.resolve();
+  expect(el.querySelector<HTMLTableRowElement>("thead tr")?.style.gridTemplateColumns).toContain("48px");
+
+  el.columns = [{ col: "value", width: 112 }];
+  await Promise.resolve();
+  expect(el.querySelector<HTMLTableRowElement>("thead tr")?.style.gridTemplateColumns).toContain("112px");
+  expect(tableDisplaysAtMeasurement.length).toBeGreaterThanOrEqual(2);
+  expect(tableDisplaysAtMeasurement.every((display) => display === "table")).toBe(true);
+
+  el.transpose = true;
+  expect(el.querySelector<HTMLTableElement>("table")?.style.display).toBe("");
+  el.transpose = false;
+  expect(el.querySelector<HTMLTableElement>("table")?.style.display).toBe("block");
+  rectSpy.mockRestore();
 });
 it("keeps component-owned table cells out of bare document typography", () => {
   const page = document.createElement("div");
@@ -81,12 +153,12 @@ it("fills a GridItem without turning standalone height into a forced fill", () =
   expect(getComputedStyle(standalone).height).not.toBe("100%");
   expect(standalone.getAttribute("height")).toBe("166");
 });
-it("windows rows against the measured scroll viewport and refreshes after resize", () => {
-  let onResize: ResizeObserverCallback | undefined;
+it("windows rows against the measured scroll viewport and refreshes after resize", async () => {
+  const onResize: ResizeObserverCallback[] = [];
   let disconnected = false;
   class TestResizeObserver implements ResizeObserver {
     constructor(callback: ResizeObserverCallback) {
-      onResize = callback;
+      onResize.push(callback);
     }
     observe() {}
     unobserve() {}
@@ -103,12 +175,13 @@ it("windows rows against the measured scroll viewport and refreshes after resize
     rows: Array.from({ length: 100 }, (_, value) => ({ value })),
   };
   document.body.append(el);
+  await Promise.resolve();
   const viewport = el.querySelector("[data-slot=table-scroll]")!;
   Object.defineProperty(viewport, "clientHeight", {
     configurable: true,
     value: 33,
   });
-  onResize?.([], {} as ResizeObserver);
+  onResize[0]?.([], {} as ResizeObserver);
 
   expect(el.querySelectorAll("tbody tr[data-row-key]")).toHaveLength(13);
   el.remove();
@@ -282,7 +355,7 @@ it("keeps the grouped row count after the final page without more requests", asy
   await el.loadMore();
   expect(reads).toBe(1);
 });
-it("bounds large loaded results and recovers stable identities after scrolling", () => {
+it("bounds large loaded results and recovers stable identities after scrolling", async () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
   el.data = {
@@ -290,6 +363,7 @@ it("bounds large loaded results and recovers stable identities after scrolling",
     rows: Array.from({ length: 10000 }, (_, id) => ({ id })),
   };
   document.body.append(el);
+  await Promise.resolve();
   const id = el.querySelector("td[data-column]")?.getAttribute("data-af-id");
   expect(el.querySelectorAll("tbody tr[data-row-key]").length).toBeLessThan(50);
   const scroll = el.querySelector("[data-slot=table-scroll]")!;
