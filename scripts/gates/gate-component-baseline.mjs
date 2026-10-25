@@ -26,9 +26,10 @@ import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
 if(process.env.NATIVE_MIGRATION_BATCH__ROOT){
  const output=process.env.NATIVE_MIGRATION_BATCH__OUTPUT;
+ await mkdir(output,{recursive:true,mode:0o700});
  const admitted=await loadNativeMigrationCaptureBatch({root:process.env.NATIVE_MIGRATION_BATCH__ROOT,output});
  const browserContext=nativeMigrationBrowserContext(process.argv[2]||'http://localhost:3030',admitted.entries.map(entry=>entry.input.preparedStore.reader.pageId));
- await writeFile(path.join(output,'browser-context.json'),JSON.stringify(browserContext,null,2),{mode:0o600});
+ await writeFile(path.join(output,'browser-context.json'),JSON.stringify(browserContext,null,2),{flag:'wx',mode:0o600});
  const browser=await launchChromium({args:['--enable-unsafe-swiftshader',...browserContext.args]});
  try{
   const report=await runNativeMigrationCaptureBatch(admitted,{base:process.argv[2]||'http://localhost:3030',browser,connectAgent});
@@ -41,7 +42,7 @@ if(process.env.NATIVE_MIGRATION_PILOT__INPUT){
  const input=JSON.parse(await readFile(process.env.NATIVE_MIGRATION_PILOT__INPUT,'utf8'));
  const browserContext=nativeMigrationBrowserContext(process.argv[2]||'http://localhost:3030',input.preparedStore?[input.preparedStore.reader.pageId]:[]);
  await mkdir(process.env.NATIVE_MIGRATION_PILOT__OUTPUT,{recursive:true,mode:0o700});
- await writeFile(path.join(process.env.NATIVE_MIGRATION_PILOT__OUTPUT,'browser-context.json'),JSON.stringify(browserContext,null,2),{mode:0o600});
+ await writeFile(path.join(process.env.NATIVE_MIGRATION_PILOT__OUTPUT,'browser-context.json'),JSON.stringify(browserContext,null,2),{flag:'wx',mode:0o600});
  const browser=await launchChromium({args:['--enable-unsafe-swiftshader',...browserContext.args]});
  try{await runNativeMigrationPilot({base:process.argv[2]||'http://localhost:3030',browser,connectAgent,paths:{input:process.env.NATIVE_MIGRATION_PILOT__INPUT,canonical:process.env.NATIVE_MIGRATION_PILOT__CANONICAL,recovery:process.env.NATIVE_MIGRATION_PILOT__RECOVERY,bundle:process.env.NATIVE_MIGRATION_PILOT__BUNDLE,output:process.env.NATIVE_MIGRATION_PILOT__OUTPUT}});console.log('Native migration pilot capture complete; private evidence written to the explicit output directory. No paired parity claim made.');}
  catch(error){const output=process.env.NATIVE_MIGRATION_PILOT__OUTPUT;if(output){await mkdir(output,{recursive:true,mode:0o700});await writeFile(path.join(output,'migration-pilot-failure.json'),JSON.stringify({message:error.message,stack:error.stack},null,2),{mode:0o600});}throw Error('Native migration pilot failed; consult the explicit private evidence directory');}
