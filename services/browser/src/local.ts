@@ -232,7 +232,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
         const one = slides.nth(req.capture.slide - 1);
         await one.scrollIntoViewIfNeeded({ timeout });
         await waitForCharts();
-        return { mime, bytes: new Uint8Array(await one.screenshot(shotOpts)) };
+        return { mime, bytes: new Uint8Array(await one.screenshot({ ...shotOpts, style: '[data-af-deck-chrome]{visibility:hidden!important}' })) };
       }
       if (req.capture === 'full') return { mime, bytes: new Uint8Array(await surface.screenshot(shotOpts)) };
       if (req.capture === 'preview' || typeof req.capture === 'object') {

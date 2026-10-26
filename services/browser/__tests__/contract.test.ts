@@ -21,6 +21,11 @@ const PAGE = `<html><head><style>
 <div data-af-slide style="height:100px;background:#c33">one</div>
 <div data-af-slide style="height:100px;background:#3c3">two</div>
 <div data-af-slide style="height:100px;background:#33c">three</div></main></body></html>`;
+const SLIDE_CHROME_PAGE=`<html><body style="margin:0"><main style="width:600px"><af-slide-deck>
+<div data-af-slide style="height:630px;background:#c33">First</div>
+<div data-af-slide style="height:630px;background:#3c3;position:relative">Second<footer style="position:absolute;bottom:0;width:100%;height:20px;background:#33c">Authored footer</footer></div>
+<nav data-af-deck-chrome="toolbar" style="position:fixed;bottom:0;left:0;width:600px;height:100px;background:#f00">1 / 2</nav>
+</af-slide-deck></main></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
 /* A script component's mount: the server fallback (red) until the page's script replaces it (green), as the page runtime does. */
 const MOUNT_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p style="margin:0">Loading</p></div></main><script>setTimeout(()=>{const m=document.querySelector('[data-mx-mount]');m.replaceChildren();const d=document.createElement('div');d.style.cssText='width:100px;height:100px;background:#3c3';m.append(d)},400)</script></body></html>`;
@@ -45,7 +50,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { if (q.url === '/slow') { const t = setTimeout(() => { if (!s.destroyed) { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); } }, 1000); s.on('close', () => clearTimeout(t)); return; } s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/slide-chrome'?SLIDE_CHROME_PAGE:q.url==='/mount'?MOUNT_PAGE:q.url==='/never-mounts'?NEVER_MOUNTS_PAGE:q.url==='/harvest'?HARVEST_PAGE:q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -128,6 +133,20 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     expect(data[at + 1]).toBeGreaterThan(150);
     expect(data[at]).toBeLessThan(80);
     expect(data[at + 2]).toBeLessThan(80);
+  });
+  it('excludes generated fixed deck navigation while retaining the selected slide and authored footer',async()=>{
+    const r=await svc.render({...base(),url:pages.base+'/slide-chrome',viewport:{width:600,height:630},capture:{slide:2}});
+    if(!r.ok)throw Error(JSON.stringify(r));
+    const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
+    expect(info).toMatchObject({width:600,height:630});
+    const pixel=(y:number)=>[...data.subarray((y*info.width+300)*info.channels,(y*info.width+300)*info.channels+3)];
+    expect(pixel(580)).toEqual([51,204,51]);
+    expect(pixel(620)).toEqual([51,51,204]);
+    const live=await svc.render({...base(),url:pages.base+'/slide-chrome',viewport:{width:600,height:630},capture:'full'});
+    if(!live.ok)throw Error(JSON.stringify(live));
+    const full=await sharp(Buffer.from(live.bytes)).raw().toBuffer({resolveWithObject:true});
+    const at=(580*full.info.width+300)*full.info.channels;
+    expect([...full.data.subarray(at,at+3)]).toEqual([255,0,0]);
   });
   it('answers no_slide with the count', async () => {
     expect(await svc.render({ ...base(), capture: { slide: 9 } })).toEqual({ ok: false, reason: 'no_slide', slides: 3 });

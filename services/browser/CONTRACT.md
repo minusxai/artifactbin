@@ -7,6 +7,8 @@ A Chromium that renders a URL to an image (and, for diagrams, hands back the SVG
 `POST /render` with a `RenderRequest`:
 `url` (the page, carrying its own short-lived key — the service holds no credentials and sets no cookies) ·
 `format` `png|jpg` (+ `quality`) · `viewport` · `selector` (the element to shoot) · `capture` `"full" | "card" | "preview" | { card: { x, y, width } } | { slide: n }` ·
+Slide capture excludes generated `[data-af-deck-chrome]` navigation during the screenshot, preserving authored footers and the live deck.
+
 `sameOriginOnly` (abort every other origin) · `allowedOrigins` (optional exact additional origins for generic callers) ·
 `assetOrigin` (deployment-owned public cached-asset origin, internally fulfilled as described below) ·
 `waitForManagedFrames` (wait for author-ready handshakes) · `waitForMountsMs` (wait, at most that long, until every
