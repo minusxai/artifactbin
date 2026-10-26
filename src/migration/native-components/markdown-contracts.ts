@@ -1,5 +1,7 @@
 import type { NativeTypedAnalysis } from "./analyze-contracts.ts";
 import type { NativeIdentityRevision } from "./identity-contracts.ts";
+/** Retained source Markdown has no code-copy buttons; native defaults must not add them. */
+export interface NativeMarkdownPresentation { copyControls: false }
 export interface NativeMarkdownParse {
   sourceNode: string;
   source: string;
