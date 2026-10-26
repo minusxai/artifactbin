@@ -254,8 +254,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(rule?.parent&&!rule.parent.some(parent=>ancestors.includes(parent)))block('compound-parent-required',node,'Native compound part requires its owning component');
   const recipeEntries=input.componentRecipes?.filter(entry=>entry.sourceNode===node.graphKey)??[];
   const recipe=recipeEntries[0];
-  const recipeTag={Button:'button',Card:'div',CardHeader:'div',CardTitle:'div',CardDescription:'div',CardContent:'div',CardFooter:'div',CardAction:'div',Alert:'div',AlertTitle:'div',AlertDescription:'div',Badge:'span'} as const;
-  if(recipe&&(recipeEntries.length!==1||recipe.tag!==node.tag||!recipeTag[recipe.tag]||!digest(input.authoredStyleSha256)||typeof recipe.className!=='string'||recipe.actionWrapper!==undefined&&(recipe.tag!=='Button'||recipe.actionWrapper!=='mutation-hint')||Object.keys(recipe.attributes).some(name=>!/^data-(slot|variant|size)$/.test(name)&&!(name==='type'&&recipe.attributes.type==='button'))))block('component-recipe-proof',node,'Exact source component recipe and stylesheet closure required');
+  const recipeTag={Button:'button',Card:'div',CardHeader:'div',CardTitle:'div',CardDescription:'div',CardContent:'div',CardFooter:'div',CardAction:'div',Alert:'div',AlertTitle:'div',AlertDescription:'div',Badge:'span',Table:'table',TableHeader:'thead',TableBody:'tbody',TableFooter:'tfoot',TableRow:'tr',TableHead:'th',TableCell:'td',TableCaption:'caption'} as const;
+  if(recipe&&(recipeEntries.length!==1||recipe.tag!==node.tag||!recipeTag[recipe.tag]||!digest(input.authoredStyleSha256)||typeof recipe.className!=='string'||recipe.actionWrapper!==undefined&&(recipe.tag!=='Button'||recipe.actionWrapper!=='mutation-hint')||recipe.presentationWrapper!==undefined&&(recipe.tag!=='Table'||recipe.presentationWrapper!=='table-container')||Object.keys(recipe.attributes).some(name=>!/^data-(slot|variant|size)$/.test(name)&&!(name==='type'&&recipe.attributes.type==='button'))))block('component-recipe-proof',node,'Exact source component recipe and stylesheet closure required');
   const proof=binding(node),tag=recipe?recipeTag[recipe.tag]:(rule?.htmlTag??node.tag);
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
   for(const attribute of node.attributes){
@@ -395,9 +395,10 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
-  const helpers=recipe?.actionWrapper&&proof?nativeComponentHelperIdentity(proof.afId):null;
+  const helpers=(recipe?.actionWrapper||recipe?.presentationWrapper)&&proof?nativeComponentHelperIdentity(proof.afId):null;
   if(helpers&&Object.values(helpers).some(id=>input.identityBindings.some(binding=>binding.afId===id)||input.reservedIdentities?.some(entry=>entry.afId===id)))block('component-helper-collision',node,'Structural helper identities must not reuse source or retired identities');
   const rendered=`<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
+  if(recipe?.presentationWrapper&&helpers)return `<div data-af-id="${helpers.trigger}" data-slot="table-container" class="relative w-full overflow-x-auto">${rendered}</div>`;
   return helpers?`<span data-af-id="${helpers.trigger}" data-slot="tooltip-trigger" data-state="closed" class="inline-flex"><span data-af-id="${helpers.contents}" style="display:contents">${rendered}</span></span>`:rendered;
  };
  const body=input.analysis.nodes.map(node=>walk(node)).join('');

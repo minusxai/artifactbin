@@ -1,3 +1,4 @@
+import {parseFragment} from 'parse5';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {NativeTypedAnalysis,RetainedJsxNode,NativeJson} from './analyze-contracts.ts';
@@ -216,4 +217,11 @@ test('exact retained Alert and Badge recipes preserve source DOM and merged styl
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));assert.match(result.html!,/<div[^>]*data-slot="alert"[^>]*role="alert"/);assert.match(result.html!,/<div[^>]*data-slot="alert-title"/);assert.match(result.html!,/<span[^>]*data-slot="badge"/);assert.match(result.html!,/class="inline-flex rounded-full bg-secondary text-xs"/);assert.doesNotMatch(result.html!,/native-alert|native-badge|<aside|<h3/);
  const wrong=structuredClone(source);wrong.componentRecipes![0]!.tag='Badge';assert.equal(lowerNativeComponents(wrong).status,'blocked');
  const unbound=structuredClone(source);delete unbound.authoredStyleSha256;assert.equal(lowerNativeComponents(unbound).status,'blocked');
+});
+
+test('source table recipes retain no-wrap cells and horizontal scroll container with separate helper identity',()=>{
+ const cell=element('TableCell',{},[text('long visible content')]),row=element('TableRow',{},[cell]),body=element('TableBody',{},[row]),table=element('Table',{className:'mt-4'},[body]);const source=input([table]);source.authoredStyleSha256=proof;
+ source.componentRecipes=[{sourceNode:table.graphKey,tag:'Table',className:'w-full caption-bottom text-sm mt-4',presentationWrapper:'table-container',attributes:{'data-slot':'table'}},{sourceNode:body.graphKey,tag:'TableBody',className:'[&_tr:last-child]:border-0',attributes:{'data-slot':'table-body'}},{sourceNode:row.graphKey,tag:'TableRow',className:'border-b transition-colors',attributes:{'data-slot':'table-row'}},{sourceNode:cell.graphKey,tag:'TableCell',className:'p-2 align-middle whitespace-nowrap',attributes:{'data-slot':'table-cell'}}];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));const container:any=parseFragment(result.html!).childNodes[0],inner=container.childNodes[0];assert.equal(container.tagName,'div');assert.ok(container.attrs.some((a:any)=>a.name==='data-slot'&&a.value==='table-container'));assert.ok(container.attrs.some((a:any)=>a.name==='class'&&a.value==='relative w-full overflow-x-auto'));assert.equal(inner.tagName,'table');assert.notEqual(container.attrs.find((a:any)=>a.name==='data-af-id').value,inner.attrs.find((a:any)=>a.name==='data-af-id').value);assert.match(result.html!,/<td[^>]*class="p-2 align-middle whitespace-nowrap"/);assert.doesNotMatch(result.html!,/native-table/);
+ const wrong=structuredClone(source);wrong.componentRecipes![1]!.presentationWrapper='table-container';assert.equal(lowerNativeComponents(wrong).status,'blocked');
 });
