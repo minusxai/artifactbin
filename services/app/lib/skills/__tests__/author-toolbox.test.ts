@@ -116,3 +116,13 @@ it('keeps --json read output as canonical HTML with a matching baseline',async()
   expect(result.outputOwned).toBe(true);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('summarizes a saved check per viewport so the file need not be reopened',async()=>{
+ const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const viewport={width:390,height:844},clean={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[]};
+ const passed=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},task:{total:42},screenshot:{path:'/tmp/390x844.png'}}],unverified:['visual appearance']},'qa.json');
+ expect(passed.split('\n')).toEqual(['check completed: smoke passed; full result qa.json','  390x844: no errors; fits; task {"total":42}; screenshot /tmp/390x844.png','  unverified: visual appearance','']);
+ const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
+ expect(failed).toContain('check check_failed: smoke failed');
+ expect(failed).toContain('pageErrors 1: boom; overflow 512>390; task error: Expected 7 labels');
+ expect(failed).toContain('  session closed');
+});
