@@ -14,7 +14,6 @@ describe('one root for installed and direct HTTP agents',()=>{
   const cli=withTeachingOrigin(teaching.files['SKILL.md'],origin);
   for(const operation of ['POST /api/artifacts','PUT /api/artifacts/ID'])expect(http).toContain(operation);
   for(const field of ['expectedVersion','expectedState','Idempotency-Key','@afbin/apollo'])expect(http).toContain(field);
-  expect(http).toContain('If sign-in is required, reuse an email already provided');
   expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
   expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
   expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');

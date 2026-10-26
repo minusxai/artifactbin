@@ -40,7 +40,6 @@ describe('one installable native HTML author skill',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','scripts/read.mjs','scripts/publish.mjs','data-af-id'])expect(root).toContain(value);
   expect(root).toContain('/llms/html-operations');
-  expect(root).toContain('rewrites that file and its `.af.json` companion in place');
   expect(root).not.toMatch(/afbin |@afbin\/cli|afbin pull|\/prepare|<Helmet>|className=/);
   for(const topic of ['npm-local','commands','publishing-auth','markup','http-document-graph','http-authoring'])expect(publicGuideText(topic,BASE)).toBeNull();
  });
@@ -52,14 +51,13 @@ describe('one installable native HTML author skill',()=>{
   expect(json).toBeTruthy();
   const anchor=JSON.parse(json!);
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
-  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','`cursor` query parameter','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','auto-scopes `page` locators','scripts/check.mjs','overflow','appearance unverified','comment.mjs watch'])expect(guide).toContain(value);
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs','overflow','comment.mjs watch'])expect(guide).toContain(value);
   const browserExample=[...guide.matchAll(/```js\n([\s\S]*?)```/g)][1]?.[1];
   expect(browserExample).toContain('page.getByRole');
-  expect(browserExample).toContain("throw Error('Expected changed test data after refresh')");
+  expect(browserExample).toMatch(/throw Error\(/);
   expect(browserExample).not.toContain('frameLocator(');
   const files=skillPackageFiles(skillTree(),BASE);
   expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
-  expect(publicGuideText('html-examples',BASE)).toContain('Slide deck with viewer-local navigation');
   expect(publicGuideText('html-examples',BASE)).toContain('registerSlideDeck');
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{

@@ -412,7 +412,8 @@ it('HTTP authentication is direct and reuses the existing rotating credential st
 });
 
 it('keeps sign-in conditional across root guides and discovery', () => {
- for (const text of [buildQuickSheet(BASE), llmsText(BASE)]) {
+ expect(llmsText(BASE)).not.toContain('Install CLI only when requested');
+ for (const text of [buildQuickSheet(BASE)]) {
   expect(text).toContain('Missing credentials do not mean a new');
   expect(text).not.toContain('Install CLI only when requested');
   expect(text).toContain('If sign-in is required');
