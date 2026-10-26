@@ -44,7 +44,7 @@ const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after m
 const RENDER_RETRY_MS = 1_000;
 
 /** Bump to invalidate images made by an older capture implementation. */
-export const EXPORT_RENDER_GENERATION = 8;
+export const EXPORT_RENDER_GENERATION = 9;
 
 
 /** `format` value → export format; null when absent or unrecognized. */

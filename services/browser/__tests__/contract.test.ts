@@ -24,7 +24,7 @@ const PAGE = `<html><head><style>
 const SLIDE_CHROME_PAGE=`<html><body style="margin:0"><main style="width:600px"><af-slide-deck>
 <div data-af-slide style="height:630px;background:#c33">First</div>
 <div data-af-slide style="height:630px;background:#3c3;position:relative">Second<footer style="position:absolute;bottom:0;width:100%;height:20px;background:#33c">Authored footer</footer></div>
-<nav data-af-deck-chrome="toolbar" style="position:fixed;bottom:0;left:0;width:600px;height:100px;background:#f00">1 / 2<i style="position:absolute;inset:0;background:#f00;transition:all 2s"></i></nav>
+<nav data-af-deck-chrome="toolbar" style="position:fixed;bottom:0;left:0;width:600px;height:100px;background:#f00">1 / 2<i style="position:absolute;inset:0;background:#f00;transition:all 2s"></i><b class="dot"></b></nav><style>.dot::after{content:"";position:absolute;inset:0;background:#f00;transition:all 2s}</style>
 </af-slide-deck></main></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
 /* A script component's mount: the server fallback (red) until the page's script replaces it (green), as the page runtime does. */
