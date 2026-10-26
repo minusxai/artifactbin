@@ -246,6 +246,7 @@ describe('CodeQL avoids redundant post-merge work without narrowing analysis',()
   expect(analyze.with['upload-database']).toBe("${{ github.event_name != 'push' }}");
   expect(analyze.with.upload??'always').toBe('always');
   expect(analyze.with['skip-queries']??'false').toBe('false');
+  expect(init.with['trap-caching']).toBe(true);
   expect(init.with.queries).toBeUndefined();
   expect(init.with['config-file']).toBeUndefined();
   expect(init.with['config']).toBeUndefined();

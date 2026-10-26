@@ -41,6 +41,10 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: none
+          # Default-branch scans seed the action's content-addressed extraction cache.
+          # Other branch scans cannot save it themselves; overlay-base mode otherwise
+          # disables this cache. Full source analysis and queries still run every time.
+          trap-caching: true
       - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: /language:${{ matrix.language }}
