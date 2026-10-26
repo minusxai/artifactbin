@@ -1,5 +1,5 @@
 /** Pure retained compiler output; no renderer, class merger or recipe code ships to a page. */
-export type NativeComponentRecipeTag='Button'|'Card'|'CardHeader'|'CardTitle'|'CardDescription'|'CardContent'|'CardFooter'|'CardAction';
+export type NativeComponentRecipeTag='Button'|'Card'|'CardHeader'|'CardTitle'|'CardDescription'|'CardContent'|'CardFooter'|'CardAction'|'Alert'|'AlertTitle'|'AlertDescription'|'Badge';
 export interface NativeComponentRecipe {
  sourceNode:string;
  tag:NativeComponentRecipeTag;
