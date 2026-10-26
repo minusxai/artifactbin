@@ -127,3 +127,10 @@ export interface NativeCatalogDatasetIdentity {
  sourceNamespace:string;sourceId:string;selectionSha256:string;sourceManifestSha256:string;objectManifestSha256:string;
  datasetProjectionSha256:string;datasetSourceSha256:string;versionSourceSha256:string;
 }
+
+/** Read-only equivalence proof. Both catalog-wide source manifests remain explicit;
+ * no persisted row or imported history is rewritten by comparison. */
+export interface NativeCatalogRowEquivalence {
+ equal: boolean;
+ provenance?: {storedSourceManifestSha256:string; incomingSourceManifestSha256:string; datasetProjectionSha256:string};
+}
