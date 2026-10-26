@@ -9,6 +9,7 @@ export interface NativeComponentRecipe {
  actionWrapper?:'mutation-hint';
  /** Retained Table adds one non-source horizontal scroll container. */
  presentationWrapper?:'table-container';
+ /** Exact source attributes, including omitted table header scope; do not infer accessibility defaults. */
  attributes:Readonly<Record<string,string>>;
 }
 /** The retained compiler's ordinary story column, even when no outline is eligible. */
