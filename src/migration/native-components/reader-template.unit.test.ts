@@ -5,6 +5,7 @@ import {
   prepareNativeReaderTemplate,
   renderNativeReaderTemplate,
   NATIVE_CONTENTS_AUTHOR_JS,
+  NATIVE_TABLE_SCROLL_AUTHOR_JS,
 } from "./reader-template.ts";
 import type {
   NativeTypedAnalysis,
@@ -297,3 +298,10 @@ test("source-bound Markdown outline follows existing native heading IDs and pres
     }),
   );
 });
+
+test('ordinary table overflow marks update after scroll, fonts, resize and inserted tables without duplicating listeners',()=>{
+ const make=()=>{const attrs=new Map<string,string>(),events=new Map<string,()=>void>();return{scrollWidth:500,clientWidth:200,scrollLeft:0,attrs,events,setAttribute:(k:string,v:string)=>attrs.set(k,v),removeAttribute:(k:string)=>attrs.delete(k),addEventListener:(k:string,f:()=>void)=>{assert.ok(!events.has(k));events.set(k,f)}}};const table=make(),tables=[table],timers:(()=>void)[]=[],events=new Map<string,()=>void>();let mutation=()=>{};const root={querySelectorAll:()=>tables};const win={setTimeout:(f:()=>void)=>{timers.push(f);return timers.length},addEventListener:(k:string,f:()=>void)=>events.set(k,f),MutationObserver:class{constructor(f:()=>void){mutation=f}observe(){}}};
+ runInNewContext(NATIVE_TABLE_SCROLL_AUTHOR_JS,{document:{querySelector:()=>root,defaultView:win}});assert.equal(table.attrs.get('data-mx-scrollable'),'');table.scrollLeft=300;table.events.get('scroll')!();assert.equal(table.attrs.get('data-mx-scrollable'),'end');table.clientWidth=500;events.get('resize')!();assert.ok(!table.attrs.has('data-mx-scrollable'));const added=make();tables.push(added);mutation();mutation();assert.equal(timers.length,2);timers[1]!();assert.equal(added.attrs.get('data-mx-scrollable'),'');timers[0]!();assert.equal(table.events.size,1);assert.equal(added.events.size,1);
+});
+
+test('a source table receives its overflow behavior even when no contents rail is eligible',()=>{const source=fixture(null);(source.analysis.nodes[0] as any).tag='Table';const receipt=prepareNativeReaderTemplate(source);assert.equal(receipt.scrollTables,true);assert.equal(receipt.rail,false);assert.equal(renderNativeReaderTemplate(receipt,'<table></table>').authorJs,NATIVE_TABLE_SCROLL_AUTHOR_JS);});

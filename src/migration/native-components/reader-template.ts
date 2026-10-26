@@ -108,7 +108,9 @@ export function prepareNativeReaderTemplate(
       (slides < 2 &&
         !grid &&
         entries.filter((entry) => entry.level === 2).length >= 3));
+  const hasTables=(nodes:readonly RetainedJsxNode[]):boolean=>nodes.some(node=>node.type==='element'&&(['Table','table','Markdown'].includes(node.tag)||hasTables(node.children)));
   const payload = {
+    ...(hasTables(input.analysis.nodes)?{scrollTables:true as const}:{}),
     key: input.analysis.key,
     sourceSha256: input.analysis.sourceSha256,
     analysisSha256: input.analysis.analysisSha256,
@@ -199,6 +201,16 @@ export function renderNativeReaderTemplate(
   return {
     html: html.replace(">", " data-af-reader-template>"),
     css: NATIVE_READER_TEMPLATE_CSS,
-    authorJs: receipt.rail ? NATIVE_CONTENTS_AUTHOR_JS : "",
+    authorJs: (receipt.rail ? NATIVE_CONTENTS_AUTHOR_JS : "")+(receipt.scrollTables ? NATIVE_TABLE_SCROLL_AUTHOR_JS : ""),
   };
 }
+
+export const NATIVE_TABLE_SCROLL_AUTHOR_JS=`(()=>{
+ const root=document.querySelector('[data-af-reader-template]'),win=document.defaultView;if(!root||!win)return;
+ const tables=()=>[...root.querySelectorAll('table:not([data-mx-kit-table])')],wired=new Set();
+ const measure=table=>{if(table.scrollWidth<=table.clientWidth+1){table.removeAttribute('data-mx-scrollable');return;}table.setAttribute('data-mx-scrollable',table.scrollLeft+table.clientWidth>=table.scrollWidth-1?'end':'');};
+ const measureAll=()=>tables().forEach(measure);
+ const sweep=()=>{for(const table of tables()){if(!wired.has(table)){wired.add(table);table.addEventListener('scroll',()=>measure(table),{passive:true});}measure(table);}};
+ sweep();win.setTimeout(sweep,800);win.addEventListener('resize',measureAll);
+ let queued=0;new win.MutationObserver(()=>{if(queued)return;queued=win.setTimeout(()=>{queued=0;sweep();},16);}).observe(root,{childList:true,subtree:true});
+})();`;
