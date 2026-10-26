@@ -29,6 +29,8 @@ export interface NativeReaderTemplateReceipt {
   chrome: boolean;
   entries: readonly NativeContentsEntry[];
   rail: boolean;
+  /** Source ordinary tables retain overflow marks as layout changes. */
+  scrollTables?: true;
   sha256: string;
 }
 export interface NativeReaderTemplateOutput {
