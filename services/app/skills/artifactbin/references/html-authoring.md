@@ -10,7 +10,7 @@ Use an email-authenticated bearer ([authentication](http-auth.md)). JSON uses `C
 
 `publish.mjs FILE` discovers CSS, fonts, images, modules, datasets and declared backend TypeScript. JSON/CSV publishes datasets; media publishes assets. `--root` bounds files; `--manifest` accepts `{ "manifest": ["extra.json"] }`. `--dry-run` plans without writes. Backend TypeScript publishes through its declaring page.
 
-Edit with `read.mjs ID --output page.html`, retain `page.html.af.json`, then `publish.mjs page.html`. Canonical IDs and observed version/state survive. Publish returns a fresh pair beside the input; use it for the next edit. Historical, missing or mismatched baselines refuse updates. Never attach a fresh head to stale bytes. `--artifact ID --baseline FILE` requires the matching pair. Explicit `--create` recovers exported source as a new identity; lost HTML markers plus companion defeat detection. Data/media identity lives only in the companion.
+Edit with `read.mjs ID --output page.html`, retain `page.html.af.json`, then `publish.mjs page.html`. Canonical IDs and observed version/state survive. Publish updates the input and companion in place (beside it if edited meanwhile). Historical, missing or mismatched baselines refuse updates. Never attach a fresh head to stale bytes. `--artifact ID --baseline FILE` requires the matching pair. Explicit `--create` recovers exported source as a new identity; lost HTML markers plus companion defeat detection. Data/media identity lives only in the companion.
 
 Credential-free journals live outside the project (`--request FILE` or private store default). `--resume FILE` reuses the exact saved origin/method/body/key without rereading source. Retain partial dependency receipts. No force overwrite exists.
 

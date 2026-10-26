@@ -2,24 +2,26 @@ import path from 'node:path';
 import {readFile,realpath} from 'node:fs/promises';
 import {prepareBundle} from './publication-bundle.mjs';
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
-import {loadPair,sourceIdentity,saveAuthoringPair} from './toolbox-source.mjs';
+import {loadPair,sourceIdentity,saveAuthoringPair,UNPAIRED} from './toolbox-source.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':'text/css','.js':'text/javascript','.woff2':'font/woff2'};
 export async function finishPublication({saved,receipt,journal}){
  const resultFile=journal+'.result.json',previous=await optionalFile(resultFile);
  if(previous){const result=JSON.parse(previous);if(result.id!==receipt.id||result.version!==receipt.version)throw new ToolError('receipt_mismatch','Saved result does not match the replayed receipt.',4);if(!await optionalFile(result.source)||!await optionalFile(result.baseline))throw new ToolError('canonical_pair_missing','Saved canonical output pair is incomplete.',1,'Read the committed artifact to a fresh source path.',{journal,id:receipt.id});return result;}
  let pair;
+ // The input is replaced only while it still holds exactly the published bytes; later author edits keep the result beside it.
+ const current=saved.source?.file?await optionalFile(saved.source.file):null,inPlace=!!current&&hash(current)===saved.source.sha256;
  if(saved.body.html!==undefined&&typeof receipt.html!=='string')throw new ToolError('publication_recovered','The server recovered the identity without canonical HTML.',1,'Read the returned identity to a fresh authoring pair; do not create a replacement.',{committed:true,id:receipt.id,journal});
  try{
  if(typeof receipt.html==='string'){
   if(!saved.source)throw new ToolError('source_snapshot_missing','Publication journal has no source-output plan.',1);
-  pair=await saveAuthoringPair({record:receipt,server:saved.server,output:saved.source.output,root:saved.source.root,receipts:receipt.dependencyReceipts??[],localReferences:true});
+  pair=await saveAuthoringPair({record:receipt,server:saved.server,output:inPlace?saved.source.file:saved.source.output,root:saved.source.root,receipts:receipt.dependencyReceipts??[],localReferences:true,replace:inPlace});
  }else{
-  const output=saved.source.output,body=saved.body;
+  const output=inPlace?saved.source.file:saved.source.output,body=saved.body;
   let bytes;if(body.dataset!==undefined)bytes=typeof body.dataset==='string'?body.dataset:JSON.stringify(body.dataset,null,2)+'\n';else bytes=Buffer.from(body.file.base64,'base64');
-  const {exclusive}=await import('./toolbox-client.mjs');await exclusive(output,bytes);
-  const companion=output+'.af.json';await exclusive(companion,JSON.stringify({kind:'data-baseline',schema:1,server:saved.server,id:receipt.id,version:receipt.version,state:receipt.state,format:receipt.format,...(body.file?{contentType:body.file.contentType,filename:body.file.filename}:{}),sourceFile:path.basename(output),historical:false},null,2)+'\n');pair={source:output,baseline:companion};
+  const {exclusive}=await import('./toolbox-client.mjs'),{atomicWrite}=await platform();if(!inPlace)await exclusive(output,bytes);
+  const companion=output+'.af.json',write=inPlace?atomicWrite:exclusive;await write(companion,JSON.stringify({kind:'data-baseline',schema:1,server:saved.server,id:receipt.id,version:receipt.version,state:receipt.state,format:receipt.format,...(body.file?{contentType:body.file.contentType,filename:body.file.filename}:{}),sourceFile:path.basename(output),historical:false},null,2)+'\n');pair={source:output,baseline:companion};
  }
- const result={id:receipt.id,url:receipt.url,version:receipt.version,journal,...pair};
+ const result={id:receipt.id,url:receipt.url,version:receipt.version,journal,...pair,...(inPlace?{updatedInPlace:true}:saved.source?.file?{note:'The input changed during publication, so it was kept. Reapply those later edits to the saved source before the next publish.'}:{})};
  const {atomicWrite}=await platform();await atomicWrite(resultFile,JSON.stringify(result,null,2)+'\n',{exclusive:true});return result;
  }catch(error){throw new ToolError('canonical_pair_save_failed','Server confirmed publication but the canonical output pair could not be completed.',1,'Retain this journal and receipt; read the committed identity to a fresh authoring pair.',{committed:true,id:receipt.id,version:receipt.version,journal,cause:error.code??'filesystem_error'});}
 }
@@ -38,9 +40,9 @@ export async function publishCommand({values,positionals},options={}){
  if(!values.create&&sidecar){
   if(type==='html')({baseline}=await loadPair(file,server,values.baseline));
   else{
-   baseline=JSON.parse(sidecar);if(baseline.kind!=='data-baseline'||baseline.server!==server||baseline.sourceFile!==path.basename(file)||baseline.historical||baseline.schema!==1||!/^[A-Za-z0-9]{6,12}$/.test(baseline.id??'')||!Number.isSafeInteger(baseline.version)||baseline.version<1||!/^[a-f0-9]{64}$/.test(baseline.state??''))throw new ToolError('invalid_baseline','Data source requires a matching current-head companion.',2);
+   baseline=JSON.parse(sidecar);if(baseline.kind!=='data-baseline'||baseline.server!==server||baseline.sourceFile!==path.basename(file)||baseline.historical||baseline.schema!==1||!/^[A-Za-z0-9]{6,12}$/.test(baseline.id??'')||!Number.isSafeInteger(baseline.version)||baseline.version<1||!/^[a-f0-9]{64}$/.test(baseline.state??''))throw new ToolError('invalid_baseline','Data source requires a matching current-head companion.',2,'Publish the file its companion was saved with, or read.mjs ID --output fresh.json. Never copy or hand-edit .af.json companions.');
   }
- }else if(!values.create&&type==='html'&&(sourceIdentity(source)||/data-af\s*=\s*["'](?:portable|runtime|offline-source)|data-af-id\s*=/i.test(source)))throw new ToolError('baseline_missing','Recovered or linked HTML needs a matching baseline, or explicit --create for a new identity.',2);
+ }else if(!values.create&&type==='html'&&(sourceIdentity(source)||/data-af\s*=\s*["'](?:portable|runtime|offline-source)|data-af-id\s*=/i.test(source)))throw new ToolError('baseline_missing','This HTML has data-af-id attributes or an authoring marker but no companion '+path.basename(file)+'.af.json, so its page identity is unknown.',2,UNPAIRED);
  if(values.artifact){if(!baseline||!values.baseline)throw new ToolError('baseline_required','--artifact requires --baseline; never infer a fresh head.',2);const {resolveTarget}=await import('./toolbox-client.mjs');if(resolveTarget(values.artifact,server).id!==baseline.id)throw new ToolError('identity_mismatch','Artifact and baseline IDs differ.',2);}
  if(values.baseline&&!baseline&&!values.create)throw new ToolError('baseline_missing','The explicitly selected baseline is unavailable.',2);
  if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=recoverPortableSource(source)??source;}source=source.replace(/<!-- af-authoring:[A-Za-z0-9_-]+ -->/g,'');baseline=null;}

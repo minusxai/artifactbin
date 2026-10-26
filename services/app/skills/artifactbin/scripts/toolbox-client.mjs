@@ -49,7 +49,7 @@ export function makeClient(server,{env=process.env,fetcher=fetch}={}){
    if(response.ok){if(raw)return response;try{return await response.json();}catch{throw new ToolError(unsafe?'outcome_unknown':'invalid_response',unsafe?'Write response could not be read; outcome is unknown.':'Server response was not valid JSON.',unsafe?5:1,unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before another write.':'Retry this read later.');}}
    const refusal=await response.json().catch(()=>({error:'http_'+response.status}));
    const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??'http_'+response.status;
-   throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,404].includes(response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(unsafe?'Retain the journal; retry the exact supported intent after recovery.':'Inspect access and request inputs.'),refusal);
+   throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,404].includes(response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(response.status===409?'A newer version exists. Run read.mjs ID --output fresh.html, reapply your edits there and publish it; do not resume this journal.':unsafe?'Retain the journal; retry the exact supported intent after recovery.':'Inspect access and request inputs.'),refusal);
   }
  }
  return {server,root,request,grant,fetcher};
