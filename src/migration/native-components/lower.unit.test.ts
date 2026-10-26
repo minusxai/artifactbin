@@ -1,4 +1,4 @@
-import {parseFragment} from 'parse5';
+import {parseFragment,type DefaultTreeAdapterTypes} from 'parse5';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {NativeTypedAnalysis,RetainedJsxNode,NativeJson} from './analyze-contracts.ts';
@@ -225,3 +225,5 @@ test('source table recipes retain no-wrap cells and horizontal scroll container 
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));const container:any=parseFragment(result.html!).childNodes[0],inner=container.childNodes[0];assert.equal(container.tagName,'div');assert.ok(container.attrs.some((a:any)=>a.name==='data-slot'&&a.value==='table-container'));assert.ok(container.attrs.some((a:any)=>a.name==='class'&&a.value==='relative w-full overflow-x-auto'));assert.equal(inner.tagName,'table');assert.notEqual(container.attrs.find((a:any)=>a.name==='data-af-id').value,inner.attrs.find((a:any)=>a.name==='data-af-id').value);assert.match(result.html!,/<td[^>]*class="p-2 align-middle whitespace-nowrap"/);assert.doesNotMatch(result.html!,/native-table/);
  const wrong=structuredClone(source);wrong.componentRecipes![1]!.presentationWrapper='table-container';assert.equal(lowerNativeComponents(wrong).status,'blocked');
 });
+
+test('retained table headings preserve omitted and explicitly authored scope',()=>{for(const scope of [undefined,'row','col']){const node=element('TableHead',scope?{scope}:{},[text('Heading')]),result=lowerNativeComponents(input([node]));assert.equal(result.status,'complete',JSON.stringify(result.blockers));const fragment=parseFragment('<table><thead><tr>'+result.html!+'</tr></thead></table>');const find=(n:DefaultTreeAdapterTypes.Node):DefaultTreeAdapterTypes.Element|undefined=>'tagName'in n&&n.tagName==='th'?n:'childNodes'in n?n.childNodes.map(find).find(Boolean):undefined;const header=find(fragment);assert.ok(header);assert.equal(header.attrs.find(a=>a.name==='scope')?.value,scope);}});

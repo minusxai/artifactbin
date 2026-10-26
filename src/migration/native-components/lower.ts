@@ -283,7 +283,6 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
 
   if(node.tag==='Markdown')attrs['copy-controls']=String(retainedMarkdownPresentation.copyControls);
   if(node.tag==='Alert')attrs.role='alert';
-  if(node.tag==='TableHead')attrs.scope='col';
   let gridCanvas:string|undefined;
   if(node.tag==='Grid'){
    {
