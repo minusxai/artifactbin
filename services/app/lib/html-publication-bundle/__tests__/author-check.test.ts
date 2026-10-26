@@ -97,3 +97,10 @@ it('captures a bounded viewport and labels hosted shell scope without a full bod
  const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true,capture:true});
  expect(captures).toEqual([{fullPage:false,timeout:1000}]);expect(result).toMatchObject({screenshot:{scope:'reader-viewport'}});
 });
+
+it('fails smoke when visible text is effectively invisible against its background',async()=>{
+ const {summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const base={pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Deck',overflow:{viewport:1280,content:1280,fits:true}};
+ expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:3,unreadable:0,low:[]}}]).smokePassed).toBe(true);
+ expect(summarizeCheck([{...base,contrast:{checked:40,belowAA:5,unreadable:2,low:[]}}]).smokePassed).toBe(false);
+});

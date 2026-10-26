@@ -79,7 +79,8 @@ export function checkDigest(envelope,file){
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
   const task=check.error?'task error: '+clip(check.error,300):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
   const overflow=check.overflow?check.overflow.fits?'fits':`overflow ${check.overflow.content}>${check.overflow.viewport}`:'overflow unknown';
-  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${task}${check.screenshot?.path?'; screenshot '+check.screenshot.path:''}`);
+  const worst=check.contrast?.low?.[0],contrast=check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; worst ${worst.ratio}:1 "${worst.text}")`:'contrast ok':'contrast unknown';
+  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}; ${task}${check.screenshot?.path?'; screenshot '+check.screenshot.path:''}`);
  }
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  return lines.join('\n')+'\n';
