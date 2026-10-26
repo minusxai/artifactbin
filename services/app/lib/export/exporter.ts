@@ -258,7 +258,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
  try {
   const image=await (await sharedCache()).read({
    cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null),
-   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,
+   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,current:capture!=='card',
   },async id=>{
    const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){

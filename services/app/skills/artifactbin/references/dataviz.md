@@ -10,7 +10,7 @@ Name question, unit, grain, source, period, timezone and missing/partial data. R
 
 ## Bootstrap
 
-Use the exact versioned ESM URLs below, not bare `vega` imports or globals. The core import map supplies Apollo, not chart packages. The downloaded author skill's private preview serves the same modules locally. Hosted downloads pack referenced registered libraries into the HTML; external data still needs admission or an honest offline state.
+Use the exact versioned ESM URLs below, not bare `vega` imports or globals. The core import map supplies Apollo, not chart packages. Local `serve.mjs` serves the same modules (bundled in `scripts/preview-libraries.mjs`, not a folder). Hosted downloads pack referenced registered libraries into the HTML; external data still needs admission or an honest offline state.
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
