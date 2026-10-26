@@ -14,7 +14,7 @@ Edit with `read.mjs ID --output page.html`, retain `page.html.af.json`, then `pu
 
 Credential-free journals live outside the project (`--request FILE` or private store default). `--resume FILE` reuses the exact saved origin/method/body/key without rereading source. Retain partial dependency receipts. No force overwrite exists.
 
-`read.mjs list` discovers one page. `read.mjs ID` returns canonical JSON. With `--output page.html`, it writes canonical HTML and `page.html.af.json`; `--json` only formats the stdout receipt and never changes those file contents; dataset source outputs require `.json`. `export.mjs ID --format html|png|jpg --output FILE` saves portable HTML or image; image-only `--slide N` is supported, version/viewport flags are not. See offline `--help` for all flags.
+`read.mjs list` lists artifacts. `read.mjs ID` returns JSON. `--output page.html` saves canonical HTML + `page.html.af.json`, even with `--json` (receipt formatting only). Dataset outputs require `.json`. `export.mjs ID --format html|png|jpg --output FILE` saves portable HTML or image; image-only `--slide N` is supported, version/viewport flags are not. See offline `--help` for all flags.
 
 ## Create
 
@@ -31,7 +31,7 @@ The server inserts the core first and assigns stable `data-af-id`s. Initial inli
 ## Edit the same page
 
 1. `GET /api/artifacts/ID`. Require `format:"html"`; retain canonical `html`, `version` and `state`.
-2. Edit that HTML. Keep existing `data-af-id` values, including when moving elements. New page: omit `data-af-id`s; the server assigns canonical identities on save. Existing page: preserve all existing identities; only new elements may omit IDs. Script-created elements need stable identities derived from their logical data; keep them beneath a saved source container. Never assign a retired identity to another element. See [dynamic elements and comments](html-runtime.md#dynamic-elements-and-comments).
+2. Edit that HTML. Keep existing `data-af-id` values, including when moving elements. New page: omit `data-af-id`s for server assignment. Existing page: preserve existing IDs; only new elements may omit them. Script-created elements need stable identities derived from their logical data; keep them beneath a saved source container. Never assign a retired identity to another element. See [dynamic elements and comments](html-runtime.md#dynamic-elements-and-comments).
 3. `PUT /api/artifacts/ID` with `{"html":"<edited complete HTML>","expectedVersion":<observed version>,"expectedState":"<observed state>"}` and a new durable idempotency key.
 4. Save the successful canonical response for further edits. A 409 means another writer advanced the page; read the new head, reconcile and submit a newly intended write. Never silently overwrite it.
 
