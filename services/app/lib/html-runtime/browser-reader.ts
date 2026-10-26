@@ -48,6 +48,7 @@ import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPaylo
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
+import {startSourceAnnotationReadiness} from '../html-bridge/imported-observation';
 import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
@@ -110,9 +111,11 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const cursor = win.document.documentElement.style.cursor;
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
-  const layout = (report=true) => {const positions=painter.paint(annotations);if(report)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
-  const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
   const sourceObservation=config.annotationObservation==='imported-source-v1';
+  let sourceReady=!sourceObservation;
+  const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
+  const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
+  const readiness=sourceObservation?startSourceAnnotationReadiness(win,()=>{sourceReady=true;if(annotations.pins.length)layout();}):null;
   const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node);
   const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();});
   const annotationObservation=sourceObservation?observeSourceAnnotations(win,{root:win.document.body,ownsOverlay,repaint:()=>{if(annotations.pins.length)layout();}}):null;
@@ -197,6 +200,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       relay = null;
       observation.dispose();
       annotationObservation?.dispose();
+      readiness?.dispose();
       painter.dispose();
       actions.dispose();
       presence.dispose();
