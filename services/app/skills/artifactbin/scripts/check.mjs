@@ -11,6 +11,15 @@ import path from 'node:path';
 import {mkdir} from 'node:fs/promises';
 import {runTool,resolveTarget,selectedServer,makeClient,positional,enumValue,credentialRoot,ToolError,exclusive} from './toolbox-client.mjs';
 
+/** Resolve both named ESM and CommonJS default exports before attempting a browser launch. */
+export async function loadChromium(modulePath){
+ let module;
+ try{module=await import(modulePath?pathToFileURL(realpathSync(modulePath)).href:'playwright');}
+ catch{throw new ToolError('browser_dependency_missing','Local checks could not load Playwright.',1,'Install Playwright in the isolated harness and pass its entrypoint with --playwright-module.');}
+ const chromium=typeof module.chromium?.launch==='function'?module.chromium:module.default?.chromium;
+ if(typeof chromium?.launch!=='function')throw new ToolError('browser_module_invalid','Selected module does not export chromium.launch.',2,'Pass a Playwright CommonJS or ESM entrypoint.');
+ return chromium;
+}
 export function checkTarget(value){
  if(/^[A-Za-z0-9]{6,}$/.test(value))return {mode:'hosted',target:'/a/'+value};
  let url;try{url=new URL(value);}catch{throw Error('Use an artifact ID or an HTTP loopback preview URL.');}
@@ -47,7 +56,7 @@ export async function inspectPage(page,options,task){
    return {viewport:html.clientWidth,content,fits:content<=html.clientWidth+1};
   },undefined,{timeout:1000});
  }catch(error){evidence.inspectionError=String(error.message);}
- if(options.capture)try{evidence.screenshot={mime:'image/png',base64:Buffer.from(await page.locator('body').screenshot({timeout:1000})).toString('base64')};}catch(error){evidence.screenshotError=String(error.message);}
+ if(options.capture)try{evidence.screenshot={mime:'image/png',scope:options.hosted?'reader-viewport':'local-viewport',base64:Buffer.from(await page.screenshot({fullPage:false,timeout:1000})).toString('base64')};}catch(error){evidence.screenshotError=String(error.message);}
  // Do not let page-close cancellation events mutate evidence already collected.
  return {...evidence,pageErrors:[...pageErrors],consoleErrors:[...consoleErrors],failedRequests:[...failedRequests],httpErrors:[...httpErrors],telemetry:[...telemetry]};
 }
@@ -55,6 +64,7 @@ export function checkScript({target,viewports,steps='',timeoutMs=2500,capture=fa
  if(!viewports||viewports.length!==1)throw Error('Each hosted execution checks one viewport.');
  return `const page=await context.newPage();try{return await (${inspectPage.toString()})(page,${JSON.stringify({target,viewport:viewports[0],timeoutMs,hosted:true,capture})},${steps?`async(page)=>{${steps}\n}`:'null'});}finally{await page.close();}`;
 }
+/** @returns {import('../../../lib/skills/author-toolbox-contract').AuthorCheckResult} */
 export function summarizeCheck(checks){
  return {smokePassed:checks.length>0&&checks.every(check=>!check.error&&!check.inspectionError&&check.overflow?.fits===true&&check.text.length>0&&['pageErrors','consoleErrors','failedRequests','httpErrors'].every(key=>check[key]?.length===0)),checks,
   unverified:['visual appearance','task behavior','persistence','permissions'],note:'Smoke evidence only. Inspect task results separately; text and geometry cannot establish visual acceptance.'};
@@ -111,7 +121,7 @@ export async function checkCommand({values,positionals},options={}){
  const local=/^http:\/\//.test(input)&&!/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
  if(local){
   if(values.viewer||values.server)throw new ToolError('local_identity','Loopback preview has no platform viewer/server selection.',2);
-  let chromium;try{({chromium}=await import(values['playwright-module']?pathToFileURL(realpathSync(values['playwright-module'])).href:'playwright'));}catch{throw new ToolError('browser_dependency_missing','Local checks need Playwright and its installed Chromium browser.',1,'Install Playwright in the isolated harness and pass --playwright-module when needed.');}
+  const chromium=await loadChromium(values['playwright-module']);
   result=await checkLocal({target:checkTarget(input).target,viewports,steps,capture:true},chromium);
  }else{
   if(values['playwright-module'])throw new ToolError('hosted_browser','Hosted checks use server browser sessions.',2);
@@ -120,7 +130,7 @@ export async function checkCommand({values,positionals},options={}){
   result=await checkHosted({target:'/a/'+id,server,viewports,steps,capture:true,viewer:viewer==='guest'?'guest':undefined,requester:body=>client.request('/api/browser-sessions',{method:'POST',body})});
  }
  const directory=path.join(credentialRoot(options.env),'checks',randomUUID());let created=false;
- for(const check of result.checks){if(check.screenshot){if(!created){await mkdir(directory,{recursive:true,mode:0o700});created=true;}const file=path.join(directory,`${check.viewport.width}x${check.viewport.height}.png`);await exclusive(file,Buffer.from(check.screenshot.base64,'base64'));check.screenshot={path:file,mime:'image/png',visuallyReviewed:false};}}
+ for(const check of result.checks){if(check.screenshot){if(!created){await mkdir(directory,{recursive:true,mode:0o700});created=true;}const file=path.join(directory,`${check.viewport.width}x${check.viewport.height}.png`);await exclusive(file,Buffer.from(check.screenshot.base64,'base64'));check.screenshot={path:file,mime:'image/png',scope:check.screenshot.scope,visuallyReviewed:false};}}
  if(!result.smokePassed)throw new ToolError('check_failed','Smoke or task checks failed.',1,'Inspect partial diagnostics and remaining unverified acceptance.',result);
  return result;
 }

@@ -70,6 +70,11 @@ export async function resumeJournal(file,client,operation){
   try{const {atomicWrite}=await platform();await atomicWrite(file+'.receipt.json',JSON.stringify({receipt},null,2)+'\n');}catch{throw new ToolError('receipt_save_failed','Server confirmed the write but its receipt could not be saved.',1,'Resume the same journal to recover its confirmed receipt.',{journal:file,committed:true,id:receipt.id,version:receipt.version});}return {saved,receipt,journal:file};
  }catch(error){if(error.details&&!error.details.committed){try{const {atomicWrite}=await platform();await atomicWrite(file+'.receipt.json',JSON.stringify({receipt:error.details},null,2)+'\n');}catch{}}error.details={...error.details,journal:file};throw error;}
 }
+/** Preserve legacy details while exposing a stable check result on all refusals. */
+export function toolFailure(name,error){
+ const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance','task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(error.code==='check_failed'?error.details:{})}:{};
+ return {...diagnostics,ok:false,code:error.code??'operation_failed',message:error instanceof ToolError?error.message:'Operation failed; inspect the selected files and server.',recovery:error.recovery??'Correct the input or inspect the underlying operation.',...(error.details?{details:error.details}:{})};
+}
 /** @param {(parsed:any)=>Promise<import('../../../lib/skills/author-toolbox-contract').AuthorResult|any>} execute */
 export async function runTool(name,url,execute,args=process.argv.slice(2)){
  if(!process.argv[1]||realpathSync(process.argv[1])!==fileURLToPath(url))return;
@@ -84,7 +89,7 @@ export async function runTool(name,url,execute,args=process.argv.slice(2)){
   const data=JSON.stringify(envelope,null,parsed.values.json?0:2)+'\n';
   if(parsed.values.output&&!result.outputOwned)await exclusive(parsed.values.output,data);else process.stdout.write(data);
  }catch(error){
-  const envelope={ok:false,code:error.code??'operation_failed',message:error instanceof ToolError?error.message:'Operation failed; inspect the selected files and server.',recovery:error.recovery??'Correct the input or inspect the underlying operation.',...(error.details?{details:error.details}:{})};
+  const envelope=toolFailure(name,error);
   if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(envelope,null,2)+'\n');}catch{process.stderr.write('Could not save check output; existing files were retained.\n');}}
   if(parsed?.values.json)process.stdout.write(JSON.stringify(envelope)+'\n');else process.stderr.write(envelope.code+': '+envelope.message+' '+envelope.recovery+'\n');process.exitCode=error.exit??1;
  }
