@@ -20,9 +20,15 @@ export function revealHtmlAnnotation(doc:Document,pin:HtmlAnnotationPaint['pins'
  if(matches.length===1)matches[0]?.scrollIntoView?.({block:'nearest'});
 }
 /** Document coordinates match imported source paint; reported positions always stay viewport-relative. */
-export interface HtmlAnnotationPainterOptions { coordinateSpace?: 'viewport' | 'document' }
-/** Paint in an inert overlay: authored DOM/text and the viewer's native selection stay intact. */
+export interface HtmlAnnotationPainterOptions { coordinateSpace?: 'viewport' | 'document'; blockPresentation?: 'overlay' | 'source-node' }
+/** Native paint is inert; imported source blocks use reversible platform stamps without editing text or inline CSS. */
 export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotationPainterOptions = {}) {
+  const sourceNode = options.blockPresentation === 'source-node';
+  const stamp='data-af-comment-block';
+  let tokenIndex=0;const existing=new Set([...doc.querySelectorAll('['+stamp+']')].map(node=>node.getAttribute(stamp)));while(existing.has(`af-block-${tokenIndex}-base`)||existing.has(`af-block-${tokenIndex}-active`))tokenIndex++;const token=`af-block-${tokenIndex}`;
+  const stamped=new Map<Element,string|null>();
+  const restore=(node:Element,prior:string|null)=>{if(prior===null)node.removeAttribute(stamp);else if(node.getAttribute(stamp)!==prior)node.setAttribute(stamp,prior);};
+  const clearStamps=()=>{for(const [node,prior] of stamped)restore(node,prior);stamped.clear();};
   const documentSpace = options.coordinateSpace === 'document';
   const positioned = (rect: {x:number;y:number}) => ({position:documentSpace?'absolute':'fixed',left:`${rect.x+(documentSpace?(doc.defaultView?.scrollX??0):0)}px`,top:`${rect.y+(documentSpace?(doc.defaultView?.scrollY??0):0)}px`});
   const overlay = doc.createElement('div');
@@ -35,11 +41,14 @@ export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotati
   const clearHighlights=()=>{for(const name of registered)view?.CSS?.highlights?.delete(name);registered.clear();};
   return {
     ownsOverlay:(node:Node)=>node===overlay||overlay.contains(node),
+    ownsMutation:(record:MutationRecord)=>sourceNode&&record.type==='attributes'&&record.attributeName===stamp,
     paint(input: HtmlAnnotationPaint): HtmlAnnotationPosition[] {
       clearHighlights();
       overlay.replaceChildren();
+      const sourceBlocks=new Map<Element,boolean>();
+
       const blockMarks = new Map<Element, {mark: HTMLElement; active: boolean}>();
-      return input.pins.map((pin) => {
+      const positions: HtmlAnnotationPosition[] = input.pins.map((pin) => {
         const matches = htmlAnchorElements(doc,pin.anchor?.nodeId ?? pin.nodeId ?? pin.path,pin.anchor?.ancestorId);
         const node = matches.length === 1 ? matches[0]! : null;
         if (!node) return { id: pin.id, status: matches.length ? 'ambiguous' : 'missing', rect: { x: 0, y: 0, width: 0, height: 0 } };
@@ -48,6 +57,7 @@ export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotati
         if(pin.anchor?.presentation==='block'){
           const rect=box(node.getBoundingClientRect()),active=input.openId===pin.id||input.hoverId===pin.id;
           if((rect.width!==0||rect.height!==0)&&!pin.layoutOnly&&(input.mode==='on'||active)){
+            if(sourceNode){sourceBlocks.set(node,(sourceBlocks.get(node)??false)||active);}else{
             let painted=blockMarks.get(node);
             if(!painted){
               const mark=doc.createElement('div');
@@ -58,6 +68,7 @@ export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotati
             mark.style.cssText=painted.active?COMMENT_PRESENTATION.blockStyle.activeCss:COMMENT_PRESENTATION.blockStyle.baseCss;
             Object.assign(mark.style,{...positioned(rect),width:`${rect.width}px`,height:`${rect.height}px`,background:'transparent',pointerEvents:'none'});
             if(painted.active)mark.style.boxShadow=COMMENT_PRESENTATION.blockStyle.activeInset;
+            }
           }
           return {id:pin.id,status:'exact',rect};
         }
@@ -98,7 +109,11 @@ export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotati
         const rect = ranges.length ? (()=>{const boxes=ranges.map(range=>typeof range.getBoundingClientRect==='function'?range.getBoundingClientRect():node.getBoundingClientRect());const x=Math.min(...boxes.map(r=>r.x)),y=Math.min(...boxes.map(r=>r.y));return {x,y,width:Math.max(...boxes.map(r=>r.right))-x,height:Math.max(...boxes.map(r=>r.bottom))-y};})() : areaRect ?? (resolved?.range && typeof resolved.range.getBoundingClientRect === 'function' ? resolved.range.getBoundingClientRect() : node.getBoundingClientRect());
         return { id: pin.id, status: 'exact', rect: box(rect) };
       });
+      for(const [node,prior] of stamped)if(!sourceBlocks.has(node)){restore(node,prior);stamped.delete(node);}
+      for(const [node,active] of sourceBlocks){if(!stamped.has(node))stamped.set(node,node.getAttribute(stamp));const value=token+(active?'-active':'-base');if(node.getAttribute(stamp)!==value)node.setAttribute(stamp,value);}
+      if(sourceBlocks.size){const style=doc.createElement('style');style.textContent=`[${stamp}="${token}-base"]:not([data-af-comment-ranged]) { ${COMMENT_PRESENTATION.blockStyle.baseCss} } [${stamp}="${token}-active"]:not([data-af-comment-ranged]) { ${COMMENT_PRESENTATION.blockStyle.activeCss} } :root:not(.mx-taking-screenshot) [${stamp}="${token}-active"]:not([data-af-comment-ranged]) { box-shadow: ${COMMENT_PRESENTATION.blockStyle.activeInset} !important; }`;overlay.append(style);}
+      return positions;
     },
-    dispose: () => {clearHighlights();overlay.remove();},
+    dispose: () => {clearStamps();clearHighlights();overlay.replaceChildren();overlay.remove();},
   };
 }

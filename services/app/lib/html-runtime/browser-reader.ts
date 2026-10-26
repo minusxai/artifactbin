@@ -105,7 +105,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
   const sourceObservation=config.annotationObservation==='imported-source-v1';
-  const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport'});
+  const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport',blockPresentation:sourceObservation?'source-node':'overlay'});
   const commentView = createHtmlCommentViewSession(win.document);
   const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
   let pick: 'block' | 'area' | 'select' | null = null;
@@ -117,7 +117,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
   const readiness=sourceObservation?startSourceAnnotationReadiness(win,()=>{sourceReady=true;if(annotations.pins.length)layout();}):null;
   const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node);
-  const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();});
+  const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();},painter.ownsMutation);
   const annotationObservation=sourceObservation?observeSourceAnnotations(win,{root:win.document.body,ownsOverlay,repaint:()=>{if(annotations.pins.length)layout();}}):null;
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
