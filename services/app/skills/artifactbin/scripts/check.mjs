@@ -76,6 +76,26 @@ export async function inspectPage(page,options,task){
    low.sort((x,y)=>x.ratio-y.ratio);
    return {checked,belowAA:low.length,unreadable:low.filter(item=>item.ratio<2).length,low:low.slice(0,8)};
   },undefined,{timeout:1500});
+  // Each laid-out data-af-slide at this viewport: text cut off by the slide or by a clipping box inside it (what an export crops).
+  evidence.slides=await page.locator('html').evaluate(()=>{
+   const slides=[...document.querySelectorAll('[data-af-slide]')].filter(slide=>!slide.closest('[data-af-deck-chrome]')&&slide.getBoundingClientRect().width>1&&slide.getBoundingClientRect().height>1);
+   if(!slides.length)return null;
+   const clipped=[];
+   slides.forEach((slide,index)=>{
+    const seen=new Set(),walker=document.createTreeWalker(slide,NodeFilter.SHOW_TEXT);
+    for(let n=walker.nextNode();n;n=walker.nextNode()){
+     const el=n.parentElement;if(!el||seen.has(el)||n.textContent.trim().length<2||el.closest('[data-af-deck-chrome]'))continue;seen.add(el);
+     const s=getComputedStyle(el),r=el.getBoundingClientRect();if(s.visibility!=='visible'||Number(s.opacity)===0||r.width<1||r.height<1)continue;
+     for(let box=el;box;box=box===slide?null:box.parentElement){
+      const b=box.getBoundingClientRect(),style=getComputedStyle(box);
+      if(box!==slide&&style.overflowX==='visible'&&style.overflowY==='visible')continue;
+      const by=Math.max(b.top-r.top,r.bottom-b.bottom,b.left-r.left,r.right-b.right);
+      if(by>1){clipped.push({slide:index+1,text:n.textContent.trim().slice(0,48),px:Math.round(by),by:box===slide?'slide':box.tagName.toLowerCase()+(box.className&&typeof box.className==='string'?'.'+box.className.trim().split(/\s+/)[0]:'')});break;}
+     }
+    }
+   });
+   return {count:slides.length,clipped:clipped.length,items:clipped.slice(0,8)};
+  },undefined,{timeout:1500});
  }catch(error){evidence.inspectionError=String(error.message);}
  if(options.capture)try{evidence.screenshot={mime:'image/png',scope:options.hosted?'reader-viewport':'local-viewport',base64:Buffer.from(await page.screenshot({fullPage:false,timeout:1000})).toString('base64')};}catch(error){evidence.screenshotError=String(error.message);}
  // Do not let page-close cancellation events mutate evidence already collected.
