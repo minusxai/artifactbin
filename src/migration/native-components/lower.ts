@@ -40,6 +40,7 @@ export interface NativeLowerInput {
   analysis: NativeTypedAnalysis;
   authorPrograms?:readonly NativeAuthorProgramReceipt[];
   /** Emits identities for visible text; JSX indentation-only multiline text keeps its proved ID as nonvisual without inserting an element that changes CSS sibling selectors. */
+  /** Emit stable text IDs on inert af-text elements, separate from authored span selectors. */
   emitTextIdentities?: boolean;
   admittedBindings?: readonly NativeBindingTarget[];
   admittedDeclarations?: readonly {kind:string;name:string;analysisSha256:string}[];
@@ -165,11 +166,11 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
   // JSX indentation-only multiline text renders no text node. Preserve its proved reservation without inserting a CSS-visible sibling element.
   if(node.type==='text'&&input.emitTextIdentities&&/^[\t\n\r ]*$/.test(node.value)&&/\n/.test(node.value)&&!ancestors.includes('title')&&!ancestors.includes('svg')){binding(node,'nonvisual');return '';}
-  if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
+  if(node.type==='text'){if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<af-text style="display:contents" data-af-id="${escape(proof.afId)}">${escape(node.value)}</af-text>`:'';}identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
   if(node.type==='expression'){
-   if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
+   if(!node.value.static){if(admittedTarget(node,'text')){const proof=binding(node,'text');return proof?`<af-text style="display:contents" data-af-id="${escape(proof.afId)}"></af-text>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
    const value=node.value.json;
-   if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}">${text}</span>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
+   if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<af-text style="display:contents" data-af-id="${escape(proof.afId)}">${text}</af-text>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
    block('unsupported-expression-literal',node,'Array/object expression children require explicit semantic admission');return '';
   }
   if(node.type==='element'){
@@ -187,7 +188,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    const admitted=admittedTarget(node,'condition');
    if(admitted?.kind==='condition'&&node.tag==='__mx_condition'&&node.attributes.length===0&&control&&typeof control==='object'&&!Array.isArray(control)&&control.kind==='and'){
     const proof=binding(node);templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,ancestors,depth+1)).join('')}</template>`);
-    return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';
+    return proof?`<af-text style="display:contents" data-af-id="${escape(proof.afId)}"></af-text>`:'';
    }
    require('condition',node,'Preserve the complete typed conditional and keyed branch identity plan');return '';
   }
