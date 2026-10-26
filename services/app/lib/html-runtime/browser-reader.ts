@@ -110,11 +110,11 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   const cursor = win.document.documentElement.style.cursor;
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
-  const layout = () => post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions: painter.paint(annotations), viewStateError: commentView.error } });
+  const layout = (report=true) => {const positions=painter.paint(annotations);if(report)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
   const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
   const sourceObservation=config.annotationObservation==='imported-source-v1';
   const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node);
-  const observation=observeHtmlDom(win,ownsOverlay,()=>{if(!sourceObservation&&annotations.pins.length)layout();presence.paint();});
+  const observation=observeHtmlDom(win,ownsOverlay,()=>{if(annotations.pins.length)layout(!sourceObservation);presence.paint();});
   const annotationObservation=sourceObservation?observeSourceAnnotations(win,{root:win.document.body,ownsOverlay,repaint:()=>{if(annotations.pins.length)layout();}}):null;
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
@@ -136,6 +136,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     if (pick === 'area' || !win.getSelection()?.toString().trim()) return;
     post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
   };
+  const resize = () => layout();
   const scroll = () => { post({ kind: 'scroll', scrollX: win.scrollX, scrollY: win.scrollY }); selection(); if (annotations.pins.length) layout(); };
   const down = (event: PointerEvent) => {
     if (!pick || !canAnnotate) return;
@@ -164,7 +165,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   win.document.addEventListener('click', click);
   win.document.addEventListener('selectionchange', selection);
   win.addEventListener('scroll', scroll, { passive: true });
-  win.addEventListener('resize', layout);
+  win.addEventListener('resize', resize);
   post({ kind: 'ready', nonce });
   return {
     receive(payload) {
@@ -208,7 +209,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       win.document.removeEventListener('click', click);
       win.document.removeEventListener('selectionchange', selection);
       win.removeEventListener('scroll', scroll);
-      win.removeEventListener('resize', layout);
+      win.removeEventListener('resize', resize);
     },
   };
 }

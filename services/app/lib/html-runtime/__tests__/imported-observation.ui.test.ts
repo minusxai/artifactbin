@@ -11,7 +11,7 @@ for(const imported of [true,false])it(`keeps ${imported?'imported source':'nativ
  const events:any[]=[];const {startFrameBridge}=await import('../browser-client');const bridge=startFrameBridge({win:window,post:event=>events.push(event)});bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'thread',path:'heading',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'heading',quote:'',presentation:'block'}}],openId:null,hoverId:null}});await flush();
  const position=()=>events.filter(item=>item.event?.type==='mx:annotation-layout').at(-1).event.positions[0].rect.y;
- expect(position()).toBe(208);panel.hidden=true;await flush();expect(position()).toBe(imported?208:0);
+ expect(position()).toBe(208);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(1);panel.hidden=true;await flush();expect(position()).toBe(imported?208:0);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(0);
  window.dispatchEvent(new Event('scroll'));await flush();expect(position()).toBe(0);
  panel.hidden=false;window.dispatchEvent(new Event('resize'));await flush();expect(position()).toBe(208);
  y=333;document.dispatchEvent(new Event('input'));await flush();if(imported)expect(position()).toBe(333);

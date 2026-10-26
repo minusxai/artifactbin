@@ -43,7 +43,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
         // Identity alone locates it even when its words changed or repeat.
         if(pin.anchor?.presentation==='block'){
           const rect=box(node.getBoundingClientRect()),active=input.openId===pin.id||input.hoverId===pin.id;
-          if(!pin.layoutOnly&&(input.mode==='on'||active)){
+          if((rect.width!==0||rect.height!==0)&&!pin.layoutOnly&&(input.mode==='on'||active)){
             let painted=blockMarks.get(node);
             if(!painted){
               const mark=doc.createElement('div');
