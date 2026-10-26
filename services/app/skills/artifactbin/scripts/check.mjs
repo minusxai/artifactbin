@@ -76,16 +76,18 @@ export async function inspectPage(page,options,task){
    low.sort((x,y)=>x.ratio-y.ratio);
    return {checked,belowAA:low.length,unreadable:low.filter(item=>item.ratio<2).length,low:low.slice(0,8)};
   },undefined,{timeout:1500});
-  // Each laid-out data-af-slide at this viewport: text cut off by the slide or by a clipping box inside it (what an export crops).
+  // Each laid-out data-af-slide at this viewport: text cut off by the slide or a clipping box inside it, and text drawn over other text.
   evidence.slides=await page.locator('html').evaluate(()=>{
    const slides=[...document.querySelectorAll('[data-af-slide]')].filter(slide=>!slide.closest('[data-af-deck-chrome]')&&slide.getBoundingClientRect().width>1&&slide.getBoundingClientRect().height>1);
    if(!slides.length)return null;
-   const clipped=[];
+   const clipped=[],overlaps=[];
    slides.forEach((slide,index)=>{
-    const seen=new Set(),walker=document.createTreeWalker(slide,NodeFilter.SHOW_TEXT);
+    const seen=new Set(),texts=[],walker=document.createTreeWalker(slide,NodeFilter.SHOW_TEXT);
     for(let n=walker.nextNode();n;n=walker.nextNode()){
      const el=n.parentElement;if(!el||seen.has(el)||n.textContent.trim().length<2||el.closest('[data-af-deck-chrome]'))continue;seen.add(el);
      const s=getComputedStyle(el),r=el.getBoundingClientRect();if(s.visibility!=='visible'||Number(s.opacity)===0||r.width<1||r.height<1)continue;
+     let hidden=!!el.closest('svg');for(let e=el;e&&!hidden&&e!==slide.parentElement;e=e.parentElement){const es=getComputedStyle(e),er=e.getBoundingClientRect();hidden=es.clip!=='auto'||es.clipPath!=='none'||er.width<4||er.height<4;}
+     if(!hidden)texts.push({el,r,text:n.textContent.trim().slice(0,48)});
      for(let box=el;box;box=box===slide?null:box.parentElement){
       const b=box.getBoundingClientRect(),style=getComputedStyle(box);
       if(box!==slide&&style.overflowX==='visible'&&style.overflowY==='visible')continue;
@@ -93,8 +95,14 @@ export async function inspectPage(page,options,task){
       if(by>1){clipped.push({slide:index+1,text:n.textContent.trim().slice(0,48),px:Math.round(by),by:box===slide?'slide':box.tagName.toLowerCase()+(box.className&&typeof box.className==='string'?'.'+box.className.trim().split(/\s+/)[0]:'')});break;}
      }
     }
+    // HTML text drawn over other HTML text (not nested), across at least 30% of the smaller box each way; chart libraries place SVG labels.
+    for(let i=0;i<texts.length;i++)for(let j=i+1;j<texts.length;j++){
+     const a=texts[i],b=texts[j];if(a.el.contains(b.el)||b.el.contains(a.el))continue;
+     const w=Math.min(a.r.right,b.r.right)-Math.max(a.r.left,b.r.left),h=Math.min(a.r.bottom,b.r.bottom)-Math.max(a.r.top,b.r.top);
+     if(w>0.3*Math.min(a.r.width,b.r.width)&&h>0.3*Math.min(a.r.height,b.r.height))overlaps.push({slide:index+1,text:a.text,over:b.text});
+    }
    });
-   return {count:slides.length,clipped:clipped.length,items:clipped.slice(0,8)};
+   return {count:slides.length,clipped:clipped.length,items:clipped.slice(0,8),overlapping:overlaps.length,overlaps:overlaps.slice(0,8)};
   },undefined,{timeout:1500});
  }catch(error){evidence.inspectionError=String(error.message);}
  if(options.capture)try{evidence.screenshot={mime:'image/png',scope:options.hosted?'reader-viewport':'local-viewport',base64:Buffer.from(await page.screenshot({fullPage:false,timeout:1000})).toString('base64')};}catch(error){evidence.screenshotError=String(error.message);}

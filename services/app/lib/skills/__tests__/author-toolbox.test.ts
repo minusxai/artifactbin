@@ -125,7 +125,7 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(failed).toContain('check check_failed: smoke failed');
  expect(failed).toContain('pageErrors 1: boom; overflow 512>390; contrast 2 below AA (1 under 2:1; worst 1.01:1 "Stop the loss"); task error: Expected 7 labels');
  expect(failed).toContain('  session closed');
- const deck=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:1200,height:630},...clean,overflow:{viewport:1200,content:1200,fits:true},contrast:{checked:30,belowAA:0,unreadable:0,low:[]},slides:{count:8,clipped:2,items:[{slide:8,text:'7.5k',px:53,by:'div.milestones'}]}}]},'qa.json');
- expect(deck).toContain('contrast ok; slides 8, 2 clipped (slide 8 "7.5k" by div.milestones 53px); no task');
+ const deck=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:1200,height:630},...clean,overflow:{viewport:1200,content:1200,fits:true},contrast:{checked:30,belowAA:0,unreadable:0,low:[]},slides:{count:8,clipped:2,items:[{slide:8,text:'7.5k',px:53,by:'div.milestones'}],overlapping:1,overlaps:[{slide:2,text:'02',over:'Header label'}]}}]},'qa.json');
+ expect(deck).toContain('contrast ok; slides 8, 2 clipped (slide 8 "7.5k" by div.milestones 53px), 1 overlapping (slide 2 "02" over "Header label"); no task');
  expect(passed).not.toContain('slides');
 });
