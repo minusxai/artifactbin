@@ -47,7 +47,7 @@ export function onBackendChange(listener: (names: readonly string[],reason?:Quer
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
-import {observeHtmlDom} from '../html-bridge/observe';
+import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
 import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
@@ -112,7 +112,10 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   let drag: { x: number; y: number; target: Node } | null = null;
   const layout = () => post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions: painter.paint(annotations), viewStateError: commentView.error } });
   const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });
-  const observation=observeHtmlDom(win,node=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node),()=>{if(annotations.pins.length)layout();presence.paint();});
+  const sourceObservation=config.annotationObservation==='imported-source-v1';
+  const ownsOverlay=(node:Node)=>painter.ownsOverlay(node)||presence.ownsOverlay(node)||actions.ownsOverlay(node);
+  const observation=observeHtmlDom(win,ownsOverlay,()=>{if(!sourceObservation&&annotations.pins.length)layout();presence.paint();});
+  const annotationObservation=sourceObservation?observeSourceAnnotations(win,{root:win.document.body,ownsOverlay,repaint:()=>{if(annotations.pins.length)layout();}}):null;
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
@@ -192,6 +195,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
       uploadSession.dispose();if(uploads===uploadSession){uploads=undefined;uploadContext.update({state:'unavailable',scope:nonce+':closed'});}
       relay = null;
       observation.dispose();
+      annotationObservation?.dispose();
       painter.dispose();
       actions.dispose();
       presence.dispose();

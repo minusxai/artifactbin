@@ -1,6 +1,8 @@
 import type { PortableDocument } from './portable-contract';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 export interface HtmlRuntimeConfig {
+  /** Server-verified imported source; preserve its annotation invalidation lifecycle. */
+  annotationObservation?: 'imported-source-v1';
   pageId: string;
   revision: string;
   /** Source-owned identities, supplied by assembly before author code runs. */
