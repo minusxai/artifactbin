@@ -38,3 +38,7 @@ export interface NativeReaderTemplateOutput {
   css: string;
   authorJs: string;
 }
+
+/** Native panels preserve children and change hidden; retained hydration rebuilds
+ * children. Both must refresh the source-bound outline after visibility settles. */
+export interface NativeContentsMutationOptions {childList:true;subtree:true;attributes:true;attributeFilter:readonly ['hidden']}

@@ -179,6 +179,7 @@ test("emitted plain DOM behavior scrolls only the exact native heading, marks up
   const events = new Map<string, () => void>();
   let click: (event: unknown) => void = () => {};
   let mutation = () => {};
+  let observedOptions:any={};
   const timers: (() => void)[] = [];
   const root = {
     contains: (row: unknown) => rows.includes(row as (typeof rows)[number]),
@@ -200,7 +201,7 @@ test("emitted plain DOM behavior scrolls only the exact native heading, marks up
       constructor(listener: () => void) {
         mutation = listener;
       }
-      observe() {}
+      observe(_root:unknown,options:unknown) {observedOptions=options;}
     },
   };
   runInNewContext(NATIVE_CONTENTS_AUTHOR_JS, {
@@ -215,6 +216,10 @@ test("emitted plain DOM behavior scrolls only the exact native heading, marks up
     JSON.stringify(scrolled),
     JSON.stringify([{ i: 2, options: { behavior: "smooth", block: "start" } }]),
   );
+  tops=[100,0,0];
+  if(observedOptions.attributes&&observedOptions.attributeFilter?.includes('hidden'))mutation();
+  timers.splice(0).forEach(run=>run());
+  assert.deepEqual(rows.map(row=>row.getAttribute('aria-current')),[null,null,'true'],'native panel hidden changes must refresh source-bound heading geometry');
   tops = [-10, 299, 900];
   events.get("scroll")!();
   assert.deepEqual(
