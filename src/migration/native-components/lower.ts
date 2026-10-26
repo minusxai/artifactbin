@@ -5,6 +5,8 @@ import {prepareNativeIdentityDecoration} from './adapters/identity-decoration.ts
 import {prepareNativeSlideDeck} from './adapters/slide-deck.ts';
 import {prepareNativeDocumentMarkup,SVG_TAGS,SVG_ATTRIBUTES,HEAD_METADATA_TAGS} from './adapters/document-markup.ts';
 import {nativeMarkdownSource} from './markdown.ts';
+import type {NativeMarkdownPresentation} from './markdown-contracts.ts';
+const retainedMarkdownPresentation:NativeMarkdownPresentation={copyControls:false};
 import {nativeDigest} from './selection.ts';
 import {nativeComponentHelperIdentity} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
@@ -279,6 +281,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(proof)attrs['data-af-id']=proof.afId;
   if(recipe){attrs.class=recipe.className;Object.assign(attrs,recipe.attributes);}else if(rule?.generatedClass)attrs.class=rule.generatedClass;
 
+  if(node.tag==='Markdown')attrs['copy-controls']=String(retainedMarkdownPresentation.copyControls);
   if(node.tag==='Alert')attrs.role='alert';
   if(node.tag==='TableHead')attrs.scope='col';
   let gridCanvas:string|undefined;
