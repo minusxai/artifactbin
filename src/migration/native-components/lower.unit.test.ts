@@ -208,3 +208,12 @@ test('significant inline spaces and authored multiline text remain exact identit
  source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/span>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,3);assert.match(result.html!,/> \r <\/span>/);
 });
+
+test('exact retained Alert and Badge recipes preserve source DOM and merged styles without generic semantic defaults',()=>{
+ const title=element('AlertTitle',{},[text('Note')]),description=element('AlertDescription',{},[text('Details')]),badge=element('Badge',{variant:'secondary'},[text('Status')]),alert=element('Alert',{'className':'mt-3'},[title,description]);
+ const source=input([alert,badge]);source.authoredStyleSha256=proof;
+ source.componentRecipes=[{sourceNode:alert.graphKey,tag:'Alert',className:'relative grid px-4 py-3 text-sm mt-3',attributes:{'data-slot':'alert'}},{sourceNode:title.graphKey,tag:'AlertTitle',className:'col-start-2 font-medium',attributes:{'data-slot':'alert-title'}},{sourceNode:description.graphKey,tag:'AlertDescription',className:'col-start-2 grid text-sm',attributes:{'data-slot':'alert-description'}},{sourceNode:badge.graphKey,tag:'Badge',className:'inline-flex rounded-full bg-secondary text-xs',attributes:{'data-slot':'badge'}}];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));assert.match(result.html!,/<div[^>]*data-slot="alert"[^>]*role="alert"/);assert.match(result.html!,/<div[^>]*data-slot="alert-title"/);assert.match(result.html!,/<span[^>]*data-slot="badge"/);assert.match(result.html!,/class="inline-flex rounded-full bg-secondary text-xs"/);assert.doesNotMatch(result.html!,/native-alert|native-badge|<aside|<h3/);
+ const wrong=structuredClone(source);wrong.componentRecipes![0]!.tag='Badge';assert.equal(lowerNativeComponents(wrong).status,'blocked');
+ const unbound=structuredClone(source);delete unbound.authoredStyleSha256;assert.equal(lowerNativeComponents(unbound).status,'blocked');
+});

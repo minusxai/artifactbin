@@ -7,7 +7,7 @@ const [{graphNodes,graphSource},{splitHelmet},{documentStyleSheets,DOCUMENT_ROOT
  load('document/document-graph.ts'),load('document/helmet.ts'),load('page-styles/document-styles.ts'),load('page-styles/document-fonts.ts'),load('data/story/story-system-sheets.ts'),load('data/story/story-themes.ts'),load('story-surface/index.ts'),load('story-runtime/contract.ts'),load('story-ui/interpreter-primitives.ts'),load('compiled-page/static-solid/attrs.ts'),load('dataflow/ref-data.ts')
 ]);
 const [{RECIPES},{cn},{refName}]=await Promise.all([load('islands/kit/recipes/basic.ts'),load('islands/kit/recipes/cn.ts'),load('dataflow/dataflow.ts')]);
-const recipeSlots:Record<string,string>={Button:'button',Card:'card',CardHeader:'card-header',CardTitle:'card-title',CardDescription:'card-description',CardContent:'card-content',CardFooter:'card-footer',CardAction:'card-action'};
+const recipeSlots:Record<string,string>={Button:'button',Card:'card',CardHeader:'card-header',CardTitle:'card-title',CardDescription:'card-description',CardContent:'card-content',CardFooter:'card-footer',CardAction:'card-action',Alert:'alert',AlertTitle:'alert-title',AlertDescription:'alert-description',Badge:'badge'};
 const componentRecipes:{sourceNode:string;tag:string;className:string;actionWrapper?:'mutation-hint';attributes:Record<string,string>}[]=[];
 const nodes=graphNodes(request.document),{content}=splitHelmet(nodes),mode=resolveStoryMode(request.theme,request.colorMode);
 const htmlAttributes:Record<string,string>={class:mode,...(request.theme?{'data-theme':request.theme}:{})},storyAttributes:Record<string,string>={id:STORY_ROOT_ID,'data-mx-inline-story':'',[STORY_ROOT_ATTR]:'',...htmlAttributes};

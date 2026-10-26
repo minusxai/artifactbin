@@ -254,7 +254,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(rule?.parent&&!rule.parent.some(parent=>ancestors.includes(parent)))block('compound-parent-required',node,'Native compound part requires its owning component');
   const recipeEntries=input.componentRecipes?.filter(entry=>entry.sourceNode===node.graphKey)??[];
   const recipe=recipeEntries[0];
-  const recipeTag={Button:'button',Card:'div',CardHeader:'div',CardTitle:'div',CardDescription:'div',CardContent:'div',CardFooter:'div',CardAction:'div'} as const;
+  const recipeTag={Button:'button',Card:'div',CardHeader:'div',CardTitle:'div',CardDescription:'div',CardContent:'div',CardFooter:'div',CardAction:'div',Alert:'div',AlertTitle:'div',AlertDescription:'div',Badge:'span'} as const;
   if(recipe&&(recipeEntries.length!==1||recipe.tag!==node.tag||!recipeTag[recipe.tag]||!digest(input.authoredStyleSha256)||typeof recipe.className!=='string'||recipe.actionWrapper!==undefined&&(recipe.tag!=='Button'||recipe.actionWrapper!=='mutation-hint')||Object.keys(recipe.attributes).some(name=>!/^data-(slot|variant|size)$/.test(name)&&!(name==='type'&&recipe.attributes.type==='button'))))block('component-recipe-proof',node,'Exact source component recipe and stylesheet closure required');
   const proof=binding(node),tag=recipe?recipeTag[recipe.tag]:(rule?.htmlTag??node.tag);
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
