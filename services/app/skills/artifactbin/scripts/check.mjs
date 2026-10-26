@@ -74,7 +74,7 @@ export async function inspectPage(page,options,task){
     if(ratio<need)low.push({text:n.textContent.trim().slice(0,48),ratio,need,color:s.color,fontSize:Math.round(size)});
    }
    low.sort((x,y)=>x.ratio-y.ratio);
-   return {checked,belowAA:low.length,unreadable:low.filter(item=>item.ratio<2).length,low:low.slice(0,8)};
+   return {checked,belowAA:low.length,unreadable:low.filter(item=>item.ratio<2).length,low:low.slice(0,100)};
   },undefined,{timeout:1500});
   // Each laid-out data-af-slide at this viewport: text cut off by the slide or a clipping box inside it, and text drawn over other text.
   evidence.slides=await page.locator('html').evaluate(()=>{
@@ -102,7 +102,7 @@ export async function inspectPage(page,options,task){
      if(w>0.3*Math.min(a.r.width,b.r.width)&&h>0.3*Math.min(a.r.height,b.r.height))overlaps.push({slide:index+1,text:a.text,over:b.text});
     }
    });
-   return {count:slides.length,clipped:clipped.length,items:clipped.slice(0,8),overlapping:overlaps.length,overlaps:overlaps.slice(0,8)};
+   return {count:slides.length,clipped:clipped.length,items:clipped.slice(0,100),overlapping:overlaps.length,overlaps:overlaps.slice(0,100)};
   },undefined,{timeout:1500});
  }catch(error){evidence.inspectionError=String(error.message);}
  if(options.capture)try{evidence.screenshot={mime:'image/png',scope:options.hosted?'reader-viewport':'local-viewport',base64:Buffer.from(await page.screenshot({fullPage:false,timeout:1000})).toString('base64')};}catch(error){evidence.screenshotError=String(error.message);}

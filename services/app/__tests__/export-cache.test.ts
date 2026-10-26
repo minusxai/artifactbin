@@ -40,6 +40,16 @@ describe('shared export refresh leases',()=>{
   expect((await cache.read(changed,fail)).id).toBe(old.id);await cache.drain();
   expect((await cache.read(changed,fail)).id).toBe(old.id);expect(calls).toBe(1);
  });
+ it('an explicit export never returns the previous revision after a publish',async()=>{
+  const db=await getDb(),cache=createExportCache(db,options);
+  const old=await cache.read({...cacheRequest,current:true},async()=>image);
+  const changed={...cacheRequest,revision:'r2',current:true};
+  const fresh=await cache.read(changed,async()=>({...image,object_key:'exports/objects/r2'}));
+  expect(fresh.id).not.toBe(old.id);expect(fresh.object_key).toBe('exports/objects/r2');
+  const failing={...cacheRequest,revision:'r3',current:true};
+  await expect(cache.read(failing,async()=>{throw new Error('render timed out');})).rejects.toThrow();
+  await expect(cache.read(failing,async()=>image)).rejects.toThrow('Export refresh did not complete');
+ });
  it('fences a slow worker after lease recovery so it cannot overwrite the winner',async()=>{
   const db=await getDb(),a=createExportCache(db,options),b=createExportCache(db,options);
   const release=gate(),entered=gate();

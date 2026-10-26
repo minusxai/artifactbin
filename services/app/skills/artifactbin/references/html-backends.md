@@ -10,11 +10,11 @@ Shared app state belongs in a backend file, not top-level page state. A backend 
 <link rel="af-backend" data-af-name="garden" href="./garden.ts">
 ```
 
-Publish the HTML with `backendSources:{"garden":"<complete garden.ts source>"}`. The namespace name must match exactly. The filename is an authoring reference; browsers never fetch or execute this backend file. Older page versions retain their backend bindings.
+Publish the HTML with `backendSources:{"garden":"<complete garden.ts source>"}`. The namespace name must match exactly. The filename is an authoring reference; browsers never fetch or execute this backend file. Publish keeps that `href` in your source and sends the file each time; a page read with `read.mjs` has no `href` and keeps its published backend until you add `href="./NAME.ts"` beside that file. Older page versions retain their backend bindings.
 
 ## Resolver contract
 
-Export GraphQL `typeDefs` and a default object of root field resolvers. Each resolver receives `(args, principal, caps)`:
+Export GraphQL `typeDefs` and a default object of root field resolvers. Write type names in `typeDefs` without the namespace; the platform adds it, so `input BudgetInput` is `budget__BudgetInput` in page queries. Each resolver receives `(args, principal, caps)`:
 
 ```ts
 export const typeDefs=`

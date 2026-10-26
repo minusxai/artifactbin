@@ -5,6 +5,15 @@ import {ToolError,hash,platform,exclusive,jsonFile,optionalFile,serverOrigin} fr
 const marker=/<!-- af-authoring:([A-Za-z0-9_-]+) -->/g;
 export const UNPAIRED='New page: rerun with --create. Existing page: run read.mjs ID --output fresh.html, apply your edits to that file and publish it. Never copy or hand-edit .af.json companions.';
 export function sourceIdentity(source){const all=[...source.matchAll(marker)];if(all.length>1)throw new ToolError('ambiguous_identity','Source has multiple authoring identities.',2);if(!all.length)return null;try{return JSON.parse(Buffer.from(all[0][1],'base64url').toString());}catch{throw new ToolError('invalid_identity','Source identity is malformed.',2);}}
+/** Canonical HTML drops backend hrefs; put the author's local path back so later backend edits are published. */
+export function restoreBackendHrefs(source,links){
+ const hrefs=new Map((links??[]).filter(link=>link.name&&link.href).map(link=>[link.name,link.href]));if(!hrefs.size)return source;
+ return source.replace(/<link\b[^>]*>/gi,tag=>{
+  if(!/\brel\s*=\s*["'][^"']*\baf-backend\b/i.test(tag)||/\shref\s*=/i.test(tag))return tag;
+  const name=tag.match(/\sdata-af-name\s*=\s*["']([^"']+)["']/i)?.[1],href=name&&hrefs.get(name);
+  return href?tag.replace(/^<link\b/i,'<link href="'+href.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"'):tag;
+ });
+}
 export function stampSource(source,identity){return source.replace(marker,'')+'\n<!-- af-authoring:'+Buffer.from(JSON.stringify(identity)).toString('base64url')+' -->\n';}
 /** @param {import('../../../lib/skills/author-toolbox-contract').AuthorBaseline} baseline */
 export function validateBaseline(baseline,file,source,server){
@@ -14,12 +23,12 @@ export function validateBaseline(baseline,file,source,server){
  return baseline;
 }
 /** Recoverable pair: interrupted writes leave no valid baseline (pair IDs differ). `replace` is only for publish's own unchanged input; never overwrite an author edit. */
-export async function saveAuthoringPair({record,server,output,root,entryPath,receipts,localReferences=false,historical=false,replace=false}){
+export async function saveAuthoringPair({record,server,output,root,entryPath,receipts,localReferences=false,historical=false,replace=false,backendLinks=[]}){
  if(typeof record.html!=='string')throw new ToolError('not_html','This record is not editable HTML.',2);
  const shared=await platform(),pair=randomUUID();root=path.resolve(root??path.dirname(output));entryPath=entryPath??path.relative(root,output).split(path.sep).join('/');
  const dependencies=receipts??record.dependencyReceipts??[];
  let source=localReferences?shared.authoringHtml(record.html,{server,pageId:record.id,entryPath,receipts:dependencies}):record.html;
- source=stampSource(source,{server,id:record.id,pair});
+ source=stampSource(restoreBackendHrefs(source,backendLinks),{server,id:record.id,pair});
  const baseline={kind:'author-baseline',schema:1,server,id:record.id,version:record.version,state:record.state,format:'html',sourceFile:path.basename(output),pair,historical,root,entryPath,dependencyReceipts:dependencies,retainedBackends:shared.previewBackendLinks(source)};
  const companion=output+'.af.json';
  if(replace){await shared.atomicWrite(output,source);await shared.atomicWrite(companion,JSON.stringify(baseline,null,2)+'\n');return {source:path.resolve(output),baseline:path.resolve(companion),id:record.id,version:record.version};}

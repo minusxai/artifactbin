@@ -14,7 +14,7 @@ export async function finishPublication({saved,receipt,journal}){
  try{
  if(typeof receipt.html==='string'){
   if(!saved.source)throw new ToolError('source_snapshot_missing','Publication journal has no source-output plan.',1);
-  pair=await saveAuthoringPair({record:receipt,server:saved.server,output:inPlace?saved.source.file:saved.source.output,root:saved.source.root,receipts:receipt.dependencyReceipts??[],localReferences:true,replace:inPlace});
+  pair=await saveAuthoringPair({record:receipt,server:saved.server,output:inPlace?saved.source.file:saved.source.output,root:saved.source.root,receipts:receipt.dependencyReceipts??[],localReferences:true,replace:inPlace,backendLinks:saved.body.html===undefined?[]:(await platform()).previewBackendLinks(saved.body.html)});
  }else{
   const output=inPlace?saved.source.file:saved.source.output,body=saved.body;
   let bytes;if(body.dataset!==undefined)bytes=typeof body.dataset==='string'?body.dataset:JSON.stringify(body.dataset,null,2)+'\n';else bytes=Buffer.from(body.file.base64,'base64');
