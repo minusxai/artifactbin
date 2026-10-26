@@ -91,7 +91,7 @@
   },
   {
    "name": "red-ink",
-   "light": "#C8321F",
+   "light": "#B42D1C",
    "dark": "#FF6A55",
    "usage": "Red as text on paper: one word in a headline, a link, a delta.",
    "group": "Brand"

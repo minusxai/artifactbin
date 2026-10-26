@@ -25,7 +25,7 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 | `--ds-on-ink` | #EEEADE | #20201D |
 | `--ds-red` | #EC402B | #EC402B |
 | `--ds-on-red` | #20201D | #20201D |
-| `--ds-red-ink` | #C8321F | #FF6A55 |
+| `--ds-red-ink` | #B42D1C | #FF6A55 |
 | `--ds-red-soft` | #F9D5CF | #4A1D17 |
 | `--ds-positive` | #2A9D5C | #5EC98A |
 | `--ds-positive-soft` | #D7EFE0 | #143524 |

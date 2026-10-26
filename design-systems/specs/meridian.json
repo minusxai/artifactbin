@@ -73,8 +73,8 @@
   },
   {
    "name": "ink-faint",
-   "light": "#8e8f98",
-   "dark": "#6b6f7a",
+   "light": "#696a73",
+   "dark": "#848894",
    "usage": "Tertiary text: timestamps, helper text, disabled labels, the drawing line.",
    "group": "Ink"
   },
