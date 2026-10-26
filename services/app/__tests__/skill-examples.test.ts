@@ -3,7 +3,7 @@ import {describe,expect,it,vi} from 'vitest';
 import {skillTree} from '@/lib/skills';
 import {skillPackageFiles} from '@/lib/skills/package';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -82,6 +82,8 @@ describe('installed native author examples',()=>{
    }};
    const source=path.join(project,'index.html');await writeFile(source,'<link rel="stylesheet" href="./theme.css"><h1>One</h1>');await writeFile(path.join(project,'theme.css'),'body{color:red}');
    const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.version).toBe(1);
+   // An unchanged input becomes the canonical pair in place; no sibling copies.
+   expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first.baseline).toBe(first.source+'.af.json');
    const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
    const anchor=path.join(dir,'anchor.json'),bodyFile=path.join(dir,'comment.txt');await writeFile(anchor,JSON.stringify({kind:'html-node',v:1,revision:'1',nodeId,quote:'One'}));await writeFile(bodyFile,'Review this heading');
@@ -96,10 +98,19 @@ describe('installed native author examples',()=>{
    await expect(publishCommand({values:{server,request:journal},positionals:[first.source]},options)).rejects.toMatchObject({code:'outcome_unknown'});
    await writeFile(first.source,canonical.replace('>One<','>Unsaved later edit<'));
    const changed=await publishCommand({values:{server,resume:journal},positionals:[]},options);expect(changed.id).toBe(first.id);expect(changed.version).toBe(2);
+   expect(changed.updatedInPlace).toBeUndefined();expect(changed.source).not.toBe(first.source);expect(changed.note).toContain('input changed');
    expect(await readFile(changed.source,'utf8')).toContain('>Two<');expect(await readFile(first.source,'utf8')).toContain('Unsaved later edit');
    expect(JSON.parse(await readFile(changed.baseline,'utf8')).dependencyReceipts[0]).toMatchObject({id:baseline.dependencyReceipts[0].id,revision:'2'});
    await expect(publishCommand({values:{server},positionals:[first.source]},options)).rejects.toMatchObject({exit:4});
    const downloaded=await readCommand({values:{server,output:path.join(project,'read.html')},positionals:[first.id]},options);expect(JSON.parse(await readFile(downloaded.baseline,'utf8')).dependencyReceipts).toHaveLength(1);
+   // Repeated edit → publish cycles keep one file and advance its companion.
+   const pairSource=await realpath(downloaded.source);
+   for(const [text,version] of [['Three',3],['Four',4]] as const){
+    await writeFile(downloaded.source,(await readFile(downloaded.source,'utf8')).replace(/>(Two|Three)</,`>${text}<`));
+    const next=await publishCommand({values:{server},positionals:[downloaded.source]},options);
+    expect(next).toMatchObject({version,updatedInPlace:true,source:pairSource,baseline:pairSource+'.af.json'});
+    expect(JSON.parse(await readFile(downloaded.baseline,'utf8')).version).toBe(version);
+   }
    await (await import('node:fs/promises')).unlink(downloaded.baseline);
    await expect(publishCommand({values:{server},positionals:[downloaded.source]},options)).rejects.toMatchObject({code:'baseline_missing'});
   }finally{await rm(dir,{recursive:true,force:true});}
