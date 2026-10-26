@@ -125,3 +125,44 @@ it('shares a block outline by node while preserving thread positions and mixed t
  painter.paint({...input,pins:[pins[1]!]});expect(marks()).toHaveLength(1);expect(marks()[0]?.style.outline).toBe('1px solid rgba(245, 158, 11, .15)');
  document.querySelector('[data-af-id="a"]')!.remove();expect(painter.paint({...input,pins:[pins[0]!]})[0]?.status).toBe('missing');expect(marks()).toHaveLength(0);painter.dispose();
 });
+
+it('paints imported outlines in document coordinates through scroll and reflow without changing viewport reports or authored DOM',()=>{
+ document.body.innerHTML='<p data-af-id="p">source context</p>';const node=document.querySelector('p')!,original=node.outerHTML;
+ const rect=vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(408,248,672,152.953125));
+ vi.spyOn(window,'scrollX','get').mockReturnValue(0);const scroll=vi.spyOn(window,'scrollY','get').mockReturnValue(0);
+ const painter=createHtmlAnnotationPainter(document,{coordinateSpace:'document'}),input={pins:[{id:'one',path:'p',anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'context',presentation:'block' as const}}],mode:'on' as const,openId:null,hoverId:null};
+ const mark=()=>document.querySelector('[data-af="annotation-overlay"]>div') as HTMLElement;
+ expect(painter.paint(input)[0]?.rect.y).toBe(248);expect((mark().parentElement as HTMLElement).style.position).toBe('absolute');expect(mark().style.position).toBe('absolute');expect(mark().style.top).toBe('248px');
+ scroll.mockReturnValue(100);rect.mockReturnValue(new DOMRect(408,148,672,152.953125));expect(painter.paint(input)[0]?.rect.y).toBe(148);expect(mark().style.top).toBe('248px');
+ rect.mockReturnValue(new DOMRect(20,160,350,200));expect(painter.paint(input)[0]?.rect).toEqual({x:20,y:160,width:350,height:200});expect(mark().style.top).toBe('260px');expect(mark().style.width).toBe('350px');
+ expect(node.outerHTML).toBe(original);painter.paint({...input,mode:'off'});expect(document.querySelector('[data-af="annotation-overlay"]')!.children).toHaveLength(0);painter.dispose();expect(document.querySelector('[data-af="annotation-overlay"]')).toBeNull();
+});
+it('keeps ordinary native annotation overlays viewport-relative while scrolled',()=>{
+ document.body.innerHTML='<p data-af-id="p">context</p>';vi.spyOn(document.querySelector('p')!,'getBoundingClientRect').mockReturnValue(new DOMRect(10,20,80,40));vi.spyOn(window,'scrollY','get').mockReturnValue(100);
+ const painter=createHtmlAnnotationPainter(document);painter.paint({pins:[{id:'one',path:'p',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'p',quote:'',presentation:'block'}}],mode:'on',openId:null,hoverId:null});const mark=document.querySelector('[data-af="annotation-overlay"]>div') as HTMLElement;expect(mark.style.position).toBe('fixed');expect(mark.style.top).toBe('20px');expect((mark.parentElement as HTMLElement).style.position).toBe('fixed');painter.dispose();
+});
+
+it('paints imported block outlines on source nodes with reversible reserved stamps and untouched authored inline priorities',()=>{
+ document.body.innerHTML='<p data-af-id="p" data-af-comment-block="authored" style="outline:2px dotted red!important;outline-offset:7px!important;box-shadow:1px 2px blue!important">context</p>';
+ const node=document.querySelector('p')!,original=node.outerHTML;vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(10,20,200,80));
+ const painter=createHtmlAnnotationPainter(document,{blockPresentation:'source-node'}),anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'context',presentation:'block' as const},pins=[{id:'one',path:'p',anchor},{id:'two',path:'p',anchor}],input={pins,mode:'on' as const,openId:null,hoverId:null};
+ expect(painter.paint(input).map(p=>p.rect)).toEqual([{x:10,y:20,width:200,height:80},{x:10,y:20,width:200,height:80}]);
+ expect(node.getAttribute('data-af-comment-block')).toBe('af-block-0-base');expect(document.querySelectorAll('[data-af="annotation-overlay"]>div')).toHaveLength(0);
+ expect(node.getAttribute('style')).toContain('outline:2px dotted red!important');expect((node as HTMLElement).style.getPropertyPriority('outline')).toBe('important');expect((node as HTMLElement).style.getPropertyPriority('outline-offset')).toBe('important');expect((node as HTMLElement).style.getPropertyPriority('box-shadow')).toBe('important');
+ painter.paint({...input,openId:'two'});expect(node.getAttribute('data-af-comment-block')).toBe('af-block-0-active');
+ painter.paint({...input,pins:[pins[0]!]});expect(node.getAttribute('data-af-comment-block')).toBe('af-block-0-base');
+ node.remove();expect(painter.paint(input).every(p=>p.status==='missing')).toBe(true);expect(node.outerHTML).toBe(original);
+ document.body.append(node);painter.paint(input);expect(node.getAttribute('data-af-comment-block')).toBe('af-block-0-base');
+ painter.paint({...input,mode:'off'});expect(node.outerHTML).toBe(original);painter.paint(input);painter.dispose();expect(node.outerHTML).toBe(original);
+});
+it('source node stamps do not mutate authored inline styles and clean up absent stamps',()=>{
+ document.body.innerHTML='<p data-af-id="p">context</p>';const node=document.querySelector('p')!,original=node.outerHTML;vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(0,0,80,20));
+ const painter=createHtmlAnnotationPainter(document,{blockPresentation:'source-node'});painter.paint({pins:[{id:'one',path:'p',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'p',quote:'',presentation:'block'}}],mode:'on',openId:null,hoverId:null});expect(node.hasAttribute('style')).toBe(false);expect(node.getAttribute('data-af-comment-block')).toBe('af-block-0-base');painter.dispose();expect(node.outerHTML).toBe(original);
+});
+
+it('source node rules paint computed outlines, preserve other reserved stamps, and remove active inset when a shared thread closes',()=>{
+ document.body.innerHTML='<p data-af-id="p">context</p><aside data-af-comment-block="af-block-0-base">existing</aside>';const node=document.querySelector('p')!,aside=document.querySelector('aside')!,before=aside.outerHTML;vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(0,0,80,20));
+ const painter=createHtmlAnnotationPainter(document,{blockPresentation:'source-node'}),anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'',presentation:'block' as const},pins=[{id:'one',path:'p',anchor},{id:'two',path:'p',anchor}],input={pins,mode:'on' as const,openId:null,hoverId:null};
+ painter.paint(input);expect(node.getAttribute('data-af-comment-block')).toBe('af-block-1-base');expect(getComputedStyle(node).outline).toContain('1px solid');expect(getComputedStyle(node).outlineOffset).toBe('3px');expect(getComputedStyle(aside).outline).not.toContain('rgba(245');
+ painter.paint({...input,hoverId:'two'});expect(getComputedStyle(node).boxShadow).toContain('inset');painter.paint({...input,pins:[pins[0]!]});expect(getComputedStyle(node).boxShadow).not.toContain('inset');painter.dispose();expect(aside.outerHTML).toBe(before);expect(getComputedStyle(node).outline).not.toContain('rgba(245');
+});
