@@ -40,7 +40,7 @@ describe('one installable native HTML author skill',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','scripts/read.mjs','scripts/publish.mjs','data-af-id'])expect(root).toContain(value);
   expect(root).toContain('/llms/html-operations');
-  expect(root).toContain('Keep the `.af.json` companion');
+  expect(root).toContain('rewrites that file and its `.af.json` companion in place');
   expect(root).not.toMatch(/afbin |@afbin\/cli|afbin pull|\/prepare|<Helmet>|className=/);
   for(const topic of ['npm-local','commands','publishing-auth','markup','http-document-graph','http-authoring'])expect(publicGuideText(topic,BASE)).toBeNull();
  });
