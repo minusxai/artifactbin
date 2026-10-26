@@ -70,6 +70,20 @@ export async function resumeJournal(file,client,operation){
   try{const {atomicWrite}=await platform();await atomicWrite(file+'.receipt.json',JSON.stringify({receipt},null,2)+'\n');}catch{throw new ToolError('receipt_save_failed','Server confirmed the write but its receipt could not be saved.',1,'Resume the same journal to recover its confirmed receipt.',{journal:file,committed:true,id:receipt.id,version:receipt.version});}return {saved,receipt,journal:file};
  }catch(error){if(error.details&&!error.details.committed){try{const {atomicWrite}=await platform();await atomicWrite(file+'.receipt.json',JSON.stringify({receipt:error.details},null,2)+'\n');}catch{}}error.details={...error.details,journal:file};throw error;}
 }
+/** One line per viewport so a saved check needs no second call to read it; the file keeps full evidence. */
+export function checkDigest(envelope,file){
+ const clip=(value,n)=>{const text=typeof value==='string'?value:JSON.stringify(value);return text.length>n?text.slice(0,n)+'…':text;};
+ const lines=[`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':'failed'}; full result ${file}`];
+ for(const check of envelope.checks??[]){
+  if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
+  const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
+  const task=check.error?'task error: '+clip(check.error,300):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
+  const overflow=check.overflow?check.overflow.fits?'fits':`overflow ${check.overflow.content}>${check.overflow.viewport}`:'overflow unknown';
+  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${task}${check.screenshot?.path?'; screenshot '+check.screenshot.path:''}`);
+ }
+ if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
+ return lines.join('\n')+'\n';
+}
 /** Preserve legacy details while exposing a stable check result on all refusals. */
 export function toolFailure(name,error){
  const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance','task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(error.code==='check_failed'?error.details:{})}:{};
@@ -87,10 +101,10 @@ export async function runTool(name,url,execute,args=process.argv.slice(2)){
   if(result===undefined)return;
   const envelope={ok:true,code:'completed',...result};
   const data=JSON.stringify(envelope,null,parsed.values.json?0:2)+'\n';
-  if(parsed.values.output&&!result.outputOwned)await exclusive(parsed.values.output,data);else process.stdout.write(data);
+  if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.output,data);if(name==='check')process.stdout.write(checkDigest(envelope,parsed.values.output));}else process.stdout.write(data);
  }catch(error){
   const envelope=toolFailure(name,error);
-  if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(envelope,null,2)+'\n');}catch{process.stderr.write('Could not save check output; existing files were retained.\n');}}
+  if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(envelope,null,2)+'\n');process.stdout.write(checkDigest(envelope,parsed.values.output));}catch{process.stderr.write('Could not save check output; existing files were retained.\n');}}
   if(parsed?.values.json)process.stdout.write(JSON.stringify(envelope)+'\n');else process.stderr.write(envelope.code+': '+envelope.message+' '+envelope.recovery+'\n');process.exitCode=error.exit??1;
  }
 }
