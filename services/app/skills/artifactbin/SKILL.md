@@ -40,7 +40,7 @@ Copy the installed `components/` module graph into the project and import its co
 | [Identity/status](references/html-components.md#content-and-data) | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
 | [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-isometric` |
 | [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload` |
-| [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
+| [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide`: keyboard/click navigation and fullscreen built in; add `data-af-slide` to each `af-slide` for per-slide export with controls hidden |
 
 For native HTML visualizations, use the direct library APIs rather than a custom chart or map element. Choose the guide that fits the work:
 
