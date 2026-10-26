@@ -105,3 +105,14 @@ it('refuses lossy dataset file extensions and writes canonical JSON with its obs
   const pair=await readCommand({values:{output:path.join(root,'data.json')},positionals:['DATA12']},options);expect(JSON.parse(await readFile(pair.source,'utf8'))).toEqual([{count:2}]);expect(JSON.parse(await readFile(pair.baseline,'utf8'))).toMatchObject({id:'DATA12',version:3,state:'a'.repeat(64)});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('keeps --json read output as canonical HTML with a matching baseline',async()=>{
+ const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {readCommand}=await import('../../../skills/artifactbin/scripts/read.mjs');const root=await mkdtemp(path.join(tmpdir(),'author-html-read-'));
+ try{
+  const html='<html><body><h1 data-af-id="heading">Canonical</h1></body></html>';
+  const result=await readCommand({values:{output:path.join(root,'page.html'),json:true},positionals:['PAGE12']},{env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic'},fetcher:async()=>Response.json({id:'PAGE12',format:'html',version:3,state:'a'.repeat(64),html})});
+  expect(await readFile(result.source,'utf8')).toContain(html);
+  expect(JSON.parse(await readFile(result.baseline,'utf8'))).toMatchObject({id:'PAGE12',version:3,state:'a'.repeat(64),sourceFile:'page.html'});
+  expect(result.outputOwned).toBe(true);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

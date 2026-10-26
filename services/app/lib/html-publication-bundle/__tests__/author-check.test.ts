@@ -68,3 +68,32 @@ it('collects errors, separates only known telemetry, and catches overflow withou
  expect(taskRan).toBe(true);expect(evidence.pageErrors).toEqual(['intentional regression']);expect(evidence.failedRequests).toHaveLength(2);expect(evidence.telemetry).toHaveLength(1);
  expect(summarizeCheck([evidence])).toMatchObject({smokePassed:false,unverified:expect.arrayContaining(['visual appearance','task behavior'])});
 });
+
+it('loads named ESM and CommonJS Playwright exports and distinguishes invalid modules',async()=>{
+ const {loadChromium}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const root=await mkdtemp(join(tmpdir(),'author-browser-module-'));
+ try{
+  for(const extension of ['mjs','cjs']){
+   const file=join(root,'browser.'+extension);
+   await writeFile(file,extension==='mjs'?'export const chromium={launch(){return "esm"}}':'module.exports={chromium:{launch(){return "cjs"}}}');
+   expect((await loadChromium(file)).launch()).toBe(extension==='mjs'?'esm':'cjs');
+  }
+  const invalid=join(root,'invalid.mjs');await writeFile(invalid,'export const chromium={}');
+  await expect(loadChromium(invalid)).rejects.toMatchObject({code:'browser_module_invalid'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('keeps check diagnostics top-level on failure and preserves the legacy details alias',async()=>{
+ const {toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const {ToolError}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const diagnostics={smokePassed:false,checks:[{error:'fixture'}],unverified:['visual appearance'],note:'Smoke only'};
+ expect(toolFailure('check',new ToolError('check_failed','Failed',1,'Inspect',diagnostics))).toMatchObject({...diagnostics,ok:false,details:diagnostics});
+ expect(toolFailure('check',new ToolError('invalid_viewport','Invalid',2))).toMatchObject({ok:false,smokePassed:false,checks:[]});
+ expect(toolFailure('read',new ToolError('refused','Refused'))).not.toHaveProperty('checks');
+});
+it('captures a bounded viewport and labels hosted shell scope without a full body capture',async()=>{
+ const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const captures:unknown[]=[];
+ const page={url:()=> 'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},goto:async()=>{},mainFrame:()=>({locator:()=>({waitFor:async()=>{}})}),locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})}),screenshot:async(options:unknown)=>{captures.push(options);return Buffer.from('fixture');}};
+ const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true,capture:true});
+ expect(captures).toEqual([{fullPage:false,timeout:1000}]);expect(result).toMatchObject({screenshot:{scope:'reader-viewport'}});
+});

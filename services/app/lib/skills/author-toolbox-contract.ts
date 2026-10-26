@@ -12,3 +12,8 @@ export interface AuthorJournal {
 }
 export interface AuthorResult {ok:boolean;code:string;recovery?:string;[key:string]:unknown}
 export interface CommentCheckpoint {kind:'comment-checkpoint';schema:1;server:string;artifact:string;stream:'human-comments';cursor:string;eventIds:string[]}
+
+/** Check diagnostics stay at the top level on success and refusal; details remains a compatibility alias. */
+export interface AuthorCheckResult {
+ smokePassed:boolean; checks:ReadonlyArray<Record<string,unknown>>; unverified:ReadonlyArray<string>; note:string;
+}
