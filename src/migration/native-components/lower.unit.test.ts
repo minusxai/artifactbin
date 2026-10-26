@@ -116,7 +116,7 @@ test('admitted expression and condition targets emit exact slots and inert templ
  const branch=element('__mx_condition',{},[expression]);if(branch.type!=='element')throw Error();branch.control={kind:'and',test:{kind:'signal',name:'open'}};
  const source=input([branch]);source.identityBindings=[branch,expression].map((node,i)=>({sourceNode:node.graphKey,sourceStart:0,sourceEnd:1,sourceSha256:digest,afId:`adapter-${i}`,analysisSha256:digest,proofSha256:proof}));
  source.admittedBindings=[{...source.identityBindings[0]!,kind:'condition',templateId:'template-branch'},{...source.identityBindings[1]!,kind:'text'}];
- const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/data-af-id="adapter-0"/);assert.match(result.html!,/<template id="template-branch"><span[^>]*data-af-id="adapter-1"/);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/data-af-id="adapter-0"/);assert.match(result.html!,/<template id="template-branch"><af-text[^>]*data-af-id="adapter-1"/);
  const stale=structuredClone(source);stale.admittedBindings![0]!.analysisSha256='f'.repeat(64);assert.equal(lowerNativeComponents(stale).status,'blocked');
 });
 test('admitted For preserves the source div wrapper id and class and blocks incompatible parent contexts',()=>{
@@ -207,7 +207,7 @@ test('JSX indentation identities preserve adjacent authored siblings and retain 
 test('significant inline spaces and authored multiline text remain exact identity-bearing text',()=>{
  const spaces=text(' '),crOnly=text(' \r '),prose=text('Line one\n  Line two'),source=input([element('p',{},[spaces,crOnly,prose])]);source.emitTextIdentities=true;
  source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
- const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/span>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,3);assert.match(result.html!,/> \r <\/span>/);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/> <\/af-text>/);assert.match(result.html!,/Line one\n  Line two/);assert.equal(result.identities.filter(x=>x.kind==='text').length,3);assert.match(result.html!,/> \r <\/af-text>/);
 });
 
 test('exact retained Alert and Badge recipes preserve source DOM and merged styles without generic semantic defaults',()=>{
@@ -227,3 +227,16 @@ test('source table recipes retain no-wrap cells and horizontal scroll container 
 });
 
 test('retained table headings preserve omitted and explicitly authored scope',()=>{for(const scope of [undefined,'row','col']){const node=element('TableHead',scope?{scope}:{},[text('Heading')]),result=lowerNativeComponents(input([node]));assert.equal(result.status,'complete',JSON.stringify(result.blockers));const fragment=parseFragment('<table><thead><tr>'+result.html!+'</tr></thead></table>');const find=(n:DefaultTreeAdapterTypes.Node):DefaultTreeAdapterTypes.Element|undefined=>'tagName'in n&&n.tagName==='th'?n:'childNodes'in n?n.childNodes.map(find).find(Boolean):undefined;const header=find(fragment);assert.ok(header);assert.equal(header.attrs.find(a=>a.name==='scope')?.value,scope);}});
+
+test('text identities do not enter source-authored span selector matches or replace real span identities',()=>{
+ const caption=text('A proposed inspection sequence.'),authored=element('span',{},[text('Authored span')]);
+ const source=input([element('figcaption',{className:'d-titleblock'},[caption,authored])]);source.emitTextIdentities=true;source.authoredStyleSha256=digest;
+ source.identityBindings=[...source.identityBindings,...source.analysis.sourceSpans.filter(span=>!source.identityBindings.some(b=>b.sourceNode===span.sourceNode)).map((span,index)=>({...span,sourceSha256:digest,analysisSha256:digest,proofSha256:proof,afId:'text-proof-'+index}))];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');
+ const fragment=parseFragment(result.html!) as any;const root=fragment.childNodes[0],children=root.childNodes.filter((n:any)=>n.tagName);
+ assert.deepEqual(children.map((n:any)=>n.tagName),['af-text','span']);
+ const identity=source.identityBindings.find(b=>b.sourceNode===caption.graphKey)!;assert.equal(children[0].attrs.find((a:any)=>a.name==='data-af-id').value,identity.afId);
+ assert.equal(children[0].attrs.find((a:any)=>a.name==='style').value,'display:contents');
+ assert.equal(children[0].childNodes[0].value,'A proposed inspection sequence.');
+ assert.equal(result.identities.find(i=>i.sourceNode===caption.graphKey)?.afId,identity.afId);
+});
