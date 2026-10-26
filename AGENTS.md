@@ -83,12 +83,9 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   external-state changes; never copy receipts. See [docs/agent-workflows.md](docs/agent-workflows.md).
 - **Bound investigation:** scoped `rg -l`/`rg -n`, bounded output/sections; skip irrelevant fixtures,
   transcripts/assets/dependencies; batch reads, never repeat searches.
-- The author skill (`services/app/skills/artifactbin`) is tested by contracts, never by its wording: byte budgets,
-  resolving links, the generated command table, legacy-transport exclusions and executable samples. Do not add tests
-  that pin skill prose; rewording a sentence must not need a test change.
-- Changing other pinned docs/copy/errors: find their tests and gates (`buildQuickSheet`, `agentDiscovery`,
-  `renderDoc`, exact text) and update them together. Skill guide edits also run
-  `services/app/lib/__tests__/skill-tree.test.ts`: each rendered guide must stay within 8,192 bytes.
+- Author skill: test contracts, never prose. Pinned docs/copy/errors: find their tests and gates
+  (`buildQuickSheet`, `agentDiscovery`, `renderDoc`, exact text) and update them. Guide edits run
+  `services/app/lib/__tests__/skill-tree.test.ts`: rendered guides stay within 8,192 bytes.
   Reuse only the task's own dev server.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
