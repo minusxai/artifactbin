@@ -1,3 +1,4 @@
+import {compareNativeCatalogRows} from './catalog-row-equivalence';
 import { registeredPlan } from "@/lib/registered-page-queries/registry";
 import type { HtmlBackendLink, HtmlPageVersion } from "@artifactbin/contracts";
 import type { HtmlBackendVersionRecord } from "@/lib/html-backends";
@@ -279,7 +280,7 @@ async function verifyDataset(
     ).rows[0];
   if (
     !stored ||
-    nativeCatalogDigest(normalize(stored)) !== nativeCatalogDigest(expected)
+    !compareNativeCatalogRows(normalize(stored),expected).equal
   )
     throw Error("native_catalog_collision");
   const expectedVersions = [...d.versions]
@@ -292,8 +293,8 @@ async function verifyDataset(
     )
   ).rows;
   if (
-    nativeCatalogDigest(versions.map(normalize)) !==
-    nativeCatalogDigest(expectedVersions)
+    versions.length!==expectedVersions.length ||
+    versions.some((stored,index)=>!compareNativeCatalogRows(normalize(stored),expectedVersions[index]!).equal)
   )
     throw Error("native_catalog_history_collision");
   const shares = (
