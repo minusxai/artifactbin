@@ -33,7 +33,10 @@ export async function inspectPage(page,options,task){
  const record=(list,item)=>{if(list.length<100)list.push(item);};
  page.on('pageerror',error=>record(pageErrors,String(error.message)));
  page.on('console',message=>{if(message.type()==='error'){const url=message.location?.().url;if(url&&classify(url))record(telemetry,{url,error:message.text()});else record(consoleErrors,message.text());}});
- page.on('requestfailed',request=>{const item={url:request.url(),error:request.failure()?.errorText};record(classify(item.url)?telemetry:failedRequests,item);});
+ // A main-frame navigation (e.g. a step's reload) cancels requests that started before it; those aborts are not page failures.
+ let navigation=0;const started=new WeakMap();
+ page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigation++;started.set(request,navigation);});
+ page.on('requestfailed',request=>{const item={url:request.url(),error:request.failure()?.errorText};const aborted=item.error==='net::ERR_ABORTED'&&started.get(request)<navigation;record(classify(item.url)||aborted?telemetry:failedRequests,aborted?{...item,reason:'navigation'}:item);});
  page.on('response',response=>{if(response.status()>=400){const item={url:response.url(),status:response.status()};record(classify(item.url)?telemetry:httpErrors,item);}});
  page.setDefaultTimeout(options.timeoutMs??4000);
  const evidence={viewport:options.viewport,pageErrors,consoleErrors,failedRequests,httpErrors,telemetry,text:'',overflow:null,task:null};
@@ -86,8 +89,10 @@ export async function inspectPage(page,options,task){
     for(let n=walker.nextNode();n;n=walker.nextNode()){
      const el=n.parentElement;if(!el||seen.has(el)||n.textContent.trim().length<2||el.closest('[data-af-deck-chrome]'))continue;seen.add(el);
      const s=getComputedStyle(el),r=el.getBoundingClientRect();if(s.visibility!=='visible'||Number(s.opacity)===0||r.width<1||r.height<1)continue;
-     let hidden=!!el.closest('svg');for(let e=el;e&&!hidden&&e!==slide.parentElement;e=e.parentElement){const es=getComputedStyle(e),er=e.getBoundingClientRect();hidden=es.clip!=='auto'||es.clipPath!=='none'||er.width<4||er.height<4;}
-     if(!hidden)texts.push({el,r,text:n.textContent.trim().slice(0,48)});
+     // Visually hidden text (sr-only tables, clipped boxes) is neither clipped nor overlapping; chart libraries place SVG labels.
+     let hidden=false;for(let e=el;e&&!hidden&&e!==slide.parentElement;e=e.parentElement){const es=getComputedStyle(e),er=e.getBoundingClientRect();hidden=es.clip!=='auto'||es.clipPath!=='none'||er.width<4||er.height<4;}
+     if(hidden)continue;
+     if(!el.closest('svg'))texts.push({el,r,text:n.textContent.trim().slice(0,48)});
      for(let box=el;box;box=box===slide?null:box.parentElement){
       const b=box.getBoundingClientRect(),style=getComputedStyle(box);
       if(box!==slide&&style.overflowX==='visible'&&style.overflowY==='visible')continue;
