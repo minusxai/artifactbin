@@ -23,7 +23,7 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 | `--ds-hairline-strong` | #c9c9ce | #3a3f4b |
 | `--ds-ink` | #111114 | #f2f2f4 |
 | `--ds-ink-soft` | #5a5b63 | #a0a3ad |
-| `--ds-ink-faint` | #8e8f98 | #6b6f7a |
+| `--ds-ink-faint` | #696a73 | #848894 |
 | `--ds-blue` | #2e5bff | #7a9bff |
 | `--ds-on-blue` | #ffffff | #0b0c0f |
 | `--ds-blue-soft` | #e9eeff | #182040 |
