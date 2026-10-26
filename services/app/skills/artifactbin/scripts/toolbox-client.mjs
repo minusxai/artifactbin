@@ -86,10 +86,12 @@ export function checkDigest(envelope,file){
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  return lines.join('\n')+'\n';
 }
+/** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */
+const transient=error=>!(error instanceof ToolError)&&/fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|socket|network|timed? ?out|\b5\d\d\b/i.test(String(error?.message)+' '+String(error?.cause?.code??''));
 /** Preserve legacy details while exposing a stable check result on all refusals. */
 export function toolFailure(name,error){
  const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance','task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(error.code==='check_failed'?error.details:{})}:{};
- return {...diagnostics,ok:false,code:error.code??'operation_failed',message:error instanceof ToolError?error.message:'Operation failed; inspect the selected files and server.',recovery:error.recovery??'Correct the input or inspect the underlying operation.',...(error.details?{details:error.details}:{})};
+ return {...diagnostics,ok:false,code:error.code??'operation_failed',message:error instanceof ToolError?error.message:transient(error)?'Network or server error before a result arrived.':'Operation failed; inspect the selected files and server.',recovery:error.recovery??(transient(error)?'Retry once; written requests resume from their journal.':'Correct the input or inspect the underlying operation.'),...(error.details?{details:error.details}:{})};
 }
 /** @param {(parsed:any)=>Promise<import('../../../lib/skills/author-toolbox-contract').AuthorResult|any>} execute */
 export async function runTool(name,url,execute,args=process.argv.slice(2)){
