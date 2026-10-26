@@ -25,12 +25,12 @@ export interface NativeComponentRule {
   generatedClass?: string;
 }
 const rules: NativeComponentRule[] = [...NATIVE_TABS_RULES,...NATIVE_ACCORDION_RULES,...NATIVE_MERMAID_RULES,...NATIVE_IDENTITY_DECORATION_RULES,...NATIVE_SLIDE_DECK_RULES];
-const semantic = (tag: string, htmlTag: string, generatedClass?: string) => rules.push({tag,htmlTag,kind:'semantic',generatedClass});
+const semantic = (tag: string, htmlTag: string, generatedClass?: string,attributes?:NativeComponentRule['attributes']) => rules.push({tag,htmlTag,kind:'semantic',generatedClass,attributes});
 for(const [tag,htmlTag,css] of [
  ['Card','section','native-card'],['CardHeader','header','native-card-header'],['CardTitle','h2','native-card-title'],['CardDescription','p','native-muted'],['CardContent','div','native-card-content'],['CardFooter','footer','native-card-footer'],['CardAction','div','native-card-action'],
  ['Grid','div','native-grid'],['GridItem','div','native-grid-item'],['Alert','aside','native-alert'],['AlertTitle','h3','native-alert-title'],['AlertDescription','div','native-alert-description'],['Badge','span','native-badge'],
  ['Table','table','native-table'],['TableHeader','thead',''],['TableBody','tbody',''],['TableFooter','tfoot',''],['TableRow','tr',''],['TableHead','th',''],['TableCell','td',''],['TableCaption','caption',''],['Number','span',''],['Cell','span',''],
-] as const) semantic(tag,htmlTag,css);
+] as const) semantic(tag,htmlTag,css,tag==='TableHead'?{scope:['','row','col','rowgroup','colgroup']}:undefined);
 const native = (tag: string, module: string, register: string, attributes: NativeComponentRule['attributes']={}, properties: readonly string[]=[], parent?: readonly string[]) => {
  const htmlTag='af-'+tag.replace(/[A-Z]/g,(letter,index)=>(index?'-':'')+letter.toLowerCase());
  rules.push({tag,htmlTag,kind:'native',module,register,attributes,properties,parent});
