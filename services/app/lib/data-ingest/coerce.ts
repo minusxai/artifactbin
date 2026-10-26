@@ -1,4 +1,4 @@
-import {isTimestamp} from '@artifactbin/utils/shape';
+import {isIsoDate,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * CSV cells are all strings. Deciding their types is ingest's job, because
  * `inferColumns` reads the types the caller already chose — correct for JSON,
@@ -22,8 +22,6 @@ export interface DeclaredColumn { name: string; type: string }
  * *looks* numeric and must not be.
  */
 const SAFE_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
-/** ISO only. `03/04/2026` is March 4th or April 3rd depending on the reader. */
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isBlank = (v: string) => v.trim() === '';
 
@@ -56,7 +54,8 @@ function columnType(values: string[]): ColumnType {
   if (present.length === 0) return 'string';
   if (present.every(inferredNumber)) return 'number';
   if (present.every((v) => /^(true|false)$/i.test(v))) return 'boolean';
-  if (present.every((v) => ISO_DATE.test(v))) return 'date';
+  // ISO calendar dates only: `03/04/2026` is ambiguous, and `2025-11-32` would be stored as a date that breaks every row query.
+  if (present.every(isIsoDate)) return 'date';
   if (present.every((v) => /^[0-9]{4}-/.test(v) && isTimestamp(v))) return 'timestamp';
   return 'string';
 }
@@ -74,8 +73,8 @@ function convert(value: string, type: ColumnType, quotedEmpty: boolean): unknown
     // Dates stay ISO strings: that is what the dataset tier stores and what
     // Vega's temporal encoding parses. Converting to Date would only be
     // re-serialised on the way to the database.
-    case 'timestamp':
-    case 'date': return v;
+    case 'timestamp': return v;
+    case 'date': return isIsoDate(v) ? v : null;
     default: return value;
   }
 }

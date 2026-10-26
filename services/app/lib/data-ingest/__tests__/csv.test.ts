@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseCsv } from '../csv';
 import { coerceRows } from '../coerce';
+import { inferColumns } from '@artifactbin/utils/shape';
 
 describe('parseCsv — RFC 4180', () => {
   it('parses the ordinary case', () => {
@@ -111,6 +112,17 @@ describe('coerceRows — types decided per column', () => {
     // 03/04/2026 is March 4th or April 3rd depending on the reader. Guessing
     // would silently corrupt data, so it stays text.
     expect(one('d2', '03/04/2026', '04/05/2026')).toEqual(['03/04/2026', '04/05/2026']);
+  });
+
+  it('keeps impossible calendar dates out of date columns', () => {
+    // One impossible day demotes the column to text, so row queries keep working.
+    const sniffed = coerceRows(['d'], [['2025-11-30'], ['2025-11-32']]);
+    expect(sniffed.map(r => r.d)).toEqual(['2025-11-30', '2025-11-32']);
+    expect(inferColumns(sniffed)).toEqual([{ name: 'd', type: 'string' }]);
+    expect(inferColumns([{ d: '2026-02-29' }])).toEqual([{ name: 'd', type: 'string' }]);
+    expect(inferColumns([{ d: '2028-02-29' }])).toEqual([{ name: 'd', type: 'date' }]);
+    // A declared date keeps its type; an impossible value becomes an honest null.
+    expect(coerceRows(['d'], [['2025-11-32'], ['2025-11-03']], [{ name: 'd', type: 'date' }]).map(r => r.d)).toEqual([null, '2025-11-03']);
   });
 
   it('trims surrounding whitespace when deciding a number', () => {
