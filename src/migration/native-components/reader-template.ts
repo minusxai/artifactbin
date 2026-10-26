@@ -4,6 +4,7 @@ import { nativeDigest } from "./selection.ts";
 import type { RetainedJsxNode } from "./analyze-contracts.ts";
 import type {
   NativeContentsEntry,
+  NativeContentsMutationOptions,
   NativeReaderTemplateInput,
   NativeReaderTemplateReceipt,
   NativeReaderTemplateOutput,
@@ -167,6 +168,7 @@ export const NATIVE_READER_TEMPLATE_CSS = `
 @media print { .mx-outline { display: none; } }
 `;
 /** Ordinary author DOM behavior: no globals, injected platform state, URL hashes or AST selectors. */
+const contentsMutationOptions:NativeContentsMutationOptions={childList:true,subtree:true,attributes:true,attributeFilter:['hidden']};
 export const NATIVE_CONTENTS_AUTHOR_JS = `
 (()=>{
  const root=document.querySelector('[data-af-reader-template]');if(!root)return;
@@ -176,7 +178,7 @@ export const NATIVE_CONTENTS_AUTHOR_JS = `
  const mark=()=>{const list=rows();let active=0;const line=win.innerHeight/3;list.forEach((row,i)=>{const node=heading(row);if(node&&node.getBoundingClientRect().top<=line)active=i;});list.forEach((row,i)=>{if(i===active)row.setAttribute('aria-current','true');else row.removeAttribute('aria-current');});};
  root.addEventListener('click',event=>{const row=event.target?.closest?.('.mx-outline-row[data-af-contents-target]');if(row&&root.contains(row))heading(row)?.scrollIntoView({behavior:'smooth',block:'start'});});
  win.addEventListener('scroll',mark,{passive:true});win.addEventListener('resize',mark);
- let queued=0;new win.MutationObserver(()=>{if(queued)return;queued=win.setTimeout(()=>{queued=0;mark();},16);}).observe(root,{childList:true,subtree:true});mark();
+ let queued=0;new win.MutationObserver(()=>{if(queued)return;queued=win.setTimeout(()=>{queued=0;mark();},16);}).observe(root,${JSON.stringify(contentsMutationOptions)});mark();
 })();`;
 export function renderNativeReaderTemplate(
   receipt: NativeReaderTemplateReceipt,
