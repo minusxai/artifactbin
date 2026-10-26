@@ -19,11 +19,15 @@ export function revealHtmlAnnotation(doc:Document,pin:HtmlAnnotationPaint['pins'
  const matches=htmlAnchorElements(doc,pin.anchor?.nodeId??pin.nodeId??pin.path,pin.anchor?.ancestorId);
  if(matches.length===1)matches[0]?.scrollIntoView?.({block:'nearest'});
 }
+/** Document coordinates match imported source paint; reported positions always stay viewport-relative. */
+export interface HtmlAnnotationPainterOptions { coordinateSpace?: 'viewport' | 'document' }
 /** Paint in an inert overlay: authored DOM/text and the viewer's native selection stay intact. */
-export function createHtmlAnnotationPainter(doc: Document) {
+export function createHtmlAnnotationPainter(doc: Document, options: HtmlAnnotationPainterOptions = {}) {
+  const documentSpace = options.coordinateSpace === 'document';
+  const positioned = (rect: {x:number;y:number}) => ({position:documentSpace?'absolute':'fixed',left:`${rect.x+(documentSpace?(doc.defaultView?.scrollX??0):0)}px`,top:`${rect.y+(documentSpace?(doc.defaultView?.scrollY??0):0)}px`});
   const overlay = doc.createElement('div');
   overlay.setAttribute('data-af', 'annotation-overlay');
-  Object.assign(overlay.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '2147483646' });
+  Object.assign(overlay.style, { position: documentSpace?'absolute':'fixed', inset: '0', pointerEvents: 'none', zIndex: '2147483646' });
   doc.documentElement.append(overlay);
   type HighlightRegistry={set(name:string,value:unknown):unknown;delete(name:string):unknown};
   const view=doc.defaultView as unknown as {CSS?:{highlights?:HighlightRegistry};Highlight?:new(...ranges:Range[])=>unknown}|null;
@@ -52,7 +56,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
             painted.active ||= active;
             const mark=painted.mark;
             mark.style.cssText=painted.active?COMMENT_PRESENTATION.blockStyle.activeCss:COMMENT_PRESENTATION.blockStyle.baseCss;
-            Object.assign(mark.style,{position:'fixed',left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`,background:'transparent',pointerEvents:'none'});
+            Object.assign(mark.style,{...positioned(rect),width:`${rect.width}px`,height:`${rect.height}px`,background:'transparent',pointerEvents:'none'});
             if(painted.active)mark.style.boxShadow=COMMENT_PRESENTATION.blockStyle.activeInset;
           }
           return {id:pin.id,status:'exact',rect};
@@ -88,7 +92,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
         }
         if (!highlightApi && !pin.layoutOnly && (input.mode === 'on' || active)) for (const rect of rects) {
           const mark = doc.createElement('div');
-          Object.assign(mark.style, { position: 'fixed', left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px`, background: active ? 'rgba(59,130,246,.20)' : 'rgba(250,204,21,.20)', outline: active ? '1px solid rgba(59,130,246,.6)' : 'none', pointerEvents: 'none' });
+          Object.assign(mark.style, { ...positioned(rect), width: `${rect.width}px`, height: `${rect.height}px`, background: active ? 'rgba(59,130,246,.20)' : 'rgba(250,204,21,.20)', outline: active ? '1px solid rgba(59,130,246,.6)' : 'none', pointerEvents: 'none' });
           overlay.append(mark);
         }
         const rect = ranges.length ? (()=>{const boxes=ranges.map(range=>typeof range.getBoundingClientRect==='function'?range.getBoundingClientRect():node.getBoundingClientRect());const x=Math.min(...boxes.map(r=>r.x)),y=Math.min(...boxes.map(r=>r.y));return {x,y,width:Math.max(...boxes.map(r=>r.right))-x,height:Math.max(...boxes.map(r=>r.bottom))-y};})() : areaRect ?? (resolved?.range && typeof resolved.range.getBoundingClientRect === 'function' ? resolved.range.getBoundingClientRect() : node.getBoundingClientRect());

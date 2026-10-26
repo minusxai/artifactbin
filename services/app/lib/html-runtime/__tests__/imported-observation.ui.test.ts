@@ -3,6 +3,7 @@ const bridges:Array<{dispose():void}>=[];
 afterEach(()=>{for(const bridge of bridges.splice(0))bridge.dispose();document.body.innerHTML='';Reflect.deleteProperty(document,'fonts');vi.unstubAllGlobals();vi.restoreAllMocks();vi.resetModules();});
 for(const imported of [true,false])it(`keeps ${imported?'imported source':'native'} lifecycle while scroll, resize, input and text reflow stay live`,async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],...(imported?{annotationObservation:'imported-source-v1'}:{})});
+ vi.spyOn(window,'scrollY','get').mockReturnValue(100);
  document.body.innerHTML='<section><h2 data-af-id="heading">Heading</h2></section>';
  const panel=document.querySelector('section')!,heading=document.querySelector('h2')!;let y=208;
  vi.spyOn(heading,'getBoundingClientRect').mockImplementation(()=>({x:16,y:panel.hidden?0:y,width:panel.hidden?0:200,height:panel.hidden?0:32,top:panel.hidden?0:y,left:16,right:216,bottom:y+32,toJSON(){return {};}}));
@@ -11,7 +12,7 @@ for(const imported of [true,false])it(`keeps ${imported?'imported source':'nativ
  const events:any[]=[];const {startFrameBridge}=await import('../browser-client');const bridge=startFrameBridge({win:window,post:event=>events.push(event)});bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'thread',path:'heading',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'heading',quote:'',presentation:'block'}}],openId:null,hoverId:null}});await flush();
  const position=()=>events.filter(item=>item.event?.type==='mx:annotation-layout').at(-1).event.positions[0].rect.y;
- expect(position()).toBe(208);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(1);panel.hidden=true;await flush();expect(position()).toBe(imported?208:0);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(0);
+ expect(position()).toBe(208);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(1);const mark=document.querySelector('[data-af=annotation-overlay]>div') as HTMLElement;expect(mark.style.position).toBe(imported?'absolute':'fixed');expect(mark.style.top).toBe(imported?'308px':'208px');panel.hidden=true;await flush();expect(position()).toBe(imported?208:0);expect(document.querySelector('[data-af=annotation-overlay]')!.childElementCount).toBe(0);
  window.dispatchEvent(new Event('scroll'));await flush();expect(position()).toBe(0);
  panel.hidden=false;window.dispatchEvent(new Event('resize'));await flush();expect(position()).toBe(208);
  y=333;document.dispatchEvent(new Event('input'));await flush();if(imported)expect(position()).toBe(333);

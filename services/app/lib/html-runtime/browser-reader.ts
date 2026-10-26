@@ -104,14 +104,14 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   updateUploadContext(attach?.uploadContext??{state:'unavailable',scope:nonce});
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
-  const painter = createHtmlAnnotationPainter(win.document);
+  const sourceObservation=config.annotationObservation==='imported-source-v1';
+  const painter = createHtmlAnnotationPainter(win.document,{coordinateSpace:sourceObservation?'document':'viewport'});
   const commentView = createHtmlCommentViewSession(win.document);
   const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
   let pick: 'block' | 'area' | 'select' | null = null;
   const cursor = win.document.documentElement.style.cursor;
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
-  const sourceObservation=config.annotationObservation==='imported-source-v1';
   let sourceReady=!sourceObservation;
   const layout = (report=true) => {const positions=painter.paint(annotations);if(report&&sourceReady)post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions, viewStateError: commentView.error } });};
   const actions = createHtmlSelectionActions({ win, capture: target => htmlSelection(win, target, config.revision, config.savedNodeIds), onAction: (action, selected) => post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action, selection: selected } }) });

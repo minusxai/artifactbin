@@ -125,3 +125,19 @@ it('shares a block outline by node while preserving thread positions and mixed t
  painter.paint({...input,pins:[pins[1]!]});expect(marks()).toHaveLength(1);expect(marks()[0]?.style.outline).toBe('1px solid rgba(245, 158, 11, .15)');
  document.querySelector('[data-af-id="a"]')!.remove();expect(painter.paint({...input,pins:[pins[0]!]})[0]?.status).toBe('missing');expect(marks()).toHaveLength(0);painter.dispose();
 });
+
+it('paints imported outlines in document coordinates through scroll and reflow without changing viewport reports or authored DOM',()=>{
+ document.body.innerHTML='<p data-af-id="p">source context</p>';const node=document.querySelector('p')!,original=node.outerHTML;
+ const rect=vi.spyOn(node,'getBoundingClientRect').mockReturnValue(new DOMRect(408,248,672,152.953125));
+ vi.spyOn(window,'scrollX','get').mockReturnValue(0);const scroll=vi.spyOn(window,'scrollY','get').mockReturnValue(0);
+ const painter=createHtmlAnnotationPainter(document,{coordinateSpace:'document'}),input={pins:[{id:'one',path:'p',anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'context',presentation:'block' as const}}],mode:'on' as const,openId:null,hoverId:null};
+ const mark=()=>document.querySelector('[data-af="annotation-overlay"]>div') as HTMLElement;
+ expect(painter.paint(input)[0]?.rect.y).toBe(248);expect((mark().parentElement as HTMLElement).style.position).toBe('absolute');expect(mark().style.position).toBe('absolute');expect(mark().style.top).toBe('248px');
+ scroll.mockReturnValue(100);rect.mockReturnValue(new DOMRect(408,148,672,152.953125));expect(painter.paint(input)[0]?.rect.y).toBe(148);expect(mark().style.top).toBe('248px');
+ rect.mockReturnValue(new DOMRect(20,160,350,200));expect(painter.paint(input)[0]?.rect).toEqual({x:20,y:160,width:350,height:200});expect(mark().style.top).toBe('260px');expect(mark().style.width).toBe('350px');
+ expect(node.outerHTML).toBe(original);painter.paint({...input,mode:'off'});expect(document.querySelector('[data-af="annotation-overlay"]')!.children).toHaveLength(0);painter.dispose();expect(document.querySelector('[data-af="annotation-overlay"]')).toBeNull();
+});
+it('keeps ordinary native annotation overlays viewport-relative while scrolled',()=>{
+ document.body.innerHTML='<p data-af-id="p">context</p>';vi.spyOn(document.querySelector('p')!,'getBoundingClientRect').mockReturnValue(new DOMRect(10,20,80,40));vi.spyOn(window,'scrollY','get').mockReturnValue(100);
+ const painter=createHtmlAnnotationPainter(document);painter.paint({pins:[{id:'one',path:'p',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'p',quote:'',presentation:'block'}}],mode:'on',openId:null,hoverId:null});const mark=document.querySelector('[data-af="annotation-overlay"]>div') as HTMLElement;expect(mark.style.position).toBe('fixed');expect(mark.style.top).toBe('20px');expect((mark.parentElement as HTMLElement).style.position).toBe('fixed');painter.dispose();
+});
