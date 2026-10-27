@@ -29,6 +29,8 @@ export interface NativeReaderTemplateReceipt {
   chrome: boolean;
   entries: readonly NativeContentsEntry[];
   rail: boolean;
+  /** Source reader chrome surrounds the authored column when a supported deck has multiple slides. */
+  deckRail?: true;
   /** Source ordinary tables retain overflow marks as layout changes. */
   scrollTables?: true;
   sha256: string;

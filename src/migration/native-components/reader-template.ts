@@ -29,11 +29,13 @@ export function prepareNativeReaderTemplate(
   if (!/^[a-f0-9]{64}$/.test(input.sourceRecordSha256))
     throw Error("Reader template source record proof");
   const entries: NativeContentsEntry[] = [];
+  let deckHosts=0;
   let slides = 0,
     grid = false;
   const inspect = (nodes: readonly RetainedJsxNode[]) => {
     for (const node of nodes) {
       if (node.type !== "element") continue;
+      if(node.isComponent&&node.tag==="SlideDeck")deckHosts++;
       if (node.isComponent && node.tag === "Slide") {
         slides++;
         continue;
@@ -103,14 +105,16 @@ export function prepareNativeReaderTemplate(
   const eligibleTemplate =
     input.chrome && ["doc", "editorial", "plan"].includes(input.template ?? "");
   if (eligibleTemplate) discover(input.analysis.nodes);
+  const deckRail=input.chrome&&slides>=2&&deckHosts===1;
   const rail =
-    !!eligibleTemplate &&
+    !deckRail&&!!eligibleTemplate &&
     (input.template === "doc" ||
       (slides < 2 &&
         !grid &&
         entries.filter((entry) => entry.level === 2).length >= 3));
   const hasTables=(nodes:readonly RetainedJsxNode[]):boolean=>nodes.some(node=>node.type==='element'&&(['Table','table','Markdown'].includes(node.tag)||hasTables(node.children)));
   const payload = {
+    ...(deckRail?{deckRail:true as const}:{}),
     ...(hasTables(input.analysis.nodes)?{scrollTables:true as const}:{}),
     key: input.analysis.key,
     sourceSha256: input.analysis.sourceSha256,
@@ -184,8 +188,9 @@ export function renderNativeReaderTemplate(
   receipt: NativeReaderTemplateReceipt,
   content: string,
 ): NativeReaderTemplateOutput {
-  const column = `<div class="${receipt.template === "doc" ? "mx-doc mx-doc--document" : "mx-doc"}">${content}</div>`;
-  let html = column;
+  const columnClass=receipt.template === "doc" ? "mx-doc mx-doc--document" : "mx-doc";
+  const column = `<div class="${columnClass}">${content}</div>`;
+  let html = receipt.deckRail?`<af-slide-deck><div class="${columnClass}" data-af-deck-content>${content}</div></af-slide-deck>`:column;
   if (receipt.rail) {
     let section = 0;
     const rows = receipt.entries

@@ -2,6 +2,8 @@ import type { NativeLowerBlocker } from '../lower.ts';
 import type { NativeComponentRule } from '../component-map.ts';
 import type { RetainedAttribute, RetainedJsxNode, RetainedStaticValue } from '../analyze-contracts.ts';
 
+export interface NativeSlideDeckPreparationOptions { readonly readerRoot?:true; }
+
 /** Pure normalization result for the source SlideDeck/Slide wrappers. */
 export interface NativeSlideDeckPreparation {
   readonly node: RetainedJsxNode;
@@ -94,7 +96,7 @@ const normalizeNested=(node:RetainedJsxNode):RetainedJsxNode=>{
  * two or more source slides. A single-slide source deck therefore remains the
  * original div/section structure instead of acquiring target-only chrome.
  */
-export function prepareNativeSlideDeck(node:RetainedJsxNode):NativeSlideDeckPreparation {
+export function prepareNativeSlideDeck(node:RetainedJsxNode,options:NativeSlideDeckPreparationOptions={}):NativeSlideDeckPreparation {
   const blockers:NativeLowerBlocker[]=[];validateProps(node,blockers);
   visit(node,element=>{
     if(!element.isComponent||element.tag!=='Slide')return;
@@ -108,6 +110,7 @@ export function prepareNativeSlideDeck(node:RetainedJsxNode):NativeSlideDeckPrep
     let count=0;const topSlides=new Set(discoveredSlides(node.children).map(slide=>slide.graphKey));count=topSlides.size;
     const rail=count>=2;
     const children=node.children.map(child=>normalizeDeckChild(child,rail,false));
+    if(rail&&options.readerRoot)return {node:clone(node,{tag:'div',isComponent:false,attributes:node.attributes,children}),blockers};
     const attrs=rail?node.attributes.map(value=>value.name==='aria-label'?{...value,name:'label'}:value):node.attributes;
     return {node:clone(node,{tag:rail?'SlideDeck':'div',isComponent:rail,attributes:attrs,children}),blockers};
   }

@@ -34,6 +34,8 @@ export interface NativeLowerFormattedReceipt {
   text: string;
 }
 export interface NativeLowerInput {
+ /** Source-bound reader receipt supplies the outer deck chrome; keep authored SlideDeck as its original div. */
+ readerDeckRail?:true;
  markdown?:readonly import("./markdown-contracts.ts").NativeMarkdownReceipt[];
  componentRecipes?:readonly NativeComponentRecipe[];
   authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
@@ -173,9 +175,10 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(value===null||['boolean','string','number'].includes(typeof value)){const text=value===null||typeof value==='boolean'?'':escape(value);if(input.emitTextIdentities&&!ancestors.includes('title')&&!ancestors.includes('svg')){const proof=binding(node,'text');return proof?`<af-text style="display:contents" data-af-id="${escape(proof.afId)}">${text}</af-text>`:'';}identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return text;}
    block('unsupported-expression-literal',node,'Array/object expression children require explicit semantic admission');return '';
   }
+  const sourceDeckAncestor=input.readerDeckRail&&node.type==='element'&&node.isComponent&&node.tag==='SlideDeck';
   if(node.type==='element'){
    const prepare=node.tag==='Tabs'||node.tag.startsWith('Tabs')?prepareNativeTabs:node.tag==='Accordion'?prepareNativeAccordion:node.tag==='Mermaid'?prepareNativeMermaid:['Icon','Separator'].includes(node.tag)?prepareNativeIdentityDecoration:node.tag==='SlideDeck'?prepareNativeSlideDeck:null;
-   if(prepare){const plan=prepare(node);blockers.push(...plan.blockers);if(plan.blockers.length)return '';node=plan.node;}
+   if(prepare){const plan=prepare===prepareNativeSlideDeck?prepareNativeSlideDeck(node,input.readerDeckRail?{readerRoot:true}:{}):prepare(node);blockers.push(...plan.blockers);if(plan.blockers.length)return '';node=plan.node;}
    if(node.type!=='element'){block('component-normalization-type',node,'Component normalization must retain an element');return '';}
    const markup=prepareNativeDocumentMarkup(node,{inHead:ancestors.includes('Helmet'),svgNamespace:ancestors.includes('svg'),fragmentIds:svgFragmentIds.get(node.graphKey)});blockers.push(...markup.blockers);if(markup.blockers.length)return '';
    if(SVG_TAGS.has(node.tag)&&node.tag!=='svg'&&node.tag!=='title'&&!ancestors.includes('svg')){block('svg-parent-required',node,'SVG children require an SVG namespace parent');return '';}
@@ -394,7 +397,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
     if(column.template)templates.push(`<template id="${escape(column.template.templateId)}">${child.children.map(child=>walk(child,[...ancestors,'DataTable'],depth+1)).join('')}</template>`);
     else for(const whitespace of child.children)binding(whitespace,'nonvisual');
    }
-  }else children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
+  }else children=formatted??node.children.map(child=>walk(child,[...ancestors,sourceDeckAncestor?'SlideDeck':node.tag],depth+1)).join('');
   if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');

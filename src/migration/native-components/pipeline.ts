@@ -48,7 +48,7 @@ export async function runNativePipeline(request:NativePipelineRequest,ports:Nati
  }
  let readerTemplate;
  const meta=revision.original.meta as Record<string,unknown>|null|undefined;
- try{if(['doc','editorial','plan'].includes(typeof meta?.template==='string'?meta.template:''))readerTemplate=prepareNativeReaderTemplate({analysis,identity,sourceRecordSha256:revision.rowSha256,markdown,template:typeof meta?.template==='string'?meta.template:null,chrome:meta?.chrome!==false});}catch{block('reader-template-unsupported');}
+ try{const candidate=prepareNativeReaderTemplate({analysis,identity,sourceRecordSha256:revision.rowSha256,markdown,template:typeof meta?.template==='string'?meta.template:null,chrome:meta?.chrome!==false});if(candidate.deckRail||['doc','editorial','plan'].includes(candidate.template??''))readerTemplate=candidate;}catch{block('reader-template-unsupported');}
  const profiles=await ports.authorProfiles?.(context)??[];
  const authorPrograms=[];
  for(const node of nodes.filter(n=>n.type==='element'&&n.tag==='script')){

@@ -1,3 +1,4 @@
+import {isNativeSvgRevealMarker} from '../svg-marker-contracts.ts';
 import type { RetainedJsxNode, RetainedStaticValue } from '../analyze-contracts.ts';
 import type { NativeLowerBlocker } from '../lower.ts';
 
@@ -12,7 +13,7 @@ export const SVG_TAGS: ReadonlySet<string> = new Set([
 
 /** Exact source attribute spellings accepted for static SVG. URL-bearing attrs are omitted. */
 export const SVG_ATTRIBUTES: ReadonlySet<string> = new Set([
-  'id', 'class', 'className', 'role', 'tabIndex', 'focusable', 'xmlns',
+  'id', 'class', 'className', 'role', 'tabIndex', 'focusable', 'xmlns', 'data-reveal',
   'viewBox', 'preserveAspectRatio', 'width', 'height', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
   'cx', 'cy', 'r', 'rx', 'ry', 'fill', 'fillRule', 'fillOpacity', 'stroke', 'clipPath', 'mask',
   'markerStart', 'markerMid', 'markerEnd', 'letterSpacing',
@@ -107,6 +108,10 @@ export function prepareNativeDocumentMarkup(
       continue;
     }
     const value = staticPrimitive(attribute.value);
+    if(attribute.name==='data-reveal'){
+      if(!isSvgRoot||!isNativeSvgRevealMarker(value))blockers.push(blocker(node,'svg-reveal-marker-unsupported','SVG reveal markers require an exact static boolean on the SVG root.',attribute.name));
+      continue;
+    }
     if (typeof value === 'string') {
       if (attribute.name === 'xmlns') {
         if (value !== SVG_NAMESPACE) blockers.push(blocker(node, 'svg-namespace-unsupported', 'Only the standard SVG namespace declaration is supported.', attribute.name));
