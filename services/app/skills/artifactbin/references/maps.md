@@ -62,7 +62,7 @@ function persistView() {
 try {
   const [{client: apollo, gql}, {Deck, MapView, ScatterplotLayer}] = await Promise.all([
     import("@afbin/apollo"),
-    import("/libraries/deck-gl-9.4.0/index.js")
+    import("@afbin/deck-gl")
   ]);
   client = apollo;
   viewQuery = gql`{mapView {longitude latitude zoom pitch bearing}}`;

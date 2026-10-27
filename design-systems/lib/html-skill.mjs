@@ -6,10 +6,12 @@ import {varsMap} from './runtime.mjs';
 import {packagedFontFaces} from './packaged-fonts.mjs';
 const ROOT=path.join(REPO,'services/app/skills/artifactbin');
 const cell=value=>String(value).replaceAll('|','\\|').replaceAll('\n',' ');
+import {TOKEN_RULES,tokenRuleCss} from './token-colors.mjs';
+const tokenCss=selector=>TOKEN_RULES.map(rule=>`${rule.names.map(name=>`${selector} .tok-${name}`).join(', ')} { ${tokenRuleCss(rule)}; }`).join('\n');
 export function nativeSystemCss(slug){
  const spec=loadSpec(slug),selector=`:root[data-af-design-system="${slug}"]`;
  const vars=mode=>Object.entries(varsMap(spec,mode)).map(([key,value])=>`  ${key}: ${value};`).join('\n');
- return `/* Generated from design-systems/specs/${slug}.json. */\n${packagedFontFaces(spec.fonts.map(([family])=>family))}\n${selector} {\n${vars('light')}\n}\n${selector}[data-af-dark="true"] {\n${vars('dark')}\n}\n${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${typeCss(spec).replaceAll(`.ds-${slug}`,selector)}\n`;
+ return `/* Generated from design-systems/specs/${slug}.json. */\n${packagedFontFaces(spec.fonts.map(([family])=>family))}\n${selector} {\n${vars('light')}\n}\n${selector}[data-af-dark="true"] {\n${vars('dark')}\n}\n${selector} body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }\n${typeCss(spec).replaceAll(`.ds-${slug}`,selector)}\n${tokenCss(selector)}\n`;
 }
 export function nativeSystemMd(slug){
  const s=loadSpec(slug);

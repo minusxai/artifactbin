@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
@@ -180,7 +180,7 @@ it('keeps native theme font delivery and linked-CSS guides generated from the in
   expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
  }
 });
-it('gives every colour token its use in the native guide and keeps text tokens readable on the page grounds',async()=>{
+it('gives every colour token its use in the native guide and keeps text tokens and reports their contrast',async()=>{
  const {nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
  const ratio=(a,b)=>{const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x);return (hi+0.05)/(lo+0.05);};
@@ -195,5 +195,30 @@ it('gives every colour token its use in the native guide and keeps text tokens r
     const fg=mode==='light'?token.light:token.dark??token.light,bg=mode==='light'?ground.light:ground.dark??ground.light;
     if(/^#[0-9a-f]{6}$/i.test(fg)&&/^#[0-9a-f]{6}$/i.test(bg))expect(ratio(fg,bg),`${name} ${mode} ${token.name} on ${ground.name}`).toBeGreaterThanOrEqual(4.5);
    }
+ }
+});
+
+it('ships highlight token rules in every system stylesheet, each AA-readable on --background and --muted in both modes',async()=>{
+ const {nativeSystemCss}=await import('../../design-systems/lib/html-skill.mjs');
+ const {varsMap}=await import('../../design-systems/lib/runtime.mjs');
+ const {TOKEN_RULES,tokenContrasts}=await import('../../design-systems/lib/token-colors.mjs');
+ const KEYS=['--background','--muted','--foreground','--primary','--chart-1','--chart-2','--chart-3','--chart-4','--destructive','--muted-foreground'];
+ const palettes=[];
+ for(const name of ROSTER){
+  const css=nativeSystemCss(name),spec=loadSpec(name);
+  for(const rule of TOKEN_RULES)for(const token of rule.names)expect(css,`${name} .tok-${token}`).toContain(`:root[data-af-design-system="${name}"] .tok-${token}`);
+  expect(css).not.toMatch(/\.tok-[^{]*\{[^}]*(#[0-9a-f]{3}|rgb|hsl|oklch)/i);
+  for(const mode of ['light','dark']){
+   const vars=varsMap(spec,mode),resolve=key=>{let v=vars[key];for(let i=0;i<5&&typeof v==='string'&&v.startsWith('var(');i++)v=vars[v.slice(4,-1)];return v;};
+   const palette=Object.fromEntries(KEYS.map(key=>[key,resolve(key)]));
+   for(const [key,value] of Object.entries(palette))expect(value,`${name} ${mode} ${key} must be a 6-digit hex for verification`).toMatch(/^#[0-9a-f]{6}$/i);
+   palettes.push({name,mode,palette});
+  }
+ }
+ const worst=(rule)=>Math.min(...palettes.flatMap(({palette})=>tokenContrasts(rule,palette)));
+ for(const rule of TOKEN_RULES.filter(r=>r.hue)){
+  expect(worst(rule),`${rule.names[0]} (${rule.hue} ${rule.mix}%) AA`).toBeGreaterThanOrEqual(4.5);
+  // The percentage is the largest that passes: one point more hue would fail somewhere.
+  if(rule.mix<100)expect(worst({...rule,mix:rule.mix+1}),`${rule.names[0]} mix is maximal`).toBeLessThan(4.5);
  }
 });
