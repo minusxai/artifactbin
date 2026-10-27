@@ -1,5 +1,12 @@
+/**
+ * Internal: the HTML parser surface of the skill: page decoration for the preview, local reference
+ * and dataset/backend link discovery, platform styles, and re-exported autofix and export packing.
+ * The downloadable archive bundles this parser (buildPreviewParser); installed previews need only
+ * Node.
+ * Used by: preview.mjs, preview-*.mjs, publication-bundle.mjs, toolbox-platform.mjs,
+ *   toolbox-publish.mjs, autofix.mjs, the skill ZIP route and several parser tests.
+ */
 export {packPreviewExport} from './preview-export.mjs';
-// The downloadable archive bundles this parser; installed previews need only Node.
 import {parse,parseFragment,serialize} from 'parse5';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import parseCss from 'css-tree/parser';
@@ -11,27 +18,32 @@ import {
 export {autofixHtml,formatAutofixReport,scriptFingerprint,
   localReferences} from '../../../lib/html-autofix/index.ts';
 import {htmlAppearance} from '../../../lib/html-page/design-system.ts';
-import {htmlSystemsCss} from '../../../lib/html-systems/index.ts';
-/** The platform stylesheet for one local page: only its resolved system, inline first in <head> (lib/html-systems). */
-export function withPlatformStyles(source){
- const {designSystem}=htmlAppearance(source);if(!designSystem)return source;
+/** The design system a page names (its meta or <html> attribute), or null. */
+export const pageDesignSystem=source=>htmlAppearance(source).designSystem??null;
+/** The platform stylesheet for one local page — `css`, its resolved system only, which the
+ * preview fetches from the selected server's /af/styles.css?system=NAME (lib/html-systems) —
+ * inline first in <head>. */
+export function withPlatformStyles(source,css){
+ if(!css||!pageDesignSystem(source))return source;
 const document=parse(source),html=document.childNodes.find(node=>node.nodeName==='html'),head=
    html?.childNodes.find(node=>node.nodeName==='head');
 const present=node=>node.attrs?.some(attr=>attr.name==='data-af'&&attr.value==='platform-styles')||(
    node.childNodes??[]).some(present);
  if(!head||present(document))return source;
 const style=parseFragment('<style data-af="platform-styles"></style>').childNodes[0];
-   style.childNodes=[{nodeName:'#text',value:htmlSystemsCss([designSystem]),parentNode:style}];
+   style.childNodes=[{nodeName:'#text',value:css,parentNode:style}];
  style.parentNode=head;head.childNodes.unshift(style);return serialize(document);
 }
-/** Shared server admission distinguishes literal project dependencies from closed runtime URL adapters. */
+/** Shared server admission distinguishes literal project dependencies from closed runtime URL
+ * adapters. */
 export function publicationLocalReferences(source,contentType){
 const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=imports.some(item=>
    item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(text):[];return imports.flatMap(item=>
    {
   if(item.d===-2)return [];
 if(item.n===undefined){if(runtime.some(entry=>entry.importStart===item.ss))return [];throw Error(
-    'Computed module imports cannot be discovered; use literal imports. Other runtime-loaded files must be listed in the publication manifest.');}
+    'Computed module imports cannot be discovered; use literal imports. Other runtime-loaded '+
+    'files must be listed in the publication manifest.');}
 return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[
     ];
  });};
@@ -54,8 +66,8 @@ if(node.tagName==='script'&&node.attrs.some(attr=>attr.name==='type'&&
  };
  walk(parse(source));return references;
 }
-export function previewHtml(source,notice,localConfig){
- const document=parse(localConfig?withPlatformStyles(source):source);
+export function previewHtml(source,notice,localConfig,platformCss){
+ const document=parse(localConfig?withPlatformStyles(source,platformCss):source);
  const html=document.childNodes.find(node=>node.nodeName==='html');
  html.attrs=html.attrs.filter(attr=>attr.name!=='data-af-private-preview');
  html.attrs.push({name:'data-af-private-preview',value:'true'});
@@ -93,7 +105,8 @@ if(node.nodeName==='link'&&(attrs.rel??'').split(/\s+/).includes('af-dataset')&&
  }visit(document);return {links,baseHref};
 }
 
-/** Backend hrefs are source declarations; a read may explicitly retain their saved remote binding. */
+/** Backend hrefs are source declarations; a read may explicitly retain their saved remote
+ * binding. */
 export function previewBackendLinks(source){
 const found=[];function walk(node){if(node.tagName==='link'&&node.attrs.some(attr=>
    attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){const value=name=>

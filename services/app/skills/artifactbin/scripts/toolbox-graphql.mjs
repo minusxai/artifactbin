@@ -1,3 +1,5 @@
+/** Internal: picks and validates the one operation to send from a GraphQL document.
+ * Used by: graphql.mjs, author-toolbox.test.ts. */
 import {ToolError,platform} from './toolbox-client.mjs';
 export async function selectedOperation(document,name,command){
 const {parse,getOperationAST}=await platform();let parsed;try{parsed=parse(document);}catch{

@@ -1,3 +1,8 @@
+/**
+ * Internal: the authoring pair: a local source file plus its .af.json baseline companion; load,
+ * validate, stamp and save them, and restore local backend hrefs.
+ * Used by: toolbox-publish.mjs, toolbox-publish-finish.mjs, read.mjs.
+ */
 import path from 'node:path';
 import {readFile,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -5,12 +10,15 @@ import {ToolError,hash,platform,exclusive,jsonFile,optionalFile,
   serverOrigin} from './toolbox-client.mjs';
 const marker=/<!-- af-authoring:([A-Za-z0-9_-]+) -->/g;
 export const UNPAIRED=
-  'New page: rerun with --create. Existing page: run read.mjs ID --output fresh.html, apply your edits to that file and publish it. Never copy or hand-edit .af.json companions.';
+  'New page: remove the data-af-id values you wrote yourself (new pages need none) or rerun with '+
+  '--create. Existing page: run read.mjs ID --output fresh.html, apply your '+
+  'edits to that file and publish it. Never copy or hand-edit .af.json companions.';
 export function sourceIdentity(source){const all=[...source.matchAll(marker)];if(
   all.length>1)throw new ToolError('ambiguous_identity','Source has multiple authoring identities.',
   2);if(!all.length)return null;try{return JSON.parse(Buffer.from(all[0][1],'base64url').toString(
   ));}catch{throw new ToolError('invalid_identity','Source identity is malformed.',2);}}
-/** Canonical HTML drops backend hrefs; put the author's local path back so later backend edits are published. */
+/** Canonical HTML drops backend hrefs; put the author's local path back so later backend edits are
+ * published. */
 export function restoreBackendHrefs(source,links){
 const hrefs=new Map((links??[]).filter(link=>link.name&&link.href).map(link=>[link.name,
    link.href]));if(!hrefs.size)return source;
@@ -34,7 +42,8 @@ if(baseline?.kind!=='author-baseline'||baseline.schema!==1||baseline.server!==se
    identity?.server!==baseline.server||identity?.id!==baseline.id||
    identity?.pair!==baseline.pair)throw new ToolError('invalid_baseline',
    'Source and current-head companion baseline must be a complete matching pair.',2,
-   'Publish the file its companion was saved with, or run read.mjs ID --output fresh.html and reapply your edits there. Never copy or hand-edit .af.json companions.');
+   'Publish the file its companion was saved with, or run read.mjs ID --output fresh.html and '+
+   'reapply your edits there. Never copy or hand-edit .af.json companions.');
 const paths=new Set();for(const receipt of baseline.dependencyReceipts){if(!receipt||
    typeof receipt.path!=='string'||receipt.path.startsWith('/')||receipt.path.split('/').some(part=>
    part==='..'||!part)||receipt.path.includes('\\')||paths.has(receipt.path)||!['asset',
@@ -43,7 +52,8 @@ const paths=new Set();for(const receipt of baseline.dependencyReceipts){if(!rece
    'Baseline dependency receipts are inconsistent.',2);paths.add(receipt.path);}
  return baseline;
 }
-/** Recoverable pair: interrupted writes leave no valid baseline (pair IDs differ). `replace` is only for publish's own unchanged input; never overwrite an author edit. */
+/** Recoverable pair: interrupted writes leave no valid baseline (pair IDs differ). `replace` is
+ * only for publish's own unchanged input; never overwrite an author edit. */
 export async function saveAuthoringPair({record,server,output,root,entryPath,receipts,
   localReferences=false,historical=false,replace=false,backendLinks=[]}){
 if(typeof record.html!=='string')throw new ToolError('not_html','This record is not editable HTML.',

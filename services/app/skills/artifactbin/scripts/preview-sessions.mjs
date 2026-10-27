@@ -1,3 +1,9 @@
+/**
+ * Internal: in-memory local dataset sessions for the preview: loads a page's declared local data
+ * files, keeps unsaved edits per session (bounded count, size and age) and recovers them when the
+ * page file disappears.
+ * Used by: preview.mjs, preview-dataset-route.mjs (through the sessions object).
+ */
 import {randomBytes,createHash} from 'node:crypto';
 import {resolve,relative,sep} from 'node:path';
 import {previewDatasetLinks} from './preview-html.mjs';
@@ -48,13 +54,15 @@ if(session.pathname===pathname&&(session.dirty||session.active)){session.conflic
      schema:session.adapter.schema,names:[...session.names],conflict:true};}
   }
   if(pending.has(key))return pending.get(key);
-  if(pending.size>=4)throw failure(429,'Too many local dataset sessions are loading; retry shortly.');
+  if(pending.size>=4)throw failure(429,'Too many local dataset sessions are loading; retry '+
+    'shortly.');
   // Serialize creation so concurrent pages cannot each allocate the full budget.
   const work=sequence.then(async()=>{
    prune();
 while(sessions.size>=maxSessions){const disposable=[...sessions].find(([,session])=>!session.dirty&&
      !session.active);if(!disposable)throw failure(429,
-     'Local dataset preview is full of unsaved sessions; export and explicitly discard edits before opening another page.');sessions.delete(disposable[0]);}
+     'Local dataset preview is full of unsaved sessions; export and explicitly discard edits '+
+     'before opening another page.');sessions.delete(disposable[0]);}
    let bytes=0;
    const admitted=new Map();
    for(const declaration of declarations)for(const file of declaration.files){

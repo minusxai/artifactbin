@@ -1,7 +1,10 @@
 /**
- * Strict argument parsing for the installed commands. Flag metadata (type, repeatable) lives here because the
- * parser needs it; everything a reader needs (purpose, usage, flags, examples, gotchas) lives in each script's
- * DESCRIPTION export, which --help prints. SKILL.md's Core flows quote real commands; a test checks them against these descriptions.
+ * Internal: strict argument parsing for the installed commands. Flag metadata (type, repeatable)
+ * lives here because the parser needs it; everything a reader needs (purpose, usage, flags,
+ * examples, gotchas) lives in each script's DESCRIPTION export, which --help prints. SKILL.md's
+ * Core flows quote real commands; a test checks them against these descriptions.
+ * Used by: toolbox-client.mjs (runTool), toolbox-description.mjs, author-commands and
+ *   author-toolbox tests.
  */
 import {parseArgs} from 'node:util';
 
@@ -16,7 +19,8 @@ function flag(type = 'string', multiple = false) {
   return {type, ...(multiple ? {multiple: true} : {})};
 }
 
-// Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`; `listed:false` keeps a command out of the table.
+// Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`;
+// `listed:false` keeps a command out of the table.
 const commands = {
 auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {}, logout: {
     }}},
@@ -42,7 +46,12 @@ auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, sta
   read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag()}}},
   export: {flags: {format: flag(), slide: flag()}},
   check: {
-    flags: {viewport: flag('string', true), steps: flag(), viewer: flag(), 'playwright-module': flag()}
+    flags: {
+      viewport: flag('string', true),
+      steps: flag(),
+      viewer: flag(),
+      'playwright-module': flag()
+    }
   },
   graphql: {
     sub: {

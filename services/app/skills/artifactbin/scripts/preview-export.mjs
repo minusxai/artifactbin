@@ -1,5 +1,10 @@
-/** Pure local rendering boundary. It never fetches, reads files, executes page
- * scripts or accepts credentials. The preview server alone admits resource bytes. */
+/**
+ * Internal: packs a previewed page into one self-contained export. Pure local rendering boundary:
+ * it never fetches, reads files, executes page scripts or accepts credentials. The preview server
+ * alone admits resource bytes (through the `load` callback).
+ * Used by: preview-html.mjs (re-exported, so preview-source-routes.mjs), lib/skills/
+ *   preview-assets.server.ts (parser build input), preview-export and import-map tests.
+ */
 import {parse,serialize} from 'parse5';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import parseCss from 'css-tree/parser';

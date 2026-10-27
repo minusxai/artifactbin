@@ -1,4 +1,10 @@
-/** Native project snapshot helper. Does not change local author source or store credentials. */
+/**
+ * Internal: native project snapshot helper: builds the publication bundle (entry HTML plus its
+ * local dependencies) and sends saved requests. Does not change local author source or store
+ * credentials. Also a deprecated direct entry (`--help`; prefer publish.mjs FILE).
+ * Used by: toolbox-publish.mjs, publish.mjs, native-author-skill/helper/skill-examples tests,
+ *   scripts/lib and fixture publication helpers.
+ */
 import {readFile,realpath,lstat,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {realpathSync} from 'node:fs';
@@ -11,7 +17,8 @@ const types={'.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':
 /** @typedef {{root:string,entry:string,server:string,entryHtml?:string,manifest?:string[],
   mappings?:import('../../../lib/html-publication-bundle/contracts').PublicationBundle['mappings'],
   retainedBackends?:{name:string,href:string}[]}} BundlePreparationOptions */
-/** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot limits/discovery.
+/** entryHtml replaces only selected entry bytes after filesystem admission, before snapshot
+ * limits/discovery.
  * @param {BundlePreparationOptions} options */
 export async function prepareBundle({root,entry,server,entryHtml,manifest=[],mappings={},
   retainedBackends=[]}){
@@ -28,7 +35,13 @@ name=path.posix.normalize(name);if(name==='..'||name.startsWith('../'))throw Err
     'Dependency escapes project root: '+name);
   const full=path.join(project,name),parts=name.split('/');let parent=project;
 for(const part of parts){parent=path.join(parent,part);let info;try{info=await lstat(parent);}catch(
-    error){if(error.code==='ENOENT'&&(mappings[name]||retainedPaths.has(name)))return;throw error;
+    error){if(error.code==='ENOENT'&&(mappings[name]||retainedPaths.has(name)))return;
+    // A missing local components/<name>.js: point at the hosted @afbin/<name> import instead.
+    const component=error.code==='ENOENT'&&
+      /^(?:.*\/)?components\/([a-z][a-z0-9-]*)\.js$/.exec(name);
+    if(component)error.message=`Missing ${name}: components are hosted; `+
+      `import '@afbin/${component[1]}' instead of a local copy.`;
+    throw error;
     }if(info.isSymbolicLink())throw Error('Symlink dependencies are refused: '+name);}
 const canonical=await realpath(full);if(!canonical.startsWith(project+path.sep))throw Error(
     'Dependency escapes project root');
@@ -81,12 +94,14 @@ await writeFile(receiptFile,JSON.stringify({receipt,mappings:Object.fromEntries(
    path,mapping]))},null,2)+'\n',{mode:0o600});throw error;}
 }
 const help=
-  `Usage: node publication-bundle.mjs PROJECT_ROOT ENTRY.html SERVER_ORIGIN REQUEST.json [MANIFEST.json]
+  `Usage: node publication-bundle.mjs PROJECT_ROOT ENTRY.html SERVER_ORIGIN REQUEST.json `+
+  `[MANIFEST.json]
        node publication-bundle.mjs --send REQUEST.json
        node publication-bundle.mjs --help
 MANIFEST.json: {manifest:[paths],mappings:{path:receipt}}.
 Send uses origin-matched ARTIFACTBIN_URL and ARTIFACTBIN_TOKEN; saves REQUEST.json.receipt.json.
-Reuse unchanged REQUEST.json and key on uncertain outcomes. A new update gets a new key. Never run from stdin.`;
+Reuse unchanged REQUEST.json and key on uncertain outcomes. A new update gets a new key. Never `+
+  `run from stdin.`;
 async function main(args){
  if(args.length===1&&args[0]==='--help'){console.log(help);return;}
 if(args[0]==='--send'){if(args.length!==2)throw Error(help);console.log(JSON.stringify(
@@ -101,7 +116,8 @@ if(!extra||typeof extra!=='object'||Object.keys(extra).some(key=>!['manifest','m
  const prepared=await prepareBundle(options);
  await writeFile(output,JSON.stringify(prepared,null,2)+'\n',{flag:'wx',mode:0o600});
 console.log(
-   'Saved immutable publication request. Send with publication-bundle.mjs --send; preserve its receipt mappings for updates.');
+   'Saved immutable publication request. Send with publication-bundle.mjs --send; preserve its '+
+   'receipt mappings for updates.');
 }
 if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){console.error(
   'Deprecated publication-bundle.mjs; prefer publish.mjs FILE.');main(process.argv.slice(2)).catch(

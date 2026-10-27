@@ -1,3 +1,8 @@
+/**
+ * Internal: bounded, root-contained file reads for the preview (2,000 files, 32 MiB per file,
+ * 128 MiB total) and the PreviewLimitError the server answers with 413.
+ * Used by: preview.mjs, preview-changes.mjs, preview-sessions.mjs, preview-source-routes.mjs.
+ */
 import {open,realpath,stat} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {relative,sep} from 'node:path';

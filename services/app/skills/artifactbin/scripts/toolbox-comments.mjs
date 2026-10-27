@@ -1,7 +1,13 @@
+/**
+ * Internal: comment feed helpers: text rendering of comments and reactions, and the resumable
+ * watch loop over the comments stream (logs and checkpoints).
+ * Used by: comment.mjs, author-toolbox and comment-reactions-toolbox tests.
+ */
 import {open,readFile} from 'node:fs/promises';
 import {ToolError,optionalFile,jsonFile,exclusive} from './toolbox-client.mjs';
 const stream='comments';
-/** Logs and checkpoints saved before the feed carried agents' writes name the old stream; they resume unchanged. */
+/** Logs and checkpoints saved before the feed carried agents' writes name the old stream; they
+ * resume unchanged. */
 const STREAMS=new Set([stream,'human-comments']);
 function matches(value,server,id){return value?.server===server&&value?.artifact===id&&STREAMS.has(
   value?.stream);}
@@ -23,7 +29,8 @@ return {cursor:checkpoint.cursor,eventIds:records.filter(record=>record.kind==='
    record.event.event_id)};
 }
 const REACTION_MARKS={thumbs_up:'👍'};
-/** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or the bare count from an older server. */
+/** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or
+ * the bare count from an older server. */
 export function reactionText(reaction){
 const mark=REACTION_MARKS[reaction?.kind]??String(reaction?.kind),by=Array.isArray(
    reaction?.by)?reaction.by:null;
@@ -32,7 +39,8 @@ const names=by.map(reactor=>reactor?.label||(reactor?.kind==='agent'?'agent':'so
    reaction.count??names.length)-names.length;
  return `${mark} ${names.join(', ')}${more>0?` +${more}`:''}`;
 }
-/** A comment listing as text output shows it: each comment's reactions as reactionText lines. --json keeps the structure. */
+/** A comment listing as text output shows it: each comment's reactions as reactionText lines.
+ * --json keeps the structure. */
 export function listText(page){
  if(!Array.isArray(page?.annotations))return page;
 return {...page,annotations:page.annotations.map(annotation=>({...annotation,thread:Array.isArray(
@@ -79,7 +87,8 @@ for(const event of result.events){if(typeof event.event_id!=='string')throw new 
      'invalid_feed','Comment event has no event ID.',1);if(!seen.has(event.event_id)){await emit({
      kind:'event',server,artifact:id,stream,event});seen.add(event.event_id);}}
    // Accept the next cursor only after all event records have been delivered and flushed.
-   cursor=result.next_cursor;await emit({kind:'checkpoint',schema:1,server,artifact:id,stream,cursor});
+   cursor=result.next_cursor;
+    await emit({kind:'checkpoint',schema:1,server,artifact:id,stream,cursor});
    if(values.once&&!result.has_more)break;
   }
  }finally{await handle?.close();}
