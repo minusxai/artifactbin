@@ -14,7 +14,7 @@ const mime=value=>value.split(';')[0].trim().toLowerCase();
 const data=(type,bytes)=>'data:'+type+';base64,'+Buffer.from(bytes).toString('base64');
 const text=bytes=>new TextDecoder().decode(bytes);
 /** See lib/skills/preview-contract.d.ts. Canonical source is never modified. */
-export async function packPreviewExport({html,pathname,load}){
+export async function packPreviewExport({html,pathname,load,libraries={}}){
  if(typeof html!=='string'||Buffer.byteLength(html)>LIMIT.htmlBytes)throw Error('Local export HTML limit exceeded');
  // Intentional lazy pure dependency: downloaded parsers bundle this code; raw
  // source-checkout previews need no TypeScript loader for ordinary HTML files.
@@ -47,7 +47,7 @@ export async function packPreviewExport({html,pathname,load}){
   const edits=[];
   for(const item of parseImports(source)[0]){
    if(item.d===-2)continue;if(item.n===undefined)throw Error('Computed module imports cannot be saved; use literal imports');reserved(item.n);if(PLATFORM.has(item.n))continue;
-   const selected=mapped(item.n,owner);if(!selected&&!item.n.startsWith('.')&&!item.n.startsWith('/'))throw Error('Foreign or unmapped module cannot be saved locally');
+   const selected=mapped(item.n,owner)??(Object.hasOwn(libraries,item.n)?libraries[item.n]:null);if(!selected&&!item.n.startsWith('.')&&!item.n.startsWith('/'))throw Error('Foreign or unmapped module cannot be saved locally');
    const alias=await module(selected??resolve(item.n,owner));edits.push({start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:alias});
   }
   for(const edit of edits.sort((a,b)=>b.start-a.start))source=source.slice(0,edit.start)+edit.value+source.slice(edit.end);return source;

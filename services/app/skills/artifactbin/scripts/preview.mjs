@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {realpathSync} from 'node:fs';
 import {runtimeAssetManifest} from './preview-runtime-assets.mjs';
-import {libraryAssetManifest} from './preview-library-assets.mjs';
+import {libraryAssetManifest,libraryImportMap} from './preview-library-assets.mjs';
 import {createServer} from 'node:http';
 import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
@@ -33,7 +33,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
  const runtimeAssets=bundled?runtimeAssetManifest(bundled):new Map();
  let libraries=libraryAssets;
  if(!libraries){try{libraries=(await import(new URL('./preview-libraries.mjs',import.meta.url).href)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}}
- const publicLibraries=libraryAssetManifest(libraries??{});
+ const publicLibraries=libraryAssetManifest(libraries??{}),libraryImports=libraryImportMap(publicLibraries);
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
@@ -86,7 +86,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
       return {contentType:types[extname(target).toLowerCase()]??'application/octet-stream',bytes:await readPreviewFile(base,target)};
      }catch(error){if(error.code==='ENOENT')throw Error('Missing local dependency: '+name);throw error;}
     };
-    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html,pathname:selected,load});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
+    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html,pathname:selected,load,libraries:libraryImports});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
     catch(error){res.setHeader('Content-Type','application/json');return end(error.code==='PREVIEW_LIMIT'?413:422,JSON.stringify({error:'Local export failed: '+(error.code==='ENOENT'?'a project dependency is missing':error.message)}));}
    }
    if(pathname==='/__af_preview/source'){
@@ -111,7 +111,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
    const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError('Preview file exceeds 32 MiB; reduce the file or select a smaller project.');
    const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':'application/octet-stream');
    res.setHeader('Content-Type',type);
-   if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config=local?{pageId:'local:'+pathname,revision,backends:local.names,offline:true,localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:undefined;const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config);res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config={pageId:'local:'+pathname,revision,backends:local?local.names:[],offline:true,libraries:libraryImports,...(local?{localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:{})};const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config);res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
    const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
    end(200,bytes);

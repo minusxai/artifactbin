@@ -1,3 +1,4 @@
+import {libraryPathForSpecifier} from '../libraries';
 import path from 'node:path';
 import {admitRuntimeModuleImports} from './runtime-module-imports';
 import {fileContentType} from '@artifactbin/contracts';
@@ -23,6 +24,7 @@ function links(source:string,css:boolean,js=false):Link[]{
  if(js){const imports=parseImports(source)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(source):[];return imports.flatMap(item=>{
   if(item.d===-2)return [];
   if(item.n==='@afbin/apollo'||item.n==='@afbin/reader'||item.n==='@afbin/chrome'||item.n==='@afbin/portable')return [];
+  if(item.n!==undefined&&libraryPathForSpecifier(item.n))return [];
   if(item.n===undefined){const admitted=runtime.find(entry=>entry.importStart===item.ss);if(!admitted)throw Error('Computed module imports require an explicit absolute remote URL');return [{start:admitted.argumentStart,end:admitted.argumentEnd,value:admitted.replacement,kind:'asset' as const,runtimeModule:true as const}];}
   if(!item.n.startsWith('.')&&!item.n.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(item.n))throw Error('Bare module imports require an import map or absolute remote URL');
   return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const}];
