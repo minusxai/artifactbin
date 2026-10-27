@@ -1,7 +1,7 @@
 /** Public HTTP skill folder. References are shared with CLI teaching;
  * templates select HTTP procedures while the CLI compiler selects CLI procedures.
  * Assets are explicit: request input never selects a path or ZIP member. */
-import {loadSkillAssets,skillAssetName,skillFontMemberName,type SkillPackageAssets} from './assets';
+import {loadSkillAssets,skillAssetName,type SkillPackageAssets} from './assets';
 import {isShippedSkillTopic} from './public-surface';
 import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
@@ -10,14 +10,13 @@ export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackage
  return {...assets,...Object.fromEntries(renderTree(tree,base,'http',true).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
- * Text and already-compressed WOFF2 bytes need no filesystem traversal or compression. */
-/** Text teaching plus raw, registry-admitted font bytes. */
-export type SkillArchiveFiles=Readonly<Record<string,string|Uint8Array>>;
+ * Text members need no filesystem traversal or compression. No binary members: fonts load from the platform (D16). */
+export type SkillArchiveFiles=Readonly<Record<string,string>>;
 export function skillZip(files:SkillArchiveFiles):Uint8Array<ArrayBuffer>{
  const local:Buffer[]=[],central:Buffer[]=[];let offset=0;
  for(const [relative,content] of Object.entries(files).sort(([a],[b])=>a.localeCompare(b))){
-  if(skillFontMemberName(relative)?!(content instanceof Uint8Array):typeof content!=='string'||!(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
-  const name=Buffer.from(`artifactbin/${relative}`),data=typeof content==='string'?Buffer.from(content):Buffer.from(content);let crc=0xffffffff;
+  if(typeof content!=='string'||!(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
+  const name=Buffer.from(`artifactbin/${relative}`),data=Buffer.from(content);let crc=0xffffffff;
   for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
   const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(20,4);head.writeUInt16LE(0x800,6);head.writeUInt16LE(0x21,12);head.writeUInt32LE(crc,14);head.writeUInt32LE(data.length,18);head.writeUInt32LE(data.length,22);head.writeUInt16LE(name.length,26);
   local.push(head,name,data);

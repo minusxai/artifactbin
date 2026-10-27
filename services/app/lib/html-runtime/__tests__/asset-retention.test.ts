@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {createRuntimeAssetRetention} from '../asset-retention';
 import type {RuntimeAssetStore} from '../asset-retention-contract';
 const hash=(source:string)=>createHash('sha256').update(source).digest('hex');
-const assets=(apollo:string)=>({core:`reader for ${hash(apollo)}`,apollo,apolloPath:`/af/v1/apollo/${hash(apollo)}`,reader:`reader:${apollo}`,readerPath:`/af/v1/reader/${hash(`reader:${apollo}`)}`});
+const assets=(apollo:string)=>({core:`reader for ${hash(apollo)}`,apollo,apolloPath:'/af/apollo.js',reader:`reader:${apollo}`,readerPath:'/af/reader.js'});
 function memory(){const values=new Map<string,string>();return {values,store:{get:async digest=>values.get(digest)??null,put:async(digest,source)=>{values.set(digest,source);}} satisfies RuntimeAssetStore};}
 it('a second release serves exact retained bytes referenced by an already-open reader',async()=>{
  const {store}=memory(),first=assets('export const release=1'),second=assets('export const release=2');
@@ -16,9 +16,6 @@ it('never serves missing, malformed or tampered objects as executable code',asyn
  const {store,values}=memory(),current=assets('current'),retention=createRuntimeAssetRetention(current,store,hash);
  values.set(hash('old'),'tampered');
  expect(await retention.read(hash('old'))).toBeNull();expect(await retention.read(hash('missing'))).toBeNull();expect(await retention.read('../private')).toBeNull();
- const invalid={...current,apolloPath:'/af/v1/apollo/'+hash('different')};
- await expect(createRuntimeAssetRetention(invalid,store,hash).expose()).rejects.toThrow();
- expect(values.has(hash(current.apollo))).toBe(false);
 });
 it('does not expose either module before durable writes and retries failures',async()=>{
  const current=assets('current');let fail=true;

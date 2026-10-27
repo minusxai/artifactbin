@@ -13,8 +13,8 @@ describe('authorized offline dependency packaging',()=>{
   await expect(packOfflineDependencies({html:'<img src="https://user:secret@example.test/x">',baseUrl,resources:[]})).rejects.toThrow(/credential/);
  });
  it('keeps core and runtime module imports for portable assembly, handles escaping and inline CSS',async()=>{
-  const html='<head><script data-af="core" src="/af/v1/core.js"></script></head><body style="background:url(&quot;./p.png?x=1&amp;y=2&quot;)"><script type="module">import {client} from "@afbin/apollo";import "./x.js";</script></body>';
-  const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./p.png?x=1&y=2','image/png','png'),file('./x.js','application/javascript','globalThis.ok=true;')]});expect(packed.html).toContain('src="/af/v1/core.js"');expect(packed.html).not.toContain('./x.js');expect(packed.html).toContain('data:image/png;base64,');
+  const html='<head><script data-af="core" src="/af/core.js"></script></head><body style="background:url(&quot;./p.png?x=1&amp;y=2&quot;)"><script type="module">import {client} from "@afbin/apollo";import "./x.js";</script></body>';
+  const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./p.png?x=1&y=2','image/png','png'),file('./x.js','application/javascript','globalThis.ok=true;')]});expect(packed.html).toContain('src="/af/core.js"');expect(packed.html).not.toContain('./x.js');expect(packed.html).toContain('data:image/png;base64,');
  });
  it('refuses MIME confusion and remote unresolved imports',async()=>{
   await expect(packOfflineDependencies({html:'<script type="module" src="./x.js"></script>',baseUrl,resources:[file('./x.js','image/png','alert(1)')]})).rejects.toThrow(/MIME/);

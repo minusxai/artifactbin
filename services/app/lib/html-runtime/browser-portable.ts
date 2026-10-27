@@ -1,3 +1,4 @@
+import {isRuntimeCoreSrc} from '../html-page/core-script';
 import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { recoverPortableSource,recoverPortableRendering,portableRenderedDigest } from './portable-source';
@@ -15,7 +16,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const target=parser.parseFromString(rendered,'text/html');
  if(adopt){
   const canonical=parser.parseFromString(source,'text/html');
-  const authored=(doc:Document)=>[...doc.querySelectorAll('*')].filter(node=>!(node.tagName==='SCRIPT'&&(node.getAttribute('src')==='/af/v1/core.js'||node.getAttribute('data-af')==='core')));
+  const authored=(doc:Document)=>[...doc.querySelectorAll('*')].filter(node=>!(node.tagName==='SCRIPT'&&(isRuntimeCoreSrc(node.getAttribute('src'))||node.getAttribute('data-af')==='core')));
   const before=authored(target),after=authored(canonical);
   if(before.length!==after.length||before.some((node,index)=>node.tagName!==after[index]!.tagName))throw Error('Published source structure changed; save the linked copy from the platform');
   for(let index=0;index<before.length;index++){const id=after[index]!.getAttribute('data-af-id');if(id)before[index]!.setAttribute('data-af-id',id);}
@@ -23,7 +24,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const renderedSource=(rendered.match(/^\s*(<!doctype[^>]*>)/i)?.[1]??'')+target.documentElement.outerHTML;
  const envelope={version:1 as const,source,...(portable.identity?{identity:portable.identity}:{}),...((portable.renderedDigest||adopt||options.renderedSource!==undefined)?{renderedDigest:portableRenderedDigest(renderedSource)}:{}),...(options.privateState?{privateState:options.privateState}:{})};
  const block=parser.parseFromString(portableScript(envelope),'text/html').querySelector('script')!;
- for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/v1/core.js"]')) old.remove();
+ for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/core.js"],script[src="/af/v1/core.js"]')) old.remove();
  const fragments:Node[]=[];
  for(const name of ['runtime','apollo','reader','chrome','portable-engine','core']) {
   const source=live.querySelector(`script[data-af="${name}"]`);

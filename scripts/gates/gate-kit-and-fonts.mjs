@@ -49,7 +49,7 @@ const publish = async (body, options = {}) => {
 };
 const css = `*{box-sizing:border-box}body{margin:0;padding:24px;max-width:1000px;margin-inline:auto}button,input,select{font:inherit;padding:8px}article,section,details{padding:16px;margin-block:12px;border:1px solid currentColor}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid}svg{max-width:100%}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}.stats article{min-width:0}.bar{display:flex;width:100%}.bar>span{padding:8px;white-space:nowrap;font-size:clamp(11px,2vw,18px)}.bar>span:first-child{background:#222;color:white}.bar>span:last-child{background:#ddd;color:#222}.popover-wrap{display:flex;justify-content:end;position:relative;margin-top:32px}#popover{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:white;color:black;border:1px solid;padding:8px;max-width:100%}#popover[hidden]{display:none}`;
 const html = (title, body, script = "", state = {}, head = "", system = "") =>
-  `<!doctype html><html${system ? ` data-af-design-system="${system}" data-af-dark="false"` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${head}<script src="/af/v1/core.js" data-af="core"></script><script type="application/json" data-af="state">${JSON.stringify(state)}</script><style>${css}</style></head><body>${body}${script ? `<script type="module">import {client,gql} from '@afbin/apollo';${script}</script>` : ""}</body></html>`;
+  `<!doctype html><html${system ? ` data-af-design-system="${system}" data-af-dark="false"` : ""}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>${head}<script src="/af/core.js" data-af="core"></script><script type="application/json" data-af="state">${JSON.stringify(state)}</script><style>${css}</style></head><body>${body}${script ? `<script type="module">import {client,gql} from '@afbin/apollo';${script}</script>` : ""}</body></html>`;
 const files = await readdir(
   new URL("../../services/app/public/fonts/", import.meta.url),
 );
@@ -299,6 +299,17 @@ try {
       (await fetch(`${B}/fonts/NotoSerif-Regular.ttf`)).status === 404,
       "retired unhashed TTF remains absent",
     );
+    {
+      // D17: the same bytes at the platform's plain-name address, immutable.
+      const plain = await fetch(`${B}/af/fonts/${bodyFace.split("/").at(-1).replace(/\.[a-f0-9]{8}\.woff2$/, ".woff2")}`);
+      const hashed = await fetch(`${B}${bodyFace}`);
+      check(
+        plain.status === 200 &&
+          /immutable/.test(plain.headers.get("cache-control") ?? "") &&
+          Buffer.from(await plain.arrayBuffer()).equals(Buffer.from(await hashed.arrayBuffer())),
+        "platform font name serves the hashed file's bytes, immutable",
+      );
+    }
     const context = await browser.newContext();
     const { page, frame } = await open(context, fontDoc.id);
     const read = async (target) =>

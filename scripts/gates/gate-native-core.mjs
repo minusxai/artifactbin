@@ -15,15 +15,15 @@ const publish=async body=>{const res=await fetch(base+'/api/artifacts',{method:'
 const dataset=await publish({dataset:[{value:7}]});
 const body='<p data-af-id="words">The reader works before the author engine loads.</p><button id="start">Load client</button><output id="count"></output><button id="remote">Read shared data</button><output id="status"></output>';
 const script=`document.querySelector('#start').onclick=async()=>{const {client,gql}=await import('@afbin/apollo');const query=gql\`{count}\`;await client.updateQuery({query},({count})=>({count:count+1}));document.querySelector('#count').textContent=(await client.query({query})).data.count;document.querySelector('#remote').onclick=async()=>{document.querySelector('#status').textContent=JSON.stringify(await client.query({query:gql\`{orders{rows{value}}}\`}))}}`;
-const html=`<!doctype html><html><head><script data-af="core" src="/af/v1/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
+const html=`<!doctype html><html><head><script data-af="core" src="/af/core.js"></script><script type="application/json" data-af="state">{"count":3}</script><link rel="af-dataset" data-af-name="orders" href="ref:${dataset.id}"></head><body>${body}<script>${script}</script></body></html>`;
 try{
  const doc=await publish({html}),page=await browser.newPage();let authorRequests=0,relayRequests=0;
- page.on('request',request=>{if(/\/af\/v1\/apollo\/[a-f0-9]{64}$/.test(request.url()))authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/graphql`))relayRequests++;});
+ page.on('request',request=>{if(new URL(request.url()).pathname==='/af/apollo.js')authorRequests++;if(request.url().endsWith(`/api/artifacts/${doc.id}/graphql`))relayRequests++;});
  await page.goto(`${base}/a/${doc.id}`,{waitUntil:'load'});const frame=await documentFrame(page);
  await frame.locator('[data-af="presence-overlay"]').waitFor();
  check(authorRequests===0,'reader/comments/presence initialize without fetching the author engine');
  await frame.locator('#start').click();await frame.locator('#count').filter({hasText:'4'}).waitFor();
- check(authorRequests===1,'first actual author import fetches one immutable module');
+ check(authorRequests===1,'first actual author import fetches the one author module');
  check(await frame.locator('#count').textContent()==='4','lazy client initializes and updates private viewer state');
  await frame.locator('#remote').click();await frame.locator('#status').filter({hasText:'data'}).waitFor();
  check(relayRequests===1,'lazy client reuses the already attached trusted parent relay');
@@ -61,7 +61,7 @@ try{
  const diagnostic=await publish({html:`<html><body><script type="module">${diagnosticScript}</script></body></html>`}),diagnosticPage=await browser.newPage();await diagnosticPage.goto(`${base}/a/${diagnostic.id}`,{waitUntil:'load'});const diagnosticFrame=await documentFrame(diagnosticPage);await diagnosticFrame.waitForFunction(()=>window.policyResult!==undefined);
  const [dataAllowed,blobAllowed]=await diagnosticFrame.evaluate(()=>window.policyResult);check(!dataAllowed&&blobAllowed,'hosted data module refusal and blob module execution retain original policy');
  // A raw authored page may load the documented core before publication. It gains no parent authority.
- const preview=createServer((_request,response)=>{response.setHeader('content-type','text/html');response.end(`<!doctype html><html><head><script src="${base}/af/v1/core.js" data-af="core"></script><script type="application/json" data-af="state">{"count":3}</script></head><body>${body}<script>${script}</script></body></html>`)});
+ const preview=createServer((_request,response)=>{response.setHeader('content-type','text/html');response.end(`<!doctype html><html><head><script src="${base}/af/core.js" data-af="core"></script><script type="application/json" data-af="state">{"count":3}</script></head><body>${body}<script>${script}</script></body></html>`)});
  await new Promise(resolve=>preview.listen(0,'127.0.0.1',resolve));
  const standalone=await browser.newPage();
  try{await standalone.goto(`http://127.0.0.1:${preview.address().port}/standalone.html`);await standalone.locator('#start').click();await standalone.locator('#count').filter({hasText:'4'}).waitFor();}

@@ -115,7 +115,7 @@ describe('actual fixture publication payloads',()=>{
     await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
-      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);if(file.path.startsWith('fonts/'))expect(Buffer.from(file.base64,'base64').equals(await readFile(path.join(repo,'services/app/public',file.path)))).toBe(true);}
+      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);}
       // The platform serves the design system and its fonts: the page names it and uploads neither.
       expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/')||file.path.startsWith('design-systems/'))).toHaveLength(0);
       expect(body.html).toContain('<meta name="artifactbin:design-system" content="almanac">');expect(body.html).not.toContain('design-systems/almanac.css');

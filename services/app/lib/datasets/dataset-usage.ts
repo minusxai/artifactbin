@@ -10,7 +10,7 @@ function usage(id:string,catalog?:DatasetCatalog):string {
  if(catalog?.kind==='postgres')return datasetQuerySnippet(id,catalog);
  return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dataset rows</title><script src="/af/v1/core.js" data-af="core"></script>
+<title>Dataset rows</title><script src="/af/core.js" data-af="core"></script>
 ${datasetQuerySnippet(id,catalog)}
 </head><body><h1>Dataset rows</h1><p id="status">Loading…</p><pre id="rows"></pre>
 <script type="module">

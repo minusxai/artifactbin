@@ -3,8 +3,6 @@ import path from 'node:path';
 /** Explicit text-only package resources. Request input never chooses filesystem paths.
  * Components are flat lowercase kebab-case .ts source and .js runtime siblings.
  * Component .test.ts and .fixture.ts files are development-only and never exported. */
-/** Binary members are admitted separately from the text asset walk. */
-export const skillFontMemberName=(name:string):boolean=>/^fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/.test(name);
 export type SkillPackageAssets=Readonly<Record<string,string>>;
 export const skillAssetName=(name:string):boolean=>/^(?:scripts\/[a-z0-9-]+\.mjs|examples\/[a-z0-9-]+\.(?:html|csv|ts)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.(?:ts|js))$/.test(name);
 export function loadSkillAssets(root=path.resolve(process.cwd(),'skills/artifactbin')):SkillPackageAssets{

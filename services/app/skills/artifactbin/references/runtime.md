@@ -7,7 +7,7 @@ description: Normal HTML scripts and Apollo state, viewer-local persistence, sha
 Load the one core script before author scripts. It supplies the import mapping; normal CSS/JS runs in the browser without a JSX compiler.
 
 ```html
-<script src="/af/v1/core.js" data-af="core"></script>
+<script src="/af/core.js" data-af="core"></script>
 <script type="application/json" data-af="state">{"count":0}</script>
 <button id="increment" type="button">Add one</button>
 <output id="count">0</output>

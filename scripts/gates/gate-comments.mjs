@@ -1018,7 +1018,7 @@ async function selectionLeg(browser, seed) {
 
 // One authored local-state projection; the draft is intentionally excluded.
 const VIEW_DOC = `<!doctype html><html><head><title>Saved comment view</title>
-<script src="/af/v1/core.js" data-af="core"></script>
+<script src="/af/core.js" data-af="core"></script>
 <script type="application/json" data-af="state" data-af-comment-version="one" data-af-comment-fields='["screen"]'>{"screen":"home","draft":""}</script></head>
 <body style="padding:40px"><button id="home">Home</button><button id="detail">Detail</button><input id="draft" aria-label="Private draft"><p id="target" data-af-id="target">Saved view target</p><output id="screen"></output>
 <script type="module">import {client,gql} from '@afbin/apollo';

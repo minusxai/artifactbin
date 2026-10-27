@@ -128,13 +128,13 @@ test('local operations bound concurrency and pass a real abort signal',async()=>
 });
 
 
-test('runtime admission verifies all split modules against immutable source paths',async()=>{
- const {runtimeAssetManifest}=await import('../../services/app/skills/artifactbin/scripts/preview-runtime-assets.mjs');const {createHash}=await import('node:crypto');
- const source='export const splitModule=true;',path='/af/v1/reader/'+createHash('sha256').update(source).digest('hex');
- const manifest=runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:path});assert.equal(manifest.get(path),source);assert.equal(manifest.get('/af/v1/core.js'),'core()');
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:'changed',portableEnginePath:path}),/immutable source/);
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'https://example.invalid/runtime'}),/immutable source/);
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEnginePath:path}),/immutable source/);
+test('runtime admission admits split modules only at flat /af/ addresses',async()=>{
+ const {runtimeAssetManifest}=await import('../../services/app/skills/artifactbin/scripts/preview-runtime-assets.mjs');
+ const source='export const splitModule=true;',path='/af/portable.js';
+ const manifest=runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:path});assert.equal(manifest.get(path),source);assert.equal(manifest.get('/af/core.js'),'core()');assert.equal(manifest.get('/af/core.js'),'core()');
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'/af/v1/reader/'+'0'.repeat(64)}),/does not match its source/);
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'https://example.invalid/runtime'}),/does not match its source/);
+ assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:'',portableEnginePath:path}),/does not match its source/);
 });
 
 test('private preview mounts only admitted versioned library bytes without eval permissions',async()=>{

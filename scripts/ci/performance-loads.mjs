@@ -192,6 +192,8 @@ try {
   console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
   const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, log: line => console.log(line) });
   if (sizeOnly) assert(samples.every(sample => sample.ready && sample.jsBeforeReady !== null), 'size pass needs a ready marker and JS byte count for every view');
+  result.stylesheetRevalidation = await measureStylesheetRevalidation(browser, base, documentFixtures.find(f => f.key === 'system').id);
+  console.log(`Platform stylesheet revalidation: ${JSON.stringify(result.stylesheetRevalidation)}`);
   result.documents = { conditions: { ...(mode.throttle ?? {}), mode: sizeOnly ? 'size-only' : 'timing', runs: mode.runs, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000', storedDiagrams }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(result, null, 2));
@@ -208,6 +210,36 @@ try {
   gateway.closeAllConnections();
   await new Promise(resolve => gateway.close(resolve));
   rmSync(scratch, { recursive: true, force: true });
+}
+
+/**
+ * The platform stylesheet (/af/styles.css: strong ETag, no-cache) on a repeat view of a page that names a design
+ * system: the first view fills the browser cache, every later one revalidates and should get a 304. Recorded per
+ * repeat from the DevTools protocol (status, header-only transfer, request→response ms), plus a direct conditional
+ * GET against the server for the bare 304 cost.
+ */
+async function measureStylesheetRevalidation(browser, base, id) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  const seen = [];
+  cdp.on('Network.responseReceived', ({ response }) => { if (new URL(response.url).pathname === '/af/styles.css') seen.push({ status: response.status, fromCache: response.fromDiskCache || response.fromMemoryCache, ms: response.timing ? response.timing.receiveHeadersEnd - response.timing.sendStart : null, encodedBytes: response.encodedDataLength }); });
+  const views = [];
+  try {
+    for (let i = 0; i < 6; i++) {
+      seen.length = 0;
+      await page.goto(`${base}/a/${id}/raw`, { waitUntil: 'load' });
+      await page.waitForTimeout(200);
+      views.push(seen[0] ?? null);
+    }
+  } finally { await context.close(); }
+  const first = await fetch(`${base}/af/styles.css`);
+  const etag = first.headers.get('etag'); await first.arrayBuffer();
+  const direct = [];
+  for (let i = 0; i < 15; i++) { const start = performance.now(); const response = await fetch(`${base}/af/styles.css`, { headers: { 'if-none-match': etag } }); await response.arrayBuffer(); direct.push({ status: response.status, ms: performance.now() - start }); }
+  const repeats = views.slice(1).filter(Boolean), median = values => { const sorted = values.filter(v => typeof v === 'number').sort((a, b) => a - b); return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null; };
+  return { cacheControl: first.headers.get('cache-control'), firstView: views[0], repeatStatuses: repeats.map(r => r.status), repeatMedianMs: median(repeats.map(r => r.ms)), directStatuses: [...new Set(direct.map(d => d.status))], directMedianMs: median(direct.map(d => d.ms)) };
 }
 
 // All samples are saved and child resources closed; imported SDK timers must

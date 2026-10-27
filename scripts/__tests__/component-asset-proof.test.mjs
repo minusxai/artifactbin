@@ -29,7 +29,7 @@ it('rejects a stale served module, source-stale build and omitted transitive out
  await expect(verifyComponentAssetArchive({root,files})).rejects.toThrow('Stale component build');
 });
 it('adds verified asset proof to supplied reader entries without republishing the private selection',async()=>{
- const root=await fixture(),files=await built(root),zip=skillZip({'components/slide.js':files.get('components/slide.js').toString(),'scripts/publication-bundle.mjs':'export {};','scripts/preview-html.mjs':'export {};','design-systems/almanac.css':'body{}','fonts/test.12345678.woff2':new Uint8Array([0x77,0x4f,0x46,0x32])});
+ const root=await fixture(),files=await built(root),zip=skillZip({'components/slide.js':files.get('components/slide.js').toString(),'scripts/publication-bundle.mjs':'export {};','scripts/preview-html.mjs':'export {};','design-systems/almanac.css':'body{}'});
  const entries=[{fixture:'chosen-private-fixture',theme:'dark',url:'http://localhost:3030/a/Private123/raw'}],input={implementation:'html',sourceRevision:'source-bound-candidate',entries,output:path.join(root,'evidence')};
  let requested;
  const result=await attachVerifiedComponentAssets(input,{source:root,base:'http://localhost:3030',fetcher:async url=>{requested=String(url);return new Response(zip,{status:200});}});

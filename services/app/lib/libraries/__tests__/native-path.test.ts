@@ -10,7 +10,7 @@ import {registeredLibrarySources,referencedLibraryResources} from '../assets.ser
 import {packOfflineDependencies} from '../../offline-dependencies';
 import {assembleHtmlPage,downloadableHtml} from '../../html-runtime';
 const baseUrl='https://page.example/a/PAGE12/download';
-const authored=`<html><head><script src="/af/v1/core.js"></script></head><body><div data-af-id="chart"></div><script type="module" data-af-id="chart-script">
+const authored=`<html><head><script src="/af/core.js"></script></head><body><div data-af-id="chart"></div><script type="module" data-af-id="chart-script">
 import * as vega from "/libraries/vega-6.3.1/index.js";
 import {compile} from "/libraries/vega-lite-6.4.3/index.js";
 const native={width:100,height:50,marks:[{type:'rect',encode:{enter:{x:{value:0},y:{value:0},width:{value:40},height:{value:30},fill:{value:'#16a085'}}}}]};

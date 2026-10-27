@@ -15,7 +15,7 @@ describe('native head publication',()=>{
   const wire=await response.json();expect(wire.title).toBe('Scripted page');
   expect(wire.html).toContain('@import url("https://fonts.example/x.css"); h1 { color: red; }');
   expect(wire.html).toContain('console.log("body")');
-  expect(wire.html.indexOf('/af/v1/core.js')).toBeLessThan(wire.html.indexOf('document.body.dataset.ready'));
+  expect(wire.html.indexOf('/af/core.js')).toBeLessThan(wire.html.indexOf('document.body.dataset.ready'));
  });
  it('an explicit request title wins over the native head title',async()=>{
   const response=await publish(page('<title>Source title</title>'),'Named by hand');
@@ -26,6 +26,6 @@ describe('native head publication',()=>{
   const canonical=(await first.json()).html;
   const second=await publish(canonical);expect(second.status).toBe(201);
   expect((await second.json()).html).toBe(canonical);
-  expect(canonical.match(/src="\/af\/v1\/core.js"/g)).toHaveLength(1);
+  expect(canonical.match(/src="\/af\/core.js"/g)).toHaveLength(1);
  });
 });

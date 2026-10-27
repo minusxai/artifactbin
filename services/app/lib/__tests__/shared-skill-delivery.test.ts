@@ -1,4 +1,3 @@
-import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic,isShippedSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
@@ -91,8 +90,8 @@ describe('installable shared skill folder',()=>{
    expect(Object.keys(libraries)).toContain('/libraries/vega-6.3.1/index.js');expect(Object.keys(libraries)).toContain('/libraries/vega-lite-6.4.3/index.js');
    expect(assets.core).toContain('@afbin/apollo');
    expect(assets.reader).toContain('offline');
-   expect(assets.apolloPath).toBe('/af/v1/apollo/'+createHash('sha256').update(assets.apollo).digest('hex'));
-   expect(assets.readerPath).toBe('/af/v1/reader/'+createHash('sha256').update(assets.reader).digest('hex'));
+   expect(assets.apolloPath).toBe('/af/apollo.js');
+   expect(assets.readerPath).toBe('/af/reader.js');
    const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
    expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
    const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
@@ -101,7 +100,7 @@ describe('installable shared skill folder',()=>{
    try {
     for(const [url,source] of Object.entries(libraries)){const response=await fetch(new URL(url,preview.url));expect(response.status).toBe(200);expect(await response.text()).toBe(source);}
     expect(await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json()).toEqual(assets);
-    for(const [resource,source] of [['/af/v1/core.js',assets.core],...Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([key,path])=>[path,assets[key.slice(0,-4)]])]){
+    for(const [resource,source] of [['/af/core.js',assets.core],...Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([key,path])=>[path,assets[key.slice(0,-4)]])]){
      const response=await fetch(new URL(resource,preview.url));
      expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);
     }

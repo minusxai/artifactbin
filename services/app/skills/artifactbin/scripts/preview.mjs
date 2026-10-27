@@ -13,18 +13,41 @@ import {writeFile,rename} from 'node:fs/promises';
 import {dirname,basename} from 'node:path';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {pathToFileURL,fileURLToPath} from 'node:url';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
+import configuredServer from './toolbox-config.mjs';
 
 // No remote sources, frames, forms, workers or popup permissions. This is a
 // browser resource policy, not an OS/network sandbox for hostile JavaScript.
 export const PRIVATE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-downloads";
 const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff','.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
-/** The platform stylesheet's hosted font files: the skill archive's fonts/, or the app's public/fonts in a source checkout. */
-const PLATFORM_FONT=/^\/fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/;
-async function platformFont(pathname){
- if(!PLATFORM_FONT.test(pathname))return null;
- for(const dir of ['../fonts/','../../../public/fonts/']){try{return await readFile(fileURLToPath(new URL(dir+pathname.slice('/fonts/'.length),import.meta.url)));}catch(error){if(error.code!=='ENOENT')throw error;}}
- return null;
+/**
+ * The platform stylesheet's font files: /af/fonts/<name>.woff2 (and the legacy /fonts/<name>.<hash8>.woff2). A source
+ * checkout reads the app's public/fonts; otherwise each file is fetched once from the selected server's /af/fonts/ (the
+ * skill archive packages no fonts) and served from this origin, so the private CSP keeps font-src 'self'.
+ */
+const PLATFORM_FONT=/^\/(?:af\/fonts\/([a-z0-9-]+)\.woff2|fonts\/([a-z0-9-]+)\.[a-f0-9]{8}\.woff2)$/;
+let checkoutFonts;
+async function checkoutFont(name){
+ const dir=new URL('../../../public/fonts/',import.meta.url);
+ checkoutFonts??=readdir(fileURLToPath(dir)).catch(error=>{if(error.code==='ENOENT'||error.code==='ENOTDIR')return [];throw error;});
+ const file=(await checkoutFonts).find(entry=>entry.startsWith(name+'.')&&/^\.[a-f0-9]{8}\.woff2$/.test(entry.slice(name.length)));
+ return file?await readFile(fileURLToPath(new URL(file,dir))):null;
+}
+function platformFonts(origin){
+ const fetched=new Map();
+ return async pathname=>{
+  const match=PLATFORM_FONT.exec(pathname);if(!match)return null;
+  const name=match[1]??match[2],local=await checkoutFont(name);if(local)return local;
+  if(!origin)return null;
+  if(!fetched.has(name))fetched.set(name,(async()=>{
+   const response=await fetch(new URL(`/af/fonts/${name}.woff2`,origin),{redirect:'error',signal:AbortSignal.timeout(10000)});
+   if(!response.ok)return null;
+   const bytes=Buffer.from(await response.arrayBuffer());
+   if(bytes.length>4_000_000||bytes.subarray(0,4).toString('latin1')!=='wOF2')throw Error('Unexpected platform font response');
+   return bytes;
+  })().catch(error=>{fetched.delete(name);throw error;}));
+  return fetched.get(name);
+ };
 }
 const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!tail.startsWith('..'+sep)&&tail!=='..'&&!tail.startsWith(sep));};
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts. */
@@ -32,7 +55,7 @@ const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!ta
 function previewAutofix(base,file,html){
  return autofixHtml(html,{exists:relative=>{const full=resolve(dirname(file),relative);if(!inside(base,full))return false;try{return statSync(full).isFile();}catch{return false;}}});
 }
-export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
+export async function startPreview({root,port=0,runtimeDir,fontOrigin=configuredServer,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
  if(!Number.isInteger(port)||port<0||port>65535)throw Error('Port must be an integer from 0 to 65535');
  const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error('Root must be a directory');
  // Generated only in the downloadable archive; optional in a source checkout.
@@ -43,6 +66,8 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
  if(!libraries){try{libraries=(await import(new URL('./preview-libraries.mjs',import.meta.url).href)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}}
  const publicLibraries=libraryAssetManifest(libraries??{}),libraryImports=libraryImportMap(publicLibraries);
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
+ if(fontOrigin!==null&&fontOrigin!==undefined&&!/^https?:$/.test(new URL(fontOrigin).protocol))throw Error('Font origin must be http(s)');
+ const platformFont=platformFonts(fontOrigin??null);
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
  // One report per distinct served content of each page, not one per request.
@@ -114,8 +139,8 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
    const source=runtimeAssets.get(pathname)??publicLibraries.get(pathname);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
-   const isRuntime=runtime&&pathname.startsWith('/af/v1/');const selected=isRuntime?runtime:base;
-   const requested=isRuntime?pathname.slice('/af/v1/'.length):pathname.slice(1);
+   const isRuntime=runtime&&pathname.startsWith('/af/');const selected=isRuntime?runtime:base;
+   const requested=isRuntime?pathname.slice('/af/'.length):pathname.slice(1);
    let file=resolve(selected,requested||'index.html');if(!inside(selected,file))return end(404,'Not found');
    file=await realpath(file);if(!inside(selected,file)||relative(selected,file).split(sep).some(part=>part.startsWith('.')))return end(404,'Not found');
    const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError('Preview file exceeds 32 MiB; reduce the file or select a smaller project.');

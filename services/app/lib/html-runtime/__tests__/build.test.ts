@@ -26,7 +26,7 @@ it('keeps executable inline JavaScript in assembled static HTML under the 10 KiB
 
 it('hosted readers omit the author engine, while downloads carry the same module without network dependencies',async()=>{
  const assets=await buildHtmlAssets();
- expect(assets.apolloPath).toMatch(/^\/af\/v1\/apollo\/[a-f0-9]{64}$/);
+ expect(assets.apolloPath).toBe("/af/apollo.js");
  expect(assets.core).not.toContain(assets.apollo);
  const html=downloadableHtml({html:'<html><body></body></html>',core:assets.core,apollo:assets.apollo,reader:assets.reader,config:{pageId:'p',revision:'1',backends:[]}});
  expect(html).toContain('data-af="apollo"');
@@ -36,7 +36,7 @@ it('hosted readers omit the author engine, while downloads carry the same module
 
 it('keeps reader code out of the bootstrap and embeds exact portable reader bytes',async()=>{
  const assets=await buildHtmlAssets();
- expect(assets.readerPath).toMatch(/^\/af\/v1\/reader\/[a-f0-9]{64}$/);
+ expect(assets.readerPath).toBe("/af/reader.js");
  expect(assets.core).not.toContain(assets.reader);
  const hosted=assembleHtmlPage({html:'<html><body></body></html>',core:assets.core,config:{pageId:'p',revision:'1',backends:[]}});
  expect(hosted).not.toContain('<script type="application/json" data-af="reader">');
@@ -115,8 +115,8 @@ it('leaves hosted top-level captures untouched and boots portable and raw local 
   try {
    runInNewContext(assets.core,{document,location,window:Object.assign(win,{parent:win}),URL:LocalURL,Blob});
    expect(listeners).toEqual(['DOMContentLoaded']);expect(mapNonce).toBe('platform-render-nonce');
-   expect(imports?.['@afbin/reader']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/v1\/reader\/[a-f0-9]{64}$/);
-   expect(imports?.['@afbin/apollo']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/v1\/apollo\/[a-f0-9]{64}$/);
+   expect(imports?.['@afbin/reader']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/reader\.js$/);
+   expect(imports?.['@afbin/apollo']).toMatch(offline?/^blob:/:/^https:\/\/page\.example\/af\/apollo\.js$/);
    if(offline){expect(await (await fetch(imports!['@afbin/reader']!)).text()).toBe(assets.reader);expect(await (await fetch(imports!['@afbin/apollo']!)).text()).toBe(assets.apollo);}
   }finally{for(const url of blobs)URL.revokeObjectURL(url);}
  }

@@ -4,6 +4,13 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import type {HtmlRuntimeAssets} from './contract';
 import {htmlSystemsCss} from '../html-systems';
+import {RUNTIME_BUILD_KEY,RUNTIME_MODULE_PATHS} from './contract';
+/**
+ * Prepended to every lazily loaded runtime module. Core (inline in the page, or /af/core.js) records its build id
+ * before any module runs; a module from another build reloads the page once (fresh HTML brings the matching core) and
+ * refuses to run. Pages without a hosted core (offline copies embed their own modules) never set the id.
+ */
+const skewGuard=(id:string)=>`{const c=globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})];if(c&&c!==${JSON.stringify(id)}){let r=!1;try{const n="afbin:runtime-reload";if(sessionStorage.getItem(n)!==${JSON.stringify(id)}){sessionStorage.setItem(n,${JSON.stringify(id)});r=!0}}catch{}if(r)location.reload();throw Error("Artifactbin runtime updated; reload the page")}}\n`;
 let assets:Promise<HtmlRuntimeAssets>|undefined;
 /** Build immutable code once. Page configuration is supplied only by assembly. */
 export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=compile().catch(error=>{assets=undefined;throw error;});}
@@ -15,19 +22,19 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const readerSource=reader.outputFiles?.[0]?.text,apollo=author.outputFiles?.[0]?.text;
  if(!readerSource||!apollo)throw Error('HTML runtime build produced no module');
  const portableBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./portable-session.ts',import.meta.url))],format:'esm',external:['@afbin/chrome']});
- const portableEngine=portableBuild.outputFiles![0]!.text;
- const portableEnginePath='/af/v1/reader/'+createHash('sha256').update(portableEngine).digest('hex');
  // The live morph (./live-morph) loads only when a new version reaches an open framed page.
  const morphBuild=await build({...options,entryPoints:[fileURLToPath(new URL('./live-morph.ts',import.meta.url))],format:'esm'});
- const morph=morphBuild.outputFiles![0]!.text;
- const morphPath='/af/v1/reader/'+createHash('sha256').update(morph).digest('hex');
  const chrome=await buildPortableChrome();
- const chromePath='/af/v1/reader/'+createHash('sha256').update(chrome).digest('hex');
- const readerPath='/af/v1/reader/'+createHash('sha256').update(readerSource).digest('hex');
- const apolloPath='/af/v1/apollo/'+createHash('sha256').update(apollo).digest('hex');
+ // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
+ // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
+ const unguarded={apollo,reader:readerSource,chrome,portableEngine:portableBuild.outputFiles![0]!.text,morph:morphBuild.outputFiles![0]!.text};
+ const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
+ const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
+ const {apolloPath,readerPath,chromePath,portableEnginePath,morphPath}=RUNTIME_MODULE_PATHS;
  const entry=`import {installHtmlReaderCommands} from ${JSON.stringify(fileURLToPath(new URL('../html-bridge/reader.ts',import.meta.url)))};
 import {openFrameDoor} from ${JSON.stringify(fileURLToPath(new URL('../islands/frame-door.ts',import.meta.url)))};
 import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL('./table-scroll.ts',import.meta.url)))};
+globalThis[Symbol.for(${JSON.stringify(RUNTIME_BUILD_KEY)})]=${JSON.stringify(buildId)};
 const platformNonce=document.currentScript?.nonce;
 const supplied=document.querySelector('[data-af="runtime"]');
 const config=supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};
@@ -59,5 +66,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo,apolloPath,reader:readerSource,readerPath,chrome,chromePath,portableEngine,portableEnginePath,morph,morphPath};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo:guarded.apollo,apolloPath,reader:guarded.reader,readerPath,chrome:guarded.chrome,chromePath,portableEngine:guarded.portableEngine,portableEnginePath,morph:guarded.morph,morphPath};
 }

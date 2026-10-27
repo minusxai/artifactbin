@@ -167,7 +167,7 @@ describe('installed native author examples',()=>{
    }};
    const source=path.join(project,'index.html');
    const body='<h1>Quarterly plan</h1>\n<p>Three bets for the next quarter.</p>\n<ul><li>Ship the importer</li><li>Halve time to first chart</li></ul>\n';
-   const draft=`<!doctype html>\n<html>\n<head><title>Plan</title></head>\n<body>\n${body}<script defer src="/af/v1/core.js"></script>\n</body>\n</html>\n`;
+   const draft=`<!doctype html>\n<html>\n<head><title>Plan</title></head>\n<body>\n${body}<script defer src="/af/core.js"></script>\n</body>\n</html>\n`;
    // Refusals stop before anything is sent or written.
    await writeFile(source,draft.replace('</ul>','</ul><img src="./missing.png">'));
    await expect(publishCommand({values:{server},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_refused',exit:2});

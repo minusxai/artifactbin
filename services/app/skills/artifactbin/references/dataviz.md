@@ -14,7 +14,7 @@ Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); 
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
-<script src="/af/v1/core.js"></script>
+<script src="/af/core.js"></script>
 <script type="module">
 import * as vega from "@afbin/vega";
 import {compile} from "@afbin/vega-lite";

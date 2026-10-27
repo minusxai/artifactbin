@@ -196,7 +196,7 @@ it('autofix.mjs fixes in place, --dry-run writes nothing, and the report starts 
  const {autofixCommand}=await import('../../../skills/artifactbin/scripts/autofix.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-autofix-'));
  try{
-  const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1><script defer src="/af/v1/core.js"></script></body></html>';
+  const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1><script defer src="/af/core.js"></script></body></html>';
   await writeFile(file,source);const logs:string[]=[];const log=(text:string)=>{logs.push(text);};
   await autofixCommand({values:{'dry-run':true},positionals:[file]},{log});
   expect(await readFile(file,'utf8')).toBe(source);expect(logs[0]).toMatch(/^autofix: 3 to fix/);expect(logs[0]).toContain('dry run; nothing written');

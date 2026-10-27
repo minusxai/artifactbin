@@ -1,3 +1,4 @@
+import {isRuntimeCoreSrc} from '../html-page/core-script';
 import {parse as parseJavaScript} from 'acorn';
 import {createHash} from 'node:crypto';
 import {build,transform,type Loader} from 'esbuild';
@@ -61,7 +62,7 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  for(const element of elements){const attr=(name:string)=>element.attrs.find(a=>a.name===name)?.value;const set=(name:string,value:string)=>{const location=element.sourceCodeLocation?.attrs?.[name];if(location)edits.push({start:location.startOffset,end:location.endOffset,text:`${name}="${escaped(value)}"`});};
   const remove=(name:string)=>{const location=element.sourceCodeLocation?.attrs?.[name];if(location)edits.push({start:location.startOffset,end:location.endOffset,text:''});};
   const src=attr('src'),href=attr('href');
-  if(element.tagName==='script'&&attr('data-af')!=='core'&&src!=='/af/v1/core.js'){
+  if(element.tagName==='script'&&attr('data-af')!=='core'&&!isRuntimeCoreSrc(src)){
    const module=attr('type')==='module';if(src){const data=/^data:/i.test(src),resource=data?dataResource(src):get(canonical(src));if(!JS.has(type(resource.contentType)))throw Error('Script resource MIME is not JavaScript');const source=new TextDecoder().decode(resource.bytes);if(!module){checkClassic(source);if(!data)set('src',encoded(type(resource.contentType),resource.bytes));}else if(data){checkModule(source,true);}else{const packed=await bundle(source,canonical(src),'js');set('src',packed.url);remove('integrity');extraCss+=packed.css;}}
    else if(module){const loc=element.sourceCodeLocation;if(loc?.startTag&&loc.endTag){const packed=await bundle(input.html.slice(loc.startTag.endOffset,loc.endTag.startOffset),input.baseUrl,'js');const bytes=Buffer.from(packed.url.split(',')[1]!,'base64').toString();edits.push({start:loc.startTag.endOffset,end:loc.endTag.startOffset,text:bytes.replace(/<\/script/gi,'<\\/script')});extraCss+=packed.css;}}
   }else if(element.tagName==='link'&&attr('rel')==='stylesheet'&&href){const data=/^data:/i.test(href),resource=data?dataResource(href):get(canonical(href));if(type(resource.contentType)!=='text/css')throw Error('Stylesheet resource MIME is not CSS');set('href',(await bundle(new TextDecoder().decode(resource.bytes),data?input.baseUrl:canonical(href),'css')).url);remove('integrity');}
