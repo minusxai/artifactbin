@@ -5,7 +5,7 @@ description: Native HTML comment anchor contract, HTTP comment operations and th
 
 ## Read first
 
-Use this guide for the native HTML comment contract over HTTP and the browser session API. Prefer `scripts/comment.mjs` and `scripts/check.mjs`. Read [HTML authoring](html-authoring.md) for page creation and updates; keep credentials in the API caller, never in page code.
+Use this guide for the native HTML comment contract over HTTP and the browser session API. Prefer `scripts/comment.mjs` and `scripts/check.mjs`. keep credentials in the API caller, never in page code.
 
 ## Contents
 
@@ -15,7 +15,7 @@ Use this guide for the native HTML comment contract over HTTP and the browser se
 
 # Native HTML comments and the browser session
 
-Use these procedures with the [HTML API](html-authoring.md) and the selected server.
+Use these procedures with the selected server.
 
 ## Comment on a saved HTML node
 

@@ -18,7 +18,7 @@ describe('docs addresses', () => {
     const response=await app.request('/api/artifacts/abc123/query');
     expect(response.status).toBe(404);
     const refusal=await response.json();
-    expect(refusal.help).toBe('/llms/html-datasets');
+    expect(refusal.help).toBe('/llms/datasets');
     expect(refusal.details.join(' ')).toContain('/graphql');
     expect((await app.request(refusal.help)).status).toBe(200);
   });

@@ -337,7 +337,7 @@ it('keeps component sources out of Markdown teaching while including them in the
  const root=mkdtempSync(path.join(tmpdir(),'skill-component-package-'));
  try{
   const skill=path.join(root,'artifactbin');mkdirSync(path.join(skill,'components'),{recursive:true});mkdirSync(path.join(skill,'references'));
-  const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/html-runtime.md':ok('html-runtime')};
+  const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/runtime.md':ok('runtime')};
   for(const [name,text] of Object.entries(docs))writeFileSync(path.join(root,name),text);
   const components={'components/button.ts':'export interface ButtonProps {}','components/button.js':'export const register=()=>{};'};
   for(const [name,text] of Object.entries(components))writeFileSync(path.join(skill,name),text);
@@ -347,7 +347,7 @@ it('keeps component sources out of Markdown teaching while including them in the
   const assets=loadSkillAssets(skill);expect(assets).toEqual(components);
   const installed=skillPackageFiles(buildSkillTree(sources),BASE,assets);
   expect(installed).toMatchObject(components);expect(installed['SKILL.md']).toContain('name: artifactbin');
-  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.js','components/button.ts','references/html-runtime.md']);
+  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.js','components/button.ts','references/runtime.md']);
   expect(skillZip(installed).byteLength).toBeGreaterThan(0);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

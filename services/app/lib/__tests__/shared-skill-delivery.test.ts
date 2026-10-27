@@ -63,7 +63,7 @@ describe('installable shared skill folder',()=>{
   }
   expect(expected['scripts/publish.mjs']).toContain('sendPublication');
   expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
-  expect(expected['references/html-datasets.md']).toContain('dataset');
+  expect(expected['references/datasets.md']).toContain('dataset');
   expect(expected['components/file-upload.ts']).toContain('uploadFile');
   expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
@@ -149,8 +149,8 @@ describe('installable shared skill folder',()=>{
  });
  it('leaves room in the packaged data guide for origin expansion',()=>{
   const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
-  expect(Buffer.byteLength(files['references/html-datasets.md']!)).toBeLessThanOrEqual(7992);
-  expect(Buffer.byteLength(publicGuideText('html-datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(files['references/datasets.md']!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(publicGuideText('datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
  });
  it('rejects arbitrary archive members and traversal',()=>{
   for(const name of ['../SKILL.md','scripts/../other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');

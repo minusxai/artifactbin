@@ -1,5 +1,5 @@
 ---
-name: html-runtime
+name: runtime
 description: Normal HTML scripts and Apollo state, viewer-local persistence, shared namespaces and offline behavior.
 ---
 ## Read first

@@ -22,7 +22,10 @@ Gotchas: keep editing and publishing the same file (never copy or hand-edit the 
   Computed imports and cyclic graphs are refused; remote URLs, absolute server paths and ref: links stay as written.
   af-backend files go in as backend sources, never as public assets. An update is conditional on the observed
   version: a concurrent remote change exits 4 instead of overwriting. The journal is saved before sending and
-  --resume never changes it. The old --prepare/--send flags are deprecated.
+  --resume never changes it. A 409 or a refused baseline means someone else edited (or the baseline is historical, missing or
+  mismatched): read.mjs again and reapply; there is no force overwrite and never attach a fresh head to stale bytes.
+  --create publishes exported or recovered source as a new page. Data and media identity lives only in the .af.json companion.
+  The old --prepare/--send flags are deprecated.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
 /** Optional author-skill helper. Credentials never enter a page or saved publication request. */

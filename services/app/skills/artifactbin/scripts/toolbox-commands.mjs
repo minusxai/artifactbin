@@ -1,7 +1,7 @@
 /**
  * Strict argument parsing for the installed commands. Flag metadata (type, repeatable) lives here because the
  * parser needs it; everything a reader needs (purpose, usage, flags, examples, gotchas) lives in each script's
- * DESCRIPTION export, which --help prints and the SKILL.md command table is generated from. No text is duplicated.
+ * DESCRIPTION export, which --help prints. SKILL.md's Core flows quote real commands; a test checks them against these descriptions.
  */
 import {readFileSync} from 'node:fs';
 import {parseArgs} from 'node:util';
@@ -99,16 +99,6 @@ export function describe(name, read) {
 /** --help prints the script's DESCRIPTION verbatim. */
 export function commandHelp(name, read) {
   return descriptionOf(name, read) + '\n';
-}
-/** The SKILL.md command table, one row per listed command, generated from each DESCRIPTION. */
-export function commandTable(read) {
-  const rows = Object.entries(COMMANDS)
-    .filter(([, spec]) => spec.listed !== false)
-    .map(([name]) => {
-      const {summary, example} = describe(name, read);
-      return `| \`${example}\` | [${summary}](scripts/${name}.mjs) |`;
-    });
-  return ['| Command | Use |', '|---|---|', ...rows].join('\n');
 }
 export function parseCommand(name, args) {
   const command = COMMANDS[name];

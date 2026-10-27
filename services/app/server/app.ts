@@ -282,8 +282,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
   return json({
     error: 'not_found',
-    help: guessedQuery ? '/llms/html-datasets' : '/llms.txt',
-    ...(guessedQuery ? { details: ['Read linked dataset schema and rows through the page GraphQL endpoint /api/artifacts/<pageId>/graphql. Use /llms/html-datasets for namespaces, discovery and permissions.'] } : {}),
+    help: guessedQuery ? '/llms/datasets' : '/llms.txt',
+    ...(guessedQuery ? { details: ['Read linked dataset schema and rows through the page GraphQL endpoint /api/artifacts/<pageId>/graphql. Use /llms/datasets for namespaces, discovery and permissions.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 

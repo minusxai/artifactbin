@@ -253,9 +253,9 @@ it('teaches script-created element IDs in the main steps and no longer names dat
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
  for(const block of ['state','core','design-system'])expect(skill).toContain(`data-af="${block}"`);
- const steps=skill.slice(skill.indexOf('## Author and publish'),skill.indexOf('## Preserve the document'));
- expect(steps).toContain('afId');expect(steps).toContain('references/html-runtime.md#dynamic-elements-and-comments');
- const runtime=await readFile(new URL('../../../skills/artifactbin/references/html-runtime.md',import.meta.url),'utf8');
+ const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
+ expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
+ const runtime=await readFile(new URL('../../../skills/artifactbin/references/runtime.md',import.meta.url),'utf8');
  expect(runtime).toContain('## Dynamic elements and comments');
 });
 it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{

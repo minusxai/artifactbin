@@ -17,10 +17,12 @@ describe('one installable native HTML author skill',()=>{
  it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const snippets=(name:string)=>Array.from(files['references/'+name+'.md']!.matchAll(/```html\n([\s\S]*?)```/g),match=>match[1]!);
-  const head=snippets('html-authoring').find(html=>html.includes('artifactbin:pwa-enabled'))!;
-  expect(head).toBeTruthy();
+  // The install metadata is named in SKILL.md; its values are validated by the native reader and by autofix.
+  const skill=files['SKILL.md']!;
+  for(const name of ['artifactbin:pwa-enabled','-name','-short-name','-theme-color','-background-color','-icon'])expect(skill).toContain(name);
+  const head='<meta name="artifactbin:pwa-enabled" content="true"><meta name="artifactbin:pwa-name" content="Garden tasks"><meta name="artifactbin:pwa-short-name" content="Garden"><meta name="artifactbin:pwa-theme-color" content="#234b35"><meta name="artifactbin:pwa-background-color" content="#ffffff"><meta name="artifactbin:pwa-icon" content="ref:Ab1234">';
   expect(htmlPwaSettings('<html><head>'+head+'</head><body></body></html>')).toEqual({enabled:true,name:'Garden tasks',shortName:'Garden',themeColor:'#234b35',backgroundColor:'#ffffff',icon:'Ab1234'});
-  const image=snippets('html-runtime').find(html=>html.includes('ref:abc123'))!;
+  const image=snippets('runtime').find(html=>html.includes('ref:abc123'))!;
   expect(image).toBeTruthy();
   const html='<html><head></head><body>'+image+'</body></html>';
   const packed=await packOfflineHtmlImages({html,admittedIds:['abc123'],loadImage:async()=>({bytes:new Uint8Array([1,2,3]),mime:'image/png'}),maxBytes:10000});
@@ -29,7 +31,7 @@ describe('one installable native HTML author skill',()=>{
  });
  it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
   const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
-  const guide=publicGuideText('html-backends',BASE)!;
+  const guide=publicGuideText('backends',BASE)!;
   const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
   expect(query).toBeTruthy();
   const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);

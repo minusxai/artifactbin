@@ -4,7 +4,7 @@ Usage: node scripts/read.mjs ID|URL [--version N] [--output FILE]
        node scripts/read.mjs list [--limit N] [--cursor CURSOR]
 Flags: --version N reads a saved version (historical pairs cannot be published back); --output FILE saves the
   canonical source plus FILE.af.json baseline (even with --json); list takes --limit 1-100 (default 20) and
-  --cursor. Common: --server ORIGIN, --json, --help.
+  --cursor (read.mjs list shows your artifacts). Common: --server ORIGIN, --json, --help.
 Examples:
   node scripts/read.mjs ID --output page.html     # edit page.html, then node scripts/publish.mjs page.html
   node scripts/read.mjs ID --json                 # record with html, version and state

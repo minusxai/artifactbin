@@ -211,9 +211,9 @@ describe('CLI and HTTP discovery',()=>{
   expect(text).toContain('normal HTML file');
   expect(text).toContain('PUT /api/artifacts/');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
-  for(const topic of ['http-auth','html-authoring','html-runtime'])
+  for(const topic of ['http-auth','runtime','datasets'])
     expect(text).toContain(`http://localhost:3000/llms/${topic}`);
-  expect(text).toContain('## Author and publish');expect(text).toContain('## Installed resources');
+  expect(text).toContain('## Core flows');expect(text).toContain('## Installed resources');
   expect(text).not.toContain('## Direct HTTP API');
  });
 });

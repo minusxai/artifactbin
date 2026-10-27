@@ -2,7 +2,8 @@
 export const DESCRIPTION = `Export a portable HTML copy or a rendered image (not editable source).
 Usage: node scripts/export.mjs ID|URL --format html|png|jpg --output FILE [--slide N]
 Flags: --format html|png|jpg (required); --output FILE (required, never overwrites); --slide N a visible slide number,
-  image formats only (1200x630 per slide). Common: --server ORIGIN, --json, --help.
+  image formats only (1200x630; the Nth visible data-af-slide element, 1-based; display:none ones are skipped;
+  a missing slide returns 404 slide_not_found with the count; capture hides data-af-deck-chrome). Common: --server ORIGIN, --json, --help.
 Examples:
   node scripts/export.mjs ID --format html --output copy.html
   node scripts/export.mjs ID --format png --slide 2 --output slide-2.png

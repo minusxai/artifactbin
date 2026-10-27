@@ -1,5 +1,5 @@
 ---
-name: html-backends
+name: backends
 description: Paired TypeScript resolver files, immutable namespaces, per-backend stores and trusted account roles.
 ---
 ## Read first
@@ -10,7 +10,7 @@ Shared app state belongs in a backend file, not top-level page state. A backend 
 <link rel="af-backend" data-af-name="garden" href="./garden.ts">
 ```
 
-Publish the HTML with `backendSources:{"garden":"<complete garden.ts source>"}`. The namespace name must match exactly. The filename is an authoring reference; browsers never fetch or execute this backend file. Publish keeps that `href` in your source and sends the file each time; a page read with `read.mjs` has no `href` and keeps its published backend until you add `href="./NAME.ts"` beside that file. Older page versions retain their backend bindings.
+Publish the HTML with `backendSources:{"garden":"<complete garden.ts source>"}`. The namespace name must match exactly. The filename is an authoring reference; browsers never fetch or execute this backend file. Publish keeps that `href` in your source and sends the file each time; a page read with `read.mjs` has no `href` and keeps its published backend until you add `href="./NAME.ts"` beside that file. Older page versions retain their backend bindings. On an update, an unchanged backend may be omitted: keep its `af-backend` link and it keeps its immutable version; a new or changed one needs its source; removing the link unlinks it from the new version only (older versions keep their binding). `publish.mjs` does this when you publish the declaring page.
 
 ## Resolver contract
 
