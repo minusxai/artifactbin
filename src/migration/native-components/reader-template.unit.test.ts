@@ -310,3 +310,18 @@ test('ordinary table overflow marks update after scroll, fonts, resize and inser
 });
 
 test('a source table receives its overflow behavior even when no contents rail is eligible',()=>{const source=fixture(null);(source.analysis.nodes[0] as any).tag='Table';const receipt=prepareNativeReaderTemplate(source);assert.equal(receipt.scrollTables,true);assert.equal(receipt.rail,false);assert.equal(renderNativeReaderTemplate(receipt,'<table></table>').authorJs,NATIVE_TABLE_SCROLL_AUTHOR_JS);});
+
+
+test('source deck chrome wraps the original authored column rather than its padded SlideDeck descendant',()=>{
+ const input=fixture(null);const heading=input.analysis.nodes[0]!;if(heading.type!=='element')throw Error('fixture element');
+ const slide=(key:string)=>({...heading,type:'element' as const,tag:'Slide',isComponent:true,graphKey:key,children:[]});
+ const deck={...heading,type:'element' as const,tag:'SlideDeck',isComponent:true,graphKey:'deck',children:[slide('s1'),slide('s2')]};
+ input.analysis.nodes=[{...heading,type:'element',tag:'div',graphKey:'authored-gutter',attributes:[{name:'className',value:{static:true,json:'px-6 @2xl:px-12'},start:0,end:1}],children:[deck]}];
+ const receipt=prepareNativeReaderTemplate(input);assert.equal(receipt.deckRail,true);assert.equal(receipt.rail,false);
+ const rendered=renderNativeReaderTemplate(receipt,'<div class="px-6" data-af-id="authored"><div data-af-id="deck"><af-slide data-af-id="s1"></af-slide><af-slide data-af-id="s2"></af-slide></div></div>');
+ assert.match(rendered.html, /^<af-slide-deck[^>]*><div class="mx-doc" data-af-deck-content>/);
+ assert.match(rendered.html,/data-af-id="authored"/);assert.match(rendered.html,/data-af-id="deck"/);
+ input.template='doc';const doc=prepareNativeReaderTemplate(input);assert.equal(doc.deckRail,true);assert.equal(doc.rail,false);assert.match(renderNativeReaderTemplate(doc,'<div data-af-id="authored"></div>').html,/<af-slide-deck[^>]*><div class="mx-doc mx-doc--document" data-af-deck-content>/);
+ input.chrome=false;assert.equal(prepareNativeReaderTemplate(input).deckRail,undefined);
+ input.chrome=true;deck.children.pop();assert.equal(prepareNativeReaderTemplate(input).deckRail,undefined);
+});
