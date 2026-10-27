@@ -1,3 +1,4 @@
+import{prepareNativeSlidePreviewImages}from'./slide-preview-resources.ts';
 import {nativeComponentHelperIds} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
@@ -141,7 +142,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const registrations=lowered.modules.map((module,index)=>{
   const mappings=input.modules?.filter(m=>m.name===module.name&&m.register===module.register)??[],mapping=mappings[0];
   if(mappings.length!==1||!mapping||!/^\.\/components\/[A-Za-z0-9_./-]+\.js$/.test(mapping.specifier)||mapping.specifier.slice(2).split('/').some(part=>!part||part==='.'||part==='..')||files.filter(f=>'./'+f.path===mapping.specifier&&f.sha256===mapping.sha256).length!==1){block('native-module-mapping',module.name);return '';}
-  return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}();`;
+  return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}(${module.name==='slide-deck'&&module.register==='registerSlideDeck'?'undefined,undefined,'+json({previewImages:prepareNativeSlidePreviewImages({files,urls:input.urls??[]})}):''});`;
  }).join('\n');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
  let chartMounts='';
