@@ -40,6 +40,7 @@ import { becomeAccountOwner, publishAs } from '../lib/start-doc.mjs';
 import { pageHtml } from '../fixtures/page-speed/native.mjs';
 import { publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews } from '../lib/document-views.mjs';
+import { shellScriptsOf } from '../lib/shell-graph.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const sizeOnly = process.argv.includes('--size-only');
@@ -190,7 +191,8 @@ try {
   // The steady state a reader meets: a build that prerenders diagrams has stored them by now (bounded; a no-op wait otherwise).
   const storedDiagrams = []; // Native diagrams are author-supplied SVG, not a server compiler cache.
   console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
-  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, log: line => console.log(line) });
+  // The build's own manifest names the app shell's eager scripts (size target 4); each build is measured with its own.
+  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, shell: shellScriptsOf(root), log: line => console.log(line) });
   if (sizeOnly) assert(samples.every(sample => sample.ready && sample.jsBeforeReady !== null), 'size pass needs a ready marker and JS byte count for every view');
   result.stylesheetRevalidation = await measureStylesheetRevalidation(browser, base, documentFixtures.find(f => f.key === 'system').id);
   console.log(`Platform stylesheet revalidation: ${JSON.stringify(result.stylesheetRevalidation)}`);

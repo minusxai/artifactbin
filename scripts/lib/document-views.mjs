@@ -127,7 +127,7 @@ export const documentMeasurementMode = sizeOnly => sizeOnly
 const kindOf = ({ type }) => type === 'Document' ? 'html' : type === 'Script' ? 'js' : type === 'Stylesheet' ? 'css' : 'other';
 
 /** One cold view of `url` in a fresh tab of `context`; size mode skips throttling and timing waits. */
-async function measureDocumentView(context, url, { route, painted, authorReady = false, throttle = LAB_THROTTLE, sizeOnly = false, timeoutMs = 60_000 }) {
+async function measureDocumentView(context, url, { route, painted, authorReady = false, throttle = LAB_THROTTLE, sizeOnly = false, timeoutMs = 60_000, shell = null }) {
   const page = await context.newPage();
   try {
     const cdp = await context.newCDPSession(page);
@@ -173,16 +173,27 @@ async function measureDocumentView(context, url, { route, painted, authorReady =
       const kind = bytes[kindOf(request)];
       kind.decoded += request.decoded; kind.gzip += request.gzip;
     }
-    // JS BEFORE READY: the wire bytes (CDP, per URL) of the scripts the page had finished loading when it became ready.
+    // JS BEFORE READY (raced): the wire bytes (CDP, per URL) of the scripts the page had finished loading when it became ready.
     const before = new Set(measured.scriptsBeforeReady ?? []);
     let jsBeforeReady = measured.scriptsBeforeReady === null ? null : { decoded: 0, gzip: 0 };
     const scriptsBeforeReady = [];
     if (jsBeforeReady) for (const request of requests.values()) if (kindOf(request) === 'js' && before.has(request.url)) {
       jsBeforeReady.decoded += request.decoded;
       jsBeforeReady.gzip += request.gzip;
-      scriptsBeforeReady.push({ url: new URL(request.url).pathname, gzip: request.gzip });
+      scriptsBeforeReady.push({ url: new URL(request.url).pathname, gzip: request.gzip, ...(shell ? { shell: shell.has(new URL(request.url).pathname) } : {}) });
     }
     if (jsBeforeReady) jsBeforeReady = scriptBudgetBytes(jsBeforeReady, measured.inlineScripts);
+    // THE APP SHELL'S JS on the view route (scripts/lib/shell-graph): the wire bytes of the entry and the document page's
+    // static import graph, whenever each finished, plus the inline scripts present at ready. Unlike the raced count above
+    // it does not depend on whether a lazily loaded chunk beats an unthrottled frame's ready mark, so size target 4 reads
+    // the same set in a size pass and a timing pass. The raced count stays in the sample (`jsBeforeReadyRaced`).
+    let jsBeforeReadyRaced = null;
+    if (route === 'view' && shell && jsBeforeReady) {
+      jsBeforeReadyRaced = jsBeforeReady;
+      const eager = { decoded: 0, gzip: 0 };
+      for (const request of requests.values()) if (kindOf(request) === 'js' && shell.has(new URL(request.url).pathname)) { eager.decoded += request.decoded; eager.gzip += request.gzip; }
+      jsBeforeReady = scriptBudgetBytes(eager, measured.inlineScripts);
+    }
     return {
       route, ready, errors,
       fcp: measured.fcp, lcp: measured.lcp,
@@ -193,6 +204,7 @@ async function measureDocumentView(context, url, { route, painted, authorReady =
       scripts: [...requests.values()].filter(request => kindOf(request) === 'js').map(request => ({ url: new URL(request.url).pathname, gzip: request.gzip })),
       bytes,
       jsBeforeReady,
+      ...(jsBeforeReadyRaced ? { jsBeforeReadyRaced } : {}),
       scriptsBeforeReady,
       scriptMs: Math.round((metrics.ScriptDuration ?? 0) * 1000),
     };
@@ -233,7 +245,7 @@ async function canonicalView(base, id, fetchImpl = fetch) {
  * `runs` cold views of every fixture on both routes, interleaved per repetition
  * so drift in the runner affects every cell alike.
  */
-export async function measureDocumentViews({ browser, base, fixtures, runs, throttle = LAB_THROTTLE, sizeOnly = false, log = () => {} }) {
+export async function measureDocumentViews({ browser, base, fixtures, runs, throttle = LAB_THROTTLE, sizeOnly = false, shell = null, log = () => {} }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addInitScript(documentViewProbe);
   const views = [];
@@ -243,7 +255,7 @@ export async function measureDocumentViews({ browser, base, fixtures, runs, thro
     for (let repetition = 0; repetition < runs; repetition++) {
       for (const { fixture, view, raw } of views) {
         for (const route of ['view', 'raw']) {
-          const sample = await measureDocumentView(context, route === 'view' ? view : raw, { route, painted: sizeOnly ? null : fixture.painted, authorReady: fixture.authorReady === true, throttle, sizeOnly, timeoutMs: sizeOnly ? 15_000 : 60_000 });
+          const sample = await measureDocumentView(context, route === 'view' ? view : raw, { route, painted: sizeOnly ? null : fixture.painted, authorReady: fixture.authorReady === true, throttle, sizeOnly, shell, timeoutMs: sizeOnly ? 15_000 : 60_000 });
           samples.push({ fixture: fixture.key, repetition, ...sample });
           log(`${fixture.key} ${route} #${repetition}: fcp ${Math.round(sample.fcp ?? -1)} takeover ${Math.round(sample.takeover ?? -1)} painted ${Math.round(sample.painted ?? -1)}${sample.ready ? '' : ' (TIMED OUT)'}`);
         }
@@ -270,8 +282,13 @@ const METRICS = {
   cssDecoded: s => s.bytes.css.decoded, cssGzip: s => s.bytes.css.gzip,
   /** Every response body on the wire (the size targets' "total transferred"). */
   totalGzip: s => Object.values(s.bytes).reduce((n, kind) => n + kind.gzip, 0),
-  /** External wire bytes plus attributed inline executable gzip present when ready (the size targets' "JS before ready"); null on a build that never signalled ready. */
+  /**
+   * External wire bytes plus attributed inline executable gzip present when ready (the size targets' "JS before ready");
+   * on the view route, the app shell's eager scripts instead (scripts/lib/shell-graph). Null on a build that never signalled ready.
+   */
   jsBeforeReadyGzip: s => s.jsBeforeReady?.gzip ?? null,
+  /** The view route's scripts that happened to finish before ready, lazily loaded ones included (reported, not judged). */
+  jsBeforeReadyRacedGzip: s => s.jsBeforeReadyRaced?.gzip ?? s.jsBeforeReady?.gzip ?? null,
   inlineJsGzip: s => s.jsBeforeReady?.inline?.gzip ?? 0,
   inlineJsDecoded: s => s.jsBeforeReady?.inline?.decoded ?? 0,
   fcp: s => s.fcp, lcp: s => s.lcp, takeover: s => s.takeover, painted: s => s.painted, readyAt: s => s.readyAt ?? null, scriptMs: s => s.scriptMs,
@@ -306,7 +323,7 @@ const delta = (head, base, format) => {
 export function documentViewsMarkdown(head, base = {}) {
   const columns = [
     ['requests', 'Requests', String], ['htmlGzip', 'HTML gz KB', kb], ['jsDecoded', 'JS KB', kb], ['jsGzip', 'JS gz KB', kb],
-    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['inlineJsGzip', 'Inline JS attributed gz KB', kb], ['totalGzip', 'Total gz KB', kb],
+    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['jsBeforeReadyRacedGzip', 'JS finished before ready gz KB', kb], ['inlineJsGzip', 'Inline JS attributed gz KB', kb], ['totalGzip', 'Total gz KB', kb],
     ['cssGzip', 'CSS gz KB', kb], ['fcp', 'FCP ms', ms], ['lcp', 'LCP ms', ms], ['takeover', 'Takeover ms', ms],
     ['painted', 'Painted ms', ms], ['scriptMs', 'Script ms', ms],
   ];
