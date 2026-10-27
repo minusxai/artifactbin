@@ -49,8 +49,17 @@ export async function inspectPage(page,options,task){
   if(options.hosted)await page.mainFrame().locator('iframe[data-mx-document-frame]').waitFor({timeout:2000});
   await page.locator('body').waitFor({timeout:2000});
   if(task){
+   // Name the steps-file call that failed or was still pending, so a bare Playwright timeout points at its line.
+   const pending=new Set();let failed=null;
+   const show=arg=>{try{return typeof arg==='function'?String(arg):JSON.stringify(arg);}catch{return String(arg);}};
+   const wrap=(target,label)=>new Proxy(target,{get(object,key){const value=Reflect.get(object,key);if(typeof value!=='function'||typeof key!=='string')return value;
+    return (...args)=>{const call=`${label}.${key}(${args.map(show).join(', ')})`.replace(/\s+/g,' ').slice(0,240);const result=value.apply(object,args);
+     if(result&&typeof result.then==='function'){pending.add(call);result.then(()=>pending.delete(call),()=>{pending.delete(call);failed??=call;});}
+     else if(result&&typeof result==='object'&&/^(locator|getBy|first|last|nth|filter|frameLocator)/.test(key))return wrap(result,call);
+     return result;};}});
    let timer;
-   try{evidence.task=await Promise.race([task(page),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Task deadline exceeded; inspect the awaited condition')),6000);})]);}
+   try{evidence.task=await Promise.race([task(wrap(page,'page')),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Task deadline exceeded; inspect the awaited condition')),6000);})]);}
+   catch(error){const call=failed??[...pending].pop();throw call?Error(`${error.message} (step call: ${call})`):error;}
    finally{clearTimeout(timer);}
   }
  }catch(error){evidence.error=String(error.message);}

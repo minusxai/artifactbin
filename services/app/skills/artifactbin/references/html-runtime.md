@@ -23,7 +23,7 @@ document.querySelector('#increment').onclick=()=>{
 </script>
 ```
 
-State in `data-af="state"` initializes each viewer’s private browser state, which then persists in that browser across reloads and tabs (so a dark-mode or month choice survives a reload). Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `client.query({query})` reads it; `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
+State in `data-af="state"` initializes each viewer’s private browser state, which then persists in that browser across reloads and tabs (so a dark-mode or month choice survives a reload). Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `await client.query({query})` reads it (a Promise); `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
 
 The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A raw authored file can use the core from an absolute server URL for local preview: without a hosted runtime context, only private local state is available. A downloaded page embeds the engine and works without fetching code.
 
