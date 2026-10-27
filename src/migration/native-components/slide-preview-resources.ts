@@ -13,7 +13,7 @@ export function prepareNativeSlidePreviewImages(input:NativeSlidePreviewResource
  const result:NativeSlidePreviewImageResource[]=[];
  for(const file of input.files){
   const name=/^assets\/([a-f0-9]{64})\.(png|jpg|jpeg|gif|webp)$/.exec(file.path);if(!name||!file.bytes.length||input.files.filter(f=>f.path===file.path).length!==1||file.sha256!==name[1]||sha(file.bytes)!==file.sha256)continue;
-  const src='./'+file.path,receipts=input.urls.filter(u=>u.target===src);if(receipts.length!==1||!receipts[0]!.source.trim()||receipts[0]!.sha256!==file.sha256)continue;
+  const src='./'+file.path,receipts=input.urls.filter(u=>u.target===src);if(!receipts.length||new Set(receipts.map(u=>u.source)).size!==receipts.length||receipts.some(u=>!u.source.trim()||u.sha256!==file.sha256))continue;
   const mime=rasterMime(file.bytes),expected={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp'}[name[2]!];if(!mime||mime!==expected)continue;
   result.push({src,sha256:file.sha256,bytes:file.bytes.length,mime});
  }
