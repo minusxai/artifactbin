@@ -32,7 +32,8 @@ import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
-import { CommentReactions } from './CommentReactions';
+// Reaction controls load with an opened comment, keeping the reader shell small.
+const CommentReactions = lazy(() => import('./CommentReactions').then(module => ({default:module.CommentReactions})));
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -311,8 +312,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
             <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
             <Show when={editing() !== c().id && props.onReact}>
-              <CommentReactions comment={c()} signedIn={!!session()?.user?.id} unavailable={props.backend.unavailable('commentReactions')}
-                onSignIn={()=>props.onSignIn?.()} onReact={(active)=>props.onReact!(c().id,active)} />
+              <Suspense><CommentReactions comment={c()} signedIn={!!session()?.user?.id} unavailable={props.backend.unavailable('commentReactions')}
+                onSignIn={()=>props.onSignIn?.()} onReact={(active)=>props.onReact!(c().id,active)} /></Suspense>
             </Show>
             <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
