@@ -31,7 +31,7 @@ window.addEventListener("pagehide", () => view.finalize(), {once:true});
 </script>
 ```
 
-For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. Add the table, resizing, theme and teardown below.
+For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. Add table, resizing, theme and teardown below. Steps: bars are `.mark-rect path`, not `<rect>`.
 
 ## Contents
 
