@@ -84,7 +84,7 @@ export function checkDigest(envelope,file){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
   if(check.ids?.duplicates)errors.push(`duplicate data-af-id ${check.ids.duplicates}: ${check.ids.items.map(item=>`${clip(item.id,60)} x${item.count}`).join(', ')}${check.ids.duplicates>check.ids.items.length?`; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
-  const task=check.error?'task error: '+clip(check.error,700):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
+  const task=check.error?'task error: '+clip(check.error,1000):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
   const overflow=check.overflow?check.overflow.fits?'fits':`overflow ${check.overflow.content}>${check.overflow.viewport}${check.overflow.culprits?.length?' from '+check.overflow.culprits.map(c=>`${c.element} (right ${c.right})`).join(', '):''}`:'overflow unknown';
   // List the first three defects of each kind, by text and element or slide, so a fix needs no trip into the JSON.
   const few=(items,show,n=5,total=items?.length??0)=>(items??[]).slice(0,n).map(show).join('; ')+(total>n?`; +${total-n} more`:'');

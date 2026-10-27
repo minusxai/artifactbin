@@ -336,7 +336,7 @@ export async function inspectPage(page, options, task) {
                     status: [...doc.querySelectorAll('[role=status],[role=alert],[aria-live]')]
                       .map(node => tidy(node.textContent).slice(0, 120))
                       .filter(Boolean)
-                      .slice(0, 3),
+                      .slice(0, 2),
                     text: tidy(doc.body?.innerText).slice(0, 200)
                   };
                 },
