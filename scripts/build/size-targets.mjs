@@ -44,7 +44,8 @@ export const SIZE_TARGETS = Object.freeze([
   { id: 2, label: 'JS before ready, interactive (kit, dashboard, every component)', metric: 'jsBeforeReadyGzip', route: 'raw', fixtures: ['kit', 'dashboard'], optional: ['kitchen'], limit: 90 * KB },
   // The viewed page is the app shell plus the framed document.
   { id: 3, label: 'Prose page, total transferred', metric: 'totalGzip', route: 'view', fixtures: ['prose'], optional: [], limit: 250 * KB },
-  // The shell's own scripts: the `view` route's JS before ready, which never counts the framed document's, on every page kind it frames.
+  // The shell's own scripts: the `view` route's eager JS (entry + document page static graph, scripts/lib/shell-graph), which
+  // never counts the framed document's or a lazily loaded chunk, on every page kind it frames. Deterministic in size and timing passes.
   { id: 4, label: 'App shell JS before the document frame is ready', metric: 'jsBeforeReadyGzip', route: 'view', fixtures: ['prose', 'deck', 'kit', 'dashboard'], optional: ['kitchen'], limit: 50 * KB },
 ]);
 
