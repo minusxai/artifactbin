@@ -28,11 +28,11 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 | `--ds-on-blue` | #ffffff | #0b0c0f |
 | `--ds-blue-soft` | #e9eeff | #182040 |
 | `--ds-blue-ink` | #2449d0 | #9db5ff |
-| `--ds-positive` | #15803d | #4ade80 |
+| `--ds-positive` | #147c3b | #4ade80 |
 | `--ds-positive-soft` | #e6f6ec | #0f2a1a |
-| `--ds-caution` | #a16207 | #facc15 |
+| `--ds-caution` | #9d6007 | #facc15 |
 | `--ds-caution-soft` | #fdf4d8 | #2d2408 |
-| `--ds-negative` | #dc2626 | #f87171 |
+| `--ds-negative` | #ce2121 | #f87171 |
 | `--ds-negative-soft` | #fde8e8 | #2f1313 |
 | `--ds-violet` | #7c5cff | #a78bfa |
 | `--ds-teal` | #0d9488 | #2dd4bf |
