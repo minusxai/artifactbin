@@ -180,7 +180,7 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     const matrix=ci.jobs.cli;
     expect(matrix.needs).toEqual(['plan']);
     expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
-    expect(String(matrix.strategy.matrix.node)).toContain('["22.22.3","24.21.0"]');
+    expect(String(matrix.strategy.matrix.node)).toContain('["22.23.4","24.22.1"]');
     expect(String(matrix.strategy.matrix.os)).toContain('"windows-2022"');
     const nodeSetups = matrix.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
     expect(nodeSetups).toHaveLength(2);
