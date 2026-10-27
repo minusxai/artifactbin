@@ -2,7 +2,13 @@
  * The reader backend's face of the shared retry policy (lib/http/retry): requests go through `retried`, and a
  * surface that wants a quiet "retrying…" subscribes with `watchRetrying`. The policy itself lives only in lib/http.
  */
-import { retryFetch, type RetryOptions } from '@/lib/http/retry';
+// The policy is only ever imported lazily, by lib/http/retry-lazily: a module imported both statically and dynamically
+// needs a namespace helper from the large shared chunk, which every chunk importing it would then load.
+import type { RetryOptions } from '@/lib/http/retry';
+import { retryLazily } from '@/lib/http/retry-lazily';
+
+// The comment backend loads after the reader shell; fetch the policy now so a failed write retries without waiting for it.
+void import('@/lib/http/retry').catch(() => {});
 
 export const RETRY_TUNING: { policy?: RetryOptions['policy'] } = {};
 
@@ -21,8 +27,8 @@ export function newIdempotencyKey(): string {
 }
 
 /** One request through the shared policy; resolves to the final Response exactly as fetch would. */
-export async function retried(send: (idempotencyKey: string | undefined) => Promise<Response>, options: Omit<RetryOptions, 'onWait' | 'policy'> = {}): Promise<Response> {
-  const { response } = await retryFetch(({ idempotencyKey }) => send(idempotencyKey), {
+export async function retried(send: (idempotencyKey: string | undefined) => Promise<Response>, options: Omit<RetryOptions, 'onWait' | 'policy' | 'first'> = {}): Promise<Response> {
+  const { response } = await retryLazily(({ idempotencyKey }) => send(idempotencyKey), {
     ...options, policy: RETRY_TUNING.policy,
     onWait: (on) => announce(on ? 1 : -1),
   });

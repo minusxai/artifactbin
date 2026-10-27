@@ -117,7 +117,8 @@ describe('editing your own comment', () => {
     expect(still.textContent).toBe('my careful rewrite');
     patchAnswer = (body) => new Response(JSON.stringify({ ...THREAD, revision: 6, thread: [{ ...THREAD.thread[0]!, body: body.body, edited_at: '2026-10-14T10:00:00Z' }, THREAD.thread[1]!] }), { status: 200 });
     fireEvent.click(screen.getByLabelText('Save edit'));
+    // The save goes out after the lazily loaded retry policy; wait for it rather than for the draft's own text.
+    await waitFor(() => expect(patches()).toHaveLength(2));
     await waitFor(() => expect(within(thread).getByText('my careful rewrite')).toBeTruthy());
-    expect(patches()).toHaveLength(2);
   });
 });
