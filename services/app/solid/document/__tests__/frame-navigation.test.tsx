@@ -139,18 +139,21 @@ describe('the document page', () => {
     </Router>);
     return { frame, unmount: view.unmount };
   }
+
+  /** The page adopts the frame at once and loads its bridge lazily (create-framed-story): wait for it. */
+  async function mountReady(path?: string) { const mounted = mount(path); await vi.dynamicImportSettled(); return mounted; }
   const viewReports = () => fetcher.mock.calls.filter(([url, init]) => String(url) === '/api/page/artifact/doc12345/view' && (init as RequestInit | undefined)?.method === 'POST');
 
-  it('reports one view of the document it shows, with the served reader\'s request', () => {
-    const first = mount();
+  it('reports one view of the document it shows, with the served reader\'s request', async () => {
+    const first = await mountReady();
     expect(viewReports()).toEqual([['/api/page/artifact/doc12345/view', { method: 'POST', credentials: 'same-origin', keepalive: true }]]);
     first.unmount();
-    mount();
+    await mountReady();
     expect(viewReports().length, 'the same document shown again in this page is the same view').toBe(1);
   });
 
   it('follows a link to an app page from its frame through the router', async () => {
-    const { frame } = mount();
+    const { frame } = await mountReady();
     // The frame stays in the served host; its own window is the admitted navigation source.
     const answers = recordAnswers(frame);
     ask('/', frame.contentWindow);
