@@ -1,3 +1,4 @@
+import{prepareNativeStaticDataTables}from'./static-data-table.ts';
 import {nativeDigest} from './selection.ts';
 import {buildNativeCellAdapter} from './cell-build.ts';
 import type {NativeAssemblyFile} from './assemble-contracts.ts';
@@ -1653,4 +1654,26 @@ test('literal table chart receives the exact ordered decoded table without remot
 test('static source binding cannot authorize unrelated nodes, altered tables, duplicate names or scalar/control reads',()=>{
  const changes:Array<(i:NativeBindingsInput)=>void>=[i=>{i.staticTableSources=[]},i=>{i.staticTableSources=[...i.staticTableSources!,...i.staticTableSources!]},i=>{i.staticTableSources![0]!.binding.rowsSha256='0'.repeat(64)},i=>{i.analysis.nodes[0]!.graphKey='replacement'},i=>{i.analysis.flow.values.push(structuredClone(i.analysis.flow.values[0]!))},i=>{i.analysis.flow.values[0]!.rows=[{label:'first',amount:99}]},i=>{(i.analysis.nodes[1]as any).tag='Select';(i.targets[0]as any).property='options';(i.targets[0]as any).attribute='options'}];
  for(const change of changes){const i=staticTableBindingInput();change(i);assert.equal(emitNativeBindings(i).status,'blocked');}
+});
+
+function staticGridBindingInput():NativeBindingsInput {
+ const i=staticTableBindingInput();(i.analysis.nodes[1]as Extract<RetainedJsxNode,{type:'element'}>).tag='DataTable';delete i.staticTableSources;
+ const prepared=prepareNativeStaticDataTables({analysis:i.analysis,compilation:{sourceSha256:i.analysis.sourceSha256,compilerSourceSha256:i.analysis.compilerSourceSha256,sqlEngineSha256:digest,values:i.analysis.flow.values,queries:[],mutations:[],imports:[]}as any});assert.equal(prepared.blockers.length,0);assert.equal(prepared.proofs.length,1);i.staticDataTableSources=prepared.proofs;return i;
+}
+test('proved literal DataTable receives ordered private table bytes without remote state, query or writes',async()=>{
+ const i=staticGridBindingInput(),expected=structuredClone({columns:i.analysis.flow.values[0]!.columns,rows:i.analysis.flow.values[0]!.rows}),result=emitNativeBindings(i);assert.equal(result.status,'complete');if(result.status!=='complete')return;assert.deepEqual({...result.localDefaults},{});
+ const doc=new Doc(),grid=new Element('af-data-table',{'data-af-id':'chart'});doc.body.append(grid);const port=client({}),runtime=await execute(result.authorJs,port,doc);
+ try{assert.deepEqual((grid as any).data,expected);assert.equal(port.remotes.length,0);assert.equal(port.writes.length,0);(grid as any).data.rows[0].amount=999;assert.deepEqual(i.analysis.flow.values[0]!.rows,expected.rows);
+ const doc2=new Doc(),grid2=new Element('af-data-table',{'data-af-id':'chart'});doc2.body.append(grid2);const other=await execute(result.authorJs,client({}),doc2);try{assert.deepEqual((grid2 as any).data,expected);}finally{await other.close();}
+ }finally{await runtime.close();}
+});
+test('literal DataTable cannot borrow chart proof or accept missing/duplicate/stale per-target provenance',()=>{
+ const changes:Array<(i:NativeBindingsInput)=>void>=[i=>{i.staticDataTableSources=[]},i=>{i.staticDataTableSources=[...i.staticDataTableSources!,...i.staticDataTableSources!]},i=>{i.staticDataTableSources![0]!.targetSourceNode='other'},i=>{i.staticDataTableSources![0]!.compiledTableSha256='0'.repeat(64)},i=>{(i.analysis.nodes[1]as any).tag='Chart'},i=>{i.analysis.flow.values[0]!.rows=[{label:'first',amount:999}]},i=>{i.queries=[{name:'items'}]as any}];
+ for(const change of changes){const i=staticGridBindingInput();change(i);assert.equal(emitNativeBindings(i).status,'blocked');}
+});
+
+test('two proved DataTables never share a mutable table seed in one viewer',async()=>{
+ const i=staticGridBindingInput(),grid2=el('grid2','DataTable',{data:'$items'});i.analysis.nodes.push(grid2);i.targets=[...i.targets,{kind:'property',sourceNode:'grid2',afId:'grid2',property:'data',attribute:'data',analysisSha256:i.analysis.analysisSha256}as any];
+ i.staticDataTableSources=prepareNativeStaticDataTables({analysis:i.analysis,compilation:{sourceSha256:i.analysis.sourceSha256,compilerSourceSha256:i.analysis.compilerSourceSha256,sqlEngineSha256:digest,values:i.analysis.flow.values,queries:[],mutations:[],imports:[]}as any}).proofs;
+ const result=emitNativeBindings(i);assert.equal(result.status,'complete');if(result.status!=='complete')return;const doc=new Doc(),a=new Element('af-data-table',{'data-af-id':'chart'}),b=new Element('af-data-table',{'data-af-id':'grid2'});doc.body.append(a);doc.body.append(b);const runtime=await execute(result.authorJs,client({}),doc);try{const before=structuredClone((b as any).data);(a as any).data.rows[0].amount=999;assert.deepEqual((b as any).data,before);assert.notEqual((a as any).data,(b as any).data);}finally{await runtime.close();}
 });
