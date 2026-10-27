@@ -1,12 +1,25 @@
+/**
+ * Internal: shared runtime of the installed commands: ToolError, argument and file helpers, the
+ * origin-bound HTTP client (makeClient) and runTool, which parses flags, runs a command and prints
+ * its JSON envelope. Journals live in toolbox-journal.mjs, the check digest in
+ * toolbox-check-digest.mjs; both are re-exported here.
+ * Used by: every command script (auth serve autofix publish read export check graphql comment),
+ *   toolbox-*.mjs, author-toolbox/author-check tests.
+ */
 import {homedir} from 'node:os';
 import path from 'node:path';
-import {readFile,writeFile,mkdir,realpath,lstat} from 'node:fs/promises';
+import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {randomUUID,createHash} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import configuredServer from './toolbox-config.mjs';
 import {parseCommand} from './toolbox-commands.mjs';
 import {commandHelp} from './toolbox-description.mjs';
+import {checkDigest} from './toolbox-check-digest.mjs';
+export {checkDigest};
+// toolbox-journal.mjs imports helpers back from this module; the cycle is safe because neither
+// module uses the other's exports while loading.
+export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
 export class ToolError extends Error{constructor(code,message,exit=1,recovery=
   'Inspect the refusal and correct the request.',details){super(message);Object.assign(this,{code,
   exit,recovery,details});}}
@@ -76,7 +89,9 @@ const url=new URL(route,server);if(url.origin!==server||!route.startsWith('/')||
   let connection=authenticated?await grant():null;
   for(let attempt=0;attempt<2;attempt++){
    let response;
-   // Transient outage (a deploy restart): the shared policy (lib/http/retry) retries network errors and 502/503/504 — reads, declared-safe requests and keyed writes only, the same Idempotency-Key every time; never 4xx.
+   // Transient outage (a deploy restart): the shared policy (lib/http/retry) retries network errors
+   // and 502/503/504 — reads, declared-safe requests and keyed writes only, the same
+   // Idempotency-Key every time; never 4xx.
 try{response=(await (await platform()).retryFetch(()=>fetcher(url,{method,redirect:'error',signal:
      signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
      headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{
@@ -86,112 +101,31 @@ try{response=(await (await platform()).retryFetch(()=>fetcher(url,{method,redire
      delaysMs:retryDelays}:undefined})).response;}
 catch{throw new ToolError(unsafe?'outcome_unknown':'network_unavailable',
      unsafe?'Write outcome is unknown.':'Server request failed.',unsafe?5:1,
-     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before another write.':'Retry this read later.');}
+     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before '+
+     'another write.':'Retry this read later.');}
 if(response.status===401&&attempt===0&&connection?.refreshToken){const shared=await platform();
      connection=await shared.refreshCredentials(connection,root,{fetch:fetcher});continue;}
 if(response.ok){if(raw)return response;try{return await response.json();}catch{throw new ToolError(
      unsafe?'outcome_unknown':'invalid_response',
      unsafe?'Write response could not be read; outcome is unknown.':
      'Server response was not valid JSON.',unsafe?5:1,
-     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before another write.':'Retry this read later.');}}
+     unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before '+
+     'another write.':'Retry this read later.');}}
    const refusal=await response.json().catch(()=>({error:'http_'+response.status}));
 const code=typeof refusal.error==='string'?refusal.error:refusal.error?.code??
      'http_'+response.status;
 throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,404].includes(
      response.status)?3:response.status===409?4:unsafe&&response.status>=500?5:1,refusal.hint??(
-     response.status===409?'A newer version exists. Run read.mjs ID --output fresh.html, reapply your edits there and publish it; do not resume this journal.':unsafe?'Retain the journal; retry the exact supported intent after recovery.':'Inspect access and request inputs.'),refusal);
+     response.status===409?'A newer version exists. Run read.mjs ID --output fresh.html, reapply '+
+     'your edits there and publish it; do not resume this journal.':
+     unsafe?'Retain the journal; retry the exact supported intent after recovery.':
+     'Inspect access and request inputs.'),refusal);
   }
  }
  return {server,root,request,grant,fetcher};
 }
-export async function createJournal(value,{file,root,project}={}){
-if(!file){const directory=path.join(root??credentialRoot(),'requests');await mkdir(directory,{
-   recursive:true,mode:0o700});file=path.join(directory,randomUUID()+'.json');}
- file=await safeParent(file);
-if(project&&within(await realpath(project),file))throw new ToolError('journal_inside_project',
-   'Keep write journals outside served/uploaded project directories.',2);
-const {atomicWrite}=await platform();await atomicWrite(file,JSON.stringify(value,null,2)+'\n',{
-   exclusive:true});return file;
-}
-/** @param {any} intent @returns {import(
-  '../../../lib/skills/author-toolbox-contract').AuthorJournal} */
-export function journalIntent({server,method,path:route,body,operation,source,baseline}){return {
-  kind:'author-request',schema:1,server:serverOrigin(server),method,path:route,key:randomUUID(),
-  body,operation,...(source?{source}:{}),...(baseline?{baseline}:{})};}
-export async function resumeJournal(file,client,operation){
- const saved=await jsonFile(file);
-if(saved.kind!=='author-request'||saved.schema!==1||saved.operation!==operation||
-   saved.server!==client.server||!['POST','PUT','PATCH'].includes(saved.method)||
-   !/^[A-Za-z0-9_-]{16,128}$/.test(saved.key??'')||!saved.body||typeof saved.body!=='object'||
-   operation==='publish'&&!/^\/api\/artifacts(?:\/[A-Za-z0-9]{6,12})?$/.test(saved.path??'')||
-   operation==='comment'&&
-   !/^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/annotations(?:\/[A-Za-z0-9_-]+(?:\/reactions)?)?$/.test(
-   saved.path??''))throw new ToolError('invalid_journal',
-   'Journal does not match this origin, operation or supported endpoint.',2);
- try{
-const receipt=await client.request(saved.path,{method:saved.method,body:saved.body,headers:{
-    'Idempotency-Key':saved.key},unsafe:true});
-try{const {atomicWrite}=await platform();await atomicWrite(file+'.receipt.json',JSON.stringify({
-    receipt},null,2)+'\n');}catch{throw new ToolError('receipt_save_failed',
-    'Server confirmed the write but its receipt could not be saved.',1,
-    'Resume the same journal to recover its confirmed receipt.',{journal:file,committed:true,id:
-    receipt.id,version:receipt.version});}return {saved,receipt,journal:file};
-}catch(error){if(error.details&&!error.details.committed){try{const {atomicWrite}=await platform();
-   await atomicWrite(file+'.receipt.json',JSON.stringify({receipt:error.details},null,2)+'\n');
-   }catch{}}error.details={...error.details,journal:file};throw error;}
-}
-/** One line per viewport so a saved check needs no second call to read it; the file keeps full evidence. */
-export function checkDigest(envelope,file){
-const clip=(value,n)=>{const text=typeof value==='string'?value:JSON.stringify(value);
-   return text.length>n?text.slice(0,n)+'…':text;};
- const lines=[];
- // Problems autofix cannot fix in a local preview come first: the browser evidence below may follow from them.
- const autofix=envelope.autofix??envelope.details?.autofix;
-if(autofix?.problems?.length){lines.push(
-   `autofix: ${autofix.problems.length} problem${autofix.problems.length===1?'':
-   's'} to fix by hand`);for(const problem of autofix.problems.slice(0,5))lines.push(
-   `  ${autofix.file??'page'}:${problem.line}:${problem.column} ${problem.message}`);if(
-   autofix.problems.length>5)lines.push(`  … and ${autofix.problems.length-5} more`);}
-lines.push(`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':
-   'failed'}; full result ${file}`);
- for(const check of envelope.checks??[]){
-  if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
-const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[
-    key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
-if(check.ids?.duplicates)errors.push(
-    `duplicate data-af-id ${check.ids.duplicates}: ${check.ids.items.map(item=>`${clip(item.id,
-    60)} x${item.count}`).join(
-    ', ')}${check.ids.duplicates>check.ids.items.length?`; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
-const task=check.error?'task error: '+clip(check.error,300):
-    check.inspectionError?'inspection error: '+clip(check.inspectionError,200):
-    check.task==null?'no task':'task '+clip(check.task,300);
-const overflow=check.overflow?check.overflow.fits?'fits':
-    `overflow ${check.overflow.content}>${check.overflow.viewport}${check.overflow.culprits?.length?' from '+check.overflow.culprits.map(c=>`${c.element} (right ${c.right})`).join(', '):''}`:'overflow unknown';
-  // List the first few defects of each kind so one fix round covers them without reopening the file.
-const few=(items,show,n=5,total=items?.length??0)=>(items??[]).slice(0,n).map(show).join('; ')+(
-    total>n?`; +${total-n} more`:'');
-const slides=!check.slides?'':
-    `; slides ${check.slides.count} exportable, ${check.slides.clipped?`${check.slides.clipped} clipped (${few(check.slides.items,cut=>`slide ${cut.slide} "${cut.text}" by ${cut.by} ${cut.px}px`,5,check.slides.clipped)})`:'none clipped'}${check.slides.overlapping?`, ${check.slides.overlapping} overlapping (${few(check.slides.overlaps,o=>`slide ${o.slide} "${o.text}" over "${o.over}"`,3,check.slides.overlapping)})`:''}`;
-const contrast=
-    check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; ${few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.color?' '+low.color:''}`,5,check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
-lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):
-    'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
- }
- // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke failure.
-for(const check of envelope.checks??[]){const stability=check?.idStability;if(
-   stability?.unstable)lines.push(
-   `  warning: ${stability.unstable} script-created data-af-id differ between loads (${stability.sample.map(id=>clip(id,60)).join(', ')}); derive them from record IDs, not index, text or random values.`);else if(stability?.skipped)lines.push('  warning: '+clip(stability.skipped,160));}
- if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
- // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.
-if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
-   '  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
-else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
-   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
-   !check.idStability?.unstable))lines.push(
-   '  clean pass: if your steps cover the requested behaviour, reply with the link and what you tested, then stop; no exports, re-checks or polish needed.');
- return lines.join('\n')+'\n';
-}
-/** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */
+/** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server
+ * blip says so and suggests one retry. */
 const transient=error=>!(error instanceof ToolError)&&
   /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|socket|network|timed? ?out|\b5\d\d\b/i.test(String(
   error?.message)+' '+String(error?.cause?.code??''));
@@ -228,6 +162,10 @@ if(parsed.values.output&&!parsed.values.append){const destination=await safePare
 if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.output,data);if(
     name==='check')process.stdout.write(checkDigest(envelope,parsed.values.output));
     }else process.stdout.write(data);
+  // A publish that added data-af-ids says so last, below the JSON, where a tail of the output
+  // still shows it.
+  if(typeof result.rewritten==='string'&&!parsed.values.json)process.stderr.write(
+   result.rewritten+'\n');
  }catch(error){
   const envelope=toolFailure(name,error);
 if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(
