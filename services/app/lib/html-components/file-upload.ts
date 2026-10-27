@@ -1,46 +1,49 @@
 /**
- * <af-file-upload>: file chooser/drop zone that uploads to a linked live dataset through the trusted platform frame; no credentials in page code.
- * Import:  import {registerFileUpload} from './components/file-upload.js'; registerFileUpload();  (load the .js in the browser; this .ts is the readable contract)
- * Props: value (file metadata {ref,name,contentType?,size?}[]), datasetName or dataset attribute, adapter, accept, multiple, limits, label
- * Adapter: adapter.upload(file,{dataset,signal}) returns {ref,url,name,contentType,size,replayed?}; optional fileUrl resolves previews
- * Events: af-change with the value and reason upload|remove
- * bindFileUpload disables the chooser while the trusted session loads, when signed out, in archived/portable readers or when the connection
- * is unavailable, and sets helperText ("Sign in to upload files."); it does not prove an insert grant. For a custom control,
- * watchUploadContext(listener) reports {state,scope} and returns {unsubscribe()}; uploadFile(file,{dataset,signal,requestId?}) returns the receipt.
- * The signed-in caller needs current dataset insert authority; the server rechecks access, provenance, file policy and grants. Requests are
- * bounded to 50 MB and four pending uploads; accept and limits are browser guidance. Retry with the same File (or an explicit requestId of
- * 8-120 letters, digits, _ . -) to recover an uncertain upload; reusing an ID for different bytes conflicts. Removing a reference does not
- * delete the stored file. Archived readers, portable downloads and raw pages without the platform frame cannot upload.
- * Usage:
+ * <af-file-upload>: file chooser/drop zone that uploads to a linked live dataset through the
+ *   trusted platform frame; no credentials in page code.
+ * Usage: import '@afbin/file-upload';  (registers the tags; this .ts is the readable contract)
+ * Props: value (file metadata {ref,name,contentType?,size?}[]), datasetName or dataset attribute,
+ *   adapter, accept, multiple, max-files (10), max-bytes (50 MB), label, helper-text, disabled.
+ *   adapter.upload(file,{dataset,signal}) returns {ref,url,name,contentType,size,replayed?};
+ *   optional adapter.fileUrl resolves previews.
+ * Events: af-change (cancelable) with detail {value, reason: 'upload'|'remove'}.
+ * Examples:
  *   <link rel="af-dataset" data-af-name="attachments" href="ref:DATASET_ID" data-af-mode="live">
- *   <af-file-upload dataset="attachments" label="Attachments" multiple accept="text/plain"></af-file-upload>
+ *   <af-file-upload dataset="attachments" multiple accept="text/plain"></af-file-upload>
  *   import {bindFileUpload} from '@afbin/apollo';
- *   const binding=bindFileUpload(document.querySelector('af-file-upload'),{helperText:'Or drop files here.'});
- *   // binding.setDisabled(true|false) for your own rules; binding.dispose() when removing the view.
+ *   const binding=bindFileUpload(document.querySelector('af-file-upload'),
+ *     {helperText:'Or drop files here.'});
+ *   // binding.setDisabled(true|false) for your own rules; binding.dispose() when removing it.
+ * Gotchas: bindFileUpload disables the chooser while the trusted session loads, when signed out, in
+ *   archived/portable readers or when the connection is unavailable, and sets helperText ("Sign in
+ *   to upload files."); it does not prove an insert grant. For a custom control,
+ *   watchUploadContext(listener) reports {state,scope} and returns {unsubscribe()};
+ *   uploadFile(file,{dataset,signal,requestId?}) returns the receipt. The signed-in caller needs
+ *   current dataset insert authority; the server rechecks access, provenance, file policy and
+ *   grants. Requests are bounded to 50 MB and four pending uploads; accept and limits are browser
+ *   guidance. Retry with the same File (or an explicit requestId of 8-120 letters, digits, _ . -)
+ *   to recover an uncertain upload; reusing an ID for different bytes conflicts. Removing a
+ *   reference does not delete the stored file. Archived readers, portable downloads and raw pages
+ *   without the platform frame cannot upload.
  */
-import { uploadFile, uploadUrl, uploadError, type AfUploadFile, type AfFileUploadAdapter,
+import { registerComponent } from './register-component';
+import { fileUploadStyles, positiveOr, reconcile, uploadFile, uploadUrl, uploadError,
+  previewImage, type AfUploadFile, type AfFileUploadAdapter,
   type AfFileUploadChangeDetail } from './file-upload-model';
 export type { AfUploadFile, AfFileUploadAdapter,
   AfFileUploadChangeDetail } from './file-upload-model';
-
 /** Transport, account credentials and dataset access belong exclusively to the author's adapter. */
 let nextHelperId=0;
 export class AfFileUpload extends HTMLElement {
 static observedAttributes = ['dataset', 'label', 'accept', 'multiple', 'max-files', 'max-bytes',
     'disabled', 'helper-text'];
-  onChange?: (detail: AfFileUploadChangeDetail) => void;
-  onBusyChange?: (busy: boolean) => void;
-  private transport?: AfFileUploadAdapter;
-  private selection: AfUploadFile[] = [];
-  private controlled = false;
-  private proposed?: AfUploadFile[];
-  private generation = 0;
-  private controller?: AbortController;
-  private uploading = false;
-  private failures: Array<{ file: File; error: string }> = [];
-  private error = '';
-  private shell?: HTMLDivElement;
-  private input?: HTMLInputElement;
+  onChange?: (detail: AfFileUploadChangeDetail) => void; onBusyChange?: (busy: boolean) => void;
+  private transport?: AfFileUploadAdapter; private selection: AfUploadFile[] = [];
+  private controlled = false; private proposed?: AfUploadFile[];
+  // Bumped by cancel(); stale uploads and change events compare against it and stop.
+  private generation = 0; private controller?: AbortController; private uploading = false;
+  private failures: Array<{ file: File; error: string }> = []; private error = '';
+  private shell?: HTMLDivElement; private input?: HTMLInputElement;
   private readonly helperId = `af-upload-help-${++nextHelperId}`;
   /** Ordinary caller-owned helper text, with no authentication semantics. */
   get helperText(): string { return this.getAttribute('helper-text') ?? ''; }
@@ -55,7 +58,7 @@ set value(value: readonly AfUploadFile[]) { if (!this.proposed || JSON.stringify
     this.selection = Array.isArray(value) ? value.map(uploadFile).filter((file):
     file is AfUploadFile => file !== null) : []; this.render(); }
   get busy(): boolean { return this.uploading; }
-  // HTMLElement.dataset remains the native DOMStringMap; use datasetName for the upload destination.
+  // HTMLElement.dataset stays the native DOMStringMap; datasetName is the upload destination.
   get datasetName(): string { return this.getAttribute('dataset') ?? ''; }
   set datasetName(value: string) { this.setAttribute('dataset', value); }
   get multiple(): boolean { return this.hasAttribute('multiple'); }
@@ -83,8 +86,7 @@ private cancel(): void { this.generation++; this.controller?.abort(); this.contr
     this.failures = []; this.error = ''; this.setBusy(false); }
   private change(value: AfUploadFile[], reason: AfFileUploadChangeDetail['reason']): void {
     const detail = { value: value.map(file => ({ ...file })), reason };
-    this.proposed = detail.value;
-    const generation = this.generation;
+    this.proposed = detail.value; const generation = this.generation;
     try {
 if (!this.dispatchEvent(new CustomEvent<AfFileUploadChangeDetail>('af-change', { detail, cancelable:
         true, bubbles: true, composed: true }))) return;
@@ -97,14 +99,14 @@ async upload(files: readonly File[], retained: Array<{ file: File; error: string
     Promise<void> {
     const adapter = this.adapter;
     if (!this.isConnected || this.disabled || this.busy || !adapter || !files.length) return;
-const positive = (name: string, fallback: number) => { const value = Number(this.getAttribute(
-      name)); return Number.isFinite(value) && value > 0 ? value : fallback; };
-this.error = uploadError(files, this.selection.length, { multiple: this.multiple, accept:
-      this.getAttribute('accept') ?? '', maxFiles: positive('max-files', 10), maxBytes: positive(
-      'max-bytes', 50_000_000) });
+    const positive = (name: string, fallback: number) =>
+      positiveOr(this.getAttribute(name), fallback);
+    this.error = uploadError(files, this.selection.length, { multiple: this.multiple,
+      accept: this.getAttribute('accept') ?? '', maxFiles: positive('max-files', 10),
+      maxBytes: positive('max-bytes', 50_000_000) });
     if (this.error) { this.render(); return; }
-    const token = ++this.generation;
-    const controller = new AbortController(); this.controller = controller;
+    const token = ++this.generation; const controller = new AbortController();
+    this.controller = controller;
     this.failures = retained; this.setBusy(true); this.render();
     for (const file of files) {
       if (token !== this.generation) break;
@@ -122,14 +124,16 @@ this.failures.push({ file, error: cause instanceof Error ? cause.message :
       }
       this.render();
     }
-    if (token === this.generation) { this.controller = undefined; this.setBusy(false); this.render(); }
+    if (token !== this.generation) return;
+    this.controller = undefined; this.setBusy(false); this.render();
   }
   private render(): void {
     if (!this.isConnected) return;
 if (!this.shell) { this.shell = this.ownerDocument.createElement('div'); this.shell.className =
       'af-file-upload-shell'; this.prepend(this.shell); }
-    const target = this.shell;
-    this.shell = this.ownerDocument.createElement('div'); this.shell.className = 'af-file-upload-shell';
+    // Build a fresh tree, then reconcile it into the live shell so focus and rows survive.
+    const target = this.shell; this.shell = this.ownerDocument.createElement('div');
+    this.shell.className = 'af-file-upload-shell';
     this.setAttribute('aria-busy', String(this.busy));
     const doc = this.ownerDocument;
 const add = (tag: string, text = '', parent: HTMLElement = this.shell!) => { const node =
@@ -169,10 +173,7 @@ for (const failure of this.failures) { const row = add('div'); add('span',
       let url: string | undefined;
 try { url = uploadUrl(this.adapter?.fileUrl?.(file, this.datasetName), doc.baseURI); } catch {
         /* Preview failure must not prevent reference removal. */ }
-if (url && file.contentType?.startsWith('image/')) { const image = doc.createElement('img');
-        image.src = url; image.alt = file.name; image.loading = 'lazy'; image.onerror = event => {
-        if (typeof event !== 'string') (event.currentTarget as HTMLImageElement).remove(); };
-        row.append(image); }
+    if (url && file.contentType?.startsWith('image/')) row.append(previewImage(doc,url,file.name));
       const details = add('div', '', row); details.className = 'af-file-upload-details';
 if (url) { const link = doc.createElement('a'); link.href = url; link.download = file.name;
         link.textContent = file.name; details.append(link); } else add('span', file.name, details);
@@ -186,50 +187,12 @@ button(`Remove ${file.name}`, 'Remove', () => { const focused =
         this.shell?.querySelector<HTMLButtonElement>('button'))?.focus(); }, row).disabled =
         this.disabled;
     }
-    reconcile(target, this.shell);
-    this.shell = target;
+    reconcile(target, this.shell); this.shell = target;
     this.input = target.querySelector('input') ?? undefined;
   }
 }
-
-/** Reconcile generated light DOM without replacing focused controls or keyed file rows. */
-function reconcile(target: HTMLElement, source: HTMLElement): void {
-for (const attribute of Array.from(target.attributes)) if (!source.hasAttribute(attribute.name) &&
-    attribute.name !== 'data-af-id') target.removeAttribute(attribute.name);
-for (const attribute of Array.from(source.attributes)) target.setAttribute(attribute.name,
-    attribute.value);
-target.onerror = source.onerror; target.onclick = source.onclick; target.onchange = source.onchange;
-    target.ondrop = source.ondrop; target.ondragover = source.ondragover;
-if (target instanceof HTMLButtonElement && source instanceof HTMLButtonElement) target.disabled =
-    source.disabled;
-if (target instanceof HTMLInputElement && source instanceof HTMLInputElement) { target.disabled =
-    source.disabled; target.multiple = source.multiple; }
-  const previous = Array.from(target.childNodes);
-  const used = new Set<Node>();
-const key = (node: HTMLElement) => node.getAttribute('data-af-upload-ref') ??
-    `${node.tagName}:${node.className}:${node.getAttribute('role') ?? ''}`;
-  let index = 0;
-  for (const next of Array.from(source.childNodes)) {
-const existing = previous.find(node => !used.has(node) && (node instanceof HTMLElement &&
-      next instanceof HTMLElement ? key(node) === key(next) : node.nodeType === next.nodeType));
-    if (existing) used.add(existing);
-if (existing instanceof HTMLElement && next instanceof HTMLElement &&
-      existing.tagName === next.tagName) {
-      reconcile(existing, next);
-if (target.childNodes[index] !== existing) target.insertBefore(existing, target.childNodes[index] ??
-        null);
-} else if (existing?.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
-      existing.textContent = next.textContent; }
-    else target.insertBefore(next, target.childNodes[index] ?? null);
-    index++;
-  }
-  while (target.childNodes.length > index) target.lastChild?.remove();
-}
-export function registerFileUpload(registry: CustomElementRegistry = customElements, document:
-  Document = globalThis.document): void {
-if (!document.querySelector('style[data-af-file-upload-styles]')) { const style =
-    document.createElement('style'); style.setAttribute('data-af-file-upload-styles', '');
-    style.textContent =
-    'af-file-upload{display:block;color:var(--foreground,#222)}af-file-upload .af-file-upload-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}af-file-upload .af-file-upload-shell{display:flex;flex-direction:column;gap:.75rem}af-file-upload .af-file-upload-label{font-size:.875rem;font-weight:500;line-height:1.25rem}af-file-upload .af-file-upload-drop{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;border:1px dashed var(--input,#aaa);padding:1rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px))}af-file-upload .af-file-upload-help{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload button{font:inherit;font-size:.875rem;line-height:1.25rem;color:inherit;background:var(--background,#fff);border:1px solid var(--input,#aaa);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem .75rem;box-shadow:0 1px 2px #0000000d;cursor:pointer}af-file-upload button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-file-upload button:disabled{opacity:.5;cursor:not-allowed}af-file-upload li{display:flex;gap:.5rem;align-items:center}af-file-upload .af-file-upload-details{display:flex;min-width:0;flex:1;flex-direction:column}af-file-upload .af-file-upload-details a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}af-file-upload .af-file-upload-size{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload img{border-radius:var(--radius-sm,calc(var(--radius,.625rem) - 4px));width:4rem;height:4rem;object-fit:cover}af-file-upload [role=alert]{color:var(--destructive,#b11)}'; document.head.append(style); }
-  if (!registry.get('af-file-upload')) registry.define('af-file-upload', AfFileUpload);
-}
+registerComponent({
+  styleKey: 'af-file-upload-styles',
+  styles: fileUploadStyles,
+  elements: { 'af-file-upload': AfFileUpload },
+});
