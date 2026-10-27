@@ -1,3 +1,11 @@
+/**
+ * <af-textarea>: multi-line text control.
+ * Import:  import {registerTextarea} from './components/textarea.js'; registerTextarea();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value, label, placeholder, native constraints
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-textarea label="Notes" rows="4"></af-textarea>
+ */
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
 
 class AfTextarea extends HTMLElement implements TextControlContract {

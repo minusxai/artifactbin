@@ -114,4 +114,4 @@ Replace the example ID with a real admitted image artifact. Download packs reada
 Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials. Test the downloaded file without a network.
 
 
-For an unpublished local project, read [private local preview](html-preview.md).
+For an unpublished local project, read the top of `scripts/serve.mjs`.

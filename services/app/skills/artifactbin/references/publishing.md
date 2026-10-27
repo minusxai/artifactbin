@@ -41,4 +41,4 @@ The Helmet script runs in the document as an ES module: it binds the declared na
 See [authentication](publishing-auth.md) for how afbin signs in. Full replacement, metadata and folder settings are fields of the file you push.
 
 
-For native HTML projects with local dependencies, read [publication bundles](publication-bundles.md).
+For native HTML projects with local dependencies, read the top of `scripts/publish.mjs`.

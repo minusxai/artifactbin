@@ -1,3 +1,11 @@
+/**
+ * <af-slider>: numeric range control.
+ * Import:  import {registerSlider} from './components/slider.js'; registerSlider();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value (number), min, max, step, disabled, label
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
+ */
 import { format as d3format } from 'd3-format';
 
 /** Numeric value exposed by the author-facing range control. */

@@ -1,3 +1,12 @@
+/**
+ * <af-collapsible>: one disclosure region; you own its open state, the element only emits intent.
+ * Import:  import {registerCollapsible} from './components/collapsible.js'; registerCollapsible();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: open (boolean)
+ * Parts: af-collapsible-trigger, af-collapsible-content
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-collapsible><af-collapsible-trigger>More</af-collapsible-trigger><af-collapsible-content>Details</af-collapsible-content></af-collapsible>
+ */
 /** Author-owned open state. The element emits intent and never persists viewer state. */
 export interface CollapsibleChangeDetail { value: boolean }
 export interface CollapsibleContract { open: boolean }

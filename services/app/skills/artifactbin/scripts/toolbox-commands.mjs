@@ -1,35 +1,128 @@
-/** One installed command definition owns strict parsing, offline help and the skill table. */
+/**
+ * Strict argument parsing for the installed commands. Flag metadata (type, repeatable) lives here because the
+ * parser needs it; everything a reader needs (purpose, usage, flags, examples, gotchas) lives in each script's
+ * DESCRIPTION export, which --help prints and the SKILL.md command table is generated from. No text is duplicated.
+ */
+import {readFileSync} from 'node:fs';
 import {parseArgs} from 'node:util';
-const common={help:'Show complete offline help.',server:'Origin; must match target and baseline.',json:'Machine-readable result; diagnostics go to stderr.',output:'Exclusive result/payload file; dataset source requires .json.'};
-const flag=(description,type='string',multiple=false)=>({description,type,...(multiple?{multiple:true}:{})});
-const shared=Object.fromEntries(Object.entries(common).map(([name,description])=>[name,flag(description,['help','json'].includes(name)?'boolean':'string')]));
-const commands={
- auth:{usage:'login|status|logout',example:'auth.mjs status',summary:'Sign in, inspect or remove this origin’s private grant.',guide:'http-auth',sub:{login:{email:flag('Start email sign-in for the supplied address.'),challenge:flag('Private wrapper challenge handle from the first login step.'),'code-file':flag('File containing the user-provided OTP; never pass codes on argv.')},status:{},logout:{}}},
- serve:{usage:'PROJECT',example:'serve.mjs ./project --port 7474',summary:'Foreground private loopback preview; Ctrl-C stops it.',guide:'html-preview',flags:{port:flag('Listening port; default 0 chooses a free port.'),'runtime-dir':flag('Repository users: prebuilt local runtime assets.'),autofix:flag('Also write autofix fixes to each served HTML file (default: serve fixed bytes, file unchanged).','boolean')}},
- autofix:{usage:'FILE',example:'autofix.mjs ./project/index.html',summary:'Fix platform-owned HTML pieces in place and list problems to fix by hand; publish and serve run it already.',guide:'html-authoring',listed:false,flags:{'dry-run':flag('List problems and pending fixes; write nothing.','boolean'),root:flag('Project boundary for local file checks; default the file directory.')}},
- publish:{usage:'FILE',example:'publish.mjs ./project/index.html',summary:'Publish source with dependencies; FILE and FILE.af.json update in place.',guide:'html-authoring',flags:{type:flag('html|dataset|asset; infer unambiguous file extensions.'),root:flag('Project boundary; default source directory.'),manifest:flag('JSON {manifest:[paths]}; explicit extra local dependencies.'),title:flag('Explicit artifact title.'),visibility:flag('private|unlisted|public; new default unlisted.'),'dry-run':flag('Validate/plan locally without writes.','boolean'),strict:flag('Refuse fixable autofix problems instead of fixing them.','boolean'),create:flag('Explicit new identity for ambiguous recovered source.','boolean'),artifact:flag('Advanced recovery: existing artifact target; requires --baseline.'),baseline:flag('Advanced recovery: existing companion baseline.'),request:flag('Exclusive immutable journal outside project; default private journal directory.'),resume:flag('Replay exact journal without reading changed source.')}},
- read:{usage:'ID|URL | list',example:'read.mjs ID --output page.html',summary:'Read canonical JSON; --output saves canonical source + baseline, even with --json.',guide:'html-authoring',flags:{version:flag('Positive saved version; historical pairs cannot update.')},sub:{list:{cursor:flag('Continue this listing only.'),limit:flag('Items per response, 1–100 (default 20).')}}},
- export:{usage:'ID|URL --format html|png|jpg --output FILE',example:'export.mjs ID --format html --output copy.html',summary:'Portable HTML or a rendered image; not editable source.',guide:'html-authoring',flags:{format:flag('Required: html|png|jpg.'),slide:flag('Positive visible slide number; image formats only.')}},
- check:{usage:'ID|URL',example:'check.mjs ID --viewport 1280x800 --viewport 390x844',summary:'Collect smoke/task evidence; appearance remains unverified.',guide:'html-operations',flags:{viewport:flag('WIDTHxHEIGHT; repeat up to 8; defaults 1280x800 and 390x844.','string',true),steps:flag('Async JS function body receiving page; return assertions and throw on failure.'),viewer:flag('Hosted only: self (default) or guest.'),'playwright-module':flag('Local only: installed Playwright CommonJS or ESM entrypoint.')}},
- graphql:{usage:'schema|query|mutate ID|URL',example:'graphql.mjs schema ID',summary:'Read SDL or execute a selected linked namespace operation.',guide:'html-backends',sub:{schema:{revision:flag('Positive saved page revision; default current.')},query:{document:flag('Required GraphQL document file.'),operation:flag('Selected operation name; required for multiple operations.'),variables:flag('JSON object file.'),revision:flag('Positive saved page revision; default current.')},mutate:{document:flag('Required GraphQL mutation document file.'),operation:flag('Selected operation name; required for multiple operations.'),variables:flag('JSON object file.'),revision:flag('Positive saved page revision; default current.')}}},
- comment:{usage:'list|add|reply|edit|react|resolve|reopen|watch ID|URL',example:'comment.mjs list ID --status all --json',summary:'Native comment threads and the human-comment feed.',guide:'html-operations',sub:{list:{status:flag('open (default)|resolved|all.'),cursor:flag('Continue the same filtered list.'),limit:flag('Items per response, 1–100 (default 20).')},add:{anchor:flag('Required canonical native HTML anchor JSON file.'),'body-file':flag('Required UTF-8 comment text file.'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},reply:{thread:flag('Required root thread ID.'),'expected-revision':flag('Optional for a plain reply (never conflicts); required with --resolve. Integer ≥0.'),'body-file':flag('Required UTF-8 reply text file.'),resolve:flag('Atomically resolve with the reply.','boolean'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},edit:{comment:flag('Required comment ID.'),'expected-revision':flag('Required observed thread revision, integer ≥0.'),'body-file':flag('Required replacement text file.'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},resolve:{thread:flag('Required root thread ID.'),'expected-revision':flag('Required observed thread revision, integer ≥0.'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},reopen:{thread:flag('Required root thread ID.'),'expected-revision':flag('Required observed thread revision, integer ≥0.'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},react:{comment:flag('Required root or reply comment ID.'),kind:flag('Reaction kind: thumbs_up (default).'),active:flag('Required desired state: true|false.'),request:flag('Exclusive saved write journal.'),resume:flag('Replay exact supported comment journal.')},watch:{cursor:flag('Opaque cursor, or a saved checkpoint/log file.'),once:flag('Drain available backlog, then exit; no cursor establishes now.','boolean'),append:flag('Explicitly append to an existing validated --output log.','boolean')}}}
+
+// Flags every command accepts.
+const shared = {
+  help: flag('boolean'),
+  json: flag('boolean'),
+  server: flag(),
+  output: flag()
 };
-export const COMMANDS=Object.freeze(commands);
-export function commandHelp(name){
- const command=COMMANDS[name];if(!command)throw Error('Unknown command');
- const lines=[`Usage: node scripts/${name}.mjs ${command.usage}`,command.summary,'',...Object.entries({...shared,...command.flags}).map(([key,spec])=>`  --${key}${spec.type==='string'?' VALUE':''}  ${spec.description}`)];
- for(const [sub,flags]of Object.entries(command.sub??{}))lines.push('',`${sub}:`,...Object.entries(flags).map(([key,spec])=>`  --${key}${spec.type==='string'?' VALUE':''}  ${spec.description}`));
- if(name==='publish')lines.push('','Compatibility: --prepare SAMPLE --server ORIGIN [--dataset-id ID] --output FILE; --send FILE. Deprecated; use FILE / --resume.');
- lines.push('','Exits: 0 completed; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.','No credentials in results. Writes save immutable intent before sending; --resume never changes it.');return lines.join('\n')+'\n';
+function flag(type = 'string', multiple = false) {
+  return {type, ...(multiple ? {multiple: true} : {})};
 }
-export function commandTable(){return ['| Command | Use |','|---|---|',...Object.entries(COMMANDS).filter(([,spec])=>spec.listed!==false).map(([name,spec])=>`| \`node scripts/${spec.example}\` | [${spec.summary}](references/${spec.guide}.md) |`)].join('\n');}
-export function parseCommand(name,args){
- const command=COMMANDS[name];if(!command)throw Error('Unknown command');
- // The command verb is positional and must precede flags, except global offline --help.
- const sub=command.sub&&Object.hasOwn(command.sub,args[0])?args[0]:undefined;
- if(command.sub&&!sub&&!['read'].includes(name)&&!args.includes('--help'))throw Error('Choose a subcommand; see --help.');
- const flags={...shared,...(sub?command.sub[sub]:command.flags)};
- const options=Object.fromEntries(Object.entries(flags).map(([key,{type,multiple}])=>[key,{type,...(multiple?{multiple:true}:{})}]));
- const parsed=parseArgs({args:sub?args.slice(1):args,options,allowPositionals:true,strict:true});
- return {...parsed,sub};
+
+// Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`; `listed:false` keeps a command out of the table.
+const commands = {
+  auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {}, logout: {}}},
+  serve: {flags: {port: flag(), 'runtime-dir': flag(), autofix: flag('boolean')}},
+  autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},
+  publish: {
+    flags: {
+      type: flag(),
+      root: flag(),
+      manifest: flag(),
+      title: flag(),
+      visibility: flag(),
+      'dry-run': flag('boolean'),
+      strict: flag('boolean'),
+      create: flag('boolean'),
+      artifact: flag(),
+      baseline: flag(),
+      request: flag(),
+      resume: flag()
+    }
+  },
+  read: {flags: {version: flag()}, sub: {list: {cursor: flag(), limit: flag()}}},
+  export: {flags: {format: flag(), slide: flag()}},
+  check: {
+    flags: {viewport: flag('string', true), steps: flag(), viewer: flag(), 'playwright-module': flag()}
+  },
+  graphql: {
+    sub: {
+      schema: {revision: flag()},
+      query: {document: flag(), operation: flag(), variables: flag(), revision: flag()},
+      mutate: {document: flag(), operation: flag(), variables: flag(), revision: flag()}
+    }
+  },
+  comment: {
+    sub: {
+      list: {status: flag(), cursor: flag(), limit: flag()},
+      add: {anchor: flag(), 'body-file': flag(), request: flag(), resume: flag()},
+      reply: {
+        thread: flag(),
+        'expected-revision': flag(),
+        'body-file': flag(),
+        resolve: flag('boolean'),
+        request: flag(),
+        resume: flag()
+      },
+      edit: {
+        comment: flag(),
+        'expected-revision': flag(),
+        'body-file': flag(),
+        request: flag(),
+        resume: flag()
+      },
+      resolve: {thread: flag(), 'expected-revision': flag(), request: flag(), resume: flag()},
+      reopen: {thread: flag(), 'expected-revision': flag(), request: flag(), resume: flag()},
+      react: {comment: flag(), kind: flag(), active: flag(), request: flag(), resume: flag()},
+      watch: {cursor: flag(), once: flag('boolean'), append: flag('boolean')}
+    }
+  }
+};
+export const COMMANDS = Object.freeze(commands);
+
+/** The script's own DESCRIPTION text, read from its source (the script may not be imported: it runs its command on load). */
+export function descriptionOf(
+  name,
+  read = file => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
+) {
+  if (!COMMANDS[name]) throw Error('Unknown command');
+  const match = /^export const DESCRIPTION = `([^`]*)`;$/m.exec(read(`${name}.mjs`));
+  if (!match) throw Error(`${name}.mjs has no DESCRIPTION`);
+  return match[1];
+}
+/** Parts of a DESCRIPTION that other surfaces reuse: the first line (summary) and the first example command. */
+export function describe(name, read) {
+  const text = descriptionOf(name, read);
+  const example =
+    /^Examples:\n\s+(node scripts\/\S+(?: (?!#)\S+)*)/m.exec(text)?.[1] ?? `node scripts/${name}.mjs`;
+  return {summary: text.split('\n')[0], example};
+}
+/** --help prints the script's DESCRIPTION verbatim. */
+export function commandHelp(name, read) {
+  return descriptionOf(name, read) + '\n';
+}
+/** The SKILL.md command table, one row per listed command, generated from each DESCRIPTION. */
+export function commandTable(read) {
+  const rows = Object.entries(COMMANDS)
+    .filter(([, spec]) => spec.listed !== false)
+    .map(([name]) => {
+      const {summary, example} = describe(name, read);
+      return `| \`${example}\` | [${summary}](scripts/${name}.mjs) |`;
+    });
+  return ['| Command | Use |', '|---|---|', ...rows].join('\n');
+}
+export function parseCommand(name, args) {
+  const command = COMMANDS[name];
+  if (!command) throw Error('Unknown command');
+  // The command verb is positional and must precede flags, except global offline --help.
+  const sub = command.sub && Object.hasOwn(command.sub, args[0]) ? args[0] : undefined;
+  if (command.sub && !sub && !['read'].includes(name) && !args.includes('--help'))
+    throw Error('Choose a subcommand; see --help.');
+  const flags = {...shared, ...(sub ? command.sub[sub] : command.flags)};
+  const options = Object.fromEntries(
+    Object.entries(flags).map(([key, {type, multiple}]) => [
+      key,
+      {type, ...(multiple ? {multiple: true} : {})}
+    ])
+  );
+  const parsed = parseArgs({args: sub ? args.slice(1) : args, options, allowPositionals: true, strict: true});
+  return {...parsed, sub};
 }

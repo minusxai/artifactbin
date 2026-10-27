@@ -1,3 +1,13 @@
+/**
+ * <af-tabs>: tab list and panels.
+ * Import:  import {registerTabs} from './components/tabs.js'; registerTabs();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value (string on the root af-tabs)
+ * Parts: af-tabs-list, af-tabs-trigger value="a", af-tabs-content value="a"
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-tabs value="a"><af-tabs-list><af-tabs-trigger value="a">One</af-tabs-trigger></af-tabs-list>
+ *   <af-tabs-content value="a">First</af-tabs-content></af-tabs>
+ */
 import {tabFocusTarget} from './tab-navigation';
 /** Author-owned selection; components emit intent and never persist viewer state. */
 export interface TabsChangeDetail { value: string }

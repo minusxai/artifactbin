@@ -1,3 +1,4 @@
+/** Internal helper for af-popover, af-tooltip and af-date-picker; not a public entry point. */
 export type FloatingSide = 'top' | 'bottom' | 'left' | 'right';
 export interface FloatingRect { left: number; top: number; width: number; height: number }
 export interface FloatingPosition { left: number; top: number; side: FloatingSide }

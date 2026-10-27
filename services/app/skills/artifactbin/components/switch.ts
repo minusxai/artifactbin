@@ -1,3 +1,11 @@
+/**
+ * <af-switch>: on/off toggle.
+ * Import:  import {registerSwitch} from './components/switch.js'; registerSwitch();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: checked (boolean), disabled, label
+ * Events: af-change with event.detail.value (the new checked state)
+ * Usage:
+ *   <af-switch label="Notifications"></af-switch>
+ */
 export interface AfSwitchChangeDetail {
   value: boolean;
 }

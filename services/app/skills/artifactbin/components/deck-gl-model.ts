@@ -1,3 +1,4 @@
+/** Internal helper for af-deck-gl; not a public entry point. */
 import type { MapViewState, Feature, Row } from "../viz/deck-engine-core";
 export interface DeckGLOptions {
   data: readonly Row[];

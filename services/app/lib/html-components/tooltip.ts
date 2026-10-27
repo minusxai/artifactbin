@@ -1,3 +1,12 @@
+/**
+ * <af-tooltip>: hover/focus tooltip.
+ * Import:  import {registerTooltip} from './components/tooltip.js'; registerTooltip();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: open (boolean)
+ * Parts: af-tooltip-trigger (use a native button inside), af-tooltip-content
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-tooltip><af-tooltip-trigger><button>?</button></af-tooltip-trigger><af-tooltip-content>Help</af-tooltip-content></af-tooltip>
+ */
 import {floatingVisibility,identifyFloating,positionFloating,topFloating} from './floating-position';
 export interface TooltipChangeDetail { value: boolean }
 export interface TooltipContract { open: boolean | undefined }

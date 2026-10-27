@@ -51,14 +51,16 @@ describe('one installable native HTML author skill',()=>{
   expect(json).toBeTruthy();
   const anchor=JSON.parse(json!);
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
-  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs','overflow','comment.mjs watch'])expect(guide).toContain(value);
-  const browserExample=[...guide.matchAll(/```js\n([\s\S]*?)```/g)][1]?.[1];
-  expect(browserExample).toContain('page.getByRole');
-  expect(browserExample).toMatch(/throw Error\(/);
-  expect(browserExample).not.toContain('frameLocator(');
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs'])expect(guide).toContain(value);
   const files=skillPackageFiles(skillTree(),BASE);
   expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
-  expect(publicGuideText('html-examples',BASE)).toContain('registerSlideDeck');
+  // What used to live in the guide now ships at the top of the scripts and component sources.
+  const check=files['scripts/check.mjs']!,comment=files['scripts/comment.mjs']!;
+  for(const value of ['page.getByRole','page.mainFrame()','overflow','--viewer'])expect(check).toContain(value);
+  expect(check.slice(0,check.indexOf('import'))).not.toContain('frameLocator(');
+  expect(comment).toContain('watch');expect(comment).toContain('react');
+  expect(files['components/slide-deck.ts']).toContain('registerSlideDeck');
+  for(const gone of ['html-components','html-examples','html-uploads','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

@@ -1,3 +1,4 @@
+/** Internal helper for af-select; not a public entry point. */
 import type { AfSelectOption, AfSelectScalar, AfSelectValue } from './select';
 export interface SelectEntry { value: AfSelectScalar; label: string; key: string }
 export function selectKey(value: AfSelectScalar | null): string { return `${typeof value}:${String(value)}`; }

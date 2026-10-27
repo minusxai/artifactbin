@@ -1,3 +1,23 @@
+/**
+ * <af-file-upload>: file chooser/drop zone that uploads to a linked live dataset through the trusted platform frame; no credentials in page code.
+ * Import:  import {registerFileUpload} from './components/file-upload.js'; registerFileUpload();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value (file metadata {ref,name,contentType?,size?}[]), datasetName or dataset attribute, adapter, accept, multiple, limits, label
+ * Adapter: adapter.upload(file,{dataset,signal}) returns {ref,url,name,contentType,size,replayed?}; optional fileUrl resolves previews
+ * Events: af-change with the value and reason upload|remove
+ * bindFileUpload disables the chooser while the trusted session loads, when signed out, in archived/portable readers or when the connection
+ * is unavailable, and sets helperText ("Sign in to upload files."); it does not prove an insert grant. For a custom control,
+ * watchUploadContext(listener) reports {state,scope} and returns {unsubscribe()}; uploadFile(file,{dataset,signal,requestId?}) returns the receipt.
+ * The signed-in caller needs current dataset insert authority; the server rechecks access, provenance, file policy and grants. Requests are
+ * bounded to 50 MB and four pending uploads; accept and limits are browser guidance. Retry with the same File (or an explicit requestId of
+ * 8-120 letters, digits, _ . -) to recover an uncertain upload; reusing an ID for different bytes conflicts. Removing a reference does not
+ * delete the stored file. Archived readers, portable downloads and raw pages without the platform frame cannot upload.
+ * Usage:
+ *   <link rel="af-dataset" data-af-name="attachments" href="ref:DATASET_ID" data-af-mode="live">
+ *   <af-file-upload dataset="attachments" label="Attachments" multiple accept="text/plain"></af-file-upload>
+ *   import {bindFileUpload} from '@afbin/apollo';
+ *   const binding=bindFileUpload(document.querySelector('af-file-upload'),{helperText:'Or drop files here.'});
+ *   // binding.setDisabled(true|false) for your own rules; binding.dispose() when removing the view.
+ */
 import { uploadFile, uploadUrl, uploadError, type AfUploadFile, type AfFileUploadAdapter, type AfFileUploadChangeDetail } from './file-upload-model';
 export type { AfUploadFile, AfFileUploadAdapter, AfFileUploadChangeDetail } from './file-upload-model';
 

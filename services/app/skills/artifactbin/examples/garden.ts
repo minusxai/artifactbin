@@ -1,3 +1,8 @@
+/**
+ * Example backend for examples/shared-app.html (publish them together): TypeScript resolvers over a shared store with
+ * role-protected mutations. It demonstrates typeDefs plus resolvers; the page links it with af-backend.
+ * Backend files are published as backend sources, never as public assets.
+ */
 interface Job {id:string;title:string;done:boolean}
 interface GardenState {jobs:Job[]}
 interface StoreCaps {store:{get():Promise<{value:GardenState|null;version:number}>;set(value:GardenState,options:{expected:number}):Promise<number>}}

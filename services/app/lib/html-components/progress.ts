@@ -1,3 +1,10 @@
+/**
+ * <af-progress>: native 0-100 progress indicator with no platform state.
+ * Import:  import {registerProgress} from './components/progress.js'; registerProgress();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value (0-100, or null for indeterminate)
+ * Usage:
+ *   <af-progress value="60"></af-progress>
+ */
 /** A native, light DOM 0–100 progress indicator with no platform state. */
 export interface ProgressContract {
   /** Finite values from 0 through 100; null represents indeterminate progress. */

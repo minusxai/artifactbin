@@ -1,3 +1,4 @@
+/** Internal helper for af-icon; not a public entry point. */
 /** Local Lucide glyph catalog. Bundled with the component; no runtime fetches. */
 import * as lucide from 'lucide-static';
 

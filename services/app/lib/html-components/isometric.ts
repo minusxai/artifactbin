@@ -1,3 +1,10 @@
+/**
+ * <af-isometric>: isometric illustration from keyed geometry.
+ * Import:  import {registerIsometric} from './components/isometric.js'; registerIsometric();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: options={title,parts,...}: keyed geometry, spread/angle/flow, motion
+ * Usage:
+ *   document.querySelector('af-isometric').options={title:'Stack',parts:[...]};
+ */
 import { isometricScene, type IsoDrawPath } from "../story-ui/isometric";
 import { isometricError } from "../jsx/isometric-spec";
 import {
