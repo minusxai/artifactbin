@@ -1,10 +1,13 @@
 <!doctype html>
 <!--
-Example: a chart computed from a linked dataset's discovered table and column IDs, all result pages and one consistent revision.
-Goes with examples/repairs.csv: publish that file first (node scripts/publish.mjs examples/repairs.csv --type dataset), then replace the
-placeholder after ref: in the dataset link below with the returned dataset ID. Never publish the placeholder.
-Verify chart values against the source cells, including empty or missing values.
-Copy it as index.html and replace only the [bracketed] text and the data; keep its CSS, JS and layout, and add no new controls.
+Example: a chart computed from a linked dataset's discovered table and column IDs, all result
+pages and one consistent revision. Goes with examples/repairs.csv.
+Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset), then
+replace the placeholder after ref: in the dataset link below with the returned dataset ID and
+publish this page (node scripts/publish.mjs examples/csv-dashboard.html).
+Gotchas: never publish the placeholder. Verify chart values against the source cells, including
+empty or missing values. Copy it as index.html and replace only the [bracketed] text and the
+data; keep its CSS, JS and layout, and add no new controls.
 -->
 <html lang="en">
 <head>
@@ -13,59 +16,139 @@ Copy it as index.html and replace only the [bracketed] text and the data; keep i
 <title>[Page title: Repair bench capacity]</title>
 <link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
 <style>
-*{box-sizing:border-box}body{line-height:1.6}main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}p{max-width:68ch}button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);border:1px solid currentColor;border-radius:4px}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}.layout>*{min-width:0}#chart,.chart svg{max-width:100%;height:auto}@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+*{box-sizing:border-box}body{line-height:1.6}
+main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
+p{max-width:68ch}
+button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);
+border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}
+.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}
+svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}
+td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}
+.layout>*{min-width:0}#chart,.chart svg{max-width:100%;height:auto}
+@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}
+main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 <script type="application/json" data-af="state">{"metric":"completed"}</script>
 </head><body><main>
-<p class="muted">[Kicker: Operations notebook] · sample CSV</p><h1 class="t-display-xl">[Title: Repair bench capacity]</h1><p class="lead">[One-sentence summary: completed repairs and work still waiting, calculated from the linked dataset.]</p>
-<div class="toolbar"><label for="metric">Measure</label><select id="metric"><option value="completed">Completed repairs</option><option value="waiting">Waiting repairs</option></select><button id="refresh" type="button">Refresh data</button></div><p id="status" role="status" aria-live="polite">Loading the linked sample dataset…</p>
-<div class="layout rule"><section><h2 id="chart-title" class="t-title">Completed repairs by week</h2><svg id="chart" viewBox="0 0 640 300" role="img" aria-labelledby="chart-title chart-description"><desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section><aside><h2 class="t-title">How to read this</h2><p>Figures below are calculated only after every row page has loaded at the same dataset revision.</p><p id="summary" class="number"></p><p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr><th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead><tbody id="rows"></tbody></table>
+<p class="muted">[Kicker: Operations notebook] · sample CSV</p>
+<h1 class="t-display-xl">[Title: Repair bench capacity]</h1>
+<p class="lead">[One-sentence summary: completed repairs and work still waiting, calculated from
+the linked dataset.]</p>
+<div class="toolbar"><label for="metric">Measure</label><select id="metric">
+<option value="completed">Completed repairs</option><option value="waiting">Waiting repairs</option>
+</select><button id="refresh" type="button">Refresh data</button></div>
+<p id="status" role="status" aria-live="polite">Loading the linked sample dataset…</p>
+<div class="layout rule"><section><h2 id="chart-title" class="t-title">Completed repairs by
+week</h2><svg id="chart" viewBox="0 0 640 300" role="img"
+aria-labelledby="chart-title chart-description">
+<desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section>
+<aside><h2 class="t-title">How to read this</h2>
+<p>Figures below are calculated only after every row page has loaded at the same dataset
+revision.</p><p id="summary" class="number"></p>
+<p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog
+total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr>
+<th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead>
+<tbody id="rows"></tbody></table>
 </main>
 <script type="module">
 import {client,gql} from '@afbin/apollo';
 const preference=gql`{metric}`;
-const schemaQuery=gql`{repairs{schema{revision tables{id label source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}}`;
-const rowsQuery=gql`query Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision source{truncated totalRows storedRows} columns{id label type nullable} rows{id cells{columnId value{type string number boolean json}}} pageInfo{hasNextPage endCursor}}}}`;
+// Discover table and column IDs from the schema instead of hard-coding them.
+const schemaQuery=gql`{repairs{schema{revision tables{id label
+  source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}}`;
+const rowsQuery=gql`query
+  Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision
+  source{truncated totalRows storedRows} columns{id label type nullable}
+  rows{id cells{columnId value{type string number boolean json}}}
+  pageInfo{hasNextPage endCursor}}}}`;
 let rows=[],sourceNote='';
 const status=document.querySelector('#status');
 function render(metric){
  document.querySelector('#metric').value=metric;
- document.querySelector('#chart-title').textContent=(metric==='completed'?'Completed':'Waiting')+' repairs by week';
- const chart=document.querySelector('#chart'),description=document.querySelector('#chart-description');
- chart.replaceChildren(description);description.textContent=rows.map(row=>`${row.week}: ${row[metric]}`).join('; ');
+ document.querySelector('#chart-title').textContent=
+  (metric==='completed'?'Completed':'Waiting')+' repairs by week';
+ const chart=document.querySelector('#chart'),
+  description=document.querySelector('#chart-description');
+ // The SVG's <desc> doubles as the text alternative, so keep it in sync with the bars.
+ chart.replaceChildren(description);
+ description.textContent=rows.map(row=>`${row.week}: ${row[metric]}`).join('; ');
  const max=Math.max(1,...rows.map(row=>row[metric]));
  rows.forEach((row,index)=>{
   const y=24+index*76,width=430*row[metric]/max;
-  const make=(role,tag,attrs,text)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);el.dataset.afId='repair-chart-'+row.id+'-'+role;for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;chart.append(el);};
+  const make=(role,tag,attrs,text)=>{
+   const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+   el.dataset.afId='repair-chart-'+row.id+'-'+role;
+   for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));
+   if(text!==undefined)el.textContent=text;chart.append(el);
+  };
   make('week','text',{x:0,y:y+24,fill:'currentColor','font-size':17},row.week);
   make('bar','rect',{x:120,y,width,height:36,fill:'var(--primary)'});
   make('value','text',{x:130+width,y:y+24,fill:'currentColor','font-size':17},String(row[metric]));
  });
- document.querySelector('#summary').textContent=metric==='completed'?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`:`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
+ document.querySelector('#summary').textContent=metric==='completed'
+  ?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`
+  :`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
  if(sourceNote)document.querySelector('#summary').textContent+=' '+sourceNote;
- const body=document.querySelector('#rows');body.replaceChildren();for(const row of rows){const tr=document.createElement('tr');tr.dataset.afId='repair-row-'+row.id;for(const key of ['week','completed','waiting']){const td=document.createElement('td');td.dataset.afId='repair-cell-'+row.id+'-'+key;td.textContent=String(row[key]);tr.append(td);}body.append(tr);}
+ const body=document.querySelector('#rows');body.replaceChildren();
+ for(const row of rows){
+  const tr=document.createElement('tr');tr.dataset.afId='repair-row-'+row.id;
+  for(const key of ['week','completed','waiting']){
+   const td=document.createElement('td');td.dataset.afId='repair-cell-'+row.id+'-'+key;
+   td.textContent=String(row[key]);tr.append(td);
+  }
+  body.append(tr);
+ }
 }
 async function refresh(){
- const button=document.querySelector('#refresh');button.disabled=true;status.textContent='Reading dataset schema and rows…';
+ const button=document.querySelector('#refresh');button.disabled=true;
+ status.textContent='Reading dataset schema and rows…';
  try{
-  const schemaResult=await client.query({query:schemaQuery});if(schemaResult.errors?.length)throw Error(schemaResult.errors[0].message);
+  const schemaResult=await client.query({query:schemaQuery});
+  if(schemaResult.errors?.length)throw Error(schemaResult.errors[0].message);
   const tables=schemaResult.data.repairs.schema.tables;
-  const table=tables.find(table=>['week','completed','waiting'].every(label=>table.columns.some(column=>column.label===label)));
+  const table=tables.find(table=>['week','completed','waiting']
+   .every(label=>table.columns.some(column=>column.label===label)));
   if(!table)throw Error('Dataset needs week, completed and waiting columns.');
   const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id]));
   const loaded=[];let after=null,revision=null;
+  // Read every page; all pages must share one revision or the totals would mix versions.
   do{
-   const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});if(result.errors?.length)throw Error(result.errors[0].message);
-   const page=result.data.repairs.rows;if(revision!==null&&revision!==page.revision)throw Error('Dataset changed during reading. Refresh to try again.');revision=page.revision;
-   for(const row of page.rows){const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,waiting=cells[ids.waiting]?.number;if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))throw Error('A row has missing or nonnumeric repair values.');loaded.push({id:row.id,week,completed,waiting});}
-   after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;if(page.pageInfo.hasNextPage&&!after)throw Error('Dataset returned no continuation cursor.');
+   const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});
+   if(result.errors?.length)throw Error(result.errors[0].message);
+   const page=result.data.repairs.rows;
+   if(revision!==null&&revision!==page.revision)
+    throw Error('Dataset changed during reading. Refresh to try again.');
+   revision=page.revision;
+   for(const row of page.rows){
+    const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));
+    const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,
+     waiting=cells[ids.waiting]?.number;
+    if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))
+     throw Error('A row has missing or nonnumeric repair values.');
+    loaded.push({id:row.id,week,completed,waiting});
+   }
+   after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
+   if(page.pageInfo.hasNextPage&&!after)throw Error('Dataset returned no continuation cursor.');
   }while(after);
-  sourceNote=table.source.truncated?`Stored sample: ${table.source.storedRows??'unknown'} of ${table.source.totalRows??'unknown'} source rows. Totals cover stored rows only.`:'';
-  rows=loaded.sort((a,b)=>a.week.localeCompare(b.week));const {data}=await client.query({query:preference});render(data.metric);status.textContent=`Loaded ${rows.length} sample rows at revision ${revision}.`;
- }catch(error){status.textContent=error.message||'Could not read this dataset.';}finally{button.disabled=false;}
+  // A truncated source means only stored rows were loaded; say so next to the totals.
+  sourceNote=table.source.truncated
+   ?`Stored sample: ${table.source.storedRows??'unknown'} of ${table.source.totalRows??'unknown'}`+
+    ' source rows. Totals cover stored rows only.'
+   :'';
+  rows=loaded.sort((a,b)=>a.week.localeCompare(b.week));
+  const {data}=await client.query({query:preference});render(data.metric);
+  status.textContent=`Loaded ${rows.length} sample rows at revision ${revision}.`;
+ }catch(error){status.textContent=error.message||'Could not read this dataset.';}
+ finally{button.disabled=false;}
 }
 client.watchQuery({query:preference}).subscribe(({data})=>render(data.metric));
-document.querySelector('#metric').onchange=event=>client.updateQuery({query:preference},()=>({metric:event.target.value}));
+document.querySelector('#metric').onchange=
+ event=>client.updateQuery({query:preference},()=>({metric:event.target.value}));
 document.querySelector('#refresh').onclick=refresh;
 await refresh();
 </script>
