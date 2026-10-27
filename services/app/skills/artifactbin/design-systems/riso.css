@@ -1,38 +1,54 @@
-/* Generated from design-systems/specs/riso.json. */
-@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-ext-standard-normal.a2930b27.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-standard-normal.7234ed86.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-ext-standard-italic.4983926d.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-standard-italic.066710ce.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-ext-400-italic.a7642ae8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-400-italic.a5fb4904.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-ext-400-normal.44ad50c7.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-400-normal.fb4a81a2.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-ext-700-italic.0db253a6.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-700-italic.e84908e1.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-ext-700-normal.52edd9a8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-700-normal.2d46bd15.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+/*
+ * Riso: Three inks, one key plate, a hair out of register.
+ * Scrolly stories, picture-book explainers, posters, zines. Mood: Printed. Opens light. Generated from
+ * design-systems/specs/riso.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="riso">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-deck t-body-l t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Riso is the print shop: three fluorescent inks laid one pass at a time over a navy key plate, each slipped
+ * by a hair, on uncoated paper with a grain you can feel. Headlines overprint themselves. Pages go full-bleed in
+ * one ink. Tags hang off things. It makes any subject feel like a picture book someone made by hand, and it is at
+ * its best when the story moves in chapters.
+ * Fits: Scrolly stories and picture-book explainers, chaptered long reads, posters and zines, launch pages that
+ * want warmth with a spine.
+ * Avoid when: Dense dashboards (three inks and a key cannot carry twelve series), institutional or legal subjects,
+ * anything that must look neutral, or long UI-heavy apps.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
 :root[data-af-design-system="riso"] {
-  --ds-paper: #F3ECDC;
-  --ds-sheet: #FBF6EA;
-  --ds-paper-sunk: #E8DFC6;
-  --ds-manila: #F1DFA6;
-  --ds-line: #CFC5AD;
-  --ds-key: #1C2340;
-  --ds-key-2: #3A3F5C;
-  --ds-blue: #0078BF;
-  --ds-on-blue: #FBF6EA;
-  --ds-blue-soft: #CFE6F5;
-  --ds-pink: #FF48B0;
-  --ds-on-pink: #1C2340;
-  --ds-pink-soft: #FFD3EA;
-  --ds-yellow: #FFE800;
-  --ds-on-yellow: #1C2340;
-  --ds-positive: #00704B;
-  --ds-positive-soft: #CDEEDD;
-  --ds-caution: #765D00;
-  --ds-caution-soft: #FFF3A0;
-  --ds-negative: #E8322B;
-  --ds-negative-soft: #FFD6D3;
+  --ds-paper: #F3ECDC; /* Page ground: uncoated stock. In Night the key plate becomes the page. */
+  --ds-sheet: #FBF6EA; /* Cards, step cards, proofs: a whiter sheet laid on the paper. */
+  --ds-paper-sunk: #E8DFC6; /* Wells, code, inactive tracks, table stripes. */
+  --ds-manila: #F1DFA6; /* Luggage tags and folio stock: physical card, the same in both modes. Text on it is on-yellow. */
+  --ds-line: #CFC5AD; /* Hairlines and quiet borders. The 2px key edge is the real border. */
+  --ds-key: #1C2340; /* The key plate: text, edges, hard shadows. Every other ink sits on top of it. */
+  --ds-key-2: #3A3F5C; /* Secondary text, imprints, captions. */
+  --ds-blue: #0078BF; /* Ink 1. Primary actions, the first series, the headline colour. */
+  --ds-on-blue: #FBF6EA; /* Text on blue. */
+  --ds-blue-soft: #CFE6F5; /* Ground for blue tags and selected rows. */
+  --ds-pink: #FF48B0; /* Ink 2. Fluorescent; the second series, the slipped plate behind a headline, badges. */
+  --ds-on-pink: #1C2340; /* Text on pink. */
+  --ds-pink-soft: #FFD3EA; /* Ground for pink tags and info callouts. */
+  --ds-yellow: #FFE800; /* Ink 3. Highlighter and ticker ground; never text, never a line. */
+  --ds-on-yellow: #1C2340; /* Text on yellow. */
+  --ds-positive: #00704B; /* Success text and the kept share, always with a word or a pip. */
+  --ds-positive-soft: #CDEEDD; /* Ground for success callouts and positive tags. */
+  --ds-caution: #765D00; /* Warnings as text: a dark ochre on paper, the yellow itself at night. */
+  --ds-caution-soft: #FFF3A0; /* Ground for warning callouts. */
+  --ds-negative: #E8322B; /* Errors and the lost share. A printer’s red, not pink. */
+  --ds-negative-soft: #FFD6D3; /* Ground for error callouts. */
   --background: var(--ds-paper);
   --foreground: var(--ds-key);
   --card: var(--ds-sheet);
@@ -66,6 +82,7 @@
   --ds-chip-radius: 0;
   --ds-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
+/* Dark values: the same tokens, under data-af-dark="true". */
 :root[data-af-design-system="riso"][data-af-dark="true"] {
   --ds-paper: #1C2340;
   --ds-sheet: #263054;
@@ -118,17 +135,30 @@
   --ds-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 :root[data-af-design-system="riso"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(64px, 12vw, 160px) / .82: One per page. The chapter word, the cover word. Soft, wonky, enormous. */
 :root[data-af-design-system="riso"] .t-display-xl { font-family: "Fraunces", Georgia, serif; font-size: clamp(64px, 12vw, 160px); line-height: .82; font-weight: 900; letter-spacing: -0.045em; }
+/* display, clamp(40px, 6.4vw, 84px) / .9: Section openers and plate titles. */
 :root[data-af-design-system="riso"] .t-display-l { font-family: "Fraunces", Georgia, serif; font-size: clamp(40px, 6.4vw, 84px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; }
+/* display, 40px / 40px: Tag titles, stat blocks, page titles. */
 :root[data-af-design-system="riso"] .t-display-m { font-family: "Fraunces", Georgia, serif; font-size: 40px; line-height: 40px; font-weight: 900; letter-spacing: -0.02em; }
+/* display, 24px / 28px: Card and step titles. */
 :root[data-af-design-system="riso"] .t-title { font-family: "Fraunces", Georgia, serif; font-size: 24px; line-height: 28px; font-weight: 900; letter-spacing: -0.01em; }
+/* display, clamp(20px, 2vw, 26px) / 1.25: The italic line under a headline, chapter subtitles, pull quotes. */
 :root[data-af-design-system="riso"] .t-deck { font-family: "Fraunces", Georgia, serif; font-size: clamp(20px, 2vw, 26px); line-height: 1.25; font-weight: 500; font-style: italic; }
+/* sans, 20px / 1.5: Step cards and lead paragraphs. Fraunces at 500 reads at length. */
 :root[data-af-design-system="riso"] .t-body-l { font-family: "Fraunces", Georgia, serif; font-size: 20px; line-height: 1.5; font-weight: 500; }
+/* sans, 17px / 1.55: Default reading and UI text. */
 :root[data-af-design-system="riso"] .t-body { font-family: "Fraunces", Georgia, serif; font-size: 17px; line-height: 1.55; font-weight: 500; }
+/* sans, 14px / 1.45: Captions, imprints, helper text. */
 :root[data-af-design-system="riso"] .t-body-s { font-family: "Fraunces", Georgia, serif; font-size: 14px; line-height: 1.45; font-weight: 500; }
+/* mono, 12px / 16px: Eyebrows, folios, tag facts, running heads. Caps from CSS. */
 :root[data-af-design-system="riso"] .t-label { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
+/* mono, 40px / 44px: KPI figures and the numbers inside doors. Tabular. */
 :root[data-af-design-system="riso"] .t-numeral { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Code, IDs, table figures. */
 :root[data-af-design-system="riso"] .t-mono { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="riso"] .tok-comment, :root[data-af-design-system="riso"] .tok-quote, :root[data-af-design-system="riso"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
 :root[data-af-design-system="riso"] .tok-keyword, :root[data-af-design-system="riso"] .tok-selector-tag, :root[data-af-design-system="riso"] .tok-doctag, :root[data-af-design-system="riso"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
 :root[data-af-design-system="riso"] .tok-string, :root[data-af-design-system="riso"] .tok-regexp, :root[data-af-design-system="riso"] .tok-template-variable, :root[data-af-design-system="riso"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
@@ -140,3 +170,17 @@
 :root[data-af-design-system="riso"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
 :root[data-af-design-system="riso"] .tok-emphasis { font-style:italic; }
 :root[data-af-design-system="riso"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-ext-standard-normal.a2930b27.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-standard-normal.7234ed86.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-ext-standard-italic.4983926d.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/fraunces-latin-standard-italic.066710ce.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-ext-400-italic.a7642ae8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-400-italic.a5fb4904.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-ext-400-normal.44ad50c7.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/space-mono-latin-400-normal.fb4a81a2.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-ext-700-italic.0db253a6.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-700-italic.e84908e1.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-ext-700-normal.52edd9a8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/space-mono-latin-700-normal.2d46bd15.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

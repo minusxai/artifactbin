@@ -100,7 +100,9 @@ describe('one installable native HTML author skill',()=>{
     const saved=JSON.parse(readFileSync(request,'utf8'));
     expect(saved).not.toHaveProperty('token');expect(saved.body.publicationBundle).toBeDefined();
     const plan=planPublicationBundle(saved.body.html,saved.body.publicationBundle);
-    expect(plan.dependencies.some(dep=>dep.contentType==='font/woff2'),sample).toBe(true);
+    // Systems are named by a head meta and served by the platform with its fonts: nothing local is bundled for them.
+    expect(saved.body.html,sample).toContain('name="artifactbin:design-system"');
+    expect(plan.dependencies.some(dep=>dep.contentType==='font/woff2'||/design-systems\//.test(dep.path)),sample).toBe(false);
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
@@ -113,9 +115,10 @@ describe('one installable native HTML author skill',()=>{
 describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
-  // Design-system guides are listed apart: they are generated and owned by their own workstream.
-  const refs=Object.keys(files).filter(name=>/^references\//.test(name)&&!/^references\/(?:html-system-[a-z0-9-]+|html-design-systems)\.md$/.test(name)).sort();
+  const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
   expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/maps.md','references/runtime.md']);
+  // The design systems ship as self-documenting stylesheets, not guides.
+  expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.
   expect(files['SKILL.md']).not.toMatch(/http-auth|html-operations/);
   for(const topic of ['http-auth','html-operations']){
