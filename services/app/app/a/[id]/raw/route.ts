@@ -1,3 +1,4 @@
+import {designSystemChoice} from '@/lib/html-systems';
 import {nativeHtmlPresentation} from '@/lib/serving/native-html-presentation.server';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
@@ -138,7 +139,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   const validator = async (row: ArtifactHeader) => etagOf({
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
     // Source is immutable within a published version; bindings are header metadata.
-    links: row.meta.htmlLinks ?? [], runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
+    links: row.meta.htmlLinks ?? [], designSystem: designSystemChoice(row.meta), runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
   });
   const responseHeaders = (etag: string | null) => ({
     ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
@@ -167,7 +168,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
-      const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
+      // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
+      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}) });
       // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
       if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void trackEvent('view', artifact.id, { userId: actor.userId });
       return new Response(await nativeHtmlPresentation(rendered.html,row,domain), { headers: responseHeaders(etag) });

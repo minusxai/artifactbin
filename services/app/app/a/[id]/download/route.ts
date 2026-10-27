@@ -1,3 +1,4 @@
+import {designSystemChoice} from '@/lib/html-systems';
 import {withOfflineSystemStyle} from '@/lib/html-systems/offline.server';
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
@@ -52,9 +53,9 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
     try{resources.push(...await referencedLibraryResources(packed,resources,request.url));}catch{return json({error:'offline_dependency_unavailable'},422);}
     // The platform stylesheet, active system only: its rules inline, its fonts embedded by the packer.
-    try{const styled=withOfflineSystemStyle(packed,request.url);packed=styled.html;resources.push(...styled.resources);}catch{return json({error:'offline_dependency_unavailable'},422);}
+    try{const styled=withOfflineSystemStyle(packed,request.url,designSystemChoice(artifact.meta));packed=styled.html;resources.push(...styled.resources);}catch{return json({error:'offline_dependency_unavailable'},422);}
     if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
-    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true });
+    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true, designSystem:designSystemChoice(artifact.meta) });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {

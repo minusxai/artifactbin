@@ -346,7 +346,7 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} /><DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} /><DocumentActions designSystem={{ value: page?.surface?.theme ?? null, colorMode: documentMode(), send: (command) => runtimeRef.current?.send(command), pick }} groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         onSettings={() => { close(); setSettingsOpen(true); }}
         onSocialPreview={() => { close(); void openSocialPreview(); }}
         onRenamed={(title) => setRenamed({ title, version: currentVersion() })}

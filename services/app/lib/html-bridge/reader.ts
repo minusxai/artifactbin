@@ -1,11 +1,25 @@
 /** Validated presentation choice; callers establish their own transport authority. */
-export interface HtmlReaderAppearanceCommand { type: 'mx:reader-mode'; mode: 'light' | 'dark' }
+interface HtmlReaderAppearanceCommand { type: 'mx:reader-mode'; mode: 'light' | 'dark' }
+/** The owner switched the page's design system in the top bar (D4); `mode` is the viewer's pick, else the system's default. */
+interface HtmlDesignSystemCommand { type: 'mx:design-system'; name: string; mode: 'light' | 'dark' }
+const setMode = (document: Document, mode: 'light' | 'dark') => {
+  document.documentElement.setAttribute('data-af-dark', mode === 'dark' ? 'true' : 'false');
+  document.documentElement.style.colorScheme = mode;
+};
 export function applyHtmlReaderAppearance(document: Document, command: unknown): boolean {
   if (!command || typeof command !== 'object') return false;
-  const data = command as Partial<HtmlReaderAppearanceCommand>;
-  if (data.type !== 'mx:reader-mode' || (data.mode !== 'light' && data.mode !== 'dark')) return false;
-  document.documentElement.setAttribute('data-af-dark', data.mode === 'dark' ? 'true' : 'false');
-  document.documentElement.style.colorScheme = data.mode;
+  const data = command as Partial<HtmlReaderAppearanceCommand> | Partial<HtmlDesignSystemCommand>;
+  if (data.mode !== 'light' && data.mode !== 'dark') return false;
+  if (data.type === 'mx:design-system') {
+    const name = (data as Partial<HtmlDesignSystemCommand>).name;
+    // A name shape only: an unknown system matches no platform rule (keeps the system table out of the core and reader).
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) return false;
+    document.documentElement.setAttribute('data-af-design-system', name);
+    setMode(document, data.mode);
+    return true;
+  }
+  if (data.type !== 'mx:reader-mode') return false;
+  setMode(document, data.mode);
   return true;
 }
 /** Reader preferences and hash navigation grant no storage or network authority. */

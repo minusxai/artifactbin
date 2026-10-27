@@ -7,6 +7,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {resolveParent,isParentRefusal} from './placement';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';
+import {HTML_SYSTEM_NAMES,isHtmlSystem} from '../html-systems';
 import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
 export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
  if(['document_update','markup','jsx','markdown','source','operations','annotation_ops','edit_id','old_string','new_string'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Replace page content with the complete html field and observed expectedVersion/expectedState through PUT. Metadata PATCH accepts metadata fields only.'},400);
@@ -26,6 +27,8 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
  for(const key of ['title','description','theme','template','colorMode'] as const){
   const value=body[key];if(value===undefined)continue;
   if(value!==null&&typeof value!=='string')return json({error:'invalid_metadata',field:key},400);
+  // An HTML page's theme is its owner's design-system choice: one of the systems the platform stylesheet carries, or null.
+  if(key==='theme'&&value!==null&&current.format==='html'&&!isHtmlSystem(value))return json({error:'unknown_theme',allowed:HTML_SYSTEM_NAMES},400);
   if(key==='theme'&&value!==null&&!STORY_DESIGN_NAMES.includes(value as never))return json({error:'unknown_theme',allowed:STORY_DESIGN_NAMES},400);
   if(key==='template'&&value!==null&&!STORY_TEMPLATE_NAMES.includes(value as never))return json({error:'unknown_template',allowed:STORY_TEMPLATE_NAMES},400);
   if(key==='colorMode'&&value!==null&&value!=='light'&&value!=='dark')return json({error:'unknown_color_mode'},400);

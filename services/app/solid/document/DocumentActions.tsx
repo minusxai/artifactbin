@@ -21,12 +21,15 @@ import { LikeAction } from './LikeAction';
  */
 /** Lazy on purpose (a documented lazy-import exception): the People panel only draws once its row is opened, and the reader's document page must stay within the page-speed prose budget. */
 const DocumentPeople = lazy(() => import('./DocumentPeople').then((m) => ({ default: m.DocumentPeople })));
+const DocumentDesignSystem = lazy(() => import('./DocumentDesignSystem').then((m) => ({ default: m.DocumentDesignSystem })));
 const TransferOwnershipDialog = lazy(() => import('../components/TransferOwnershipDialog').then((m) => ({ default: m.TransferOwnershipDialog })));
 import { RefreshDocumentAssets } from './RefreshDocumentAssets';
 
 /** Every row of the controls panel is a ghost `sm` Button (a link row takes `href`), lower-case, with one 14px icon. */
 const ROW_BUTTON = 'w-full justify-start';
 interface DocumentActionsProps {
+  /** An HTML page's design-system control (solid/document/DocumentDesignSystem), for its editors. */
+  designSystem?: import('./DocumentDesignSystem').DesignSystemHost;
   groupId?:string|null;
   pwaEnabled?: boolean; membershipAvailable?: boolean;
   id: string; title: string; version: number; archived?: boolean;
@@ -54,6 +57,7 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   const activeCommenter = () => props.canAnnotate && !props.archived;
   const toggleComments = () => { const open = !commentsOpen(); setCommentsOpen(open); props.onCommentsChange(open); };
   return <div class="space-y-4" aria-label="Document actions">
+    <Show when={activeEditor() && props.designSystem}>{host => <Suspense fallback={null}><DocumentDesignSystem id={props.id} host={host()} /></Suspense>}</Show>
     <Show when={props.membershipAvailable || peopleOpen()}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={peopleOpen()} hideJoin /></Suspense></Show>
     <section aria-label="Document actions" class="space-y-1">
       <h2 class="px-2"><MicroLabel>Artifact</MicroLabel></h2>
