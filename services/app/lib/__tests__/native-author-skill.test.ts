@@ -55,7 +55,7 @@ describe('one installable native HTML author skill',()=>{
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
   for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs'])expect(guide).toContain(value);
   const files=skillPackageFiles(skillTree(),BASE);
-  expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
+  expect(guide).toContain('iframe[data-mx-document-frame]');
   // What used to live in the guide now ships at the top of the scripts and component sources.
   const check=files['scripts/check.mjs']!,comment=files['scripts/comment.mjs']!;
   for(const value of ['page.getByRole','page.mainFrame()','overflow','--viewer'])expect(check).toContain(value);
@@ -107,5 +107,21 @@ describe('one installable native HTML author skill',()=>{
     if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(role:EDITOR)');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
+ });
+});
+
+describe('the shipped skill folder',()=>{
+ it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
+  const files=skillPackageFiles(skillTree(),BASE);
+  // Design-system guides are listed apart: they are generated and owned by their own workstream.
+  const refs=Object.keys(files).filter(name=>/^references\//.test(name)&&!/^references\/(?:html-system-[a-z0-9-]+|html-design-systems)\.md$/.test(name)).sort();
+  expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/maps.md','references/runtime.md']);
+  // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.
+  expect(files['SKILL.md']).not.toMatch(/http-auth|html-operations/);
+  for(const topic of ['http-auth','html-operations']){
+   expect(files[`references/${topic}.md`],topic).toBeUndefined();
+   expect(publicGuideText(topic,BASE),topic).toBeTruthy();
+   expect(llmsText(BASE)).toContain(`${BASE}/llms/${topic}`);
+  }
  });
 });

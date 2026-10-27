@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {isPublicSkillTopic} from '../skills/public-surface';
+import {isPublicSkillTopic,isShippedSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText} from '@/lib/serving/agent-references.server';
@@ -56,8 +56,8 @@ describe('installable shared skill folder',()=>{
   expect(Object.keys(expected)).not.toContain('scripts/credentials.mjs');
   expect(Object.keys(cli)).not.toContain('scripts/credentials.mjs');
   for(const [transport,files] of [['http',expected],['cli',cli]] as const){
-   for(const {file,text} of renderTree(skillTree(),origin,transport)){
-    if(transport==='http'&&file.ref&&!isPublicSkillTopic(file.file.replace(/\.md$/,'')))continue;
+   for(const {file,text} of renderTree(skillTree(),origin,transport,transport==='http')){
+    if(transport==='http'&&file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
     expect(files[file.path.replace(/^artifactbin\//,'')],`${transport}: ${file.path}`).toBe(skillFileWithFrontmatter(file,text));
    }
   }

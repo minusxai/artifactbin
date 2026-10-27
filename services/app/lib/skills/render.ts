@@ -40,6 +40,8 @@ export interface RenderOptions {
   /** Deferred path for origin-free CLI teaching; concrete HTTP origins use the existing store. */
   credentialPath?: string;
   transport?: 'cli' | 'http';
+  /** Render for the downloadable skill folder: prose that links guides served only over HTTP is left out. */
+  shipped?: boolean;
   /**
    * Render the CONDENSED copy: the spans a reference marks as bundle-skippable are dropped rather
    * than kept. `afbin help <template>` concatenates eight references into one answer, and at 40 KB
@@ -146,6 +148,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       base: opts.base,
       credentialPath: opts.credentialPath ?? credentialPaths(opts.base, '~/.artifactbin').backingPath,
       transport: opts.transport ?? 'cli',
+      shipped: opts.shipped === true,
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
       ...(file.file === 'SKILL.md' && !file.ref ? { example: (opts.transport === 'http' ? stripFrontmatter(skillExample()) : skillExample()).trimEnd() } : {}),

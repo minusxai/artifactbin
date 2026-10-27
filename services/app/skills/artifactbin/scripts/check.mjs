@@ -5,7 +5,8 @@ Usage: node scripts/check.mjs ID|URL [--viewport WxH]... [--steps FILE] [--viewe
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; add 1200x630 for slides); --steps FILE
   an async function body receiving the page; return assertions and throw on failure; --viewer self (default) or
-  guest (hosted only, a fixed-identity server session); --playwright-module FILE (local only: your installed
+  guest (hosted only, a fixed-identity server session; the viewer is fixed when the session starts, and the page is
+  signed in as you unless guest); --playwright-module FILE (local only: your installed
   Playwright entrypoint). Common: --server ORIGIN, --json, --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
@@ -20,7 +21,7 @@ Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for dat
   use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the reader chrome. Click before
   page.keyboard. Use disposable test data (steps can write), test persistence by changing data then reloading, and
   test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
-  script is limited to 20 s and 64 KB. View the screenshots (paths in the JSON) before claiming appearance.
+  script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). View the screenshots (paths in the JSON) before claiming appearance.
   A clean pass with your behaviour covered means stop: reply with the link and what you tested.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 

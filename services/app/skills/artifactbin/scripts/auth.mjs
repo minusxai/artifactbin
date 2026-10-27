@@ -16,6 +16,10 @@ Gotchas: use an email the user gave you; never invent an identity. Challenges ex
   bound to the origin. Credentials live in the private origin store (ARTIFACTBIN_HOME or ~/.artifactbin); the
   file format and token refresh are in references/http-auth.md. logout removes only the local grant (there is
   no server-side revocation) and an ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
+  Every other script reuses this grant and refreshes an expired access token itself (the refresh token is single-use and
+  serialized across processes, so never refresh by hand or copy the store). Network errors, 429 and server errors keep
+  the grant: retry later. Missing credentials or invalid_grant, invalid_client or revoked_token mean log in again.
+  The store is a private directory (0700) and file (0600) per origin; never log tokens or put them in URLs or pages.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
 import path from 'node:path';
