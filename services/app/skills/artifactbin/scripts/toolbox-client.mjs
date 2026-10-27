@@ -5,7 +5,8 @@ import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {randomUUID,createHash} from 'node:crypto';
 import configuredServer from './toolbox-config.mjs';
-import {parseCommand,commandHelp} from './toolbox-commands.mjs';
+import {parseCommand} from './toolbox-commands.mjs';
+import {commandHelp} from './toolbox-description.mjs';
 export class ToolError extends Error{constructor(code,message,exit=1,recovery='Inspect the refusal and correct the request.',details){super(message);Object.assign(this,{code,exit,recovery,details});}}
 export function serverOrigin(value){let url;try{url=new URL(value);}catch{throw new ToolError('server_required','Select --server ORIGIN or origin-bound ARTIFACTBIN_URL.',2);}
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw new ToolError('invalid_origin','Select an HTTP(S) origin without path or credentials.',2);return url.origin;}
