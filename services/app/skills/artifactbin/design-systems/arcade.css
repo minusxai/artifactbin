@@ -35,7 +35,7 @@
   --ds-ink: #0f0f1a; /* Pixel ink: text, sprites, every 4px frame. */
   --ds-ink-muted: #5b586b; /* Secondary text, the dim high score. */
   --ds-red: #ff3b3b; /* The brand: cabinet red. Primary actions, hearts, the player sprite. */
-  --ds-on-red: #ffffff; /* Text on red fills. */
+  --ds-on-red: #0f0f1a; /* Text on red fills. */
   --ds-blue: #2e6bff; /* Player two: the second drawing fill, the first chart series, links. */
   --ds-on-blue: #ffffff; /* Text on blue fills. */
   --ds-blue-soft: #dce6ff; /* Ground for the selected row and the quiet drawing fill. */

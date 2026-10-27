@@ -36,7 +36,7 @@
   --ds-key: #1C2340; /* The key plate: text, edges, hard shadows. Every other ink sits on top of it. */
   --ds-key-2: #3A3F5C; /* Secondary text, imprints, captions. */
   --ds-blue: #0078BF; /* Ink 1. Primary actions, the first series, the headline colour. */
-  --ds-on-blue: #FBF6EA; /* Text on blue. */
+  --ds-on-blue: #FFFFFF; /* Text on blue. */
   --ds-blue-soft: #CFE6F5; /* Ground for blue tags and selected rows. */
   --ds-pink: #FF48B0; /* Ink 2. Fluorescent; the second series, the slipped plate behind a headline, badges. */
   --ds-on-pink: #1C2340; /* Text on pink. */

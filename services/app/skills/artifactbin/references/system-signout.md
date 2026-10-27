@@ -54,7 +54,7 @@ Day is the paper: clean kraft with marker-black ink and a hot vermilion pick. Ni
 | `--ds-vermilion` | The pick: your slot, the primary action, the stamp. One per view. |
 | `--ds-on-vermilion` | Text on vermilion fills. |
 | `--ds-vermilion-soft` | Ground for the selected row and the picked slot halo. |
-| `--ds-hazard` | Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink. |
+| `--ds-hazard` | Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is on-vermilion (dark in both modes). |
 | `--ds-hazard-soft` | Ground for warnings. |
 | `--ds-caution` | Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard. |
 | `--ds-open` | Open, available, confirmed: the stamp green. Always with a word. |

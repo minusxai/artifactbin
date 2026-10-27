@@ -3,9 +3,9 @@ export const DESCRIPTION = `Browser smoke and task check of a saved page or a lo
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
 Usage: node scripts/check.mjs ID|URL [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
-Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; add 1200x630 for slides); --steps FILE
-  an async function body receiving the page; return assertions and throw on failure; --viewer self (default) or
-  guest (hosted only, a fixed-identity server session; the viewer is fixed when the session starts, and the page is
+Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
+  --steps FILE an async function body receiving the page; return assertions and throw on failure; --viewer self
+  (default) or guest (hosted only, a fixed-identity server session; the viewer is fixed when the session starts, and the page is
   signed in as you unless guest); --playwright-module FILE (local only: your installed
   Playwright entrypoint). Common: --server ORIGIN, --json, --output FILE (use a new name each run), --help.
 Examples:
@@ -13,16 +13,20 @@ Examples:
   steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
                return {assertions:['add shows Saved']}
 Output: --output saves the full JSON and prints one summary line per viewport: errors, overflow, contrast
-  (text under 2:1 fails), slides, your task result. Smoke fails on page or console errors, failed requests, overflow,
-  unreadable text and duplicate data-af-id values (first ids and counts listed). A warning (not a failure) lists
-  script-created data-af-ids that differ between two loads; checked on the first viewport, only when the page has any.
+  (text under 2:1 fails), slides, your task result; the first 3 items of each kind name their text and element or
+  slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
+  values (first ids and counts listed). A warning (not a failure) lists script-created data-af-ids that differ
+  between two loads; checked on the first viewport, only when the page has any.
 Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. page is scoped to the page's own document frame:
   use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the reader chrome. Click before
-  page.keyboard. Use disposable test data (steps can write), test persistence by changing data then reloading, and
+  page.keyboard. Past the deadline, the error names the numbered call still running and what the page shows. Use
+  disposable test data (steps can write), test persistence by changing data then reloading, and
   test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
-  script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). View the screenshots (paths in the JSON) before claiming appearance.
-  A clean pass with your behaviour covered means stop: reply with the link and what you tested.
+  script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). Open the screenshots
+  (paths in the JSON) only if your model accepts image input; otherwise don't, and say appearance is unverified.
+  A clean pass with your behaviour covered means stop: reply with the link and what you tested; republish only to
+  fix a failed requirement, never for polish, refactors or extra verification.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
 /** Browser check contracts. Smoke evidence never implies task or visual acceptance.
@@ -165,17 +169,32 @@ export async function inspectPage(page, options, task) {
     overflow: null,
     task: null
   };
-  try {
-    await page.setViewportSize(options.viewport);
-    await page.goto(options.target, {waitUntil: 'domcontentloaded', timeout: 4000});
-    // Do not wait for networkidle: charts, telemetry and subscriptions can remain active.
-    if (options.hosted)
-      await page.mainFrame().locator('iframe[data-mx-document-frame]').waitFor({timeout: 2000});
+  // After any load (first, compare or a step's reload/goto): wait for the document, not the reader shell. Hosted, page is
+  // scoped to the document frame by its name, which a reloaded frame only gets once its document commits; until then
+  // page calls resolve in the reader shell and never see the page.
+  const ready = async () => {
+    if (options.hosted) {
+      const host = page.mainFrame().locator('iframe[data-mx-document-frame]');
+      await host.waitFor({timeout: 2000});
+      for (const end = Date.now() + 3000; Date.now() < end; await new Promise(resolve => setTimeout(resolve, 50))) {
+        const frame = await host
+          .elementHandle({timeout: 500})
+          .then(handle => handle?.contentFrame())
+          .catch(() => null);
+        if (frame && !frame.isDetached() && frame.name() && !/^(about:blank)?$/.test(frame.url())) break;
+      }
+    }
     await page.locator('body').waitFor({timeout: 2000});
     // The reader shows an aria-busy "Loading page…" placeholder first; measure the page, not the placeholder.
     await page
       .waitForFunction(() => !document.querySelector('[aria-busy="true"]'), null, {timeout: 5000})
       .catch(() => {});
+  };
+  try {
+    await page.setViewportSize(options.viewport);
+    await page.goto(options.target, {waitUntil: 'domcontentloaded', timeout: 4000});
+    // Do not wait for networkidle: charts, telemetry and subscriptions can remain active.
+    await ready();
     if (options.compareReload) {
       // Only script-created IDs (live minus the runtime's savedNodeIds) can drift between renders; with none, skip the reload.
       try {
@@ -218,12 +237,7 @@ export async function inspectPage(page, options, task) {
         if (!created.length) evidence.idStability = {checked: false, created: 0};
         else {
           await page.reload({waitUntil: 'domcontentloaded', timeout: 4000});
-          if (options.hosted)
-            await page.mainFrame().locator('iframe[data-mx-document-frame]').waitFor({timeout: 2000});
-          await page.locator('body').waitFor({timeout: 2000});
-          await page
-            .waitForFunction(() => !document.querySelector('[aria-busy="true"]'), null, {timeout: 5000})
-            .catch(() => {});
+          await ready();
           await settle();
           const again = (await readIds()).ids.filter(id => !savedIds.has(id)),
             before = new Set(created),
@@ -245,9 +259,11 @@ export async function inspectPage(page, options, task) {
     }
     if (task) {
       evidence.steps = true;
-      // Name the steps-file call that failed or was still pending, so a bare Playwright timeout points at its line.
-      const pending = new Set();
-      let failed = null;
+      // Name the steps-file call that failed or was still pending, numbered so a call repeated after a reload is told apart.
+      const pending = new Map();
+      let failed = null,
+        sequence = 0,
+        expired = false;
       const show = arg => {
         try {
           return typeof arg === 'function' ? String(arg) : JSON.stringify(arg);
@@ -261,15 +277,23 @@ export async function inspectPage(page, options, task) {
             const value = Reflect.get(object, key);
             if (typeof value !== 'function' || typeof key !== 'string') return value;
             return (...args) => {
-              const call = `${label}.${key}(${args.map(show).join(', ')})`.replace(/\s+/g, ' ').slice(0, 240);
-              const result = value.apply(object, args);
+              const text = `${label}.${key}(${args.map(show).join(', ')})`.replace(/\s+/g, ' ').slice(0, 240),
+                id = ++sequence,
+                call = `#${id} ${text}`;
+              let result = value.apply(object, args);
+              // A reload or navigation replaces the document frame: wait for the new one so later calls act on the page.
+              if (label === 'page' && (key === 'reload' || key === 'goto') && result && typeof result.then === 'function')
+                result = result.then(async response => {
+                  await ready();
+                  return response;
+                });
               if (result && typeof result.then === 'function') {
-                pending.add(call);
+                pending.set(id, call);
                 result.then(
-                  () => pending.delete(call),
+                  () => pending.delete(id),
                   () => {
-                    pending.delete(call);
-                    failed ??= call;
+                    pending.delete(id);
+                    if (!expired) failed ??= call;
                   }
                 );
               } else if (
@@ -277,7 +301,7 @@ export async function inspectPage(page, options, task) {
                 typeof result === 'object' &&
                 /^(locator|getBy|first|last|nth|filter|frameLocator)/.test(key)
               )
-                return wrap(result, call);
+                return wrap(result, text);
               return result;
             };
           }
@@ -294,8 +318,40 @@ export async function inspectPage(page, options, task) {
           })
         ]);
       } catch (error) {
-        const call = failed ?? [...pending].pop();
-        throw call ? Error(`${error.message} (step call: ${call})`) : error;
+        const deadline = /^Task deadline exceeded/.test(error.message);
+        expired = true;
+        const latest = [...pending.values()].pop(),
+          call = deadline ? (latest ?? failed) : (failed ?? latest);
+        // At the deadline, say what the page shows: its live status regions and the start of its visible text.
+        let shows = '';
+        if (deadline) {
+          const seen = await Promise.race([
+            page
+              .locator('html')
+              .evaluate(
+                html => {
+                  const tidy = value => String(value || '').replace(/\s+/g, ' ').trim();
+                  const doc = html.ownerDocument;
+                  return {
+                    status: [...doc.querySelectorAll('[role=status],[role=alert],[aria-live]')]
+                      .map(node => tidy(node.textContent).slice(0, 120))
+                      .filter(Boolean)
+                      .slice(0, 3),
+                    text: tidy(doc.body?.innerText).slice(0, 200)
+                  };
+                },
+                undefined,
+                {timeout: 1000}
+              )
+              .catch(() => null),
+            new Promise(resolve => setTimeout(() => resolve(null), 1000))
+          ]);
+          if (seen)
+            shows =
+              (seen.status.length ? `; status: ${seen.status.map(value => JSON.stringify(value)).join(', ')}` : '') +
+              `; page text: ${JSON.stringify(seen.text)}`;
+        }
+        throw call || shows ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}`) : error;
       } finally {
         clearTimeout(timer);
       }
@@ -304,17 +360,32 @@ export async function inspectPage(page, options, task) {
     evidence.error = String(error.message);
   }
   try {
-    // Measure settled layout and colours: web fonts loaded, transitions finished, then two frames for redraws.
+    // Measure settled layout and colours: web fonts loaded, transitions finished, then layout unchanged across two
+    // frames (charts and late fonts move text after load, which made clipping flicker between runs of the same page).
     await page
-      .evaluate(() =>
-        Promise.race([
-          Promise.all([
-            document.fonts?.ready,
-            ...document.getAnimations().map(animation => animation.finished.catch(() => {}))
-          ]).then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
-          new Promise(resolve => setTimeout(resolve, 1000))
-        ])
-      )
+      .evaluate(async () => {
+        const within = (promise, ms) => Promise.race([promise, new Promise(resolve => setTimeout(resolve, ms))]);
+        const frames = () =>
+          new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        await within(document.fonts?.ready, 1500);
+        await within(Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {}))), 1000);
+        const shape = () =>
+          [document.body.scrollWidth, document.body.scrollHeight]
+            .concat(
+              [...document.querySelectorAll('[data-af-slide], [data-af-slide] svg')].slice(0, 200).map(node => {
+                const box = node.getBoundingClientRect();
+                return `${Math.round(box.left)},${Math.round(box.top)},${Math.round(box.width)},${Math.round(box.height)}`;
+              })
+            )
+            .join('|');
+        let last = null;
+        for (const end = Date.now() + 1500; Date.now() < end; ) {
+          await frames();
+          const now = shape();
+          if (now === last) break;
+          last = now;
+        }
+      })
       .catch(() => {});
     evidence.text = (await page.locator('body').innerText({timeout: 1000})).slice(0, 24000);
     evidence.overflow = await page.locator('html').evaluate(
@@ -440,14 +511,23 @@ export async function inspectPage(page, options, task) {
             ratio = Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
           const size = parseFloat(s.fontSize),
             need = size >= 24 || (size >= 18.66 && Number(s.fontWeight) >= 700) ? 3 : 4.5;
-          if (ratio < need)
+          if (ratio < need) {
+            const slide = el.closest('[data-af-slide]');
             low.push({
               text: n.textContent.trim().slice(0, 48),
               ratio,
               need,
               color: s.color,
-              fontSize: Math.round(size)
+              fontSize: Math.round(size),
+              element:
+                el.tagName.toLowerCase() +
+                (el.id ? '#' + el.id : '') +
+                (typeof el.className === 'string' && el.className.trim()
+                  ? '.' + el.className.trim().split(/\s+/)[0]
+                  : ''),
+              ...(slide ? {slide: [...document.querySelectorAll('[data-af-slide]')].indexOf(slide) + 1} : {})
             });
+          }
         }
         low.sort((x, y) => x.ratio - y.ratio);
         return {

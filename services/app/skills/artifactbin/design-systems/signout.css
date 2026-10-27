@@ -36,7 +36,7 @@
   --ds-vermilion: #e5481b; /* The pick: your slot, the primary action, the stamp. One per view. */
   --ds-on-vermilion: #16140f; /* Text on vermilion fills. */
   --ds-vermilion-soft: #f9d9cc; /* Ground for the selected row and the picked slot halo. */
-  --ds-hazard: #f2b705; /* Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink. */
+  --ds-hazard: #f2b705; /* Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is on-vermilion (dark in both modes). */
   --ds-hazard-soft: #f8ecc0; /* Ground for warnings. */
   --ds-caution: #7a5a00; /* Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard. */
   --ds-open: #1f7a4d; /* Open, available, confirmed: the stamp green. Always with a word. */

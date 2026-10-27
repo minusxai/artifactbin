@@ -40,7 +40,7 @@
   --ds-lamp-hot: #b8661f; /* The hot centre of the lamp: the italic phrase in a headline, the filament. */
   --ds-lamp-soft: #f3e5c2; /* Ground for highlighted rows and the halo behind a lit thing. */
   --ds-ember: #b8551a; /* The accent: the lamp itself, the focus ring, the comparison series. */
-  --ds-on-ember: #fff6e4; /* Text on ember fills. */
+  --ds-on-ember: #ffffff; /* Text on ember fills. */
   --ds-cool: #3a5a8a; /* The cool counterweight: the second drawing fill, the second chart series, the sky wash. */
   --ds-positive: #2b5a45; /* Open, continued, confirmed. Always with a word. */
   --ds-positive-soft: #dcebe1; /* Ground for positive rows. */

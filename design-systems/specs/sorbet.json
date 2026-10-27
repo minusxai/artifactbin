@@ -119,7 +119,7 @@
   },
   {
    "name": "on-blueberry",
-   "light": "#ffffff",
+   "light": "#120a1f",
    "dark": "#120a1f",
    "usage": "Text on blueberry.",
    "group": "Candy"
@@ -140,7 +140,7 @@
   },
   {
    "name": "positive",
-   "light": "#3e8a14",
+   "light": "#367a10",
    "dark": "#9beb5e",
    "usage": "Done, fresh, yes. Lime as text is darkened on cream.",
    "group": "Status"

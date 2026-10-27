@@ -55,7 +55,7 @@ Day first: paper ground, ink type, red for the surface that matters. Night is th
 | `--ds-ink-soft` | Secondary text, captions, muted eyebrows. |
 | `--ds-on-ink` | Type on an ink surface. |
 | `--ds-red` | The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night. |
-| `--ds-on-red` | Type on red: ink, never paper, so red surfaces stay printed, not glowing. |
+| `--ds-on-red` | Type on red: near-black in both modes (--ds-ink on red is under AA), never paper, so red surfaces stay printed, not glowing. |
 | `--ds-red-ink` | Red as text on paper: one word in a headline, a link, a delta. |
 | `--ds-red-soft` | Ground for selected rows and red callouts; text on it is ink. |
 | `--ds-positive` | Up, done, approved. Always with a word or a glyph. |

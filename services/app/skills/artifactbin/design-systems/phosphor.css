@@ -39,7 +39,7 @@
   --ds-green-ink: #0b6a31; /* Green as text: links, the active line. */
   --ds-green-soft: #d9f0dc; /* Ground for pass rows and selected lines. */
   --ds-amber: #9a6a00; /* The attention colour: focus ring, warnings, the one thing running now. */
-  --ds-on-amber: #1a1000; /* Text on amber fills. */
+  --ds-on-amber: #ffffff; /* Text on amber fills. */
   --ds-amber-soft: #f6e9c4; /* Ground for warning rows. */
   --ds-positive: #0f7a3a; /* Pass. Shares green: in Phosphor, green means it worked. */
   --ds-caution: #9a6a00; /* Flaky, pending, retrying. */

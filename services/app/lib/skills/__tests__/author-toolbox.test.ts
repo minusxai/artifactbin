@@ -139,6 +139,9 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // Every listed defect appears, not only the first, so one fix round covers them.
  const many=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:390,height:844},...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:9,belowAA:2,unreadable:0,low:[{text:'Ask',ratio:2.98,need:4.5,color:'rgb(240, 78, 56)'},{text:'Seed',ratio:3.1,need:4.5}]},slides:{count:8,clipped:2,items:[{slide:4,text:'2025',px:2,by:'svg'},{slide:5,text:'0.0',px:18,by:'svg'}],overlapping:0,overlaps:[]}}]},'qa.json');
  for(const text of ['"Ask"','rgb(240, 78, 56)','"Seed"','slide 4 "2025"','slide 5 "0.0"'])expect(many).toContain(text);
+ // Contrast items name the element and slide; each kind lists three, then a count.
+ const named=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:1200,height:630},...clean,overflow:{viewport:1200,content:1200,fits:true},contrast:{checked:9,belowAA:4,unreadable:0,low:['A','B','C','D'].map(text=>({text,ratio:3.18,need:4.5,element:'p.foot',slide:8}))}}]},'qa.json');
+ expect(named).toContain('3.18:1 "A" p.foot slide 8');expect(named).toContain('"C"');expect(named).not.toContain('"D"');expect(named).toContain('+1 more');
  expect(passed).not.toContain('slides');
  expect(failed).not.toContain('clean pass');
  expect(deck).not.toContain('clean pass');
