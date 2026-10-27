@@ -57,6 +57,13 @@ test('observations must belong to this contract, state and viewport',()=>{
 test('pending ids cover busy and unloaded data only',()=>{
  assert.deepEqual(pendingIds(contract,observe('target')),[]);
  assert.deepEqual(pendingIds(contract,observe('target',{total:{count:1,instances:[inst('42',{busy:true,data:{loaded:true,value:'42'}})]}})),['total']);
+ assert.deepEqual(pendingIds(contract,observe('target',{chart:{count:1,instances:[inst('',{visible:false,data:{loaded:false}})]}})),[]);
+});
+test('data hidden on both sides is unverified, never a pass for that component or a failure',()=>{
+ const hidden={chart:{count:1,instances:[inst('',{visible:false,data:{loaded:false,state:'pending',surface:false,marks:0,labels:[]}})]}};
+ const r=compareSmoke(contract,observe('source',hidden),observe('target',hidden));
+ assert.equal(r.status,'pass');assert.deepEqual(r.warnings.map(w=>w.id+':'+w.reason),['chart:data_hidden_unverified']);
+ const shown=compareSmoke(contract,observe('source'),observe('target',hidden));assert.equal(shown.status,'fail');
 });
 
 async function scratch(){return fs.mkdtemp(path.join(os.tmpdir(),'migration-smoke-'))}

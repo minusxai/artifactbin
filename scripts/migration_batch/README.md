@@ -167,8 +167,9 @@ node scripts/migration_batch/smoke.mjs compare --contract NEW_DIR/contract.json 
 
 `prepare` is a `read` step: it writes `contract.json`, a self-contained `probe.mjs` for the
 existing `mountImportedPilot` camera hook, and `provenance.json`. Put the same probe in the
-source and target capture bundles. The probe waits until every present data component is
-loaded and idle (not merely `aria-busy="false"`: served cells start idle with a placeholder)
+source and target capture bundles. The probe waits until every visible data component is
+loaded and idle (hidden ones in closed disclosures or inactive tabs may draw only when shown;
+`compare` reports them as `data_hidden_unverified`) (not merely `aria-busy="false"`: served cells start idle with a placeholder)
 and two observations agree, then writes `smoke-<side>-<state>-<viewport>-<normal|regression>.json`.
 An unsettled page is recorded, not thrown, so screenshots still complete.
 

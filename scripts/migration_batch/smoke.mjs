@@ -67,6 +67,8 @@ export function compareSmoke(contract,source,target){
    else if(e.textLeaf&&(si.text!==ti.text||si.textLength!==ti.textLength))add(failures,e.id,'text_differs',{index:i,source:si.text,target:ti.text});
    if(e.kind==='control'&&!ti.visible&&si.visible)add(failures,e.id,'control_hidden',{index:i});
    if(!DATA[e.tag])return;
+   // Closed disclosures and inactive tabs may never draw; that is unverified, not proved or broken.
+   if(!si.visible&&!ti.visible&&(!si.data?.loaded||!ti.data?.loaded)){add(warnings,e.id,'data_hidden_unverified',{index:i});return}
    if(!si.data?.loaded||si.busy){add(exceptions,e.id,'source_data_not_loaded',{index:i});return}
    if(!ti.data?.loaded||ti.busy){add(failures,e.id,'target_data_not_loaded',{index:i,state:ti.data?.state??null});return}
    if(e.kind==='cell'&&si.data.value!==ti.data.value)add(failures,e.id,'cell_value_differs',{index:i,source:si.data.value,target:ti.data.value});

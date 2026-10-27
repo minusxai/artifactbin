@@ -16,7 +16,8 @@ export function observePage(contract){
    const labels=[...n.querySelectorAll('[role="graphics-symbol"]')].filter(m=>!/(axis|tick|legend|grid|title)/i.test(m.getAttribute('aria-roledescription')??'')).map(m=>norm(m.getAttribute('aria-label'))).filter(Boolean).sort().slice(0,500);
    return{loaded:state?state==='ready':surface,state,surface,marks:labels.length,labels}}
   if(kind==='table'){const rows=[...n.querySelectorAll('tbody tr,[role="row"]')].filter(r=>!r.querySelector('th,[role="columnheader"]'));return{loaded:rows.length>0,rows:rows.length,headers:[...n.querySelectorAll('th,[role="columnheader"]')].map(h=>norm(h.textContent)).filter(Boolean)}}
-  if(kind==='diagram')return{loaded:!!n.querySelector('svg')};
+  // A stored drawing is served as an <img>; the engine draws an inline <svg>.
+  if(kind==='diagram')return{loaded:!!n.querySelector('svg')||[...n.querySelectorAll('img')].some(i=>i.complete&&i.naturalWidth>0)};
   return undefined;
  };
  const entries={};
@@ -27,18 +28,20 @@ export function observePage(contract){
  return{side:document.querySelector('[data-af-id]')?'target':'source',title:norm(document.title),entries};
 }
 
-/** Ids of data components that are present but not yet showing loaded, idle data. */
+/** Ids of visible data components not yet showing loaded, idle data. Hidden ones (closed
+ * disclosures, inactive tabs) may draw only when shown, so they never hold readiness. */
 export function pendingIds(contract,observation){
- return contract.entries.filter(e=>['cell','chart','table','diagram'].includes(e.kind)).filter(e=>observation.entries[e.id]?.instances.some(i=>i.busy||!i.data?.loaded)).map(e=>e.id);
+ return contract.entries.filter(e=>['cell','chart','table','diagram'].includes(e.kind)).filter(e=>observation.entries[e.id]?.instances.some(i=>i.visible&&(i.busy||!i.data?.loaded))).map(e=>e.id);
 }
 
-/** Fonts plus data deadlines stay under the camera's own 30s reader-ready limit, so an unsettled page is still recorded.
+/** Fonts plus data deadlines stay well under the camera's 30s reader-ready limit, which also covers the
+ * camera's own shell wait, so an unsettled page is still recorded.
  * @param {import('./smoke-contracts.mjs').SmokeContract} contract */
-export function createSmokeProbe(contract,{deadlineMs=20000,intervalMs=250}={}){return async function mountImportedPilot({frame,reader,state,viewport,regression,output}){
+export function createSmokeProbe(contract,{deadlineMs=15000,intervalMs=250}={}){return async function mountImportedPilot({frame,reader,state,viewport,regression,output}){
  if(reader?.version!==contract.key.version||state.actions.length)throw Error('smoke_probe_scope');let written=false;
  return{
   async ready(){
-   await frame.evaluate(()=>Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,5000))]));
+   await frame.evaluate(()=>Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,3000))]));
    const deadline=Date.now()+deadlineMs;let previous,observation,pending;
    // Settled: every present data component loaded and idle, and two consecutive observations agree.
    for(;;){observation=await frame.evaluate(observePage,contract);pending=pendingIds(contract,observation);const same=previous!==undefined&&JSON.stringify(observation)===previous;if((!pending.length&&same)||Date.now()>deadline)break;previous=JSON.stringify(observation);await new Promise(r=>setTimeout(r,intervalMs));}
