@@ -62,6 +62,8 @@ Use an empty `quote` for the whole node. A comment on a script-created node also
 
 Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` by repeating the request with the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply`, `resolve:true`, or both and the last `expected_revision`. One `{reply:"Fixed in version 2",resolve:true,expected_revision:REVISION}` request atomically replies then resolves. Quote the version actually checked. To edit a comment you wrote, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`. Read the current thread after a conflict before retrying.
 
+Reactions: [account reaction metadata and desired-state writes](comment-reactions.md).
+
 ## Verify the actual HTML in a server browser session
 
 `POST /api/browser-sessions` runs Playwright in an isolated browser. `/a/ID` is the reader shell, with authored HTML in its sandboxed `iframe[data-mx-document-frame]`. The session worker auto-scopes `page` locators, evaluation and actions to that frame. Use `page.getByRole(...)` and `page.locator(...)`; `page.frameLocator(...)` double-scopes. Use `page.mainFrame()` for reader chrome; navigation and full-page screenshots still use the shell.

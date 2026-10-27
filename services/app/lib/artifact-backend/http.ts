@@ -191,6 +191,11 @@ export function createHttpBackend(id: string): ArtifactBackend {
       }
       return (await res.json()) as AnnotationWire;
     },
+    async setCommentReaction(commentId, body) {
+      const res=await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}/reactions`,{method:'PUT',headers:JSON_HEADERS,body:JSON.stringify(body)});
+      if(!res.ok)throw new BackendRequestError('Could not update your reaction. Try again.',res.status,res.status===401);
+      return await res.json() as AnnotationWire;
+    },
     async editAnnotation(commentId, body) {
       const res = await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
       if (!res.ok) {

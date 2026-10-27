@@ -33,12 +33,24 @@ export interface AnnotationWireAuthor extends AnnotationAuthor {
   image: string | null;
 }
 
+/** Stable kind keys; each account may independently react once per kind on a comment. */
+export type CommentReactionKind = 'thumbs_up';
+export interface CommentReactionSummary {
+  kind: CommentReactionKind;
+  count: number;
+  /** Personal to the admitted reader; never exposes the accounts who reacted. */
+  viewer_reacted: boolean;
+}
+/** Desired state, rather than a non-idempotent toggle: safe to retry after an uncertain response. */
+export interface CommentReactionInput { kind: CommentReactionKind; active: boolean }
+
 /** One comment of a thread as every reader receives it: the store answers it, remote mentions and the offline backend build it. */
 export interface AnnotationCommentWire {
   id: string;
   body: string;
   author: AnnotationWireAuthor;
   created_at: string;
+  reactions?: CommentReactionSummary[];
   /** The one image this comment carries — a root's or a reply's own. */
   image?: CommentImageWire;
   /** When its author last rewrote the text; absent on a comment never edited. There is no edit history. */

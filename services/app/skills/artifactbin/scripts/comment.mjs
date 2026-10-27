@@ -14,6 +14,9 @@ export async function commentCommand({sub,values,positionals},options={}){
  if(sub==='add'){
   requireFlags(values,['anchor']);body.anchor=await jsonFile(values.anchor);
   const anchor=body.anchor;if(anchor?.kind!=='html-node'||anchor.v!==1||typeof anchor.revision!=='string'||typeof anchor.nodeId!=='string'||typeof anchor.quote!=='string')throw new ToolError('invalid_anchor','Provide a native html-node anchor with canonical revision/nodeId/quote.',2);
+ }else if(sub==='react'){
+  requireFlags(values,['comment','active']);if(!/^[A-Za-z0-9_-]+$/.test(values.comment))throw new ToolError('invalid_comment_id','Invalid comment ID.',2);
+  method='PUT';route+='/'+values.comment+'/reactions';body={kind:enumValue(values.kind??'thumbs_up',['thumbs_up'],'kind'),active:enumValue(values.active,['true','false'],'active')==='true'};
  }else{
   requireFlags(values,[sub==='edit'?'comment':'thread','expected-revision']);const thread=values[sub==='edit'?'comment':'thread'];if(!/^[A-Za-z0-9_-]+$/.test(thread))throw new ToolError('invalid_comment_id','Invalid comment/thread ID.',2);route+='/'+thread;body.expected_revision=integer(values['expected-revision'],'expected_revision',0);
   if(sub==='edit')method='PATCH';else if(sub==='reply'){body.reply=body.body;delete body.body;if(values.resolve)body.resolve=true;}else body[sub==='resolve'?'resolve':'reopen']=true;

@@ -19,7 +19,7 @@ import type {PresencePublication,PresenceViewer} from '@/lib/html-presence/contr
  * Every type here is the shape the call site already read before the move.
  * The module is types only: importing it adds nothing to a bundle.
  */
-import type { AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
+import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
@@ -32,6 +32,7 @@ export type BackendFeature =
   | 'versions'        // version history and restore
   | 'mentions'        // @mention lookup of members
   | 'commentImages'   // screenshots attached to comments
+  | 'commentReactions' // account reactions; unavailable in downloaded files
   | 'live';           // the live event stream
 
 /** Aborts a read whose answer nobody wants any more. */
@@ -222,6 +223,7 @@ export interface ArtifactBackend {
    * thread. Rejects with a BackendRequestError: `annotation_conflict` (409) when the thread moved past
    * `expected_revision`, 404 when the comment is gone or not this viewer's.
    */
+  setCommentReaction(commentId: string, body: CommentReactionInput): Promise<AnnotationWire>;
   editAnnotation(commentId: string, body: AnnotationEditBody): Promise<AnnotationWire>;
   /**
    * Optional exact authorship hint for comments held outside a server account (an offline file's own, a local

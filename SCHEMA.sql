@@ -1278,6 +1278,19 @@ CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (arti
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
 
+CREATE TABLE IF NOT EXISTS app.comment_reactions (
+  comment_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  PRIMARY KEY (comment_id, user_id, kind)
+);
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,
   code_hash TEXT NOT NULL,

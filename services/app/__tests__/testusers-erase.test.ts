@@ -79,6 +79,8 @@ it('takes everything the person owned, held and said — and nothing of the acco
   await db.query(
     "INSERT INTO annotations (id, artifact_id, body, author_kind, author_user_id, author_transport) VALUES ('ann_erase', $1, 'mine', 'human', $2, 'browser')",
     [copy.id, testuser.id]);
+  await db.query("INSERT INTO annotations (id, artifact_id, body, author_kind, author_user_id, author_transport) VALUES ('ann_keep', $1, 'retained', 'human', $2, 'browser')",[page.id,owner.userId]);
+  await db.query("INSERT INTO comment_reactions (comment_id,user_id,kind) VALUES ('ann_erase',$1,'thumbs_up'),('ann_keep',$2,'thumbs_up'),('ann_keep',$1,'thumbs_up')",[owner.userId,testuser.id]);
   noteTestUserSession(testuser.id, 'session-erase', { credential: 'bearer', tokenId: owner.tokenId, userId: owner.userId });
   expect(testUserSessionCount(testuser.id)).toBe(1);
 
@@ -94,6 +96,7 @@ it('takes everything the person owned, held and said — and nothing of the acco
   expect(await resolveTokenById(testuser.tokenId)).toBeNull();
   expect((await db.query('SELECT 1 FROM annotations WHERE author_user_id = $1', [testuser.id])).rows).toHaveLength(0);
   expect((await db.query('SELECT 1 FROM artifacts WHERE user_id = $1', [testuser.id])).rows).toHaveLength(0);
+  expect((await db.query('SELECT comment_id,user_id FROM comment_reactions')).rows).toEqual([{comment_id:'ann_keep',user_id:owner.userId}]);
   expect(await has(testuser.id, 'follow', friend.id)).toBe(false);
   expect(await count('like', copy.id)).toBe(0);
   expect(testUserSessionCount(testuser.id)).toBe(0);
