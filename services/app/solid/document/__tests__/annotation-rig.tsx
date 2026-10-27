@@ -15,7 +15,8 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { type StoryController } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
-import { render } from '../../__tests__/helpers';
+import { screen } from '@testing-library/dom';
+import { fireEvent, render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
 import { AnnotationLayer, preloadScreenshotUpload, type AnnotationLayerProps } from '../AnnotationLayer';
 import { preloadThreadMenu } from '../AnnotationThread';
@@ -136,6 +137,12 @@ export function installAnnotationFetch() {
 export const flush = async () => {
   for (let i = 0; i < 6; i += 1) await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+};
+
+/** Expand the rail's resolved group (collapsed by default) unless a viewed thread already did. */
+export const showResolved = async () => {
+  const toggle = await screen.findByRole('button', { name: /^resolved/i });
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
 };
 
 /** A document runtime: `send` is what the layer posts, `emit` is the runtime answering. */

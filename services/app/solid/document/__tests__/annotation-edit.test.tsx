@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { fireEvent } from '../../__tests__/helpers';
 import { SessionProvider } from '../../lib/session';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const THREAD = { ...ANN, revision: 3 };
@@ -61,6 +61,7 @@ describe('editing your own comment', () => {
     // Not the owner of the document here: delete is offered only for one's own words, edit likewise.
     expect(screen.getByRole('menuitem', { name: 'Delete thread' })).toBeTruthy();
     // The resolved thread's comments are someone else's (a person with no account, an agent): no menu at all.
+    await showResolved();
     const resolved = screen.getByLabelText('Resolved annotation thread');
     expect(within(resolved).queryByLabelText('Annotation actions')).toBeNull();
   });

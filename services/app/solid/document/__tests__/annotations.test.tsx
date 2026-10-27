@@ -16,7 +16,7 @@ import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
-  ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
+  ADA_IMAGE, ANN, FACES, RESOLVED, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, showResolved, trustedRoot,
 } from './annotation-rig';
 
 beforeEach(installAnnotationFetch);
@@ -333,9 +333,9 @@ describe('AnnotationLayer', () => {
     await flush(); await flush();
     expect(fetchCalls.some((c) => c.url.includes('status=resolved'))).toBe(true);
     expect(screen.queryByLabelText('Show resolved annotations')).toBeNull();
-    expect(await screen.findByText('resolved')).toBeTruthy();
-    const divider = screen.getByRole('separator', { name: 'resolved' });
-    expect(divider.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    const divider = await screen.findByRole('separator', { name: /^resolved/ });
+    expect(divider.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThanOrEqual(2);
+    await showResolved();
     expect(screen.queryByText(/an older figure/)).toBeNull();
     expect(screen.getByText('please verify the older figure')).toBeTruthy();
     expect(screen.queryByText('verified and corrected')).toBeNull();
@@ -353,9 +353,50 @@ describe('AnnotationLayer', () => {
     expect(onRailOpenChange).toHaveBeenCalledWith(false);
   });
 
+  describe('the resolved group', () => {
+    const toggle = () => screen.findByRole('button', { name: /^resolved/i });
+
+    it('starts collapsed with the count, and the toggle shows and hides the threads', async () => {
+      layer({ railOpen: true });
+      await flush(); await flush();
+      const button = await toggle();
+      expect(button.textContent).toContain('(1)');
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
+      expect(screen.queryByText('please verify the older figure')).toBeNull();
+
+      fireEvent.click(button);
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      expect(document.getElementById(button.getAttribute('aria-controls')!)!.contains(screen.getByLabelText('Resolved annotation thread'))).toBe(true);
+      fireEvent.click(button);
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
+    });
+
+    it('with nothing resolved offers no toggle and says so without expanding', async () => {
+      knobs.resolved = [];
+      layer({ railOpen: true });
+      await flush(); await flush();
+      expect(await screen.findByText(/nothing resolved/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^resolved/i })).toBeNull();
+    });
+
+    it('opens by itself when a resolved thread is the open one', async () => {
+      const view = layer({ railOpen: true });
+      await flush(); await flush();
+      const button = await toggle();
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      view.runtime.emit({ type: 'mx:annotation-pin', id: RESOLVED.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+      await flush();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByLabelText('Resolved annotation thread')).toBeTruthy();
+    });
+  });
+
   it('reopens an expanded resolved thread and moves it back to the open list', async () => {
     layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     fireEvent.click(screen.getByLabelText('Reopen annotation'));
     await flush();
@@ -373,6 +414,7 @@ describe('AnnotationLayer', () => {
     await screen.findByLabelText('Annotation thread');
     view.runtime.emit({ type: 'mx:annotation-hover', id: ANN.id });
     expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
     expect(screen.getByLabelText('Agent type Codex')).toBeTruthy();
