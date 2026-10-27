@@ -1,26 +1,30 @@
 /**
  * <af-textarea>: multi-line text control.
- * Import:  import '@afbin/textarea';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerTextarea} from './components/textarea.js'; registerTextarea();  (load the .js in the browser; this .ts is the readable contract)
  * Props: value, label, placeholder, native constraints
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-textarea label="Notes" rows="4"></af-textarea>
  */
-import { registerComponent } from './register-component';
-import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
+import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract,
+  type TextControlController } from './text-control';
 
 class AfTextarea extends HTMLElement implements TextControlContract {
   static observedAttributes = [...textControlAttributes];
   private controller?: TextControlController;
   private propertyControlled = false;
   private propertyValue: string | number | null | undefined;
-  get value(): string | number | null { return getTextControlValue(this, this.propertyControlled, this.propertyValue); }
-  set value(value: string | number | null | undefined) { this.propertyControlled = value !== undefined; this.propertyValue = value; this.controller?.sync(); }
+get value(): string | number | null { return getTextControlValue(this, this.propertyControlled,
+    this.propertyValue); }
+set value(value: string | number | null | undefined) { this.propertyControlled =
+    value !== undefined; this.propertyValue = value; this.controller?.sync(); }
   connectedCallback(): void {
     if (Object.prototype.hasOwnProperty.call(this, 'value')) {
-      const value = this.value; delete (this as {value?: string | number | null}).value; this.value = value;
+const value = this.value; delete (this as {value?: string | number | null}).value; this.value =
+        value;
     }
-    this.controller?.disconnect(); this.controller = connectTextControl(this, 'textarea', {controlled:()=>this.propertyControlled,value:()=>this.propertyValue});
+this.controller?.disconnect(); this.controller = connectTextControl(this, 'textarea', {controlled:(
+      )=>this.propertyControlled,value:()=>this.propertyValue});
   }
   disconnectedCallback(): void { this.controller?.disconnect(); this.controller = undefined; }
   attributeChangedCallback(): void { this.refresh(); }
@@ -39,8 +43,11 @@ af-textarea>.af-text-control:disabled{cursor:not-allowed;opacity:.5}
 af-textarea>.af-text-control:read-only{cursor:default}
 `;
 
-registerComponent({
-  styleKey: 'af-textarea-styles',
-  styles: textareaStyles,
-  elements: { 'af-textarea': AfTextarea },
-});
+export function registerTextarea(registry: CustomElementRegistry = customElements, document:
+  Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-textarea-styles]')) {
+const style = document.createElement('style'); style.dataset.afTextareaStyles = '';
+      style.textContent = textareaStyles; document.head.append(style);
+  }
+  if (!registry.get('af-textarea')) registry.define('af-textarea', AfTextarea);
+}

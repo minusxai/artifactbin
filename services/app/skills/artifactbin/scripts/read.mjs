@@ -40,7 +40,8 @@ export async function readCommand({sub = undefined, values, positionals}, option
   const {server, id} = resolveTarget(positional(positionals), selectedServer(values, options.env)),
     client = makeClient(server, options);
   const version = values.version ? integer(values.version, 'version') : undefined;
-  const record = await client.request('/api/artifacts/' + id + (version ? '/versions/' + version : ''));
+const record = await client.request('/api/artifacts/' + id + (version ? '/versions/' + version :
+    ''));
   if (!values.output) return {record};
   // HTML: saveAuthoringPair writes the source (with its data-af-ids) and the FILE.af.json baseline publish needs.
   if (record.format === 'html' || typeof record.html === 'string') {
@@ -70,7 +71,8 @@ export async function readCommand({sub = undefined, values, positionals}, option
       );
     bytes = JSON.stringify(record.rows, null, 2) + '\n';
   } else if (['image', 'file', 'pdf'].includes(record.format)) {
-    const raw = await client.request(`/a/${id}/raw${version ? '?version=' + version : ''}`, {raw: true});
+const raw = await client.request(`/a/${id}/raw${version ? '?version=' + version : ''}`, {raw:
+      true});
     bytes = new Uint8Array(await raw.arrayBuffer());
   } else
     throw new ToolError(

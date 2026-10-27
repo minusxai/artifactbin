@@ -1,26 +1,30 @@
 /**
  * <af-input>: single-line text control.
- * Import:  import '@afbin/input';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerInput} from './components/input.js'; registerInput();  (load the .js in the browser; this .ts is the readable contract)
  * Props: value, label, placeholder, native constraints (required, maxlength, pattern, ...)
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-input id="search" label="Search"></af-input>
  */
-import { registerComponent } from './register-component';
-import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
+import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract,
+  type TextControlController } from './text-control';
 
 class AfInput extends HTMLElement implements TextControlContract {
   static observedAttributes = [...textControlAttributes];
   private controller?: TextControlController;
   private propertyControlled = false;
   private propertyValue: string | number | null | undefined;
-  get value(): string | number | null { return getTextControlValue(this, this.propertyControlled, this.propertyValue); }
-  set value(value: string | number | null | undefined) { this.propertyControlled = value !== undefined; this.propertyValue = value; this.controller?.sync(); }
+get value(): string | number | null { return getTextControlValue(this, this.propertyControlled,
+    this.propertyValue); }
+set value(value: string | number | null | undefined) { this.propertyControlled =
+    value !== undefined; this.propertyValue = value; this.controller?.sync(); }
   connectedCallback(): void {
     if (Object.prototype.hasOwnProperty.call(this, 'value')) {
-      const value = this.value; delete (this as {value?: string | number | null}).value; this.value = value;
+const value = this.value; delete (this as {value?: string | number | null}).value; this.value =
+        value;
     }
-    this.controller?.disconnect(); this.controller = connectTextControl(this, 'input', {controlled:()=>this.propertyControlled,value:()=>this.propertyValue});
+this.controller?.disconnect(); this.controller = connectTextControl(this, 'input', {controlled:()=>
+      this.propertyControlled,value:()=>this.propertyValue});
   }
   disconnectedCallback(): void { this.controller?.disconnect(); this.controller = undefined; }
   attributeChangedCallback(): void { this.refresh(); }
@@ -40,8 +44,11 @@ af-input>.af-text-control:read-only{cursor:default}
 af-input>.af-text-control[type=number]{font-variant-numeric:tabular-nums}
 `;
 
-registerComponent({
-  styleKey: 'af-input-styles',
-  styles: inputStyles,
-  elements: { 'af-input': AfInput },
-});
+export function registerInput(registry: CustomElementRegistry = customElements, document: Document =
+  globalThis.document): void {
+  if (!document.querySelector('style[data-af-input-styles]')) {
+const style = document.createElement('style'); style.dataset.afInputStyles = ''; style.textContent =
+      inputStyles; document.head.append(style);
+  }
+  if (!registry.get('af-input')) registry.define('af-input', AfInput);
+}

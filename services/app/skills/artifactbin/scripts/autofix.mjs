@@ -1,5 +1,6 @@
 /** What this command does and how to use it; also printed by --help. */
-export const DESCRIPTION = `Fix platform-owned HTML pieces in place and list problems to fix by hand.
+export const DESCRIPTION =
+  `Fix platform-owned HTML pieces in place and list problems to fix by hand.
 publish and serve already run it.
 Usage: node scripts/autofix.mjs FILE [--dry-run] [--root DIR]
 Flags: --dry-run lists problems and pending fixes and writes nothing; --root DIR is the project boundary for local
@@ -50,8 +51,10 @@ export async function replaceFile(file, text) {
   await writeFile(temporary, text);
   await rename(temporary, file);
 }
-/** @param {{values:any,positionals:string[]}} parsed @param {{log?:(text:string)=>void}} [options] */
-export async function autofixCommand({values, positionals}, {log = text => process.stdout.write(text)} = {}) {
+/** @param {{values:any,positionals:string[]}} parsed @param {{log?:(text:string)=>
+  void}} [options] */
+export async function autofixCommand({values, positionals}, {log = text => process.stdout.write(
+  text)} = {}) {
   const file = await realpath(positional(positionals));
   if (!/\.html?$/i.test(file)) throw new ToolError('not_html', 'autofix checks HTML pages only.', 2);
   const root = await realpath(values.root ?? path.dirname(file));

@@ -1,19 +1,19 @@
 /**
  * <af-switch>: on/off toggle.
- * Import:  import '@afbin/switch';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerSwitch} from './components/switch.js'; registerSwitch();  (load the .js in the browser; this .ts is the readable contract)
  * Props: checked (boolean), disabled, label
  * Events: af-change with event.detail.value (the new checked state)
  * Usage:
  *   <af-switch label="Notifications"></af-switch>
  */
-import { registerComponent, type ComponentDescriptor } from './register-component';
 export interface AfSwitchChangeDetail {
   value: boolean;
 }
 
 /** A light-DOM switch that reports user intent through `af-change`. */
 export class AfSwitch extends HTMLElement {
-  static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled', 'read-only', 'readonly'];
+static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled',
+    'read-only', 'readonly'];
 
   private shell?: HTMLDivElement;
   private caption?: HTMLSpanElement;
@@ -118,7 +118,8 @@ export class AfSwitch extends HTMLElement {
     const checked = this.currentChecked();
     this.button.setAttribute('aria-checked', String(checked));
     this.button.disabled = this.disabled;
-    this.button.setAttribute('aria-readonly', String(this.hasAttribute('read-only') || this.hasAttribute('readonly')));
+this.button.setAttribute('aria-readonly', String(this.hasAttribute('read-only') ||
+      this.hasAttribute('readonly')));
     this.button.setAttribute('data-state', checked ? 'checked' : 'unchecked');
   }
 }
@@ -137,10 +138,13 @@ af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
-/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
-export const switchComponent: ComponentDescriptor = {
-  styleKey: 'af-switch-styles',
-  styles: switchStyles,
-  elements: { 'af-switch': AfSwitch },
-};
-registerComponent(switchComponent);
+export function registerSwitch(registry: CustomElementRegistry = customElements, document:
+  Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-switch-styles]')) {
+    const style = document.createElement('style');
+    style.setAttribute('data-af-switch-styles', '');
+    style.textContent = switchStyles;
+    document.head.append(style);
+  }
+  if (!registry.get('af-switch')) registry.define('af-switch', AfSwitch);
+}

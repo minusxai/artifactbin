@@ -39,7 +39,8 @@ import {
   makeClient
 } from './toolbox-client.mjs';
 // Subcommands: status (read-only), logout (local grant only), login (two steps: send the code, then exchange it).
-export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} = {}) {
+export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
+  {}) {
   positional(positionals, 0);
   const server = serverOrigin(selectedServer(values, env)),
     root = credentialRoot(env),

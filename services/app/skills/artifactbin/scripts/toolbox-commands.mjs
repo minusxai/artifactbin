@@ -18,7 +18,8 @@ function flag(type = 'string', multiple = false) {
 
 // Per command: positional verb(s) in `sub` (flags per subcommand) or plain `flags`; `listed:false` keeps a command out of the table.
 const commands = {
-  auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {}, logout: {}}},
+auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, status: {}, logout: {
+    }}},
   serve: {flags: {port: flag(), 'runtime-dir': flag(), autofix: flag('boolean')}},
   autofix: {listed: false, flags: {'dry-run': flag('boolean'), root: flag()}},
   publish: {
@@ -92,6 +93,7 @@ export function parseCommand(name, args) {
       {type, ...(multiple ? {multiple: true} : {})}
     ])
   );
-  const parsed = parseArgs({args: sub ? args.slice(1) : args, options, allowPositionals: true, strict: true});
+const parsed = parseArgs({args: sub ? args.slice(1) : args, options, allowPositionals: true, strict:
+    true});
   return {...parsed, sub};
 }

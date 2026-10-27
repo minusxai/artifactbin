@@ -59,7 +59,8 @@ export async function exportCommand({values, positionals}, options = {}) {
     client = makeClient(server, options);
   const query = new URLSearchParams({format});
   if (values.slide) query.set('slide', String(integer(values.slide, 'slide')));
-  const response = await client.request(`/a/${id}/${format === 'html' ? 'download' : 'export'}?${query}`, {
+const response = await client.request(`/a/${id}/${format === 'html' ? 'download' :
+    'export'}?${query}`, {
     raw: true,
     timeoutMs: 60000
   });

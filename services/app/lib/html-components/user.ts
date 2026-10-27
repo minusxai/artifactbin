@@ -1,6 +1,6 @@
 /**
  * <af-user>: person card; the app supplies identity (no account lookup happens in the element).
- * Import:  import '@afbin/user';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerUser} from './components/user.js'; registerUser();  (load the .js in the browser; this .ts is the readable contract)
  * Props: person={id,name,handle,image,profileHref}, loading, error, identityState (unknown|missing|deleted), mode (user|avatar|handle), size (sm|md|lg)
  * To resolve a User ID from a linked dataset's typed user column, query that authorized namespace:
  *   const {data}=await client.query({query:gql`query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}`,variables:{ids:[userId]}});
@@ -10,7 +10,6 @@
  * Usage:
  *   element.person={id:"u1",name:"Ada",handle:"ada",image:null,profileHref:"/u/ada"};
  */
-import { registerComponent, type ComponentDescriptor } from './register-component';
 import { personFaceBackground, personInitial } from '../islands';
 
 export type UserSize = 'sm' | 'md' | 'lg';
@@ -39,15 +38,19 @@ export interface UserContract {
   status: UserStatus;
 }
 
-const isSize = (value: string | null): value is UserSize => value === 'sm' || value === 'md' || value === 'lg';
-const isMode = (value: string | null): value is UserMode => value === 'user' || value === 'avatar' || value === 'handle';
-const isIdentityState = (value: string | null): value is UserIdentityState => value === 'unknown' || value === 'missing' || value === 'deleted';
+const isSize = (value: string | null): value is UserSize => value === 'sm' || value === 'md' ||
+  value === 'lg';
+const isMode = (value: string | null): value is UserMode => value === 'user' ||
+  value === 'avatar' || value === 'handle';
+const isIdentityState = (value: string | null): value is UserIdentityState => value === 'unknown' ||
+  value === 'missing' || value === 'deleted';
 
 function safeHref(value: string | null | undefined): string | null {
   const candidate = value?.trim();
   if (!candidate || candidate.includes('\\') || candidate.startsWith('//')) return null;
   if (/^https?:\/\//i.test(candidate)) {
-    try { const url = new URL(candidate); return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password ? candidate : null; }
+try { const url = new URL(candidate); return (url.protocol === 'http:' ||
+      url.protocol === 'https:') && !url.username && !url.password ? candidate : null; }
     catch { return null; }
   }
   if (/^[a-z][a-z\d+.-]*:/i.test(candidate)) return null;
@@ -71,7 +74,8 @@ function replayPreUpgradeProperties(element: HTMLElement, names: readonly string
 }
 
 export class AfUser extends HTMLElement implements UserContract {
-  static observedAttributes = ['loading', 'error', 'identity-state', 'size', 'mode', 'avatar', 'link', 'decorative', 'fallback', 'profile-href'];
+static observedAttributes = ['loading', 'error', 'identity-state', 'size', 'mode', 'avatar', 'link',
+    'decorative', 'fallback', 'profile-href'];
   private currentPerson: UserPerson | null = null;
   private avatarBox: HTMLElement | undefined;
   private fallbackNode: HTMLElement | undefined;
@@ -87,31 +91,42 @@ export class AfUser extends HTMLElement implements UserContract {
 
   get person(): UserPerson | null { return this.currentPerson; }
   set person(value: UserPerson | null) { this.currentPerson = value; this.sync(); }
-  get loading(): boolean { return this.getAttribute('loading') !== null && this.getAttribute('loading') !== 'false'; }
+get loading(): boolean { return this.getAttribute('loading') !== null && this.getAttribute(
+    'loading') !== 'false'; }
   set loading(value: boolean) { this.setAttribute('loading', String(Boolean(value))); }
-  get error(): string | null { return this.hasAttribute('error') ? this.getAttribute('error') ?? '' : null; }
-  set error(value: string | null) { if (value === null) this.removeAttribute('error'); else this.setAttribute('error', value); }
-  get identityState(): UserIdentityState { const value = this.getAttribute('identity-state'); return isIdentityState(value) ? value : 'unknown'; }
+get error(): string | null { return this.hasAttribute('error') ? this.getAttribute('error') ?? '' :
+    null; }
+set error(value: string | null) { if (value === null) this.removeAttribute('error');
+    else this.setAttribute('error', value); }
+get identityState(): UserIdentityState { const value = this.getAttribute('identity-state');
+    return isIdentityState(value) ? value : 'unknown'; }
   set identityState(value: UserIdentityState) { this.setAttribute('identity-state', value); }
-  get size(): UserSize { const value = this.getAttribute('size'); return isSize(value) ? value : 'sm'; }
+get size(): UserSize { const value = this.getAttribute('size'); return isSize(value) ? value : 'sm';
+    }
   set size(value: UserSize) { this.setAttribute('size', value); }
-  get mode(): UserMode { const value = this.getAttribute('mode'); return isMode(value) ? value : 'user'; }
+get mode(): UserMode { const value = this.getAttribute('mode'); return isMode(value) ? value :
+    'user'; }
   set mode(value: UserMode) { this.setAttribute('mode', value); }
   get avatar(): boolean { return this.getAttribute('avatar') !== 'false'; }
   set avatar(value: boolean) { this.setAttribute('avatar', String(Boolean(value))); }
   get link(): boolean { return this.getAttribute('link') !== 'false'; }
   set link(value: boolean) { this.setAttribute('link', String(Boolean(value))); }
-  get decorative(): boolean { return this.getAttribute('decorative') !== null && this.getAttribute('decorative') !== 'false'; }
+get decorative(): boolean { return this.getAttribute('decorative') !== null && this.getAttribute(
+    'decorative') !== 'false'; }
   set decorative(value: boolean) { this.setAttribute('decorative', String(Boolean(value))); }
   get fallback(): string | undefined { return this.getAttribute('fallback') ?? undefined; }
-  set fallback(value: string | undefined) { if (value === undefined) this.removeAttribute('fallback'); else this.setAttribute('fallback', value); }
+set fallback(value: string | undefined) { if (value === undefined) this.removeAttribute('fallback');
+    else this.setAttribute('fallback', value); }
   get profileHref(): string | undefined { return this.getAttribute('profile-href') ?? undefined; }
-  set profileHref(value: string | undefined) { if (value === undefined) this.removeAttribute('profile-href'); else this.setAttribute('profile-href', value); }
-  get status(): UserStatus { return this.loading ? 'loading' : this.error !== null ? 'error' : this.person ? 'person' : this.identityState; }
+set profileHref(value: string | undefined) { if (value === undefined) this.removeAttribute(
+    'profile-href'); else this.setAttribute('profile-href', value); }
+get status(): UserStatus { return this.loading ? 'loading' : this.error !== null ? 'error' :
+    this.person ? 'person' : this.identityState; }
 
   connectedCallback(): void {
     this.replayingProperties = true;
-    try { replayPreUpgradeProperties(this, ['person', 'loading', 'error', 'identityState', 'size', 'mode', 'avatar', 'link', 'decorative', 'fallback', 'profileHref']); }
+try { replayPreUpgradeProperties(this, ['person', 'loading', 'error', 'identityState', 'size',
+      'mode', 'avatar', 'link', 'decorative', 'fallback', 'profileHref']); }
     finally { this.replayingProperties = false; }
     if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'user');
     this.ensureView(); this.sync();
@@ -124,11 +139,15 @@ export class AfUser extends HTMLElement implements UserContract {
 
   private ensureView(): void {
     if (this.avatarBox && this.fallbackNode && this.labelNode) return;
-    const view = this.ownerDocument.createElement('span'); view.setAttribute('data-slot', 'user-content');
-    this.avatarBox = this.ownerDocument.createElement('span'); this.avatarBox.setAttribute('data-slot', 'avatar');
-    this.fallbackNode = this.ownerDocument.createElement('span'); this.fallbackNode.setAttribute('data-slot', 'avatar-fallback');
+const view = this.ownerDocument.createElement('span'); view.setAttribute('data-slot',
+      'user-content');
+this.avatarBox = this.ownerDocument.createElement('span'); this.avatarBox.setAttribute('data-slot',
+      'avatar');
+this.fallbackNode = this.ownerDocument.createElement('span'); this.fallbackNode.setAttribute(
+      'data-slot', 'avatar-fallback');
     this.avatarBox.append(this.fallbackNode);
-    this.labelNode = this.ownerDocument.createElement('span'); this.labelNode.setAttribute('data-slot', 'user-label');
+this.labelNode = this.ownerDocument.createElement('span'); this.labelNode.setAttribute('data-slot',
+      'user-label');
     view.append(this.avatarBox, this.labelNode);
     this.prepend(view);
   }
@@ -151,18 +170,22 @@ export class AfUser extends HTMLElement implements UserContract {
       if (generation !== this.generation || this.nativeImage !== image || !this.isConnected) return;
       this.imageState = 'error'; this.syncAvatar();
     };
-    image.addEventListener('load', this.onImageLoad); image.addEventListener('error', this.onImageError);
-    if (image.complete) { this.imageState = image.naturalWidth > 0 ? 'loaded' : 'error'; this.syncAvatar(); }
+image.addEventListener('load', this.onImageLoad); image.addEventListener('error',
+      this.onImageError);
+if (image.complete) { this.imageState = image.naturalWidth > 0 ? 'loaded' : 'error';
+      this.syncAvatar(); }
   }
   private replaceImage(source: string | null): void {
     this.unbindImage(); this.generation++;
     const previous = this.nativeImage;
     if (previous && previous.parentNode === this.avatarBox) previous.remove();
     this.nativeImage = undefined; this.nativeImageSrc = source;
-    this.imageState = source ? 'loading' : this.status === 'person' && this.person?.image ? 'error' : 'empty';
+this.imageState = source ? 'loading' : this.status === 'person' && this.person?.image ? 'error' :
+      'empty';
     if (!source || !this.avatarBox) return;
     const image = this.ownerDocument.createElement('img');
-    image.setAttribute('data-slot', 'user-image'); image.alt = ''; image.setAttribute('aria-hidden', 'true'); image.hidden = true;
+image.setAttribute('data-slot', 'user-image'); image.alt = ''; image.setAttribute('aria-hidden',
+      'true'); image.hidden = true;
     this.nativeImage = image; this.avatarBox.append(image);
     image.setAttribute('src', source);
     this.bindImage();
@@ -170,24 +193,30 @@ export class AfUser extends HTMLElement implements UserContract {
   private displayLabel(): string {
     if (this.status === 'loading') return 'Loading person';
     if (this.status === 'error') return this.error || 'Unable to load person';
-    if (this.person) return this.person.handle ? `@${this.person.handle}` : this.person.name?.trim() || 'Unknown person';
+if (this.person) return this.person.handle ? `@${this.person.handle}` : this.person.name?.trim() ||
+      'Unknown person';
     if (this.identityState === 'missing') return 'Person not found';
     if (this.identityState === 'deleted') return 'Deleted person';
     return this.fallback ?? 'Unknown person';
   }
-  private fallbackOnly(): boolean { return !this.person && this.status === 'unknown' && this.fallback !== undefined; }
-  private showsAvatar(): boolean { return !this.fallbackOnly() && (this.mode === 'avatar' || this.mode === 'user' && this.avatar); }
+private fallbackOnly(): boolean { return !this.person && this.status === 'unknown' &&
+    this.fallback !== undefined; }
+private showsAvatar(): boolean { return !this.fallbackOnly() && (this.mode === 'avatar' ||
+    this.mode === 'user' && this.avatar); }
   private renderLabel(): void {
     const label = this.labelNode; if (!label) return;
     label.setAttribute('aria-live', 'polite');
     label.replaceChildren();
     const person = this.person;
     if (this.status === 'person' && person?.handle) {
-      const candidate = this.profileHref ?? person.profileHref ?? `/@${encodeURIComponent(person.handle)}`;
+const candidate = this.profileHref ?? person.profileHref ?? `/@${encodeURIComponent(
+        person.handle)}`;
       const href = this.link ? safeHref(candidate) : null;
       if (href) {
-        const anchor = this.ownerDocument.createElement('a'); anchor.setAttribute('data-slot', 'user-profile-link');
-        anchor.setAttribute('href', href); anchor.setAttribute('target', '_top'); anchor.setAttribute('rel', 'noopener');
+const anchor = this.ownerDocument.createElement('a'); anchor.setAttribute('data-slot',
+          'user-profile-link');
+anchor.setAttribute('href', href); anchor.setAttribute('target', '_top'); anchor.setAttribute('rel',
+          'noopener');
         anchor.textContent = `@${person.handle}`; label.append(anchor); return;
       }
     }
@@ -199,13 +228,16 @@ export class AfUser extends HTMLElement implements UserContract {
     const person = this.status === 'person' ? this.person : null;
     initial.textContent = person?.name ? personInitial(person.name) : '?';
     initial.hidden = this.imageState === 'loaded';
-    if (person?.id) { box.style.backgroundColor = personFaceBackground(person.id); initial.style.color = '#fff'; }
+if (person?.id) { box.style.backgroundColor = personFaceBackground(person.id); initial.style.color =
+      '#fff'; }
     else { box.style.removeProperty('background-color'); initial.style.removeProperty('color'); }
     box.hidden = !this.showsAvatar();
     if (this.decorative || this.mode === 'user') {
-      box.removeAttribute('role'); box.removeAttribute('aria-label'); box.setAttribute('aria-hidden', 'true');
+box.removeAttribute('role'); box.removeAttribute('aria-label'); box.setAttribute('aria-hidden',
+        'true');
     } else {
-      box.removeAttribute('aria-hidden'); box.setAttribute('role', 'img'); box.setAttribute('aria-label', person?.name?.trim() || this.displayLabel());
+box.removeAttribute('aria-hidden'); box.setAttribute('role', 'img'); box.setAttribute('aria-label',
+        person?.name?.trim() || this.displayLabel());
     }
     if (this.nativeImage) this.nativeImage.hidden = this.imageState !== 'loaded';
   }
@@ -215,7 +247,8 @@ export class AfUser extends HTMLElement implements UserContract {
     const nextStatus = this.status;
     this.dataset.state = nextStatus;
     if (this.lastStatus !== undefined && this.lastStatus !== nextStatus) {
-      this.dispatchEvent(new CustomEvent('af-user-state', { detail: { status: nextStatus }, bubbles: true, composed: true }));
+this.dispatchEvent(new CustomEvent('af-user-state', { detail: { status: nextStatus }, bubbles: true,
+        composed: true }));
     }
     this.lastStatus = nextStatus;
     const showAvatar = this.showsAvatar();
@@ -251,10 +284,11 @@ af-user [data-slot=user-label] a:hover{text-decoration-color:currentColor}
 af-user[data-state=error] [data-slot=user-label],af-user[data-state=unknown] [data-slot=user-label],af-user[data-state=missing] [data-slot=user-label],af-user[data-state=deleted] [data-slot=user-label]{color:var(--muted-foreground,#737373)}
 `;
 
-/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
-export const userComponent: ComponentDescriptor = {
-  styleKey: 'af-user-styles',
-  styles: userStyles,
-  elements: { 'af-user': AfUser },
-};
-registerComponent(userComponent);
+export function registerUser(registry: CustomElementRegistry = customElements, document: Document =
+  globalThis.document): void {
+  if (!document.querySelector('style[data-af-user-styles]')) {
+const style = document.createElement('style'); style.setAttribute('data-af-user-styles', '');
+      style.textContent = userStyles; document.head.append(style);
+  }
+  if (!registry.get('af-user')) registry.define('af-user', AfUser);
+}

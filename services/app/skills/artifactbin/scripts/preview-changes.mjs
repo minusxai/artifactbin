@@ -9,33 +9,42 @@ export async function projectRevision(root,limits=PREVIEW_LIMITS){
  root=await realpath(root);
  let hash=createHash('sha256'),count=0,total=0,entries=0;const seen=new Set();
  async function visit(path){
-  if(++entries>limits.maxFiles*2+1)throw new PreviewLimitError("Preview directory entry limit exceeded; select a dedicated project directory.");
+if(++entries>limits.maxFiles*2+1)throw new PreviewLimitError(
+    "Preview directory entry limit exceeded; select a dedicated project directory.");
   const actual=await realpath(path),tail=relative(root,actual);
   if(tail==='..'||tail.startsWith('..'+sep)||tail.split(sep).some(part=>part.startsWith('.')))return;
   const info=await stat(actual);
   if(info.isDirectory()){
    if(seen.has(actual))return;seen.add(actual);
-   const names=[];for await(const entry of await opendir(actual))if(!entry.name.startsWith('.')){names.push(entry.name);if(names.length>limits.maxFiles*2)throw new PreviewLimitError('Preview directory entry limit exceeded.');}
+const names=[];for await(const entry of await opendir(actual))if(!entry.name.startsWith('.')){
+     names.push(entry.name);if(names.length>limits.maxFiles*2)throw new PreviewLimitError(
+     'Preview directory entry limit exceeded.');}
    for(const name of names.sort())await visit(join(path,name));
   }else if(info.isFile()){
-   if(++count>limits.maxFiles)throw new PreviewLimitError(`Preview exceeds ${limits.maxFiles} files; select a dedicated project directory.`);
-   if(info.size>limits.maxFileBytes||total+info.size>limits.maxTotalBytes)throw new PreviewLimitError('Preview size limit exceeded; use files below 32 MiB and a project below 128 MiB.');
+if(++count>limits.maxFiles)throw new PreviewLimitError(
+     `Preview exceeds ${limits.maxFiles} files; select a dedicated project directory.`);
+if(info.size>limits.maxFileBytes||total+info.size>limits.maxTotalBytes)throw new PreviewLimitError(
+     'Preview size limit exceeded; use files below 32 MiB and a project below 128 MiB.');
    const bytes=await readPreviewFile(root,path,limits.maxFileBytes);total+=bytes.length;
    if(total>limits.maxTotalBytes)throw new PreviewLimitError('Preview exceeds total byte limit.');
    hash.update(relative(root,path));hash.update('\0');hash.update(bytes);hash.update('\0');
   }
  }
  // Editors can replace files while a scan is in progress; retry one inconsistent scan.
- for(let attempt=0;;attempt++)try{await visit(root);return hash.digest('hex');}catch(error){if(attempt||error.code!=='ENOENT')throw error;seen.clear();count=0;total=0;entries=0;hash=createHash('sha256');}
+for(let attempt=0;;attempt++)try{await visit(root);return hash.digest('hex');}catch(error){if(
+   attempt||error.code!=='ENOENT')throw error;seen.clear();count=0;total=0;entries=0;hash=
+   createHash('sha256');}
 }
 
 /** All viewers of one server share in-flight work and a short revision cache. */
-export function createRevisionSource(root,{now=Date.now,scan=()=>projectRevision(root),intervalMs=1000}={}){
+export function createRevisionSource(root,{now=Date.now,scan=()=>projectRevision(root),intervalMs=
+  1000}={}){
  let pending,last,expires=0;
  return {current({fresh=false}={}){
   if(pending)return pending;
   if(!fresh&&last!==undefined&&now()<expires)return Promise.resolve(last);
-  pending=Promise.resolve().then(scan).then(value=>{last=value;expires=now()+intervalMs;return value;}).finally(()=>{pending=undefined;});
+pending=Promise.resolve().then(scan).then(value=>{last=value;expires=now()+intervalMs;return value;
+    }).finally(()=>{pending=undefined;});
   return pending;
  }};
 }

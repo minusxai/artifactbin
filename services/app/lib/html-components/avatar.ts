@@ -1,12 +1,11 @@
 /**
  * <af-avatar>: image with a fallback.
- * Import:  import '@afbin/avatar';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerAvatar} from './components/avatar.js'; registerAvatar();  (load the .js in the browser; this .ts is the readable contract)
  * Props: size (sm|default|lg)
  * Parts: af-avatar-image src alt, af-avatar-fallback
  * Usage:
  *   <af-avatar><af-avatar-image src="me.png" alt="Ada"></af-avatar-image><af-avatar-fallback>A</af-avatar-fallback></af-avatar>
  */
-import { registerComponent, type ComponentDescriptor } from './register-component';
 export type AvatarSize = 'sm' | 'default' | 'lg';
 export type AvatarStatus = 'idle' | 'loading' | 'loaded' | 'error';
 export interface AvatarContract { size: AvatarSize; status: AvatarStatus }
@@ -29,7 +28,8 @@ export class AfAvatar extends HTMLElement implements AvatarContract {
   private currentStatus: AvatarStatus = 'idle';
   private primaryImage: AfAvatarImage | null = null;
   private observer = new MutationObserver(() => this.syncParts());
-  get size(): AvatarSize { const size = this.getAttribute('size'); return size === 'sm' || size === 'lg' ? size : 'default'; }
+get size(): AvatarSize { const size = this.getAttribute('size'); return size === 'sm' ||
+    size === 'lg' ? size : 'default'; }
   set size(value: AvatarSize) { this.setAttribute('size', value); }
   get status(): AvatarStatus { return this.currentStatus; }
 
@@ -40,7 +40,8 @@ export class AfAvatar extends HTMLElement implements AvatarContract {
     const image = this.images()[0];
     if (image) {
       const state = image.dataset.state;
-      this.currentStatus = state === 'loading' || state === 'loaded' || state === 'error' ? state : image.hasAttribute('src') ? 'loading' : 'error';
+this.currentStatus = state === 'loading' || state === 'loaded' || state === 'error' ? state :
+        image.hasAttribute('src') ? 'loading' : 'error';
     } else this.currentStatus = 'idle';
     this.syncParts();
   }
@@ -50,8 +51,10 @@ export class AfAvatar extends HTMLElement implements AvatarContract {
   }
   attributeChangedCallback(): void { this.dataset.size = this.size; }
 
-  private images(): AfAvatarImage[] { return [...this.querySelectorAll<AfAvatarImage>('af-avatar-image')].filter(image => image.closest('af-avatar') === this); }
-  private fallbacks(): AfAvatarFallback[] { return [...this.querySelectorAll<AfAvatarFallback>('af-avatar-fallback')].filter(part => part.closest('af-avatar') === this); }
+private images(): AfAvatarImage[] { return [...this.querySelectorAll<AfAvatarImage>(
+    'af-avatar-image')].filter(image => image.closest('af-avatar') === this); }
+private fallbacks(): AfAvatarFallback[] { return [...this.querySelectorAll<AfAvatarFallback>(
+    'af-avatar-fallback')].filter(part => part.closest('af-avatar') === this); }
   private onStatus = (event: CustomEvent<AvatarImageStatusDetail>): void => {
     const image = this.images()[0] ?? null;
     if (event.target !== image) return;
@@ -66,7 +69,8 @@ export class AfAvatar extends HTMLElement implements AvatarContract {
       this.primaryImage = image;
       const state = image?.dataset.state;
       this.currentStatus = image
-        ? state === 'loading' || state === 'loaded' || state === 'error' ? state : image.hasAttribute('src') ? 'loading' : 'error'
+? state === 'loading' || state === 'loaded' || state === 'error' ? state : image.hasAttribute(
+          'src') ? 'loading' : 'error'
         : 'idle';
     }
     this.dataset.size = this.size;
@@ -84,7 +88,8 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
   private onLoad: (() => void) | undefined;
   private onError: (() => void) | undefined;
   get src(): string | null { return this.getAttribute('src'); }
-  set src(value: string | null) { if (value === null) this.removeAttribute('src'); else this.setAttribute('src', value); }
+set src(value: string | null) { if (value === null) this.removeAttribute('src');
+    else this.setAttribute('src', value); }
   get alt(): string { return this.getAttribute('alt') ?? ''; }
   set alt(value: string) { this.setAttribute('alt', value); }
 
@@ -102,7 +107,8 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
     else if (this.nativeImage) this.nativeImage.alt = this.alt;
   }
 
-  private ensureSlot(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-image'); }
+private ensureSlot(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot',
+    'avatar-image'); }
   private unbind(): void {
     if (!this.nativeImage) return;
     if (this.onLoad) this.nativeImage.removeEventListener('load', this.onLoad);
@@ -132,8 +138,10 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
     const image = this.nativeImage!;
     image.alt = this.alt;
     if (!src) { image.removeAttribute('src'); this.emit('error', generation); return; }
-    this.onLoad = () => { if (generation === this.generation && this.nativeImage === image) this.emit(image.naturalWidth > 0 ? 'loaded' : 'error', generation); };
-    this.onError = () => { if (generation === this.generation && this.nativeImage === image) this.emit('error', generation); };
+this.onLoad = () => { if (generation === this.generation && this.nativeImage === image) this.emit(
+      image.naturalWidth > 0 ? 'loaded' : 'error', generation); };
+this.onError = () => { if (generation === this.generation && this.nativeImage === image) this.emit(
+      'error', generation); };
     image.addEventListener('load', this.onLoad);
     image.addEventListener('error', this.onError);
     this.emit('loading', generation);
@@ -143,16 +151,20 @@ export class AfAvatarImage extends HTMLElement implements AvatarImageContract {
 }
 
 class AfAvatarFallback extends HTMLElement {
-  connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-fallback'); }
+connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot',
+    'avatar-fallback'); }
 }
 class AfAvatarBadge extends HTMLElement {
-  connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-badge'); }
+connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot',
+    'avatar-badge'); }
 }
 class AfAvatarGroup extends HTMLElement {
-  connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-group'); }
+connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot',
+    'avatar-group'); }
 }
 class AfAvatarGroupCount extends HTMLElement {
-  connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot', 'avatar-group-count'); }
+connectedCallback(): void { if (!this.hasAttribute('data-slot')) this.setAttribute('data-slot',
+    'avatar-group-count'); }
 }
 
 const avatarStyles = `
@@ -177,17 +189,18 @@ af-avatar-group:has(af-avatar[data-size=sm])>af-avatar-group-count{width:1.5rem;
 af-avatar-group-count>svg{width:1rem;height:1rem}
 `;
 
-/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
-export const avatarComponent: ComponentDescriptor = {
-  styleKey: 'af-avatar-styles',
-  styles: avatarStyles,
-  elements: {
+export function registerAvatar(registry: CustomElementRegistry = customElements, document:
+  Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-avatar-styles]')) {
+const style = document.createElement('style'); style.setAttribute('data-af-avatar-styles', '');
+      style.textContent = avatarStyles; document.head.append(style);
+  }
+  for (const [name, ctor] of Object.entries({
     'af-avatar': AfAvatar,
     'af-avatar-image': AfAvatarImage,
     'af-avatar-fallback': AfAvatarFallback,
     'af-avatar-badge': AfAvatarBadge,
     'af-avatar-group': AfAvatarGroup,
     'af-avatar-group-count': AfAvatarGroupCount,
-  },
-};
-registerComponent(avatarComponent);
+  })) if (!registry.get(name)) registry.define(name, ctor);
+}

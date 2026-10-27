@@ -100,7 +100,8 @@ export class AfDeckGL extends HTMLElement {
         if (!current()) return;
         const status = (this.status ??= this.ownerDocument.createElement("p"));
         status.setAttribute("role", "status");
-        status.textContent = `Map could not load: ${error instanceof Error ? error.message : "engine unavailable"}`;
+status.textContent = `Map could not load: ${error instanceof Error ? error.message :
+          "engine unavailable"}`;
         this.append(status);
       });
   }

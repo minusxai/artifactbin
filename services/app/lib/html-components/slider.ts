@@ -1,12 +1,11 @@
 /**
  * <af-slider>: numeric range control.
- * Import:  import '@afbin/slider';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerSlider} from './components/slider.js'; registerSlider();  (load the .js in the browser; this .ts is the readable contract)
  * Props: value (number), min, max, step, disabled, label
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
  */
-import { registerComponent } from './register-component';
 import { format as d3format } from 'd3-format';
 
 /** Numeric value exposed by the author-facing range control. */
@@ -21,7 +20,8 @@ function numeric(value: string | null): number | null {
 
 let nextId = 0;
 export class AfSlider extends HTMLElement implements SliderContract {
-  static observedAttributes = ['value', 'default-value', 'min', 'max', 'step', 'label', 'format', 'prefix', 'suffix', 'disabled', 'readonly'];
+static observedAttributes = ['value', 'default-value', 'min', 'max', 'step', 'label', 'format',
+    'prefix', 'suffix', 'disabled', 'readonly'];
   private initialized = false;
   private controlled = false;
   private propertyValue: number | null = null;
@@ -97,8 +97,10 @@ export class AfSlider extends HTMLElement implements SliderContract {
     if (this.hasAttribute('disabled') || this.hasAttribute('readonly')) { this.sync(); return; }
     const value = input.valueAsNumber;
     if (!Number.isFinite(value) || value === this.value) { this.sync(); return; }
-    const change = new CustomEvent<SliderChangeDetail>('af-change', { detail: { value }, bubbles: true, composed: true, cancelable: true });
-    if (this.dispatchEvent(change) && !this.controlled && !this.hasAttribute('value')) this.selection = value;
+const change = new CustomEvent<SliderChangeDetail>('af-change', { detail: { value }, bubbles: true,
+      composed: true, cancelable: true });
+if (this.dispatchEvent(change) && !this.controlled && !this.hasAttribute('value')) this.selection =
+      value;
     this.sync();
   };
 
@@ -116,7 +118,8 @@ export class AfSlider extends HTMLElement implements SliderContract {
     input.value = String(value ?? min);
     this.labelElement!.htmlFor = input.id;
     if (this.hasAttribute('label')) this.labelElement!.textContent = this.getAttribute('label') ?? '';
-    this.readout!.textContent = value === null ? '—' : `${this.getAttribute('prefix') ?? ''}${this.formatValue(value)}${this.getAttribute('suffix') ?? ''}`;
+this.readout!.textContent = value === null ? '—' : `${this.getAttribute('prefix') ??
+      ''}${this.formatValue(value)}${this.getAttribute('suffix') ?? ''}`;
   }
 
   private formatValue(value: number): string {
@@ -139,8 +142,13 @@ af-slider>input[type=range]:disabled{opacity:.5}
 af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:11px}
 `;
 
-registerComponent({
-  styleKey: 'af-slider-styles',
-  styles: sliderStyles,
-  elements: { 'af-slider': AfSlider },
-});
+export function registerSlider(registry: CustomElementRegistry = customElements, document:
+  Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-slider-styles]')) {
+    const style = document.createElement('style');
+    style.setAttribute('data-af-slider-styles', '');
+    style.textContent = sliderStyles;
+    document.head.append(style);
+  }
+  if (!registry.get('af-slider')) registry.define('af-slider', AfSlider);
+}

@@ -1,15 +1,15 @@
 /**
  * <af-button>: native light-DOM button; authored label or children.
- * Import:  import '@afbin/button';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerButton} from './components/button.js'; registerButton();  (load the .js in the browser; this .ts is the readable contract)
  * Props: variant (default|destructive|outline|secondary|ghost|link), size (default|xs|sm|lg|icon|icon-xs|icon-sm|icon-lg), type, disabled, busy
  * Events: the native click
  * Usage:
  *   <af-button variant="outline" size="sm">Save</af-button>
  */
-import { registerComponent, type ComponentDescriptor } from './register-component';
 /** Public attributes and forwarded properties supported by the native light-DOM button. */
 export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
-export type ButtonSize = 'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg';
+export type ButtonSize = 'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' |
+  'icon-lg';
 export type ButtonType = 'button' | 'submit' | 'reset';
 export interface ButtonContract {
   type: ButtonType;
@@ -22,20 +22,25 @@ export interface ButtonContract {
 }
 
 export class AfButton extends HTMLElement implements ButtonContract {
-  static observedAttributes = ['type', 'disabled', 'busy', 'variant', 'size', 'label', 'aria-label', 'name', 'value'];
+static observedAttributes = ['type', 'disabled', 'busy', 'variant', 'size', 'label', 'aria-label',
+    'name', 'value'];
   private nativeButton: HTMLButtonElement | undefined;
-  get type(): ButtonType { return this.getAttribute('type') === 'submit' || this.getAttribute('type') === 'reset' ? this.getAttribute('type') as ButtonType : 'button'; }
+get type(): ButtonType { return this.getAttribute('type') === 'submit' || this.getAttribute(
+    'type') === 'reset' ? this.getAttribute('type') as ButtonType : 'button'; }
   set type(value: ButtonType) { this.setAttribute('type', value); }
   get disabled(): boolean { return this.hasAttribute('disabled'); }
   set disabled(value: boolean) { this.toggleAttribute('disabled', Boolean(value)); }
   get busy(): boolean { return this.hasAttribute('busy'); }
   set busy(value: boolean) { this.toggleAttribute('busy', Boolean(value)); }
-  get variant(): ButtonVariant { return isVariant(this.getAttribute('variant')) ? this.getAttribute('variant') as ButtonVariant : 'default'; }
+get variant(): ButtonVariant { return isVariant(this.getAttribute('variant')) ? this.getAttribute(
+    'variant') as ButtonVariant : 'default'; }
   set variant(value: ButtonVariant) { this.setAttribute('variant', value); }
-  get size(): ButtonSize { return isSize(this.getAttribute('size')) ? this.getAttribute('size') as ButtonSize : 'default'; }
+get size(): ButtonSize { return isSize(this.getAttribute('size')) ? this.getAttribute(
+    'size') as ButtonSize : 'default'; }
   set size(value: ButtonSize) { this.setAttribute('size', value); }
   get label(): string | undefined { return this.getAttribute('label') ?? undefined; }
-  set label(value: string | undefined) { if (value === undefined) this.removeAttribute('label'); else this.setAttribute('label', value); }
+set label(value: string | undefined) { if (value === undefined) this.removeAttribute('label');
+    else this.setAttribute('label', value); }
 
   connectedCallback(): void {
     const properties = this as unknown as Record<string, unknown>;
@@ -58,7 +63,8 @@ export class AfButton extends HTMLElement implements ButtonContract {
   }
 
   attributeChangedCallback(): void { this.sync(); }
-  focus(options?: FocusOptions): void { (this.nativeButton ?? this.querySelector('button'))?.focus(options); }
+focus(options?: FocusOptions): void { (this.nativeButton ?? this.querySelector('button'))?.focus(
+    options); }
   click(): void {
     const button = this.nativeButton ?? this.querySelector('button');
     if (!button || this.disabled || this.busy) return;
@@ -75,7 +81,8 @@ export class AfButton extends HTMLElement implements ButtonContract {
     button.dataset.variant = this.variant;
     button.dataset.size = this.size;
     const name = this.getAttribute('aria-label') ?? this.getAttribute('label');
-    if (name === null) button.removeAttribute('aria-label'); else button.setAttribute('aria-label', name);
+if (name === null) button.removeAttribute('aria-label'); else button.setAttribute('aria-label',
+      name);
     for (const attr of ['name', 'value']) {
       const value = this.getAttribute(attr);
       if (value === null) button.removeAttribute(attr); else button.setAttribute(attr, value);
@@ -84,10 +91,12 @@ export class AfButton extends HTMLElement implements ButtonContract {
 }
 
 function isVariant(value: string | null): value is ButtonVariant {
-  return value === 'default' || value === 'destructive' || value === 'outline' || value === 'secondary' || value === 'ghost' || value === 'link';
+return value === 'default' || value === 'destructive' || value === 'outline' ||
+    value === 'secondary' || value === 'ghost' || value === 'link';
 }
 function isSize(value: string | null): value is ButtonSize {
-  return value === 'default' || value === 'xs' || value === 'sm' || value === 'lg' || value === 'icon' || value === 'icon-xs' || value === 'icon-sm' || value === 'icon-lg';
+return value === 'default' || value === 'xs' || value === 'sm' || value === 'lg' ||
+    value === 'icon' || value === 'icon-xs' || value === 'icon-sm' || value === 'icon-lg';
 }
 
 /** Semantic-token styling for the recipes supported by the author contract. */
@@ -128,10 +137,11 @@ html[data-af-dark="true"] af-button>button[data-variant=destructive]{background:
 html[data-af-dark="true"] af-button>button:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)}
  `;
 
-/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
-export const buttonComponent: ComponentDescriptor = {
-  styleKey: 'af-button-styles',
-  styles: buttonStyles,
-  elements: { 'af-button': AfButton },
-};
-registerComponent(buttonComponent);
+export function registerButton(registry: CustomElementRegistry = customElements, document:
+  Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-button-styles]')) {
+const style = document.createElement('style'); style.setAttribute('data-af-button-styles', '');
+      style.textContent = buttonStyles; document.head.append(style);
+  }
+  if (!registry.get('af-button')) registry.define('af-button', AfButton);
+}

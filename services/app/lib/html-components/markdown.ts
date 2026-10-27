@@ -1,11 +1,10 @@
 /**
  * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting and copy buttons; unsafe or unsupported content is rejected.
- * Import:  import '@afbin/markdown';  (registers the tags; this .ts is the readable contract)
+ * Import:  import {registerMarkdown} from './components/markdown.js'; registerMarkdown();  (load the .js in the browser; this .ts is the readable contract)
  * Props: source (property wins over the source attribute, then the initial text)
  * Usage:
  *   <af-markdown>## Notes\n- one\n- two</af-markdown>
  */
-import { registerComponent } from './register-component';
 /** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
@@ -31,7 +30,9 @@ function scopeMarkdownBranch(value:string):string{
  const leading=value.match(/^(?:(?:\s+)|(?:\/\*[\s\S]*?\*\/\s*))*/)?.[0]??'';
  const selector=value.slice(leading.length).trim();
  const ancestorTheme=selector.match(/^(\.dark|\[data-theme=["']dark["']\])\s+(.*)$/s);
- if(ancestorTheme){const scoped=`${ancestorTheme[1]} af-markdown ${ancestorTheme[2]}`;return `${leading}${ancestorTheme[1]==='.dark'?`${scoped}, [data-af-dark="true"] af-markdown ${ancestorTheme[2]}`:scoped}`;}
+if(ancestorTheme){const scoped=`${ancestorTheme[1]} af-markdown ${ancestorTheme[2]}`;
+   return `${leading}${ancestorTheme[
+   1]==='.dark'?`${scoped}, [data-af-dark="true"] af-markdown ${ancestorTheme[2]}`:scoped}`;}
  if(selector.startsWith(':where(')){
   let depth=1,quote='',comment=false,close=-1;
   for(let index=7;index<selector.length;index++){
@@ -42,14 +43,16 @@ function scopeMarkdownBranch(value:string):string{
    if(char==='"'||char==="'"){quote=char;continue;}
    if(char==='(')depth++;else if(char===')'&&--depth===0){close=index;break;}
   }
-  if(close>=0){const scoped=splitSelectors(selector.slice(7,close)).map(scopeMarkdownBranch).join(', ');return `${leading}:where(${scoped})${selector.slice(close+1)}`;}
+if(close>=0){const scoped=splitSelectors(selector.slice(7,close)).map(scopeMarkdownBranch).join(
+    ', ');return `${leading}:where(${scoped})${selector.slice(close+1)}`;}
  }
  return `${leading}af-markdown ${selector}`;
 }
 function scopeMarkdownCss(css:string):string{
  // MARKDOWN_CSS is a flat list of rules. Split only selector commas at the
  // top level so commas inside :where(), :has(), fallbacks, and strings survive.
- return css.replace(/(^|})([^{}]+)\{/g,(_rule,close:string,selectors:string)=>`${close}${splitSelectors(selectors).map(scopeMarkdownBranch).join(', ')}{`);
+return css.replace(/(^|})([^{}]+)\{/g,(_rule,close:string,selectors:string)=>
+   `${close}${splitSelectors(selectors).map(scopeMarkdownBranch).join(', ')}{`);
 }
 /** Only generated output is replaced; the host remains the authored identity. */
 export class AfMarkdown extends HTMLElement implements MarkdownContract {
@@ -61,20 +64,35 @@ export class AfMarkdown extends HTMLElement implements MarkdownContract {
  get source(): string { return this.value ?? this.getAttribute('source') ?? this.literalSource; }
  set source(value: string) { this.value=String(value); this.render(); }
  get copyControls(): boolean { return this.getAttribute('copy-controls') !== 'false'; }
- set copyControls(value: boolean) { if(value)this.removeAttribute('copy-controls');else this.setAttribute('copy-controls','false'); }
+set copyControls(value: boolean) { if(value)this.removeAttribute('copy-controls');
+   else this.setAttribute('copy-controls','false'); }
  connectedCallback(): void {
-  for(const key of ['source','copyControls'] as const)if(Object.prototype.hasOwnProperty.call(this,key)){const value=this[key];delete (this as unknown as Record<string,unknown>)[key];Object.assign(this,{[key]:value});}
-  if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nodeType===3).map(node=>node.textContent ?? '').join(''); for(const node of [...this.childNodes]) if(node.nodeType===3) node.remove(); this.output=this.ownerDocument.createElement('div'); this.output.className='mx-markdown'; this.append(this.output); }
+for(const key of ['source','copyControls'] as const)if(Object.prototype.hasOwnProperty.call(this,
+    key)){const value=this[key];delete (this as unknown as Record<string,unknown>)[key];
+    Object.assign(this,{[key]:value});}
+if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nodeType===3).map(
+    node=>node.textContent ?? '').join(''); for(const node of [...this.childNodes]) if(
+    node.nodeType===3) node.remove(); this.output=this.ownerDocument.createElement('div');
+    this.output.className='mx-markdown'; this.append(this.output); }
   this.render();
  }
  attributeChangedCallback(): void { this.render(); }
  private render(): void {
   if(!this.output) return;
   const rendered=markdownContent(this.source);
-  if(rendered.errors.length) { const alert=this.ownerDocument.createElement('p'); alert.setAttribute('role','alert'); alert.textContent=rendered.errors.join(' '); this.output.replaceChildren(alert); return; }
+if(rendered.errors.length) { const alert=this.ownerDocument.createElement('p'); alert.setAttribute(
+    'role','alert'); alert.textContent=rendered.errors.join(' '); this.output.replaceChildren(
+    alert); return; }
   this.output.innerHTML=rendered.html;
-  this.output.querySelectorAll<HTMLElement>('[data-mx-markdown-heading]').forEach(heading=>{heading.id=`${this.id || this.scope}-heading-${heading.dataset.mxMarkdownHeading}`;});
-  if(this.copyControls)this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type='button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ?? '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});} catch {button.textContent='Copy unavailable';}}); pre.append(button);});
+this.output.querySelectorAll<HTMLElement>('[data-mx-markdown-heading]').forEach(heading=>{
+    heading.id=`${this.id || this.scope}-heading-${heading.dataset.mxMarkdownHeading}`;});
+if(this.copyControls)this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector(
+    'code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type=
+    'button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=
+    this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){
+    button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ??
+    '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});
+    } catch {button.textContent='Copy unavailable';}}); pre.append(button);});
  }
 }
 // The retained document applies preflight, Markdown, bare prose, then the
@@ -100,8 +118,10 @@ af-markdown pre:hover button,af-markdown pre:focus-within button{opacity:1}
 af-markdown pre button:hover{background:var(--muted,Canvas)}
 af-markdown pre button:focus-visible{outline:2px solid var(--ring,Highlight);outline-offset:2px}
 `;
-registerComponent({
-  styleKey: 'af-markdown-styles',
-  styles: markdownStyles,
-  elements: { 'af-markdown': AfMarkdown },
-});
+export function registerMarkdown(registry:CustomElementRegistry=customElements,doc:Document=
+  document):void {
+if(!doc.querySelector('style[data-af-markdown-styles]')) {const style=doc.createElement('style');
+   style.setAttribute('data-af-markdown-styles','');style.textContent=markdownStyles;
+   doc.head.append(style);}
+ if(!registry.get('af-markdown')) registry.define('af-markdown',AfMarkdown);
+}

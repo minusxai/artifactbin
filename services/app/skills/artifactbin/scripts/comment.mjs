@@ -1,5 +1,6 @@
 /** What this command does and how to use it; also printed by --help. */
-export const DESCRIPTION = `Native comment threads: list, add, reply, edit, react, resolve, reopen, watch.
+export const DESCRIPTION =
+  `Native comment threads: list, add, reply, edit, react, resolve, reopen, watch.
 Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
 Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
        node scripts/comment.mjs add ID --anchor ANCHOR.json --body-file FILE
