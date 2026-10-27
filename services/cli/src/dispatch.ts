@@ -577,7 +577,7 @@ function monitoringStep(operations:ReadonlyArray<Record<string,unknown>>):string
  const commands=[...new Set(monitored.map(entry=>entry.cli))],urls=[...new Set(monitored.map(entry=>entry.url))];
  if(!commands.length)return '';
  const watch=commands.length===1?`start \`${commands[0]}\``:'start each published operation\u2019s `monitoring.cli`';
- return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} ${WATCH_DELIVERY}; keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. ${watchFallback(urls.join(' '))} `;
+ return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} ${WATCH_DELIVERY}; keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. Skip events marked you: true (your own writes). ${watchFallback(urls.join(' '))} `;
 }
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is

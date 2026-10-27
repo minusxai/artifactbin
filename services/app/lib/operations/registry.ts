@@ -300,7 +300,7 @@ const editCommentOp: Operation = {
     if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
-    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.author.kind, ctx.mutationReceipt));
+    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt));
   },
 };
 
@@ -308,12 +308,12 @@ const reactCommentOp: Operation = {
   name: 'react_comment',
   title: 'React to a comment',
   http: {method:'PUT',path:'/api/artifacts/{id}/annotations/{comment_id}/reactions'},
-  description: 'Set your account thumbs-up reaction on an accessible comment. Desired state is idempotent; each account contributes once per kind. Returns the thread with counts and viewer_reacted metadata.',
+  description: 'Set your account thumbs-up reaction on an accessible comment. Desired state is idempotent; each account contributes once per kind. Returns the thread with counts, viewer_reacted and the reactors (by). A person\'s change also reaches the comment feed as a reaction event.',
   input: {id:z.string(),comment_id:z.string(),kind:z.literal('thumbs_up'),active:z.boolean()},
   annotations: {},
   example: {input:{id:'aB3xK9',comment_id:'ann_123',kind:'thumbs_up',active:true}},
   errors: [NOT_FOUND,{status:403,code:'account_required',fix:'sign in with an account to react'},{status:400,code:'invalid_comment_reaction',fix:'send kind thumbs_up and boolean active'}],
-  async run(ctx,input) {return fromResponse(await respondToCommentReaction(input,ctx.actor,String(input.id),String(input.comment_id)));},
+  async run(ctx,input) {return fromResponse(await respondToCommentReaction(input,ctx.actor,String(input.id),String(input.comment_id),ctx.author));},
 };
 
 const listArtifactsOp: Operation = {

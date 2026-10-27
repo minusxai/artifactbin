@@ -353,9 +353,13 @@ describe('reply / resolve — the agent\'s one mutation', () => {
       // Joined in the reads that fetch the comments — the roots and the replies,
       // two statements per read however many people wrote — never a picture
       // looked up on its own, per comment.
+      // Reactors' faces are joined the same way, in the one statement that reads every comment's reactions.
       const pictureReads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes('image_key'));
-      expect(pictureReads.every((sql) => /FROM annotations a LEFT JOIN users u ON u\.id = a\.author_user_id/.test(sql))).toBe(true);
-      expect(pictureReads).toHaveLength(2 * 2);
+      const authorReads = pictureReads.filter((sql) => /FROM annotations a LEFT JOIN users u ON u\.id = a\.author_user_id/.test(sql));
+      const reactorReads = pictureReads.filter((sql) => /FROM comment_reactions r LEFT JOIN users u ON u\.id = r\.user_id/.test(sql));
+      expect(authorReads).toHaveLength(2 * 2);
+      expect(reactorReads).toHaveLength(2);
+      expect(pictureReads).toHaveLength(authorReads.length + reactorReads.length);
     } finally { query.mockRestore(); }
   });
 

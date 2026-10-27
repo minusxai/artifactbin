@@ -1221,6 +1221,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
   change_seq BIGINT,
+  change_token_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1274,6 +1275,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
 
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_token_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
@@ -1282,6 +1285,9 @@ CREATE TABLE IF NOT EXISTS app.comment_reactions (
   comment_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   kind TEXT NOT NULL,
+  reactor_kind TEXT,
+  reactor_label TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (comment_id, user_id, kind)
 );
 
@@ -1290,6 +1296,51 @@ ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS comment_id TEXT NOT N
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
 
 ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_kind TEXT;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_label TEXT;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.comment_reaction_events (
+  seq BIGINT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  comment_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  active BOOLEAN NOT NULL,
+  reactor_kind TEXT NOT NULL,
+  reactor_label TEXT,
+  count INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  token_id TEXT,
+  PRIMARY KEY (seq)
+);
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_label TEXT;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS count INTEGER NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS token_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_comment_reaction_events_artifact_seq ON app.comment_reaction_events (artifact_id, seq);
 
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,

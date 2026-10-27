@@ -35,11 +35,27 @@ export interface AnnotationWireAuthor extends AnnotationAuthor {
 
 /** Stable kind keys; each account may independently react once per kind on a comment. */
 export type CommentReactionKind = 'thumbs_up';
+/**
+ * Who reacted, drawn by the rule that draws a comment's author (lib/annotations/store `commentWire`): every reader
+ * admitted to the thread sees it, a person as their account (`user_id`, current handle, face) and an agent as its
+ * product label with no account. Never the email or the token.
+ */
+export interface CommentReactor {
+  kind: 'human' | 'agent';
+  label: string | null;
+  user_id: string | null;
+  image: string | null;
+}
+/** The most reactors listed per kind; `count` stays exact beyond it. */
+export const COMMENT_REACTORS_MAX = 50;
 export interface CommentReactionSummary {
   kind: CommentReactionKind;
+  /** Unique accounts with this reaction now. */
   count: number;
-  /** Personal to the admitted reader; never exposes the accounts who reacted. */
+  /** Personal to the admitted reader: whether their own account is among them. */
   viewer_reacted: boolean;
+  /** The accounts behind `count`, earliest first, at most COMMENT_REACTORS_MAX. Absent from older servers and offline files. */
+  by?: CommentReactor[];
 }
 /** Desired state, rather than a non-idempotent toggle: safe to retry after an uncertain response. */
 export interface CommentReactionInput { kind: CommentReactionKind; active: boolean }
