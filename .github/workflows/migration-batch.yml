@@ -1,0 +1,15 @@
+name: Migration batch host
+on:
+  pull_request:
+    paths: ['scripts/migration_batch/**', 'tests/migration_batch/**', '.github/workflows/migration-batch.yml']
+  push:
+    paths: ['scripts/migration_batch/**', 'tests/migration_batch/**', '.github/workflows/migration-batch.yml']
+permissions:
+  contents: read
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -m unittest discover -s tests/migration_batch -v
