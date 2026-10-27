@@ -77,8 +77,8 @@
   },
   {
    "name": "red",
-   "light": "#EC402B",
-   "dark": "#EC402B",
+   "light": "#F04E38",
+   "dark": "#F04E38",
    "usage": "The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night.",
    "group": "Brand"
   },
@@ -133,8 +133,8 @@
   },
   {
    "name": "negative",
-   "light": "#EC402B",
-   "dark": "#EC402B",
+   "light": "#F04E38",
+   "dark": "#F04E38",
    "usage": "Down, failed, refused. The same red: errors are loud, there is one red.",
    "group": "Status"
   },

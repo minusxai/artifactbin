@@ -23,7 +23,7 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 | `--ds-ink` | #20201D | #EEEADE |
 | `--ds-ink-soft` | #5C5A52 | #B3B0A3 |
 | `--ds-on-ink` | #EEEADE | #20201D |
-| `--ds-red` | #EC402B | #EC402B |
+| `--ds-red` | #F04E38 | #F04E38 |
 | `--ds-on-red` | #20201D | #20201D |
 | `--ds-red-ink` | #B42D1C | #FF6A55 |
 | `--ds-red-soft` | #F9D5CF | #4A1D17 |
@@ -31,7 +31,7 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 | `--ds-positive-soft` | #D7EFE0 | #143524 |
 | `--ds-caution` | #B8841A | #F0BD57 |
 | `--ds-caution-soft` | #FAECC9 | #42310A |
-| `--ds-negative` | #EC402B | #EC402B |
+| `--ds-negative` | #F04E38 | #F04E38 |
 | `--ds-negative-soft` | #F9D5CF | #4A1D17 |
 
 | Role | Family | Size / line height | Use |

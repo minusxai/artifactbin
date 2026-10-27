@@ -10,7 +10,7 @@ Create a dataset through the retained artifact API, then link it from the page. 
 {"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n2026-W03,21,3\n","title":"Repair bench sample","visibility":"unlisted","access":"readwrite"}
 ```
 
-Send this JSON to `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key`; save its returned dataset `id`. `dataset` also accepts an array of row objects. These are sample figures, not measured results. Page source contains only the dataset reference:
+Send this JSON to `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key`; save its returned dataset `id`. `dataset` also accepts an array of row objects. `node scripts/publish.mjs rows.csv --type dataset --title T` does this (`.json`: a bare row array). These are sample figures, not measured results. Page source contains only the dataset reference:
 
 ```html
 <link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
