@@ -33,6 +33,9 @@ export interface NativeLowerFormattedReceipt {
   /** Exact admitted formatter output; never recompute with a guessed locale/default. */
   text: string;
 }
+/** Exact original reader TH interaction, projected only for source DataTable nodes. */
+export interface NativeSourceDataTableAttributes {readonly 'header-interaction':'source'}
+const sourceDataTableAttributes:NativeSourceDataTableAttributes={'header-interaction':'source'};
 export interface NativeLowerInput {
  /** Source-bound reader receipt supplies the outer deck chrome; keep authored SlideDeck as its original div. */
  readerDeckRail?:true;
@@ -377,6 +380,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(kind==='boolean'||booleanAttrs.has(target)){if(!rule){if(value)attrs[target]='';}else if(value===true)attrs[target]='';else if(value!==false&&value!==null)block('invalid-attribute',node,'Native boolean attributes require exact boolean literals',name);continue;}
    if(value!==null)attrs[target]=String(value);
   }
+  if(node.tag==='DataTable')Object.assign(attrs,sourceDataTableAttributes);
   if(recipe?.attributes.type)attrs.type=recipe.attributes.type;
   if(styles.length)attrs.style=styles.join(';');
   if(rule?.module&&!recipe)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
