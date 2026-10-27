@@ -1,19 +1,25 @@
 /**
  * <af-tabs>: tab list and panels.
- * Import:  import {registerTabs} from './components/tabs.js'; registerTabs();  (load the .js in the browser; this .ts is the readable contract)
- * Props: value (string on the root af-tabs)
- * Parts: af-tabs-list, af-tabs-trigger value="a", af-tabs-content value="a"
- * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
- * Usage:
- *   <af-tabs value="a"><af-tabs-list><af-tabs-trigger value="a">One</af-tabs-trigger></af-tabs-list>
- *   <af-tabs-content value="a">First</af-tabs-content></af-tabs>
+ * Usage: import '@afbin/tabs';  (registers the tags; this .ts is the readable contract)
+ * Props: value (string on the root af-tabs; property or attribute), default-value, orientation
+ *   (horizontal|vertical), activation-mode (automatic|manual), loop (default on; "false" stops
+ *   wrapping), variant (default|line, also per af-tabs-list), dir. Children: af-tabs-list,
+ *   af-tabs-trigger value="a" (disabled skips it), af-tabs-content value="a".
+ * Events: af-change (bubbles, cancelable) with event.detail.value; reflect your Apollo value
+ *   back for controlled use.
+ * Examples:
+ *   <af-tabs value="a"><af-tabs-list><af-tabs-trigger value="a">One</af-tabs-trigger>
+ *   </af-tabs-list><af-tabs-content value="a">First</af-tabs-content></af-tabs>
+ * Gotchas: selection is author-owned; with value set, af-change only reports intent. No
+ *   default-value means nothing is selected. Automatic mode selects on focus (arrow keys), manual
+ *   needs Enter/Space/click. Panels always stay mounted; inactive ones are hidden and inert.
  */
-import {tabFocusTarget} from './tab-navigation';
-/** Author-owned selection; components emit intent and never persist viewer state. */
-export interface TabsChangeDetail { value: string }
-export type TabsOrientation = 'horizontal' | 'vertical';
-export type TabsActivationMode = 'automatic' | 'manual';
-export interface TabsContract { value: string | undefined }
+import { registerComponent, type ComponentDescriptor } from './register-component';
+import {tabFocusTarget, tabsStyles} from './tab-navigation';
+import type {TabsChangeDetail, TabsContract} from './tab-navigation';
+export type {TabsActivationMode, TabsChangeDetail, TabsContract, TabsOrientation}
+  from './tab-navigation';
+export {tabsStyles};
 let nextId = 0;
 export class AfTabs extends HTMLElement implements TabsContract {
   static observedAttributes = ['value', 'orientation', 'activation-mode', 'dir', 'loop', 'variant'];
@@ -146,7 +152,8 @@ if (!this.focused || !enabled.includes(this.focused) || !enabled.includes(this.a
     for (const list of this.own('af-tabs-list')) {
 list.dataset.orientation = this.getAttribute('orientation') === 'vertical' ? 'vertical' :
         'horizontal';
-      list.dataset.variant = list.getAttribute('variant') ?? this.getAttribute('variant') ?? 'default';
+      list.dataset.variant = list.getAttribute('variant') ?? this.getAttribute('variant') ??
+        'default';
 list.setAttribute('role','tablist'); list.setAttribute('aria-orientation', this.getAttribute(
         'orientation') === 'vertical' ? 'vertical' : 'horizontal');
     }
@@ -177,36 +184,10 @@ if (trigger) panel.setAttribute('aria-labelledby',trigger.id); else panel.remove
 export class AfTabsList extends HTMLElement {}
 export class AfTabsTrigger extends HTMLElement {}
 export class AfTabsContent extends HTMLElement {}
-/** Light DOM styles may be bundled once by the author runtime. */
-export const tabsStyles = `
-af-tabs{display:flex;gap:.5rem;flex-direction:column}
-af-tabs[orientation=vertical]{flex-direction:row}
-af-tabs-list{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:fit-content;height:36px;padding:3px;border-radius:var(--radius-lg,var(--radius,.625rem));background:var(--muted,#eee);color:var(--muted-foreground,#555)}
-af-tabs-list[data-orientation=vertical]{height:fit-content;flex-direction:column}
-af-tabs-trigger{box-sizing:border-box;position:relative;display:inline-flex;flex:1;align-items:center;justify-content:center;gap:.375rem;height:calc(100% - 1px);cursor:pointer;border:1px solid transparent;padding:4px 8px;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));font-family:inherit;font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;color:var(--muted-foreground,#555);transition:background-color .15s,color .15s,box-shadow .15s}
-af-tabs-list[data-orientation=vertical]>af-tabs-trigger{width:100%;justify-content:flex-start}
-af-tabs-trigger[disabled]{opacity:.5;cursor:default;pointer-events:none}
-af-tabs-trigger[data-state=inactive]:hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
-af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
-af-tabs-trigger:focus-visible{z-index:10;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
-af-tabs-trigger>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
-af-tabs-list[data-variant=line]{background:transparent;gap:.25rem;border-radius:0}
-af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:none}
-af-tabs-list[data-variant=line]>af-tabs-trigger::after{position:absolute;content:"";background:var(--primary,#222);opacity:0;transition:opacity .15s}
-af-tabs-list[data-variant=line][data-orientation=horizontal]>af-tabs-trigger::after{left:0;right:0;bottom:-5px;height:2px}
-af-tabs-list[data-variant=line][data-orientation=vertical]>af-tabs-trigger::after{top:0;bottom:0;right:-4px;width:2px}
-af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]::after{opacity:1}
-af-tabs-content{flex:1;outline:none}
-af-tabs-content[hidden]{display:none!important}
-`;
-export function registerTabs(registry: CustomElementRegistry = customElements, document: Document =
-  globalThis.document): void {
-  if (!document.querySelector('style[data-af-tabs-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-tabs-styles', '');
-    style.textContent = tabsStyles; document.head.append(style);
-  }
-for (const [name, ctor] of Object.entries({ 'af-tabs': AfTabs, 'af-tabs-list': AfTabsList,
-    'af-tabs-trigger': AfTabsTrigger, 'af-tabs-content': AfTabsContent })) {
-    if (!registry.get(name)) registry.define(name, ctor);
-  }
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const tabsComponent: ComponentDescriptor = {
+  styleKey: 'af-tabs-styles', styles: tabsStyles,
+  elements: {'af-tabs': AfTabs, 'af-tabs-list': AfTabsList,
+    'af-tabs-trigger': AfTabsTrigger, 'af-tabs-content': AfTabsContent},
+};
+registerComponent(tabsComponent);
