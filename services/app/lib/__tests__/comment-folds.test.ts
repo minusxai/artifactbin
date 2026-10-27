@@ -115,6 +115,11 @@ describe('the auto-fold verdict comes from the layout, not the characters', () =
     expect(verdict.maxHeight).toBe(FOLD_LINES * 20);
   });
 
+  it('reserves vertical room for reaction metadata without losing the full line count', () => {
+    expect(foldFromMeasure(1200, 20, 6)).toEqual({overflowing:true,lines:60,maxHeight:120});
+    expect(foldFromMeasure(120, 20, 6).overflowing).toBe(false);
+  });
+
   it('ten lines exactly is not folded, and neither is an unmeasurable body', () => {
     expect(foldFromMeasure(FOLD_LINES * 20, 20).overflowing).toBe(false);
     expect(foldFromMeasure(201, 20).overflowing).toBe(true);
