@@ -7,7 +7,7 @@ const allowed=new Set(['id','title','data','viz','height','class','className','s
  * layout/theme enrichment and compilation, using separately shipped engines. */
 export const mapNativeCharts:NativeMapCharts=analysis=>{
  const mappings:NativeChartMapping[]=[],blockers:{sourceNode:string;code:string}[]=[];
- const walk=(node:RetainedJsxNode,inGridItem:boolean,inTemplate:boolean)=>{
+ const walk=(node:RetainedJsxNode,inGridItem:boolean,inTemplate:boolean,gridFlow=false)=>{
   if(node.type!=='element')return;
   if(node.tag==='Chart'||node.tag==='Question'){
    const start=blockers.length,props:Record<string,NativeJson>={};
@@ -25,7 +25,8 @@ export const mapNativeCharts:NativeMapCharts=analysis=>{
    const n=typeof props.height==='number'?props.height:typeof props.height==='string'?parseFloat(props.height):NaN;
    if(start===blockers.length&&data){const payload={sourceNode:node.graphKey,nodeSha256:nativeDigest(node),sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,kind:kind as NativeChartMapping['kind'],data,props,height:Number.isFinite(n)?Math.max(n,kind==='single_value'?48:340):kind==='single_value'?120:430,inGridItem};mappings.push({...payload,sha256:nativeDigest(payload)});}
   }
-  node.children.forEach(child=>walk(child,inGridItem||node.tag==='GridItem',inTemplate||node.tag==='For'||!!node.control&&!(typeof node.control==='object'&&!Array.isArray(node.control)&&node.control.kind==='fragment')));
+  const nextGridFlow=node.tag==='Grid'?node.attributes.some(a=>a.name==='mode'&&a.value.static&&a.value.json==='flow'):gridFlow;
+  node.children.forEach(child=>walk(child,node.tag==='GridItem'?!gridFlow:inGridItem,inTemplate||node.tag==='For'||!!node.control&&!(typeof node.control==='object'&&!Array.isArray(node.control)&&node.control.kind==='fragment'),nextGridFlow));
  };analysis.nodes.forEach(node=>walk(node,false,false));return {mappings,blockers};
 };
 export function verifyNativeChartMapping(analysis:NativeTypedAnalysis,mapping:NativeChartMapping):boolean{
