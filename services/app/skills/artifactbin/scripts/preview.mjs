@@ -7,7 +7,10 @@ import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
-import {previewHtml,packPreviewExport} from './preview-html.mjs';
+import {previewHtml,packPreviewExport,autofixHtml,formatAutofixReport} from './preview-html.mjs';
+import {statSync} from 'node:fs';
+import {writeFile,rename} from 'node:fs/promises';
+import {dirname,basename} from 'node:path';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {pathToFileURL} from 'node:url';
 
@@ -17,7 +20,11 @@ export const PRIVATE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline
 const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff','.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!tail.startsWith('..'+sep)&&tail!=='..'&&!tail.startsWith(sep));};
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts. */
-export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000}) {
+/** Autofix (lib/html-autofix) on the bytes a page is served with; the file changes only when `write` is chosen. */
+function previewAutofix(base,file,html){
+ return autofixHtml(html,{exists:relative=>{const full=resolve(dirname(file),relative);if(!inside(base,full))return false;try{return statSync(full).isFile();}catch{return false;}}});
+}
+export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
  if(!Number.isInteger(port)||port<0||port>65535)throw Error('Port must be an integer from 0 to 65535');
  const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error('Root must be a directory');
  // Generated only in the downloadable archive; optional in a source checkout.
@@ -30,6 +37,15 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
+ // One report per distinct served content of each page, not one per request.
+ const reported=new Map();
+ const served=async(file,html)=>{
+  const result=previewAutofix(base,file,html),name=relative(base,file).split(sep).join('/');
+  const write=autofix.write&&result.changed;if(write){const temporary=file+'.autofix-'+process.pid+'.tmp';await writeFile(temporary,result.html);await rename(temporary,file);}
+  const report=formatAutofixReport(result,{file:name,landed:result.changed?write?`also written to ${basename(file)}`:'served fixed; file unchanged (run autofix.mjs to write)':undefined,routine:result.routine});
+  if(autofix.report&&reported.get(file)!==html){reported.set(file,html);autofix.report(report);}
+  return {...result,report};
+ };
  const server=createServer(async(req,res)=>{
   res.setHeader('Content-Security-Policy',PRIVATE_CSP);res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Cross-Origin-Resource-Policy','same-origin');
   const end=(status,body)=>{res.statusCode=status;res.end(req.method==='HEAD'?undefined:body);};
@@ -78,6 +94,12 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
     if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
     const file=resolve(base,requested==='/'?'index.html':requested.slice(1));const html=(await readPreviewFile(base,file)).toString('utf8');res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,pathname:requested}));
    }
+   if(pathname==='/__af_preview/autofix'){
+    const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
+    if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
+    const file=resolve(base,requested==='/'?'index.html':requested.slice(1));const result=previewAutofix(base,file,(await readPreviewFile(base,file)).toString('utf8'));res.setHeader('Content-Type','application/json');
+    return end(200,JSON.stringify({clean:!result.fixes.length&&!result.problems.length,fixes:result.fixes,problems:result.problems,routine:result.routine,file:requested}));
+   }
    if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
    const source=runtimeAssets.get(pathname)??publicLibraries.get(pathname);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
@@ -89,7 +111,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
    const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError('Preview file exceeds 32 MiB; reduce the file or select a smaller project.');
    const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':'application/octet-stream');
    res.setHeader('Content-Type',type);
-   if(type.startsWith('text/html')){const html=(await readPreviewFile(selected,file)).toString('utf8');const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config=local?{pageId:'local:'+pathname,revision,backends:local.names,offline:true,localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:undefined;const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config);res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config=local?{pageId:'local:'+pathname,revision,backends:local.names,offline:true,localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:undefined;const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config);res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
    const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
    end(200,bytes);

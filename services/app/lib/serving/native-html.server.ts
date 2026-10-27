@@ -11,6 +11,7 @@ import { etagOf, matchingTag } from '@/lib/http/revalidation';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
+import { scriptFingerprint } from '@/lib/html-autofix';
 import { buildHtmlAssets } from '@/lib/html-runtime/build.server';
 import type { HtmlPageLink } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
@@ -42,6 +43,8 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
   const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{})};
   const source=input.row.source??'';
+  const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
+  config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
   const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
   const assembly={platformScriptNonce:randomUUID().replaceAll('-',''),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine}:{})};

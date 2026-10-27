@@ -365,7 +365,7 @@ export async function replacedArtifactWire(
     // the only thing it is for.
     edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
-    ...(row.format==='html'?{html:row.source}:markupEcho(sentMarkup, row.source)),
+    ...(row.format==='html'?{html:row.source,...(row.meta.htmlIdentityCarry?{identity:row.meta.htmlIdentityCarry}:{})}:markupEcho(sentMarkup, row.source)),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
     ...(row.format === 'dataset' ? { access: row.access } : {}),

@@ -2,6 +2,7 @@ import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } f
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
+import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
@@ -178,7 +179,7 @@ export async function createArtifact(
   }
   if(input.format==='html'&&input.source){
     const page=canonicalizeHtmlPage(input.source);
-    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger}};
+    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html)}};
   }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
@@ -610,7 +611,8 @@ async function replaceScoped(
         const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
         const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
         const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
-        input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger}};
+        // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
+        input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
       }catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
     }
     if(input.format==='html'){

@@ -172,3 +172,45 @@ it('sets independent desired comment reaction state and replays the exact intent
   await expect(commentCommand({sub:'react',values:{comment:'ann_reply',active:'true',kind:'heart'},positionals:['PAGE12']},options)).rejects.toThrow();expect(calls).toHaveLength(2);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('autofix.mjs fixes in place, --dry-run writes nothing, and the report starts with autofix:',async()=>{
+ const {mkdtemp,readFile,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {autofixCommand}=await import('../../../skills/artifactbin/scripts/autofix.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-autofix-'));
+ try{
+  const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1>Hi</h1><script defer src="/af/v1/core.js"></script></body></html>';
+  await writeFile(file,source);const logs:string[]=[];const log=(text:string)=>{logs.push(text);};
+  await autofixCommand({values:{'dry-run':true},positionals:[file]},{log});
+  expect(await readFile(file,'utf8')).toBe(source);expect(logs[0]).toMatch(/^autofix: 3 to fix/);expect(logs[0]).toContain('dry run; nothing written');
+  const json=await autofixCommand({values:{json:true},positionals:[file]},{log});
+  expect(json).toMatchObject({written:true,clean:false});expect(json!.fixes.map((fix:any)=>fix.rule)).toEqual(['core-script','charset','viewport']);
+  const fixed=await readFile(file,'utf8');expect(fixed).toContain('<meta charset="utf-8">');expect(fixed.match(/core\.js/g)).toHaveLength(1);
+  await autofixCommand({values:{},positionals:[file]},{log});expect(logs.at(-1)).toMatch(/^autofix: clean/);expect(await readFile(file,'utf8')).toBe(fixed);
+  await writeFile(file,fixed.replace('<h1>Hi</h1>','<img src="./missing.png">'));process.exitCode=undefined;
+  await autofixCommand({values:{},positionals:[file]},{log});expect(logs.at(-1)).toMatch(/refused index\.html:\d+:\d+ local file not found: \.\/missing\.png/);expect(process.exitCode).toBe(1);process.exitCode=undefined;
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('serve runs autofix on the served bytes and leaves the file alone unless asked to write',async()=>{
+ const {mkdtemp,readFile,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const startPreview=(await import('../../../skills/artifactbin/scripts/preview.mjs')).startPreview as (options:any)=>Promise<{url:string;close():Promise<void>}>;
+ const root=await mkdtemp(path.join(tmpdir(),'author-serve-autofix-'));
+ try{
+  const file=path.join(root,'index.html'),source='<!doctype html><html><head><title>T</title></head><body><h1 id="x">Hi</h1><p id="x"></p></body></html>';await writeFile(file,source);
+  const reports:string[]=[];const session=await startPreview({root,revisionIntervalMs:60000,autofix:{report:(text:string)=>reports.push(text)}});
+  try{
+   const served=await (await fetch(session.url)).text();
+   expect(served).toContain('<meta charset="utf-8">');expect(served).toContain('name="viewport"');
+   expect(await readFile(file,'utf8')).toBe(source);
+   await fetch(session.url);expect(reports).toHaveLength(1);
+   expect(reports[0]).toMatch(/^autofix: 2 fixed, 1 problem/);expect(reports[0]).toContain('served fixed; file unchanged (run autofix.mjs to write)');
+   const findings=await (await fetch(new URL('/__af_preview/autofix?path=/',session.url))).json();
+   expect(findings.problems).toEqual([expect.objectContaining({rule:'duplicate-id',line:1})]);
+  }finally{await session.close();}
+  const writing=await startPreview({root,revisionIntervalMs:60000,autofix:{write:true}});
+  try{await fetch(writing.url);expect(await readFile(file,'utf8')).toContain('<meta charset="utf-8">');}finally{await writing.close();}
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('lists local autofix problems at the top of a saved check summary',async()=>{
+ const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const digest=checkDigest({ok:true,smokePassed:true,checks:[],autofix:{file:'/',problems:[{rule:'duplicate-id',line:4,column:2,message:'duplicate id "a" (first at line 3)'}]}},'qa.json');
+ expect(digest.split('\n')[0]).toBe('autofix: 1 problem to fix by hand');expect(digest.split('\n')[1]).toContain(':4:2 duplicate id');expect(digest.split('\n')[2]).toMatch(/^check completed/);
+});

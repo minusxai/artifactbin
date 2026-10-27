@@ -73,7 +73,11 @@ export async function resumeJournal(file,client,operation){
 /** One line per viewport so a saved check needs no second call to read it; the file keeps full evidence. */
 export function checkDigest(envelope,file){
  const clip=(value,n)=>{const text=typeof value==='string'?value:JSON.stringify(value);return text.length>n?text.slice(0,n)+'…':text;};
- const lines=[`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':'failed'}; full result ${file}`];
+ const lines=[];
+ // Problems autofix cannot fix in a local preview come first: the browser evidence below may follow from them.
+ const autofix=envelope.autofix??envelope.details?.autofix;
+ if(autofix?.problems?.length){lines.push(`autofix: ${autofix.problems.length} problem${autofix.problems.length===1?'':'s'} to fix by hand`);for(const problem of autofix.problems.slice(0,5))lines.push(`  ${autofix.file??'page'}:${problem.line}:${problem.column} ${problem.message}`);if(autofix.problems.length>5)lines.push(`  … and ${autofix.problems.length-5} more`);}
+ lines.push(`check ${envelope.ok?'completed':envelope.code}: smoke ${envelope.smokePassed?'passed':'failed'}; full result ${file}`);
  for(const check of envelope.checks??[]){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);

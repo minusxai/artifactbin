@@ -82,7 +82,11 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview','autofix'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   // The installed autofix runs standalone and edits only the selected file.
+   const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
+   expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);
+   expect(readFileSync(page,'utf8')).toContain('<meta charset="utf-8">');
    const occupied=path.join(dir,'occupied.json');writeFileSync(occupied,'retained');
    try{execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'missing.html','--output',occupied,'--json'],{cwd:dir});throw Error('Expected output refusal');}catch(error){const failure=error as {status:number;stdout:Buffer};expect(failure.status).toBe(2);expect(JSON.parse(String(failure.stdout))).toMatchObject({ok:false,code:'output_exists'});}
    expect(readFileSync(occupied,'utf8')).toBe('retained');
