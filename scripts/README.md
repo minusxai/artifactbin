@@ -130,6 +130,8 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | `services/cli/scripts/generate-teaching.mjs`, `lib/afbin-run.mjs`, tests |
 | `scripts/lib/native-migration-disposable-provider.ts` | Open a reviewed disposable migration lifecycle with isolated local storage. | Migration lifecycle adapter configuration |
 | `scripts/lib/native-migration-production-authority.ts` | Prepare and verify reviewed production migration authority bindings. | Migration operator preparation |
+| `scripts/migration_batch/reader-preflight.mjs` | Verify sealed reader inputs and expected bindings before apply, then actual receipt scope before preservation readback. | Reviewed migration host jobs |
+| `scripts/migration_batch/refresh-selection.mjs` | Create an immutable current-source selection for the same agreed artifact IDs with verified source identity and provenance. | Reviewed migration preparation |
 | `scripts/native-migration-production.mjs` | Plan or apply a reviewed latest-head migration using explicit operator approvals. | Migration operator |
 | `scripts/lib/native-migration-camera.mjs` | Adapt reviewed source-bound recipes to the existing migration capture and comparison contract. | Migration verification callers |
 
