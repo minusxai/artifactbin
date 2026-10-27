@@ -159,6 +159,25 @@ it('replies without --expected-revision but still requires it to resolve or edit
   expect(JSON.parse(calls[1].body)).toEqual({reply:'Thanks',expected_revision:3,resolve:true});expect(calls).toHaveLength(2);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('retries a keyed comment write through 502/503 with one key, and never retries a 409',async()=>{
+ const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-retry-')),file=path.join(root,'body.md');await writeFile(file,'Thanks');
+ const run=async(...answers:Array<number|Error>)=>{
+  const calls:any[]=[];const queue=[...answers];
+  const fetcher=async(url:any,init:any)=>{calls.push({url:String(url),...init});const next=queue.length>1?queue.shift()!:queue[0]!;if(next instanceof Error)throw next;return next===200?Response.json({id:'ann_root',revision:2,thread:[]}):Response.json({error:next===409?'annotation_conflict':'unavailable'},{status:next});};
+  const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,retryDelays:[0,0,0]};
+  const outcome=await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,'expected-revision':'1'},positionals:['PAGE12']},options).then(()=>'ok',(error:any)=>error.code);
+  return {calls,outcome};
+ };
+ try{
+  const ok=await run(502,new TypeError('down'),503,200);
+  expect(ok.outcome).toBe('ok');expect(ok.calls).toHaveLength(4);
+  expect(new Set(ok.calls.map(call=>call.headers['Idempotency-Key'])).size).toBe(1);expect(ok.calls[0].headers['Idempotency-Key']).toBeTruthy();
+  const conflict=await run(409,200);expect(conflict.calls).toHaveLength(1);expect(conflict.outcome).toBe('annotation_conflict');
+  const exhausted=await run(502);expect(exhausted.calls).toHaveLength(4);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('sets independent desired comment reaction state and replays the exact intent',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');

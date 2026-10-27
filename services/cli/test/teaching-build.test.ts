@@ -34,8 +34,8 @@ test('teaching bootstraps without its output and repairs stale output determinis
   const skill=bundle.files['SKILL.md'];
   for(const reference of ['dataviz','maps','diagrams'])assert.ok(bundle.files[`references/${reference}.md`],`${reference} guide is packaged`);
   for(const link of ['references/dataviz.md','references/maps.md','references/diagrams.md'])assert.ok(skill.includes(link),`${link} is linked from the author skill`);
-  assert.ok(bundle.files['references/maps.md'].includes('/libraries/deck-gl-9.4.0/index.js'));
-  assert.ok(bundle.files['references/diagrams.md'].includes('/libraries/pele-flowchart-1.12.0/index.js'));
+  assert.ok(bundle.files['references/maps.md'].includes('@afbin/deck-gl'));
+  assert.ok(bundle.files['references/diagrams.md'].includes('@afbin/pele-flowchart'));
   const authGuide=bundle.files['references/publishing-auth.md'];
   for(const instruction of ['If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills.','If an old `afbin` reports `cli_npm_required`, run the setup line once.','afbin.cmd','install-node.sh','install-node.ps1','automatic updates run after a successful command finishes','`afbin update` installs the version the server names (else the latest) globally through npm','~/.artifactbin/npm'])assert.ok(authGuide.includes(instruction),instruction);
   assert.doesNotMatch(authGuide,/only prints the command for your next launch|launching the explicit npm command shown/);

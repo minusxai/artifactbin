@@ -167,6 +167,24 @@ describe('nobody else may', () => {
   });
 });
 
+describe('a retried browser write lands once', () => {
+  it('replays a keyed reply and a keyed edit instead of applying them twice', async () => {
+    const w = await world();
+    const made = await comment(w.commenter, w.id, 'First draft');
+    const send = (route: typeof actRoute | typeof editRoute, method: string, target: string, json: unknown, key: string) =>
+      route(request(`/api/my/artifacts/${w.id}/annotations/${target}`, { method, actor: w.commenter.session, headers: { 'Idempotency-Key': key }, json }), ctx(w.id, target));
+    const first = await send(actRoute, 'POST', made.id, { reply: 'Once' }, 'reply-key-0123456789ab');
+    const again = await send(actRoute, 'POST', made.id, { reply: 'Once' }, 'reply-key-0123456789ab');
+    expect([first.status, again.status]).toEqual([200, 200]);
+    const thread = await again.json();
+    expect(thread.thread.map((m: { body: string }) => m.body)).toEqual(['First draft', 'Once']);
+    const edited = await send(editRoute, 'PATCH', made.id, { body: 'Second draft' }, 'edit-key-0123456789abc');
+    const edited2 = await send(editRoute, 'PATCH', made.id, { body: 'Second draft' }, 'edit-key-0123456789abc');
+    expect([edited.status, edited2.status]).toEqual([200, 200]);
+    expect((await edited2.json()).revision).toBe(thread.revision + 1);
+  });
+});
+
 describe('the edit contract', () => {
   it('refuses a stale revision with 409 annotation_conflict and leaves the text alone', async () => {
     const w = await world();

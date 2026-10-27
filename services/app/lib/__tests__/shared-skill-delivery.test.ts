@@ -80,6 +80,8 @@ describe('installable shared skill folder',()=>{
    const platform=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs')).href);
    expect(platform.getOperationAST(platform.parse('query { __typename }')).operation).toBe('query');
    expect(typeof platform.inspectPublicationBundle).toBe('function');
+   // The installed scripts carry the one shared retry policy (lib/http/retry), bundled in.
+   expect(typeof platform.retryFetch).toBe('function');
    const parser=readFileSync(path.join(dir,'artifactbin/scripts/preview-html.mjs'),'utf8');
    expect(parser).not.toMatch(/from\s*["']parse5/);
    const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');

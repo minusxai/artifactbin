@@ -213,6 +213,8 @@ export interface ArtifactBackend {
   /** Every page of annotations with this status; OPEN when `status` is omitted (the server's default). */
   listAnnotations(status?: 'open' | 'resolved', options?: RequestOptions): Promise<AnnotationWire[]>;
   /** Rejects with a BackendRequestError (`signInRequired` for a guest). */
+  /** Online only: tells a surface while a comment write waits between automatic retries. */
+  watchRetrying?(listener: (retrying: boolean) => void): () => void;
   createAnnotation(body: Record<string, unknown>, idempotencyKey: string): Promise<AnnotationWire>;
   /** A reply may carry one staged comment image (`attachment_id`, with the `edit_id` it was staged against). */
   actOnAnnotation(annotationId: string, body: AnnotationActionBody): Promise<AnnotationWire>;
