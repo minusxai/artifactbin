@@ -17,7 +17,8 @@ export async function writeComponentAssetReceipt({root,inputs,outputs,receiptPat
  * @param {{root:string,files:ReadonlyMap<string,Uint8Array>,receiptPath?:string}} options
  */
 export async function verifyComponentAssetArchive({root,files,receiptPath=COMPONENT_RECEIPT}){
- const receipt=JSON.parse(await readFile(path.resolve(root,receiptPath),'utf8'));
+ // A checkout that never ran the component build has no receipt: the same missing proof, not a raw ENOENT.
+ const receipt=JSON.parse(await readFile(path.resolve(root,receiptPath),'utf8').catch(error=>{if(error.code==='ENOENT')throw Error('Missing component build proof');throw error;}));
  if(receipt.format!=='component-assets-v1'||!receipt.inputs?.length||!receipt.outputs?.length)throw Error('Missing component build proof');
  for(const entry of [...receipt.inputs,...receipt.outputs]){
   if(typeof entry.path!=='string'||entry.path.startsWith('../')||path.isAbsolute(entry.path)||entry.path.includes('\\')||entry.path.split('/').some(part=>!part||part==='.'||part==='..')||!/^[a-f0-9]{64}$/.test(entry.sha256))throw Error('Invalid component build proof');

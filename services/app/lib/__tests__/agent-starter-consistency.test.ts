@@ -273,7 +273,8 @@ it('the published HTTP comment example creates, replies, resolves, reopens and e
   expect(result.reopened.revision).toBeGreaterThan(result.created.revision);
   expect(result.edited.thread[0]).toMatchObject({body:'Please clarify this paragraph', edited_at:expect.any(String)});
   expect(result.edited.revision).toBe(result.reopened.revision + 1);
-  const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{reply:'stale duplicate',expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
+  // A plain reply only appends and never conflicts; the revision guard is on state changes.
+  const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{resolve:true,expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.edited.revision});
 });
