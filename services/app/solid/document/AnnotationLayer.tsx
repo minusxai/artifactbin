@@ -23,6 +23,7 @@ import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
+import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
@@ -179,6 +180,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
    * `annotations` — never dereference the open id against that list without a fallback.
    */
   const [openId, setOpenId] = createSignal<string | null>(null);
+  /** The resolved group starts collapsed — local to this rail, never stored. Whatever is being looked at forces it open. */
+  const [resolvedOpen, setResolvedOpen] = createSignal(false);
   const [inspectedResolvedId, setInspectedResolvedId] = createSignal<string | null>(null);
   /** What this viewer folded — read from the store, so a remount or a reload cannot lose it. */
   const [folds, setFolds] = createSignal<Folds>(readFolds(props.id));
@@ -548,6 +551,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             delete next[annId];
             return next;
           });
+          // The thread being looked at moves into resolved history: open the group so it is still there.
+          if (untrack(openId) === annId) setResolvedOpen(true);
           setOpenId((current) => (current === annId ? null : current));
         }
         else if (body.reopen) {
@@ -858,6 +863,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const openIds = createMemo(() => annotations().map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const resolvedIds = createMemo(() => (resolvedList() ?? []).map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const openRow = (id: string) => annotations().find((row) => row.id === id);
+  // A resolved thread that is open (a link, a pin, a card) or was just asked for must never sit behind the collapsed heading.
+  createEffect(() => { const open = openId(); if (open && resolvedIds().includes(open)) setResolvedOpen(true); });
+  createEffect(on(justOpenedId, (id) => { if (id && untrack(resolvedIds).includes(id)) setResolvedOpen(true); }));
   const resolvedRow = (id: string) => (resolvedList() ?? []).find((row) => row.id === id);
 
   const railHeader = () => <div class="space-y-2 border-b border-edge px-1 pb-3 font-sans">
@@ -1022,18 +1030,31 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, false)} />
               )}</Show>
             )}</For>
+            {/* Nothing resolved: no toggle, the heading stays plain and the note below says so. */}
             <div role="separator" aria-labelledby="resolved-annotations-heading" class="mt-1 flex items-center gap-2 px-1">
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
-              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">resolved</h2>
+              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">
+                <Show when={resolvedIds().length > 0} fallback="resolved">
+                  <Button type="button" variant="ghost" size="xs" aria-expanded={resolvedOpen()} aria-controls="resolved-annotations-list" onClick={() => setResolvedOpen((open) => !open)}
+                    class="gap-1 px-1 text-micro! font-semibold! uppercase tracking-[0.12em] text-faint!">
+                    <ChevronRight aria-hidden="true" class="size-3 transition-transform" classList={{ 'rotate-90': resolvedOpen() }} />
+                    resolved ({resolvedIds().length})
+                  </Button>
+                </Show>
+              </h2>
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
             </div>
-            <For each={resolvedIds()}>{(id) => (
-              <Show when={resolvedRow(id)}>{(row) => (
-                <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
-                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
-                  isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
-              )}</Show>
-            )}</For>
+            <div id="resolved-annotations-list" class="contents">
+              <Show when={resolvedOpen()}>
+                <For each={resolvedIds()}>{(id) => (
+                  <Show when={resolvedRow(id)}>{(row) => (
+                    <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
+                      viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                      isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
+                  )}</Show>
+                )}</For>
+              </Show>
+            </div>
             <Show when={(resolvedList()?.length ?? 0) === 0}>
               <p class="p-2 font-mono text-xs text-muted">nothing resolved yet</p>
             </Show>
