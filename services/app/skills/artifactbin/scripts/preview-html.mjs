@@ -6,6 +6,8 @@ import parseCss from 'css-tree/parser';
 import walkCss from 'css-tree/walker';
 initSync();
 import {admitRuntimeModuleImports} from '../../../lib/html-publication-bundle/runtime-module-imports.ts';
+// The shared autofix rules (lib/html-autofix) reach every script through this bundled module.
+export {autofixHtml,formatAutofixReport,scriptFingerprint,localReferences} from '../../../lib/html-autofix/index.ts';
 /** Shared server admission distinguishes literal project dependencies from closed runtime URL adapters. */
 export function publicationLocalReferences(source,contentType){
  const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(text):[];return imports.flatMap(item=>{

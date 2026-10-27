@@ -15,6 +15,8 @@ export interface HtmlRuntimeConfig {
   /** Default publication destination for an unpublished file, never a published association. */
   publishOrigin?: string;
   initialState?: HtmlJsonObject;
+  /** The version's script fingerprint (lib/html-autofix scriptFingerprint): equal values run identical code, so a new version may be morphed in place. */
+  scriptFingerprint?: string;
   /** Private preview helper transport; never an account capability. */
   localPreview?: { endpoint: string; schema: import('@artifactbin/contracts').PageSchema };
 }

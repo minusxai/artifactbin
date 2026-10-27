@@ -209,6 +209,8 @@ export async function checkCommand({values,positionals},options={}){
   if(values.viewer||values.server)throw new ToolError('local_identity','Loopback preview has no platform viewer/server selection.',2);
   const chromium=await loadChromium(values['playwright-module']);
   result=await checkLocal({target:checkTarget(input).target,viewports,steps,capture:true},chromium);
+  // The preview's autofix findings for this page (lib/html-autofix), listed first in the summary.
+  try{const target=new URL(checkTarget(input).target),response=await fetch(new URL('/__af_preview/autofix?path='+encodeURIComponent(target.pathname),target.origin),{signal:AbortSignal.timeout(3000)});if(response.ok)result.autofix=await response.json();}catch{}
  }else{
   if(values['playwright-module'])throw new ToolError('hosted_browser','Hosted checks use server browser sessions.',2);
   const {server,id}=resolveTarget(input,selectedServer(values,options.env)),client=makeClient(server,options);
