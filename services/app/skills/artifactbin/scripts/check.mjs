@@ -101,7 +101,8 @@ export async function inspectPage(page,options,task){
       const b=box.getBoundingClientRect(),style=getComputedStyle(box);
       if(box!==slide&&style.overflowX==='visible'&&style.overflowY==='visible')continue;
       const by=Math.max(b.top-r.top,r.bottom-b.bottom,b.left-r.left,r.right-b.right);
-      if(by>1){clipped.push({slide:index+1,text:n.textContent.trim().slice(0,48),px:Math.round(by),by:box===slide?'slide':box.tagName.toLowerCase()+(box.className&&typeof box.className==='string'?'.'+box.className.trim().split(/\s+/)[0]:'')});break;}
+      // A font's em box overhangs a tight line box without clipping visible glyphs; ignore overhang within ~15% of the font size.
+      if(by>Math.max(1,0.15*parseFloat(s.fontSize||'16'))){clipped.push({slide:index+1,text:n.textContent.trim().slice(0,48),px:Math.round(by),by:box===slide?'slide':box.tagName.toLowerCase()+(box.className&&typeof box.className==='string'?'.'+box.className.trim().split(/\s+/)[0]:'')});break;}
      }
     }
     // HTML text drawn over other HTML text (not nested), across at least 30% of the smaller box each way; chart libraries place SVG labels.
