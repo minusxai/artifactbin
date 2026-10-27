@@ -84,9 +84,9 @@
   },
   {
    "name": "on-red",
-   "light": "#20201D",
-   "dark": "#20201D",
-   "usage": "Type on red: ink, never paper, so red surfaces stay printed, not glowing.",
+   "light": "#121210",
+   "dark": "#121210",
+   "usage": "Type on red: near-black in both modes (--ds-ink on red is under AA), never paper, so red surfaces stay printed, not glowing.",
    "group": "Brand"
   },
   {

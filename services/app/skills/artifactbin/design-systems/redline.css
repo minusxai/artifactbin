@@ -36,7 +36,7 @@
   --ds-ink-soft: #5C5A52; /* Secondary text, captions, muted eyebrows. */
   --ds-on-ink: #EEEADE; /* Type on an ink surface. */
   --ds-red: #F04E38; /* The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night. */
-  --ds-on-red: #20201D; /* Type on red: ink, never paper, so red surfaces stay printed, not glowing. */
+  --ds-on-red: #121210; /* Type on red: near-black in both modes (--ds-ink on red is under AA), never paper, so red surfaces stay printed, not glowing. */
   --ds-red-ink: #B42D1C; /* Red as text on paper: one word in a headline, a link, a delta. */
   --ds-red-soft: #F9D5CF; /* Ground for selected rows and red callouts; text on it is ink. */
   --ds-positive: #2A9D5C; /* Up, done, approved. Always with a word or a glyph. */
@@ -85,7 +85,7 @@
   --ds-ink-soft: #B3B0A3;
   --ds-on-ink: #20201D;
   --ds-red: #F04E38;
-  --ds-on-red: #20201D;
+  --ds-on-red: #121210;
   --ds-red-ink: #FF6A55;
   --ds-red-soft: #4A1D17;
   --ds-positive: #5EC98A;

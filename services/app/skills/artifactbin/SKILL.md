@@ -10,8 +10,6 @@ A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
 
-Write the page file directly as a compact first version: keep reasoning to a short plan and never draft the page's CSS, JS or copy there first; publish and share its returned URL before extending it.
-
 Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace with `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable `Idempotency-Key`. On 409, read the new head and reconcile; never attach it to stale source.
 
 ## You write / the platform adds
@@ -23,7 +21,7 @@ Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace
 
 Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn one, read the top of it (`head -30 scripts/NAME.mjs`: purpose, usage, flags, examples, gotchas; `--help` prints the same text). Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in (`node scripts/auth.mjs status`; its top covers login and refresh). Groups, ACLs, secrets and trash have no script.
 
-- **New page.** Write `index.html`: pick one design system from the table and name it in `<head>` with `<meta name="artifactbin:design-system" content="NAME">`; the platform serves the stylesheet, sets the `<html>` attributes and hosts the fonts, so copy and link nothing. Read `design-systems/NAME.css` for its exact tokens, type-role classes (`t-title`, …) and what each colour is for. Keep the page compact (about 30 KB), with state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
+- **New page.** Plan in at most ~5 lines with no CSS, JS or copy in your reasoning; never draft the page there first. Start from the closest example (`cp examples/csv-dashboard.html index.html` for a dashboard, `examples/shared-app.html` for a shared app or backend, Decks below for slides) and write `index.html` as your next action, a compact first version (about 30 KB). Pick one design system from the table and name it in `<head>` with `<meta name="artifactbin:design-system" content="NAME">`; the platform serves the stylesheet, sets the `<html>` attributes and hosts the fonts, so copy and link nothing. `design-systems/NAME.css` has its exact tokens, type-role classes (`t-title`, …) and what each colour is for. Keep state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`; it autofixes the page and prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL before extending it; a URL-only request gets the URL alone.
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -40,9 +38,9 @@ Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--out
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
   - Design: start from the reader's decision and the subject's own visual material; give the opening a concrete point, one expressive moment, and let typography set the hierarchy (no identical cards for every paragraph). Use real data in charts, label assumptions, keep lines under about 80 characters and controls keyboard-usable.
-  - Decks: stack full-viewport `<section data-af-slide>` elements (each simple: a heading, a few lines, at most one chart or diagram), mark the nav `data-af-deck-chrome`, and move with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read mid-scroll). Slide images are a 1200x630 viewport; reply with `slide=N` links (`export.mjs --slide N`) instead of testing exports.
+  - Decks: stack full-viewport `<section data-af-slide>` elements (each simple: a heading, a few lines, at most one chart or diagram), mark the nav `data-af-deck-chrome`, and move with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read mid-scroll). Slides are designed for 1200x630: check decks with `--viewport 1200x630 --viewport 1280x800` only, and reply with `slide=N` links (`export.mjs --slide N`) instead of testing exports.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files. Use authenticated account identity, never a name typed into a form, to authorize actions.
-- **Check.** `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run; add `--viewport 1200x630` for slides). Write one short steps file that waits for your data and checks the requested values and behaviour; set values explicitly and `waitForFunction` the expected text after each click. Fix only what fails, rerun once. Done means those pass and the summary shows no errors, overflow, contrast, clipping, overlap or duplicate ids: send the link and what you tested, then stop. The summary is your layout evidence: no own pixel scripts, re-exports or polish. If you can view images, open the screenshot paths in the `--output` file; otherwise don't and say appearance is unverified.
+- **Check.** `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run; decks as above). Write one short steps file that waits for your data and checks the requested values and behaviour; set values explicitly and `waitForFunction` the expected text after each click. Fix only what fails, rerun once. The summary is your layout evidence (no own pixel scripts or re-exports): after one passing steps run that covers the requested behaviour, with no errors, overflow, contrast, clipping, overlap or duplicate ids, reply with the link and what you tested, then stop. Republish only to fix a failed requirement, never for polish, refactors or extra verification. Open screenshots only if your model accepts image input; if not, say appearance is unverified.
 - **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing the same file and never regenerate the page from scratch. Keep every existing `data-af-id`; new static elements may omit it. Elements your script creates (list rows, cards, table rows, labels) each need a `data-af-id` that is unique on the page and identical on every render, built as `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id; amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount them under a container present in the saved HTML ([dynamic elements](references/runtime.md#dynamic-elements-and-comments)).
 - **Answer comments.** `node scripts/comment.mjs list ID`. If a comment asks for a change, make the edit first, then `node scripts/comment.mjs reply ID --thread T --body-file reply.txt` (add `--resolve --expected-revision R` when done). Anchors are described at the top of `comment.mjs`.[% if not shipped %] Direct-HTTP agents: [authentication](references/http-auth.md) and [comment anchors and browser sessions](references/html-operations.md).[% endif %]
 - **Monitor.** `node scripts/comment.mjs watch ID` streams new comments.
@@ -88,7 +86,7 @@ Every saved page version remains available; never reuse an ID removed in an earl
 
 ## Installed resources
 
-[Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/` folder into your harness’s skill directory, then reload skills. The archive is one `artifactbin/` skill folder. Read only the guide needed for the task:
+[Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/` folder into your harness’s skill directory, then reload skills. Read only the guide needed for the task:
 
 - [Runtime](references/runtime.md): Apollo local state, remote namespaces and offline behavior.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
@@ -97,12 +95,11 @@ Every saved page version remains available; never reuse an ID removed in an earl
 - [Offline images](references/runtime.md#portable-images): download limits.
 - [Datasets](references/datasets.md): CSV import, schema discovery and stable dataset IDs.
 - [Backend files](references/backends.md): TypeScript resolvers, shared stores and permissions.
-- `design-systems/NAME.css` (13 files): each opens with the shared contract and annotates its own tokens; read the one you chose.
-- `examples/` (report, CSV dashboard, shared task app): each file's top comment says what it shows and which files go with it.
+- `examples/`: each file's top comment says what it shows and which files go with it.
 
 Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); the top of `scripts/serve.mjs` covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.
 
-Scripts are helpers inside this skill, not installed global product commands. Existing `preview.mjs` and `publication-bundle.mjs` entrypoints are compatibility shims; use the verb commands above.
+Scripts are helpers inside this skill, not global commands; `preview.mjs` and `publication-bundle.mjs` are compatibility shims.
 [% else %]
 
 ## Read first

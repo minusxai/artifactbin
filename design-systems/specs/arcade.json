@@ -77,7 +77,7 @@
   },
   {
    "name": "on-red",
-   "light": "#ffffff",
+   "light": "#0f0f1a",
    "dark": "#0a0a14",
    "usage": "Text on red fills.",
    "group": "Brand"

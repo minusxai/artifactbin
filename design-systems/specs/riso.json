@@ -80,7 +80,7 @@
   },
   {
    "name": "on-blue",
-   "light": "#FBF6EA",
+   "light": "#FFFFFF",
    "dark": "#1C2340",
    "usage": "Text on blue.",
    "group": "Inks"

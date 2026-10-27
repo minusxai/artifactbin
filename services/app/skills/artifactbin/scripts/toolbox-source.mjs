@@ -3,7 +3,7 @@ import {readFile,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {ToolError,hash,platform,exclusive,jsonFile,optionalFile,serverOrigin} from './toolbox-client.mjs';
 const marker=/<!-- af-authoring:([A-Za-z0-9_-]+) -->/g;
-export const UNPAIRED='New page: rerun with --create. Existing page: run read.mjs ID --output fresh.html, apply your edits to that file and publish it. Never copy or hand-edit .af.json companions.';
+export const UNPAIRED='New page: remove the data-af-id values you wrote yourself (new pages need none) or rerun with --create. Existing page: run read.mjs ID --output fresh.html, apply your edits to that file and publish it. Never copy or hand-edit .af.json companions.';
 export function sourceIdentity(source){const all=[...source.matchAll(marker)];if(all.length>1)throw new ToolError('ambiguous_identity','Source has multiple authoring identities.',2);if(!all.length)return null;try{return JSON.parse(Buffer.from(all[0][1],'base64url').toString());}catch{throw new ToolError('invalid_identity','Source identity is malformed.',2);}}
 /** Canonical HTML drops backend hrefs; put the author's local path back so later backend edits are published. */
 export function restoreBackendHrefs(source,links){

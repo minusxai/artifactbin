@@ -40,10 +40,10 @@
   --ds-mango: #ffb01f; /* The second candy: NEW stickers, prices, the sun. */
   --ds-lime: #8be04d; /* The third candy: done, fresh, yes. */
   --ds-blueberry: #5b7cff; /* The fourth candy: links, focus, the second chart series. */
-  --ds-on-blueberry: #ffffff; /* Text on blueberry. */
+  --ds-on-blueberry: #120a1f; /* Text on blueberry. */
   --ds-grape: #b96cff; /* The fifth candy: the fifth series, a sprinkle. */
   --ds-lilac: #eadff5; /* The quiet fill: muted shapes in drawings, the inactive track. */
-  --ds-positive: #3e8a14; /* Done, fresh, yes. Lime as text is darkened on cream. */
+  --ds-positive: #367a10; /* Done, fresh, yes. Lime as text is darkened on cream. */
   --ds-positive-soft: #e6f8d6; /* Ground for done rows and positive tags. */
   --ds-caution: #9a5e00; /* Almost, low, soon. Mango as text is darkened on cream. */
   --ds-caution-soft: #fff0cc; /* Ground for caveats. */

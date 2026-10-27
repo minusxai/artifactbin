@@ -37,7 +37,7 @@
   --ds-ink: #374836; /* Forest green: all text, all rules, the first series. */
   --ds-ink-muted: #576355; /* Secondary text at 65%: captions, notes, metadata. */
   --ds-accent: #B44E30; /* Terracotta: the one word in a headline, the filled button, the progress bar, the second series. */
-  --ds-on-accent: #F2E7D6; /* Text on terracotta. */
+  --ds-on-accent: #FFFFFF; /* Text on terracotta. */
   --ds-accent-soft: #F0D9CD; /* Ground for accent tags and the selected state. */
   --ds-mauve: #846B94; /* The third series and nothing else. */
   --ds-positive: #3E6B3C; /* Success text and the kept share, with a word. */

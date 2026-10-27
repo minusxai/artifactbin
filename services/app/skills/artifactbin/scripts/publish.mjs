@@ -16,7 +16,9 @@ Examples:
   node scripts/publish.mjs page.html --group design-team  # new page in a group you edit
   node scripts/publish.mjs page.html                      # after: node scripts/read.mjs ID --output page.html
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome); replays the exact request
-Gotchas: keep editing and publishing the same file (never copy or hand-edit the .af.json companion). Dependencies
+Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written against the old text miss: re-read
+  FILE after publishing or edit by element. Keep editing and publishing the same file (never copy or hand-edit the
+  .af.json companion). Dependencies
   publish before the page and are discovered from static HTML URLs, CSS url() and @import, and static or literal
   dynamic module imports (up to 99 files, 4 MB each, 16 MB total); list other runtime-loaded files in --manifest.
   Computed imports and cyclic graphs are refused; remote URLs, absolute server paths and ref: links stay as written.

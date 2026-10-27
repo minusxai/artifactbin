@@ -104,7 +104,7 @@
   },
   {
    "name": "on-amber",
-   "light": "#1a1000",
+   "light": "#ffffff",
    "dark": "#1a1000",
    "usage": "Text on amber fills.",
    "group": "Brand"
