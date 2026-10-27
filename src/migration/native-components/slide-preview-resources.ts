@@ -19,3 +19,15 @@ export function prepareNativeSlidePreviewImages(input:NativeSlidePreviewResource
  }
  return result;
 }
+
+/** Preserve the admitted descriptor in inert HTML so the normal publication planner rewrites the same asset reference as authored images. */
+export function projectNativeSlidePreviewResources(input:import('./slide-preview-resource-contracts.ts').NativeSlidePreviewResourceProjectionInput):import('./slide-preview-resource-contracts.ts').NativeSlidePreviewResourceProjection {
+ const resources=input.resources.map(r=>({src:r.src,sha256:r.sha256,bytes:r.bytes,mime:r.mime}));
+ if(/data-native-slide-preview-resources/i.test(input.authoredHtml))throw Error('preview_manifest_authored_collision');
+ if(new Set(resources.map(r=>r.src)).size!==resources.length||resources.some(r=>{const match=/^\.\/assets\/([a-f0-9]{64})\.(png|jpg|jpeg|gif|webp)$/.exec(r.src);return!match||match[1]!==r.sha256||!Number.isSafeInteger(r.bytes)||r.bytes<=0||({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp'}as Record<string,string>)[match[2]!]!==r.mime;}))throw Error('preview_manifest_descriptor');
+ const descriptorSha256=sha(Buffer.from(JSON.stringify(resources)));
+ if(!resources.length)return{descriptorSha256,templateHtml:'',registrationExpression:'[]'};
+ const templateHtml=`<template data-native-slide-preview-resources="${descriptorSha256}">${resources.map((r,i)=>`<img src="${r.src}" data-native-slide-preview-index="${i}" data-native-slide-preview-canonical="${r.src}" data-native-slide-preview-sha256="${r.sha256}" data-native-slide-preview-bytes="${r.bytes}" data-native-slide-preview-mime="${r.mime}">`).join('')}</template>`;
+ const registrationExpression=`(()=>{const expected=${JSON.stringify(resources)},templates=document.querySelectorAll('template[data-native-slide-preview-resources="${descriptorSha256}"]');if(templates.length!==1)throw Error('preview_manifest_count');const children=[...templates[0].content.children];if(children.length!==expected.length||templates[0].content.childNodes.length!==children.length)throw Error('preview_manifest_children');return expected.map((r,i)=>{const el=children[i],fields={'data-native-slide-preview-index':String(i),'data-native-slide-preview-canonical':r.src,'data-native-slide-preview-sha256':r.sha256,'data-native-slide-preview-bytes':String(r.bytes),'data-native-slide-preview-mime':r.mime};if(el.tagName!=='IMG'||el.attributes.length!==6||Object.entries(fields).some(([key,value])=>el.getAttribute(key)!==value))throw Error('preview_manifest_metadata');const raw=el.getAttribute('src');if(!raw)throw Error('preview_manifest_src');const url=new URL(raw,document.baseURI),base=new URL(document.baseURI);if(!['http:','https:'].includes(url.protocol)||url.origin!==base.origin||url.username||url.password||url.hash)throw Error('preview_manifest_origin');return{...r,resolvedSrc:url.href};});})()`;
+ return{descriptorSha256,templateHtml,registrationExpression};
+}

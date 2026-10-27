@@ -1,4 +1,4 @@
-import{prepareNativeSlidePreviewImages}from'./slide-preview-resources.ts';
+import{prepareNativeSlidePreviewImages,projectNativeSlidePreviewResources}from'./slide-preview-resources.ts';
 import {nativeComponentHelperIds} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
@@ -139,10 +139,15 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  for(const file of files)if(!/^(components|assets)\/[A-Za-z0-9_./-]+$/.test(file.path)||file.path.split('/').some(part=>!part||part==='.'||part==='..')||createHash('sha256').update(file.bytes).digest('hex')!==file.sha256)block('module-file-proof');
  if(new Set(files.map(f=>f.path)).size!==files.length)block('duplicate-module-file');
  for(const match of input.style?.css.matchAll(/@import\s+(?:url\(\s*)?["']?([^"'()\s;]+)["']?\s*\)?\s*;/gi)??[]){const path=match[1]!;if(!path.startsWith('./assets/')||files.filter(file=>'./'+file.path===path).length!==1)block('style-import-file');}
+ let previewTemplateHtml='';
  const registrations=lowered.modules.map((module,index)=>{
   const mappings=input.modules?.filter(m=>m.name===module.name&&m.register===module.register)??[],mapping=mappings[0];
   if(mappings.length!==1||!mapping||!/^\.\/components\/[A-Za-z0-9_./-]+\.js$/.test(mapping.specifier)||mapping.specifier.slice(2).split('/').some(part=>!part||part==='.'||part==='..')||files.filter(f=>'./'+f.path===mapping.specifier&&f.sha256===mapping.sha256).length!==1){block('native-module-mapping',module.name);return '';}
-  return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}(${module.name==='slide-deck'&&module.register==='registerSlideDeck'?'undefined,undefined,'+json({previewImages:prepareNativeSlidePreviewImages({files,urls:input.urls??[]})}):''});`;
+  let argumentsJs='';
+  if(module.name==='slide-deck'&&module.register==='registerSlideDeck'){
+   try{const projection=projectNativeSlidePreviewResources({resources:prepareNativeSlidePreviewImages({files,urls:input.urls??[]}),authoredHtml:lowered.html!+lowered.headHtml});previewTemplateHtml+=projection.templateHtml;argumentsJs='undefined,undefined,{previewImages:'+projection.registrationExpression+'}';}catch{block('slide-preview-manifest');return '';}
+  }
+  return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}(${argumentsJs});`;
  }).join('\n');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
  let chartMounts='';
@@ -172,7 +177,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(column&&(column.tag!=='div'||column.attributes.class!=='mx-doc'||Object.keys(column.attributes).length!==1)){block('story-column');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  const content=readerOutput?.html??(column?`<div${attributes(column.attributes)}>${lowered.html}</div>`:lowered.html);
  const story=wrapper?`<div${wrapperAttributes}>${content}</div>`:content;
- const html=`<!DOCTYPE html><html${htmlAttributes}><head><script src="${escape(input.coreUrl)}"></script>${links}<style>${lowered.css}</style><style>${input.style?.css??''}</style>${readerOutput?`<style>${readerOutput.css}</style>`:''}${lowered.headHtml}</head><body>${story}<script type="application/json" data-af="state">${json(emitted.localDefaults)}</script><script type="module">${authorJs}</script></body></html>`;
+ const html=`<!DOCTYPE html><html${htmlAttributes}><head><script src="${escape(input.coreUrl)}"></script>${links}<style>${lowered.css}</style><style>${input.style?.css??''}</style>${readerOutput?`<style>${readerOutput.css}</style>`:''}${lowered.headHtml}</head><body>${story}${previewTemplateHtml}<script type="application/json" data-af="state">${json(emitted.localDefaults)}</script><script type="module">${authorJs}</script></body></html>`;
  if(Buffer.byteLength(html)>6000000){block('page-size');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  return {status:'complete',files,html,htmlSha256:hash(html),bindingTargets:targets,blockers:[]};
 }
