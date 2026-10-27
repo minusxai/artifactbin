@@ -5,3 +5,6 @@ export interface NativeSlidePreviewResourceInput {readonly files:readonly {reado
 /** An inert, source-byte-bound HTML dependency surface used by ordinary publication URL rewriting. */
 export interface NativeSlidePreviewResourceProjection {readonly descriptorSha256:string;readonly templateHtml:string;readonly registrationExpression:string}
 export interface NativeSlidePreviewResourceProjectionInput {readonly resources:readonly NativeSlidePreviewImageResource[];readonly authoredHtml:string}
+
+/** The sole additional image attribute inserted by ordinary HTML persistence after assembly. */
+export interface NativeSlidePreviewPlatformIdentityPolicy {readonly attribute:'data-af-id';readonly valuePattern:'^af-[1-9][0-9]*$'}
