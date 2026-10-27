@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { CommentMarkdown } from './CommentMarkdown';
 
 /** The rail measures rendered markdown and clamps only bodies over ten laid-out lines. */
-export function CommentFoldingBody(props: { text: string; foldable: boolean }): JSX.Element {
+export function CommentFoldingBody(props: { text: string; foldable: boolean; visibleLines?: number }): JSX.Element {
   let measured!: HTMLDivElement;
   const [fold, setFold] = createSignal({ overflowing: false, lines: 0, maxHeight: 0 });
   const [shown, setShown] = createSignal(false);
@@ -15,7 +15,7 @@ export function CommentFoldingBody(props: { text: string; foldable: boolean }): 
       if (!measured?.isConnected) return;
       const line = measured.querySelector('p, li, pre') ?? measured;
       const height = Number.parseFloat(getComputedStyle(line).lineHeight) || 20;
-      const next = foldFromMeasure(measured.scrollHeight, height);
+      const next = foldFromMeasure(measured.scrollHeight, height, props.visibleLines);
       setFold(current => current.overflowing === next.overflowing && current.lines === next.lines && current.maxHeight === next.maxHeight ? current : next);
     });
   });

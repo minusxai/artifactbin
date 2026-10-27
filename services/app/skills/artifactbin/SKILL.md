@@ -185,6 +185,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
 [% endif %]
   - [http-auth.md](references/http-auth.md) — HTTP sign-in, storage and refresh
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
+  - [comment-reactions.md](references/comment-reactions.md) — Account reactions and counts
   - [html-operations.md](references/html-operations.md) — Native HTML comments and runner-frame browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
   - [http-document-graph.md](references/http-document-graph.md) — Advanced graph updates

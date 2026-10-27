@@ -15,7 +15,7 @@ Use this guide for native HTML comments and browser QA. Read [HTML authoring](ht
 
 # Native HTML comments and browser verification
 
-Use these procedures with the [HTML API](html-authoring.md) and the selected server. They describe native HTML operations; JSX `node_id` anchors and CLI-only browser guidance are separate compatibility contracts.
+Use these procedures with the [HTML API](html-authoring.md) and the selected server. 
 
 ## Comment on a saved HTML node
 

@@ -302,7 +302,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             }>
             <Show when={commentFolded()} fallback={
               <Show when={props.open} fallback={<p class="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c().body)}</p>}>
-                <CommentFoldingBody text={c().body} foldable={!(props.justOpened && newest())} />
+                <CommentFoldingBody visibleLines={props.onReact ? 6 : undefined} text={c().body} foldable={!(props.justOpened && newest())} />
               </Show>
             }>
               <p class="truncate font-sans leading-snug text-fg/90">{firstLine(c().body)}</p>

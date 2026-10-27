@@ -4,7 +4,7 @@ import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetP
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
-import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit} from '@/lib/annotations';
+import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit,respondToCommentReaction} from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http/pagination';
 import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
@@ -302,6 +302,18 @@ const editCommentOp: Operation = {
     if (refusal) return fromResponse(refusal);
     return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.author.kind, ctx.mutationReceipt));
   },
+};
+
+const reactCommentOp: Operation = {
+  name: 'react_comment',
+  title: 'React to a comment',
+  http: {method:'PUT',path:'/api/artifacts/{id}/annotations/{comment_id}/reactions'},
+  description: 'Set your account thumbs-up reaction on an accessible comment. Desired state is idempotent; each account contributes once per kind. Returns the thread with counts and viewer_reacted metadata.',
+  input: {id:z.string(),comment_id:z.string(),kind:z.literal('thumbs_up'),active:z.boolean()},
+  annotations: {},
+  example: {input:{id:'aB3xK9',comment_id:'ann_123',kind:'thumbs_up',active:true}},
+  errors: [NOT_FOUND,{status:403,code:'account_required',fix:'sign in with an account to react'},{status:400,code:'invalid_comment_reaction',fix:'send kind thumbs_up and boolean active'}],
+  async run(ctx,input) {return fromResponse(await respondToCommentReaction(input,ctx.actor,String(input.id),String(input.comment_id)));},
 };
 
 const listArtifactsOp: Operation = {
@@ -723,6 +735,6 @@ const queryResourceOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];
