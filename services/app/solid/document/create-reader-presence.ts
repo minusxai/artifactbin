@@ -19,13 +19,16 @@ export function createReaderPresence(options:{id:string;revision:string;enabled:
   const leave=()=>{active=false;},restore=()=>{active=true;};
   const stopPending=()=>{window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',restore);};
   window.addEventListener('pagehide',leave);window.addEventListener('pageshow',restore);
-  onCleanup(()=>{disposed=true;stopPending();dispose();});
-  void load().then(({startReaderPresence})=>{
+  const start=()=>{void load().then(({startReaderPresence})=>{
    stopPending();if(disposed)return;
    const engine=startReaderPresence({revision:options.revision,nonce,controller,backend:options.backend!,preferences,changed:setViewers,active});
    receivePeers=engine.receive;receivePeers(latestPeers);update=engine.update;
    dispose=()=>{update=()=>{};receivePeers=()=>{};engine.dispose();};
-  }).catch(()=>{stopPending();/* Optional presence can recover when the bridge reconnects. */});
+  }).catch(()=>{stopPending();/* Optional presence can recover when the bridge reconnects. */});};
+  onCleanup(()=>{disposed=true;document.removeEventListener('DOMContentLoaded',start);stopPending();dispose();});
+  // A fast frame bridge can connect while the host HTML is still parsing.
+  // Optional geometry/session work must not compete with building that DOM.
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
  }));
  return {preferences,viewers,receive:(peers:PresenceViewer[])=>{latestPeers=peers;receivePeers(peers);},setPreference:(name:keyof ReaderPreferences,value:boolean)=>{setPreferences(settings.set(name,value));update();}};
 }
