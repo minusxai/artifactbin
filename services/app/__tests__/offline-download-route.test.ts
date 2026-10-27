@@ -96,3 +96,18 @@ it('preserves HTTP DNS provenance in offline downloads without granting connecti
  const {actor,id}=await publish('unlisted');const input=request(`/a/${id}/download`,{token:actor.token});input.headers.set('x-forwarded-proto','http');input.headers.set('x-forwarded-host','app.lvh.me:53324');
  const response=await download(input,params(id));expect(response.status).toBe(200);expect(readPortableDocument(await response.text()).identity?.platformOrigin).toBe('http://app.lvh.me:53324');
 });
+  it('embeds only the active design system and its fonts, and tells the core the appearance (D3/D4)', async () => {
+    const actor = await mintAccountToken('native-download-system');
+    const html = source.replace('<title>Trip plan</title>', '<title>Trip plan</title><meta name="artifactbin:design-system" content="phosphor">');
+    const created = await POST(request('/api/artifacts', { method: 'POST', token: actor.token, json: { html, visibility: 'private' } }));
+    expect(created.status, await created.clone().text()).toBe(201);
+    const id = (await created.json()).id as string;
+    const doc = new JSDOM(await (await download(request(`/a/${id}/download`, { token: actor.token }), params(id))).text()).window.document;
+    const style = doc.querySelector('style[data-af="platform-styles"]')!.textContent!;
+    expect(style).toMatch(/\[data-af-design-system="?phosphor"?\]/);
+    expect(style).not.toMatch(/\[data-af-design-system="?redline"?\]/);
+    expect(style).toContain('data:font/woff2;base64,');
+    expect(style).not.toContain('/fonts/');
+    expect(doc.querySelector('link[data-af="platform-styles"]')).toBeNull();
+    expect(JSON.parse(doc.querySelector('[data-af="runtime"]')!.textContent!).appearance).toEqual({ designSystem: 'phosphor', mode: 'dark' });
+  });

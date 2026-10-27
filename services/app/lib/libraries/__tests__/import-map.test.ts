@@ -38,7 +38,7 @@ it('exposes library URLs in the runtime JSON, never overriding an author import 
 it('has the core add validated library entries to the import map, skipped for portable copies',async()=>{
  const {buildHtmlCore}=await import('../../html-runtime/build.server');
  const core=await buildHtmlCore();
- expect(core).toContain('c.libraries??{}');
+ expect(core).toMatch(/\b\w+\.libraries\?\?\{\}/);
  expect(core).toContain('@afbin\\/[a-z][a-z0-9-]*$');
  expect(core).toMatch(/if\(!\w+\)for\(let\[\w+,\w+\]of Object\.entries\(\w+\.libraries/);
  expect(core.indexOf('.libraries')).toBeLessThan(core.indexOf('"@afbin/apollo"'));

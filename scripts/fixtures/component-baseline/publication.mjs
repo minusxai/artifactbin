@@ -99,7 +99,9 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
       // A root SlideDeck owns the page column beside its rail; don't wrap the
       // whole host in the generic page inset that ordinary HTML fixtures get.
       const bodyPadding=htmlBodyPadding(fixture);
-      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${substitute(fixture.newHtml)}<script type="module">${code}</script></body></html>`;
+      // The platform owns the design system: the page names it, the served page links the platform stylesheet and the
+      // core sets <html data-af-design-system/data-af-dark>; the viewer's mode comes from ?mx-mode= (gate-component-baseline).
+      const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="artifactbin:design-system" content="almanac"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${substitute(fixture.newHtml)}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);
       const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;body.publicationBundle.mappings=reuse.mappings(body.publicationBundle);request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');

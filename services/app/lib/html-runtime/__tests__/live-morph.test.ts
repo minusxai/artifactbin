@@ -21,6 +21,15 @@ const SCRIPTS='document.querySelector(".chart")';
 afterEach(()=>{vi.restoreAllMocks();delete (window as unknown as Record<symbol,unknown>)[LOADED_SOURCE];});
 
 describe('native HTML live morph',()=>{
+ it('keeps the platform-owned <html> attributes the core set, and follows a new design-system meta (D4)',()=>{
+  const legacy=served(1,V1).replace('<html data-af-id="h">','<html data-af-id="h" data-af-dark="false" data-af-design-system="riso">');
+  load(legacy);
+  document.documentElement.setAttribute('data-af-dark','true');document.documentElement.setAttribute('data-af-design-system','riso');
+  const v2=served(2,V1).replace('"scriptFingerprint"','"appearance":{"designSystem":"volta","mode":"light"},"scriptFingerprint"');
+  morphHtmlVersion(document,legacy,v2,SCRIPTS);
+  expect(document.documentElement.getAttribute('data-af-dark')).toBe('true');
+  expect(document.documentElement.getAttribute('data-af-design-system')).toBe('volta');
+ });
  it('draws a text, markup and CSS edit in place, keeping the input, its value and focus, scroll and script-drawn nodes',()=>{
   const live=load(served(1,V1));
   const scrolled=vi.spyOn(window,'scrollTo').mockImplementation(()=>{}),reload=vi.fn();

@@ -48,6 +48,12 @@ it('installs all themes with exact local font bytes and publishes Almanac throug
   const preview=await startPreview({root:installed,port:0,revisionIntervalMs:0});
   try{
    const page=await fetch(preview.url);expect(page.status).toBe(200);
+   // The served page carries the platform stylesheet for its system only, with the hosted /fonts/ files served locally.
+   const served=await page.text(),platform=/<style data-af="platform-styles">([\s\S]*?)<\/style>/.exec(served)![1]!;
+   expect(platform).toContain(':root[data-af-design-system="almanac"]');expect(platform).not.toContain('data-af-design-system="redline"');
+   expect(served).toContain('"appearance":{"designSystem":"almanac","mode":"light"}');expect(served).not.toContain('data-af="design-system"');
+   const hosted=/src: url\("(\/fonts\/[^"]+)"\)/.exec(platform)![1]!,hostedFont=await fetch(new URL(hosted,preview.url));
+   expect(hostedFont.status).toBe(200);expect(Buffer.from(await hostedFont.arrayBuffer())).toEqual(readFileSync(path.resolve('public',hosted.slice(1))));
    const cssResponse=await fetch(new URL('/design-systems/almanac.css',preview.url));expect(cssResponse.status).toBe(200);
    const css=await cssResponse.text();const reference=/src:\s*url\("([^"\n]+)"\)/.exec(css)![1]!;
    const font=await fetch(new URL(reference,cssResponse.url));expect(font.status).toBe(200);expect(font.headers.get('content-type')).toContain('font/woff2');

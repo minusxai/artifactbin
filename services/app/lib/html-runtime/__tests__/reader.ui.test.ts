@@ -47,14 +47,14 @@ function createReaderWindow() {
   };
 }
 
-it('sets the exact dark attribute and removes it for light while preserving color scheme', () => {
+it('sets the exact dark attribute, explicitly false for light, while preserving color scheme', () => {
   const mock = createReaderWindow();
   const stop = installHtmlReaderCommands(mock.win, 'https://platform.example');
   mock.deliver({ type: 'mx:reader-mode', mode: 'dark' });
   expect(mock.root.getAttribute('data-af-dark')).toBe('true');
   expect(mock.root.style.colorScheme).toBe('dark');
   mock.deliver({ type: 'mx:reader-mode', mode: 'light' });
-  expect(mock.root.hasAttribute('data-af-dark')).toBe(false);
+  expect(mock.root.getAttribute('data-af-dark')).toBe('false');
   expect(mock.root.style.colorScheme).toBe('light');
   stop();
 });

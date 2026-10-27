@@ -53,12 +53,22 @@ describe('autofix rules',()=>{
   expect(seen.sort()).toEqual(['img/a.png','lib.js','style.css']);
   expect(problems.map(problem=>[problem.rule,problem.message.split(': ')[1]])).toEqual([['missing-asset','img/a.png'],['missing-asset','./lib.js']]);
  });
- it('keeps D2 off, and moves design selection into head metadata only when enabled',()=>{
-  const html=page(OK).replace('<html>','<html data-af-dark="false" data-af-design-system="riso">');
-  expect(autofixHtml(html).html).toBe(html);
-  const on=autofixHtml(html,{rules:{designSystemMeta:true}});
-  expect(on.fixes.map(fix=>fix.rule)).toEqual(['design-system-meta']);
-  expect(on.html).toContain('<html>');expect(on.html).toContain('<meta name="artifactbin:design-system" content="riso">');
+ it('moves design selection from <html> into head metadata and drops the copied system stylesheet (D2)',()=>{
+  const html=page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./design-systems/riso.css">').replace('<html>','<html data-af-dark="false" data-af-design-system="riso">');
+  const fixed=autofixHtml(html);
+  expect(fixed.fixes.map(fix=>fix.rule)).toEqual(['design-system-meta','design-system-link']);
+  expect(fixed.html).toContain('<html>');expect(fixed.html).toContain('<meta name="artifactbin:design-system" content="riso">');
+  expect(fixed.html).not.toContain('data-af="design-system"');expect(fixed.html).not.toContain('data-af-dark');
+  expect(autofixHtml(fixed.html).html).toBe(fixed.html);
+  expect(formatAutofixReport(fixed)).toContain('fixed design-system-link');
+ });
+ it('names the system a copied stylesheet implies, keeps an existing meta, and leaves unknown systems linked',()=>{
+  const linked=autofixHtml(page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./design-systems/volta.css">'));
+  expect(linked.html).toContain('content="volta"');expect(linked.html).not.toContain('volta.css');
+  const meta=page(OK+'\n<meta name="artifactbin:design-system" content="redline">').replace('<html>','<html data-af-design-system="riso">');
+  const kept=autofixHtml(meta).html;expect(kept.match(/artifactbin:design-system/g)).toHaveLength(1);expect(kept).toContain('content="redline"');
+  const custom=page(OK+'\n<link data-af="design-system" rel="stylesheet" href="./mine.css">');
+  expect(autofixHtml(custom).html).toBe(custom);
  });
  it('is deterministic and idempotent',()=>{
   const html=page('<title>t</title>','<p>x</p><script defer src="/af/v1/core.js"></script>');

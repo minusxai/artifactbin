@@ -236,7 +236,7 @@ it('applies reader appearance through the authenticated frame command session', 
   document.documentElement.setAttribute('data-af-dark', 'false');
   for (const mode of ['dark', 'light', 'dark'] as const) {
     bridge.receive({kind: 'send', command: {type: 'mx:reader-mode', mode}});
-    expect(document.documentElement.getAttribute('data-af-dark')).toBe(mode === 'dark' ? 'true' : null);
+    expect(document.documentElement.getAttribute('data-af-dark')).toBe(mode === 'dark' ? 'true' : 'false');
     expect(document.documentElement.style.colorScheme).toBe(mode);
   }
   bridge.receive({kind: 'send', command: {type: 'mx:reader-mode', mode: 'invalid'}});
