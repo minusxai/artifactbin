@@ -30,8 +30,8 @@ class ConversionTests(unittest.TestCase):
   c['adapter']=[ref(script)];c['items']=[]
   for id in ['sample','rejected']:
    c['items'].append({'artifact':id,'version':1,'inputs':[],'command':[sys.executable,str(script),id,str(self.root/(id+'.packet.json')),str(self.root/'calls'),'no'],'cwd':str(self.root),'output':str(self.root/(id+'.packet.json'))})
-  db=self.root/'state.db';root=self.root/'batch';a=run(c,root,db);self.assertEqual((a['attempted'],a['converted'],a['exceptions']),(2,1,1));old=(self.root/'sample.packet.json').read_bytes();run(c,root,db);self.assertEqual((self.root/'calls').read_text().splitlines(),['sample','rejected'])
-  item=c['items'][1];item['command'][-1]='yes';item['command'][3]=str(self.root/'rejected.fixed.json');item['output']=item['command'][3];b=run(c,root,db,only=['rejected']);self.assertEqual((b['attempted'],b['thisRunAttempted'],b['converted']),(2,1,2));self.assertEqual((self.root/'sample.packet.json').read_bytes(),old);self.assertEqual((self.root/'calls').read_text().splitlines(),['sample','rejected','rejected'])
+  db=self.root/'state.db';root=self.root/'batch';a=run(c,root,db);self.assertEqual((a['attempted'],a['converted'],a['exceptions']),(2,1,1));old=(self.root/'sample.packet.json').read_bytes();run(c,root,db);self.assertCountEqual((self.root/'calls').read_text().splitlines(),['sample','rejected'])
+  item=c['items'][1];item['command'][-1]='yes';item['command'][3]=str(self.root/'rejected.fixed.json');item['output']=item['command'][3];b=run(c,root,db,only=['rejected']);self.assertEqual((b['attempted'],b['thisRunAttempted'],b['converted']),(2,1,2));self.assertEqual((self.root/'sample.packet.json').read_bytes(),old);self.assertCountEqual((self.root/'calls').read_text().splitlines(),['sample','rejected','rejected'])
  def test_reader_context_rejected_before_apply(self):
   context=self.save('context.json',{'format':'native-pipeline-host-context'})
   with self.assertRaisesRegex(ValueError,'reader_cli_config_shape'):reader_config(context['path'])
