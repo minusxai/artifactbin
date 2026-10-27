@@ -1,4 +1,4 @@
-import {nativeChartCellText,nativeChartVisibleRows} from './chart-table.ts';
+import {renderNativeChartPlainTable} from './chart-table.ts';
 import {nativeChartSingleValue} from './chart-single-value.ts';
 import type {NativeChartNumberFormatter} from './chart-contracts.ts';
 import {nativeChartLifecycle} from './chart-lifecycle.ts';
@@ -38,7 +38,7 @@ export function mountNativeChart(el:HTMLElement,mapping:NativeChartMapping,ports
     if(single.label){const label=document.createElement('div');label.className='text-sm text-muted-foreground';label.textContent=String(single.label);element.append(label);}
     const value=document.createElement('div');value.className='text-4xl font-semibold tracking-tight tabular-nums';value.textContent=single.text;element.append(value,sample);view={finalize(){}};
    }else if(mapping.kind==='table'){
-    await ports.table();const native=document.createElement('af-data-table') as HTMLElement&{data:NativeChartTable;cellRenderers:Record<string,(context:{row:Record<string,unknown>;column:string})=>string>;height:number};native.setAttribute('label','Data table');native.height=measurement.height;native.style.cssText='height:100%;border:0;border-radius:0;background:transparent';native.cellRenderers=Object.fromEntries(current.columns.map(column=>[column.name,({row}:{row:Record<string,unknown>})=>nativeChartCellText(row[column.name])]));native.data={...current,rows:nativeChartVisibleRows(current.rows),truncated:false,totalRows:Math.min(200,current.rows.length)};element.append(native);view={finalize(){native.remove();}};
+    const plain=renderNativeChartPlainTable(document,current);element.append(plain);view={finalize(){plain.remove();}};
    }else {
     element.style.position='absolute';element.style.inset='0';element.style.visibility='hidden';element.style.pointerEvents='none';pendingSurfaces.add(element);body.append(element);
     try{view=await ports.draw(element,mapping,current,measurement,mode(),el);}catch(error){pendingSurfaces.delete(element);element.remove();throw error;}
