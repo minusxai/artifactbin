@@ -103,6 +103,15 @@ function mount(path = '/a/doc') {
   return { host, frame, posted, unmount: view.unmount };
 }
 
+/** The page adopts the frame at once and loads its bridge lazily (create-framed-story): wait for it. */
+async function mountReady(path?: string, { fromStart = false } = {}) {
+  const mounted = mount(path); await vi.dynamicImportSettled();
+  // As when the bridge was made during render: what the page posts is observed from here, after its first attach
+  // (a bridge that waits for the tree is observed from the start: its one attach is what is asserted).
+  if (!fromStart) mounted.posted.mockClear();
+  return mounted;
+}
+
 /** The page's trusted overlays: 0 the navigation layer (install, fork), 1 discussion (comments, editor, sharing). */
 const trusted = (index = 0) => within(document.querySelectorAll('[data-trusted-ui]')[index]!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
 /**
@@ -124,21 +133,21 @@ const menuPanel = () => waitFor(() => within(panelRoot()).getByRole('navigation'
 
 it('places the doc agent handoff in trusted document navigation, outside the page bar', async () => {
   mockRole = 'owner'; mockTemplate = 'doc';
-  mount();
+  await mountReady();
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
   fireEvent.click(await trusted().findByRole('button', { name: 'Copy for agent' }));
   await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345 in place.')));
 });
 
-it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', (role, template) => {
+it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', async (role, template) => {
   mockRole = role; mockTemplate = template;
-  mount();
+  await mountReady();
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
   expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull();
 });
 
-it('adopts the served frame where the server drew it instead of rendering the document: its host is the viewport', () => {
-  const { host, frame } = mount();
+it('adopts the served frame where the server drew it instead of rendering the document: its host is the viewport', async () => {
+  const { host, frame } = await mountReady();
   const viewport = screen.getByLabelText('Artifact viewport');
   expect(viewport).toBe(host);
   expect(host.parentElement).toBe(document.body);
@@ -160,7 +169,7 @@ it('never takes the served frame out of the document: a moved iframe loads its s
   observer.observe(document.body, { childList: true, subtree: true });
   try {
     mockRole = 'viewer';
-    const { host, frame } = mount();
+    const { host, frame } = await mountReady();
     const originalWindow = frame.contentWindow;
     const originalSrc = frame.getAttribute('src');
     // The retained read-only rail opens and closes around the frame; it never adopts the frame into UI.
@@ -181,7 +190,7 @@ it('never takes the served frame out of the document: a moved iframe loads its s
 
 it('opens the artifact controls and the menu from the app bar', async () => {
   delete document.documentElement.dataset.theme;
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = await controls();
   fireEvent.click(within(panel).getByRole('button', { name: 'Dark mode' }));
@@ -198,7 +207,7 @@ it('shows and sets the APP appearance in the controls panel, while the light doc
   document.documentElement.dataset.theme = 'dark';
   mockRole = 'viewer'; mockSelectionBridge = true;
   try {
-    mount();
+    await mountReady();
     const viewport = screen.getByLabelText('Artifact viewport');
     const ground = viewport.style.background;
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
@@ -216,7 +225,7 @@ it('shows and sets the APP appearance in the controls panel, while the light doc
 
 it('places the artifact menu in a bottom sheet on phones and a dropdown after resizing', async () => {
   vi.stubGlobal('innerWidth', 390);
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
   const menu = await menuPanel();
   expect(menu).toHaveClass('inset-x-0', 'bottom-0');
@@ -229,24 +238,24 @@ it('places the artifact menu in a bottom sheet on phones and a dropdown after re
   expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus();
 });
 
-it('names the author and the document in the bar', () => {
-  mount();
+it('names the author and the document in the bar', async () => {
+  await mountReady();
   expect(screen.getByRole('link', { name: "View @ada's profile" })).toHaveAttribute('href', '/@ada');
   expect(screen.getByText('A copy', { selector: '[data-mx-document-title]' })).toHaveAttribute('data-mx-document-title');
 });
 
 it('says where a fork came from in the controls panel, linked to the source', async () => {
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = within(await controls());
   expect(panel.getByRole('link', { name: 'Open the artifact this was forked from' })).toHaveAttribute('href', '/a/source');
   expect(panel.getByText(/forked from/)).toHaveAttribute('data-mx-forked-from');
 });
 
-it('an archived version names itself in the bar, read-only', () => {
+it('an archived version names itself in the bar, read-only', async () => {
   mockRole = 'owner';
   mockArchived = { version: 1, head: 2 };
-  mount('/a/doc?version=1');
+  await mountReady('/a/doc?version=1');
   const line = screen.getByText('Version 1 of 2 · read-only');
   expect(line).toHaveAttribute('data-mx-archived-version', '1');
   expect(line).toHaveAttribute('data-mx-archived-head', '2');
@@ -256,14 +265,14 @@ it('an archived version names itself in the bar, read-only', () => {
   expect(screen.queryByRole('button', { name: 'Like' })).toBeNull();
 });
 
-it('the head names no version', () => {
+it('the head names no version', async () => {
   mockRole = 'owner';
-  mount();
+  await mountReady();
   expect(screen.queryByText(/read-only/)).toBeNull();
 });
 
 it('a commenter sees comments in the controls panel but no duplicate fork, edit or delete', async () => {
-  mount();
+  await mountReady();
   // Fork is a direct rail action; the panel does not duplicate it.
   expect(screen.getByRole('button', { name: 'Fork artifact' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -277,7 +286,7 @@ it('a commenter sees comments in the controls panel but no duplicate fork, edit 
 
 it('an owner can rename, share and delete without a document editor', async () => {
   mockRole = 'owner';
-  mount();
+  await mountReady();
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
@@ -305,7 +314,7 @@ it('the controls panel opened beside the open rail paints above it', async () =>
     .map((root) => root.querySelector<HTMLElement>(selector)).find(Boolean) ?? null;
   try {
     mockRole = 'owner';
-    mount();
+    await mountReady();
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     const rail = await waitFor(() => find('[aria-label="Annotation sidebar"]') ?? Promise.reject(new Error('no rail')));
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
@@ -333,7 +342,7 @@ it('the controls panel opened beside the open rail paints above it', async () =>
 it('opens the bar\'s panels in the navigation layer while the consent bar holds a trusted root earlier in the page', async () => {
   const hosts = { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [], frame: [], media: [] };
   mockCsp = { status: 'blocked', denied: false, extensions: hosts, asking: hosts };
-  mount();
+  await mountReady();
   await trusted().findByRole('button', {name: 'Allow once'});
   const roots = [...document.querySelectorAll('[data-trusted-ui]')];
   const bar = roots.findIndex((root) => root.shadowRoot!.querySelector('[aria-label="Document network access"]'));
@@ -350,7 +359,7 @@ it('opens the bar\'s panels in the navigation layer while the consent bar holds 
 // access controls and social preview — but none of the owner's own actions.
 it('an editor keeps metadata and sharing controls without document editing', async () => {
   mockRole = 'editor';
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = within(await controls());
   expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
@@ -364,7 +373,7 @@ it('an editor keeps metadata and sharing controls without document editing', asy
 
 it('an owner opens sharing without document source editing', async () => {
   mockRole = 'owner';
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
 });
@@ -375,21 +384,21 @@ it('opens the current comments in the document rail', async () => {
     if (url.includes('/annotations')) return Response.json({ annotations: [{ id: 'thread-1', snippet: 'A useful point', status: 'open', thread: [{ id: 'first', body: 'Please add the source.', author: { name: 'Reader' } }] }], next_cursor: null });
     return Response.json({});
   }));
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(await trusted(1).findByText('Please add the source.')).toBeInTheDocument();
   expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toHaveTextContent('Please add the source.');
 });
 
 it('opens a carried fork intent after login and consumes the query parameter', async () => {
-  mount('/a/doc?intent=fork');
+  await mountReady('/a/doc?intent=fork');
   expect(await trusted().findByRole('dialog', { name: 'Fork this artifact?' })).toBeInTheDocument();
   expect(window.location.search).toBe('');
 });
 
 it('consumes a signed-in viewer comment intent into the read-only rail without restarting login', async () => {
   mockRole = 'viewer';
-  mount('/a/doc?intent=comment');
+  await mountReady('/a/doc?intent=comment');
   expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
   const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
@@ -403,7 +412,7 @@ it('consumes a signed-in viewer comment intent into the read-only rail without r
 
 it('opens archived comments read-only and consumes the owner intent without login', async () => {
   mockRole = 'owner'; mockArchived = { version: 2, head: 3 };
-  mount('/a/doc?intent=comment');
+  await mountReady('/a/doc?intent=comment');
   expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
   const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
@@ -414,7 +423,7 @@ it('opens archived comments read-only and consumes the owner intent without logi
 });
 
 it('opens a carried comment intent for an authorized commenter without login', async () => {
-  mount('/a/doc?intent=comment');
+  await mountReady('/a/doc?intent=comment');
   expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
   expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
@@ -422,7 +431,7 @@ it('opens a carried comment intent for an authorized commenter without login', a
 
 it.each(['/a/doc', '/a/doc?intent=comment'])('lets a guest read comments before asking to sign in to post (%s)', async (path) => {
   mockKind = 'anon'; mockRole = 'viewer';
-  mount(path);
+  await mountReady(path);
   if (!path.includes('intent=')) fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
   expect(window.location.search).toBe('');
@@ -433,9 +442,9 @@ it.each(['/a/doc', '/a/doc?intent=comment'])('lets a guest read comments before 
   expect(loginHref).toHaveBeenCalledWith(window.location, 'comment');
 });
 
-it('offers the framed comment action to a guest and sends it through sign-in', () => {
+it('offers the framed comment action to a guest and sends it through sign-in', async () => {
   mockKind = 'anon'; mockRole = 'viewer'; mockSelectionBridge = true;
-  mount();
+  await mountReady();
   expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
   selectionReceive?.({ type: 'mx:selection-action', nonce: 'guest-selection-nonce', action: 'annotate',
     selection: { kind: 'text', path: '0', nodeId: 'n1', tag: 'p', rect: { x: 0, y: 0, width: 1, height: 1 }, className: '', style: '', ancestors: [] } });
@@ -443,22 +452,22 @@ it('offers the framed comment action to a guest and sends it through sign-in', (
   expect(document.querySelector('[aria-label="Annotation composer"]')).toBeNull();
 });
 
-it.each(['viewer', 'archived guest'])('does not grant a framed comment action to a %s', (kind) => {
+it.each(['viewer', 'archived guest'])('does not grant a framed comment action to a %s', async (kind) => {
   mockRole = 'viewer'; mockSelectionBridge = true;
   if (kind === 'archived guest') { mockKind = 'anon'; mockArchived = { version: 1, head: 2 }; }
-  mount();
+  await mountReady();
   expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: false });
 });
 
-it('a viewer asking for #edit reads the document', () => {
+it('a viewer asking for #edit reads the document', async () => {
   mockRole = 'viewer';
-  mount('/a/doc#edit');
+  await mountReady('/a/doc#edit');
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   expect(document.querySelectorAll('[data-trusted-ui]')[1]!.shadowRoot!.querySelector('[aria-label="Exit edit mode"]')).toBeNull();
 });
 
-it('leaving the document takes its frame off the page', () => {
-  const { host, unmount } = mount();
+it('leaving the document takes its frame off the page', async () => {
+  const { host, unmount } = await mountReady();
   expect(host.isConnected).toBe(true);
   unmount();
   expect(host.isConnected).toBe(false);
@@ -486,7 +495,7 @@ it('opens a light document dark for a reader who picked dark: the ground, the to
   localStorage.setItem('mx_theme', 'dark'); document.documentElement.dataset.theme = 'dark';
   mockRole = 'viewer'; mockSelectionBridge = true;
   try {
-    mount();
+    await mountReady();
     expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
     await waitFor(() => expect(toldModes()).toContain('dark'));
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
@@ -498,7 +507,7 @@ it('keeps the author\'s mode for a reader who never picked, even on a dark devic
   document.documentElement.dataset.theme = 'dark';
   mockRole = 'viewer'; mockSelectionBridge = true;
   try {
-    mount();
+    await mountReady();
     expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('light'));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(toldModes()).toEqual([]);
@@ -507,12 +516,12 @@ it('keeps the author\'s mode for a reader who never picked, even on a dark devic
 
 it('a pick made on one document applies to the next document opened', async () => {
   mockRole = 'viewer'; mockSelectionBridge = true;
-  const first = mount();
+  const first = await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   fireEvent.click(within(await controls()).getByRole('button', { name: 'Dark mode' }));
   first.unmount(); cleanup(); document.body.replaceChildren(); selectionSend.mockClear();
   delete document.documentElement.dataset.theme;
-  mount('/a/another');
+  await mountReady('/a/another');
   expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
   await waitFor(() => expect(toldModes()).toEqual(['dark']));
 });
@@ -552,7 +561,7 @@ it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, nav
   const [liveFrame, setLiveFrame] = createSignal<ArtifactLiveEvent | null>(null);
   mockLive = liveFrame;
   try {
-    const { frame, posted } = mount('/a/doc');
+    const { frame, posted } = await mountReady('/a/doc');
     doorOpens(frame);
     await settle();
     expect(nodeFetches()).toBe(0);
@@ -588,7 +597,7 @@ it.each([
   ['touches or selects in the document (the frame says so; no focus moves)', (frame: HTMLIFrameElement, key: string) => framePressed(frame, key)],
 ])('asks for the tree once when a guest first %s, and hands it to the running frame controller', async (_how, press) => {
   mockKind = 'anon'; mockRole = 'viewer'; servingTree();
-  const { frame, posted } = mount();
+  const { frame, posted } = await mountReady();
   doorOpens(frame);
   await settle();
   expect(nodeFetches()).toBe(0);
@@ -611,7 +620,7 @@ it.each([
 
 it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived version', 'anon', { version: 1, head: 2 }]] as const)('never asks for the tree for %s, pressing into the document included', async (_who, kind, archived) => {
   mockKind = kind; mockRole = 'viewer'; mockArchived = archived ? { ...archived } : null; servingTree();
-  const { frame, posted } = mount();
+  const { frame, posted } = await mountReady();
   doorOpens(frame);
   pressIntoDocument(frame);
   framePressed(frame, attaches(posted)[0]!.key!);
@@ -623,7 +632,7 @@ it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived 
 
 it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge attaches only with it', async (role) => {
   mockRole = role; servingTree();
-  const { posted } = mount();
+  const { posted } = await mountReady(undefined, { fromStart: true });
   await waitFor(() => expect(attaches(posted)).toHaveLength(1));
   expect(nodeFetches()).toBe(1);
   expect(attaches(posted)[0]!.payload?.nodes).toEqual(TREE);
@@ -631,7 +640,7 @@ it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge atta
 
 it.each(['owner', 'editor'])('a %s visiting a legacy edit hash reads and comments without downloading editor source', async (role) => {
   mockRole = role; mockSelectionBridge = true; mockSourceLength = 100;
-  mount('/a/doc#edit');
+  await mountReady('/a/doc#edit');
   await vi.dynamicImportSettled();
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   expect(trusted(1).queryByRole('textbox', { name: 'Markup source' })).toBeNull();
@@ -648,7 +657,7 @@ it('opens independent PWA, context and file settings without entering a document
     if (String(input) === '/api/my/artifacts/doc12345') return Response.json({ id: 'doc12345', edit_id: 'e3', version: 3, title: 'A copy', markup: '<p id="body">Hello</p>', refs: [{ id: 'file1234', kind: 'image', title: 'Reference image' }] });
     return existing(input, init);
   });
-  mount();
+  await mountReady();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   fireEvent.click(within(await controls()).getByRole('button', { name: 'Artifact settings' }));
   const settings = await trusted().findByRole('dialog', { name: 'Artifact settings' });
@@ -661,14 +670,14 @@ it('opens independent PWA, context and file settings without entering a document
 });
 
 it('loads stored script diagnostics in the trusted frame slot without changing the document',async()=>{
- mockScriptFailure={errors:['Stored script diagnostic']};mount();
+ mockScriptFailure={errors:['Stored script diagnostic']};await mountReady();
  expect(await trusted().findByText('Stored script diagnostic')).toBeTruthy();
  expect(document.querySelector('[data-mx-document-frame]')).not.toBeNull();
  expect(window.location.pathname).toBe('/a/doc');
 });
 
 it('loads the requested PWA install dialog and prompts synchronously only on its real button gesture',async()=>{
- mockPwa=true;mount('/a/doc12345/app/?install=1');
+ mockPwa=true;await mountReady('/a/doc12345/app/?install=1');
  const dispose=captureInstallPrompt(window);
  try {
   await trusted().findByRole('dialog',{name:'Install A copy'});
@@ -681,7 +690,7 @@ it('loads the requested PWA install dialog and prompts synchronously only on its
 
 it('does not fetch or mount discussion for an empty guest reader until its rail is requested', async () => {
   mockKind = 'anon'; mockRole = 'viewer';
-  mount();
+  await mountReady();
   await vi.dynamicImportSettled();
   expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/annotations'))).toHaveLength(0);
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
@@ -691,33 +700,33 @@ it('does not fetch or mount discussion for an empty guest reader until its rail 
 });
 it('loads existing guest-visible comment pins even while the discussion rail is closed', async () => {
   mockKind = 'anon'; mockRole = 'viewer'; mockOpenAnnotations = 1;
-  mount();
+  await mountReady();
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/annotations'))).toBe(true));
   expect(trusted(1).queryByRole('complementary', { name: 'Annotation sidebar' })).toBeNull();
   expect(loginHref).not.toHaveBeenCalled();
 });
 
 it.each(['comment','thread'])('admits a linked %s even without an open-comment bootstrap count',async key=>{
- mockKind='anon';mockRole='viewer';mount('/a/doc?'+key+'=thread-1');
+ mockKind='anon';mockRole='viewer';await mountReady('/a/doc?'+key+'=thread-1');
  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
  expect(loginHref).not.toHaveBeenCalled();
 });
 
 it('activates an empty guest reader when its annotation subscription delivers a new thread',async()=>{
- mockKind='anon';mockRole='viewer';mount();await vi.dynamicImportSettled();
+ mockKind='anon';mockRole='viewer';await mountReady();await vi.dynamicImportSettled();
  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
  const annotation:AnnotationWire={id:'stream-thread',status:'open',anchor:null,orphaned:true,anchor_version:3,snippet:'Arrived via stream',quote:null,range:null,quote_found:null,thread:[],created_at:'2026-01-01T00:00:00Z',resolved_at:null};
  mockLiveOptions!.onAnnotations!([annotation]);
  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
  expect(loginHref).not.toHaveBeenCalled();
 });
-it('reloads admission and the frame ticket when the live membership authority changes',()=>{
- const replace=vi.spyOn(documentNavigation,'replaceDocument').mockImplementation(()=>{});mount();
+it('reloads admission and the frame ticket when the live membership authority changes',async () => {
+ const replace=vi.spyOn(documentNavigation,'replaceDocument').mockImplementation(()=>{});await mountReady();
  mockLiveOptions!.onData!({datasets:['_members'],version:4});
  expect(replace).toHaveBeenCalledWith(window.location.href);
 });
 it('reacts to a linked thread added on the same document route without login',async()=>{
- mockKind='anon';mockRole='viewer';mount();await vi.dynamicImportSettled();
+ mockKind='anon';mockRole='viewer';await mountReady();await vi.dynamicImportSettled();
  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
  window.history.pushState(null,'','/a/doc?thread=new-thread');window.dispatchEvent(new PopStateEvent('popstate'));
  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
@@ -725,7 +734,7 @@ it('reacts to a linked thread added on the same document route without login',as
 });
 
 it('starts original block picking when Select arrives before an empty reader discussion layer exists',async()=>{
- mockRole='owner';mockSelectionBridge=true;mount();await vi.dynamicImportSettled();
+ mockRole='owner';mockSelectionBridge=true;await mountReady();await vi.dynamicImportSettled();
  expect(selectionReceive).toBeTypeOf('function');
  expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);
@@ -736,7 +745,7 @@ it('starts original block picking when Select arrives before an empty reader dis
 });
 
 it('does not turn a guest Select action into mutation tools or a forced sign-in',async()=>{
- mockKind='anon';mockRole='viewer';mockSelectionBridge=true;mount();await vi.dynamicImportSettled();
+ mockKind='anon';mockRole='viewer';mockSelectionBridge=true;await mountReady();await vi.dynamicImportSettled();
  selectionReceive?.({type:'mx:selection-action',nonce:'guest-selection-nonce',action:'select',selection:{kind:'text',path:'0',nodeId:'target',tag:'p',rect:{x:0,y:0,width:1,height:1},className:'',style:'',ancestors:[]}});
  await vi.dynamicImportSettled();expect(trusted(1).queryByRole('status',{name:'Select tool active'})).toBeNull();expect(loginHref).not.toHaveBeenCalled();
  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(false);

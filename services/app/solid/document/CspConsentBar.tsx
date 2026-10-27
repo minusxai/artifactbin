@@ -11,7 +11,7 @@
 import { createSignal, Show, type JSX } from 'solid-js';
 import type { CspRequest } from '@/lib/document';
 import { Button } from '../ui/Button';
-import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './create-framed-story';
+import { DOCUMENT_FRAME_SELECTOR, freshFrameSrc } from './frame-src';
 
 /**
  * Draw the document again under the reader's new answer. A framed document (its own origin) loads a FRESH first URL:

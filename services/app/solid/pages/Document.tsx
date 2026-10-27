@@ -3,7 +3,7 @@ import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import {artifactAppPath} from '@/lib/serving/artifact-pwa';
-import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
@@ -26,7 +26,8 @@ import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGove
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
-import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
+import type { FramedStory } from '../document/create-framed-story';
+import { framedDocumentFor } from '../document/frame-src';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createAppAppearance } from '../ui/theme';
@@ -253,72 +254,77 @@ export function DocumentPage(): JSX.Element {
     setHost(served);
     setFrameSlot(slot);
     setDocumentFrame(framed.frame);
-    // The tree the frame's controller classifies comments, selections and edits against is its own request (not in the
-    // page's data), and on a large document most of the page's bytes. A commenter or editor asks for it now, while the
-    // frame loads, and the bridge attaches when it is here. Every other reader's bridge attaches at once without it
-    // (reading, the mode pick and the `$` values need none of it): a guest's selection bubble (Comment → sign-in) is
-    // the one use left, so a guest asks for it on the first press into the document — the frame reports a press,
-    // touch, key or selection itself (a touch may never move focus), and the page's window losing focus to the frame
-    // is a second signal — and the tree goes to the running frame controller, which shows the bubble for a selection
-    // made while it was on its way. A signed-in viewer and an archived version never ask.
-    const nodes = new AbortController();
-    onCleanup(() => nodes.abort());
-    const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
-    const treeOnLoad = annotatable();
-    let treeAsked = treeOnLoad;
-    refreshTree = () => treeAsked ? fetchFrameNodes(id, window.location.search, nodes.signal) : Promise.resolve(undefined);
-    const askTreeOnPress = () => {
-      if (treeAsked || !story || !canStartComment()) return;
-      treeAsked = true;
-      story.attachTree(askTree());
-    };
-    story = createFramedStory({
-      id, framed, nodes: treeOnLoad ? askTree() : [],
-      editId: () => htmlHead().editId,
-      source: () => null,
-      htmlContext: page.surface?.format === 'html' ? () => ({
-        revision: String(page.archived?.version ?? (htmlHead().version || 1)),
-        readOnly: !!page.archived,
-        uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
-      }) : undefined,
-      version: live, reading: () => true,
-      onPressed: askTreeOnPress,
-    });
-    if (!treeOnLoad && !archivedNow()) onCleanup(onFirstPressInto(framed.frame, askTreeOnPress));
-    // The document's links to app paths take this page (another document by a full load, an app page by the router).
-    const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
+    // The bridge to the frame (create-framed-story, frame-bridge/parent) is loaded now: the frame attaches after its own
+    // document has loaded, so the app shell before the frame is ready does not carry it (page-speed size target 4).
+    const owner = getOwner();
+    let unmounted = false;
+    onCleanup(() => { unmounted = true; runtimeRef.current = null; served.remove(); });
     // The document is on screen: one view (a prerendered page counts when it is shown).
     reportArtifactView(window, id);
-    const framedStory = story;
-    framedStory.setTopInset(0);
-    window.addEventListener('hashchange', forwardHash);
-    framed.frame.addEventListener('load', forwardHash);
-    // The served frame may have loaded before the app did: forward now as well.
-    forwardHash();
-    // Null until the bridge is made (the tree arrives), then the bridge's stand-in for the document's controller.
-    runtimeRef.current = framedStory.controller();
-    createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
-    // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
-    // anew). It is told the mode then, and whenever that changes (the reader's pick).
-    createEffect(on(() => story?.nonce() ?? null, setNonce));
-    createEffect(on([nonce, toldMode], ([signed, mode]) => {
-      if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
-    }));
-    setReady(true);
-    const address = new URL(window.location.href);
-    const carried = address.searchParams.get('intent');
-    if (carried) {
-      address.searchParams.delete('intent');
-      window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
-      act(carried);
-    }
-    onCleanup(() => {
-      stopNavigation();
-      framed.frame.removeEventListener('load', forwardHash);
-      window.removeEventListener('hashchange', forwardHash);
-      runtimeRef.current = null;
-      served.remove();
-    });
+    void import('../document/create-framed-story').then(({ createFramedStory, fetchFrameNodes, onFirstPressInto }) => { if (!unmounted) runWithOwner(owner, () => {
+      // The tree the frame's controller classifies comments, selections and edits against is its own request (not in the
+      // page's data), and on a large document most of the page's bytes. A commenter or editor asks for it now, while the
+      // frame loads, and the bridge attaches when it is here. Every other reader's bridge attaches at once without it
+      // (reading, the mode pick and the `$` values need none of it): a guest's selection bubble (Comment → sign-in) is
+      // the one use left, so a guest asks for it on the first press into the document — the frame reports a press,
+      // touch, key or selection itself (a touch may never move focus), and the page's window losing focus to the frame
+      // is a second signal — and the tree goes to the running frame controller, which shows the bubble for a selection
+      // made while it was on its way. A signed-in viewer and an archived version never ask.
+      const nodes = new AbortController();
+      onCleanup(() => nodes.abort());
+      const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
+      const treeOnLoad = annotatable();
+      let treeAsked = treeOnLoad;
+      refreshTree = () => treeAsked ? fetchFrameNodes(id, window.location.search, nodes.signal) : Promise.resolve(undefined);
+      const askTreeOnPress = () => {
+        if (treeAsked || !story || !canStartComment()) return;
+        treeAsked = true;
+        story.attachTree(askTree());
+      };
+      story = createFramedStory({
+        id, framed, nodes: treeOnLoad ? askTree() : [],
+        editId: () => htmlHead().editId,
+        source: () => null,
+        htmlContext: page.surface?.format === 'html' ? () => ({
+          revision: String(page.archived?.version ?? (htmlHead().version || 1)),
+          readOnly: !!page.archived,
+          uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
+        }) : undefined,
+        version: live, reading: () => true,
+        onPressed: askTreeOnPress,
+      });
+      if (!treeOnLoad && !archivedNow()) onCleanup(onFirstPressInto(framed.frame, askTreeOnPress));
+      // The document's links to app paths take this page (another document by a full load, an app page by the router).
+      const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
+      const framedStory = story;
+      framedStory.setTopInset(0);
+      window.addEventListener('hashchange', forwardHash);
+      framed.frame.addEventListener('load', forwardHash);
+      // The served frame may have loaded before the app did: forward now as well.
+      forwardHash();
+      // Null until the bridge is made (the tree arrives), then the bridge's stand-in for the document's controller.
+      runtimeRef.current = framedStory.controller();
+      createEffect(on(framedStory.controller, (next) => { runtimeRef.current = next; }, { defer: true }));
+      // The frame's controller signs its events once it runs: the nonce arrives then (and again after the frame loads
+      // anew). It is told the mode then, and whenever that changes (the reader's pick).
+      createEffect(on(() => story?.nonce() ?? null, setNonce));
+      createEffect(on([nonce, toldMode], ([signed, mode]) => {
+        if (signed && mode) runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
+      }));
+      setReady(true);
+      const address = new URL(window.location.href);
+      const carried = address.searchParams.get('intent');
+      if (carried) {
+        address.searchParams.delete('intent');
+        window.history.replaceState(window.history.state, '', address.pathname + address.search + address.hash);
+        act(carried);
+      }
+      onCleanup(() => {
+        stopNavigation();
+        framed.frame.removeEventListener('load', forwardHash);
+        window.removeEventListener('hashchange', forwardHash);
+      });
+    }); });
   });
   const currentVersion = () => page?.archived?.version ?? live()?.version ?? htmlHead().version;
   /**
