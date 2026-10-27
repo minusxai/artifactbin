@@ -52,19 +52,19 @@ async function fixture() {
  const cursor = (await baseline.json()).next_cursor as string;
  return {token,doc,actor,open,read,cursor};
 }
-it('pages raw records, advances past agents and deleted comments, and replays stable IDs', async()=>{
+it('pages raw records, delivers agent comments, advances past deleted comments, and replays stable IDs', async()=>{
  const f=await fixture();
- await f.open('Agent',{kind:'agent',label:'Agent',transport:'http'});
+ const agent=await f.open('Agent',{kind:'agent',label:'Agent',transport:'http'});
  const deleted=await f.open('Removed');expect(await deleteAnnotationFor(f.actor,f.doc.id,deleted.id)).toBe(true);
- const a=await f.open('First');const b=await f.open('Second');
- const ignored=await (await f.read(f.cursor,'limit=2')).json() as CommentChangesPage;
- expect(ignored.events).toEqual([]);expect(ignored.has_more).toBe(true);expect(ignored.next_cursor).not.toBe(f.cursor);
- const first=await (await f.read(ignored.next_cursor,'limit=1')).json() as CommentChangesPage;
- expect(first.events.map(e=>e.event_id)).toEqual([a.id]);expect(first.has_more).toBe(true);
- const replay=await (await f.read(ignored.next_cursor,'limit=1')).json();expect(replay).toEqual(first);
- const last=await (await f.read(first.next_cursor,'limit=1')).json() as CommentChangesPage;
- expect(last.events.map(e=>e.event_id)).toEqual([b.id]);expect(last.has_more).toBe(false);
- expect((await (await f.read(last.next_cursor)).json()).events).toEqual([]);
+ const a=await f.open('First');
+ const head=await (await f.read(f.cursor,'limit=2')).json() as CommentChangesPage;
+ // An agent's comment is an event like a person's; written with the watching credential, it is marked `you`.
+ expect(head.events.map(e=>e.type==='artifactbin.comment'?[e.event_id,e.author.kind,e.author.you]:[])).toEqual([[agent.id,'agent',true]]);
+ expect(head.has_more).toBe(true);expect(head.next_cursor).not.toBe(f.cursor);
+ const first=await (await f.read(head.next_cursor,'limit=1')).json() as CommentChangesPage;
+ expect(first.events.map(e=>e.event_id)).toEqual([a.id]);expect(first.has_more).toBe(false);
+ const replay=await (await f.read(head.next_cursor,'limit=1')).json();expect(replay).toEqual(first);
+ expect((await (await f.read(first.next_cursor)).json()).events).toEqual([]);
 });
 it('rejects malformed, cross-artifact and cross-account checkpoints', async()=>{
  const f=await fixture();const other=await fixture();

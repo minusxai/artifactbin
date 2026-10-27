@@ -400,9 +400,11 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
-    // The comment feed's position for a HUMAN edit: a fresh value from `seq`'s own sequence, so one cursor orders
-    // new comments and edits alike (lib/annotations/changes). NULL = never edited by a person.
+    // The comment feed's position for an edit: a fresh value from `seq`'s own sequence, so one cursor orders
+    // new comments and edits alike (lib/annotations/changes). NULL = never edited (or edited by an agent before edits all moved).
     { name: 'change_seq', type: 'BIGINT' },
+    // The credential behind the latest edit, beside its position: the feed marks a watcher's own rewrite `you`.
+    { name: 'change_token_id', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
@@ -415,8 +417,36 @@ const COMMENT_REACTIONS: Table = {
     {name:'comment_id',type:'TEXT',notNull:true},
     {name:'user_id',type:'TEXT',notNull:true},
     {name:'kind',type:'TEXT',notNull:true},
+    // Who reacted, decided at the door like a comment's author (appended; NULL on rows from before = the account's person).
+    {name:'reactor_kind',type:'TEXT'}, // 'human' | 'agent'
+    {name:'reactor_label',type:'TEXT'}, // display snapshot: the handle then, or the agent's label
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'}, // reactor order in the summary
   ],
   primaryKey: ['comment_id','user_id','kind'],
+};
+
+/**
+ * Every effective reaction change, appended and never rewritten: the comment feed's reaction half
+ * (lib/annotations/changes). `seq` comes from `annotations.seq`'s sequence, so one cursor orders comments, edits and
+ * reactions. Per (comment, user, kind) rows strictly alternate `active`; `count` is that kind's count right after.
+ */
+const COMMENT_REACTION_EVENTS: Table = {
+  name: 'comment_reaction_events',
+  columns: [
+    {name:'seq',type:'BIGINT',notNull:true},
+    {name:'artifact_id',type:'TEXT',notNull:true},
+    {name:'comment_id',type:'TEXT',notNull:true},
+    {name:'user_id',type:'TEXT',notNull:true},
+    {name:'kind',type:'TEXT',notNull:true},
+    {name:'active',type:'BOOLEAN',notNull:true},
+    {name:'reactor_kind',type:'TEXT',notNull:true},
+    {name:'reactor_label',type:'TEXT'},
+    {name:'count',type:'INTEGER',notNull:true},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+    {name:'token_id',type:'TEXT'}, // the credential that reacted: the feed marks a watcher's own reaction `you`
+  ],
+  primaryKey: ['seq'],
+  indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],
 };
 
 // RETIRED TABLES — `login_codes` and `oauth_codes` merged into `codes` below.
@@ -1078,7 +1108,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

@@ -7,7 +7,7 @@ import {LOCAL_AUTHOR_LABEL,type PreviewComment} from './comments';
 
 /**
  * `positions` are each comment's places in the local comment feed (local-comment-watch.ts): `seq` when it was written,
- * `change` when a person last rewrote it. Both come from one workspace counter, allocated in the same transaction as the
+ * `change` when it was last rewritten. Both come from one workspace counter, allocated in the same transaction as the
  * write, so a watcher's checkpoint never passes a comment still being saved. Threads written before positions existed
  * have none: they read as position 0 and never surface as new.
  */
@@ -63,8 +63,8 @@ export function previewAnnotations(state:State,root:string,file:string,source:st
     const body=text(input.body);
     if(body===current.body)return resolved(entry);
     const value={...entry.value,thread:entry.value.thread.map(comment=>comment.id===commentId?{...comment,body,edited_at:now()}:comment)};
-    // Only a person's edit moves the comment in the feed: an agent never hears its own rewrite (as hosted).
-    const positions=author.kind==='human'?{...entry.positions,[commentId]:{seq:entry.positions?.[commentId]?.seq??0,change:position()}}:entry.positions;
+    // Every edit moves the comment in the feed, a person's or an agent's (as hosted).
+    const positions={...entry.positions,[commentId]:{seq:entry.positions?.[commentId]?.seq??0,change:position()}};
     save({...entry,value,...(positions?{positions}:{})});return resolved({...entry,value});
    });
   },

@@ -38,7 +38,7 @@ async function fixture(){
 }
 const ids=(events:CommentChangeEvent[])=>events.map(event=>event.event_id);
 
-test('a local feed delivers human comments, replies and edits once, with the hosted event shape',async()=>{
+test('a local feed delivers the person\'s comments, replies and edits once, with the hosted event shape',async()=>{
  const f=await fixture();try{
   const feed=await f.feed();
   const start=feed.read('now',100);assert.deepEqual(start.events,[]);assert.equal(start.has_more,false);
@@ -47,7 +47,7 @@ test('a local feed delivers human comments, replies and edits once, with the hos
   const first=feed.read(start.next_cursor,100);
   const localId=Object.entries(await localIdentities(await loadWorkspace(f.root,f.home))).find(([,path])=>path==='report.jsx')?.[0];
   assert.ok(localId);
-  assert.deepEqual(first.events,[{type:'artifactbin.comment',event_id:root.id,artifact_id:localId,annotation_id:root.id,comment_id:root.id,author:{kind:'human',label:'You',user_id:null,you:true},body:'Make this bolder',created_at:root.thread[0].created_at}]);
+  assert.deepEqual(first.events,[{type:'artifactbin.comment',event_id:root.id,artifact_id:localId,annotation_id:root.id,comment_id:root.id,author:{kind:'human',label:'You',user_id:null,you:false},body:'Make this bolder',created_at:root.thread[0].created_at}]);
   const replied=await f.reply(root.id,'And larger');const replyId=replied.thread[1].id;
   const second=feed.read(first.next_cursor,100);
   assert.deepEqual(second.events.map(e=>[e.comment_id,e.annotation_id,e.body]),[[replyId,root.id,'And larger']]);
@@ -56,7 +56,7 @@ test('a local feed delivers human comments, replies and edits once, with the hos
   await f.rewrite(root.id,'Make this bolder and blue');
   const edited=feed.read(second.next_cursor,100);
   assert.equal(edited.events.length,1);
-  assert.deepEqual({...edited.events[0],edited_at:undefined},{type:'artifactbin.comment',change:'edited',edited_at:undefined,event_id:edited.events[0]!.event_id,artifact_id:localId,annotation_id:root.id,comment_id:root.id,author:{kind:'human',label:'You',user_id:null,you:true},body:'Make this bolder and blue',created_at:root.thread[0].created_at});
+  assert.deepEqual({...edited.events[0],edited_at:undefined},{type:'artifactbin.comment',change:'edited',edited_at:undefined,event_id:edited.events[0]!.event_id,artifact_id:localId,annotation_id:root.id,comment_id:root.id,author:{kind:'human',label:'You',user_id:null,you:false},body:'Make this bolder and blue',created_at:root.thread[0].created_at});
   assert.notEqual(edited.events[0]!.event_id,root.id);assert.ok(edited.events[0]!.edited_at);
   // Replay from the same checkpoint gives the same IDs; the next checkpoint is quiet.
   assert.deepEqual(ids(feed.read(second.next_cursor,100).events),ids(edited.events));
@@ -64,21 +64,23 @@ test('a local feed delivers human comments, replies and edits once, with the hos
  }finally{await f.cleanup();}
 });
 
-test('CLI and --agent comments and agent edits never come back, nor do deleted ones; new-and-edited arrives once as new',async()=>{
+test('CLI and --agent comments, replies and edits all arrive marked you, deleted ones never; new-and-edited arrives once as new',async()=>{
  const f=await fixture();try{
   const feed=await f.feed();const start=feed.read('now',100).next_cursor;
   const agent=await f.comment('report.jsx','--node','para','--body','Agent note','--agent','codex');
   await f.comment('report.jsx','--edit',agent.id,'--body','Agent note, revised','--agent','codex');
-  await f.comment('report.jsx','--thread',agent.id,'--body','Agent reply','--agent','codex');
+  const replied=await f.comment('report.jsx','--thread',agent.id,'--body','Agent reply','--agent','codex');
   await f.comment('report.jsx','--node','para','--body','Unnamed CLI note');
   const fresh=await f.say('title','Frist');
   await f.rewrite(fresh.id,'First');
   const doomed=await f.say('title','Soon gone');
   assert.equal((await localDeleteComments(await loadWorkspace(f.root,f.home),'report.jsx',[doomed.id]))?.exitCode,0);
   const page=feed.read(start,100);
-  assert.deepEqual(page.events.map(e=>[e.event_id,e.change??'new',e.body]),[[fresh.id,'new','First']]);
-  // Pages are raw positions: the agent's rows still advance a bounded read.
-  const one=feed.read(start,1);assert.deepEqual(one.events,[]);assert.equal(one.has_more,true);
+  // What the CLI wrote is the watching agent's own (`you`); the preview browser's comments are the person's.
+  assert.deepEqual(page.events.map(e=>[e.change??'new',e.body,e.author.kind,e.author.you]),[
+   ['new','Agent note, revised','agent',true],['new','Agent reply','agent',true],['new','Unnamed CLI note','agent',true],['new','First','human',false]]);
+  assert.equal(page.events[1]!.annotation_id,agent.id);assert.ok(replied);
+  const one=feed.read(start,1);assert.deepEqual(one.events.map(e=>e.comment_id),[agent.id]);assert.equal(one.has_more,true);
  }finally{await f.cleanup();}
 });
 
@@ -106,7 +108,7 @@ test('afbin watch <file> --comments --json follows the local feed with no networ
    stdout:value=>{out.push(value);},stderr:value=>{err.push(value);if(value.includes('"checkpoint"'))controller.abort();}});
   assert.equal(code,0,err.join(''));assert.deepEqual(requests,[]);
   const events=out.join('').trim().split('\n').map(line=>JSON.parse(line));
-  assert.deepEqual(events.map(e=>[e.comment_id,e.body,e.author.you]),[[root.id,'Watch me',true]]);
+  assert.deepEqual(events.map(e=>[e.comment_id,e.body,e.author.you]),[[root.id,'Watch me',false]]);
   assert.ok(err.join('').split('\n').some(line=>{try{return typeof JSON.parse(line).checkpoint==='string';}catch{return false;}}),'checkpoints go to stderr');
   assert.deepEqual(connections,[]);
   }finally{await new Promise(done=>server.close(done));}

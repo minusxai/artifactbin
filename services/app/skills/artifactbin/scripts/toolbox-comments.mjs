@@ -1,7 +1,9 @@
 import {open,readFile} from 'node:fs/promises';
 import {ToolError,optionalFile,jsonFile,exclusive} from './toolbox-client.mjs';
-const stream='human-comments';
-function matches(value,server,id){return value?.server===server&&value?.artifact===id&&value?.stream===stream;}
+const stream='comments';
+/** Logs and checkpoints saved before the feed carried agents' writes name the old stream; they resume unchanged. */
+const STREAMS=new Set([stream,'human-comments']);
+function matches(value,server,id){return value?.server===server&&value?.artifact===id&&STREAMS.has(value?.stream);}
 /** @returns {Promise<Pick<import('../../../lib/skills/author-toolbox-contract').CommentCheckpoint,'cursor'|'eventIds'>>} */
 async function checkpointInput(value,server,id){
  const file=await optionalFile(value).catch(error=>{if(error.code==='ENAMETOOLONG')return null;throw error;});if(!file)return {cursor:value,eventIds:[]};
@@ -10,6 +12,19 @@ async function checkpointInput(value,server,id){
  if(records.some(record=>!matches(record,server,id)))throw new ToolError('checkpoint_mismatch','Log contains another origin, artifact or stream.',2);
  if(!checkpoint||!matches(checkpoint,server,id)||typeof checkpoint.cursor!=='string')throw new ToolError('checkpoint_mismatch','Checkpoint belongs to another origin, artifact or stream.',2);
  return {cursor:checkpoint.cursor,eventIds:records.filter(record=>record.kind==='event').map(record=>record.event.event_id)};
+}
+const REACTION_MARKS={thumbs_up:'👍'};
+/** One reaction summary for reading: "👍 ppsreejith, alice", "+N" past the listed reactors, or the bare count from an older server. */
+export function reactionText(reaction){
+ const mark=REACTION_MARKS[reaction?.kind]??String(reaction?.kind),by=Array.isArray(reaction?.by)?reaction.by:null;
+ if(!by)return `${mark} ${reaction?.count??0}`;
+ const names=by.map(reactor=>reactor?.label||(reactor?.kind==='agent'?'agent':'someone')),more=(reaction.count??names.length)-names.length;
+ return `${mark} ${names.join(', ')}${more>0?` +${more}`:''}`;
+}
+/** A comment listing as text output shows it: each comment's reactions as reactionText lines. --json keeps the structure. */
+export function listText(page){
+ if(!Array.isArray(page?.annotations))return page;
+ return {...page,annotations:page.annotations.map(annotation=>({...annotation,thread:Array.isArray(annotation.thread)?annotation.thread.map(comment=>Array.isArray(comment.reactions)?{...comment,reactions:comment.reactions.map(reactionText)}:comment):annotation.thread}))};
 }
 export async function watchComments(client,id,values,{signal,deliver}={}){
  const server=client.server,seen=new Set();let cursor;

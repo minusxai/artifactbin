@@ -7,7 +7,7 @@ import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary } from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
@@ -136,8 +136,6 @@ export interface AnnotationAction {
 export interface AnnotationEdit {
   body: string;
   expectedRevision?: number;
-  /** Who is rewriting (the door's attribution). Only a person's edit enters the comment feed; an agent never hears its own. */
-  editorKind: AnnotationAuthor['kind'];
 }
 
 /** What an edit answers: the thread as it now reads, the edited comment, and the text it replaced (null when unchanged). */
@@ -219,6 +217,22 @@ const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>
     ...(images.has(row.id) ? { image: images.get(row.id) } : {}),
     ...(row.edited_at ? { edited_at: row.edited_at } : {}),
   };
+};
+
+interface ReactionRowDb {
+  comment_id: string; kind: CommentReactionSummary['kind']; count: string; viewer_reacted: boolean;
+  reactors: Array<{ kind: string | null; label: string | null; user_id: string; image_key: string | null }> | null;
+}
+
+/**
+ * A reactor drawn exactly as `commentWire` draws an author, for the same readers: a person as their account and face,
+ * an agent as its label with no account (a token's account says nothing about whose face that is). A row from
+ * before reactors were attributed (`reactor_kind` NULL) reads as the account's person.
+ */
+const reactorWire = (row: NonNullable<ReactionRowDb['reactors']>[number]): CommentReactor => {
+  const kind = row.kind === 'agent' ? 'agent' : 'human';
+  const userId = kind === 'human' ? row.user_id : null;
+  return { kind, label: row.label, user_id: userId, image: userId ? avatarUrl({ id: userId, image_key: row.image_key }) : null };
 };
 
 // ── the anchor attribute, read and written against the parsed source ─────────
@@ -416,14 +430,23 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
     [head.id, rootIds],
   );
   const images = await commentImagesFor(db, head.id);
-  const reactions = await db.query<{comment_id:string; kind:CommentReactionSummary['kind']; count:string; viewer_reacted:boolean}>(
-    `SELECT comment_id, kind, count(*)::text AS count, bool_or(user_id = $2) AS viewer_reacted
-     FROM comment_reactions WHERE comment_id = ANY($1::text[]) GROUP BY comment_id,kind ORDER BY kind`,
-    [[...rootIds,...replies.rows.map(reply=>reply.id)],viewerId ?? null]);
+  // ONE statement for every comment's reactions and their reactors: per comment and kind, the exact count, whether
+  // the viewer is among them, and the earliest COMMENT_REACTORS_MAX accounts drawn by the author rule (`reactorWire`).
+  const reactions = await db.query<ReactionRowDb>(
+    `SELECT comment_id, kind, count::text, viewer_reacted, reactors FROM (
+       SELECT comment_id, kind, count(*) AS count, bool_or(user_id = $2) AS viewer_reacted,
+         json_agg(json_build_object('kind', reactor_kind, 'label', label, 'user_id', user_id, 'image_key', image_key)
+           ORDER BY rank) FILTER (WHERE rank <= $3) AS reactors
+       FROM (SELECT r.comment_id, r.kind, r.user_id, r.reactor_kind,
+               CASE WHEN r.reactor_kind = 'agent' THEN r.reactor_label ELSE coalesce(u.username, r.reactor_label) END AS label, u.image_key,
+               row_number() OVER (PARTITION BY r.comment_id, r.kind ORDER BY r.created_at, r.user_id) AS rank
+             FROM comment_reactions r LEFT JOIN users u ON u.id = r.user_id WHERE r.comment_id = ANY($1::text[])) ranked
+       GROUP BY comment_id, kind) grouped ORDER BY kind`,
+    [[...rootIds,...replies.rows.map(reply=>reply.id)],viewerId ?? null,COMMENT_REACTORS_MAX]);
   const reactionMap = new Map<string,CommentReactionSummary[]>();
   for(const reaction of reactions.rows){
     const group=reactionMap.get(reaction.comment_id)??[];
-    group.push({kind:reaction.kind,count:Number(reaction.count),viewer_reacted:reaction.viewer_reacted===true});
+    group.push({kind:reaction.kind,count:Number(reaction.count),viewer_reacted:reaction.viewer_reacted===true,by:(reaction.reactors??[]).map(reactorWire)});
     reactionMap.set(reaction.comment_id,group);
   }
   const withReactions=(row:AnnotationRowDb):AnnotationCommentWire=>({...commentWire(row,images),reactions:reactionMap.get(row.id)??[]});
@@ -667,11 +690,11 @@ export async function editAnnotationCommentFor(
 
     const changed = comment.body !== edit.body;
     if (changed) {
-      // A person's edit takes a new feed position from seq's own sequence, under the artifact lock already held,
-      // so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
-      await tx.query(edit.editorKind === 'human'
-        ? "UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')) WHERE id = $1"
-        : 'UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
+      // Every edit, a person's or an agent's, takes a new feed position from seq's own sequence, under the artifact
+      // lock already held, so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
+      // The editing credential is kept beside it: the feed marks the watcher's own rewrite `you`.
+      await tx.query("UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')), change_token_id = $3 WHERE id = $1",
+        [comment.id, edit.body, actor.tokenId]);
       await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
       await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
@@ -773,8 +796,16 @@ export async function countOpenAnnotations(artifactId: string): Promise<number> 
   return Number(r.rows[0]?.n ?? 0);
 }
 
-/** Desired per-account/per-kind state. Artifact→root locks serialize against deletion and all comment mutations. */
-export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput):Promise<AnnotationWire|null>{
+/**
+ * Desired per-account/per-kind state. Artifact→root locks serialize against deletion and all comment mutations.
+ *
+ * An effective change (not a repeat of the current state) also appends one row to `comment_reaction_events` with a
+ * position from `annotations.seq`'s sequence, allocated under the artifact lock like every comment-feed position, so
+ * the comment feed (./changes) orders reactions with comments on one cursor. Per account, comment and kind the
+ * log strictly alternates added/removed, which is what lets the feed net out a toggle since a checkpoint.
+ * `reactor` is decided at the door, as a comment's author is: a browser session is the person, a bearer an agent.
+ */
+export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<AnnotationWire|null>{
   if(!actor.userId)return null;
   const db=await getDb();
   return db.transaction(async tx=>{
@@ -786,9 +817,16 @@ export async function setCommentReactionFor(actor:AccessActor,artifactId:string,
     const root=(await tx.query<AnnotationRowDb>(`SELECT * FROM annotations WHERE id=$1 AND artifact_id=$2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,[rootId,artifactId])).rows[0];
     if(!root)return null;
     const result=input.active
-      ?await tx.query('INSERT INTO comment_reactions (comment_id,user_id,kind) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING comment_id',[commentId,actor.userId,input.kind])
+      ?await tx.query('INSERT INTO comment_reactions (comment_id,user_id,kind,reactor_kind,reactor_label) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING comment_id',[commentId,actor.userId,input.kind,reactor.kind,reactor.label])
       :await tx.query('DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3 RETURNING comment_id',[commentId,actor.userId,input.kind]);
-    if(result.rows.length)await notify(tx,artifactId,rootId);
+    if(result.rows.length){
+      await tx.query(
+        `INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,reactor_label,count,token_id)
+         VALUES (nextval(pg_get_serial_sequence('annotations','seq')),$1,$2,$3,$4,$5,$6,$7,
+           (SELECT count(*) FROM comment_reactions WHERE comment_id=$2 AND kind=$4),$8)`,
+        [artifactId,commentId,actor.userId,input.kind,input.active,reactor.kind,reactor.label,actor.tokenId]);
+      await notify(tx,artifactId,rootId);
+    }
     const fresh=(await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id=$1`,[rootId])).rows;
     return (await wireFor(tx,row,fresh,actor.userId))[0]??null;
   });

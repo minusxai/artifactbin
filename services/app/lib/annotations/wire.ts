@@ -85,9 +85,9 @@ export async function respondToAnnotationAction(
 }
 
 /** Body → edit; null = malformed (no words, or a revision that is not a count). */
-function parseAnnotationEdit(body: Record<string, unknown>, editorKind: AnnotationEdit['editorKind']): AnnotationEdit | null {
+function parseAnnotationEdit(body: Record<string, unknown>): AnnotationEdit | null {
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return null;
-  const edit: AnnotationEdit = { body: body.body, editorKind };
+  const edit: AnnotationEdit = { body: body.body };
   if (body.expected_revision !== undefined) {
     if (!Number.isSafeInteger(body.expected_revision) || Number(body.expected_revision) < 0) return null;
     edit.expectedRevision = Number(body.expected_revision);
@@ -104,11 +104,10 @@ export async function respondToAnnotationEdit(
   actor: AccessActor,
   id: string,
   commentId: string,
-  editorKind: AnnotationEdit['editorKind'],
   receipt?: MutationReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const edit = parseAnnotationEdit(body, editorKind);
+  const edit = parseAnnotationEdit(body);
   if (!edit) return json({ error: 'invalid_annotation_edit', hint: 'Send the new text as a non-empty `body`; `expected_revision` is the thread revision you read.' }, 400);
   let result;
   try { result = await editAnnotationCommentFor(actor, id, commentId, edit, receipt); }
@@ -122,10 +121,13 @@ export async function respondToAnnotationEdit(
   return json(result.wire);
 }
 
-/** Both account doors use the same desired-state protocol; unknown kinds fail closed until supported. */
-export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string):Promise<Response>{
+/**
+ * Both account doors use the same desired-state protocol; unknown kinds fail closed until supported. `reactor` is
+ * the door's attribution, as for a reply: the browser door names the person, the bearer door the agent.
+ */
+export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<Response>{
  if(!actor.userId)return json({error:'account_required',hint:'Sign in to react to comments.'},403);
  if(!body || body.kind!=='thumbs_up' || typeof body.active!=='boolean')return json({error:'invalid_comment_reaction'},400);
- const wire=await setCommentReactionFor(actor,id,commentId,{kind:body.kind,active:body.active});
+ const wire=await setCommentReactionFor(actor,id,commentId,{kind:body.kind,active:body.active},reactor);
  return wire?json(wire):json({error:'not_found'},404);
 }

@@ -141,4 +141,4 @@ it('native identity provenance belongs to the app and preserves multiple verifie
  expect(sql).not.toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_native_identity_imports_target');
 });
 
-it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');});
+it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBe('app');});

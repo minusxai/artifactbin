@@ -4,8 +4,9 @@
  *
  * Same events (`commentChangeEvent`, shared with the server), same opaque checkpoints, same replay: comments carry feed
  * positions from one workspace counter (preview/annotations.ts), and a read derives events from them exactly as the
- * server derives its own from `seq` and `change_seq`. Human comments are the person at this workspace (`you: true`);
- * `--agent` comments and agent edits are never events, as hosted. Waiting polls the workspace store.
+ * server derives its own from `seq` and `change_seq`. Every comment and edit is an event, the preview browser's and
+ * `afbin comment`'s alike. With no credential locally, `you` marks what the CLI wrote (any non-browser transport): the
+ * watching agent's own words, which it skips. Waiting polls the workspace store.
  */
 import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
@@ -42,18 +43,18 @@ export async function localCommentFeed(workspace:Workspace,file:string){
  const rows=()=>state.list<Stored>(LOCAL_WORKSPACE_SCOPE,'preview-thread').map(row=>row.value).filter(entry=>entry.file===file).flatMap(entry=>entry.value.thread.map(comment=>{
   const at=entry.positions?.[comment.id],seq=BigInt(at?.seq??0),change=BigInt(at?.change??0);
   return {id:comment.id,rootId:comment.id===entry.value.id?null:entry.value.id,authorKind:comment.author.kind,label:comment.author.label,userId:comment.author.user_id,
-   body:comment.body,createdAt:comment.created_at,editedAt:comment.edited_at??null,seq,key:seq>change?seq:change,you:comment.author.kind==='human'};
+   body:comment.body,createdAt:comment.created_at,editedAt:comment.edited_at??null,seq,key:seq>change?seq:change,you:comment.author.transport!=='browser'};
  }));
- const read=(after:string,limit:number):CommentChangesPage=>{
+ const read=(after:string,limit:number):CommentChangesPage<CommentChangeEvent>=>{
   const all=rows();
   if(after==='now')return {events:[],next_cursor:encode(all.reduce((max,row)=>row.key>max?row.key:max,0n)),has_more:false};
   const from=decode(after);
   const scanned=all.filter(row=>row.key>from).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0);
   const page=scanned.slice(0,limit);
-  const events=page.flatMap(row=>commentChangeEvent(row,artifactId,from)??[]) as CommentChangeEvent[];
+  const events=page.map(row=>commentChangeEvent(row,artifactId,from));
   return {events,next_cursor:encode(page.length?page[page.length-1]!.key:from),has_more:scanned.length>limit};
  };
- const wait=async(after:string,limit:number,waitSeconds:number,signal?:AbortSignal):Promise<CommentChangesPage>=>{
+ const wait=async(after:string,limit:number,waitSeconds:number,signal?:AbortSignal):Promise<CommentChangesPage<CommentChangeEvent>>=>{
   const deadline=Date.now()+Math.min(waitSeconds,COMMENT_CHANGES_MAX_WAIT_SECONDS)*1000;
   for(;;){
    const page=read(after,limit);

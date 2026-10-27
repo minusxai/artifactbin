@@ -10,7 +10,7 @@ export const flags: Record<string,Flag> = {
  personal:{description:'Select Personal for new artifacts or an explicit setup default.'},
  inherit:{description:'Clear the account destination override and inherit this deployment’s default; setup only.'},
  'set-default':{description:'Authenticate, save the selected account destination and explicitly select this server for future commands.'},
- comments:{description:'Follow new human comments, replies and edits.'},
+ comments:{description:'Follow new comments, replies, edits and reactions from people and agents.'},
  'idempotency-key':{value:'KEY',description:'Reuse this upload identity to recover a confirmed file without creating another.'},
  account:{value:'ACCOUNT',description:'Explicit workspace rebind target: current authenticated account only.'},
  artifact:{value:'ID',description:'Published live artifact ID for a schedule, including program artifacts.'},
@@ -92,7 +92,7 @@ const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
- {name:'watch',usage:'<url|id|file> --comments --json [--output <file>]',description:'Follow new human comments, replies and edits as NDJSON until cancelled; a local file is followed offline from the workspace; --cursor resumes an explicit checkpoint. Run it with a tool that wakes you on each output line; a stdout that is a file or discarded is refused, and --output appends the events to a log file on purpose instead.',min:1,max:1,flags:['comments','cursor','output'],examples:['afbin watch abc123 --comments --json','afbin watch report.jsx --comments --json','afbin watch report.jsx --comments --json --output comments.ndjson']},
+ {name:'watch',usage:'<url|id|file> --comments --json [--output <file>]',description:'Follow new comments, replies, edits and reactions (people\'s and agents\'; skip events marked you: your own writes) as NDJSON until cancelled; a local file is followed offline from the workspace; --cursor resumes an explicit checkpoint. Run it with a tool that wakes you on each output line; a stdout that is a file or discarded is refused, and --output appends the events to a log file on purpose instead.',min:1,max:1,flags:['comments','cursor','output'],examples:['afbin watch abc123 --comments --json','afbin watch report.jsx --comments --json','afbin watch report.jsx --comments --json --output comments.ndjson']},
  {name:'upload',usage:'<file> --in <document> --name <import>',description:'Upload one attachment to a declared dataset import; returns its file reference without changing rows.',min:1,max:1,flags:['in','name','idempotency-key'],examples:['afbin upload receipt.pdf --in abc123 --name expenses --json']},
  {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},

@@ -1,14 +1,16 @@
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
 /**
- * THE COMMENT FEED CARRIES HUMAN EDITS. A human rewriting a comment after a monitor's checkpoint is delivered once
+ * THE COMMENT FEED CARRIES EDITS, a person's or an agent's. A rewrite after a monitor's checkpoint is delivered once
  * as an edit event (same `type`, `change: 'edited'`, a distinct `event_id`); a comment the monitor has not seen yet
- * arrives once as the ordinary new-comment event with its current words. Agent edits never come back, nor do
- * edits of agent comments or of deleted ones; checkpoints replay the same IDs.
+ * arrives once as the ordinary new-comment event with its current words. `author.you` marks a rewrite made with the
+ * watching credential. Edits of deleted comments never come back; checkpoints replay the same IDs.
  */
 import { expect, it, vi } from 'vitest';
 import { getDb } from '@/lib/platform/db';
-import type { CommentChangesPage } from '@artifactbin/contracts';
+import type { CommentChangeEvent, CommentChangesPage as FeedPage } from '@artifactbin/contracts';
+/** This file reacts to nothing, so its pages carry comment events only. */
+type CommentChangesPage = FeedPage<CommentChangeEvent>;
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as createComment } from '@/app/api/my/artifacts/[id]/annotations/route';
@@ -98,7 +100,7 @@ it('two edits between reads collapse to one event carrying the latest words', as
   expect(page.events.map((e) => [e.change, e.body])).toEqual([['edited', 'Three']]);
 });
 
-it('never delivers agent edits, edits of agent comments, unchanged text, or edits of deleted comments', async () => {
+it('delivers agent edits and edits of agent comments, marked `you` for the watching credential; never unchanged text or deleted comments', async () => {
   const f = await fixture();
   const human = await f.comment('Human words');
   const agentMade = await bearerCreate(request(`/api/artifacts/${f.doc.id}/annotations`, { method: 'POST', token: f.t.token, json: { anchor:nativeAnchor('intro'), body: 'Agent words' } }), params({ id: f.doc.id, annId: '' }));
@@ -106,16 +108,21 @@ it('never delivers agent edits, edits of agent comments, unchanged text, or edit
   const doomed = await f.comment('Soon gone');
   const cursor = await f.now();
   const bearer = (id: string, body: string) => bearerEdit(request(`/api/artifacts/${f.doc.id}/annotations/${id}`, { method: 'PATCH', token: f.t.token, json: { body } }), params({ id: f.doc.id, annId: id }));
-  // The agent's own account wrote the human comment, so it may rewrite it, but its own edit is never echoed back.
+  // The agent's own account wrote the human comment, so it may rewrite it; its rewrite arrives, marked as its own.
   expect((await bearer(human.id, 'Human words, agent-tidied')).status).toBe(200);
   expect((await bearer(agent.id, 'Agent words, revised')).status).toBe(200);
-  await f.edit(human.id, 'Human words, agent-tidied');
+  await f.edit(human.id, 'Human words, agent-tidied'); // unchanged text: no new position
   await f.edit(doomed.id, 'Soon gone, edited');
   const removed = await deleteComment(request(`/api/my/artifacts/${f.doc.id}/annotations/${doomed.id}`, { method: 'DELETE', actor: f.actor }), params({ id: f.doc.id, annId: doomed.id }));
   expect(removed.status).toBe(200);
   const page = await f.read(cursor);
-  expect(page.events).toEqual([]);
-  expect((await f.read(cursor, '&limit=1')).has_more).toBe(false);
+  expect(page.events.map((e) => [e.comment_id, e.change, e.body, e.author.kind, e.author.you])).toEqual([
+    [human.id, 'edited', 'Human words, agent-tidied', 'human', true],
+    [agent.id, 'edited', 'Agent words, revised', 'agent', true],
+  ]);
+  // The person rewriting the same comment in the browser is another credential: no longer the watcher's own.
+  await f.edit(human.id, 'Human words, final');
+  expect((await f.read(page.next_cursor)).events.map((e) => [e.body, e.author.you])).toEqual([['Human words, final', false]]);
 });
 
 it('a baseline taken after an edit does not deliver it again', async () => {
@@ -142,7 +149,7 @@ it('allocates an edit\'s feed position only after locking the artifact', async (
   expect(lock).toBeLessThan(allocate);
 });
 
-it('says which comments are from the watching account\'s own user: author.you', async () => {
+it('says which comments were written with the watching credential: author.you', async () => {
   const f = await fixture();
   const { createUser, claimToken } = await import('@/lib/accounts');
   const { updateSharingFor } = await import('@/lib/artifacts');
@@ -151,13 +158,15 @@ it('says which comments are from the watching account\'s own user: author.you', 
   const colleagueToken = await mintAccountToken('feed-colleague', colleague.id); await claimToken(colleague.id, colleagueToken.token);
   await updateSharingFor(identityForUser(f.t.userId!, f.t.id), f.doc.id, { shares: [{ email: colleague.email!, role: 'commenter' }] });
   const cursor = await f.now();
-  const mine = await f.comment('From the owner');
+  // The watcher's own user in the browser is not the watcher: an agent must answer its user's comments.
+  const mine = await f.comment('From the owner in the browser');
+  const agentMade = await bearerCreate(request(`/api/artifacts/${f.doc.id}/annotations`, { method: 'POST', token: f.t.token, json: { anchor:nativeAnchor('intro'), body: 'From the watching agent' } }), params({ id: f.doc.id, annId: '' }));
+  expect(agentMade.status).toBe(201);
   const theirs = await createComment(request(`/api/my/artifacts/${f.doc.id}/annotations`, { method: 'POST', actor: { credential: 'session', userId: colleague.id, email: colleague.email!, emailVerified: true }, json: { anchor:nativeAnchor('intro'), body: 'From a colleague' } }), params({ id: f.doc.id, annId: '' }));
   expect(theirs.status).toBe(201);
   const page = await f.read(cursor);
-  expect(page.events.map((e) => [e.body, e.author.you])).toEqual([['From the owner', true], ['From a colleague', false]]);
+  expect(page.events.map((e) => [e.body, e.author.kind, e.author.you])).toEqual([['From the owner in the browser', 'human', false], ['From the watching agent', 'agent', true], ['From a colleague', 'human', false]]);
   expect(page.events[0]!.comment_id).toBe(mine.id);
-  // The colleague watching the same document sees it the other way round.
   const theirView = await changes(request(`/api/artifacts/${f.doc.id}/annotations/changes?after=${encodeURIComponent(cursor)}&wait=0`, { token: colleagueToken.token }), params({ id: f.doc.id, annId: '' }));
   expect(theirView.status).toBe(400); // a checkpoint is the account's own; the colleague starts from its own baseline
   const base = await changes(request(`/api/artifacts/${f.doc.id}/annotations/changes?after=now&wait=0`, { token: colleagueToken.token }), params({ id: f.doc.id, annId: '' }));

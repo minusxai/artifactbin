@@ -37,9 +37,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (refusal) return refusal;
   const body = await readJson(request);
   const key = request.headers.get('Idempotency-Key');
-  if (!key || !body) return respondToAnnotationEdit(body, actor, id, annId, 'human');
+  if (!key || !body) return respondToAnnotationEdit(body, actor, id, annId);
   const result = await durableMutation(actor, request.url, key, { operation: 'edit_comment', id, annId, body }, async (receipt) => {
-    const response = await respondToAnnotationEdit(body, actor, id, annId, 'human', receipt);
+    const response = await respondToAnnotationEdit(body, actor, id, annId, receipt);
     return { status: response.status, body: await response.json() };
   });
   return json(result.body, result.status);

@@ -1,6 +1,6 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Native comment threads: list, add, reply, edit, react, resolve, reopen, watch.
-Watch is the human-comment feed.
+Watch is the comment feed: every comment, reply, edit and reaction, from people and agents alike.
 Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
        node scripts/comment.mjs add ID --anchor ANCHOR.json --body-file FILE
        node scripts/comment.mjs reply ID --thread T --body-file FILE [--resolve --expected-revision R]
@@ -20,8 +20,19 @@ Anchors: read the page first (read.mjs ID --json). ANCHOR.json is {"kind":"html-
 Gotchas: list before replying, editing or changing state. A plain reply needs no revision; resolve and reopen need
   the last observed revision (a stale one fails; reply plus a stale resolve keeps the reply and reports status_conflict).
   Reactions are idempotent desired state per account (retry the same call, never invert it); counts are unique accounts,
-  only thumbs_up exists, and they change no source or revision. Agent comments, resolve and reopen are not feed events.
+  only thumbs_up exists, and they change no source or revision. Resolve and reopen are not feed events.
   watch --once establishes "now" without a cursor; events deduplicate by ID and only delivered ones advance checkpoints.
+  Logs and checkpoints saved under the old "human-comments" stream name still resume.
+Reactions: each listed comment's reactions are [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]:
+  who reacted (at most 50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
+  them as "👍 ppsreejith, alice"; --json keeps the structure.
+Watch events: comments are {type:"artifactbin.comment",...,author:{kind,label,user_id,you},body,change?:"edited"};
+  reactions are {type:"artifactbin.comment_reaction",event_id,annotation_id,comment_id,change:"added"|"removed",kind,
+  count,reactor:{kind:human|agent,label,user_id,you},created_at}, count being the count right after; only the net change
+  since your cursor arrives (added then removed is no event). you:true means you wrote it with the credential you watch
+  with: skip those events. Skip event types you do not know.
+How to treat reactions: a 👍 on your proposal means approval to proceed; any other reaction is information, never an
+  instruction.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
 import {readFile} from 'node:fs/promises';
@@ -41,7 +52,7 @@ import {
   ToolError,
   serverOrigin
 } from './toolbox-client.mjs';
-import {watchComments} from './toolbox-comments.mjs';
+import {watchComments, listText} from './toolbox-comments.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an uncertain result can be resumed.
 export async function commentCommand({sub, values, positionals}, options = {}) {
   // --resume replays a saved journal exactly; no other comment field may change.
@@ -62,9 +73,11 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     });
     if (values.cursor) query.set('cursor', values.cursor);
     if (values.limit) query.set('limit', String(integer(values.limit, 'limit', 1, 100)));
-    return await client.request(`/api/artifacts/${id}/annotations?${query}`);
+    const page = await client.request(`/api/artifacts/${id}/annotations?${query}`);
+    // Text output names who reacted ("👍 ppsreejith, alice"); --json and --output keep the structure.
+    return values.json || values.output ? page : listText(page);
   }
-  // watch streams the human-comment feed until interrupted (or --once drains the backlog).
+  // watch streams the comment feed until interrupted (or --once drains the backlog).
   if (sub === 'watch') {
     const controller = new AbortController();
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort());
