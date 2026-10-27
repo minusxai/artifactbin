@@ -48,7 +48,7 @@ For native HTML visualizations, use the direct library APIs rather than a custom
 |---|---|
 | Analytical charts or custom chart layouts | [Vega and Vega-Lite](references/dataviz.md) |
 | Interactive maps and geospatial layers | [deck.gl](references/maps.md) |
-| Flowcharts, sequences and other diagrams | [Mermaid](references/diagrams.md) |
+| Flowcharts, sequences and other diagrams | [Pele](references/diagrams.md) |
 
 The guides give the exact shipped ESM imports, theming, resizing, cleanup and offline limits. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
@@ -68,7 +68,7 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
 - [HTML comments and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
-- [Diagrams](references/diagrams.md): direct Mermaid rendering, themes, lifecycle and offline behavior.
+- [Diagrams](references/diagrams.md): Pele rendering of Mermaid syntax, themes, lifecycle and offline behavior.
 - [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data limits.
 - [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages](references/html-authoring.md#installable-page-presentation) and [slides](references/html-authoring.md#slides-and-image-capture): static head metadata and explicit capture boundaries.
@@ -224,7 +224,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
   - [design-systems.md](references/design-systems.md) — Choose one visual system
   - [dataviz.md](references/dataviz.md) — Native chart authoring
   - [maps.md](references/maps.md) — Native deck.gl map authoring
-  - [diagrams.md](references/diagrams.md) — Native Mermaid diagram authoring
+  - [diagrams.md](references/diagrams.md) — Native Pele diagram authoring
     - [system-almanac.md](references/system-almanac.md) — Almanac system
     - [system-arcade.md](references/system-arcade.md) — Arcade system
     - [system-broadsheet.md](references/system-broadsheet.md) — Broadsheet system

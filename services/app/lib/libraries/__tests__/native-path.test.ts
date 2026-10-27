@@ -53,7 +53,18 @@ it('reads the deployed public directory after bundling relocates import.meta.url
 });
 
 it('packs direct Mermaid and deck.gl imports from admitted project modules without network dependencies',async()=>{
- const html='<script type="module" data-af-id="chart-script">import mermaid from "/libraries/mermaid-12.0.0/index.js";import {Deck} from "/libraries/deck-gl-9.4.0/index.js";console.log(mermaid,Deck);</script>';
- const resources=await referencedLibraryResources(html,[],baseUrl);expect(resources.map(r=>r.url)).toEqual(['/libraries/deck-gl-9.4.0/index.js','/libraries/mermaid-12.0.0/index.js']);
+ const html='<script type="module" data-af-id="chart-script">import {render} from "/libraries/pele-1.12.0/index.js";import {Deck} from "/libraries/deck-gl-9.4.0/index.js";console.log(render,Deck);</script>';
+ const resources=await referencedLibraryResources(html,[],baseUrl);expect(resources.map(r=>r.url)).toEqual(['/libraries/deck-gl-9.4.0/index.js','/libraries/pele-1.12.0/index.js']);
  const packed=await packOfflineDependencies({html,baseUrl,resources});expect(packed.embeddedUrls).toHaveLength(2);initSync();const imports=parseModuleImports(authorModule(packed.html))[0].map(item=>item.n);expect(imports.length).toBe(2);expect(imports.every(url=>url?.startsWith('@afbin/offline/'))).toBe(true);const payload=JSON.parse(packed.html.match(/<script type="application\/json" data-af="offline-modules">([\s\S]*?)<\/script>/)![1]!);for(const resource of resources)expect(imports.some(url=>payload[url!]===new TextDecoder().decode(resource.bytes))).toBe(true);
+});
+
+it('renders the admitted Pele module from an actual offline page without fetching a library',async()=>{
+ const html='<script type="module" data-af-id="chart-script">import {render} from "/libraries/pele-flowchart-1.12.0/index.js";export const svg=render("flowchart LR\\n Draft --> Done",{idPrefix:"offline"}).svg;</script>';
+ const resources=await referencedLibraryResources(html,[],baseUrl);expect(resources.map(r=>r.url)).toEqual(['/libraries/pele-flowchart-1.12.0/index.js']);
+ const packed=await packOfflineDependencies({html,baseUrl,resources});expect(packed.embeddedUrls).toEqual(['https://page.example/libraries/pele-flowchart-1.12.0/index.js']);
+ const downloaded=downloadableHtml({html:packed.html,core:'/* core */',apollo:'export {};',reader:'export {};',config:{pageId:'PAGE12',revision:'1',backends:[]}});
+ let module=authorModule(downloaded);const payload=JSON.parse(packed.html.match(/<script type="application\/json" data-af="offline-modules">([\s\S]*?)<\/script>/)![1]!);
+ for(const [key,value]of Object.entries(payload))module=module.replaceAll(JSON.stringify(key),JSON.stringify('data:text/javascript;base64,'+Buffer.from(value as string).toString('base64')));
+ const fetch=vi.fn(()=>{throw Error('network unavailable');});vi.stubGlobal('fetch',fetch);
+ try{const rendered=await import(/* @vite-ignore */`data:text/javascript;base64,${Buffer.from(module).toString('base64')}`);expect(rendered.svg).toContain('Draft');expect(rendered.svg).toContain('Done');expect(fetch).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
 });

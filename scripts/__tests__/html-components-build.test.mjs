@@ -82,7 +82,7 @@ it('fits actual Mermaid, DeckGL and controls under publication limits with lazy 
  const files=new Map();for(const entry of ['mermaid.js','deck-gl.js','button.js','slider.js','tabs.js'])for(const [name,text] of await closure(dirs.outputDir,entry))files.set(name,text);
  expect(files.size).toBeLessThanOrEqual(99);expect([...files.values()].reduce((total,text)=>total+Buffer.byteLength(text),0)).toBeLessThan(16_000_000);
  expect(Math.max(...[...files.values()].map(text=>Buffer.byteLength(text)))).toBeLessThanOrEqual(4_000_000);
- expect(files.has('engine-mermaid-elk.js')).toBe(true);
+ expect(files.has('engine-mermaid-elk.js')).toBe(false);
  expect(files.get('mermaid.js')).toMatch(/import\("\.\/chunk-[a-z0-9]+\.js"\)/);expect(files.get('deck-gl.js')).toMatch(/import\("\.\/deck-gl-engine\.js"\)/);
  expect(Buffer.byteLength(files.get('mermaid.js'))).toBeLessThan(30_000);expect(Buffer.byteLength(files.get('deck-gl.js'))).toBeLessThan(30_000);
  const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan');
