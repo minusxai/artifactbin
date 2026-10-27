@@ -1,4 +1,4 @@
-import{prepareNativeSlidePreviewImages,projectNativeSlidePreviewResources}from'./slide-preview-resources.ts';
+import{prepareNativeSlidePreviewImages,projectNativeSlidePreviewResources,bindNativeSlidePreviewPlaceholders}from'./slide-preview-resources.ts';
 import {nativeComponentHelperIds} from './component-presentation.ts';
 import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
@@ -145,7 +145,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   if(mappings.length!==1||!mapping||!/^\.\/components\/[A-Za-z0-9_./-]+\.js$/.test(mapping.specifier)||mapping.specifier.slice(2).split('/').some(part=>!part||part==='.'||part==='..')||files.filter(f=>'./'+f.path===mapping.specifier&&f.sha256===mapping.sha256).length!==1){block('native-module-mapping',module.name);return '';}
   let argumentsJs='';
   if(module.name==='slide-deck'&&module.register==='registerSlideDeck'){
-   try{const projection=projectNativeSlidePreviewResources({resources:prepareNativeSlidePreviewImages({files,urls:input.urls??[]}),authoredHtml:lowered.html!+lowered.headHtml});previewTemplateHtml+=projection.templateHtml;argumentsJs='undefined,undefined,{previewImages:'+projection.registrationExpression+'}';}catch{block('slide-preview-manifest');return '';}
+   try{const projection=projectNativeSlidePreviewResources({resources:bindNativeSlidePreviewPlaceholders({resources:prepareNativeSlidePreviewImages({files,urls:input.urls??[]}),analysis:input.analysis,presentation,urls:input.urls??[],sourceImages:input.slidePreviewSources}).resources,authoredHtml:lowered.html!+lowered.headHtml});previewTemplateHtml+=projection.templateHtml;argumentsJs='undefined,undefined,{previewImages:'+projection.registrationExpression+'}';}catch{block('slide-preview-manifest');return '';}
   }
   return `import {${module.register} as register${index}} from ${json(mapping.specifier)};register${index}(${argumentsJs});`;
  }).join('\n');
