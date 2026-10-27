@@ -53,6 +53,8 @@ export async function inspectPage(page,options,task){
   }
  }catch(error){evidence.error=String(error.message);}
  try{
+  // A step may have just toggled a theme; measure settled colours, not a transition frame.
+  await page.evaluate(()=>Promise.race([Promise.all(document.getAnimations().map(animation=>animation.finished.catch(()=>{}))),new Promise(resolve=>setTimeout(resolve,1000))])).catch(()=>{});
   evidence.text=(await page.locator('body').innerText({timeout:1000})).slice(0,24000);
   evidence.overflow=await page.locator('html').evaluate(html=>{
    const content=Math.max(html.scrollWidth,html.ownerDocument.body.scrollWidth);
