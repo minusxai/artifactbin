@@ -60,7 +60,7 @@ describe('one installable native HTML author skill',()=>{
   expect(check.slice(0,check.indexOf('import'))).not.toContain('frameLocator(');
   expect(comment).toContain('watch');expect(comment).toContain('react');
   expect(files['components/slide-deck.ts']).toContain('registerSlideDeck');
-  for(const gone of ['html-components','html-examples','html-uploads','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
+  for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

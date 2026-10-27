@@ -52,6 +52,15 @@ For native HTML visualizations, use the direct library APIs rather than a custom
 
 The guides give the exact shipped ESM imports, theming, resizing, cleanup and offline limits. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
+## Sharing and access
+
+A link never carries your login: whoever opens it signs in as themselves. Visibility only controls who can read; editing, comments and dataset writes are separate permissions.
+
+- "Make it public": `node scripts/publish.mjs page.html --visibility public` (the default is unlisted).
+- "Share it with my team": `node scripts/publish.mjs page.html --group HANDLE`. Group editors can edit, viewers can read.
+- "Let readers submit something": a readable page grants no writes; use a backend mutation with a role directive ([backend permissions](references/html-backends.md)).
+- Cursors and reader presence are the platform's; don't build them.
+
 ## Preserve the document
 
 Every saved page version remains available. Keep stable `data-af-id` attributes when moving or editing elements. Never reuse an ID removed in an earlier version. Newly authored static elements may omit IDs and receive server-assigned identities; save the canonical returned HTML before the next edit. Script-created elements follow the ID rule in step 2; the platform scopes their comments automatically. HTML `id` remains available for ordinary browser anchors and selectors.
@@ -70,7 +79,7 @@ Use `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platfo
 - [Diagrams](references/diagrams.md): Pele rendering of Mermaid syntax, themes, lifecycle and offline behavior.
 - [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data limits.
 - [Installable pages](references/html-authoring.md#installable-page-presentation) and [slides](references/html-authoring.md#slides-and-image-capture): static head metadata and explicit capture boundaries.
-- [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.
+- [Offline images](references/html-runtime.md#portable-images): download limits.
 - [Datasets](references/html-datasets.md): CSV import, schema discovery and stable dataset IDs.
 - [Backend files](references/html-backends.md): TypeScript resolvers, shared stores and permissions.
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.

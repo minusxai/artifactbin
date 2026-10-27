@@ -37,7 +37,3 @@ Before expiry, or after an API `401`, send `POST /oauth/token` with `Content-Typ
 Refresh is single-use and must be serialized across every process sharing the grant. Direct file updates require exclusive ownership of the credential store: coordinate with other clients, sharing this grant, before refreshing. Re-read the saved values after acquiring exclusive access; another client may already have refreshed. Atomically save the returned access token, refresh token and calculated expiry, retaining origin and client ID, then retry the API request once. Release exclusive access after saving. Never rotate the same grant concurrently from separate copies.
 
 Keep credentials on network errors, `429`, server errors or incomplete refresh responses and retry later. Missing credentials or `invalid_grant`, `invalid_client` or `revoked_token` require sign-in again. Never log tokens or put them in URLs. Without filesystem access, keep the same values in a persistent secret store with atomic replacement and serialized refresh; if neither storage option is available, credentials cannot survive a new session.
-
-## Account destination preferences
-
-See [groups](html-sharing.md) for group/default APIs and editor/viewer permissions. Use the same origin-bound bearer credential for those requests.

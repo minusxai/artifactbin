@@ -29,6 +29,7 @@ const commands = {
       manifest: flag(),
       title: flag(),
       visibility: flag(),
+      group: flag(),
       'dry-run': flag('boolean'),
       strict: flag('boolean'),
       create: flag('boolean'),

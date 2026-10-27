@@ -258,3 +258,19 @@ it('teaches script-created element IDs in the main steps and no longer names dat
  const runtime=await readFile(new URL('../../../skills/artifactbin/references/html-runtime.md',import.meta.url),'utf8');
  expect(runtime).toContain('## Dynamic elements and comments');
 });
+it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'publish-group-')),server='https://example.test';
+ try{
+  const file=path.join(root,'index.html');await writeFile(file,'<!doctype html><html><head><meta charset="utf-8"><title>T</title></head><body><h1>Hi</h1></body></html>');
+  const seen:string[]=[];let role='editor';
+  const fetcher=async(url:any)=>{seen.push(new URL(String(url)).pathname);return Response.json({group:{id:'grp_team',handle:'team',role}});};
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:root},fetcher,log:()=>{}};
+  const planned=await publishCommand({values:{server,'dry-run':true,group:'@team'},positionals:[file]},options);
+  expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
+  expect(await publishCommand({values:{server,'dry-run':true},positionals:[file]},options)).not.toHaveProperty('destination');
+  role='viewer';
+  await expect(publishCommand({values:{server,'dry-run':true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'group_not_editor'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});

@@ -1,16 +1,19 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Publish a page, dataset or asset with its local dependencies.
 FILE and FILE.af.json are rewritten in place with the canonical result.
-Usage: node scripts/publish.mjs FILE [--title T] [--visibility private|unlisted|public] [--dry-run] [--strict]
+Usage: node scripts/publish.mjs FILE [--title T] [--visibility private|unlisted|public] [--group HANDLE] [--dry-run] [--strict]
        node scripts/publish.mjs --resume JOURNAL
 Flags: --type html|dataset|asset (inferred from unambiguous extensions); --root DIR project boundary (default: the
   source directory); --manifest FILE JSON {"manifest":[paths]} of extra runtime-loaded files; --title; --visibility
-  (new pages default to unlisted); --dry-run validates and plans without writes; --strict refuses fixable autofix
+  (new pages default to unlisted);
+  --group HANDLE creates a new page in that group (you need editor access; it resolves GET /api/groups/HANDLE first); a
+  destination that conflicts with the parent's owner is refused, and it never moves existing pages, so updates reject it; --dry-run validates and plans without writes; --strict refuses fixable autofix
   problems instead of fixing them; --create new identity for ambiguous recovered source; --artifact ID with
   --baseline FILE (advanced recovery); --request FILE exclusive journal outside the project; --resume JOURNAL.
   Common: --server ORIGIN, --json, --output FILE, --help.
 Examples:
   node scripts/publish.mjs ./project/index.html           # first publish; prints the receipt and any autofix: changes
+  node scripts/publish.mjs page.html --group design-team  # new page in a group you edit
   node scripts/publish.mjs page.html                      # after: node scripts/read.mjs ID --output page.html
   node scripts/publish.mjs --resume JOURNAL               # after exit 5 (unknown outcome); replays the exact request
 Gotchas: keep editing and publishing the same file (never copy or hand-edit the .af.json companion). Dependencies
