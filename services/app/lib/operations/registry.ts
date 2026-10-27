@@ -264,14 +264,14 @@ const annotateOp: Operation = {
   name: 'annotate',
   title: 'Answer an annotation',
   http: { method: 'POST', path: '/api/artifacts/{id}/annotations/{annotation_id}' },
-  description: 'Answer an annotation on a document you own: reply, resolve, or reopen it. A reply may accompany one state transition. Annotations arrive inlined on get_artifact — reply when you act on one, resolve when it is done.',
+  description: 'Answer an annotation on a document you own: reply, resolve, or reopen it. A reply may accompany one state transition; a plain reply never conflicts, and `expected_revision` only guards resolve/reopen (a stale one with a reply keeps the reply and answers `status_conflict:true`). Annotations arrive inlined on get_artifact — reply when you act on one, resolve when it is done.',
   input: { id: z.string(), annotation_id: z.string(), expected_revision:z.number().int().nonnegative().optional(), reply: z.string().optional(), resolve: z.boolean().optional(), reopen: z.boolean().optional() },
   annotations: {},
   example: { input: { id: 'aB3xK9', annotation_id: 'ann_123', reply: 'done — tightened the intro', resolve: true } },
   errors: [
     NOT_FOUND,
     { status: 400, code: 'invalid_annotation_action', fix: 'send at least one of reply/resolve/reopen, and never resolve with reopen' },
-    { status: 409, code: 'annotation_conflict', fix: 'read the current conversation and retry with its revision; no changes were applied' },
+    { status: 409, code: 'annotation_conflict', fix: 'a bare resolve/reopen was against a stale revision; read the current conversation and retry with its revision' },
   ],
   async run(ctx, input) {
     // The same gate the browser's comment door has: a guest is sent to sign in,

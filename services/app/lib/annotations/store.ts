@@ -52,6 +52,8 @@ interface AnnotationAnchor {
 export interface AnnotationWire {
   view_state?: CommentViewState;
   revision?: number;
+  /** Set only on an answer to reply+resolve/reopen whose revision was stale: the reply landed, the state change did not. */
+  status_conflict?: true;
   image?: CommentImageWire;
   remote_work?:RemoteWork[];
   id: string;
@@ -544,7 +546,7 @@ export async function actOnAnnotationFor(
    * transaction — so the callback hands the facts back and the log is told
    * once the transaction has resolved.
    */
-  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; wire?:AnnotationWire } | null> => {
+  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; statusConflict: boolean; wire?:AnnotationWire } | null> => {
     // Artifact → thread order matches root creation and serializes seq allocation through commit.
     const row = await scopedRow(tx, scope, artifactId, true);
     if (!row) return null;
@@ -554,7 +556,17 @@ export async function actOnAnnotationFor(
     );
     const root = found.rows[0];
     if (!root) return null;
-    if(action.expectedRevision!==undefined&&root.revision!==action.expectedRevision)throw new AnnotationRevisionError(root.revision);
+    /*
+     * A reply only APPENDS, so concurrent replies never conflict and a stale `expected_revision` on one is ignored.
+     * The optimistic check guards state changes: a bare resolve/reopen against a stale revision throws. A reply
+     * combined with a transition keeps the reply (never lose words) and skips the transition, reported as
+     * `status_conflict` so the caller re-reads and decides again.
+     */
+    const stale=action.expectedRevision!==undefined&&root.revision!==action.expectedRevision;
+    const hasReply=typeof action.reply==='string'&&action.reply.length>0;
+    const transition=Boolean(action.resolve||action.reopen);
+    if(stale&&!hasReply)throw new AnnotationRevisionError(root.revision);
+    const statusConflict=stale&&transition;
 
     const replyId='ann_'+generateInternalId();
     const replied = typeof action.reply === 'string' && action.reply.length > 0;
@@ -574,13 +586,15 @@ export async function actOnAnnotationFor(
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
     let resolved = false;
-    if (action.reopen && root.status === 'resolved') {
+    if (statusConflict) {
+      // The thread moved since the caller read it: the reply stands, the state change does not.
+    } else if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
     } else if (action.resolve && root.status === 'open') {
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
       resolved = true;
     }
-    if(replied || resolved || (action.reopen && root.status==='resolved')){
+    if(replied || resolved || (!statusConflict && action.reopen && root.status==='resolved')){
       await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
       await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:author.kind==='agent'});
     }
@@ -589,9 +603,10 @@ export async function actOnAnnotationFor(
     // make every miss truthy.
     if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]],actor.userId))[0]:undefined;
+    let wire=receipt?(await wireFor(tx,row,[fresh.rows[0]],actor.userId))[0]:undefined;
+    if(wire&&statusConflict)wire={...wire,status_conflict:true};
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:200,body:wire as unknown as Record<string,unknown>});
-    return { row: fresh.rows[0], replied, resolved,...(wire?{wire}:{}) };
+    return { row: fresh.rows[0], replied, resolved,statusConflict,...(wire?{wire}:{}) };
   });
   if (!updated) return null;
 
@@ -599,7 +614,7 @@ export async function actOnAnnotationFor(
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
   const [wire] = await wireFor(db, head, [updated.row], actor.userId);
-  return wire ?? null;
+  return wire ? (updated.statusConflict ? { ...wire, status_conflict: true } : wire) : null;
 }
 
 /**
@@ -611,7 +626,7 @@ export async function actOnAnnotationFor(
  * null as an unknown id. Anchor, quote, range and image stay as they were; `edited_at` is stamped and no history
  * is kept.
  *
- * The thread's `revision` (the root's) guards the write like a reply's. Repeating the current text changes
+ * The thread's `revision` (the root's) guards the write (a plain reply is never guarded; see actOnAnnotationFor). Repeating the current text changes
  * nothing — no revision, no stamp, no notice — so a retried edit is harmless. Mentions the edit NEWLY adds are
  * invited in this transaction (their notices leave through the event outbox once it commits); the caller tells
  * connected sessions after commit with `previous`.

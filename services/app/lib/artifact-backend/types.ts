@@ -162,7 +162,7 @@ interface LiveHandlers {
 }
 
 /** A reply and/or a state transition; a reply may carry the comment image staged for it. */
-export interface AnnotationActionBody { reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
+export interface AnnotationActionBody { expected_revision?: number; reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
 
 /** One comment's new text; `expected_revision` is the THREAD revision the editor read (AnnotationWire.revision). */
 interface AnnotationEditBody { body: string; expected_revision?: number }

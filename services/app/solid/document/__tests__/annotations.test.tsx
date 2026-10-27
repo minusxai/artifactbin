@@ -620,6 +620,28 @@ it('starts replies empty even in a tagged thread and retains a failed reply', as
   expect(field).toHaveTextContent('my draft');
 });
 
+it('sends a plain reply without a revision and shows both replies when the thread advanced meanwhile', async () => {
+  const advanced = { ...ANN, revision: 9, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_other', body: 'someone else replied' }, { ...ANN.thread[0]!, id: 'ann_mine', body: 'my reply' }] };
+  const rig = globalThis.fetch;
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { fetchCalls.push({ url: String(url), init }); return new Response(JSON.stringify(advanced), { status: 200 }); }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  const view = layer({ railOpen: true });
+  await flush();
+  view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+  const field = await screen.findByLabelText('Reply to annotation');
+  replaceComment(field, 'my reply');
+  fireEvent.click(screen.getByLabelText('Send reply'));
+  await flush();
+  const call = fetchCalls.filter((c) => c.url.endsWith(`/annotations/${ANN.id}`) && c.init?.method === 'POST').at(-1)!;
+  expect(JSON.parse(String(call.init!.body))).toEqual({ reply: 'my reply' });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
+  expect(screen.getByText('someone else replied')).toBeTruthy();
+  expect(screen.getByText('my reply')).toBeTruthy();
+});
+
 it('shows a connected agent program instead of its transport', () => {
   render(() => <AuthorIdentity author={{kind:'agent',label:'koala-8e44ad',sessionId:'a'.repeat(64),harness:'pi',transport:'http',user_id:null,image:null}} />);
   expect(screen.getByLabelText('Agent type Pi')).toBeTruthy();

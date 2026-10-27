@@ -55,7 +55,7 @@ Comments require an email bearer and document comment permission. `GET /api/arti
 
 Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify this","node_id":"message"}` (a stored JSX ID), or a unique current `quote`. Optional `range` is allowed; creation returns 201. Re-read stale/ambiguous anchors.
 
-Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID and last `expected_revision`. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never both transitions. Use each returned revision. A `409 annotation_conflict` includes `current_revision`; reconcile before retrying.
+Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never both transitions. A plain reply ignores `expected_revision` and never conflicts; resolve/reopen need the last one (stale with a reply: reply kept, `status_conflict:true`). Use each returned revision. A `409 annotation_conflict` includes `current_revision`; reconcile before retrying.
 
 Edit your own comment with **PATCH** `/api/artifacts/<id>/annotations/<comment_id>` and `{"body":"New text","expected_revision":n}`; `comment_id` is the thread ID for its first comment or a reply's `id`. Only the author may; others get 404. It answers the thread with `edited_at` on that comment. A person's edit reaches the [comment changes feed](monitoring.md) as an event with `"change":"edited"`.
 
