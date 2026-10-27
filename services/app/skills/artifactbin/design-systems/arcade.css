@@ -1,32 +1,54 @@
-/* Generated from design-systems/specs/arcade.json. */
-@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/press-start-2p-latin-ext-400-normal.3c7df3a1.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/press-start-2p-latin-400-normal.afec8699.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../fonts/pixelify-sans-latin-ext-wght-normal.0afa0101.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../fonts/pixelify-sans-latin-wght-normal.4a5633a0.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/vt323-latin-ext-400-normal.4435f062.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/vt323-latin-400-normal.8ddbebcc.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+/*
+ * Arcade: Insert coin. Press start. Have fun.
+ * Games, launches, leaderboards, playful dashboards, teaching. Mood: Fun. Opens light. Generated from
+ * design-systems/specs/arcade.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="arcade">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-title t-body t-body-s t-label t-numeral t-combo t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Arcade is the cabinet with the lights on: a near-white ground with a faint checker, pixel-black ink, and
+ * the NES primaries (red, blue, yellow, with magenta and cyan for the power-ups). Status is an HP bar that goes
+ * green, yellow, red in blocks. Lives are hearts, points are coins, hints blink, wins get a ribbon. Night is the
+ * CRT: black glass, scanlines, the colours lifted to neon.
+ * Fits: Game and launch pages, leaderboards and trackers, hackathons, playful dashboards, teaching material for
+ * kids and anyone else, anything that gets better with a score.
+ * Avoid when: Serious, institutional or long-reading subjects; dense data; anything where a pixel heart would read
+ * as a joke at the reader's expense.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
 :root[data-af-design-system="arcade"] {
-  --ds-ground: #f7f3e8;
-  --ds-raised: #ffffff;
-  --ds-sunk: #e9e3d3;
-  --ds-line: #c9c2b0;
-  --ds-ink: #0f0f1a;
-  --ds-ink-muted: #5b586b;
-  --ds-red: #ff3b3b;
-  --ds-on-red: #ffffff;
-  --ds-blue: #2e6bff;
-  --ds-on-blue: #ffffff;
-  --ds-blue-soft: #dce6ff;
-  --ds-yellow: #ffd60a;
-  --ds-on-yellow: #0f0f1a;
-  --ds-magenta: #ff4fd8;
-  --ds-cyan: #35e0ff;
-  --ds-positive: #13a03f;
-  --ds-positive-soft: #d4f5dd;
-  --ds-caution: #c98a00;
-  --ds-caution-soft: #fff1b8;
-  --ds-negative: #e02b2b;
-  --ds-negative-soft: #ffd9d9;
+  --ds-ground: #f7f3e8; /* Page ground: near-white cabinet by day; the CRT black by night (with scanlines). */
+  --ds-raised: #ffffff; /* Panels, cards, the dialogue box. */
+  --ds-sunk: #e9e3d3; /* Wells, the checker squares, empty HP blocks. */
+  --ds-line: #c9c2b0; /* Hairline rules; the checker contrast. */
+  --ds-ink: #0f0f1a; /* Pixel ink: text, sprites, every 4px frame. */
+  --ds-ink-muted: #5b586b; /* Secondary text, the dim high score. */
+  --ds-red: #ff3b3b; /* The brand: cabinet red. Primary actions, hearts, the player sprite. */
+  --ds-on-red: #ffffff; /* Text on red fills. */
+  --ds-blue: #2e6bff; /* Player two: the second drawing fill, the first chart series, links. */
+  --ds-on-blue: #ffffff; /* Text on blue fills. */
+  --ds-blue-soft: #dce6ff; /* Ground for the selected row and the quiet drawing fill. */
+  --ds-yellow: #ffd60a; /* The coin: points, the highlighted figure, the focus ring, the star. */
+  --ds-on-yellow: #0f0f1a; /* Text on yellow fills. */
+  --ds-magenta: #ff4fd8; /* Bonus items and the fourth chart series. Never a status. */
+  --ds-cyan: #35e0ff; /* Shields, power-ups and the fifth chart series. Never a status. */
+  --ds-positive: #13a03f; /* HP full, pass, level up. The green blocks. Always with a glyph or a word. */
+  --ds-positive-soft: #d4f5dd; /* Ground for pass rows and the level-up ribbon. */
+  --ds-caution: #c98a00; /* HP half, low coins, a hint. The yellow blocks. */
+  --ds-caution-soft: #fff1b8; /* Ground for warnings. */
+  --ds-negative: #e02b2b; /* HP low, fail, game over. The red blocks. */
+  --ds-negative-soft: #ffd9d9; /* Ground for fail rows. */
   --background: var(--ds-ground);
   --foreground: var(--ds-ink);
   --card: var(--ds-raised);
@@ -60,6 +82,7 @@
   --ds-pixel-edge: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink);
   --ds-pixel-shadow: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink);
 }
+/* Dark values: the same tokens, under data-af-dark="true". */
 :root[data-af-design-system="arcade"][data-af-dark="true"] {
   --ds-ground: #0a0a14;
   --ds-raised: #141428;
@@ -112,15 +135,26 @@
   --ds-pixel-shadow: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink);
 }
 :root[data-af-design-system="arcade"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(22px, 3.4vw, 44px) / 1.4: One per page, three words at most. Press Start 2P is huge per point; 44px is the ceiling. */
 :root[data-af-design-system="arcade"] .t-display-xl { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(22px, 3.4vw, 44px); line-height: 1.4; font-weight: 400; text-transform: uppercase; }
+/* display, clamp(15px, 2vw, 26px) / 1.5: Section openers. */
 :root[data-af-design-system="arcade"] .t-display-l { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(15px, 2vw, 26px); line-height: 1.5; font-weight: 400; text-transform: uppercase; }
+/* sans, 26px / 30px: Card, panel and dialogue titles. Pixelify Sans bold. */
 :root[data-af-design-system="arcade"] .t-title { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 26px; line-height: 30px; font-weight: 700; }
+/* sans, 18px / 26px: Reading and UI text. Pixelify Sans at 18px reads cleanly and still looks like a game. */
 :root[data-af-design-system="arcade"] .t-body { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 18px; line-height: 26px; font-weight: 400; }
+/* sans, 15px / 20px: Captions, helper text, the small print. */
 :root[data-af-design-system="arcade"] .t-body-s { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 15px; line-height: 20px; font-weight: 400; }
+/* display, 10px / 16px: Eyebrows, HUD labels, column heads, tags. Press Start 2P at 10px. */
 :root[data-af-design-system="arcade"] .t-label { font-family: "Press Start 2P", "Courier New", monospace; font-size: 10px; line-height: 16px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
+/* mono, 56px / 52px: Scores and counts. VT323, zero-padded, tabular, big. */
 :root[data-af-design-system="arcade"] .t-numeral { font-family: "VT323", "Courier New", monospace; font-size: 56px; line-height: 52px; font-weight: 400; font-variant-numeric: tabular-nums; }
+/* sans, 48px / 48px: The multiplier and the one celebratory word. Pixelify bold italic in red or yellow. */
 :root[data-af-design-system="arcade"] .t-combo { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 48px; line-height: 48px; font-weight: 700; font-style: italic; }
+/* mono, 22px / 26px: HUD rows, logs, dialogue. VT323 at 22px. */
 :root[data-af-design-system="arcade"] .t-mono { font-family: "VT323", "Courier New", monospace; font-size: 22px; line-height: 26px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="arcade"] .tok-comment, :root[data-af-design-system="arcade"] .tok-quote, :root[data-af-design-system="arcade"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
 :root[data-af-design-system="arcade"] .tok-keyword, :root[data-af-design-system="arcade"] .tok-selector-tag, :root[data-af-design-system="arcade"] .tok-doctag, :root[data-af-design-system="arcade"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
 :root[data-af-design-system="arcade"] .tok-string, :root[data-af-design-system="arcade"] .tok-regexp, :root[data-af-design-system="arcade"] .tok-template-variable, :root[data-af-design-system="arcade"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
@@ -132,3 +166,11 @@
 :root[data-af-design-system="arcade"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
 :root[data-af-design-system="arcade"] .tok-emphasis { font-style:italic; }
 :root[data-af-design-system="arcade"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/press-start-2p-latin-ext-400-normal.3c7df3a1.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/press-start-2p-latin-400-normal.afec8699.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../fonts/pixelify-sans-latin-ext-wght-normal.0afa0101.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../fonts/pixelify-sans-latin-wght-normal.4a5633a0.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/vt323-latin-ext-400-normal.4435f062.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/vt323-latin-400-normal.8ddbebcc.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

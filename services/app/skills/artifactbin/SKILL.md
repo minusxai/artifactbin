@@ -18,7 +18,23 @@ Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace
 
 Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn one, read the top of it (`head -30 scripts/NAME.mjs`: purpose, usage, flags, examples, gotchas; `--help` prints the same text). Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in (`node scripts/auth.mjs status`; its top covers login and refresh). Groups, ACLs, secrets and trash have no script.
 
-- **New page.** Write `index.html`: one [design system](references/html-design-systems.md) (the installed `design-systems/NAME.css`, linked from the project; keep its fonts, colors and type roles), compact (about 30 KB), the core script tag, state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
+- **New page.** Write `index.html`: pick one design system from the table and name it in `<head>` with `<meta name="artifactbin:design-system" content="NAME">`; the platform serves the stylesheet, sets the `<html>` attributes and hosts the fonts, so copy and link nothing. Read `design-systems/NAME.css` for its exact tokens, type-role classes (`t-title`, …) and what each colour is for. Keep the page compact (about 30 KB), with the core script tag and state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
+  | Name | Mood | Fits |
+  |---|---|---|
+  | `volta` | Loud | Data products, dashboards, launch pages |
+  | `phosphor` | Technical | Dev tools, CI, logs, status pages |
+  | `drafting` | Technical | Plans, specs, explainers, process stories |
+  | `meridian` | Sleek, Professional | Product dashboards, docs, SaaS marketing |
+  | `dossier` | Evidential | Plans, reports, post-mortems, long features |
+  | `riso` | Printed | Scrolly stories, picture-book explainers, posters, zines |
+  | `almanac` | Warm | Scrolly explainers, landing pages, long reads, annual reports |
+  | `redline` | Poster | Slides, decision briefs, launch pages, posters |
+  | `nocturne` | Atmospheric | Long reads, features, evening and culture subjects |
+  | `broadsheet` | Editorial | Features, reports, newsletters, long reads |
+  | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
+  | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
+  | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
+  - Design: start from the reader's decision and the subject's own visual material; give the opening a concrete point, one expressive moment, and let typography set the hierarchy (no identical cards for every paragraph). Use real data in charts, label assumptions, keep lines under about 80 characters and controls keyboard-usable. Reuse the same system when editing a page unless asked to redesign it.
   - Decks: stack full-viewport `<section data-af-slide>` elements (each simple: a heading, a few lines, at most one chart or diagram), mark the nav `data-af-deck-chrome`, and move with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read mid-scroll). Slide images are a 1200x630 viewport; reply with `slide=N` links (`export.mjs --slide N`) instead of testing exports.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files. Use authenticated account identity, never a name typed into a form, to authorize actions.
 - **Check.** `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run; add `--viewport 1200x630` for slides). Write one short steps file that waits for your data and checks the requested values and behaviour; set values explicitly and `waitForFunction` the expected text after each click. Fix only what fails, rerun once. Done means those pass and the summary shows no errors, overflow, contrast, clipping, overlap or duplicate ids: send the link and what you tested, then stop. The summary is your layout evidence: no own pixel scripts, re-exports or polish. If you can view images, open the screenshot paths in the `--output` file; otherwise don't and say appearance is unverified.
@@ -63,7 +79,7 @@ A link never carries your login: whoever opens it signs in as themselves. Visibi
 
 ## Preserve the document
 
-Every saved page version remains available; never reuse an ID removed in an earlier version, and save the canonical returned HTML before the next edit. A 409 or a refused baseline means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser anchors and selectors. Use `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platform blocks; color mode and design selection belong on `<html data-af-dark="false" data-af-design-system="NAME">`. Page scripts execute on the page's runner origin, separately from account credentials.
+Every saved page version remains available; never reuse an ID removed in an earlier version, and save the canonical returned HTML before the next edit. A 409 or a refused baseline means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser anchors and selectors. Use `data-af="state"` and `data-af="core"` for platform blocks; the design system is the head meta, never attributes on `<html>`. Page scripts execute on the page's runner origin, separately from account credentials.
 
 ## Installed resources
 
@@ -76,7 +92,7 @@ Every saved page version remains available; never reuse an ID removed in an earl
 - [Offline images](references/runtime.md#portable-images): download limits.
 - [Datasets](references/datasets.md): CSV import, schema discovery and stable dataset IDs.
 - [Backend files](references/backends.md): TypeScript resolvers, shared stores and permissions.
-- [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
+- `design-systems/NAME.css` (13 files): each opens with the shared contract and annotates its own tokens; read the one you chose.
 - `examples/` (report, CSV dashboard, shared task app): each file's top comment says what it shows and which files go with it.
 
 Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); the top of `scripts/serve.mjs` covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.

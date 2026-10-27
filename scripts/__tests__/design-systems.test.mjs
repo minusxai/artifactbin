@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
@@ -173,11 +173,11 @@ describe('a system reference pastes only what its runtime serves', () => {
   });
 });
 
-it('keeps native theme font delivery and linked-CSS guides generated from the installed manifest',async()=>{
- const {nativeSystemCss,nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
+it('keeps the shipped stylesheets generated from the specs',async()=>{
+ const {nativeSystemCss}=await import('../../design-systems/lib/html-skill.mjs');
  for(const name of ROSTER){
   expect(readFileSync(path.join(REPO,'services/app/skills/artifactbin/design-systems',name+'.css'),'utf8')).toBe(nativeSystemCss(name));
-  expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
+  expect(existsSync(path.join(REFS,'html-system-'+name+'.md')),'the per-system guides are gone: the stylesheet documents itself').toBe(false);
  }
 });
 it('keeps the HTML platform stylesheet data generated from the same specs and token rules',async()=>{
@@ -187,14 +187,18 @@ it('keeps the HTML platform stylesheet data generated from the same specs and to
  expect(readFileSync(HTML_SYSTEM_MODES_FILE,'utf8')).toBe(modes);
  for(const name of ROSTER)expect(data).toContain(JSON.stringify(nativeSystemRules(name)));
 });
-it('gives every colour token its use in the native guide and keeps text tokens and reports their contrast',async()=>{
- const {nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
+it('annotates every colour token with its use in the stylesheet and keeps text tokens AA',async()=>{
+ const {nativeSystemCss}=await import('../../design-systems/lib/html-skill.mjs');
  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
  const ratio=(a,b)=>{const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x);return (hi+0.05)/(lo+0.05);};
  for(const name of ROSTER){
-  const S=loadSpec(name),md=nativeSystemMd(name);
-  // Agents pick colours from this table; a token's use (fill versus text) must be readable there.
-  for(const token of S.tokens)if(token.usage)expect(md).toContain(token.usage);
+  const S=loadSpec(name),css=nativeSystemCss(name);
+  // Agents open the stylesheet to pick colours; a token's use (fill versus text) is written beside its value.
+  for(const token of S.tokens)if(token.usage)expect(css).toMatch(new RegExp(`--ds-${token.name}: [^;]+; /\\* ${token.usage.replace(/\s+/g,' ').trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&')} \\*/`));
+  // The opening comment documents the contract every system shares and this system's type roles.
+  const header=css.slice(0,css.indexOf('*/'));
+  for(const key of ['--background','--foreground','--primary','--chart-1','--chart-5','--radius','--font-display','--font-body','--font-mono','t-display-xl','artifactbin:design-system'])expect(header,`${name} header ${key}`).toContain(key);
+  for(const role of S.type_roles)expect(css,`${name} t-${role.name}`).toMatch(new RegExp(`/\\* [^*]*${role.size.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}[^*]*\\*/\\n:root\\[data-af-design-system="${name}"\\] \\.t-${role.name} `));
   // A token described as text for the page itself meets WCAG AA on the main page grounds.
   const grounds=S.tokens.filter(t=>['paper','canvas','surface','card'].includes(t.name));
   for(const token of S.tokens.filter(t=>/text/i.test(t.usage??'')&&!/never (body )?text|text on (it|the)|for text on/i.test(t.usage)&&!/^on-|soft$|night/.test(t.name)))
@@ -228,4 +232,15 @@ it('ships highlight token rules in every system stylesheet, each AA-readable on 
   // The percentage is the largest that passes: one point more hue would fail somewhere.
   if(rule.mix<100)expect(worst({...rule,mix:rule.mix+1}),`${rule.names[0]} mix is maximal`).toBeLessThan(4.5);
  }
+});
+
+it('lists every design system in SKILL.md with its mood and fit, as the specs state them',()=>{
+ const skill=readFileSync(path.join(REPO,'services/app/skills/artifactbin/SKILL.md'),'utf8');
+ for(const name of ROSTER){
+  const spec=loadSpec(name);
+  expect(skill,name).toContain(`| \`${name}\` | ${spec.mood} | ${spec.jobs} |`);
+ }
+ // Nothing tells an agent to copy or link the stylesheet or fonts: the head meta is the whole binding.
+ expect(skill).toContain('artifactbin:design-system');
+ expect(skill).not.toMatch(/data-af="design-system"|copy[^.\n]*design-systems\/|link[^.\n]*design-systems\/NAME/);
 });

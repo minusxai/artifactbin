@@ -1,4 +1,161 @@
-/* Generated from design-systems/specs/redline.json. */
+/*
+ * Redline: One word. Then the number.
+ * Slides, decision briefs, launch pages, posters. Mood: Poster. Opens light. Generated from
+ * design-systems/specs/redline.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="redline">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Redline sets a brief the way a good poster does: one condensed word that fills the surface, one number big
+ * enough to read from the back of the room, one red. Three surfaces (paper, red, ink) give a deck its rhythm, and
+ * small printed devices (a dotmatrix, a stamp, a split bar, a stripe) carry the figures. Everything is flat ink on
+ * stock. Nothing glows.
+ * Fits: Slide decks and decision briefs, launch and campaign pages, one-page proposals, posters, anything whose
+ * first screen must be read in a second and remembered.
+ * Avoid when: Long reading (condensed caps tire past a paragraph), dashboards with many simultaneous numbers,
+ * subjects that need warmth, softness or more than one colour.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="redline"] {
+  --ds-paper: #EEEADE; /* Page ground and the paper slide surface. */
+  --ds-paper-raised: #F6F3EA; /* Cards, fields, the paper stage inside an ink page. */
+  --ds-paper-sunk: #E2DDCC; /* Wells, tracks, table stripes, off dots. */
+  --ds-line: #C9C3B0; /* Hairline rules: list rows, footers, the slide foot. */
+  --ds-ink: #20201D; /* Type, rules, the ink slide surface, the ink half of the split bar. */
+  --ds-ink-soft: #5C5A52; /* Secondary text, captions, muted eyebrows. */
+  --ds-on-ink: #EEEADE; /* Type on an ink surface. */
+  --ds-red: #F04E38; /* The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night. */
+  --ds-on-red: #20201D; /* Type on red: ink, never paper, so red surfaces stay printed, not glowing. */
+  --ds-red-ink: #B42D1C; /* Red as text on paper: one word in a headline, a link, a delta. */
+  --ds-red-soft: #F9D5CF; /* Ground for selected rows and red callouts; text on it is ink. */
+  --ds-positive: #2A9D5C; /* Up, done, approved. Always with a word or a glyph. */
+  --ds-positive-soft: #D7EFE0; /* Ground for success callouts. */
+  --ds-caution: #B8841A; /* Pending, waiting, at capacity. */
+  --ds-caution-soft: #FAECC9; /* Ground for warning callouts. */
+  --ds-negative: #F04E38; /* Down, failed, refused. The same red: errors are loud, there is one red. */
+  --ds-negative-soft: #F9D5CF; /* Ground for error callouts. */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-ink);
+  --secondary-foreground: var(--ds-on-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-red-soft);
+  --accent-foreground: var(--ds-red-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-red);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-ink-soft);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 0px;
+  --font-display: "Barlow Condensed", Impact, "Arial Narrow", sans-serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 0px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="redline"][data-af-dark="true"] {
+  --ds-paper: #20201D;
+  --ds-paper-raised: #2A2A26;
+  --ds-paper-sunk: #171715;
+  --ds-line: #3D3D37;
+  --ds-ink: #EEEADE;
+  --ds-ink-soft: #B3B0A3;
+  --ds-on-ink: #20201D;
+  --ds-red: #F04E38;
+  --ds-on-red: #20201D;
+  --ds-red-ink: #FF6A55;
+  --ds-red-soft: #4A1D17;
+  --ds-positive: #5EC98A;
+  --ds-positive-soft: #143524;
+  --ds-caution: #F0BD57;
+  --ds-caution-soft: #42310A;
+  --ds-negative: #F04E38;
+  --ds-negative-soft: #4A1D17;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-ink);
+  --secondary-foreground: var(--ds-on-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-red-soft);
+  --accent-foreground: var(--ds-red-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-red);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-ink-soft);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-chip-radius: 0px;
+}
+:root[data-af-design-system="redline"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(80px, 18vw, 240px) / .82: The cover word. One per deck or page; it may run off the stage. */
+:root[data-af-design-system="redline"] .t-display-xl { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(80px, 18vw, 240px); line-height: .82; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
+/* display, clamp(48px, 7.5vw, 104px) / .9: Slide titles and section openers. */
+:root[data-af-design-system="redline"] .t-display-l { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(48px, 7.5vw, 104px); line-height: .9; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
+/* display, 44px / 40px: Page titles, big labels beside a number. */
+:root[data-af-design-system="redline"] .t-display-m { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 44px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; text-transform: uppercase; }
+/* display, 24px / 26px: Card titles, list heads, feature titles. */
+:root[data-af-design-system="redline"] .t-title { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 24px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
+/* sans, 19px / 1.5: Decks and the one sentence under a number. */
+:root[data-af-design-system="redline"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 19px; line-height: 1.5; font-weight: 400; }
+/* sans, 16px / 1.55: Reading and interface text. */
+:root[data-af-design-system="redline"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.55; font-weight: 400; }
+/* sans, 13px / 18px: Captions, sources, the slide foot. */
+:root[data-af-design-system="redline"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+/* mono, 11px / 16px: Eyebrows, toplines, list numbers, stamp text. Mono caps through CSS. */
+:root[data-af-design-system="redline"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
+/* display, 64px / 56px: KPI figures and the giant slide number. Condensed, tabular. */
+:root[data-af-design-system="redline"] .t-numeral { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 64px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Code, ratios, list figures. */
+:root[data-af-design-system="redline"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="redline"] .tok-comment, :root[data-af-design-system="redline"] .tok-quote, :root[data-af-design-system="redline"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="redline"] .tok-keyword, :root[data-af-design-system="redline"] .tok-selector-tag, :root[data-af-design-system="redline"] .tok-doctag, :root[data-af-design-system="redline"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-string, :root[data-af-design-system="redline"] .tok-regexp, :root[data-af-design-system="redline"] .tok-template-variable, :root[data-af-design-system="redline"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-number, :root[data-af-design-system="redline"] .tok-literal, :root[data-af-design-system="redline"] .tok-symbol, :root[data-af-design-system="redline"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-title, :root[data-af-design-system="redline"] .tok-section, :root[data-af-design-system="redline"] .tok-selector-id, :root[data-af-design-system="redline"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="redline"] .tok-title.class_, :root[data-af-design-system="redline"] .tok-type, :root[data-af-design-system="redline"] .tok-built_in, :root[data-af-design-system="redline"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-attr, :root[data-af-design-system="redline"] .tok-attribute, :root[data-af-design-system="redline"] .tok-property, :root[data-af-design-system="redline"] .tok-variable, :root[data-af-design-system="redline"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-tag, :root[data-af-design-system="redline"] .tok-operator, :root[data-af-design-system="redline"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="redline"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="redline"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
 @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-ext-100-italic.cce9e454.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-100-italic.8ad568ab.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-ext-100-normal.e04d53c8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
@@ -51,117 +208,3 @@
 @font-face { font-family: "DM Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("../fonts/dm-mono-latin-500-italic.8646989c.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../fonts/dm-mono-latin-ext-500-normal.8711f938.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("../fonts/dm-mono-latin-500-normal.9964608a.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-:root[data-af-design-system="redline"] {
-  --ds-paper: #EEEADE;
-  --ds-paper-raised: #F6F3EA;
-  --ds-paper-sunk: #E2DDCC;
-  --ds-line: #C9C3B0;
-  --ds-ink: #20201D;
-  --ds-ink-soft: #5C5A52;
-  --ds-on-ink: #EEEADE;
-  --ds-red: #F04E38;
-  --ds-on-red: #20201D;
-  --ds-red-ink: #B42D1C;
-  --ds-red-soft: #F9D5CF;
-  --ds-positive: #2A9D5C;
-  --ds-positive-soft: #D7EFE0;
-  --ds-caution: #B8841A;
-  --ds-caution-soft: #FAECC9;
-  --ds-negative: #F04E38;
-  --ds-negative-soft: #F9D5CF;
-  --background: var(--ds-paper);
-  --foreground: var(--ds-ink);
-  --card: var(--ds-paper-raised);
-  --card-foreground: var(--ds-ink);
-  --popover: var(--ds-paper-raised);
-  --popover-foreground: var(--ds-ink);
-  --primary: var(--ds-red);
-  --primary-foreground: var(--ds-on-red);
-  --secondary: var(--ds-ink);
-  --secondary-foreground: var(--ds-on-ink);
-  --muted: var(--ds-paper-sunk);
-  --muted-foreground: var(--ds-ink-soft);
-  --accent: var(--ds-red-soft);
-  --accent-foreground: var(--ds-red-ink);
-  --destructive: var(--ds-negative);
-  --destructive-foreground: var(--ds-on-red);
-  --border: var(--ds-line);
-  --input: var(--ds-line);
-  --ring: var(--ds-red);
-  --chart-1: var(--ds-red);
-  --chart-2: var(--ds-ink);
-  --chart-3: var(--ds-ink-soft);
-  --chart-4: var(--ds-positive);
-  --chart-5: var(--ds-caution);
-  --radius: 0px;
-  --font-display: "Barlow Condensed", Impact, "Arial Narrow", sans-serif;
-  --font-body: "DM Sans", system-ui, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
-  --ds-chip-radius: 0px;
-}
-:root[data-af-design-system="redline"][data-af-dark="true"] {
-  --ds-paper: #20201D;
-  --ds-paper-raised: #2A2A26;
-  --ds-paper-sunk: #171715;
-  --ds-line: #3D3D37;
-  --ds-ink: #EEEADE;
-  --ds-ink-soft: #B3B0A3;
-  --ds-on-ink: #20201D;
-  --ds-red: #F04E38;
-  --ds-on-red: #20201D;
-  --ds-red-ink: #FF6A55;
-  --ds-red-soft: #4A1D17;
-  --ds-positive: #5EC98A;
-  --ds-positive-soft: #143524;
-  --ds-caution: #F0BD57;
-  --ds-caution-soft: #42310A;
-  --ds-negative: #F04E38;
-  --ds-negative-soft: #4A1D17;
-  --background: var(--ds-paper);
-  --foreground: var(--ds-ink);
-  --card: var(--ds-paper-raised);
-  --card-foreground: var(--ds-ink);
-  --popover: var(--ds-paper-raised);
-  --popover-foreground: var(--ds-ink);
-  --primary: var(--ds-red);
-  --primary-foreground: var(--ds-on-red);
-  --secondary: var(--ds-ink);
-  --secondary-foreground: var(--ds-on-ink);
-  --muted: var(--ds-paper-sunk);
-  --muted-foreground: var(--ds-ink-soft);
-  --accent: var(--ds-red-soft);
-  --accent-foreground: var(--ds-red-ink);
-  --destructive: var(--ds-negative);
-  --destructive-foreground: var(--ds-on-red);
-  --border: var(--ds-line);
-  --input: var(--ds-line);
-  --ring: var(--ds-red);
-  --chart-1: var(--ds-red);
-  --chart-2: var(--ds-ink);
-  --chart-3: var(--ds-ink-soft);
-  --chart-4: var(--ds-positive);
-  --chart-5: var(--ds-caution);
-  --ds-chip-radius: 0px;
-}
-:root[data-af-design-system="redline"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-:root[data-af-design-system="redline"] .t-display-xl { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(80px, 18vw, 240px); line-height: .82; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
-:root[data-af-design-system="redline"] .t-display-l { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(48px, 7.5vw, 104px); line-height: .9; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
-:root[data-af-design-system="redline"] .t-display-m { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 44px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; text-transform: uppercase; }
-:root[data-af-design-system="redline"] .t-title { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 24px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
-:root[data-af-design-system="redline"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 19px; line-height: 1.5; font-weight: 400; }
-:root[data-af-design-system="redline"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.55; font-weight: 400; }
-:root[data-af-design-system="redline"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-:root[data-af-design-system="redline"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
-:root[data-af-design-system="redline"] .t-numeral { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 64px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-:root[data-af-design-system="redline"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
-:root[data-af-design-system="redline"] .tok-comment, :root[data-af-design-system="redline"] .tok-quote, :root[data-af-design-system="redline"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
-:root[data-af-design-system="redline"] .tok-keyword, :root[data-af-design-system="redline"] .tok-selector-tag, :root[data-af-design-system="redline"] .tok-doctag, :root[data-af-design-system="redline"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-string, :root[data-af-design-system="redline"] .tok-regexp, :root[data-af-design-system="redline"] .tok-template-variable, :root[data-af-design-system="redline"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-number, :root[data-af-design-system="redline"] .tok-literal, :root[data-af-design-system="redline"] .tok-symbol, :root[data-af-design-system="redline"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-title, :root[data-af-design-system="redline"] .tok-section, :root[data-af-design-system="redline"] .tok-selector-id, :root[data-af-design-system="redline"] .tok-selector-class { color:var(--foreground);font-weight:600; }
-:root[data-af-design-system="redline"] .tok-title.class_, :root[data-af-design-system="redline"] .tok-type, :root[data-af-design-system="redline"] .tok-built_in, :root[data-af-design-system="redline"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-attr, :root[data-af-design-system="redline"] .tok-attribute, :root[data-af-design-system="redline"] .tok-property, :root[data-af-design-system="redline"] .tok-variable, :root[data-af-design-system="redline"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-tag, :root[data-af-design-system="redline"] .tok-operator, :root[data-af-design-system="redline"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
-:root[data-af-design-system="redline"] .tok-emphasis { font-style:italic; }
-:root[data-af-design-system="redline"] .tok-strong { font-weight:700; }

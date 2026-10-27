@@ -5,7 +5,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {JSDOM} from 'jsdom';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
-import {nativeSystemCss,nativeSystemMd} from '../../design-systems/lib/html-skill.mjs';
+import {nativeSystemCss} from '../../design-systems/lib/html-skill.mjs';
 import {ROSTER} from '../../design-systems/lib/pages.mjs';
 import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
 import {pathToFileURL} from 'node:url';
@@ -54,11 +54,10 @@ describe('native author resources',()=>{
    expect(await readFile(output,'utf8')).toBe(original);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
- it('generates every native design guide and stylesheet from the retained specification',async()=>{
+ it('generates every shipped design-system stylesheet from the retained specification',async()=>{
   for(const slug of ROSTER){
-   const guide=nativeSystemMd(slug);expect(Buffer.byteLength(guide)).toBeLessThanOrEqual(8192);
-   expect(await readFile(path.join(ROOT,`references/html-system-${slug}.md`),'utf8')).toBe(guide);
    expect(await readFile(path.join(ROOT,`design-systems/${slug}.css`),'utf8')).toBe(nativeSystemCss(slug));
+   await expect(readFile(path.join(ROOT,`references/html-system-${slug}.md`),'utf8')).rejects.toThrow();
   }
  });
 });

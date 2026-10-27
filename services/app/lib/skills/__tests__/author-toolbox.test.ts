@@ -252,7 +252,8 @@ it('teaches script-created element IDs in the main steps and no longer names dat
  const {readFile}=await import('node:fs/promises');
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
- for(const block of ['state','core','design-system'])expect(skill).toContain(`data-af="${block}"`);
+ for(const block of ['state','core'])expect(skill).toContain(`data-af="${block}"`);
+ expect(skill).toContain('artifactbin:design-system');
  const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
  expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
  const runtime=await readFile(new URL('../../../skills/artifactbin/references/runtime.md',import.meta.url),'utf8');

@@ -1,39 +1,47 @@
-/* Generated from design-systems/specs/broadsheet.json. */
-@font-face { font-family: "UnifrakturCook"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/unifrakturcook-latin-700-normal.33047577.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Old Standard TT"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-400-italic.0ba729e1.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Old Standard TT"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-400-italic.189ea179.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-400-normal.baf81959.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-400-normal.52d24e59.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-700-normal.2e656fbd.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/old-standard-tt-latin-700-normal.c2f2e802.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Libre Franklin"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-ext-wght-normal.61216d8e.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Libre Franklin"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-wght-normal.52e60585.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Libre Franklin"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-ext-wght-italic.f405e646.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Libre Franklin"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-wght-italic.c9fb9170.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-ext-400-italic.a47dece6.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-400-italic.84f91615.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-ext-400-normal.efbea074.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-400-normal.f09844e1.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-ext-700-italic.d2329309.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-700-italic.85312945.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-ext-700-normal.b7ce6854.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-700-normal.5c7ae1cc.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+/*
+ * Broadsheet: Set it like it happened.
+ * Features, reports, newsletters, long reads. Mood: Editorial. Opens light. Generated from
+ * design-systems/specs/broadsheet.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="broadsheet">. The platform serves
+ * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link
+ * nothing. This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-masthead t-display-xl t-display-l t-deck t-body t-small t-numeral t-wire
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Broadsheet sets a feature the way a newspaper would: a blackletter masthead between rules, a bold serif
+ * headline with one red word, an italic deck, body in columns with a drop cap, engraved plates for pictures, and
+ * figures pulled into the margin. The reader gets a document that feels reported.
+ * Fits: Features and long reads, pilot reports, newsletters and digests, anything that benefits from the authority
+ * of print and the rhythm of columns.
+ * Avoid when: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to
+ * carry meaning.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
 :root[data-af-design-system="broadsheet"] {
-  --ds-newsprint: #f6efe0;
-  --ds-newsprint-raised: #fbf6ea;
-  --ds-newsprint-sunk: #ebe2cd;
-  --ds-line: #cfc3a6;
-  --ds-ink: #1f1b16;
-  --ds-ink-muted: #5c5345;
-  --ds-red: #b8371f;
-  --ds-on-red: #f6efe0;
-  --ds-red-soft: #f3dcd5;
-  --ds-positive: #2f6b3a;
-  --ds-positive-soft: #dcebd8;
-  --ds-caution: #8a5a00;
-  --ds-caution-soft: #f3e5c0;
-  --ds-negative: #b8371f;
-  --ds-negative-soft: #f3dcd5;
+  --ds-newsprint: #f6efe0; /* Page ground: newsprint by day; the late edition by night. */
+  --ds-newsprint-raised: #fbf6ea; /* Boxes, plates, fields. */
+  --ds-newsprint-sunk: #ebe2cd; /* Tint boxes, the classifieds, code. */
+  --ds-line: #cfc3a6; /* Column rules and hairlines. */
+  --ds-ink: #1f1b16; /* Printer’s ink: text, rules, the masthead. */
+  --ds-ink-muted: #5c5345; /* Secondary text, datelines, the small print. */
+  --ds-red: #b8371f; /* One ranunculus red: the second word in a headline, the pull figure, the link. Never a fill larger than a word. */
+  --ds-on-red: #f6efe0; /* Text on red fills (rare). */
+  --ds-red-soft: #f3dcd5; /* Ground for the one tinted box per page. */
+  --ds-positive: #2f6b3a; /* Continued, approved. In the ledger only. */
+  --ds-positive-soft: #dcebd8; /* Ground for positive rows. */
+  --ds-caution: #8a5a00; /* Provisional, small sample. */
+  --ds-caution-soft: #f3e5c0; /* Ground for caveats. */
+  --ds-negative: #b8371f; /* Declined, failed. Shares the red. */
+  --ds-negative-soft: #f3dcd5; /* Ground for negative rows. */
   --background: var(--ds-newsprint);
   --foreground: var(--ds-ink);
   --card: var(--ds-newsprint-raised);
@@ -64,6 +72,7 @@
   --font-mono: "Courier Prime", "Courier New", monospace;
   --ds-chip-radius: 0px;
 }
+/* Dark values: the same tokens, under data-af-dark="true". */
 :root[data-af-design-system="broadsheet"][data-af-dark="true"] {
   --ds-newsprint: #141210;
   --ds-newsprint-raised: #1d1a16;
@@ -107,14 +116,24 @@
   --ds-chip-radius: 0px;
 }
 :root[data-af-design-system="broadsheet"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* masthead, clamp(40px, 7vw, 84px) / 1: The masthead, once, centred, between a double rule. Blackletter is for the name only. */
 :root[data-af-design-system="broadsheet"] .t-masthead { font-family: "UnifrakturCook", "Old English Text MT", serif; font-size: clamp(40px, 7vw, 84px); line-height: 1; font-weight: 700; }
+/* display, clamp(44px, 6.5vw, 80px) / 1: The headline. Old Standard bold; the second line may carry the one red word. */
 :root[data-af-design-system="broadsheet"] .t-display-xl { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(44px, 6.5vw, 80px); line-height: 1; font-weight: 700; letter-spacing: -0.015em; }
+/* display, clamp(30px, 4vw, 48px) / 1.08: Section heads and crossheads. */
 :root[data-af-design-system="broadsheet"] .t-display-l { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(30px, 4vw, 48px); line-height: 1.08; font-weight: 700; letter-spacing: -0.01em; }
+/* display, clamp(19px, 2.2vw, 24px) / 1.35: The deck under the headline. Italic Old Standard. */
 :root[data-af-design-system="broadsheet"] .t-deck { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(19px, 2.2vw, 24px); line-height: 1.35; font-weight: 400; font-style: italic; }
+/* sans, 17px / 27px: Body text, in columns where the width allows. A drop cap opens the piece. */
 :root[data-af-design-system="broadsheet"] .t-body { font-family: "Old Standard TT", "Times New Roman", serif; font-size: 17px; line-height: 27px; font-weight: 400; }
+/* franklin, 11px / 15px: Datelines, figure labels, folios, the small print. Franklin caps. */
 :root[data-af-design-system="broadsheet"] .t-small { font-family: "Libre Franklin", system-ui, sans-serif; font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+/* display, clamp(44px, 6vw, 72px) / .95: Pull figures, set large in the margin with a Franklin caption. */
 :root[data-af-design-system="broadsheet"] .t-numeral { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(44px, 6vw, 72px); line-height: .95; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Wire copy, tables of figures, datelines in the old style. Courier Prime. */
 :root[data-af-design-system="broadsheet"] .t-wire { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
 :root[data-af-design-system="broadsheet"] .tok-comment, :root[data-af-design-system="broadsheet"] .tok-quote, :root[data-af-design-system="broadsheet"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
 :root[data-af-design-system="broadsheet"] .tok-keyword, :root[data-af-design-system="broadsheet"] .tok-selector-tag, :root[data-af-design-system="broadsheet"] .tok-doctag, :root[data-af-design-system="broadsheet"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
 :root[data-af-design-system="broadsheet"] .tok-string, :root[data-af-design-system="broadsheet"] .tok-regexp, :root[data-af-design-system="broadsheet"] .tok-template-variable, :root[data-af-design-system="broadsheet"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
@@ -126,3 +145,24 @@
 :root[data-af-design-system="broadsheet"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
 :root[data-af-design-system="broadsheet"] .tok-emphasis { font-style:italic; }
 :root[data-af-design-system="broadsheet"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "UnifrakturCook"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/unifrakturcook-latin-700-normal.33047577.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Old Standard TT"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-400-italic.0ba729e1.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Old Standard TT"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-400-italic.189ea179.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-400-normal.baf81959.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/old-standard-tt-latin-400-normal.52d24e59.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/old-standard-tt-latin-ext-700-normal.2e656fbd.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Old Standard TT"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/old-standard-tt-latin-700-normal.c2f2e802.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Libre Franklin"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-ext-wght-normal.61216d8e.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Libre Franklin"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-wght-normal.52e60585.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Libre Franklin"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-ext-wght-italic.f405e646.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Libre Franklin"; font-style: italic; font-weight: 100 900; font-display: swap; src: url("../fonts/libre-franklin-latin-wght-italic.c9fb9170.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-ext-400-italic.a47dece6.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-400-italic.84f91615.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-ext-400-normal.efbea074.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 400; font-display: swap; src: url("../fonts/courier-prime-latin-400-normal.f09844e1.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-ext-700-italic.d2329309.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Courier Prime"; font-style: italic; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-700-italic.85312945.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-ext-700-normal.b7ce6854.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Courier Prime"; font-style: normal; font-weight: 700; font-display: swap; src: url("../fonts/courier-prime-latin-700-normal.5c7ae1cc.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

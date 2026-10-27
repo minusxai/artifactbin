@@ -1,4 +1,162 @@
-/* Generated from design-systems/specs/signout.json. */
+/*
+ * Signout: Pick a machine. Pick an hour. Sign the sheet.
+ * Booking apps, intake forms, rosters, inventories. Mood: Utilitarian. Opens light. Generated from
+ * design-systems/specs/signout.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="signout">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Signout is the clipboard sign-out sheet every shared workshop has: kraft paper, a marker-black grid,
+ * hazard tape along the top, hatching where someone else has already signed, a stamp when you have. It makes a
+ * booking tool feel like a thing you can put your hand on, and it keeps the state honest: open, yours, or taken.
+ * Fits: Booking and reservation apps, intake and sign-up forms, rosters and shift sheets, inventories and loan
+ * logs, any tool where people claim slots or things.
+ * Avoid when: Reading-heavy pages, luxury or editorial subjects, dashboards with many simultaneous metrics, or
+ * anything that needs to feel soft.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="signout"] {
+  --ds-kraft: #f3ecdc; /* Page ground: kraft paper by day; the chalkboard at night. */
+  --ds-kraft-raised: #faf6ec; /* Sheets, slots, fields. */
+  --ds-kraft-sunk: #e8dfca; /* Wells, column heads, code. */
+  --ds-line: #c9bc9c; /* Hairline rules; the grid of the sheet; the hatch. */
+  --ds-ink: #16140f; /* Marker by day, chalk by night: all text, the 2px grid, the stamp outline. */
+  --ds-ink-muted: #5b5344; /* Secondary text, timestamps, the small print. */
+  --ds-vermilion: #e5481b; /* The pick: your slot, the primary action, the stamp. One per view. */
+  --ds-on-vermilion: #16140f; /* Text on vermilion fills. */
+  --ds-vermilion-soft: #f9d9cc; /* Ground for the selected row and the picked slot halo. */
+  --ds-hazard: #f2b705; /* Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink. */
+  --ds-hazard-soft: #f8ecc0; /* Ground for warnings. */
+  --ds-caution: #7a5a00; /* Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard. */
+  --ds-open: #1f7a4d; /* Open, available, confirmed: the stamp green. Always with a word. */
+  --ds-open-soft: #d9ebdf; /* Ground for confirmed bookings. */
+  --ds-booked: #5b5344; /* Signed out by someone else: hatched, never red. */
+  --ds-negative: #b3261e; /* Failed, overdue, broken. */
+  --ds-negative-soft: #f3d4d0; /* Ground for failures. */
+  --ds-positive: var(--ds-open);
+  --ds-positive-soft: var(--ds-open-soft);
+  --ds-caution-soft: var(--ds-hazard-soft);
+  --background: var(--ds-kraft);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-kraft-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-kraft-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-vermilion);
+  --primary-foreground: var(--ds-on-vermilion);
+  --secondary: var(--ds-vermilion-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-kraft-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-kraft-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-kraft);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-vermilion);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-vermilion);
+  --chart-3: var(--ds-hazard);
+  --chart-4: var(--ds-open);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 0px;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 0px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="signout"][data-af-dark="true"] {
+  --ds-kraft: #14201a;
+  --ds-kraft-raised: #1b2a22;
+  --ds-kraft-sunk: #0e1712;
+  --ds-line: #35493d;
+  --ds-ink: #ede6d6;
+  --ds-ink-muted: #a9b3a4;
+  --ds-vermilion: #ff6a3d;
+  --ds-on-vermilion: #16140f;
+  --ds-vermilion-soft: #3a1d14;
+  --ds-hazard: #f2b705;
+  --ds-hazard-soft: #3a2f08;
+  --ds-caution: #f2b705;
+  --ds-open: #7fd99f;
+  --ds-open-soft: #17352a;
+  --ds-booked: #a9b3a4;
+  --ds-negative: #ff6a5a;
+  --ds-negative-soft: #3a1a14;
+  --ds-positive: var(--ds-open);
+  --ds-positive-soft: var(--ds-open-soft);
+  --ds-caution-soft: var(--ds-hazard-soft);
+  --background: var(--ds-kraft);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-kraft-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-kraft-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-vermilion);
+  --primary-foreground: var(--ds-on-vermilion);
+  --secondary: var(--ds-vermilion-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-kraft-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-kraft-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-kraft);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-vermilion);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-vermilion);
+  --chart-3: var(--ds-hazard);
+  --chart-4: var(--ds-open);
+  --chart-5: var(--ds-ink-muted);
+  --ds-chip-radius: 0px;
+}
+:root[data-af-design-system="signout"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(56px, 9vw, 120px) / .86: One per sheet. Barlow Condensed at 800 in caps: a marker on kraft. */
+:root[data-af-design-system="signout"] .t-display-xl { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(56px, 9vw, 120px); line-height: .86; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
+/* display, clamp(36px, 5vw, 64px) / .9: Section and panel titles. */
+:root[data-af-design-system="signout"] .t-display-l { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(36px, 5vw, 64px); line-height: .9; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
+/* display, 28px / 28px: Row titles: the machine, the person, the item. */
+:root[data-af-design-system="signout"] .t-display-m { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 28px; line-height: 28px; font-weight: 700; text-transform: uppercase; }
+/* sans, 16px / 24px: Instructions and reading text. Barlow, plain. */
+:root[data-af-design-system="signout"] .t-body { font-family: "Barlow", system-ui, sans-serif; font-size: 16px; line-height: 24px; font-weight: 400; }
+/* sans, 13px / 18px: Specs, captions, helper text. */
+:root[data-af-design-system="signout"] .t-body-s { font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+/* display, 12px / 14px: Column heads, slot labels, stamps. Condensed caps. */
+:root[data-af-design-system="signout"] .t-label { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 12px; line-height: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+/* mono, 36px / 40px: Counts: open slots, members, hours. Mono, tabular. */
+:root[data-af-design-system="signout"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Booking ids, times, the shop log. */
+:root[data-af-design-system="signout"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="signout"] .tok-comment, :root[data-af-design-system="signout"] .tok-quote, :root[data-af-design-system="signout"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="signout"] .tok-keyword, :root[data-af-design-system="signout"] .tok-selector-tag, :root[data-af-design-system="signout"] .tok-doctag, :root[data-af-design-system="signout"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-string, :root[data-af-design-system="signout"] .tok-regexp, :root[data-af-design-system="signout"] .tok-template-variable, :root[data-af-design-system="signout"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-number, :root[data-af-design-system="signout"] .tok-literal, :root[data-af-design-system="signout"] .tok-symbol, :root[data-af-design-system="signout"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-title, :root[data-af-design-system="signout"] .tok-section, :root[data-af-design-system="signout"] .tok-selector-id, :root[data-af-design-system="signout"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="signout"] .tok-title.class_, :root[data-af-design-system="signout"] .tok-type, :root[data-af-design-system="signout"] .tok-built_in, :root[data-af-design-system="signout"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-attr, :root[data-af-design-system="signout"] .tok-attribute, :root[data-af-design-system="signout"] .tok-property, :root[data-af-design-system="signout"] .tok-variable, :root[data-af-design-system="signout"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-tag, :root[data-af-design-system="signout"] .tok-operator, :root[data-af-design-system="signout"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="signout"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="signout"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
 @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-ext-100-italic.cce9e454.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-100-italic.8ad568ab.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 100; font-display: swap; src: url("../fonts/barlow-condensed-latin-ext-100-normal.e04d53c8.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
@@ -75,121 +233,3 @@
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("../fonts/jetbrains-mono-latin-wght-normal.18be4527.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("../fonts/jetbrains-mono-latin-ext-wght-italic.60652c78.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("../fonts/jetbrains-mono-latin-wght-italic.a8afa085.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-:root[data-af-design-system="signout"] {
-  --ds-kraft: #f3ecdc;
-  --ds-kraft-raised: #faf6ec;
-  --ds-kraft-sunk: #e8dfca;
-  --ds-line: #c9bc9c;
-  --ds-ink: #16140f;
-  --ds-ink-muted: #5b5344;
-  --ds-vermilion: #e5481b;
-  --ds-on-vermilion: #16140f;
-  --ds-vermilion-soft: #f9d9cc;
-  --ds-hazard: #f2b705;
-  --ds-hazard-soft: #f8ecc0;
-  --ds-caution: #7a5a00;
-  --ds-open: #1f7a4d;
-  --ds-open-soft: #d9ebdf;
-  --ds-booked: #5b5344;
-  --ds-negative: #b3261e;
-  --ds-negative-soft: #f3d4d0;
-  --ds-positive: var(--ds-open);
-  --ds-positive-soft: var(--ds-open-soft);
-  --ds-caution-soft: var(--ds-hazard-soft);
-  --background: var(--ds-kraft);
-  --foreground: var(--ds-ink);
-  --card: var(--ds-kraft-raised);
-  --card-foreground: var(--ds-ink);
-  --popover: var(--ds-kraft-raised);
-  --popover-foreground: var(--ds-ink);
-  --primary: var(--ds-vermilion);
-  --primary-foreground: var(--ds-on-vermilion);
-  --secondary: var(--ds-vermilion-soft);
-  --secondary-foreground: var(--ds-ink);
-  --muted: var(--ds-kraft-sunk);
-  --muted-foreground: var(--ds-ink-muted);
-  --accent: var(--ds-kraft-sunk);
-  --accent-foreground: var(--ds-ink);
-  --destructive: var(--ds-negative);
-  --destructive-foreground: var(--ds-kraft);
-  --border: var(--ds-line);
-  --input: var(--ds-line);
-  --ring: var(--ds-vermilion);
-  --chart-1: var(--ds-ink);
-  --chart-2: var(--ds-vermilion);
-  --chart-3: var(--ds-hazard);
-  --chart-4: var(--ds-open);
-  --chart-5: var(--ds-ink-muted);
-  --radius: 0px;
-  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --font-body: "Barlow", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  --ds-chip-radius: 0px;
-}
-:root[data-af-design-system="signout"][data-af-dark="true"] {
-  --ds-kraft: #14201a;
-  --ds-kraft-raised: #1b2a22;
-  --ds-kraft-sunk: #0e1712;
-  --ds-line: #35493d;
-  --ds-ink: #ede6d6;
-  --ds-ink-muted: #a9b3a4;
-  --ds-vermilion: #ff6a3d;
-  --ds-on-vermilion: #16140f;
-  --ds-vermilion-soft: #3a1d14;
-  --ds-hazard: #f2b705;
-  --ds-hazard-soft: #3a2f08;
-  --ds-caution: #f2b705;
-  --ds-open: #7fd99f;
-  --ds-open-soft: #17352a;
-  --ds-booked: #a9b3a4;
-  --ds-negative: #ff6a5a;
-  --ds-negative-soft: #3a1a14;
-  --ds-positive: var(--ds-open);
-  --ds-positive-soft: var(--ds-open-soft);
-  --ds-caution-soft: var(--ds-hazard-soft);
-  --background: var(--ds-kraft);
-  --foreground: var(--ds-ink);
-  --card: var(--ds-kraft-raised);
-  --card-foreground: var(--ds-ink);
-  --popover: var(--ds-kraft-raised);
-  --popover-foreground: var(--ds-ink);
-  --primary: var(--ds-vermilion);
-  --primary-foreground: var(--ds-on-vermilion);
-  --secondary: var(--ds-vermilion-soft);
-  --secondary-foreground: var(--ds-ink);
-  --muted: var(--ds-kraft-sunk);
-  --muted-foreground: var(--ds-ink-muted);
-  --accent: var(--ds-kraft-sunk);
-  --accent-foreground: var(--ds-ink);
-  --destructive: var(--ds-negative);
-  --destructive-foreground: var(--ds-kraft);
-  --border: var(--ds-line);
-  --input: var(--ds-line);
-  --ring: var(--ds-vermilion);
-  --chart-1: var(--ds-ink);
-  --chart-2: var(--ds-vermilion);
-  --chart-3: var(--ds-hazard);
-  --chart-4: var(--ds-open);
-  --chart-5: var(--ds-ink-muted);
-  --ds-chip-radius: 0px;
-}
-:root[data-af-design-system="signout"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
-:root[data-af-design-system="signout"] .t-display-xl { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(56px, 9vw, 120px); line-height: .86; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
-:root[data-af-design-system="signout"] .t-display-l { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: clamp(36px, 5vw, 64px); line-height: .9; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; }
-:root[data-af-design-system="signout"] .t-display-m { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 28px; line-height: 28px; font-weight: 700; text-transform: uppercase; }
-:root[data-af-design-system="signout"] .t-body { font-family: "Barlow", system-ui, sans-serif; font-size: 16px; line-height: 24px; font-weight: 400; }
-:root[data-af-design-system="signout"] .t-body-s { font-family: "Barlow", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
-:root[data-af-design-system="signout"] .t-label { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-size: 12px; line-height: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-:root[data-af-design-system="signout"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-:root[data-af-design-system="signout"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
-:root[data-af-design-system="signout"] .tok-comment, :root[data-af-design-system="signout"] .tok-quote, :root[data-af-design-system="signout"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
-:root[data-af-design-system="signout"] .tok-keyword, :root[data-af-design-system="signout"] .tok-selector-tag, :root[data-af-design-system="signout"] .tok-doctag, :root[data-af-design-system="signout"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-string, :root[data-af-design-system="signout"] .tok-regexp, :root[data-af-design-system="signout"] .tok-template-variable, :root[data-af-design-system="signout"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-number, :root[data-af-design-system="signout"] .tok-literal, :root[data-af-design-system="signout"] .tok-symbol, :root[data-af-design-system="signout"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-title, :root[data-af-design-system="signout"] .tok-section, :root[data-af-design-system="signout"] .tok-selector-id, :root[data-af-design-system="signout"] .tok-selector-class { color:var(--foreground);font-weight:600; }
-:root[data-af-design-system="signout"] .tok-title.class_, :root[data-af-design-system="signout"] .tok-type, :root[data-af-design-system="signout"] .tok-built_in, :root[data-af-design-system="signout"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-attr, :root[data-af-design-system="signout"] .tok-attribute, :root[data-af-design-system="signout"] .tok-property, :root[data-af-design-system="signout"] .tok-variable, :root[data-af-design-system="signout"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-tag, :root[data-af-design-system="signout"] .tok-operator, :root[data-af-design-system="signout"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
-:root[data-af-design-system="signout"] .tok-emphasis { font-style:italic; }
-:root[data-af-design-system="signout"] .tok-strong { font-weight:700; }
