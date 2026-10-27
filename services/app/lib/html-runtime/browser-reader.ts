@@ -14,6 +14,10 @@ import type {PresencePaint} from '../html-presence/contract';
 import {followAppLinks} from '@/lib/islands/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
+import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from './live-morph-contract';
+/** The live morph is its own content-addressed module (build.server `@afbin/morph`), fetched only when a version arrives. */
+const MORPH_MODULE='@afbin/morph';
+const loadLiveMorph=()=>import(/* @vite-ignore */ MORPH_MODULE) as Promise<typeof import('./live-morph')>;
 import {RemoteUnreachable,type RemotePort,type QueryInvalidation} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
@@ -186,6 +190,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         applyHtmlReaderAppearance(win.document, payload.command);
         const command = payload.command as Partial<HtmlAnnotationPaint> & HtmlCommentViewCommand & { type?: string; annotate?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
         if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
+        // A new published version (solid/document/follow-html-version): drawn in place when safe, else the parent reloads.
+        if (command?.type === HTML_VERSION_MESSAGE) { const version = Number((payload.command as { version?: unknown }).version); if (Number.isInteger(version)) void loadLiveMorph().then((morph) => morph.applyHtmlVersion(win, config, version)).then((applied) => { config.revision = applied.revision; config.savedNodeIds = applied.savedNodeIds; if (annotations.pins.length) layout(); presence.paint(); post({ kind: 'event', event: { type: HTML_VERSION_APPLIED, nonce, revision: applied.revision } }); }, (error: unknown) => post({ kind: 'event', event: { type: HTML_VERSION_REFUSED, nonce, reason: String(error instanceof Error ? error.message : error).slice(0, 300) } })); }
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names,"data"); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }

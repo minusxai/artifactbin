@@ -250,8 +250,18 @@ it('refreshes native publication once without fetching a JSX frame or replaying 
  expect(reload).not.toHaveBeenCalled();
  expect(invalidate).toHaveBeenCalledOnce();
  ping({version:2,editId:'saved'}); ping({version:2,editId:'saved'}); ping({version:1,editId:'initial'});
- expect(reload).toHaveBeenCalledExactlyOnceWith(2);
+ expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved');
  expect(liveFrame).not.toHaveBeenCalled();
+});
+
+it('delivers the newest publication held while one was followed in place, once that one settles', async () => {
+ const {backend,ping}=liveBackend(vi.fn(async()=>frame(2)));
+ let settle=()=>{};const follow=vi.fn((_version:number,_editId?:string)=>new Promise<void>(resolve=>{settle=resolve;}));
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
+ ping({version:2,editId:'two'}); ping({version:3,editId:'three'}); ping({version:4,editId:'four'});
+ expect(follow).toHaveBeenCalledExactlyOnceWith(2,'two');
+ settle(); await Promise.resolve(); await Promise.resolve();
+ expect(follow).toHaveBeenLastCalledWith(4,'four');expect(follow).toHaveBeenCalledTimes(2);
 });
 
 it('never refreshes the native archived view when a publication arrives', () => {
