@@ -329,3 +329,24 @@ test('single-value visualizations attest DOM chart behavior without claiming Veg
  const i=input();i.analysis.nodes.push({type:'element',graphKey:'single',tag:'Chart',isComponent:true,selfClosing:true,start:0,end:1,attributes:[{name:'data',value:{static:true,json:'$summary'},start:0,end:1},{name:'viz',value:{static:true,json:{kind:'single_value'}},start:0,end:1}],children:[]});
  const proof=analyzeNativeOperations(i).operations.find(operation=>operation.kind==='visualization')!;assert.equal(proof.route,'native-single-value');assert.ok(proof.requiredGuarantees.includes('single-value-dom'));assert.ok(!proof.requiredGuarantees.includes('vega-spec-signals'));
 });
+function staticChartInput(): NativeOperationAnalysisInput {
+ const i=input(),node=i.analysis.nodes[0]!; if(node.type!=='element')throw Error('fixture');
+ const rows=[{label:'first',amount:2},{label:'second',amount:1}],columns=[{name:'label',type:'string'},{name:'amount',type:'number'}];
+ const element=(tag:string,key:string,props:Record<string,unknown>)=>({...structuredClone(node),tag,graphKey:key,attributes:Object.entries(props).map(([name,json])=>({name,value:{static:true as const,json:json as never},start:0,end:1}))});
+ i.analysis.nodes=[element('Value','literal-source',{name:'items',type:'table',value:rows}),element('Chart','chart',{data:'$items',viz:{kind:'vega-lite',spec:{mark:'bar',encoding:{x:{field:'label',type:'nominal'},y:{field:'amount',type:'quantitative'}}}}})];
+ i.analysis.flow={imports:[],values:[{name:'items',kind:'table',rows,columns,start:0,end:1}],queries:[],mutations:[]};i.compilation.queries=[];i.compilation.values=[{name:'items',kind:'table',type:'table',default:null,rows:structuredClone(rows),columns:structuredClone(columns)}];return i;
+}
+test('literal table visualization has a separate source-node and ordered-table proof, never invented query coverage',()=>{
+ const i=staticChartInput();i.admissions=admit(i);const proof=analyzeNativeOperations(i);assert.deepEqual(proof.blockers,[]);assert.deepEqual(proof.queryOrder,[]);assert.deepEqual(proof.operations[0]!.dependencies,[]);const source=proof.operations[0]!.visualizationSource;assert.equal(source?.kind,'static-table-value');if(source?.kind!=='static-table-value')throw Error('source');assert.equal(source.sourceNode,'literal-source');for(const hash of [source.sourceNodeSha256,source.rowsSha256,source.columnsSha256])assert.match(hash,/^[a-f0-9]{64}$/);
+ const moved=structuredClone(i);moved.analysis.nodes[0]!.graphKey='replacement-source';assert.ok(analyzeNativeOperations(moved).blockers.length);const reordered=structuredClone(i);(reordered.analysis.flow.values[0]!.rows as unknown[]).reverse();(reordered.analysis.nodes[0]as any).attributes.find((a:any)=>a.name==='value').value.json.reverse();(reordered.compilation.values[0]as any).rows.reverse();assert.ok(analyzeNativeOperations(reordered).blockers.length);
+});
+test('static visualization rejects missing/duplicate/scalar/dynamic or changed table sources and unresolved field/type contracts',()=>{
+ const changes:Array<(i:NativeOperationAnalysisInput)=>void>=[
+  i=>{i.analysis.flow.values=[]},i=>{(i.analysis.nodes[0]as any).attributes.pop()},i=>{delete(i.compilation.values[0]as any).rows},i=>{i.analysis.flow.values.push(structuredClone(i.analysis.flow.values[0]!))},i=>{i.compilation.values=[...i.compilation.values,structuredClone(i.compilation.values[0]!)]},
+  i=>{(i.compilation.values[0]as any).kind='scalar'},i=>{(i.compilation.values[0]as any).rows[0].amount=99},i=>{(i.compilation.values[0]as any).columns[1].type='string'},
+  i=>{(i.analysis.nodes[0]as any).attributes[2].value={static:false,exprType:'CallExpression',source:'loadRows()'}},i=>{(i.analysis.nodes[0]as any).attributes.push({name:'source',value:{static:true,json:'ref:external'}})},
+  i=>{(i.analysis.nodes[1]as any).attributes[1].value.json.spec.encoding.x.field='unknown'},i=>{(i.analysis.nodes[1]as any).attributes[1].value.json.spec.encoding.y.type='nominal'},
+  i=>{(i.analysis.nodes[1]as any).attributes[1].value.json.spec.transform=[{calculate:'datum.amount*2',as:'derived'}]},
+ ];
+ for(const change of changes){const i=staticChartInput();change(i);i.admissions=admit(i);assert.ok(analyzeNativeOperations(i).blockers.length,'unsupported static source must fail closed');}
+});

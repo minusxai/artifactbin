@@ -123,6 +123,16 @@ export function emitNativeBindings(
     if (node.type === "element") node.children.forEach(walk);
   };
   input.analysis.nodes.forEach(walk);
+  const staticTables:Record<string,{columns:unknown;rows:unknown}>=Object.create(null),staticTargets=new Map<string,string>();
+  for(const source of input.staticTableSources??[]){
+    const binding=source.binding,chart=nodes.get(source.chartSourceNode),node=nodes.get(binding.sourceNode),values=input.analysis.flow.values.filter(value=>value.name===binding.name),value=values[0];
+    try {
+      if(binding.kind!=='static-table-value'||staticTargets.has(source.chartSourceNode)||values.length!==1||value?.kind!=='table'||!chart||chart.type!=='element'||!['Chart','Question'].includes(chart.tag)||chart.attributes.filter(a=>a.name==='data'&&a.value.static&&a.value.json==='$'+binding.name).length!==1||!node||node.type!=='element'||node.tag!=='Value'||node.children.length||node.attributes.some(a=>!['name','type','value'].includes(a.name)||!a.value.static)||new Set(node.attributes.map(a=>a.name)).size!==node.attributes.length||node.attributes.find(a=>a.name==='name')?.value.static!==true||!node.attributes.some(a=>a.name==='name'&&a.value.static&&a.value.json===binding.name)||!node.attributes.some(a=>a.name==='type'&&a.value.static&&a.value.json==='table')||nativeDigest(node)!==binding.sourceNodeSha256||!Array.isArray(value.rows)||!Array.isArray(value.columns)||nativeDigest(value.rows)!==binding.rowsSha256||nativeDigest(value.columns)!==binding.columnsSha256||!node.attributes.some(a=>a.name==='value'&&a.value.static&&nativeDigest(a.value.json)===binding.rowsSha256)||input.analysis.flow.queries.some(q=>q.name===binding.name))throw Error('source');
+      const table=nativeLocalTable(value as unknown as Parameters<typeof nativeLocalTable>[0]);
+      if(staticTables[binding.name]&&nativeDigest(staticTables[binding.name])!==nativeDigest({columns:table.columns,rows:table.rows}))throw Error('collision');
+      staticTables[binding.name]={columns:table.columns,rows:table.rows};staticTargets.set(source.chartSourceNode,binding.name);
+    }catch{block(source.chartSourceNode,'static-table-source-proof');}
+  }
   for (const value of input.analysis.flow.values) {
     if(value.kind==='table'){
       try {nativeLocalTable(value as unknown as Parameters<typeof nativeLocalTable>[0]);}catch{block('$values','invalid-local-table');}
@@ -261,7 +271,7 @@ export function emitNativeBindings(
       block(mutation.name, "invalid-mutation-descriptor");
   }
   const targets: any[] = [];
-  const admit = (expr: LocalReactiveExpression | null, sourceNode: string) => {
+  const admit = (expr: LocalReactiveExpression | null, sourceNode: string, staticName?:string) => {
     if (!expr) {
       block(sourceNode, "unsupported-expression");
       return null;
@@ -271,6 +281,7 @@ export function emitNativeBindings(
         (signal) =>
           !(signal === "_me.id" && input.viewer) &&
           !Object.hasOwn(defaults, signal) &&
+          signal!==staticName &&
           !input.queries.some((query) => query.name === signal),
       )
     )
@@ -308,7 +319,7 @@ export function emitNativeBindings(
       const attrs=new Map(node.attributes.map(attr=>[attr.name,attr.value]));
       const data=attrs.get("data");
       result.expression=admit(data?.static&&typeof data.json==="string"&&data.json.startsWith("$")?expression({static:false,exprType:"reference",source:data.json}):data?expression(data):null,node.graphKey);
-      if(result.expression?.kind!=="signal"||!queryNames.has(result.expression.name))block(node.graphKey,"cell-target-needs-declared-query");
+      if(result.expression?.kind!=="signal"||!queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name)block(node.graphKey,"cell-target-needs-declared-query");
       result.format={};
       for(const property of ["col","agg","format","prefix","suffix"]){const value=attrs.get(property);if(value===undefined)continue;if(!value.static||typeof value.json!=="string"&&value.json!==null){block(node.graphKey,"invalid-cell-format-property");continue;}if(value.json!==null)result.format[property]=value.json;}
       if(result.format.agg!==undefined&&!["first","last","sum","avg","median","min","max","count"].includes(result.format.agg))block(node.graphKey,"invalid-cell-aggregate");
@@ -349,15 +360,16 @@ export function emitNativeBindings(
             ? expression(value)
             : null,
         node.graphKey,
+        target.property==='data'?staticTargets.get(node.graphKey):undefined,
       );
       if (
         target.property === "data" &&
         (target.attribute !== "data" ||
           result.expression?.kind !== "signal" ||
-          !queryNames.has(result.expression.name))
+          !queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name)
       )
         block(node.graphKey, "data-target-needs-declared-query");
-      if(target.property==="options"&&(node.tag!=="Select"||target.attribute!=="options"||result.expression?.kind!=="signal"||!queryNames.has(result.expression.name)))block(node.graphKey,"options-target-needs-declared-query");
+      if(target.property==="options"&&(node.tag!=="Select"||target.attribute!=="options"||result.expression?.kind!=="signal"||!queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name))block(node.graphKey,"options-target-needs-declared-query");
       const custom = {
         Input: "value",
         Textarea: "value",
@@ -482,7 +494,7 @@ export function emitNativeBindings(
       } catch {block(node.graphKey,'invalid-table-plan');}
       const data=node.type==='element'?node.attributes.find(attr=>attr.name==='data')?.value:undefined;
       result.expression=admit(data?.static&&typeof data.json==='string'?expression({static:false,exprType:'reference',source:data.json}):null,node.graphKey);
-      if(result.expression?.kind!=='signal'||!queryNames.has(result.expression.name))block(node.graphKey,'table-needs-declared-query');
+      if(result.expression?.kind!=='signal'||!queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name)block(node.graphKey,'table-needs-declared-query');
     } else if (target.kind === "action") {
       if (node.type !== "element" || node.tag !== "Button") {
         block(node.graphKey, "invalid-action-target");
@@ -615,6 +627,7 @@ export function emitNativeBindings(
   const plan = {
     defaults,
     valueTypes,
+    ...(Object.keys(staticTables).length?{staticTables}:{}),
     localQuery,
     targets,
     queries: input.queries,

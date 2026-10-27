@@ -8,6 +8,7 @@ import type {
   NativeOperationGuarantee,
   NativeOperationReads,
   NativeOperationRoute,
+  NativeVisualizationSourceBinding,
 } from "./operations-contracts.ts";
 
 const digest = (value: unknown) =>
@@ -25,6 +26,26 @@ function elements(nodes: readonly RetainedJsxNode[]): RetainedJsxNode[] {
   return nodes.flatMap((node) =>
     node.type === "element" ? [node, ...elements(node.children)] : [],
   );
+}
+
+/** Only a literal, fully typed source Value can replace a query dependency. */
+function staticTableSource(input:NativeOperationAnalysisInput,nodes:readonly RetainedJsxNode[],name:string,viz:unknown):NativeVisualizationSourceBinding|undefined {
+ const declared=input.analysis.flow.values.filter(v=>v.name===name),compiled=input.compilation.values.filter(v=>v.name===name),sources=nodes.filter(n=>n.type==='element'&&n.tag==='Value'&&literal(n,'name')===name);
+ if(declared.length!==1||compiled.length!==1||sources.length!==1)return;
+ const value=declared[0]!,actual=compiled[0]!,node=sources[0]!;
+ if(value.kind!=='table'||actual.kind!=='table'||value.source!==undefined||node.type!=='element'||node.children.length||node.attributes.some(a=>!['name','type','value'].includes(a.name)||!a.value.static)||new Set(node.attributes.map(a=>a.name)).size!==node.attributes.length||literal(node,'type')!=='table')return;
+ const rows=value.rows,columns=value.columns;
+ if(!Array.isArray(rows)||!Array.isArray(columns)||!columns.length||!Array.isArray(actual.rows)||!Array.isArray(actual.columns)||!Array.isArray(literal(node,'value'))||digest(rows)!==digest(literal(node,'value'))||digest(rows)!==digest(actual.rows)||digest(columns)!==digest(actual.columns))return;
+ const schema=new Map<string,string>();
+ for(const col of columns){if(!col||typeof col!=='object'||Array.isArray(col)||typeof col.name!=='string'||!col.name||typeof col.type!=='string'||!['string','number','boolean'].includes(col.type)||schema.has(col.name))return;schema.set(col.name,col.type);}
+ for(const row of rows){if(!row||typeof row!=='object'||Array.isArray(row)||Object.keys(row).length!==schema.size||[...schema].some(([key,type])=>!Object.hasOwn(row,key)||typeof row[key]!==type||type==='number'&&!Number.isFinite(row[key])))return;}
+ if(!viz||typeof viz!=='object'||Array.isArray(viz)||!('kind'in viz)||viz.kind!=='vega-lite'||!('spec'in viz)||!viz.spec||typeof viz.spec!=='object'||Array.isArray(viz.spec))return;
+ let valid=true;
+ const inspect=(item:unknown):void=>{if(!item||typeof item!=='object')return;if(Array.isArray(item)){item.forEach(inspect);return;}const obj=item as Record<string,unknown>;
+ if(Object.keys(obj).some(key=>['transform','calculate','expr','params','selection','data','datasets','signals','condition'].includes(key)||/expr$/i.test(key)))valid=false;
+ if(Object.hasOwn(obj,'field')){const type=typeof obj.field==='string'?schema.get(obj.field):undefined;if(!type||!['nominal','ordinal','quantitative'].includes(String(obj.type))||(obj.type==='quantitative'?type!=='number':type!=='string'&&type!=='boolean'))valid=false;}
+ Object.values(obj).forEach(inspect);};inspect(viz.spec);if(!valid)return;
+ return {kind:'static-table-value',name,sourceNode:node.graphKey,sourceNodeSha256:digest(node),rowsSha256:digest(rows),columnsSha256:digest(columns)};
 }
 
 /** Pure preparation evidence. No SQL execution, registration, destination write, or native runtime is produced. */
@@ -107,6 +128,7 @@ export function analyzeNativeOperations(
     route: NativeOperationRoute,
     requiredGuarantees: NativeOperationGuarantee[],
     catalogSource?:string,
+    visualizationSource?:NativeVisualizationSourceBinding,
   ): void {
     const operationSha256 = digest({
       key: analysis.key,
@@ -128,6 +150,7 @@ export function analyzeNativeOperations(
       dependencies: [...reads.queries],
       requiredGuarantees,
       status: "blocked",
+      ...(visualizationSource?{visualizationSource}:{}),
     };
     operations.push(proof);
     for (const value of reads.values)
@@ -276,7 +299,9 @@ export function analyzeNativeOperations(
       typeof data === "string" && /^\$[A-Za-z_]\w*$/.test(data)
         ? data.slice(1)
         : null;
-    if (!dependency || !queries.has(dependency))
+    const staticSource=dependency&&!queries.has(dependency)?staticTableSource(input,nodes,dependency,viz):undefined;
+    const sourceBinding:NativeVisualizationSourceBinding|undefined=staticSource??(dependency&&queries.has(dependency)?{kind:'query-result',name:dependency}:undefined);
+    if (!sourceBinding||sourceBinding.kind==='query-result'&&analysis.flow.values.some(v=>v.name===dependency))
       block("visualization-query-binding-missing", name, node.graphKey);
     if (viz === undefined || viz === null)
       block("visualization-spec-admission-missing", name, node.graphKey);
@@ -287,15 +312,17 @@ export function analyzeNativeOperations(
       {
         attributes: node.type === "element" ? node.attributes : [],
         dependency,
+        ...(staticSource?{sourceBinding:staticSource}:{}),
       },
       {
         imports: [],
-        queries: dependency ? [dependency] : [],
-        values: [],
+        queries: dependency&&!staticSource ? [dependency] : [],
+        values: staticSource&&dependency ? [dependency] : [],
         builtins: [],
       },
       viz&&typeof viz==='object'&&!Array.isArray(viz)&&viz.kind==='single_value'?"native-single-value":"native-vega",
       [viz&&typeof viz==='object'&&!Array.isArray(viz)&&viz.kind==='single_value'?"single-value-dom":"vega-spec-signals", "cancel-stale-results"],
+      undefined,sourceBinding,
     );
   }
   // A registered downstream operation cannot conceal an uncovered prerequisite.
