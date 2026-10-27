@@ -56,7 +56,8 @@ describe('a body longer than ten lines folds itself', () => {
     expect(control.textContent).toMatch(/show more \(40 lines\)/);
     const clamped = thread.querySelector<HTMLElement>('[data-folded-body="clamped"]')!;
     expect(clamped).toBeTruthy();
-    expect(clamped.style.maxHeight).toBe('200px');
+    // Leave space for reaction metadata while keeping the short reply visible.
+    expect(clamped.style.maxHeight).toBe('120px');
     expect(clamped.textContent).toContain('line 40 of the agent');
     fireEvent.click(control);
     expect(thread.querySelector('[data-folded-body="clamped"]')).toBeNull();
