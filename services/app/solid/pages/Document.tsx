@@ -9,8 +9,9 @@ import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme, storedTheme } from '@/lib/story-runtime/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
-import { STORY_DOCUMENT_MESSAGE, STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
+import type { JsxNode } from '@/lib/jsx';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { FramedRuntime } from '@/lib/serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
@@ -25,7 +26,6 @@ import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGove
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
-import { followHtmlVersion } from '../document/follow-html-version';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -152,8 +152,9 @@ export function DocumentPage(): JSX.Element {
    * (followHtmlVersion). The frame's relayed queries, presence and selection classify against it.
    */
   const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 1, editId: page?.surface?.editId ?? '' });
-  /** Set once the frame's tree is attached: the drawn version's tree is fetched again for it. */
-  let refreshTree: (() => Promise<boolean>) | null = null;
+  /** The drawn version's tree, fetched again once the frame holds one (set when the frame is adopted). */
+  let refreshTree = (): Promise<JsxNode[] | null | undefined> => Promise.resolve(undefined);
+  const reload = () => replaceDocument(window.location.href);
   const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? htmlHead().version), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
@@ -197,18 +198,10 @@ export function DocumentPage(): JSX.Element {
     },
     // The frame draws an inert edit in place and this page moves its trusted revision with it; anything else reloads
     // the original server shell and its ticketed frame together, while viewer state stays in browser storage.
-    onPublication: page.surface.format === 'html' ? (version, editId) => followHtmlVersion({
-      version, frame: archivedNow() ? null : runtimeRef.current,
-      reload: () => replaceDocument(window.location.href),
-      // The frame draws the newest version it is served: this one, or one published since (then announced next).
-      refresh: async (drawn, revision) => {
-        const shown = Number(revision);
-        if (!Number.isInteger(shown) || shown < drawn) return false;
-        if (refreshTree && !(await refreshTree())) return false;
-        setHtmlHead({ version: shown, editId: editId ?? '' });
-        return true;
-      },
-    }).then((outcome) => outcome === 'morphed' ? undefined : new Promise<never>(() => { /* the page is reloading */ })) : undefined,
+    // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
+    onPublication: page.surface.format === 'html' ? (version, editId) => import('../document/follow-html-version').then(({ followPublication }) => followPublication({
+      version, editId, frame: archivedNow() ? null : runtimeRef.current, tree: () => refreshTree(), show: setHtmlHead, reload,
+    })).catch(reload) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,
     since: page.surface.runtime?.data.dataflow?.results?.since,
@@ -273,13 +266,7 @@ export function DocumentPage(): JSX.Element {
     const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
     const treeOnLoad = annotatable();
     let treeAsked = treeOnLoad;
-    refreshTree = async () => {
-      if (!treeAsked) return true;
-      const tree = await fetchFrameNodes(id, window.location.search, nodes.signal);
-      if (!tree) return false;
-      runtimeRef.current?.update({ type: STORY_DOCUMENT_MESSAGE, nodes: tree });
-      return true;
-    };
+    refreshTree = () => treeAsked ? fetchFrameNodes(id, window.location.search, nodes.signal) : Promise.resolve(undefined);
     const askTreeOnPress = () => {
       if (treeAsked || !story || !canStartComment()) return;
       treeAsked = true;

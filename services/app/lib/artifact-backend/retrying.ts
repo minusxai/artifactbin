@@ -2,7 +2,7 @@
  * The reader backend's face of the shared retry policy (lib/http/retry): requests go through `retried`, and a
  * surface that wants a quiet "retrying…" subscribes with `watchRetrying`. The policy itself lives only in lib/http.
  */
-import { retryFetch, type RetryOptions } from '@/lib/http/retry';
+import type { RetryOptions } from '@/lib/http/retry';
 
 export const RETRY_TUNING: { policy?: RetryOptions['policy'] } = {};
 
@@ -21,8 +21,9 @@ export function newIdempotencyKey(): string {
 }
 
 /** One request through the shared policy; resolves to the final Response exactly as fetch would. */
-export async function retried(send: (idempotencyKey: string | undefined) => Promise<Response>, options: Omit<RetryOptions, 'onWait' | 'policy'> = {}): Promise<Response> {
-  const { response } = await retryFetch(({ idempotencyKey }) => send(idempotencyKey), {
+export async function retried(send: (idempotencyKey: string | undefined) => Promise<Response>, options: Omit<RetryOptions, 'onWait' | 'policy' | 'first'> = {}): Promise<Response> {
+  const { retryLazily } = await import('@/lib/http/retry-lazily');
+  const { response } = await retryLazily(({ idempotencyKey }) => send(idempotencyKey), {
     ...options, policy: RETRY_TUNING.policy,
     onWait: (on) => announce(on ? 1 : -1),
   });
