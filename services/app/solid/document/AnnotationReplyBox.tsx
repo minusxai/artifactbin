@@ -14,6 +14,7 @@ import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { Button } from '../ui/Button';
+import { RetryingNote } from './RetryingNote';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { createCommentImageDraft, type CommentImageAttachment, type CommentImageDraft } from './CommentImageAttach';
@@ -75,6 +76,7 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
       label="Reply to annotation" placeholder={props.placeholder} image={image} busy={props.busy || sending()}
       value={props.value} onChange={props.onChange} onSubmit={() => void send()}
       rows={props.rows ?? 3} autoFocus={props.autoFocus} />
+    <RetryingNote backend={props.backend} active={sending()} />
     <Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show>
     <div data-reply-actions class="flex items-center justify-end gap-2">
       <CommentSubmitHint action="reply" />

@@ -5,6 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHttpBackend } from '../http';
+import { RETRY_TUNING } from '../retrying';
 import { BackendRequestError } from '../errors';
 
 type Call = { url: string; init?: RequestInit };
@@ -234,7 +235,7 @@ describe('createHttpBackend', () => {
     await expect(backend.actOnAnnotation('ann_1', { resolve: true })).resolves.toEqual({ id: 'ann_1', status: 'resolved' });
     expect(calls[0]).toEqual({
       url: '/api/my/artifacts/AbC123/annotations/ann_1',
-      init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolve: true }) },
+      init: { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.stringMatching(/^[A-Za-z0-9_-]{16,128}$/) }, body: JSON.stringify({ resolve: true }) },
     });
     stubFetch(json({}, 403));
     await expect(backend.actOnAnnotation('ann_1', { reply: 'x' })).rejects.toBeInstanceOf(BackendRequestError);
@@ -292,3 +293,50 @@ it('publishes ephemeral reader geometry through the online backend only',async()
  expect(calls[0]).toEqual({url:'/api/artifacts/AbC123/presence',init:{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:false}});
  stubFetch(json({},403));expect(await createHttpBackend('AbC123').publishPresence(body)).toBeNull();
 });
+
+describe('comment writes through a restart', () => {
+  const backend = createHttpBackend('AbC123');
+    const fast = { delaysMs: [0, 0, 0, 0, 0] };
+    afterEach(() => { delete RETRY_TUNING.policy; });
+    const keys = (calls: Call[]) => calls.map((c) => (c.init?.headers as Record<string, string>)['Idempotency-Key']);
+
+    it('a reply that meets 502 then 200 is sent under one key and answers once', async () => {
+      RETRY_TUNING.policy = fast;
+      const calls = stubFetch(json({ error: 'bad_gateway' }, 502), new TypeError('offline'), json({ id: 'a1', revision: 3 }));
+      await expect(backend.actOnAnnotation('a1', { reply: 'hi' })).resolves.toMatchObject({ id: 'a1' });
+      expect(calls).toHaveLength(3);
+      expect(new Set(keys(calls)).size).toBe(1);
+      expect(keys(calls)[0]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    });
+
+    it('an edit and a new comment retry the same way; a reaction (desired state) too', async () => {
+      RETRY_TUNING.policy = fast;
+      let calls = stubFetch(json({}, 503), json({ id: 'a1' }));
+      await backend.editAnnotation('c1', { body: 'x' });
+      expect(calls).toHaveLength(2); expect(new Set(keys(calls)).size).toBe(1);
+      calls = stubFetch(json({}, 504), json({ id: 'a2' }, 201));
+      await backend.createAnnotation({ body: 'x' }, 'create-key-0123456789');
+      expect(keys(calls)).toEqual(['create-key-0123456789', 'create-key-0123456789']);
+      calls = stubFetch(json({}, 502), json({ id: 'a1' }));
+      await backend.setCommentReaction('c1', { kind: 'thumbs_up', active: true });
+      expect(calls).toHaveLength(2);
+    });
+
+    it.each([400, 401, 403, 404, 409, 422])('does not retry a %i', async (status) => {
+      RETRY_TUNING.policy = fast;
+      const calls = stubFetch(json({ error: status === 409 ? 'annotation_conflict' : 'refused' }, status), json({ id: 'a1' }));
+      await expect(backend.actOnAnnotation('a1', { reply: 'hi' })).rejects.toBeInstanceOf(BackendRequestError);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('shows retrying only while waiting, and reports the failure after the retries are spent', async () => {
+      RETRY_TUNING.policy = { delaysMs: [1, 1] };
+      const seen: boolean[] = [];
+      const stop = backend.watchRetrying!((on) => seen.push(on));
+      const calls = stubFetch(json({}, 502));
+      await expect(backend.actOnAnnotation('a1', { reply: 'hi' })).rejects.toMatchObject({ status: 502 });
+      stop();
+      expect(calls).toHaveLength(3);
+      expect(seen).toEqual([true, false, true, false]);
+    });
+  });

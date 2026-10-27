@@ -8,6 +8,7 @@ import { replaceComment } from './comment-input';
  * picking a block or drawing an area is annotation-picking.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { AnnotationLayer } from '../AnnotationLayer';
@@ -640,6 +641,55 @@ it('sends a plain reply without a revision and shows both replies when the threa
   expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
   expect(screen.getByText('someone else replied')).toBeTruthy();
   expect(screen.getByText('my reply')).toBeTruthy();
+});
+
+it('a reply that meets a 502 retries under one key, posts once and clears the draft', async () => {
+  RETRY_TUNING.policy = { delaysMs: [0, 0, 0] };
+  const answered = { ...ANN, revision: 5, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_mine', body: 'through the restart' }] };
+  const rig = globalThis.fetch;
+  const posts: RequestInit[] = [];
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) {
+      posts.push(init);
+      return posts.length === 1 ? new Response('<html>502</html>', { status: 502 }) : new Response(JSON.stringify(answered), { status: 200 });
+    }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  try {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+    replaceComment(await screen.findByLabelText('Reply to annotation'), 'through the restart');
+    fireEvent.click(screen.getByLabelText('Send reply'));
+    await flush(); await flush();
+    expect(posts).toHaveLength(2);
+    const keys = posts.map((post) => (post.headers as Record<string, string>)['Idempotency-Key']);
+    expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
+    expect(screen.getByText('through the restart')).toBeTruthy();
+  } finally { delete RETRY_TUNING.policy; }
+});
+
+it('a reply refused with 409 is not retried and keeps the draft', async () => {
+  RETRY_TUNING.policy = { delaysMs: [0, 0, 0] };
+  const rig = globalThis.fetch;
+  let posts = 0;
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { posts++; return new Response(JSON.stringify({ error: 'annotation_conflict' }), { status: 409 }); }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  try {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+    replaceComment(await screen.findByLabelText('Reply to annotation'), 'keep me');
+    fireEvent.click(screen.getByLabelText('Send reply'));
+    await flush(); await flush();
+    expect(posts).toBe(1);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('keep me');
+  } finally { delete RETRY_TUNING.policy; }
 });
 
 it('shows a connected agent program instead of its transport', () => {

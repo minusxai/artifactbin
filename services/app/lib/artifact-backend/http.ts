@@ -28,6 +28,8 @@ import type {
   MembersAnswer,
 } from './types';
 
+import { newIdempotencyKey, retried, watchRetrying } from './retrying';
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 /**
@@ -38,8 +40,8 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 export function artifactRequests(id: string) {
   const path = `/api/my/artifacts/${encodeURIComponent(id)}`;
   return {
-    head: () => fetch(path),
-    version: (n: number) => fetch(`${path}/versions/${n}`),
+    head: () => retried(() => fetch(path)),
+    version: (n: number) => retried(() => fetch(`${path}/versions/${n}`)),
     edits: (body: unknown) => fetch(`${path}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     htmlUpdate: (body: unknown) => fetch(path, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     patch: (body: unknown) => fetch(path, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }),
@@ -152,11 +154,11 @@ export function createHttpBackend(id: string): ArtifactBackend {
       );
     },
     async versions() {
-      const res = await fetch(`${mine}/versions`);
+      const res = await retried(() => fetch(`${mine}/versions`));
       return res.ok ? ((await res.json()) as { versions: ArtifactVersionSummary[] }).versions : null;
     },
     async version(n) {
-      const res = await fetch(`${mine}/versions/${n}`);
+      const res = await retried(() => fetch(`${mine}/versions/${n}`));
       return res.ok ? ((await res.json()) as ArtifactVersionSnapshot) : null;
     },
     async revert(input) {
@@ -165,10 +167,11 @@ export function createHttpBackend(id: string): ArtifactBackend {
     queryTransport: () => createAuthenticatedTransport(id),
 
     // ── comments ────────────────────────────────────────────────────────────
+    watchRetrying,
     async createAnnotation(body, idempotencyKey) {
-      const res = await fetch(`${mine}/annotations`, {
-        method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(body),
-      });
+      const res = await retried((key) => fetch(`${mine}/annotations`, {
+        method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body),
+      }), { method: 'POST', idempotencyKey });
       if (res.ok) return (await res.json()) as AnnotationWire;
       const refusal: unknown = await res.json().catch(() => null);
       const code = refusal && typeof refusal === 'object' ? (refusal as { error?: unknown; code?: unknown; edit_id?: unknown }) : {};
@@ -181,7 +184,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
       );
     },
     async actOnAnnotation(annotationId, body) {
-      const res = await fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const res = await retried((key) => fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body) }), { method: 'POST', idempotencyKey: newIdempotencyKey() });
       if (!res.ok) {
         const refusal = await res.json().catch(() => null) as { error?: unknown; message?: unknown; edit_id?: unknown } | null;
         const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
@@ -192,12 +195,12 @@ export function createHttpBackend(id: string): ArtifactBackend {
       return (await res.json()) as AnnotationWire;
     },
     async setCommentReaction(commentId, body) {
-      const res=await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}/reactions`,{method:'PUT',headers:JSON_HEADERS,body:JSON.stringify(body)});
+      const res=await retried(()=>fetch(`${mine}/annotations/${encodeURIComponent(commentId)}/reactions`,{method:'PUT',headers:JSON_HEADERS,body:JSON.stringify(body)}),{method:'PUT',safeToRepeat:true});
       if(!res.ok)throw new BackendRequestError('Could not update your reaction. Try again.',res.status,res.status===401);
       return await res.json() as AnnotationWire;
     },
     async editAnnotation(commentId, body) {
-      const res = await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const res = await retried((key) => fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body) }), { method: 'PATCH', idempotencyKey: newIdempotencyKey() });
       if (!res.ok) {
         const refusal = await res.json().catch(() => null) as { error?: unknown; code?: unknown } | null;
         const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
@@ -222,7 +225,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
       return (await response.json()) as { id: string };
     },
     async members(query, options = {}) {
-      const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal });
+      const r = await retried(() => fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal }), { signal: options.signal });
       return r.ok ? ((await r.json()) as MembersAnswer) : null;
     },
   };

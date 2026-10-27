@@ -9,7 +9,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {mkdir} from 'node:fs/promises';
-import {runTool,resolveTarget,selectedServer,makeClient,positional,enumValue,credentialRoot,ToolError,exclusive} from './toolbox-client.mjs';
+import {runTool,resolveTarget,selectedServer,makeClient,platform,positional,enumValue,credentialRoot,ToolError,exclusive} from './toolbox-client.mjs';
 
 /** Resolve both named ESM and CommonJS default exports before attempting a browser launch. */
 export async function loadChromium(modulePath){
@@ -174,7 +174,9 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
  server=origin(server);if(!token&&!requester)throw Error('Supply ARTIFACTBIN_TOKEN outside page code.');
  async function request(body){
   if(requester)return requester(body);
-  const response=await fetcher(server+'/api/browser-sessions',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Origin:server},body:JSON.stringify(body)});
+  // Only a status read is repeated through a restart (shared policy, lib/http/retry); a script submission is never replayed — its lost response is recovered by observing the same receipt below.
+  const send=()=>fetcher(server+'/api/browser-sessions',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Origin:server},body:JSON.stringify(body)});
+  const response=body.op==='status'?(await (await platform()).retryFetch(send,{method:'POST',safeToRepeat:true})).response:await send();
   const result=await response.json();
   if(!response.ok){const code=result.error?.code??result.error??'unknown';
    // The server holds a few browser sessions at once; a full server is a known, retryable state, not an unexplained failure.

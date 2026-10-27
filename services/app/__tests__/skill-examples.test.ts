@@ -95,7 +95,8 @@ describe('installed native author examples',()=>{
    expect(comment.journal).toBeTruthy();
    await writeFile(first.source,canonical.replace('>One<','>Two<'));await writeFile(path.join(project,'theme.css'),'body{color:blue}');
    const journal=path.join(dir,'update-request.json');loseResponse=true;
-   await expect(publishCommand({values:{server,request:journal},positionals:[first.source]},options)).rejects.toMatchObject({code:'outcome_unknown'});
+   // Retries off: the journal/--resume path is what recovers a lost response when no automatic retry is wanted.
+   await expect(publishCommand({values:{server,request:journal},positionals:[first.source]},{...options,retryDelays:[]})).rejects.toMatchObject({code:'outcome_unknown'});
    await writeFile(first.source,canonical.replace('>One<','>Unsaved later edit<'));
    const changed=await publishCommand({values:{server,resume:journal},positionals:[]},options);expect(changed.id).toBe(first.id);expect(changed.version).toBe(2);
    expect(changed.updatedInPlace).toBeUndefined();expect(changed.source).not.toBe(first.source);expect(changed.note).toContain('input changed');
