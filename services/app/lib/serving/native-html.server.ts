@@ -18,6 +18,7 @@ import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styl
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import { ASSETS_ORIGIN } from '@/lib/platform';
+import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
 /** Inputs from one permission-checked immutable version. No credentials belong here. */
@@ -41,7 +42,7 @@ function htmlCore(): Promise<string> {
 }
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
-  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{})};
+  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
   const source=input.row.source??'';
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);

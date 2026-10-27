@@ -141,3 +141,15 @@
 :root[data-af-design-system="drafting"] .t-dim { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="drafting"] .t-numeral { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="drafting"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="drafting"] .tok-comment, :root[data-af-design-system="drafting"] .tok-quote, :root[data-af-design-system="drafting"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="drafting"] .tok-keyword, :root[data-af-design-system="drafting"] .tok-selector-tag, :root[data-af-design-system="drafting"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="drafting"] .tok-string, :root[data-af-design-system="drafting"] .tok-regexp, :root[data-af-design-system="drafting"] .tok-template-variable, :root[data-af-design-system="drafting"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="drafting"] .tok-number, :root[data-af-design-system="drafting"] .tok-literal, :root[data-af-design-system="drafting"] .tok-symbol, :root[data-af-design-system="drafting"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="drafting"] .tok-title, :root[data-af-design-system="drafting"] .tok-section, :root[data-af-design-system="drafting"] .tok-selector-id, :root[data-af-design-system="drafting"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="drafting"] .tok-title.class_, :root[data-af-design-system="drafting"] .tok-type, :root[data-af-design-system="drafting"] .tok-built_in, :root[data-af-design-system="drafting"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="drafting"] .tok-attr, :root[data-af-design-system="drafting"] .tok-attribute, :root[data-af-design-system="drafting"] .tok-property, :root[data-af-design-system="drafting"] .tok-variable, :root[data-af-design-system="drafting"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="drafting"] .tok-tag, :root[data-af-design-system="drafting"] .tok-operator, :root[data-af-design-system="drafting"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="drafting"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="drafting"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="drafting"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="drafting"] .tok-strong { font-weight:700; }

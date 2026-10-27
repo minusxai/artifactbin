@@ -40,6 +40,23 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   };
   collect(document);
   const { appOrigin, ...publicConfig } = input.config;
+  // `@afbin/` library entries never override a key the author's own import map declares.
+  if (publicConfig.libraries) {
+    const claimed = new Set<string>();
+    const scan = (node: DefaultTreeAdapterMap['node']): void => {
+      if ('attrs' in node && node.nodeName === 'script' && node.attrs.some(a => a.name === 'type' && a.value === 'importmap')) {
+        try {
+          const map = JSON.parse(node.childNodes.map(c => 'value' in c ? c.value : '').join('')) as { imports?: Record<string, unknown> };
+          for (const key of Object.keys(map.imports ?? {})) claimed.add(key);
+        } catch { /* An invalid author map is the browser's to report. */ }
+      }
+      if ('content' in node) scan(node.content as unknown as DefaultTreeAdapterMap['node']);
+      if ('childNodes' in node) node.childNodes.forEach(scan);
+    };
+    scan(document);
+    publicConfig.libraries = Object.fromEntries(Object.entries(publicConfig.libraries).filter(([key]) => !claimed.has(key)));
+  }
+  if (input.offline) delete publicConfig.libraries;
   if (!publicConfig.initialState) {
     const visit = (node: DefaultTreeAdapterMap['node']): HtmlJsonObject | undefined => {
       if ('attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'state')) {

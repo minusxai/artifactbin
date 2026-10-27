@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
-import {libraryUrls} from './index';
+import {libraryUrls,libraryPathForSpecifier} from './index';
 export interface RegisteredLibraryResource {url:string;contentType:'text/javascript';bytes:Uint8Array}
 export interface LibraryResourceInput {url:string;contentType:string;bytes:Uint8Array}
 // Same package-cwd contract as server/app.ts static serving, including bundled deployment.
@@ -19,7 +19,7 @@ export async function registeredLibrarySources():Promise<Readonly<Record<string,
  * project modules. Unused library bytes never consume the offline pack's limits. */
 export async function referencedLibraryResources(html:string,resources:readonly LibraryResourceInput[],baseUrl:string):Promise<RegisteredLibraryResource[]>{
  initSync();const chosen=new Set<string>(),origin=new URL(baseUrl).origin;
- const admit=(value:string,base=baseUrl)=>{const url=new URL(value,base);if(url.origin===origin&&!url.search&&!url.username&&!url.password&&registered.has(url.pathname))chosen.add(url.pathname);};
+ const admit=(value:string,base=baseUrl)=>{const url=new URL(libraryPathForSpecifier(value)??value,base);if(url.origin===origin&&!url.search&&!url.username&&!url.password&&registered.has(url.pathname))chosen.add(url.pathname);};
  const module=(source:string,base=baseUrl)=>{for(const item of parseImports(source)[0])if(item.n&&item.d!==-2)admit(item.n,base);};
  const visit=(node:DefaultTreeAdapterMap['node']):void=>{
   if('tagName'in node&&node.tagName==='script'){

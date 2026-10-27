@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {build,transform,type Loader} from 'esbuild';
 import {initSync,parse as parseModuleImports} from 'es-module-lexer';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
+import {libraryPathForSpecifier} from '../libraries';
 import {OFFLINE_MODULES_BLOCK,type OfflineEmbeddedModules,type OfflineDependencyInput,type OfflineDependencyResult} from './contracts';
 export type {OfflineDependencyInput,OfflineDependencyResult} from './contracts';
 export const OFFLINE_DEPENDENCY_LIMITS={resources:256,resourceBytes:16*1024*1024,totalBytes:16*1024*1024,htmlBytes:4*1024*1024} as const;
@@ -47,7 +48,7 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  const bundle=async(source:string,url:string,loader:'js'|'css')=>{
   if(loader==='js')checkModule(source);
   const result=await build({stdin:{contents:source,sourcefile:url,loader},bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',legalComments:'none',logLevel:'silent',outdir:'/offline',plugins:[{name:'admitted-offline-only',setup(builder){
-   builder.onResolve({filter:/.*/},async args=>{if(['@afbin/apollo','@afbin/reader'].includes(args.path))return {path:args.path,external:true};if(/^(?:data:|#)/i.test(args.path))return {path:args.path,external:true};const resolved=canonical(args.path,args.importer||url);if(args.kind==='url-token')return {path:binary(args.path,args.importer||url),external:true};if(args.kind==='import-statement'||args.kind==='dynamic-import'){const shared=await closedModule(resolved);if(shared)return {path:shared,external:true};}return {path:resolved,namespace:'admitted'};});
+   builder.onResolve({filter:/.*/},async args=>{if(['@afbin/apollo','@afbin/reader'].includes(args.path))return {path:args.path,external:true};args={...args,path:libraryPathForSpecifier(args.path)??args.path};if(/^(?:data:|#)/i.test(args.path))return {path:args.path,external:true};const resolved=canonical(args.path,args.importer||url);if(args.kind==='url-token')return {path:binary(args.path,args.importer||url),external:true};if(args.kind==='import-statement'||args.kind==='dynamic-import'){const shared=await closedModule(resolved);if(shared)return {path:shared,external:true};}return {path:resolved,namespace:'admitted'};});
    builder.onLoad({filter:/.*/,namespace:'admitted'},args=>{const resource=get(args.path),mime=type(resource.contentType);let loader:Loader;if(JS.has(mime)){loader='js';checkModule(new TextDecoder().decode(resource.bytes));}else if(mime==='text/css')loader='css';else if(mime==='application/json')loader='json';else if(/^(?:image|font|audio|video)\//.test(mime)||mime==='application/octet-stream')return {contents:'export default '+JSON.stringify(encoded(mime,resource.bytes)),loader:'js'};else throw Error('Unsupported offline resource MIME');return {contents:resource.bytes,loader};});
   }}]});
   const output=result.outputFiles.find(file=>file.path.endsWith(loader==='css'?'.css':'.js'));if(!output)throw Error('Offline dependency bundle has no output');

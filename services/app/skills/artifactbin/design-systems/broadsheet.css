@@ -115,3 +115,15 @@
 :root[data-af-design-system="broadsheet"] .t-small { font-family: "Libre Franklin", system-ui, sans-serif; font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 :root[data-af-design-system="broadsheet"] .t-numeral { font-family: "Old Standard TT", "Times New Roman", serif; font-size: clamp(44px, 6vw, 72px); line-height: .95; font-weight: 700; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="broadsheet"] .t-wire { font-family: "Courier Prime", "Courier New", monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="broadsheet"] .tok-comment, :root[data-af-design-system="broadsheet"] .tok-quote, :root[data-af-design-system="broadsheet"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="broadsheet"] .tok-keyword, :root[data-af-design-system="broadsheet"] .tok-selector-tag, :root[data-af-design-system="broadsheet"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="broadsheet"] .tok-string, :root[data-af-design-system="broadsheet"] .tok-regexp, :root[data-af-design-system="broadsheet"] .tok-template-variable, :root[data-af-design-system="broadsheet"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="broadsheet"] .tok-number, :root[data-af-design-system="broadsheet"] .tok-literal, :root[data-af-design-system="broadsheet"] .tok-symbol, :root[data-af-design-system="broadsheet"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="broadsheet"] .tok-title, :root[data-af-design-system="broadsheet"] .tok-section, :root[data-af-design-system="broadsheet"] .tok-selector-id, :root[data-af-design-system="broadsheet"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="broadsheet"] .tok-title.class_, :root[data-af-design-system="broadsheet"] .tok-type, :root[data-af-design-system="broadsheet"] .tok-built_in, :root[data-af-design-system="broadsheet"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="broadsheet"] .tok-attr, :root[data-af-design-system="broadsheet"] .tok-attribute, :root[data-af-design-system="broadsheet"] .tok-property, :root[data-af-design-system="broadsheet"] .tok-variable, :root[data-af-design-system="broadsheet"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="broadsheet"] .tok-tag, :root[data-af-design-system="broadsheet"] .tok-operator, :root[data-af-design-system="broadsheet"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="broadsheet"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="broadsheet"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="broadsheet"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="broadsheet"] .tok-strong { font-weight:700; }

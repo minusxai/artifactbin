@@ -121,3 +121,15 @@
 :root[data-af-design-system="arcade"] .t-numeral { font-family: "VT323", "Courier New", monospace; font-size: 56px; line-height: 52px; font-weight: 400; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="arcade"] .t-combo { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 48px; line-height: 48px; font-weight: 700; font-style: italic; }
 :root[data-af-design-system="arcade"] .t-mono { font-family: "VT323", "Courier New", monospace; font-size: 22px; line-height: 26px; font-weight: 400; }
+:root[data-af-design-system="arcade"] .tok-comment, :root[data-af-design-system="arcade"] .tok-quote, :root[data-af-design-system="arcade"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="arcade"] .tok-keyword, :root[data-af-design-system="arcade"] .tok-selector-tag, :root[data-af-design-system="arcade"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="arcade"] .tok-string, :root[data-af-design-system="arcade"] .tok-regexp, :root[data-af-design-system="arcade"] .tok-template-variable, :root[data-af-design-system="arcade"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="arcade"] .tok-number, :root[data-af-design-system="arcade"] .tok-literal, :root[data-af-design-system="arcade"] .tok-symbol, :root[data-af-design-system="arcade"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="arcade"] .tok-title, :root[data-af-design-system="arcade"] .tok-section, :root[data-af-design-system="arcade"] .tok-selector-id, :root[data-af-design-system="arcade"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="arcade"] .tok-title.class_, :root[data-af-design-system="arcade"] .tok-type, :root[data-af-design-system="arcade"] .tok-built_in, :root[data-af-design-system="arcade"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="arcade"] .tok-attr, :root[data-af-design-system="arcade"] .tok-attribute, :root[data-af-design-system="arcade"] .tok-property, :root[data-af-design-system="arcade"] .tok-variable, :root[data-af-design-system="arcade"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="arcade"] .tok-tag, :root[data-af-design-system="arcade"] .tok-operator, :root[data-af-design-system="arcade"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="arcade"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="arcade"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="arcade"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="arcade"] .tok-strong { font-weight:700; }

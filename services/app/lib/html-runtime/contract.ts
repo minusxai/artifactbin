@@ -14,6 +14,8 @@ export interface HtmlRuntimeConfig {
   appOrigin?: string;
   /** Default publication destination for an unpublished file, never a published association. */
   publishOrigin?: string;
+  /** `@afbin/<name>` -> platform library URL, resolved server-side from the page's recorded pins. */
+  libraries?: Readonly<Record<string, string>>;
   initialState?: HtmlJsonObject;
   /** The version's script fingerprint (lib/html-autofix scriptFingerprint): equal values run identical code, so a new version may be morphed in place. */
   scriptFingerprint?: string;

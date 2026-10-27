@@ -304,7 +304,7 @@ async function forkInput(
     ...(overrides.ancestor_ids !== undefined ? { ancestor_ids: overrides.ancestor_ids } : {}),
   };
   if(source.format==='html'){
-    const {htmlLinks,htmlIdentity,...meta}=source.meta;
+    const {htmlLinks,htmlIdentity,htmlLibraries,...meta}=source.meta;
     try{
       const plan=await planHtmlClone(actor,source.id,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{backend:getHtmlBackendVersion,authorizeDataset:authorizeDatasetBinding});
       return {...carried,format:'html',source:source.source,meta,...plan};

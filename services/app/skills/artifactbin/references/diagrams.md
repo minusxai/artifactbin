@@ -41,7 +41,7 @@ Load the chosen design-system CSS as usual. Map its semantic tokens to Pele so l
   <p id="workflow-status" data-af-id="workflow-status" role="status" hidden></p>
 </figure>
 <script type="module">
-import {mount} from "/libraries/pele-flowchart-1.12.0/index.js";
+import {mount} from "@afbin/pele-flowchart";
 const target = document.querySelector("#workflow");
 const status = document.querySelector("#workflow-status");
 const source = `flowchart LR
@@ -67,12 +67,12 @@ window.addEventListener("pagehide", () => diagram.destroy(), {once: true});
 
 | Import | Available diagrams |
 |---|---|
-| `/libraries/pele-1.12.0/index.js` | All built-in Pele types |
-| `/libraries/pele-flowchart-1.12.0/index.js` | Flowchart only |
-| `/libraries/pele-sequence-1.12.0/index.js` | Sequence only |
-| `/libraries/pele-er-1.12.0/index.js` | Entity relationship only |
+| `@afbin/pele` | All built-in Pele types |
+| `@afbin/pele-flowchart` | Flowchart only |
+| `@afbin/pele-sequence` | Sequence only |
+| `@afbin/pele-er` | Entity relationship only |
 
-Each URL is a pinned, self-contained browser module. Prefer a per-type module when only that type is needed; use the full module for other or mixed types. Load an optional diagram with `await import("/libraries/pele-sequence-1.12.0/index.js")` only when needed. Keep literal import URLs so offline packaging can discover them. Each module has independent registration state: keep `mount`, `render`, `supports` and error imports on the same entry. The upstream `pele/lazy` API is not exposed at a platform URL.
+Each import is a self-contained browser module (the `@afbin/` prefix is reserved for platform libraries). Prefer a per-type module when only that type is needed; use the full module for other or mixed types. Load an optional diagram with `await import("@afbin/pele-sequence")` only when needed. Keep literal specifiers so offline packaging can discover them. Each module has independent registration state: keep `mount`, `render`, `supports` and error imports on the same entry. The upstream `pele/lazy` API is not exposed at a platform URL.
 
 ## Theme, updates and errors
 

@@ -142,3 +142,15 @@
 :root[data-af-design-system="phosphor"] .t-label { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }
 :root[data-af-design-system="phosphor"] .t-numeral { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="phosphor"] .t-log { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="phosphor"] .tok-comment, :root[data-af-design-system="phosphor"] .tok-quote, :root[data-af-design-system="phosphor"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="phosphor"] .tok-keyword, :root[data-af-design-system="phosphor"] .tok-selector-tag, :root[data-af-design-system="phosphor"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="phosphor"] .tok-string, :root[data-af-design-system="phosphor"] .tok-regexp, :root[data-af-design-system="phosphor"] .tok-template-variable, :root[data-af-design-system="phosphor"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="phosphor"] .tok-number, :root[data-af-design-system="phosphor"] .tok-literal, :root[data-af-design-system="phosphor"] .tok-symbol, :root[data-af-design-system="phosphor"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="phosphor"] .tok-title, :root[data-af-design-system="phosphor"] .tok-section, :root[data-af-design-system="phosphor"] .tok-selector-id, :root[data-af-design-system="phosphor"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="phosphor"] .tok-title.class_, :root[data-af-design-system="phosphor"] .tok-type, :root[data-af-design-system="phosphor"] .tok-built_in, :root[data-af-design-system="phosphor"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="phosphor"] .tok-attr, :root[data-af-design-system="phosphor"] .tok-attribute, :root[data-af-design-system="phosphor"] .tok-property, :root[data-af-design-system="phosphor"] .tok-variable, :root[data-af-design-system="phosphor"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="phosphor"] .tok-tag, :root[data-af-design-system="phosphor"] .tok-operator, :root[data-af-design-system="phosphor"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="phosphor"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="phosphor"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="phosphor"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="phosphor"] .tok-strong { font-weight:700; }

@@ -128,3 +128,15 @@
 :root[data-af-design-system="volta"] .t-label { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 :root[data-af-design-system="volta"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="volta"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="volta"] .tok-comment, :root[data-af-design-system="volta"] .tok-quote, :root[data-af-design-system="volta"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="volta"] .tok-keyword, :root[data-af-design-system="volta"] .tok-selector-tag, :root[data-af-design-system="volta"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="volta"] .tok-string, :root[data-af-design-system="volta"] .tok-regexp, :root[data-af-design-system="volta"] .tok-template-variable, :root[data-af-design-system="volta"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="volta"] .tok-number, :root[data-af-design-system="volta"] .tok-literal, :root[data-af-design-system="volta"] .tok-symbol, :root[data-af-design-system="volta"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="volta"] .tok-title, :root[data-af-design-system="volta"] .tok-section, :root[data-af-design-system="volta"] .tok-selector-id, :root[data-af-design-system="volta"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="volta"] .tok-title.class_, :root[data-af-design-system="volta"] .tok-type, :root[data-af-design-system="volta"] .tok-built_in, :root[data-af-design-system="volta"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="volta"] .tok-attr, :root[data-af-design-system="volta"] .tok-attribute, :root[data-af-design-system="volta"] .tok-property, :root[data-af-design-system="volta"] .tok-variable, :root[data-af-design-system="volta"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="volta"] .tok-tag, :root[data-af-design-system="volta"] .tok-operator, :root[data-af-design-system="volta"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="volta"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="volta"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="volta"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="volta"] .tok-strong { font-weight:700; }

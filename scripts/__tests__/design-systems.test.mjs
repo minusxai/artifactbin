@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
@@ -180,7 +180,7 @@ it('keeps native theme font delivery and linked-CSS guides generated from the in
   expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
  }
 });
-it('gives every colour token its use in the native guide and keeps text tokens readable on the page grounds',async()=>{
+it('gives every colour token its use in the native guide and keeps text tokens and reports their contrast',async()=>{
  const {nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
  const ratio=(a,b)=>{const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x);return (hi+0.05)/(lo+0.05);};
@@ -196,4 +196,30 @@ it('gives every colour token its use in the native guide and keeps text tokens r
     if(/^#[0-9a-f]{6}$/i.test(fg)&&/^#[0-9a-f]{6}$/i.test(bg))expect(ratio(fg,bg),`${name} ${mode} ${token.name} on ${ground.name}`).toBeGreaterThanOrEqual(4.5);
    }
  }
+});
+
+it('ships variable-only highlight token rules in every system stylesheet, and reports their contrast',async()=>{
+ const {nativeSystemCss,TOKEN_RULES}=await import('../../design-systems/lib/html-skill.mjs');
+ const {varsMap}=await import('../../design-systems/lib/runtime.mjs');
+ const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
+ const ratio=(a,b)=>{const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x);return (hi+0.05)/(lo+0.05);};
+ const failures=[];
+ for(const name of ROSTER){
+  const css=nativeSystemCss(name),spec=loadSpec(name);
+  for(const [names,rule] of TOKEN_RULES){
+   for(const token of names)expect(css,`${name} .tok-${token}`).toContain(`:root[data-af-design-system="${name}"] .tok-${token}`);
+   expect(rule).not.toMatch(/#|rgb|hsl|oklch/);
+  }
+  for(const mode of ['light','dark']){
+   const vars=varsMap(spec,mode),resolve=key=>{let v=vars[key];for(let i=0;i<4&&typeof v==='string'&&v.startsWith('var(');i++)v=vars[v.slice(4,-1)];return v;};
+   for(const [names,rule] of TOKEN_RULES){
+    const variable=/color:var\((--[a-z0-9-]+)\)/.exec(rule)?.[1];if(!variable)continue;
+    const fg=resolve(variable);
+    for(const ground of ['--background','--muted']){const bg=resolve(ground);
+     if(/^#[0-9a-f]{6}$/i.test(fg)&&/^#[0-9a-f]{6}$/i.test(bg)&&ratio(fg,bg)<4.5)failures.push(`${name} ${mode} ${variable} (${names[0]}) on ${ground}: ${ratio(fg,bg).toFixed(2)}`);}
+   }
+  }
+ }
+ // Contrast is reported, not enforced: token colours are a mapping decision (several systems use --accent as a fill).
+ if(process.env.AF_TOKEN_CONTRAST_REPORT)writeFileSync(process.env.AF_TOKEN_CONTRAST_REPORT,failures.join('\n'));
 });

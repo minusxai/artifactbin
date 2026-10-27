@@ -10,14 +10,14 @@ Name question, unit, grain, source, period, timezone and missing/partial data. R
 
 ## Bootstrap
 
-Use the exact versioned ESM URLs below, not bare `vega` imports or globals. The core import map supplies Apollo, not chart packages. Local `serve.mjs` serves the same modules (bundled in `scripts/preview-libraries.mjs`, not a folder). Hosted downloads pack referenced registered libraries into the HTML; external data still needs admission or an honest offline state.
+Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. Old `/libraries/<name>-<ver>/index.js` URLs still work. `serve.mjs` and downloads resolve the same names; external data still needs admission or an honest offline state.
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
 <script src="/af/v1/core.js"></script>
 <script type="module">
-import * as vega from "/libraries/vega-6.3.1/index.js";
-import {compile} from "/libraries/vega-lite-6.4.3/index.js";
+import * as vega from "@afbin/vega";
+import {compile} from "@afbin/vega-lite";
 const spec = compile({width:280, height:160,
   data:{values:[{category:"A", count:18},{category:"B", count:12}]},
   mark:"bar", encoding:{x:{field:"category",type:"nominal"},

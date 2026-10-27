@@ -6,7 +6,7 @@ description: >-
 [% if transport == "http" %]
 ## Read first
 
-A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Load the core once with `<script src="/af/v1/core.js" data-af="core"></script>`; it provides the `@afbin/apollo` import. No JSX, framework compilation, injected state globals or account credentials belong in a page.
+A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Load the core once with `<script src="/af/v1/core.js" data-af="core"></script>`; it provides the `@afbin/apollo` import and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`); that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`; design-system CSS colours its `tok-*` classes. No JSX, framework compilation, injected state globals or account credentials belong in a page.
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; [authentication](references/http-auth.md) explains email sign-in and refresh. Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
 

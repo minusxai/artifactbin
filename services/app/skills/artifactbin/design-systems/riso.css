@@ -129,3 +129,15 @@
 :root[data-af-design-system="riso"] .t-label { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
 :root[data-af-design-system="riso"] .t-numeral { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="riso"] .t-mono { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="riso"] .tok-comment, :root[data-af-design-system="riso"] .tok-quote, :root[data-af-design-system="riso"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="riso"] .tok-keyword, :root[data-af-design-system="riso"] .tok-selector-tag, :root[data-af-design-system="riso"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="riso"] .tok-string, :root[data-af-design-system="riso"] .tok-regexp, :root[data-af-design-system="riso"] .tok-template-variable, :root[data-af-design-system="riso"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="riso"] .tok-number, :root[data-af-design-system="riso"] .tok-literal, :root[data-af-design-system="riso"] .tok-symbol, :root[data-af-design-system="riso"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="riso"] .tok-title, :root[data-af-design-system="riso"] .tok-section, :root[data-af-design-system="riso"] .tok-selector-id, :root[data-af-design-system="riso"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="riso"] .tok-title.class_, :root[data-af-design-system="riso"] .tok-type, :root[data-af-design-system="riso"] .tok-built_in, :root[data-af-design-system="riso"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="riso"] .tok-attr, :root[data-af-design-system="riso"] .tok-attribute, :root[data-af-design-system="riso"] .tok-property, :root[data-af-design-system="riso"] .tok-variable, :root[data-af-design-system="riso"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="riso"] .tok-tag, :root[data-af-design-system="riso"] .tok-operator, :root[data-af-design-system="riso"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="riso"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="riso"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="riso"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="riso"] .tok-strong { font-weight:700; }

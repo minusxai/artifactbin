@@ -129,3 +129,15 @@
 :root[data-af-design-system="almanac"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
 :root[data-af-design-system="almanac"] .t-numeral { font-family: "Instrument Serif", Georgia, serif; font-size: 48px; line-height: 1; font-weight: 400; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
 :root[data-af-design-system="almanac"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; font-weight: 400; }
+:root[data-af-design-system="almanac"] .tok-comment, :root[data-af-design-system="almanac"] .tok-quote, :root[data-af-design-system="almanac"] .tok-meta { color:var(--muted-foreground);font-style:italic; }
+:root[data-af-design-system="almanac"] .tok-keyword, :root[data-af-design-system="almanac"] .tok-selector-tag, :root[data-af-design-system="almanac"] .tok-doctag { color:var(--primary); }
+:root[data-af-design-system="almanac"] .tok-string, :root[data-af-design-system="almanac"] .tok-regexp, :root[data-af-design-system="almanac"] .tok-template-variable, :root[data-af-design-system="almanac"] .tok-addition { color:var(--chart-2); }
+:root[data-af-design-system="almanac"] .tok-number, :root[data-af-design-system="almanac"] .tok-literal, :root[data-af-design-system="almanac"] .tok-symbol, :root[data-af-design-system="almanac"] .tok-bullet { color:var(--chart-3); }
+:root[data-af-design-system="almanac"] .tok-title, :root[data-af-design-system="almanac"] .tok-section, :root[data-af-design-system="almanac"] .tok-selector-id, :root[data-af-design-system="almanac"] .tok-selector-class { color:var(--accent); }
+:root[data-af-design-system="almanac"] .tok-title.class_, :root[data-af-design-system="almanac"] .tok-type, :root[data-af-design-system="almanac"] .tok-built_in, :root[data-af-design-system="almanac"] .tok-class { color:var(--chart-4); }
+:root[data-af-design-system="almanac"] .tok-attr, :root[data-af-design-system="almanac"] .tok-attribute, :root[data-af-design-system="almanac"] .tok-property, :root[data-af-design-system="almanac"] .tok-variable, :root[data-af-design-system="almanac"] .tok-params { color:var(--chart-1); }
+:root[data-af-design-system="almanac"] .tok-tag, :root[data-af-design-system="almanac"] .tok-operator, :root[data-af-design-system="almanac"] .tok-punctuation { color:var(--muted-foreground); }
+:root[data-af-design-system="almanac"] .tok-name { color:var(--primary); }
+:root[data-af-design-system="almanac"] .tok-deletion { color:var(--destructive); }
+:root[data-af-design-system="almanac"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="almanac"] .tok-strong { font-weight:700; }
