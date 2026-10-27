@@ -5,7 +5,7 @@ import {waitFor} from '@testing-library/dom';
 import {render} from '../../__tests__/helpers';
 import {createReaderPresence} from '../create-reader-presence';
 import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 it('hides on pagehide and resumes a mounted session on BFCache pageshow',async()=>{
  let disconnected=0;
  const published:Array<{visible:boolean}>=[];
@@ -66,4 +66,48 @@ it('keeps preference changes and pagehide/pageshow that occur while loading',asy
  expect(presence.preferences().shareCursor).toBe(false);
  window.dispatchEvent(new Event('pageshow'));await waitFor(()=>expect(published.at(-1)?.visible).toBe(true));
  expect(published.at(-1)?.cursor).toBeNull();view.unmount();
+});
+
+it('does not load optional presence while the host DOM is still parsing',async()=>{
+ const state=vi.spyOn(document,'readyState','get').mockReturnValue('loading');
+ const load=vi.fn(async()=>({startReaderPresence:vi.fn(()=>({receive:()=>{},update:()=>{},dispose:()=>{}}))}));
+ const controller={send:vi.fn(),subscribe:vi.fn(()=>()=>{})} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const view=render(()=>{createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled:()=>true,runtimeRef:{current:controller},backend:{publishPresence:vi.fn(async()=> 'own')}},load);return <div/>;});
+ expect(load).not.toHaveBeenCalled();
+ state.mockReturnValue('interactive');document.dispatchEvent(new Event('DOMContentLoaded'));
+ await waitFor(()=>expect(load).toHaveBeenCalledTimes(1));
+ document.dispatchEvent(new Event('DOMContentLoaded'));expect(load).toHaveBeenCalledTimes(1);
+ view.unmount();state.mockRestore();
+});
+
+it('never loads a disposed presence session when host parsing later finishes',()=>{
+ const state=vi.spyOn(document,'readyState','get').mockReturnValue('loading');
+ const load=vi.fn(async()=>({startReaderPresence:vi.fn(()=>({receive:()=>{},update:()=>{},dispose:()=>{}}))}));
+ const controller={send:vi.fn(),subscribe:vi.fn(()=>()=>{})} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const view=render(()=>{createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled:()=>true,runtimeRef:{current:controller},backend:{publishPresence:vi.fn(async()=> 'own')}},load);return <div/>;});
+ view.unmount();state.mockReturnValue('interactive');document.dispatchEvent(new Event('DOMContentLoaded'));
+ expect(load).not.toHaveBeenCalled();state.mockRestore();
+});
+
+it('does not load presence disabled before host parsing finishes',()=>{
+ const state=vi.spyOn(document,'readyState','get').mockReturnValue('loading');
+ const [enabled,setEnabled]=createSignal(true);
+ const load=vi.fn(async()=>({startReaderPresence:vi.fn(()=>({receive:()=>{},update:()=>{},dispose:()=>{}}))}));
+ const controller={send:vi.fn(),subscribe:vi.fn(()=>()=>{})} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const view=render(()=>{createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled,runtimeRef:{current:controller},backend:{publishPresence:vi.fn(async()=> 'own')}},load);return <div/>;});
+ setEnabled(false);state.mockReturnValue('interactive');document.dispatchEvent(new Event('DOMContentLoaded'));
+ expect(load).not.toHaveBeenCalled();view.unmount();
+});
+
+it('retains a pagehide before host readiness and resumes that session on pageshow',async()=>{
+ const state=vi.spyOn(document,'readyState','get').mockReturnValue('loading');
+ const published:Array<{visible:boolean}>=[];
+ const controller={send:vi.fn(),subscribe:vi.fn(()=>()=>{})} as unknown as NonNullable<DocumentRuntimeRef['current']>;
+ const load=vi.fn(()=>import('../reader-presence-engine'));
+ const view=render(()=>{createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled:()=>true,runtimeRef:{current:controller},backend:{publishPresence:async input=>{published.push(input);return 'own';}}},load);return <div/>;});
+ window.dispatchEvent(new Event('pagehide'));expect(load).not.toHaveBeenCalled();
+ state.mockReturnValue('interactive');document.dispatchEvent(new Event('DOMContentLoaded'));
+ await waitFor(()=>expect(published.at(-1)?.visible).toBe(false));
+ window.dispatchEvent(new Event('pageshow'));await waitFor(()=>expect(published.at(-1)?.visible).toBe(true));
+ view.unmount();
 });
