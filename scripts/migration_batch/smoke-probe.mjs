@@ -42,12 +42,13 @@ export function createSmokeProbe(contract,{deadlineMs=15000,intervalMs=250}={}){
  return{
   async ready(){
    await frame.evaluate(()=>Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,3000))]));
-   const deadline=Date.now()+deadlineMs;let previous,observation,pending;
-   // Settled: every present data component loaded and idle, and two consecutive observations agree.
-   for(;;){observation=await frame.evaluate(observePage,contract);pending=pendingIds(contract,observation);const same=previous!==undefined&&JSON.stringify(observation)===previous;if((!pending.length&&same)||Date.now()>deadline)break;previous=JSON.stringify(observation);await new Promise(r=>setTimeout(r,intervalMs));}
+   const started=Date.now(),deadline=started+deadlineMs;let previous,observation,pending;
+   // Settled: every visible data component loaded and idle, and two consecutive observations agree.
+   // Regression captures are styling controls that compare ignores, so they take one observation.
+   for(;;){observation=await frame.evaluate(observePage,contract);pending=pendingIds(contract,observation);const same=previous!==undefined&&JSON.stringify(observation)===previous;if(regression||(!pending.length&&same)||Date.now()>deadline)break;previous=JSON.stringify(observation);await new Promise(r=>setTimeout(r,intervalMs));}
    // An unsettled page is recorded rather than thrown, so screenshots still run and compare classifies it.
    const name=`smoke-${observation.side}-${state.id}-${viewport.width}x${viewport.height}-${regression?'regression':'normal'}.json`;
-   await writeFile(path.join(output,name),JSON.stringify({format:'migration-smoke-observation-v1',key:contract.key,contractSha256:contract.sha256,readerPageId:reader.pageId,state:state.id,viewport,regression,settled:!pending.length,pending,...observation},null,2)+'\n',{flag:'wx',mode:0o600});written=true;
+   await writeFile(path.join(output,name),JSON.stringify({format:'migration-smoke-observation-v1',key:contract.key,contractSha256:contract.sha256,readerPageId:reader.pageId,state:state.id,viewport,regression,settled:!pending.length,pending,elapsedMs:Date.now()-started,...observation},null,2)+'\n',{flag:'wx',mode:0o600});written=true;
   },
   async performAction(){throw Error('smoke_actions_not_supported')},async afterAction(){throw Error('smoke_actions_not_supported')},
   async cleanup(){if(!written)throw Error('smoke_probe_incomplete')},

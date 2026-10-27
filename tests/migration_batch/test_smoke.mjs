@@ -88,7 +88,10 @@ test('probe settles on two agreeing observations and records an unsettled page i
   const hooks=await createSmokeProbe(contract,{intervalMs:1})({frame,reader:{version:3,pageId:'p'},state:{id:'initial',actions:[]},viewport:{width:390,height:844},regression:false,output:root});
   await hooks.ready();await hooks.cleanup();assert.equal(n,2);
   const stuck={evaluate:async(fn)=>fn.name==='observePage'?{side:'target',title:'t',entries:observe('target',{chart:{count:1,instances:[inst('',{busy:true,data:{loaded:false}})]}}).entries}:undefined};
-  const late=await createSmokeProbe(contract,{deadlineMs:5,intervalMs:1})({frame:stuck,reader:{version:3,pageId:'p'},state:{id:'initial',actions:[]},viewport:{width:390,height:844},regression:true,output:root});
-  await late.ready();const saved=JSON.parse(await fs.readFile(path.join(root,'smoke-target-initial-390x844-regression.json'),'utf8'));assert.equal(saved.settled,false);assert.deepEqual(saved.pending,['chart']);
+  const late=await createSmokeProbe(contract,{deadlineMs:5,intervalMs:1})({frame:stuck,reader:{version:3,pageId:'p'},state:{id:'initial',actions:[]},viewport:{width:1280,height:900},regression:false,output:root});
+  await late.ready();const saved=JSON.parse(await fs.readFile(path.join(root,'smoke-target-initial-1280x900-normal.json'),'utf8'));assert.equal(saved.settled,false);assert.deepEqual(saved.pending,['chart']);assert.ok(saved.elapsedMs>=5);
+  // Regression captures do not wait: one observation, recorded as observed.
+  const control=await createSmokeProbe(contract,{deadlineMs:60000,intervalMs:1})({frame:stuck,reader:{version:3,pageId:'p'},state:{id:'initial',actions:[]},viewport:{width:390,height:844},regression:true,output:root});
+  await control.ready();assert.equal(JSON.parse(await fs.readFile(path.join(root,'smoke-target-initial-390x844-regression.json'),'utf8')).settled,false);
  }finally{await fs.rm(root,{recursive:true,force:true})}
 });
