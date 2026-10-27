@@ -136,3 +136,16 @@ full reader and count without applying again. `reconcile.py` permits exact,
 independently bound adoption of completed **read** outputs only; it cannot adopt
 an uncertain write or execute a command. Preserve the original failure and its
 reviewed recovery.
+
+The reader expected-map check has two lifecycle phases. Before apply, run
+`reader-preflight.mjs` with `--phase before-apply`, the exact CLI config, source
+ID, actual scope module and its digest module. It derives version, assembly,
+comparison and optional decision pins from sealed inputs and compares the
+scope module's exported map. Target head/publication receipts are not required
+or fabricated at this phase. After apply, run the same command with
+`--phase after-apply-before-reader-db`; it invokes the actual `readbackScope`
+against the real receipts before the DB reader or token mint starts. Bind both
+modules and all inputs by hash in the tail job. This prevents stale copied
+expected maps without weakening the normal preservation reader.
+
+The latest-selection helper creates an immutable alternate plan and selection for the same agreed ID set when a verified current source version advances. It preserves old plan rows and receipt metadata in provenance, requires mapped source identity and a read-only current-row proof, rejects history and rollback, and updates changed receipts to one current revision with no archived rows. It grants no import authority.
