@@ -44,4 +44,4 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string }

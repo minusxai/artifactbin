@@ -52,8 +52,11 @@ interface LiveArtifactOptions {
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onPresence?: (viewers:PresenceViewer[])=>void;
   onData?: (event: ArtifactDataEvent) => void;
-  /** Native HTML reloads its server bootstrap on publication; it never fetches a JSX frame. */
-  onPublication?: (version: number) => void;
+  /**
+   * Native HTML follows a publication itself (in place, or by reloading its server bootstrap); it never fetches a JSX frame.
+   * A returned promise holds later publications until it settles; the newest one held is then delivered.
+   */
+  onPublication?: (version: number, editId?: string) => void | Promise<unknown>;
   /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
@@ -77,6 +80,8 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
          */
         let seenVersion = initialVersion;
         let publicationPending = false;
+        /** The newest publication announced while one was being followed. */
+        let held = { version: 0, editId: '' };
         let alive = true;
         let annotationsRequest: AbortController | undefined;
         /** The newest head announced and not yet fetched; a ping arriving mid-fetch replaces it. */
@@ -138,10 +143,20 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
               if (options.onPublication) {
-                if (ping.version <= seenVersion || publicationPending) return;
-                seenVersion = ping.version;
-                publicationPending = true;
-                options.onPublication(ping.version);
+                if (ping.version <= seenVersion) return;
+                if (publicationPending) { if (ping.version > held.version) held = { version: ping.version, editId: ping.editId }; return; }
+                const publish = (version: number, editId: string): void => {
+                  seenVersion = version;
+                  publicationPending = true;
+                  const followed = options.onPublication!(version, editId);
+                  // A version followed in place lets the next one through; one that reloads the page never settles that way.
+                  if (followed && typeof (followed as Promise<unknown>).then === 'function') void (followed as Promise<unknown>).then(() => {
+                    if (!alive) return;
+                    publicationPending = false;
+                    if (held.version > seenVersion) { const next = held; held = { version: 0, editId: '' }; publish(next.version, next.editId); }
+                  }, () => {});
+                };
+                publish(ping.version, ping.editId);
                 return;
               }
               placeOwn(ping.editId, (own) => {

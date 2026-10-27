@@ -48,11 +48,13 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/lib/html-runtime/browser-reader.ts',
+  // The native HTML live morph, its own lazy browser module (build.server `@afbin/morph`).
+  'services/app/lib/html-runtime/live-morph.ts',
   'services/app/lib/html-runtime/table-scroll.ts',
   'services/app/solid/',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'frame-links', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'frame-links', 'contract', 'file-display', 'morph/dom', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
   'live-update', 'person-face', 'table-scroll', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*

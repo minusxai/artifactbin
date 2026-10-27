@@ -9,7 +9,7 @@ import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { chooseTheme, storedTheme } from '@/lib/story-runtime/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
-import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { FramedRuntime } from '@/lib/serving';
@@ -25,6 +25,7 @@ import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGove
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
+import { followHtmlVersion } from '../document/follow-html-version';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createLiveArtifact } from '../editor/create-live-artifact';
@@ -146,7 +147,14 @@ export function DocumentPage(): JSX.Element {
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
   const runtimeRef: DocumentRuntimeRef = { current: null };
-  const readerPresence = createReaderPresence({id: id!, revision: String(page?.archived?.version ?? page?.surface?.version ?? 1), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
+  /**
+   * The HTML version this page and its frame show: the served one, then each version the frame drew in place
+   * (followHtmlVersion). The frame's relayed queries, presence and selection classify against it.
+   */
+  const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 1, editId: page?.surface?.editId ?? '' });
+  /** Set once the frame's tree is attached: the drawn version's tree is fetched again for it. */
+  let refreshTree: (() => Promise<boolean>) | null = null;
+  const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? htmlHead().version), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
   const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
@@ -187,9 +195,20 @@ export function DocumentPage(): JSX.Element {
       }
       if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
     },
-    // Reload the original server shell and its ticketed frame together: their trusted
-    // revision changes atomically, while viewer state stays in browser storage.
-    onPublication: page.surface.format === 'html' ? () => replaceDocument(window.location.href) : undefined,
+    // The frame draws an inert edit in place and this page moves its trusted revision with it; anything else reloads
+    // the original server shell and its ticketed frame together, while viewer state stays in browser storage.
+    onPublication: page.surface.format === 'html' ? (version, editId) => followHtmlVersion({
+      version, frame: archivedNow() ? null : runtimeRef.current,
+      reload: () => replaceDocument(window.location.href),
+      // The frame draws the newest version it is served: this one, or one published since (then announced next).
+      refresh: async (drawn, revision) => {
+        const shown = Number(revision);
+        if (!Number.isInteger(shown) || shown < drawn) return false;
+        if (refreshTree && !(await refreshTree())) return false;
+        setHtmlHead({ version: shown, editId: editId ?? '' });
+        return true;
+      },
+    }).then((outcome) => outcome === 'morphed' ? undefined : new Promise<never>(() => { /* the page is reloading */ })) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,
     since: page.surface.runtime?.data.dataflow?.results?.since,
@@ -254,6 +273,13 @@ export function DocumentPage(): JSX.Element {
     const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
     const treeOnLoad = annotatable();
     let treeAsked = treeOnLoad;
+    refreshTree = async () => {
+      if (!treeAsked) return true;
+      const tree = await fetchFrameNodes(id, window.location.search, nodes.signal);
+      if (!tree) return false;
+      runtimeRef.current?.update({ type: STORY_DOCUMENT_MESSAGE, nodes: tree });
+      return true;
+    };
     const askTreeOnPress = () => {
       if (treeAsked || !story || !canStartComment()) return;
       treeAsked = true;
@@ -261,10 +287,10 @@ export function DocumentPage(): JSX.Element {
     };
     story = createFramedStory({
       id, framed, nodes: treeOnLoad ? askTree() : [],
-      editId: () => page.surface?.editId ?? '',
+      editId: () => htmlHead().editId,
       source: () => null,
       htmlContext: page.surface?.format === 'html' ? () => ({
-        revision: String(page.archived?.version ?? page.surface?.version ?? 1),
+        revision: String(page.archived?.version ?? htmlHead().version),
         readOnly: !!page.archived,
         uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
       }) : undefined,
@@ -307,7 +333,7 @@ export function DocumentPage(): JSX.Element {
       served.remove();
     });
   });
-  const currentVersion = () => page?.archived?.version ?? live()?.version ?? page?.surface?.version ?? 0;
+  const currentVersion = () => page?.archived?.version ?? live()?.version ?? (page?.surface?.format === 'html' ? htmlHead().version : page?.surface?.version) ?? 0;
   /**
    * The head the page SHOWS: the newest of the version it loaded and the version the live stream
    * drew in place. Comments, screenshots and their images are made against it — the id the page loaded with is a
@@ -317,6 +343,7 @@ export function DocumentPage(): JSX.Element {
     const heads = [
       { version: page?.surface?.version ?? 0, editId: page?.surface?.editId },
       { version: live()?.version ?? -1, editId: live()?.editId },
+      { version: htmlHead().version, editId: htmlHead().editId },
     ];
     return heads.reduce((best, head) => (head.editId && head.version > best.version ? head : best), { version: -1, editId: undefined as string | undefined }).editId;
   };
