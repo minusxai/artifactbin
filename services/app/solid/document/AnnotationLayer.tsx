@@ -898,6 +898,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     onHover: hoverUi,
     onReplyDraftChange: (typed: boolean) => noteThreadReply(id, typed),
     onDelete: (commentId: string) => askDelete(commentId, commentId === id),
+    onReact: async (commentId: string, active: boolean) => {
+      replaceThread(await backend.setCommentReaction(commentId,{kind:'thumbs_up',active}));
+    },
+    onSignIn: () => window.location.assign(loginHref(window.location,'comment')),
     onEdit: (commentId: string, body: string) => editComment(id, commentId, body),
     onToggleFold: () => toggle('threads', id),
     onToggleComment: (commentId: string) => toggle('comments', commentId),

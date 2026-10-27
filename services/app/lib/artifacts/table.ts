@@ -186,6 +186,9 @@ export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'e
  * narrowed again (deleteAnnotationFor): the owner may remove any thread, a
  * named editor only one they wrote.
  */
+/** Account reactions follow read admission, independently of permission to write words. */
+export const reactionScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'viewer');
+
 export const annotationScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'commenter');
 
 /** Group viewers may observe comment feeds without gaining annotation writes. */

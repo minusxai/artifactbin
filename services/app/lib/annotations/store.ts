@@ -7,7 +7,7 @@ import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary } from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
@@ -23,7 +23,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { readableArtifactHeader, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
+import { readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
@@ -374,7 +374,7 @@ export async function createAnnotationFor(
     await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'});
     await commentMentions(tx,row,actor,input.body,id);
     await notify(tx, artifactId, id);
-    const [wire] = await wireFor(tx, row, inserted.rows);
+    const [wire] = await wireFor(tx, row, inserted.rows, actor.userId);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
     return wire ?? null;
   }).catch(error=>{if(error instanceof MembershipError)return new Response(JSON.stringify({error:'mention_refused',detail:error.message}),{status:error.status,headers:{'Content-Type':'application/json'}});throw error;});
@@ -404,7 +404,7 @@ async function sourceOf(db: Queryable, id: string): Promise<string> {
 }
 
 /** Assemble wire threads for a set of roots — anchors resolved against the CURRENT source. */
-async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
+async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowDb[], viewerId?: string | null): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
   const source = head.source !== undefined ? head.source ?? '' : await sourceOf(db, head.id);
   const rootIds = roots.map((root) => root.id);
@@ -414,6 +414,17 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
     [head.id, rootIds],
   );
   const images = await commentImagesFor(db, head.id);
+  const reactions = await db.query<{comment_id:string; kind:CommentReactionSummary['kind']; count:string; viewer_reacted:boolean}>(
+    `SELECT comment_id, kind, count(*)::text AS count, bool_or(user_id = $2) AS viewer_reacted
+     FROM comment_reactions WHERE comment_id = ANY($1::text[]) GROUP BY comment_id,kind ORDER BY kind`,
+    [[...rootIds,...replies.rows.map(reply=>reply.id)],viewerId ?? null]);
+  const reactionMap = new Map<string,CommentReactionSummary[]>();
+  for(const reaction of reactions.rows){
+    const group=reactionMap.get(reaction.comment_id)??[];
+    group.push({kind:reaction.kind,count:Number(reaction.count),viewer_reacted:reaction.viewer_reacted===true});
+    reactionMap.set(reaction.comment_id,group);
+  }
+  const withReactions=(row:AnnotationRowDb):AnnotationCommentWire=>({...commentWire(row,images),reactions:reactionMap.get(row.id)??[]});
   const byRoot = new Map<string, AnnotationRowDb[]>();
   for (const r of replies.rows) {
     const list = byRoot.get(r.root_id!) ?? [];
@@ -449,7 +460,7 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
       quote: root.quote,
       range,
       quote_found: htmlResolved ? htmlResolved.quoteFound : quoteFound(anchored ? found : undefined, root.quote, range),
-      thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
+      thread: [withReactions(root), ...(byRoot.get(root.id) ?? []).map(withReactions)],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
     };
@@ -473,7 +484,7 @@ export async function listAnnotationPageFor(actor: AccessActor, artifactId: stri
       AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
       ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
   const selected = roots.rows.slice(0, opts.limit);
-  return {annotations: await wireFor(db, row, selected),
+  return {annotations: await wireFor(db, row, selected, actor.userId),
     ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
 }
 
@@ -484,7 +495,7 @@ export async function listAnnotationsFor(
 ): Promise<AnnotationWire[] | null> {
   const row = (await readableArtifactHeader(actor, artifactId))?.row;
   if (!row) return null;
-  return annotationsWireForRow(row, opts);
+  return annotationsWireForRow(row, opts, actor.userId);
 }
 
 /**
@@ -496,6 +507,7 @@ export async function listAnnotationsFor(
 export async function annotationsWireForRow(
   row: AnnotatedHead,
   opts?: { status?: 'open' | 'resolved' | 'all' },
+  viewerId?: string | null,
 ): Promise<AnnotationWire[]> {
   const db = await getDb();
   const status = opts?.status ?? 'open';
@@ -504,7 +516,7 @@ export async function annotationsWireForRow(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
-  return wireFor(db, row, roots.rows);
+  return wireFor(db, row, roots.rows, viewerId);
 }
 
 /**
@@ -577,7 +589,7 @@ export async function actOnAnnotationFor(
     // make every miss truthy.
     if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]]))[0]:undefined;
+    const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]],actor.userId))[0]:undefined;
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:200,body:wire as unknown as Record<string,unknown>});
     return { row: fresh.rows[0], replied, resolved,...(wire?{wire}:{}) };
   });
@@ -586,7 +598,7 @@ export async function actOnAnnotationFor(
   if(updated.wire)return updated.wire;
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
-  const [wire] = await wireFor(db, head, [updated.row]);
+  const [wire] = await wireFor(db, head, [updated.row], actor.userId);
   return wire ?? null;
 }
 
@@ -653,7 +665,7 @@ export async function editAnnotationCommentFor(
       await notify(tx, artifactId, root.id);
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
-    const [wire] = await wireFor(tx, row, fresh.rows);
+    const [wire] = await wireFor(tx, row, fresh.rows, actor.userId);
     const edited = wire?.thread.find((entry) => entry.id === comment.id);
     if (!wire || !edited) return null;
     if (receipt) await completeMutationReceipt(tx, receipt, { status: 200, body: wire as unknown as Record<string, unknown> });
@@ -744,4 +756,25 @@ export async function countOpenAnnotations(artifactId: string): Promise<number> 
     [artifactId],
   );
   return Number(r.rows[0]?.n ?? 0);
+}
+
+/** Desired per-account/per-kind state. Artifact→root locks serialize against deletion and all comment mutations. */
+export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput):Promise<AnnotationWire|null>{
+  if(!actor.userId)return null;
+  const db=await getDb();
+  return db.transaction(async tx=>{
+    const row=await scopedRow(tx,reactionScope(actor),artifactId,true);
+    if(!row || (row.format!=='html'&&row.format!=='markup'))return null;
+    const target=(await tx.query<{id:string;root_id:string|null}>(`SELECT id,root_id FROM annotations WHERE id=$1 AND artifact_id=$2 AND ${LIVE_ANNOTATION_SQL}`,[commentId,artifactId])).rows[0];
+    if(!target)return null;
+    const rootId=target.root_id??target.id;
+    const root=(await tx.query<AnnotationRowDb>(`SELECT * FROM annotations WHERE id=$1 AND artifact_id=$2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,[rootId,artifactId])).rows[0];
+    if(!root)return null;
+    const result=input.active
+      ?await tx.query('INSERT INTO comment_reactions (comment_id,user_id,kind) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING comment_id',[commentId,actor.userId,input.kind])
+      :await tx.query('DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3 RETURNING comment_id',[commentId,actor.userId,input.kind]);
+    if(result.rows.length)await notify(tx,artifactId,rootId);
+    const fresh=(await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id=$1`,[rootId])).rows;
+    return (await wireFor(tx,row,fresh,actor.userId))[0]??null;
+  });
 }

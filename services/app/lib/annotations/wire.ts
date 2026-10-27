@@ -13,7 +13,7 @@ import { artifactToWire } from '@/lib/artifacts';
 import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { json } from '../http/http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
-import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, type AnnotationAction, type AnnotationEdit } from './store';
+import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, setCommentReactionFor, type AnnotationAction, type AnnotationEdit } from './store';
 
 /**
  * The artifact GET's shape: the wire row plus the OPEN annotations inlined,
@@ -21,10 +21,10 @@ import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor,
  * an agent already makes before editing carries the owner's feedback, so no
  * second call and no second concept exist on the read side.
  */
-export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
+export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string, viewerId?:string|null) {
   if (row.format !== 'markup' && row.format !== 'folder') return artifactToWire(row, base, 0);
   // The count and the threads are independent reads.
-  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row)]);
+  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row,undefined,viewerId)]);
   return { ...await artifactToWire(row, base, open), annotations };
 }
 
@@ -41,7 +41,7 @@ const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
 export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string) {
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
-  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base);
+  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId);
   return snapshotForReader(wire, head.row, head.role);
 }
 
@@ -120,4 +120,12 @@ export async function respondToAnnotationEdit(
   if (!result) return json({ error: 'not_found' }, 404);
   // Sessions the edit newly mentions hear about it once it has committed; an unchanged text tells no one.
   return json(result.wire);
+}
+
+/** Both account doors use the same desired-state protocol; unknown kinds fail closed until supported. */
+export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string):Promise<Response>{
+ if(!actor.userId)return json({error:'account_required',hint:'Sign in to react to comments.'},403);
+ if(!body || body.kind!=='thumbs_up' || typeof body.active!=='boolean')return json({error:'invalid_comment_reaction'},400);
+ const wire=await setCommentReactionFor(actor,id,commentId,{kind:body.kind,active:body.active});
+ return wire?json(wire):json({error:'not_found'},404);
 }

@@ -9,6 +9,6 @@ export { readAnnotationPages } from './pages';
 export { hasReplyText, remoteWorkLabel, replyMentionPrefix } from './remote-reply';
 export { actOnAnnotationFor, countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, listAnnotationPageFor, listAnnotationsFor } from './store';
 export type { AnnotationWire, CreateAnnotationInput } from './store';
-export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction, respondToAnnotationEdit } from './wire';
+export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction, respondToAnnotationEdit, respondToCommentReaction } from './wire';
 
 export { readCommentChangesFor, InvalidCommentCursor, CommentWaitCapacityError } from './changes';

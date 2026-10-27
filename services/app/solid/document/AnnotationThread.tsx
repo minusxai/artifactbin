@@ -32,6 +32,7 @@ import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
+import { CommentReactions } from './CommentReactions';
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -80,6 +81,8 @@ interface AnnotationThreadProps {
   onReopen: () => void;
   onDelete: (commentId: string) => void;
   /** Rewrite one comment's words; rejects with the backend's refusal, and the editor keeps the draft. Absent: no editing here. */
+  onReact?: (commentId: string, active: boolean) => Promise<void>;
+  onSignIn?: () => void;
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
@@ -307,6 +310,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             </Show>
             {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
             <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
+            <Show when={editing() !== c().id && props.onReact}>
+              <CommentReactions comment={c()} signedIn={!!session()?.user?.id} unavailable={props.backend.unavailable('commentReactions')}
+                onSignIn={()=>props.onSignIn?.()} onReact={(active)=>props.onReact!(c().id,active)} />
+            </Show>
             <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
           </li>;

@@ -26,7 +26,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const row = await getEditableArtifactFor(actor, id);
   if (!row) return json({ error: 'not_found' }, 404);
-  const wire = await artifactToWireWithAnnotations(row, baseUrl(request));
+  const wire = await artifactToWireWithAnnotations(row, baseUrl(request), actor.userId);
   // The EDITOR loads through here, and it names a dataset in the data view —
   // "C1kWy2" names nothing to a person. artifactToWire has no viewer to check
   // access with, so the join happens where one exists: a ref the viewer may

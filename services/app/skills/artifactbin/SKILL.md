@@ -66,7 +66,7 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
 - [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
-- [HTML comments and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
+- [HTML comments, reactions and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
 - [Diagrams](references/diagrams.md): Pele rendering of Mermaid syntax, themes, lifecycle and offline behavior.
 - [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data limits.

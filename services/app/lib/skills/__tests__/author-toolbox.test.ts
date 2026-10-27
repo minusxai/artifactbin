@@ -145,3 +145,16 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A check without steps never reads as a clean pass; it asks for steps.
  expect(deck).toMatch(/--steps/);
 });
+it('sets independent desired comment reaction state and replays the exact intent',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-reaction-')),calls:any[]=[];
+ const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return Response.json({id:'ann_root',thread:[{id:'ann_reply',reactions:[{kind:'thumbs_up',count:1,viewer_reacted:true}]}]});}};
+ try{
+  const result=await commentCommand({sub:'react',values:{comment:'ann_reply',active:'true'},positionals:['PAGE12']},options);
+  expect(calls[0].url).toBe('https://example.test/api/artifacts/PAGE12/annotations/ann_reply/reactions');expect(calls[0].method).toBe('PUT');expect(JSON.parse(calls[0].body)).toEqual({kind:'thumbs_up',active:true});
+  await commentCommand({sub:'react',values:{resume:result.journal},positionals:[]},options);
+  expect(calls[1].body).toBe(calls[0].body);expect(calls[1].headers['Idempotency-Key']).toBe(calls[0].headers['Idempotency-Key']);
+  await expect(commentCommand({sub:'react',values:{comment:'ann_reply',active:'true',kind:'heart'},positionals:['PAGE12']},options)).rejects.toThrow();expect(calls).toHaveLength(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

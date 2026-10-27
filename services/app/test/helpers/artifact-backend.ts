@@ -43,6 +43,7 @@ export function fakeBackend(
     listAnnotations: vi.fn(async () => []),
     createAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
     actOnAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
+    setCommentReaction: vi.fn(async () => { throw new Error('not stubbed'); }),
     editAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
     deleteAnnotation: vi.fn(async () => {}),
     uploadCommentImage: vi.fn(async () => ({ id: 'img' })),
