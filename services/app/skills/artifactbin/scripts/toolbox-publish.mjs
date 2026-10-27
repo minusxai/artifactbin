@@ -21,7 +21,7 @@ export async function finishPublication({saved,receipt,journal}){
   const {exclusive}=await import('./toolbox-client.mjs'),{atomicWrite}=await platform();if(!inPlace)await exclusive(output,bytes);
   const companion=output+'.af.json',write=inPlace?atomicWrite:exclusive;await write(companion,JSON.stringify({kind:'data-baseline',schema:1,server:saved.server,id:receipt.id,version:receipt.version,state:receipt.state,format:receipt.format,...(body.file?{contentType:body.file.contentType,filename:body.file.filename}:{}),sourceFile:path.basename(output),historical:false},null,2)+'\n');pair={source:output,baseline:companion};
  }
- const result={id:receipt.id,url:receipt.url,version:receipt.version,journal,...pair,...(inPlace?{updatedInPlace:true}:saved.source?.file?{note:'The input changed during publication, so it was kept. Reapply those later edits to the saved source before the next publish.'}:{})};
+ const result={id:receipt.id,url:receipt.url,version:receipt.version,journal,...pair,...(receipt.identity?{identity:receipt.identity}:{}),...(inPlace?{updatedInPlace:true}:saved.source?.file?{note:'The input changed during publication, so it was kept. Reapply those later edits to the saved source before the next publish.'}:{})};
  const {atomicWrite}=await platform();await atomicWrite(resultFile,JSON.stringify(result,null,2)+'\n',{exclusive:true});return result;
  }catch(error){throw new ToolError('canonical_pair_save_failed','Server confirmed publication but the canonical output pair could not be completed.',1,'Retain this journal and receipt; read the committed identity to a fresh authoring pair.',{committed:true,id:receipt.id,version:receipt.version,journal,cause:error.code??'filesystem_error'});}
 }
@@ -47,8 +47,18 @@ export async function publishCommand({values,positionals},options={}){
  if(values.baseline&&!baseline&&!values.create)throw new ToolError('baseline_missing','The explicitly selected baseline is unavailable.',2);
  if(values.create){if(type==='html'){const {recoverPortableSource}=await platform();source=recoverPortableSource(source)??source;}source=source.replace(/<!-- af-authoring:[A-Za-z0-9_-]+ -->/g,'');baseline=null;}
  const root=await realpath(values.root??baseline?.root??path.dirname(file));if(!within(root,file))throw new ToolError('source_outside_root','Source is outside the selected project root.',2);
- const entryPath=path.relative(root,file).split(path.sep).join('/');let body;
+ const entryPath=path.relative(root,file).split(path.sep).join('/');let body,fixed=null;
+ const log=options.log??(text=>process.stderr.write(text));
  if(type==='html'){
+  // One autofix pass before anything is sent (lib/html-autofix); its fixes land in the file with the canonical result.
+  const {autofixSource,autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=await import('./preview-html.mjs');
+  const published=new Set((baseline?.dependencyReceipts??[]).map(receipt=>receipt.path));
+  fixed=autofixSource(source,{file,root,mapped:name=>published.has(name)});
+  if(fixed.problems.length||values.strict&&fixed.fixes.length){
+   const report=formatAutofixReport(fixed,{file:path.basename(file),landed:'nothing published or written',routine:fixed.routine});log(report);
+   throw new ToolError(fixed.problems.length?'autofix_refused':'autofix_strict',fixed.problems.length?`autofix found ${fixed.problems.length} problem(s) to fix by hand; see the autofix report.`:'--strict refuses fixable problems; see the autofix report.',2,fixed.problems.length?'Fix the listed lines, then publish again.':'Run without --strict to apply the fixes, or fix them by hand.',{autofix:autofixDetail(fixed,report)});
+  }
+  source=fixed.html;
   const extra=values.manifest?await jsonFile(values.manifest):{};if(Object.keys(extra).some(key=>key!=='manifest')||extra.manifest!==undefined&&!Array.isArray(extra.manifest))throw new ToolError('invalid_manifest','Manifest JSON supports only {manifest:[paths]}. Receipts belong in the baseline.',2);
   const mappings=Object.fromEntries((baseline?.dependencyReceipts??[]).map(({path,...receipt})=>[path,receipt]));
   const prepared=await prepareBundle({root,entry:entryPath,entryHtml:source,server,manifest:extra.manifest??[],mappings,retainedBackends:baseline?.retainedBackends??[]});body=prepared.body;
@@ -60,9 +70,26 @@ export async function publishCommand({values,positionals},options={}){
  if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.expectedState=baseline.state;}
  else body.visibility='unlisted';
  if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],'visibility');if(values.title!==undefined)body.title=values.title;
- if(values['dry-run'])return {dryRun:true,server,type,method:baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,'base64').length}))??[],note:'Local planning only; access, backend execution and rendering remain unverified.'};
+ if(values['dry-run']){
+  const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:path.basename(file),landed:'dry run; nothing written',dryRun:true,routine:fixed.routine});if(report)log(report);
+  return {dryRun:true,...(fixed?{autofix:(await import('./autofix.mjs')).autofixDetail(fixed,report)}:{}),server,type,method:baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,'base64').length}))??[],note:'Local planning only; access, backend execution and rendering remain unverified.'};
+ }
  const intent=journalIntent({server,method:baseline?'PUT':'POST',path:'/api/artifacts'+(baseline?'/'+baseline.id:''),body,operation:'publish',source:{file,sha256:hash(bytes),root,entryPath},baseline});
  intent.source.output=path.join(path.dirname(file),path.basename(file,extension)+'.canonical-'+intent.key.slice(0,8)+(type==='html'?'.html':extension||'.bin'));
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
- return finishPublication(await resumeJournal(journal,client,'publish'));
+ const done=await finishPublication(await resumeJournal(journal,client,'publish'));
+ if(!fixed)return done;
+ const {autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=await import('./preview-html.mjs');
+ const routine=[...fixed.routine,...routineChanges(source,await readFile(done.source,'utf8'),done.identity,baseline)];
+ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:fixed.changed?done.updatedInPlace?`also written to ${path.basename(file)}`:`written to ${path.basename(done.source)}`:undefined,routine});log(report);
+ return {...done,autofix:autofixDetail({...fixed,routine},report)};
+}
+/** Platform-owned changes the server made on publish, counted rather than listed: identities and asset links. */
+function routineChanges(sent,saved,identity,baseline){
+ const count=text=>(text.match(/\sdata-af-id\s*=/g)??[]).length,added=count(saved)-count(sent),changes=[];
+ if(identity&&identity.carried)changes.push(`carried forward ${identity.carried} data-af-id from v${identity.fromVersion}, ${identity.fresh} new`);
+ else if(added>0)changes.push(`added ${added} data-af-id`);
+ const links=text=>[...text.matchAll(/\s(?:src|href|poster)\s*=\s*"([^"]*)"/g)].map(match=>match[1]),before=links(sent),after=links(saved);
+ if(before.length===after.length){const rewritten=before.filter((value,index)=>value!==after[index]).length;if(rewritten)changes.push(`rewrote ${rewritten} asset link${rewritten===1?'':'s'}`);}
+ return changes;
 }

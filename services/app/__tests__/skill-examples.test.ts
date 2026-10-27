@@ -152,4 +152,41 @@ describe('installed native author examples',()=>{
   const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="garden"');
   }finally{await rm(dir,{recursive:true,force:true});}
  });
+ it('runs autofix on publish: writes fixes, refuses problems, --strict refuses fixes, and carries IDs forward on regeneration',async()=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'author-autofix-publish-'));
+  try{
+   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
+   const installed=path.join(dir,'artifactbin'),project=path.join(dir,'project');await (await import('node:fs/promises')).mkdir(project);
+   const {publishCommand}=await import(pathToFileURL(path.join(installed,'scripts/toolbox-publish.mjs')).href);
+   const owner=await mintAccountToken('toolbox-autofix'),server='http://localhost:3000',logs:string[]=[];
+   const options={log:(text:string)=>{logs.push(text);},env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:owner.token,ARTIFACTBIN_HOME:path.join(dir,'private')},fetcher:async(input:any,init:any)=>{
+    const url=new URL(String(input)),id=url.pathname.split('/').at(-1)!,method=init?.method??'GET';
+    const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(init?.body?{json:JSON.parse(String(init.body))}:{})});
+    return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
+   }};
+   const source=path.join(project,'index.html');
+   const body='<h1>Quarterly plan</h1>\n<p>Three bets for the next quarter.</p>\n<ul><li>Ship the importer</li><li>Halve time to first chart</li></ul>\n';
+   const draft=`<!doctype html>\n<html>\n<head><title>Plan</title></head>\n<body>\n${body}<script defer src="/af/v1/core.js"></script>\n</body>\n</html>\n`;
+   // Refusals stop before anything is sent or written.
+   await writeFile(source,draft.replace('</ul>','</ul><img src="./missing.png">'));
+   await expect(publishCommand({values:{server},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_refused',exit:2});
+   expect(logs.at(-1)).toMatch(/^autofix: .*nothing published or written/);expect(logs.at(-1)).toMatch(/index\.html:\d+:\d+ local file not found/);
+   await writeFile(source,draft);
+   await expect(publishCommand({values:{server,strict:true},positionals:[source]},options)).rejects.toMatchObject({code:'autofix_strict'});
+   expect(await readFile(source,'utf8')).toBe(draft);
+   const first=await publishCommand({values:{server},positionals:[source]},options);
+   expect(first.updatedInPlace).toBe(true);expect(first.autofix.fixes.map((fix:any)=>fix.rule)).toEqual(['core-script','charset','viewport']);
+   expect(logs.at(-1)).toMatch(/^autofix: 3 fixed — also written to index\.html/);expect(logs.at(-1)).toMatch(/routine: added \d+ data-af-id/);
+   const canonical=await readFile(source,'utf8');expect(canonical).toMatch(/<meta charset="utf-8"/);expect(canonical).toContain('name="viewport"');expect(canonical.match(/core\.js/g)).toHaveLength(1);
+   const idOf=(html:string,text:string)=>new RegExp(`data-af-id="([^"]+)"[^>]*>${text}`).exec(html)?.[1];
+   // A whole-file regeneration without IDs keeps the previous identities and reports the carry-forward.
+   const regenerated=canonical.replace(/ data-af-id="[^"]+"/g,'').replace('Three bets for the next quarter.','Three bets for next quarter.').replace('</ul>','<li>Price the team plan</li></ul>');
+   await writeFile(source,regenerated);
+   const second=await publishCommand({values:{server},positionals:[source]},options);
+   expect(second.version).toBe(2);expect(logs.at(-1)).toMatch(/^autofix: clean/);expect(logs.at(-1)).toMatch(/carried forward \d+ data-af-id from v1, 1 new/);
+   const next=await readFile(source,'utf8');
+   for(const text of ['Quarterly plan','Three bets','Ship the importer','Halve time'])expect(idOf(next,text),text).toBe(idOf(canonical,text));
+   expect(canonical).not.toContain(`data-af-id="${idOf(next,'Price the team plan')}"`);
+  }finally{await rm(dir,{recursive:true,force:true});}
+ });
 });
