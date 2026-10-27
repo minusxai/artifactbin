@@ -180,3 +180,20 @@ it('keeps native theme font delivery and linked-CSS guides generated from the in
   expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
  }
 });
+it('gives every colour token its use in the native guide and keeps text tokens readable on the page grounds',async()=>{
+ const {nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
+ const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};
+ const ratio=(a,b)=>{const [hi,lo]=[lum(a),lum(b)].sort((x,y)=>y-x);return (hi+0.05)/(lo+0.05);};
+ for(const name of ROSTER){
+  const S=loadSpec(name),md=nativeSystemMd(name);
+  // Agents pick colours from this table; a token's use (fill versus text) must be readable there.
+  for(const token of S.tokens)if(token.usage)expect(md).toContain(token.usage);
+  // A token described as text for the page itself meets WCAG AA on the main page grounds.
+  const grounds=S.tokens.filter(t=>['paper','canvas','surface','card'].includes(t.name));
+  for(const token of S.tokens.filter(t=>/text/i.test(t.usage??'')&&!/never (body )?text|text on (it|the)|for text on/i.test(t.usage)&&!/^on-|soft$|night/.test(t.name)))
+   for(const mode of ['light','dark'])for(const ground of grounds){
+    const fg=mode==='light'?token.light:token.dark??token.light,bg=mode==='light'?ground.light:ground.dark??ground.light;
+    if(/^#[0-9a-f]{6}$/i.test(fg)&&/^#[0-9a-f]{6}$/i.test(bg))expect(ratio(fg,bg),`${name} ${mode} ${token.name} on ${ground.name}`).toBeGreaterThanOrEqual(4.5);
+   }
+ }
+});

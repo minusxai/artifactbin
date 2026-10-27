@@ -14,28 +14,28 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-paper` | #F3EEE1 | #0D0B19 |
-| `--ds-paper-raised` | #FBF8F0 | #16141F |
-| `--ds-paper-sunk` | #E9E2D0 | #07060C |
-| `--ds-line` | #D6CEBB | #2B2838 |
-| `--ds-ink` | #12101C | #ECE6D6 |
-| `--ds-ink-soft` | #4A4658 | #A9A3B8 |
-| `--ds-night` | #0D0B19 | #F3EEE1 |
-| `--ds-on-night` | #ECE6D6 | #12101C |
-| `--ds-night-muted` | #A9A3B8 | #4A4658 |
-| `--ds-violet` | #3A1CF0 | #8F7BFF |
-| `--ds-on-violet` | #FFFFFF | #0D0B19 |
-| `--ds-violet-soft` | #DCD6FB | #231B55 |
-| `--ds-lime` | #D6FF3C | #D6FF3C |
-| `--ds-on-lime` | #12101C | #12101C |
-| `--ds-positive` | #1E7B4F | #5FCF93 |
-| `--ds-positive-soft` | #D8EEE0 | #0F3022 |
-| `--ds-caution` | #B7791F | #F0B64A |
-| `--ds-caution-soft` | #FBEBC9 | #3A2A08 |
-| `--ds-negative` | #C62828 | #FF7A6E |
-| `--ds-negative-soft` | #FAD9D5 | #431512 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-paper` | #F3EEE1 | #0D0B19 | Page ground. Paper narrates: the reading surface. |
+| `--ds-paper-raised` | #FBF8F0 | #16141F | Cards, fields, the case-file card. |
+| `--ds-paper-sunk` | #E9E2D0 | #07060C | Wells, code, inactive tracks, table stripes. |
+| `--ds-line` | #D6CEBB | #2B2838 | Hairlines inside a section. The 3px rule between sections is ink, not line. |
+| `--ds-ink` | #12101C | #ECE6D6 | Text, rules, redaction bars, the inverted number block. |
+| `--ds-ink-soft` | #4A4658 | #A9A3B8 | Secondary text, mono eyebrows, captions. |
+| `--ds-night` | #0D0B19 | #F3EEE1 | The evidence ground: a full-bleed ink section inside a paper page (and paper inside the ink page in Night). |
+| `--ds-on-night` | #ECE6D6 | #12101C | Text on night. |
+| `--ds-night-muted` | #A9A3B8 | #4A4658 | Secondary text on night. |
+| `--ds-violet` | #3A1CF0 | #8F7BFF | The brand. Primary actions, the first chart series, the second line of a headline, stamps. |
+| `--ds-on-violet` | #FFFFFF | #0D0B19 | Text on violet fills. |
+| `--ds-violet-soft` | #DCD6FB | #231B55 | Ground for selected rows and info callouts; text on it is ink. |
+| `--ds-lime` | #D6FF3C | #D6FF3C | The highlighter. One stroke under one word per page, the kicker tag, the active segment. Never text. |
+| `--ds-on-lime` | #12101C | #12101C | Text on lime. |
+| `--ds-positive` | #1E7B4F | #5FCF93 | Verified. Always with the word. |
+| `--ds-positive-soft` | #D8EEE0 | #0F3022 | Ground for verified rows and success callouts. |
+| `--ds-caution` | #B7791F | #F0B64A | Assumed, pending, intel. Always with the word. |
+| `--ds-caution-soft` | #FBEBC9 | #3A2A08 | Ground for assumption callouts. |
+| `--ds-negative` | #C62828 | #FF7A6E | Failed, refuted, blocked. |
+| `--ds-negative-soft` | #FAD9D5 | #431512 | Ground for failure callouts. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

@@ -14,28 +14,28 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-night` | #f3e7ca | #050818 |
-| `--ds-night-raised` | #faf1dc | #111940 |
-| `--ds-night-sunk` | #e9dbb9 | #02040f |
-| `--ds-line` | #d3b98b | #2a3568 |
-| `--ds-ink` | #1d170f | #ece6d6 |
-| `--ds-ink-soft` | #4a3d2c | #b9c8ee |
-| `--ds-ink-muted` | #8a7a60 | #8d98c0 |
-| `--ds-lamp` | #9a5a12 | #ffc76e |
-| `--ds-on-lamp` | #fff6e4 | #1a1206 |
-| `--ds-lamp-hot` | #b8661f | #ffe2a8 |
-| `--ds-lamp-soft` | #f3e5c2 | #241d30 |
-| `--ds-ember` | #b8551a | #ff9440 |
-| `--ds-on-ember` | #fff6e4 | #1a0e04 |
-| `--ds-cool` | #3a5a8a | #b9c8ee |
-| `--ds-positive` | #2b5a45 | #6fcf97 |
-| `--ds-positive-soft` | #dcebe1 | #10291e |
-| `--ds-caution` | #8a5a00 | #ffd27a |
-| `--ds-caution-soft` | #f3e5c2 | #2e2306 |
-| `--ds-negative` | #8a2d1c | #ff7a5c |
-| `--ds-negative-soft` | #f4dcd8 | #3a1412 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-night` | #f3e7ca | #050818 | Page ground: midnight by night; by day, lamplit cream. |
+| `--ds-night-raised` | #faf1dc | #111940 | Panels, cards and the lit stone of a panel. |
+| `--ds-night-sunk` | #e9dbb9 | #02040f | Wells, code, the unlit cells. |
+| `--ds-line` | #d3b98b | #2a3568 | Hairline rules and quiet borders. |
+| `--ds-ink` | #1d170f | #ece6d6 | Primary text: cream on night, ink on cream. |
+| `--ds-ink-soft` | #4a3d2c | #b9c8ee | Standfirsts and secondary reading text. Cool blue by night. |
+| `--ds-ink-muted` | #8a7a60 | #8d98c0 | Captions, folios, placeholders. |
+| `--ds-lamp` | #9a5a12 | #ffc76e | The brand: lamplight amber. Links, the lit cell, the one figure that glows, the primary action. |
+| `--ds-on-lamp` | #fff6e4 | #1a1206 | Text on lamp fills. |
+| `--ds-lamp-hot` | #b8661f | #ffe2a8 | The hot centre of the lamp: the italic phrase in a headline, the filament. |
+| `--ds-lamp-soft` | #f3e5c2 | #241d30 | Ground for highlighted rows and the halo behind a lit thing. |
+| `--ds-ember` | #b8551a | #ff9440 | The accent: the lamp itself, the focus ring, the comparison series. |
+| `--ds-on-ember` | #fff6e4 | #1a0e04 | Text on ember fills. |
+| `--ds-cool` | #3a5a8a | #b9c8ee | The cool counterweight: the second drawing fill, the second chart series, the sky wash. |
+| `--ds-positive` | #2b5a45 | #6fcf97 | Open, continued, confirmed. Always with a word. |
+| `--ds-positive-soft` | #dcebe1 | #10291e | Ground for positive rows. |
+| `--ds-caution` | #8a5a00 | #ffd27a | Small sample, provisional, late. The lamp, slightly cooler. |
+| `--ds-caution-soft` | #f3e5c2 | #2e2306 | Ground for caveats. |
+| `--ds-negative` | #8a2d1c | #ff7a5c | Closed, declined, failed. Rust. |
+| `--ds-negative-soft` | #f4dcd8 | #3a1412 | Ground for negative rows. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

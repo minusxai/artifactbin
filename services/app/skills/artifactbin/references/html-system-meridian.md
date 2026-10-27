@@ -14,28 +14,28 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-canvas` | #f4f4f5 | #0b0c0f |
-| `--ds-surface` | #ffffff | #14161b |
-| `--ds-surface-sunk` | #eeeef0 | #1c1f26 |
-| `--ds-hairline` | #e4e4e7 | #262a33 |
-| `--ds-hairline-strong` | #c9c9ce | #3a3f4b |
-| `--ds-ink` | #111114 | #f2f2f4 |
-| `--ds-ink-soft` | #5a5b63 | #a0a3ad |
-| `--ds-ink-faint` | #696a73 | #848894 |
-| `--ds-blue` | #2e5bff | #7a9bff |
-| `--ds-on-blue` | #ffffff | #0b0c0f |
-| `--ds-blue-soft` | #e9eeff | #182040 |
-| `--ds-blue-ink` | #2449d0 | #9db5ff |
-| `--ds-positive` | #147c3b | #4ade80 |
-| `--ds-positive-soft` | #e6f6ec | #0f2a1a |
-| `--ds-caution` | #9d6007 | #facc15 |
-| `--ds-caution-soft` | #fdf4d8 | #2d2408 |
-| `--ds-negative` | #ce2121 | #f87171 |
-| `--ds-negative-soft` | #fde8e8 | #2f1313 |
-| `--ds-violet` | #7c5cff | #a78bfa |
-| `--ds-teal` | #0d9488 | #2dd4bf |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-canvas` | #f4f4f5 | #0b0c0f | Page ground. Visibly a step below the surfaces by day; true near-black by night. |
+| `--ds-surface` | #ffffff | #14161b | Cards, fields, menus, the rail. Separated from canvas by a hairline and a 1px top highlight, never a drop shadow. |
+| `--ds-surface-sunk` | #eeeef0 | #1c1f26 | Code wells, table header, inactive tracks, the inside of a keyboard key, the row hover tint. |
+| `--ds-hairline` | #e4e4e7 | #262a33 | Every border. One weight, one colour, everywhere. |
+| `--ds-hairline-strong` | #c9c9ce | #3a3f4b | Borders on hover, the active field, the table header rule, the top of a glass card. |
+| `--ds-ink` | #111114 | #f2f2f4 | Primary text and icons. |
+| `--ds-ink-soft` | #5a5b63 | #a0a3ad | Secondary text, labels, placeholders, captions. |
+| `--ds-ink-faint` | #696a73 | #848894 | Tertiary text: timestamps, helper text, disabled labels, the drawing line. |
+| `--ds-blue` | #2e5bff | #7a9bff | The one colour. Primary actions, links, the focus ring, the first series. One fill per view. |
+| `--ds-on-blue` | #ffffff | #0b0c0f | Text and icons on blue fills. |
+| `--ds-blue-soft` | #e9eeff | #182040 | Tinted ground for the active nav item, selected rows, info callouts. |
+| `--ds-blue-ink` | #2449d0 | #9db5ff | Blue as text: links, the active nav label, the selected tab. |
+| `--ds-positive` | #147c3b | #4ade80 | Success text and the up-delta. Always paired with a word or a dot. |
+| `--ds-positive-soft` | #e6f6ec | #0f2a1a | Ground for success tags. |
+| `--ds-caution` | #9d6007 | #facc15 | Warnings and pending states. |
+| `--ds-caution-soft` | #fdf4d8 | #2d2408 | Ground for warning tags. |
+| `--ds-negative` | #ce2121 | #f87171 | Errors, destructive actions, the down-delta. |
+| `--ds-negative-soft` | #fde8e8 | #2f1313 | Ground for error tags and callouts. |
+| `--ds-violet` | #7c5cff | #a78bfa | Second chart series only. |
+| `--ds-teal` | #0d9488 | #2dd4bf | Third chart series only. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

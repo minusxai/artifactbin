@@ -14,30 +14,30 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-paper` | #f3eee4 | #121110 |
-| `--ds-paper-raised` | #fbf8f2 | #1c1a18 |
-| `--ds-paper-sunk` | #e7dfcf | #0a0908 |
-| `--ds-line` | #d3c9b5 | #34302a |
-| `--ds-edge` | #14110f | #f3eee4 |
-| `--ds-ink` | #14110f | #f3eee4 |
-| `--ds-ink-muted` | #5a5348 | #a69e90 |
-| `--ds-volt` | #ff4d1a | #ff5f2e |
-| `--ds-on-volt` | #14110f | #14110f |
-| `--ds-volt-ink` | #b5300a | #ff8a63 |
-| `--ds-volt-soft` | #ffd9cb | #3d1a0f |
-| `--ds-acid` | #d6f43a | #d6f43a |
-| `--ds-on-acid` | #14110f | #14110f |
-| `--ds-cobalt` | #2236d1 | #7484ff |
-| `--ds-on-cobalt` | #ffffff | #0a0908 |
-| `--ds-cobalt-soft` | #dde1ff | #161c45 |
-| `--ds-positive` | #16683f | #5fd394 |
-| `--ds-positive-soft` | #d5efdf | #0f2a1c |
-| `--ds-caution` | #7d5900 | #f2c14e |
-| `--ds-caution-soft` | #fbedc4 | #2e2405 |
-| `--ds-negative` | #b5300a | #ff8a63 |
-| `--ds-negative-soft` | #ffd9cb | #3d1a0f |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-paper` | #f3eee4 | #121110 | Page ground. The default surface for everything. |
+| `--ds-paper-raised` | #fbf8f2 | #1c1a18 | Cards, fields, menus: anything that sits on paper. |
+| `--ds-paper-sunk` | #e7dfcf | #0a0908 | Wells, code blocks, inactive tracks, table stripes. |
+| `--ds-line` | #d3c9b5 | #34302a | Hairline dividers and quiet borders. Never the sole edge of a control. |
+| `--ds-edge` | #14110f | #f3eee4 | The hard 2px edge on controls and cards, and the hard offset shadow. |
+| `--ds-ink` | #14110f | #f3eee4 | Primary text and icons on every paper ground. |
+| `--ds-ink-muted` | #5a5348 | #a69e90 | Secondary text, captions, placeholders. |
+| `--ds-volt` | #ff4d1a | #ff5f2e | The brand. Primary actions and the one number that must be seen. Fill only. |
+| `--ds-on-volt` | #14110f | #14110f | Text and icons on volt fills. |
+| `--ds-volt-ink` | #b5300a | #ff8a63 | Volt as text: links and inline emphasis on paper. |
+| `--ds-volt-soft` | #ffd9cb | #3d1a0f | Tinted ground for volt tags and selected rows; text on it is volt-ink. |
+| `--ds-acid` | #d6f43a | #d6f43a | The highlighter: new tags, the active tab marker, one insight card. Never body text. |
+| `--ds-on-acid` | #14110f | #14110f | Text on acid fills. |
+| `--ds-cobalt` | #2236d1 | #7484ff | Data and focus: the first chart series, the focus ring, info callouts. |
+| `--ds-on-cobalt` | #ffffff | #0a0908 | Text on cobalt fills. |
+| `--ds-cobalt-soft` | #dde1ff | #161c45 | Ground for info callouts; text on it is ink. |
+| `--ds-positive` | #16683f | #5fd394 | Positive deltas and success text, always with a ▲ or a word. |
+| `--ds-positive-soft` | #d5efdf | #0f2a1c | Ground for success callouts and positive tags. |
+| `--ds-caution` | #7d5900 | #f2c14e | Warnings, always with a word. |
+| `--ds-caution-soft` | #fbedc4 | #2e2405 | Ground for warning callouts. |
+| `--ds-negative` | #b5300a | #ff8a63 | Negative deltas and errors. Shares volt-ink: errors are loud, not a separate red. |
+| `--ds-negative-soft` | #ffd9cb | #3d1a0f | Ground for error callouts. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

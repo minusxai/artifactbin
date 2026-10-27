@@ -14,28 +14,28 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-glass` | #f2f5ec | #060a06 |
-| `--ds-glass-raised` | #fbfcf7 | #0c130c |
-| `--ds-glass-sunk` | #e3e9d9 | #030503 |
-| `--ds-line` | #c9d3bf | #1b2a1b |
-| `--ds-edge` | #0f7a3a | #3dff7a |
-| `--ds-ink` | #0f1f12 | #d7ffe0 |
-| `--ds-ink-muted` | #4c6b52 | #7fb48f |
-| `--ds-green` | #0f7a3a | #3dff7a |
-| `--ds-on-green` | #f2f5ec | #04140a |
-| `--ds-green-ink` | #0b6a31 | #5fff93 |
-| `--ds-green-soft` | #d9f0dc | #0f2a18 |
-| `--ds-amber` | #9a6a00 | #ffb000 |
-| `--ds-on-amber` | #1a1000 | #1a1000 |
-| `--ds-amber-soft` | #f6e9c4 | #2a1e00 |
-| `--ds-positive` | #0f7a3a | #3dff7a |
-| `--ds-caution` | #9a6a00 | #ffb000 |
-| `--ds-negative` | #b3261e | #ff5c5c |
-| `--ds-negative-soft` | #f6d9d6 | #2d0e0e |
-| `--ds-cyan` | #0b6e7a | #5ee1f0 |
-| `--ds-violet` | #5b3fb0 | #b79cff |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-glass` | #f2f5ec | #060a06 | Page ground. Black glass in Night; a printout in Paper. |
+| `--ds-glass-raised` | #fbfcf7 | #0c130c | Panels, fields, menus. |
+| `--ds-glass-sunk` | #e3e9d9 | #030503 | Log wells, code, inactive tracks. |
+| `--ds-line` | #c9d3bf | #1b2a1b | Hairline rules between log lines and table rows. |
+| `--ds-edge` | #0f7a3a | #3dff7a | The 1px outline on controls and panels. In Night it is the phosphor itself. |
+| `--ds-ink` | #0f1f12 | #d7ffe0 | Primary text. Pale green-white in Night so the glow has somewhere to go. |
+| `--ds-ink-muted` | #4c6b52 | #7fb48f | Secondary text, timestamps, dimmed log lines. |
+| `--ds-green` | #0f7a3a | #3dff7a | The brand and the pass state. Primary actions, the prompt, the cursor. |
+| `--ds-on-green` | #f2f5ec | #04140a | Text on green fills. |
+| `--ds-green-ink` | #0b6a31 | #5fff93 | Green as text: links, the active line. |
+| `--ds-green-soft` | #d9f0dc | #0f2a18 | Ground for pass rows and selected lines. |
+| `--ds-amber` | #9a6a00 | #ffb000 | The attention colour: focus ring, warnings, the one thing running now. |
+| `--ds-on-amber` | #1a1000 | #1a1000 | Text on amber fills. |
+| `--ds-amber-soft` | #f6e9c4 | #2a1e00 | Ground for warning rows. |
+| `--ds-positive` | #0f7a3a | #3dff7a | Pass. Shares green: in Phosphor, green means it worked. |
+| `--ds-caution` | #9a6a00 | #ffb000 | Flaky, pending, retrying. |
+| `--ds-negative` | #b3261e | #ff5c5c | Fail. The only red on the screen. |
+| `--ds-negative-soft` | #f6d9d6 | #2d0e0e | Ground for failed rows and error callouts. |
+| `--ds-cyan` | #0b6e7a | #5ee1f0 | Second chart series and the diff-added colour. Never for state. |
+| `--ds-violet` | #5b3fb0 | #b79cff | Third chart series. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

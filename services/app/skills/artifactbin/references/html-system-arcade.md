@@ -14,29 +14,29 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-ground` | #f7f3e8 | #0a0a14 |
-| `--ds-raised` | #ffffff | #141428 |
-| `--ds-sunk` | #e9e3d3 | #050509 |
-| `--ds-line` | #c9c2b0 | #26263d |
-| `--ds-ink` | #0f0f1a | #f2f0ff |
-| `--ds-ink-muted` | #5b586b | #9c98be |
-| `--ds-red` | #ff3b3b | #ff5c5c |
-| `--ds-on-red` | #ffffff | #0a0a14 |
-| `--ds-blue` | #2e6bff | #5c8bff |
-| `--ds-on-blue` | #ffffff | #0a0a14 |
-| `--ds-blue-soft` | #dce6ff | #15224d |
-| `--ds-yellow` | #ffd60a | #ffe34d |
-| `--ds-on-yellow` | #0f0f1a | #0f0f1a |
-| `--ds-magenta` | #ff4fd8 | #ff6ee0 |
-| `--ds-cyan` | #35e0ff | #5ce8ff |
-| `--ds-positive` | #13a03f | #2bd34a |
-| `--ds-positive-soft` | #d4f5dd | #0d3a1c |
-| `--ds-caution` | #c98a00 | #ffd60a |
-| `--ds-caution-soft` | #fff1b8 | #3a2e05 |
-| `--ds-negative` | #e02b2b | #ff5c5c |
-| `--ds-negative-soft` | #ffd9d9 | #3d0f14 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-ground` | #f7f3e8 | #0a0a14 | Page ground: near-white cabinet by day; the CRT black by night (with scanlines). |
+| `--ds-raised` | #ffffff | #141428 | Panels, cards, the dialogue box. |
+| `--ds-sunk` | #e9e3d3 | #050509 | Wells, the checker squares, empty HP blocks. |
+| `--ds-line` | #c9c2b0 | #26263d | Hairline rules; the checker contrast. |
+| `--ds-ink` | #0f0f1a | #f2f0ff | Pixel ink: text, sprites, every 4px frame. |
+| `--ds-ink-muted` | #5b586b | #9c98be | Secondary text, the dim high score. |
+| `--ds-red` | #ff3b3b | #ff5c5c | The brand: cabinet red. Primary actions, hearts, the player sprite. |
+| `--ds-on-red` | #ffffff | #0a0a14 | Text on red fills. |
+| `--ds-blue` | #2e6bff | #5c8bff | Player two: the second drawing fill, the first chart series, links. |
+| `--ds-on-blue` | #ffffff | #0a0a14 | Text on blue fills. |
+| `--ds-blue-soft` | #dce6ff | #15224d | Ground for the selected row and the quiet drawing fill. |
+| `--ds-yellow` | #ffd60a | #ffe34d | The coin: points, the highlighted figure, the focus ring, the star. |
+| `--ds-on-yellow` | #0f0f1a | #0f0f1a | Text on yellow fills. |
+| `--ds-magenta` | #ff4fd8 | #ff6ee0 | Bonus items and the fourth chart series. Never a status. |
+| `--ds-cyan` | #35e0ff | #5ce8ff | Shields, power-ups and the fifth chart series. Never a status. |
+| `--ds-positive` | #13a03f | #2bd34a | HP full, pass, level up. The green blocks. Always with a glyph or a word. |
+| `--ds-positive-soft` | #d4f5dd | #0d3a1c | Ground for pass rows and the level-up ribbon. |
+| `--ds-caution` | #c98a00 | #ffd60a | HP half, low coins, a hint. The yellow blocks. |
+| `--ds-caution-soft` | #fff1b8 | #3a2e05 | Ground for warnings. |
+| `--ds-negative` | #e02b2b | #ff5c5c | HP low, fail, game over. The red blocks. |
+| `--ds-negative-soft` | #ffd9d9 | #3d0f14 | Ground for fail rows. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|
