@@ -214,3 +214,28 @@ it('lists local autofix problems at the top of a saved check summary',async()=>{
  const digest=checkDigest({ok:true,smokePassed:true,checks:[],autofix:{file:'/',problems:[{rule:'duplicate-id',line:4,column:2,message:'duplicate id "a" (first at line 3)'}]}},'qa.json');
  expect(digest.split('\n')[0]).toBe('autofix: 1 problem to fix by hand');expect(digest.split('\n')[1]).toContain(':4:2 duplicate id');expect(digest.split('\n')[2]).toMatch(/^check completed/);
 });
+it('summarizes duplicate and unstable data-af-id evidence without overstating either',async()=>{
+ const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const {summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const base={viewport:{width:1280,height:800},pageErrors:[],consoleErrors:[],httpErrors:[],failedRequests:[],telemetry:[],text:'Ready',overflow:{viewport:1280,content:1280,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{ok:true}};
+ const dup={...base,ids:{total:4,duplicates:2,items:[{id:'budget-row-1',count:2},{id:'budget-row-2',count:3}]}};
+ expect(summarizeCheck([dup]).smokePassed).toBe(false);
+ const failed=checkDigest({ok:false,code:'check_failed',...summarizeCheck([dup])},'qa.json');
+ expect(failed).toContain('budget-row-1');expect(failed).toContain('budget-row-2');expect(failed).not.toContain('clean pass');
+ const unstable={...base,ids:{total:3,duplicates:0,items:[]},idStability:{checked:true,created:3,unstable:2,sample:['row-0.41','row-0.77']}};
+ expect(summarizeCheck([unstable]).smokePassed).toBe(true);
+ const warned=checkDigest({ok:true,...summarizeCheck([unstable])},'qa.json');
+ expect(warned).toContain('row-0.41');expect(warned).toMatch(/warning/i);expect(warned).not.toContain('clean pass');
+ const clean=checkDigest({ok:true,...summarizeCheck([{...base,ids:{total:3,duplicates:0,items:[]},idStability:{checked:false,created:0}}])},'qa.json');
+ expect(clean).not.toMatch(/warning|duplicate/i);expect(clean).toContain('clean pass');
+});
+it('teaches script-created element IDs in the main steps and no longer names data-af="meta"',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
+ expect(skill).not.toContain('data-af="meta"');
+ for(const block of ['state','core','design-system'])expect(skill).toContain(`data-af="${block}"`);
+ const steps=skill.slice(skill.indexOf('## Author and publish'),skill.indexOf('## Preserve the document'));
+ expect(steps).toContain('afId');expect(steps).toContain('references/html-runtime.md#dynamic-elements-and-comments');
+ const runtime=await readFile(new URL('../../../skills/artifactbin/references/html-runtime.md',import.meta.url),'utf8');
+ expect(runtime).toContain('## Dynamic elements and comments');
+});

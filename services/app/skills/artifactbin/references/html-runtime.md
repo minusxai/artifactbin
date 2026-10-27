@@ -47,7 +47,7 @@ item.append(title);
 document.querySelector('#jobs').append(item);
 ```
 
-Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Re-rendering the same logical job keeps its IDs, including after sorting or filtering. Use distinct prefixes for different lists and roles; avoid duplicate IDs. Never reuse a deleted job’s IDs for a new job, or borrow an existing source element’s identity.
+Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Use distinct prefixes for different lists and roles; avoid duplicate IDs (`check.mjs` fails on duplicates and warns when IDs differ between two loads). Never reuse a deleted job’s IDs, or borrow a source element’s identity.
 
 Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. For HTTP comments use the native HTML `html-node` anchor in [HTML operations](html-operations.md). JSX `node_id` is not an HTML anchor.
 

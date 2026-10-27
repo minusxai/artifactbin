@@ -81,6 +81,7 @@ export function checkDigest(envelope,file){
  for(const check of envelope.checks??[]){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
+  if(check.ids?.duplicates)errors.push(`duplicate data-af-id ${check.ids.duplicates}: ${check.ids.items.map(item=>`${clip(item.id,60)} x${item.count}`).join(', ')}${check.ids.duplicates>check.ids.items.length?`; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
   const task=check.error?'task error: '+clip(check.error,300):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
   const overflow=check.overflow?check.overflow.fits?'fits':`overflow ${check.overflow.content}>${check.overflow.viewport}${check.overflow.culprits?.length?' from '+check.overflow.culprits.map(c=>`${c.element} (right ${c.right})`).join(', '):''}`:'overflow unknown';
   // List the first few defects of each kind so one fix round covers them without reopening the file.
@@ -89,10 +90,12 @@ export function checkDigest(envelope,file){
   const contrast=check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; ${few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.color?' '+low.color:''}`,5,check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
   lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
  }
+ // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke failure.
+ for(const check of envelope.checks??[]){const stability=check?.idStability;if(stability?.unstable)lines.push(`  warning: ${stability.unstable} script-created data-af-id differ between loads (${stability.sample.map(id=>clip(id,60)).join(', ')}); derive them from record IDs, not index, text or random values.`);else if(stability?.skipped)lines.push('  warning: '+clip(stability.skipped,160));}
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push('  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
- else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping))lines.push('  clean pass: if your steps cover the requested behaviour, reply with the link and what you tested, then stop; no exports, re-checks or polish needed.');
+ else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&!check.idStability?.unstable))lines.push('  clean pass: if your steps cover the requested behaviour, reply with the link and what you tested, then stop; no exports, re-checks or polish needed.');
  return lines.join('\n')+'\n';
 }
 /** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */
