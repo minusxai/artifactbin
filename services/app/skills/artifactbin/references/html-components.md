@@ -72,7 +72,7 @@ Registrations follow PascalCase: `registerDatePicker`, `registerDataTable`, `reg
 | `mermaid` | `af-mermaid.code`, `title`, `colorMode` (auto/light/dark), optional `storedImage={src,type,width,height}`; `retry()`. Bundled renderer with visible errors and image fallback. |
 | `data-table` | `af-data-table.data={rows,columns}`; columns are schema `{name,type}` records. Display `columns=[{col,title,fmt}]`, `rowKey`, `sort`, `height`, `sticky`, `transpose`; `cellRenderers`/`templates`. |
 | `file-upload` | `af-file-upload.value` is file metadata `{ref,name,contentType?,size?}[]`; set `datasetName` (or `dataset` attribute), `adapter`, limits/accept. Emits `af-change` with value and reason upload/remove. |
-| `slide-deck` | `af-slide-deck` contains authored `af-slide` children; zero-based `index`; presentation/print. |
+| `slide-deck` | `af-slide-deck` contains authored `af-slide` children; zero-based `index`; presentation/print. Its slides are not export-marked; for slide images use your own `data-af-slide` sections. |
 | `deck-gl` | `af-deck-gl.options={data,layers,...}`; `boundaries`, `basemap`, `initialViewState`, tooltip/legend. Needs WebGL. |
 | `isometric` | `af-isometric.options={title,parts,...}`; keyed geometry, spread/angle/flow, motion. |
 
