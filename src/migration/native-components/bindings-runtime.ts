@@ -65,6 +65,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     const binding=target.writeback;let projection=target.property==='data'?(Object.hasOwn(plan.staticTables??{},target.expression.name)?tableData[target.expression.name]:plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null):read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
     if(target.property==='options'){const table=plan.viewer&&!viewerReady?null:tableData[target.expression.name],columns=table?.columns??[],value=columns[0]?.name,label=columns[1]?.name;projection=table&&value?table.rows.map(row=>({value:String(row[value]??''),label:label?String(row[label]??row[value]??''):String(row[value]??'')})):[];}
+    if(target.staticDataTableSource==='static-data-table-source-v1'&&projection)projection=structuredClone(projection);
     host[target.property]=projection;
     if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
      const change=async event=>{if(disposed||failed||!scope.active||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;

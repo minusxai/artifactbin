@@ -96,6 +96,7 @@ export interface NativeStaticTableVisualizationSource {
  binding:Extract<import('./operations-contracts.ts').NativeVisualizationSourceBinding,{kind:'static-table-value'}>;
 }
 export interface NativeBindingsInput {
+  staticDataTableSources?:readonly import("./static-data-table-contracts.ts").NativeStaticDataTableProof[];
   staticTableSources?:readonly NativeStaticTableVisualizationSource[];
   navigation?:import("./resource-navigation-contracts.ts").NativeNavigationPolicy;
   urls?:readonly {source:string;target:string;sha256:string}[];

@@ -1,3 +1,4 @@
+import {prepareNativeStaticDataTables} from './static-data-table.ts';
 import { createHash } from "node:crypto";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import type { RetainedJsxNode } from "./analyze-contracts.ts";
@@ -325,6 +326,8 @@ export function analyzeNativeOperations(
       undefined,sourceBinding,
     );
   }
+  const staticDataTables=prepareNativeStaticDataTables({analysis,compilation});
+  blockers.push(...staticDataTables.blockers);
   // A registered downstream operation cannot conceal an uncovered prerequisite.
   for (const name of [
     ...order,
@@ -347,6 +350,7 @@ export function analyzeNativeOperations(
     sourceSha256: analysis.sourceSha256,
     compilerSourceSha256: analysis.compilerSourceSha256,
     sqlEngineSha256: input.sqlEngineSha256,
+    ...(staticDataTables.proofs.length?{staticDataTables:staticDataTables.proofs}:{}),
     operations,
     queryOrder: order,
     blockers,

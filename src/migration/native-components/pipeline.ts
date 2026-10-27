@@ -1,3 +1,5 @@
+import{prepareNativeStaticDataTables,hasNativeStaticDataTable}from'./static-data-table.ts';
+import{retainedNativeFlowFingerprint}from'./flow-fingerprint.ts';
 import {extractNativeMarkdown} from './markdown-retained.ts';
 import {resolveNativePipelineOperationRecipe} from './pipeline-operation-recipe.ts';
 /** Parameterized compiled JSX → native pipeline. No source-script evaluation or fallback SSR. */
@@ -159,7 +161,18 @@ export async function nativePipelineFilePorts(request:NativePipelineRequest,extr
   modules:tags=>collectNativePipelineModules(tags,request.componentRoot),
   charts:async()=>{if(!index.chart)throw Error('native_pipeline_chart_libraries_missing');return buildNativeChartAdapter({legacyRoot:request.legacyRoot,libraries:index.chart.libraries,libraryFiles:await Promise.all(index.chart.files.map(async ref=>({path:ref.bundlePath,bytes:await checked(ref),sha256:ref.sha256})))});},
   operations:async context=>{
-   if(!context.analysis.flow.queries.length&&!context.analysis.flow.mutations.length&&!context.chartMappings.length)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[]};
+   if(!context.analysis.flow.queries.length&&!context.analysis.flow.mutations.length&&!context.chartMappings.length){
+    const hasTable=hasNativeStaticDataTable(context.analysis);
+    if(!hasTable)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[]};
+    if(context.analysis.flow.imports.length)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[{sourceNode:'$root',code:'static-data-table-import-unsupported'}]};
+    const fingerprint=await retainedNativeFlowFingerprint(request.legacyRoot);
+    // No SQL or clock expressions are admitted by this literal-only proof. The
+    // existing isolated compiler still receives an explicit schema-probe epoch.
+    const compilation=await compileNativeFlowOffline({document:context.revision.original.document,analysis:context.analysis,sqlEngineSha256:fingerprint.sqlEngineSha256,probeClockIso:'1970-01-01T00:00:00.000Z',catalogs:[],queryFunctions:[]},{legacyRoot:request.legacyRoot});
+    if(compilation.imports.length||compilation.queries.length||compilation.mutations.length||compilation.statementFacts?.length)throw Error('static_data_table_compilation_operations');
+    const prepared=prepareNativeStaticDataTables({analysis:context.analysis,compilation}),operationCoverage={sourceSha256:context.analysis.sourceSha256,compilerSourceSha256:context.analysis.compilerSourceSha256,sqlEngineSha256:compilation.sqlEngineSha256,operations:[],queryOrder:[],staticDataTables:prepared.proofs,blockers:prepared.blockers};
+    return{input:{backends:[],queries:[],mutations:[],operationCoverage},programs:[],blockers:prepared.blockers.map(b=>({sourceNode:b.sourceNode,code:b.code}))};
+   }
    const resolved=await resolveNativePipelineOperationRecipe(context,index,file=>readFile(locate(file)));
    if(!resolved)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[{sourceNode:'$root',code:'operation-recipe-missing'}]};
    if('blocker' in resolved)return {input:{backends:[],queries:[],mutations:[]},programs:[],blockers:[{sourceNode:'$root',code:resolved.blocker}]};

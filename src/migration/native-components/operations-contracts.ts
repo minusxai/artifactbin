@@ -119,6 +119,7 @@ export interface NativeOperationProof {
   status: "attested-plan" | "blocked";
 }
 export interface NativeOperationCoverage {
+  staticDataTables?:readonly import("./static-data-table-contracts.ts").NativeStaticDataTableProof[];
   sourceSha256: string;
   compilerSourceSha256: string;
   sqlEngineSha256: string;

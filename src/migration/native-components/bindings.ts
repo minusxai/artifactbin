@@ -1,3 +1,4 @@
+import{verifyNativeStaticDataTable}from'./static-data-table.ts';
 import {nativeLocalTable} from './local-table.ts';
 /** Offline translation of retained typed bindings into ordinary author JavaScript. */
 import { parseExpressionAt } from "acorn";
@@ -132,6 +133,14 @@ export function emitNativeBindings(
       if(staticTables[binding.name]&&nativeDigest(staticTables[binding.name])!==nativeDigest({columns:table.columns,rows:table.rows}))throw Error('collision');
       staticTables[binding.name]={columns:table.columns,rows:table.rows};staticTargets.set(source.chartSourceNode,binding.name);
     }catch{block(source.chartSourceNode,'static-table-source-proof');}
+  }
+  for(const proof of input.staticDataTableSources??[]){
+    try{
+      if(staticTargets.has(proof.targetSourceNode)||!verifyNativeStaticDataTable(input.analysis,proof))throw Error('proof');
+      const value=input.analysis.flow.values.find(v=>v.name===proof.binding.name)!,table=nativeLocalTable(value as unknown as Parameters<typeof nativeLocalTable>[0]);
+      if(staticTables[proof.binding.name]&&nativeDigest(staticTables[proof.binding.name])!==nativeDigest({columns:table.columns,rows:table.rows}))throw Error('collision');
+      staticTables[proof.binding.name]={columns:table.columns,rows:table.rows};staticTargets.set(proof.targetSourceNode,proof.binding.name);
+    }catch{block(proof.targetSourceNode,'static-data-table-source-proof');}
   }
   for (const value of input.analysis.flow.values) {
     if(value.kind==='table'){
@@ -369,6 +378,7 @@ export function emitNativeBindings(
           !queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name)
       )
         block(node.graphKey, "data-target-needs-declared-query");
+      if(node.tag==='DataTable'&&target.property==='data'&&result.expression?.kind==='signal'&&staticTargets.get(node.graphKey)===result.expression.name){const projection:import('./static-data-table-contracts.ts').NativeStaticDataTableProjection={staticDataTableSource:'static-data-table-source-v1'};Object.assign(result,projection);}
       if(target.property==="options"&&(node.tag!=="Select"||target.attribute!=="options"||result.expression?.kind!=="signal"||!queryNames.has(result.expression.name)&&staticTargets.get(node.graphKey)!==result.expression.name))block(node.graphKey,"options-target-needs-declared-query");
       const custom = {
         Input: "value",
