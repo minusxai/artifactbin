@@ -156,3 +156,19 @@ it('counts a slide clip only where a hidden-overflow box actually overflows', as
   expect(cut?.clipped).toBe(1);expect(cut?.items[0]).toMatchObject({text:'Four hidden line'});
  }finally{await browser.close();}
 });
+
+// The author check's data-af-id evidence: duplicates in the live DOM, and script-created IDs that differ between two loads.
+it('reports duplicate data-af-id values and script-created IDs that change on reload, and skips the reload when none are script-created', async () => {
+ const {chromium}=await import('playwright');const browser=await chromium.launch();
+ const run=async(saved:string[],body:string,compareReload=true)=>{const page=await browser.newPage();try{return await inspectPage(page,{target:'data:text/html,'+encodeURIComponent(`<html><body><script type="application/json" data-af="runtime">${JSON.stringify({savedNodeIds:saved})}</script><ul id="list" data-af-id="list">${body}</ul></body></html>`),viewport:{width:1280,height:800},compareReload},null) as {ids:{duplicates:number,items:{id:string,count:number}[]},idStability?:{checked:boolean,unstable?:number,sample?:string[]}};}finally{await page.close();}};
+ try{
+  const script=(ids:string)=>`<script>for(const id of ${ids}){const li=document.createElement('li');li.dataset.afId=id;li.textContent='x';document.querySelector('#list').append(li);}</script>`;
+  const duplicated=await run(['list'],script("['row-1','row-1','row-2']"));
+  expect(duplicated.ids.duplicates).toBe(1);expect(duplicated.ids.items[0]).toEqual({id:'row-1',count:2});expect(duplicated.idStability).toMatchObject({checked:true,unstable:0});
+  const random=await run(['list'],script("['row-'+Math.random(),'row-'+Math.random()]"));
+  expect(random.ids.duplicates).toBe(0);expect(random.idStability).toMatchObject({checked:true,unstable:4});expect(random.idStability!.sample!.length).toBeGreaterThan(0);
+  const saved=await run(['list','a','b'],'<li data-af-id="a">A</li><li data-af-id="b">B</li>');
+  expect(saved.ids.duplicates).toBe(0);expect(saved.idStability).toEqual({checked:false,created:0});
+  expect((await run(['list'],script("['row-1']"),false)).idStability).toBeUndefined();
+ }finally{await browser.close();}
+}, 30_000);

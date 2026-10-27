@@ -50,6 +50,26 @@ export async function inspectPage(page,options,task){
   await page.locator('body').waitFor({timeout:2000});
   // The reader shows an aria-busy "Loading page…" placeholder first; measure the page, not the placeholder.
   await page.waitForFunction(()=>!document.querySelector('[aria-busy="true"]'),null,{timeout:5000}).catch(()=>{});
+  if(options.compareReload){
+   // Only script-created IDs (live minus the runtime's savedNodeIds) can drift between renders; with none, skip the reload.
+   try{
+    const settle=()=>page.locator('html').evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))),undefined,{timeout:1500});
+    const readIds=()=>page.locator('html').evaluate(html=>{let saved=null;try{const list=JSON.parse(html.ownerDocument.querySelector('script[data-af="runtime"]')?.textContent||'null')?.savedNodeIds;if(Array.isArray(list))saved=list;}catch{}return {ids:[...new Set([...html.ownerDocument.querySelectorAll('[data-af-id]')].map(node=>node.getAttribute('data-af-id')).filter(Boolean))],saved};},undefined,{timeout:1500});
+    await settle();
+    const first=await readIds(),savedIds=new Set(first.saved??[]),created=first.ids.filter(id=>!savedIds.has(id));
+    if(!created.length)evidence.idStability={checked:false,created:0};
+    else{
+     await page.reload({waitUntil:'domcontentloaded',timeout:4000});
+     if(options.hosted)await page.mainFrame().locator('iframe[data-mx-document-frame]').waitFor({timeout:2000});
+     await page.locator('body').waitFor({timeout:2000});
+     await page.waitForFunction(()=>!document.querySelector('[aria-busy="true"]'),null,{timeout:5000}).catch(()=>{});
+     await settle();
+     const again=(await readIds()).ids.filter(id=>!savedIds.has(id)),before=new Set(created),after=new Set(again);
+     const changed=[...created.filter(id=>!after.has(id)),...again.filter(id=>!before.has(id))];
+     evidence.idStability={checked:true,created:created.length,unstable:changed.length,sample:changed.slice(0,5)};
+    }
+   }catch(error){evidence.idStability={checked:false,skipped:'reload comparison skipped: '+String(error.message).split('\n')[0].slice(0,120)};}
+  }
   if(task){
    evidence.steps=true;
    // Name the steps-file call that failed or was still pending, so a bare Playwright timeout points at its line.
@@ -77,6 +97,8 @@ export async function inspectPage(page,options,task){
    const wide=fits?[]:[...html.ownerDocument.body.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>html.clientWidth+1&&!(e.parentElement&&e.parentElement!==html.ownerDocument.body&&e.parentElement.getBoundingClientRect().right>html.clientWidth+1));
    return {viewport:html.clientWidth,content,fits,...(wide.length?{culprits:wide.slice(0,3).map(e=>({element:name(e),right:Math.round(e.getBoundingClientRect().right)}))}:{})};
   },undefined,{timeout:1000});
+  // Duplicate data-af-id values in the live DOM (after any steps): comments and edits address elements by this ID.
+  evidence.ids=await page.locator('html').evaluate(html=>{const counts=new Map();for(const node of html.ownerDocument.querySelectorAll('[data-af-id]')){const id=node.getAttribute('data-af-id');if(id)counts.set(id,(counts.get(id)||0)+1);}const duplicated=[...counts].filter(([,count])=>count>1);return {total:counts.size,duplicates:duplicated.length,items:duplicated.slice(0,5).map(([id,count])=>({id,count}))};},undefined,{timeout:1000});
   // Text colour against its resolved solid background (WCAG ratio); agents without image input cannot see contrast.
   evidence.contrast=await page.locator('html').evaluate(()=>{
    const parse=v=>{const m=String(v).match(/rgba?\(([^)]+)\)/);if(!m)return null;const p=m[1].split(/[ ,/]+/).filter(Boolean).map(Number);return {r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1};};
@@ -136,13 +158,13 @@ export async function inspectPage(page,options,task){
  // Do not let page-close cancellation events mutate evidence already collected.
  return {...evidence,pageErrors:[...pageErrors],consoleErrors:[...consoleErrors],failedRequests:[...failedRequests],httpErrors:[...httpErrors],telemetry:[...telemetry]};
 }
-export function checkScript({target,viewports,steps='',timeoutMs=2500,capture=false}){
+export function checkScript({target,viewports,steps='',timeoutMs=2500,capture=false,compareReload=false}){
  if(!viewports||viewports.length!==1)throw Error('Each hosted execution checks one viewport.');
- return `const page=await context.newPage();try{return await (${inspectPage.toString()})(page,${JSON.stringify({target,viewport:viewports[0],timeoutMs,hosted:true,capture})},${steps?`async(page)=>{${steps}\n}`:'null'});}finally{await page.close();}`;
+ return `const page=await context.newPage();try{return await (${inspectPage.toString()})(page,${JSON.stringify({target,viewport:viewports[0],timeoutMs,hosted:true,capture,compareReload})},${steps?`async(page)=>{${steps}\n}`:'null'});}finally{await page.close();}`;
 }
 /** @returns {import('../../../lib/skills/author-toolbox-contract').AuthorCheckResult} */
 export function summarizeCheck(checks){
- return {smokePassed:checks.length>0&&checks.every(check=>!check.error&&!check.inspectionError&&check.overflow?.fits===true&&check.text.length>0&&!check.contrast?.unreadable&&['pageErrors','consoleErrors','failedRequests','httpErrors'].every(key=>check[key]?.length===0)),checks,
+ return {smokePassed:checks.length>0&&checks.every(check=>!check.error&&!check.inspectionError&&check.overflow?.fits===true&&check.text.length>0&&!check.contrast?.unreadable&&!check.ids?.duplicates&&['pageErrors','consoleErrors','failedRequests','httpErrors'].every(key=>check[key]?.length===0)),checks,
   unverified:['visual appearance','task behavior','persistence','permissions'],note:'Smoke evidence only. Inspect task results separately; text and geometry cannot establish visual acceptance.'};
 }
 function origin(value){const url=new URL(value);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw Error('Select a server origin.');return url.origin;}
@@ -164,7 +186,7 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
  async function inspectViewport(viewport){
   const session_id=randomUUID(),execution_id=randomUUID(),out=[];let accepted=false;
   try{
-   const body={op:'script',session_id,execution_id,create:true,code:checkScript({target,viewports:[viewport],steps,capture}),...(viewer?{viewer}:{})};
+   const body={op:'script',session_id,execution_id,create:true,code:checkScript({target,viewports:[viewport],steps,capture,compareReload:viewport===viewports[0]}),...(viewer?{viewer}:{})};
    let run;
    // Creating the session waits up to ~20 s for a free browser slot before reporting browser_busy.
    const submit=async()=>{for(let attempt=0;;attempt++){try{return await request(body);}catch(error){if(error?.code!=='browser_busy'||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}}};
@@ -194,7 +216,7 @@ export async function checkLocal({target,viewports,steps='',capture=false},chrom
   const context=await browser.newContext({serviceWorkers:'block'});
   await context.route('**/*',route=>{const url=new URL(route.request().url());return url.origin===selected.origin?route.continue():route.abort('blockedbyclient');});
   const checks=[];
-  for(const viewport of viewports){const page=await context.newPage();try{checks.push(await inspectPage(page,{target,viewport,capture},steps?new (Object.getPrototypeOf(async function(){}).constructor)('page',steps):null));}finally{await page.close();}}
+  for(const viewport of viewports){const page=await context.newPage();try{checks.push(await inspectPage(page,{target,viewport,capture,compareReload:viewport===viewports[0]},steps?new (Object.getPrototypeOf(async function(){}).constructor)('page',steps):null));}finally{await page.close();}}
   return summarizeCheck(checks);
  }finally{await browser.close();}
 }
