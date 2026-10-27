@@ -3,6 +3,7 @@ import {gzipSync} from 'node:zlib';
 import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
+import { PLATFORM_STYLES_PATH } from '../../html-systems';
 it('builds a classic bootstrap and a self-contained downloadable page', async () => {
   const {core,apollo,reader} = await buildHtmlAssets();
   expect(() => new Function(core)).not.toThrow();
@@ -143,4 +144,32 @@ it('installs shared offline modules in the core single import map and preserves 
  const maps=win.document.querySelectorAll('script[type="importmap"]');expect(maps).toHaveLength(1);expect(maps[0]!.getAttribute('nonce')).toBe('test-nonce-1234567890');const imports=JSON.parse(maps[0]!.textContent!).imports;
  expect(imports['@afbin/apollo']).toMatch(/^blob:/);expect(imports['@afbin/reader']).toMatch(/^blob:/);const shared=Object.entries(imports).filter(([key])=>key.startsWith('@afbin/offline/'));expect(shared).toHaveLength(1);
  win.dispatchEvent(new win.PageTransitionEvent('pagehide',{persisted:true}));expect(revoked).toEqual([]);win.dispatchEvent(new win.PageTransitionEvent('pagehide',{persisted:false}));expect(revoked).toEqual([shared[0]![1]]);dom.window.close();
+});
+
+it('links the platform stylesheet after the core and before authored styles, and tells the core the appearance (D3/D4)',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.systems).toContain(':root[data-af-design-system="redline"]');
+ const hosted=assembleHtmlPage({html:'<html data-af-dark="false"><head><meta name="artifactbin:design-system" content="nocturne"><style>h1{color:red}</style></head><body></body></html>',core:assets.core,systemsHref:PLATFORM_STYLES_PATH,config:{pageId:'p',revision:'1',backends:[]}});
+ const head=/<head>([\s\S]*)<\/head>/.exec(hosted)![1]!;
+ expect(head.indexOf('data-af="core"')).toBeLessThan(head.indexOf('data-af="platform-styles"'));
+ expect(head.indexOf(`href="${PLATFORM_STYLES_PATH}"`)).toBeLessThan(head.indexOf('<style>'));
+ expect(JSON.parse(/data-af="runtime">([\s\S]*?)<\/script>/.exec(hosted)![1]!).appearance).toEqual({designSystem:'nocturne',mode:'light'});
+ const owner=assembleHtmlPage({html:'<html><head><meta name="artifactbin:design-system" content="redline"></head><body></body></html>',core:assets.core,systemsHref:PLATFORM_STYLES_PATH,designSystem:'phosphor',config:{pageId:'p',revision:'1',backends:[]}});
+ expect(JSON.parse(/data-af="runtime">([\s\S]*?)<\/script>/.exec(owner)![1]!).appearance).toEqual({designSystem:'phosphor',mode:'dark'});
+ expect(assembleHtmlPage({html:'<html><head></head><body></body></html>',core:assets.core,systemsHref:PLATFORM_STYLES_PATH,config:{pageId:'p',revision:'1',backends:[]}})).not.toContain('platform-styles');
+ expect(downloadableHtml({html:'<html><body></body></html>',core:assets.core,apollo:assets.apollo,reader:assets.reader,systemsHref:PLATFORM_STYLES_PATH,config:{pageId:'p',revision:'1',backends:[]}})).not.toContain('platform-styles');
+});
+
+it('the core sets the platform attributes before authored code, with the viewer mode from ?mx-mode= winning',async()=>{
+ const {core}=await buildHtmlAssets();
+ const {JSDOM}=await import('jsdom');
+ const run=(url:string,appearance:unknown)=>{
+  const dom=new JSDOM(`<html data-af-design-system="old"><head><script type="application/json" data-af="runtime">${JSON.stringify({pageId:'p',revision:'1',backends:[],offline:true,appearance})}</script></head><body></body></html>`,{url,runScripts:'outside-only'});
+  try{dom.window.eval(core);}catch{/* later portable checks need a reader block; the attributes are set first */}
+  return dom.window.document.documentElement;
+ };
+ const root=run('https://p.example/',{designSystem:'nocturne',mode:'dark'});
+ expect(root.getAttribute('data-af-design-system')).toBe('nocturne');expect(root.getAttribute('data-af-dark')).toBe('true');
+ const viewer=run('https://p.example/?mx-mode=light',{designSystem:'nocturne',mode:'dark'});
+ expect(viewer.getAttribute('data-af-dark')).toBe('false');expect(viewer.style.colorScheme).toBe('light');
 });

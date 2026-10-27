@@ -3,6 +3,7 @@ import {build} from 'esbuild';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import type {HtmlRuntimeAssets} from './contract';
+import {htmlSystemsCss} from '../html-systems';
 let assets:Promise<HtmlRuntimeAssets>|undefined;
 /** Build immutable code once. Page configuration is supplied only by assembly. */
 export function buildHtmlAssets():Promise<HtmlRuntimeAssets>{return assets??=compile().catch(error=>{assets=undefined;throw error;});}
@@ -30,6 +31,9 @@ import {startNativeHtmlTableScroll} from ${JSON.stringify(fileURLToPath(new URL(
 const platformNonce=document.currentScript?.nonce;
 const supplied=document.querySelector('[data-af="runtime"]');
 const config=supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};
+// D4: the platform owns <html data-af-design-system / data-af-dark>; set both before first paint. The viewer's choice
+// arrives as ?mx-mode= (the reader adds it to the frame URL) and later as reader messages; page code only reads them.
+const look=config.appearance;if(look&&typeof look==='object'){const root=document.documentElement;if(typeof look.designSystem==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(look.designSystem))root.setAttribute('data-af-design-system',look.designSystem);let mode=look.mode==='dark'?'dark':'light';try{const asked=new URLSearchParams(location.search).get('mx-mode');if(asked==='dark'||asked==='light')mode=asked;}catch{}root.setAttribute('data-af-dark',mode==='dark'?'true':'false');root.style.colorScheme=mode;}
 startNativeHtmlTableScroll(document);
 const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
 const portableReader=document.querySelector('[data-af="reader"]');
@@ -55,5 +59,5 @@ if(config.offline&&window.parent===window){void import(reader).then(module=>modu
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');
- return {core:core.outputFiles[0].text,apollo,apolloPath,reader:readerSource,readerPath,chrome,chromePath,portableEngine,portableEnginePath,morph,morphPath};
+ return {core:core.outputFiles[0].text,systems:htmlSystemsCss(),apollo,apolloPath,reader:readerSource,readerPath,chrome,chromePath,portableEngine,portableEnginePath,morph,morphPath};
 }

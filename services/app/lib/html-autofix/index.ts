@@ -1,13 +1,16 @@
 /**
- * THE ONE AUTOFIX PASS for Artifactbin HTML pages: every entry point (publish, local serve, the autofix script, the
- * server's canonical path) runs these rules, so a platform-owned piece behaves the same whether the author wrote it,
- * wrote it wrong, or left it out. Pure: source in, source out, with source-offset edits (lib/html-page/html-source) so
- * author bytes outside a fix never change and the same input always yields byte-identical output.
+ * THE ONE AUTOFIX PASS for Artifactbin HTML pages: the skill's entry points (publish.mjs, serve.mjs / the local preview,
+ * autofix.mjs, check.mjs's findings) run these rules, so a platform-owned piece behaves the same whether the author
+ * wrote it, wrote it wrong, or left it out. The server does not run this pass; its canonicalizeHtmlPage (lib/html-page)
+ * applies the same core-script and design-selection rules itself, so pages published through the HTTP API end up the
+ * same. Pure: source in, source out, with source-offset edits (lib/html-page/html-source) so author bytes outside a fix
+ * never change and the same input always yields byte-identical output.
  *
  *  FIXED   core-script  a hand-written core script misplaced, duplicated, async/defer/typed → exactly what the server expects
  *          charset      missing <meta charset> → <meta charset="utf-8"> first in <head>
  *          viewport     missing viewport meta → width=device-width, initial-scale=1
- *          design-system-meta  (D2, OFF: DESIGN_SYSTEM_META) design selection moved from <html> attributes to a head meta
+ *          design-system-meta  (D2) data-af-design-system / data-af-dark on <html> → the artifactbin:design-system meta
+ *          design-system-link  a copied <link data-af="design-system"> → removed; the platform stylesheet carries every system
  *  REFUSED script-syntax        an inline script or JSON block that does not parse, at its HTML-file line
  *          duplicate-data-af-id two elements with one identity (the server refuses these too)
  *          duplicate-id         two elements with one HTML id
@@ -19,17 +22,12 @@ import {parse as parseJs} from 'acorn';
 import {initSync,parse as parseImports} from 'es-module-lexer';
 // Explicit .ts specifiers: the skill scripts load this module directly under Node in a source checkout (preview-html.mjs).
 import {sha256Hex} from '@artifactbin/utils/sha256';
-import {applyEdits,atHeadStart,attribute,parseSource,type Edit,type Element} from '../html-page/html-source.ts';
+import {applyEdits,atHeadStart,attribute,parseSource,type Element} from '../html-page/html-source.ts';
 import {repairCoreScript} from '../html-page/index.ts';
+import {normalizeDesignSelection} from '../html-page/design-system.ts';
 initSync();
 
-/**
- * D2 is prepared but disabled: design-system CSS selects `:root[data-af-design-system="NAME"]`, so moving the value
- * off <html> would unstyle pages until the platform sets that attribute from the meta. Flip only with that change.
- */
-const DESIGN_SYSTEM_META = false;
-
-type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta';
+type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link';
 type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
@@ -37,7 +35,6 @@ interface AutofixProblem { rule: AutofixProblemRule; line: number; column: numbe
 export interface AutofixOptions {
   /** Whether a local reference exists, given its path relative to the HTML file (normalized, no query/hash). */
   exists?: (relativePath: string) => boolean;
-  rules?: { designSystemMeta?: boolean };
 }
 /** `routine` names platform-owned pieces added because they were missing (not author mistakes). */
 export interface AutofixResult { html: string; changed: boolean; fixes: AutofixFix[]; problems: AutofixProblem[]; routine: string[] }
@@ -54,7 +51,6 @@ const inHead = (element: Element, head: Element | null): boolean => { for (let a
 
 const CHARSET = '<meta charset="utf-8">';
 const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
-const DESIGN_META = (name: string) => `<meta name="artifactbin:design-system" content="${name.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}">`;
 
 /** Apply every fix rule, then report every refusal against the fixed source (its lines are what the author will see). */
 export function autofixHtml(input: string, options: AutofixOptions = {}): AutofixResult {
@@ -87,25 +83,14 @@ export function autofixHtml(input: string, options: AutofixOptions = {}): Autofi
     if (!hasViewport) pending.push({ rule: 'viewport', reason: 'missing; phones would render a desktop-width page', before: [], inserted: [VIEWPORT] });
   }
 
-  // 3. D2 (disabled by default): design selection as head metadata rather than <html> attributes.
-  if (options.rules?.designSystemMeta ?? DESIGN_SYSTEM_META) {
-    document = parseSource(html);
-    const root = document.html;
-    const dark = root ? root.sourceCodeLocation?.attrs?.['data-af-dark'] : undefined;
-    const design = root ? root.sourceCodeLocation?.attrs?.['data-af-design-system'] : undefined;
-    if (root && (dark || design)) {
-      const name = attribute(root, 'data-af-design-system');
-      const hasMeta = document.elements.some((el) => el.tagName === 'meta' && attribute(el, 'name') === 'artifactbin:design-system');
-      const before = startTag(html, root);
-      const edits: Edit[] = [dark, design].filter((at): at is NonNullable<typeof at> => !!at).map((at) => {
-        let start = at.startOffset; while (start > 0 && /\s/.test(html[start - 1]!)) start--;
-        return { start, end: at.endOffset, text: '' };
-      });
-      const inserted = name && !hasMeta ? [DESIGN_META(name)] : [];
-      if (inserted.length) edits.push(atHeadStart(document, inserted));
-      html = applyEdits(html, edits);
-      pending.push({ rule: 'design-system-meta', reason: 'design selection belongs in head metadata', before: [{ line: lineOf(input, parseSource(input).html ?? root), text: before }], inserted: [...inserted, startTag(html, parseSource(html).html!)] });
-    }
+  // 3. D2: design selection is head metadata; the platform owns the <html> attributes and the system stylesheet.
+  const design = normalizeDesignSelection(html);
+  if (design.changed) {
+    html = design.html;
+    const root = parseSource(html).html;
+    if (design.rootBefore) pending.push({ rule: 'design-system-meta', reason: 'the platform sets <html> design attributes; the page names its system in head metadata', before: [design.rootBefore], inserted: [...(design.insertedMeta ? [design.insertedMeta] : []), root ? startTag(html, root) : ''] });
+    else if (design.insertedMeta) pending.push({ rule: 'design-system-meta', reason: 'the copied stylesheet named the system; head metadata names it now', before: [], inserted: [design.insertedMeta] });
+    if (design.removedLinks.length) pending.push({ rule: 'design-system-link', reason: 'the platform adds the design-system stylesheet and fonts; no copy is uploaded', before: design.removedLinks, inserted: [] });
   }
 
   for (const fix of pending) fixes.push({ rule: fix.rule, reason: fix.reason, before: fix.before, after: fix.inserted.filter(Boolean).map((text) => placed(html, text)) });

@@ -11,6 +11,9 @@ import { POST } from '@/app/api/artifacts/route';
 import { GET as read, PUT } from '@/app/api/artifacts/[id]/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as download } from '@/app/a/[id]/download/route';
+import { GET as systemsSheet, HEAD as systemsHead } from '@/app/af/styles.css/route';
+import { PLATFORM_STYLES_PATH } from '@/lib/html-systems';
+import { buildHtmlAssets } from '@/lib/html-runtime/build.server';
 import { artifactPageAnswer, framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
 useAppHarness();
@@ -175,4 +178,35 @@ it('keeps agent instructions in the native start shell until the first content r
  const head=await(await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id))).json();
  const saved=await PUT(request(`/api/artifacts/${id}`,{method:'PUT',token:actor.token,json:{html:source,expectedVersion:head.version,expectedState:head.state}}),params(id));expect(saved.status).toBe(200);
  const next=await artifactPageAnswer(view(),id,{pages:site});expect(next.body).toMatchObject({surface:{starter:false}});expect(next.frame).toBeDefined();
+});
+
+it('links the platform stylesheet at its one stable address before authored styles and serves it to the page origin (D3)',async()=>{
+ const actor=await mintAccountToken('native-platform-sheet');
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:source.replace('<title>Native plan</title>','<title>Native plan</title><meta name="artifactbin:design-system" content="redline">'),visibility:'private'}}));
+ const id=(await created.json()).id as string;
+ const plain=await publish();
+ expect(await (await raw(request(`/a/${plain.id}/raw`,{token:plain.actor.token}),params(plain.id))).text()).not.toContain('platform-styles');
+ const assets=await buildHtmlAssets();
+ const response=await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id));
+ expect(response.headers.get('content-security-policy')).toContain(PLATFORM_STYLES_PATH);
+ expect(response.headers.get('content-security-policy')).toMatch(/font-src [^;]*\/fonts\//);
+ const doc=new JSDOM(await response.text()).window.document;
+ expect(doc.querySelector('link[data-af="platform-styles"]')!.getAttribute('href')).toBe('/af/styles.css');
+ // One stable address, no version or hash: revalidated by its strong content ETag, so a deploy shows on the next load.
+ const sheet=await systemsSheet(request(PLATFORM_STYLES_PATH));
+ expect(sheet.status).toBe(200);expect(sheet.headers.get('content-type')).toMatch(/^text\/css/);
+ expect(sheet.headers.get('cache-control')).toBe('no-cache');expect(await sheet.text()).toBe(assets.systems);
+ const tag=sheet.headers.get('etag')!;expect(tag).toMatch(/^"[a-f0-9]{64}"$/);
+ const held=await systemsSheet(request(PLATFORM_STYLES_PATH,{headers:{'if-none-match':tag}}));expect(held.status).toBe(304);expect(await held.text()).toBe('');
+ const head=await systemsHead(request(PLATFORM_STYLES_PATH,{method:'HEAD'}));expect(head.status).toBe(200);expect(head.headers.get('etag')).toBe(tag);expect(await head.text()).toBe('');
+ expect((await systemsSheet(request(PLATFORM_STYLES_PATH,{headers:{'if-none-match':'"stale"'}}))).status).toBe(200);
+});
+it('publishing through the HTTP API stores the design system as head metadata (D2 on the server)',async()=>{
+ const actor=await mintAccountToken('native-d2');
+ const html='<!doctype html><html data-af-design-system="riso" data-af-dark="true"><head><title>D2</title><link data-af="design-system" rel="stylesheet" href="https://example.test/riso.css"></head><body><p>x</p></body></html>';
+ const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html,visibility:'private'}}));
+ expect(response.status,await response.clone().text()).toBe(201);
+ const stored=(await artifacts.getArtifactById((await response.json()).id))!.source!;
+ expect(stored).toContain('<meta name="artifactbin:design-system" content="riso"');
+ expect(stored).not.toMatch(/data-af-dark|data-af-design-system=|data-af="design-system"/);
 });

@@ -656,7 +656,8 @@ try {
               await document.fonts.ready;
               return {
                 system: document.documentElement.dataset.afDesignSystem,
-                css: !!document.querySelector('style[data-af="design-system"]') || !!document.querySelector('link[data-af="design-system"]')?.sheet,
+                // The platform stylesheet carries every system; the core sets the attribute from the page's meta.
+                css: !!document.querySelector('link[data-af="platform-styles"]')?.sheet,
                 family: getComputedStyle(document.querySelector("h1"))
                   .fontFamily,
                 faces: [...document.fonts].length,
@@ -668,7 +669,7 @@ try {
             });
             check(
               result.system === theme.name && result.css,
-              `${theme.name} ${surface} preserves authored system/CSS`,
+              `${theme.name} ${surface} applies its design system through the platform stylesheet`,
             );
             check(
               result.faces > 0 &&
