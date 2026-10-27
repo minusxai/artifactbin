@@ -125,11 +125,12 @@ describe('page-speed fixtures', () => {
     const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
     expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
     expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
-    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen']);
+    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen', 'system']);
+    expect(bodies.find(body => body.title === 'Perf H design system').html).toContain('<meta name="artifactbin:design-system" content="almanac">');
     for(const body of bodies.filter(body=>body.html)){
       expect(body.html).toMatch(/^<!doctype html>/i);
       expect(body).not.toHaveProperty('markup');
-      expect(body.html).toContain('/af/v1/core.js');
+      expect(body.html).toContain('/af/core.js');
       expect(body.html).not.toContain('{{sales}}');
     }
     const dashboard=bodies.find(body=>body.title==='Perf C dashboard');

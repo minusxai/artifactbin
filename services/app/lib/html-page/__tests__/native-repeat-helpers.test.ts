@@ -7,7 +7,7 @@ import {canonicalizeHtmlPage} from '../index';
  * custom table cells. The template element itself is not cloned into a row. */
 describe('canonical native repeat helper composition',()=>{
  const sourceButton='source-choice',helpers=['helper-trigger','helper-contents'];
- const source=(identified:boolean)=>`<!doctype html><html><head><script src="/af/v1/core.js"></script></head><body><div data-af-id="repeat"></div><template id="row"><span data-af-id="condition"></span></template><template id="condition-body"><span${identified?' data-af-id="helper-trigger"':''} class="inline-flex"><span${identified?' data-af-id="helper-contents"':''} style="display:contents"><button data-af-id="source-choice" type="button" disabled aria-label="Choose">Choose</button></span></span></template></body></html>`;
+ const source=(identified:boolean)=>`<!doctype html><html><head><script src="/af/core.js"></script></head><body><div data-af-id="repeat"></div><template id="row"><span data-af-id="condition"></span></template><template id="condition-body"><span${identified?' data-af-id="helper-trigger"':''} class="inline-flex"><span${identified?' data-af-id="helper-contents"':''} style="display:contents"><button data-af-id="source-choice" type="button" disabled aria-label="Choose">Choose</button></span></span></template></body></html>`;
  function clone(html:string,templateId:string,planned:readonly string[],row:string){
   const document=new JSDOM(html).window.document,template=document.getElementById(templateId) as HTMLTemplateElement;
   const fragment=template.content.cloneNode(true) as DocumentFragment;

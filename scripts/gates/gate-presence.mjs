@@ -29,7 +29,7 @@ try{
  await Promise.all([loginViaEmail(owner,BASE,sink,email),loginViaEmail(other,BASE,sink,`mxmx_test_presence_peer_${stamp}@example.com`)]);
  const connection=await connectAgent(BASE,{email});
  if(await mergeGuestIntoAccount(owner,BASE,connection.token)!==200)throw new Error('Owner connection adoption failed');
- const published=await fetch(`${BASE}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${connection.token}`},body:JSON.stringify({visibility:'public',html:'<!doctype html><html><head><title>Presence proof</title><script data-af="core" src="/af/v1/core.js"></script></head><body style="padding:80px;font:20px sans-serif"><p data-af-id="words">Shared reader selection stays native.</p><input data-af-id="private" value="viewer secret"></body></html>'})});
+ const published=await fetch(`${BASE}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${connection.token}`},body:JSON.stringify({visibility:'public',html:'<!doctype html><html><head><title>Presence proof</title><script data-af="core" src="/af/core.js"></script></head><body style="padding:80px;font:20px sans-serif"><p data-af-id="words">Shared reader selection stays native.</p><input data-af-id="private" value="viewer secret"></body></html>'})});
  if(!published.ok)throw new Error(`publish ${published.status}`);const doc=await published.json();
  await Promise.all([owner,other,guest].map(page=>page.goto(`${BASE}/a/${doc.id}`,{waitUntil:'load'})));
  const [ownFrame,peerFrame,guestFrame]=await Promise.all([owner,other,guest].map(frame));

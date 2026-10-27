@@ -7,7 +7,8 @@ import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { etagOf, matchingTag } from '@/lib/http/revalidation';
+import { etagOf, matchingTag, publicRevalidatedResponse } from '@/lib/http/revalidation';
+const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
@@ -18,7 +19,7 @@ import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styl
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import { ASSETS_ORIGIN } from '@/lib/platform';
-import { PLATFORM_STYLES_PATH } from '@/lib/html-systems';
+import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH } from '@/lib/html-systems';
 import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
@@ -60,7 +61,7 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
-    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL('/fonts/',base).href}`),extensions);
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
@@ -86,21 +87,25 @@ export function nativeHtmlRuntimeIdentity(): Promise<string> {
   }).catch(error => { coreIdentity = undefined; throw error; });
 }
 
-/** Public code only: no page, viewer, cookie or credential is an input to these bytes. */
+/** Public code only: no page, viewer, cookie or credential is an input to these bytes. /af/core.js and its /af/v1 alias. */
 export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
- const source=await htmlCore(),etag=etagOf({core:source});
- const headers:Record<string,string>={'content-type':'application/javascript; charset=utf-8','cache-control':'public, max-age=0, must-revalidate','etag':etag,'x-content-type-options':'nosniff','access-control-allow-origin':'*'};
- if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
- headers['content-length']=String(new TextEncoder().encode(source).byteLength);
- return new Response(request.method==='HEAD'?null:source,{headers});
+ return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A content-addressed author engine, fetched only when authored code imports it. */
+/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js), always this build's bytes. */
+export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph';
+export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
+ const source=(await htmlAssets())[module];
+ if(!source)return new Response('Not found',{status:404});
+ return publicRevalidatedResponse(request,source,JS);
+}
+
+/** The pre-D17 content-addressed alias (/af/v1/apollo|reader/<sha256>): exact retained bytes, so pages opened before a deploy keep loading. */
 export async function nativeHtmlApolloResponse(request:Request,digest:string):Promise<Response>{
  await htmlAssets();
  const source=await retention!.read(digest);
  if(source===null)return new Response('Not found',{status:404});
- const headers={'content-type':'application/javascript; charset=utf-8','cache-control':'public, max-age=31536000, immutable','access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
+ const headers={'content-type':JS,'cache-control':'public, max-age=31536000, immutable','access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
  if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
  return new Response(request.method==='HEAD'?null:source,{headers});
 }
@@ -109,13 +114,8 @@ export async function nativeHtmlApolloResponse(request:Request,digest:string):Pr
 export async function nativeHtmlReaderResponse(request:Request,digest:string):Promise<Response>{return nativeHtmlApolloResponse(request,digest);}
 
 /** The platform stylesheet (lib/html-systems) at its one stable address: public, revalidated on every load by its content hash. */
-let systemsTag:string|undefined;
 export async function nativeHtmlSystemsResponse(request:Request):Promise<Response>{
  const {systems}=await htmlAssets();
  if(!systems)return new Response('Not found',{status:404});
- const etag=systemsTag??=`"${createHash('sha256').update(systems).digest('hex')}"`;
- const headers:Record<string,string>={'content-type':'text/css; charset=utf-8','cache-control':'no-cache','etag':etag,'access-control-allow-origin':'*','x-content-type-options':'nosniff'};
- if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
- headers['content-length']=String(new TextEncoder().encode(systems).byteLength);
- return new Response(request.method==='HEAD'?null:systems,{headers});
+ return publicRevalidatedResponse(request,systems,'text/css; charset=utf-8');
 }

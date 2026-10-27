@@ -54,7 +54,7 @@ const check = createChecker('reader-shell');
 const ts = Date.now().toString(36);
 
 const section = createSection(check);
-const htmlPage = (body, title = 'Gate page', head = '') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/v1/core.js"></script>${head}</head><body>${body}</body></html>`;
+const htmlPage = (body, title = 'Gate page', head = '') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/core.js"></script>${head}</head><body>${body}</body></html>`;
 
 const sink = await startMailSink();
 const browser = await launchChromium();

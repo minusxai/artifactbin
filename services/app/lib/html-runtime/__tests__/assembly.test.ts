@@ -18,8 +18,8 @@ it('captures authored initial state before the first head script executes', () =
 });
 
 it('replaces the canonical core loader while retaining its stable node identity', () => {
-  const result = assembleHtmlPage({ html: '<html><head><script src="/af/v1/core.js" data-af-id="n1"></script></head><body></body></html>', core: 'core()', config: { pageId: 'a', revision: '1', backends: [] }, offline: true });
-  expect(result).not.toContain('src="/af/v1/core.js"');
+  const result = assembleHtmlPage({ html: '<html><head><script src="/af/core.js" data-af-id="n1"></script></head><body></body></html>', core: 'core()', config: { pageId: 'a', revision: '1', backends: [] }, offline: true });
+  expect(result).not.toContain('src="/af/core.js"');
   expect(result).toContain('data-af="core" data-af-id="n1"');
   expect(result.match(/core\(\)/g)).toHaveLength(1);
 });

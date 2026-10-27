@@ -43,6 +43,8 @@ export function reportMarkdown(base, head) {
     lines.push('Interactive fixtures wait for their authored ready marker, not only bridge admission. JS before ready includes executable inline script bodies, attributed at standalone gzip size. Those bytes are already in HTML transfer and are never added again to total transferred bytes. Blob scripts are not network transfers.', '');
     lines.push(documentViewsMarkdown(head.documents.summary, base.documents?.summary ?? {}), '');
   }
+  const sheet = head.stylesheetRevalidation;
+  if (sheet) lines.push('### Platform stylesheet revalidation', '', `\`/af/styles.css\` (${sheet.cacheControl}) on repeat views of the design-system fixture: statuses ${sheet.repeatStatuses.join(', ') || 'none'}, median ${sheet.repeatMedianMs === null ? '?' : sheet.repeatMedianMs.toFixed(1)} ms; direct conditional GET ${sheet.directStatuses.join('/')} in ${sheet.directMedianMs === null ? '?' : sheet.directMedianMs.toFixed(1)} ms median.`, '');
   const headLoads = loadsSummary(head), baseLoads = loadsSummary(base);
   if (sizeOnly) return lines.join('\n') + '\n';
   lines.push('### App loads', '', `Signed-in home and anonymous prose reader, ${head.conditions?.repetitions ?? '?'} runs each. Useful: the first frame with the content.`, '');

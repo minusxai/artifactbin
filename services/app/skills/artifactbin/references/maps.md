@@ -25,7 +25,7 @@ This example uses inline records and a native `MapView`, so it makes no tile or 
 </table>
 <p id="map-status" data-af-id="sample-map-status" role="status" hidden></p>
 <script type="application/json" data-af="state">{"mapView":{"longitude":-98,"latitude":39,"zoom":3.2,"pitch":0,"bearing":0}}</script>
-<script src="/af/v1/core.js" data-af="core"></script>
+<script src="/af/core.js" data-af="core"></script>
 <script type="module">
 const host = document.querySelector("#map");
 const status = document.querySelector("#map-status");

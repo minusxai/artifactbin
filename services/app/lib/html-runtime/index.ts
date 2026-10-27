@@ -1,3 +1,4 @@
+import {isRuntimeCoreSrc} from '../html-page/core-script';
 import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies/contracts';
 import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {portableRenderedDigest} from './portable-source';
@@ -22,7 +23,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     if (!('childNodes' in node)) return;
     node.childNodes = node.childNodes.filter((child) => {
       if ('attrs' in child && child.nodeName === 'meta' && child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY)) return false;
-      if ('attrs' in child && child.nodeName === 'script' && child.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core' || attr.name === 'src' && attr.value === '/af/v1/core.js')) { coreId ??= child.attrs.find((attr) => attr.name === 'data-af-id')?.value; return false; }
+      if ('attrs' in child && child.nodeName === 'script' && child.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core' || attr.name === 'src' && isRuntimeCoreSrc(attr.value))) { coreId ??= child.attrs.find((attr) => attr.name === 'data-af-id')?.value; return false; }
       removeCore(child); return true;
     });
   };

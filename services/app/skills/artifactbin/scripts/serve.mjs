@@ -10,7 +10,7 @@ Examples:
   node scripts/check.mjs http://127.0.0.1:7474/ --viewport 1280x800 --steps acceptance.mjs --output qa.json
 Gotchas:
   - Use a dedicated directory of intended files only: dotfiles, listings, traversal and outside symlinks are refused.
-  - Keep the normal core script tag; /af/v1/core.js loads locally. A restrictive CSP blocks remote subresources,
+  - Keep the normal core script tag; /af/core.js loads locally. A restrictive CSP blocks remote subresources,
     connections, frames and workers, so copy libraries and fonts locally; ref: assets need local files. It is not a
     sandbox for hostile pages (use OS isolation) and does not run publication validation.
   - Edits on disk show "File changed - Reload" (the project is polled every 1.5 s); the running page is never patched.

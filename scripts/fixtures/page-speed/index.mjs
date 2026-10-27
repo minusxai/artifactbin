@@ -12,6 +12,9 @@ export const PAGE_SPEED_FIXTURES = [
  {key:'mermaid',title:'Perf E mermaid',painted:{diagrams:1}},
  {key:'mermaid-industry',title:'Perf F mermaid, industry theme',painted:{diagrams:1}},
  {key:'kitchen',title:'Perf G kitchen sink',painted:{charts:1},authorReady:true},
+ // Names a design system, so the reader links the platform stylesheet (/af/styles.css) and its /af/fonts/ faces;
+ // performance-loads.mjs measures that stylesheet's ETag revalidation on a repeat view.
+ {key:'system',title:'Perf H design system',painted:null},
 ];
 export async function publishPageSpeedFixtures(publish,visibility='unlisted') {
  const csv=read('sales.csv');

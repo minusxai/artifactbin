@@ -1,3 +1,4 @@
+import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from '../html-page/core-script';
 import {INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
@@ -15,7 +16,7 @@ export function recoverPortableRendering(fileBytes:string):string {
    if(!location)throw new Error('Portable bootstrap has no source location');
    const core=node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core');
    const id=node.attrs.find(attr=>attr.name==='data-af-id')?.value;
-   spans.push({start:location.startOffset,end:location.endOffset,replacement:core?`<script src="/af/v1/core.js"${id?` data-af-id="${id.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:''}></script>`:''});
+   spans.push({start:location.startOffset,end:location.endOffset,replacement:core?`<script src="${RUNTIME_CORE_PATH}"${id?` data-af-id="${id.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:''}></script>`:''});
   }
   if('childNodes' in node)for(const child of node.childNodes)walk(child);
  };
@@ -27,7 +28,7 @@ export function recoverPortableRendering(fileBytes:string):string {
 /** Compare normalized parser output while ignoring only the replaceable core loader. */
 export function portableRenderedDigest(html:string):string {
  const doc=parse(html);
- const clean=(node:DefaultTreeAdapterMap['node'])=>{if('childNodes' in node){node.childNodes=node.childNodes.filter(child=>!('attrs' in child&&(child.nodeName==='script'||child.nodeName==='meta'&&child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY))&&child.attrs.some(attr=>attr.name==='src'&&attr.value==='/af/v1/core.js'||attr.name==='data-af'&&(attr.value==='core'||attr.value===INLINE_SCRIPT_POLICY))));for(const child of node.childNodes)clean(child);}};
+ const clean=(node:DefaultTreeAdapterMap['node'])=>{if('childNodes' in node){node.childNodes=node.childNodes.filter(child=>!('attrs' in child&&(child.nodeName==='script'||child.nodeName==='meta'&&child.attrs.some(attr=>attr.name==='data-af'&&attr.value===INLINE_SCRIPT_POLICY))&&child.attrs.some(attr=>attr.name==='src'&&isRuntimeCoreSrc(attr.value)||attr.name==='data-af'&&(attr.value==='core'||attr.value===INLINE_SCRIPT_POLICY))));for(const child of node.childNodes)clean(child);}};
  clean(doc);return sha256Hex(serialize(doc));
 }
 export function recoverPortableSource(fileBytes:string):string {

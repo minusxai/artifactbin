@@ -1,11 +1,15 @@
 import type {HtmlRuntimeAssets} from './contract';
 import type {RuntimeAssetRetention,RuntimeAssetStore} from './asset-retention-contract';
-/** Release-independent public code, verified by its requested content address. */
+/**
+ * Release-independent public code behind the pre-D17 content addresses (/af/v1/apollo|reader/<sha256>). Pages opened
+ * before a deploy carry import maps naming those digests; the store keeps serving them the exact bytes. Current pages
+ * use the flat /af/*.js addresses (contract RUNTIME_MODULE_PATHS); the current build is stored too, so every /af/v1 alias
+ * answers from one place.
+ */
 export function createRuntimeAssetRetention(current:HtmlRuntimeAssets,store:RuntimeAssetStore,hash:(source:string)=>string):RuntimeAssetRetention {
  let persisted:Promise<HtmlRuntimeAssets>|undefined;
- const modules=[...(current.portableEngine&&current.portableEnginePath?[{source:current.portableEngine,path:current.portableEnginePath,prefix:'reader'}]:[]),{source:current.apollo,path:current.apolloPath,prefix:'apollo'},{source:current.reader,path:current.readerPath,prefix:'reader'},...(current.chrome&&current.chromePath?[{source:current.chrome,path:current.chromePath,prefix:'reader'}]:[]),...(current.morph&&current.morphPath?[{source:current.morph,path:current.morphPath,prefix:'reader'}]:[])].map(module=>({...module,digest:hash(module.source)}));
+ const modules=[current.portableEngine,current.apollo,current.reader,current.chrome,current.morph].filter((source):source is string=>!!source).map(source=>({source,digest:hash(source)}));
  const expose=()=>persisted??=(async()=>{
-  for(const module of modules)if(module.path!==`/af/v1/${module.prefix}/${module.digest}`)throw Error('Runtime asset digest mismatch');
   await Promise.all(modules.map(module=>store.put(module.digest,module.source)));
   return current;
  })().catch(error=>{persisted=undefined;throw error;});

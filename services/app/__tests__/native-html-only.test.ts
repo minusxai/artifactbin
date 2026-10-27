@@ -33,7 +33,7 @@ it('creates every New artifact choice as private native HTML through the origina
  const user=await createUser({email:'mxmx_test_native_starters@example.com'});const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
  for(const {template} of ARTIFACT_STARTERS){
   const response=await browserCreate(request('/api/my/artifacts',{method:'POST',actor,json:artifactStarter(template)}));expect(response.status).toBe(201);const saved=await response.json();
-  const db=await harness.db();const row=(await db.query<{format:string;source:string;user_id:string;visibility:string}>('SELECT format,source,user_id,visibility FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/v1/core.js');expect(row?.source).not.toMatch(/<Markdown|className=|<Helmet/);expect(row?.user_id).toBe(user.id);expect(row?.visibility).toBe('private');
+  const db=await harness.db();const row=(await db.query<{format:string;source:string;user_id:string;visibility:string}>('SELECT format,source,user_id,visibility FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/core.js');expect(row?.source).not.toMatch(/<Markdown|className=|<Helmet/);expect(row?.user_id).toBe(user.id);expect(row?.visibility).toBe('private');
  }
 });
 it('preserves original dataset and byte-file publication beside native pages',async()=>{
@@ -46,5 +46,5 @@ it('preserves original dataset and byte-file publication beside native pages',as
 it('starts the original handoff flow with a native HTML document',async()=>{
  const user=await createUser({email:'mxmx_test_native_handoff@example.com'});const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
  const response=await start(request('/api/start',{method:'POST',actor,json:{}}));expect(response.status).toBe(201);const saved=await response.json();
- const db=await harness.db();const row=(await db.query<{format:string;source:string}>('SELECT format,source FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/v1/core.js');expect(saved.url).toContain(`/a/${saved.id}`);expect(saved).not.toHaveProperty('token');
+ const db=await harness.db();const row=(await db.query<{format:string;source:string}>('SELECT format,source FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.format).toBe('html');expect(row?.source).toContain('/af/core.js');expect(saved.url).toContain(`/a/${saved.id}`);expect(saved).not.toHaveProperty('token');
 });

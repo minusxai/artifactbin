@@ -1,11 +1,13 @@
 import type { Server } from 'node:http';
-/** Read-only, loopback-only preview. No account or remote service configuration. */
+/** Read-only, loopback-only preview. No account; the only remote request is a platform font file (fontOrigin). */
 export interface PreviewOptions {
   root: string;
   /** Zero chooses a free port. */
   port?: number;
-  /** Optional prebuilt public core/module assets, mounted at /af/v1/. */
+  /** Optional prebuilt public core/module assets, mounted at /af/. */
   runtimeDir?: string;
+  /** Origin whose /af/fonts/ supplies platform fonts a source checkout lacks; defaults to the archive's selected server, null for none. */
+  fontOrigin?: string | null;
   /** Trusted source-owned pinned browser modules; never read from page markup. */
   libraryAssets?: Readonly<Record<string,string>>;
   /** Short shared content-scan cache; tests may set zero. */
@@ -30,7 +32,7 @@ export declare function createRevisionSource(root: string, options?: { now?: () 
  * Mutations affect memory only; export is an explicit JSON download.
  */
 export interface PreviewLocalDatasetConfig { endpoint: string; schema: unknown }
-/** Exact code-only runtime admission, validated against each content-addressed path. */
+/** Exact code-only runtime admission at the flat /af/ addresses the build names. */
 export declare function runtimeAssetManifest(assets: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string>;
 export declare function libraryAssetManifest(assets: Readonly<Record<string,string>>): ReadonlyMap<string,string>;
 /** Explicit local Save reads selected-root bytes only. The canonical HTML stays

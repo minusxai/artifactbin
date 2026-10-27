@@ -18,4 +18,4 @@ export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { REPO_URL } from './repo';
 export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap';
 
-export { nativeHtmlCoreResponse,nativeHtmlApolloResponse,nativeHtmlReaderResponse,nativeHtmlSystemsResponse } from './native-html.server';
+export { nativeHtmlCoreResponse,nativeHtmlModuleResponse,nativeHtmlApolloResponse,nativeHtmlReaderResponse,nativeHtmlSystemsResponse } from './native-html.server';

@@ -62,19 +62,16 @@ describe('native author resources',()=>{
  });
 });
 
-it('prepares an installed design-system stylesheet with its complete ../fonts graph',async()=>{
+it('prepares an installed design-system stylesheet whose fonts stay on the platform /af/fonts/ addresses',async()=>{
  const archive=new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
  const installed=await installGateSkill(archive,BASE);
  try{
+  expect([...installed.files.keys()].some(name=>name.startsWith('fonts/'))).toBe(false);
   const sheet=Buffer.from(installed.files.get('design-systems/almanac.css')).toString();
-  const html=`<!doctype html><html><head><link data-af="design-system" rel="stylesheet" href="./almanac.css"></head><body><h1>Local font graph</h1></body></html>`;
+  const refs=[...sheet.matchAll(/url\(['"]?([^)'"\s]+\.woff2)['"]?\)/g)].map(match=>match[1]);
+  expect(refs.length).toBeGreaterThan(0);for(const ref of refs)expect(ref).toMatch(/^\/af\/fonts\/[a-z0-9-]+\.woff2$/);
+  const html=`<!doctype html><html><head><link data-af="design-system" rel="stylesheet" href="./almanac.css"></head><body><h1>Platform fonts</h1></body></html>`;
   const prepared=await installed.prepare(html,'design-systems/gate-almanac.html');
-  const files=prepared.body.publicationBundle.files;
-  const names=files.map(file=>file.path);
-  const refs=[...sheet.matchAll(/url\(['"]?([^)'"\s]+\.woff2)['"]?\)/g)].map(match=>path.posix.normalize(path.posix.join('design-systems',match[1])));
-  expect(refs.length).toBeGreaterThan(0);expect(names).toEqual(expect.arrayContaining(refs));
-  expect(files.filter(file=>file.path.startsWith('fonts/')).length).toBe(new Set(refs).size);
-  expect(names).toContain('design-systems/almanac.css');
-  expect(prepared.body.html).toContain('link data-af="design-system"');
+  expect(prepared.body.publicationBundle.files.map(file=>file.path)).toEqual(['design-systems/almanac.css']);
  }finally{await installed.dispose();}
 });

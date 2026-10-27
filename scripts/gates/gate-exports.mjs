@@ -172,7 +172,7 @@ async function downloadLeg(browser) {
   const runtime=await page.locator('script[data-af="runtime"]').evaluate(node=>JSON.parse(node.textContent));
   check(runtime.offline===true&&runtime.appOrigin===undefined,'portable runtime cannot contact the platform');
   check(await page.locator('[data-af-slide]').count()===3,'portable HTML retains all authored slide sections');
-  check(await page.locator('script[data-af="core"]').count()===1&&await page.locator('script[src="/af/v1/core.js"]').count()===0,'download embeds one core without the server-relative loader');
+  check(await page.locator('script[data-af="core"]').count()===1&&await page.locator('script[src="/af/core.js"]').count()===0,'download embeds one core without the server-relative loader');
   await page.close();
 }
 

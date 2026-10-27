@@ -4,7 +4,7 @@ import { canonicalizeHtmlPage } from '../index';
 describe('canonical HTML publication', () => {
  it('places one blocking core before authored scripts and identifies every element', () => {
   const page=canonicalizeHtmlPage('<!doctype html><html><head><script>run()</script></head><body><p>Hello</p></body></html>');
-  expect(page.html.indexOf('src="/af/v1/core.js"')).toBeLessThan(page.html.indexOf('run()'));
+  expect(page.html.indexOf('src="/af/core.js"')).toBeLessThan(page.html.indexOf('run()'));
   expect(page.nodeIds).toHaveLength(6);
   expect(new Set(page.nodeIds).size).toBe(6);
  });

@@ -55,3 +55,18 @@ export const revalidationHeaders = (etag: string): Record<string, string> => ({ 
 export function notModified(etag: string): Response {
   return new Response(null, { status: 304, headers: { ...revalidationHeaders(etag), Vary: 'Accept-Encoding' } });
 }
+
+/**
+ * Public platform bytes at a stable address (/af/core.js, /af/apollo.js, /af/reader.js, /af/styles.css, …): no version
+ * or hash in the URL, so every load revalidates (`no-cache`) against a strong ETag over the bytes and a deploy shows up
+ * on the next load. `If-None-Match` → 304; HEAD answers the headers only. No viewer input reaches these bytes.
+ */
+const publicTags = new Map<string, string>();
+export function publicRevalidatedResponse(request: Request, body: string, contentType: string): Response {
+  let etag = publicTags.get(body);
+  if (!etag) { etag = `"${createHash('sha256').update(body).digest('hex')}"`; if (publicTags.size > 32) publicTags.clear(); publicTags.set(body, etag); }
+  const headers: Record<string, string> = { 'content-type': contentType, 'cache-control': 'no-cache', etag, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff' };
+  if (matchingTag(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers });
+  headers['content-length'] = String(Buffer.byteLength(body));
+  return new Response(request.method === 'HEAD' ? null : body, { headers });
+}

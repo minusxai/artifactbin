@@ -36,7 +36,6 @@ export function installedFiles(archive){
   }
   if(!files.size||offset+4>bytes.length||![0x02014b50,0x06054b50].includes(bytes.readUInt32LE(offset)))throw Error('Invalid stored skill ZIP');
   for(const name of ['scripts/publication-bundle.mjs','scripts/preview-html.mjs','design-systems/almanac.css'])if(!files.has(name))throw Error('Installed skill archive is missing '+name);
-  if(![...files.keys()].some(name=>/^fonts\/[^/]+\.woff2$/.test(name)))throw Error('Installed skill archive has no packaged fonts');
   return files;
 }
 /** Reuse only successful receipts for identical local bytes and their entire
@@ -80,7 +79,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     // Original JSX checkouts have no candidate source or archive. Only this
     // branch installs and executes the selected candidate's normal Node helper.
     const files=installedFiles(skillArchive);staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));
-    for(const [name,bytes]of files)if(/^(?:scripts|components|design-systems|fonts)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
+    for(const [name,bytes]of files)if(/^(?:scripts|components|design-systems)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
     ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs')).href));
     const {publicationLocalReferences}=await import(pathToFileURL(path.join(staging,'scripts/preview-html.mjs')).href);reuse=dependencyReceiptCache(publicationLocalReferences);
   }
@@ -101,7 +100,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
       const bodyPadding=htmlBodyPadding(fixture);
       // The platform owns the design system: the page names it, the served page links the platform stylesheet and the
       // core sets <html data-af-design-system/data-af-dark>; the viewer's mode comes from ?mx-mode= (gate-component-baseline).
-      const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="artifactbin:design-system" content="almanac"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${substitute(fixture.newHtml)}<script type="module">${code}</script></body></html>`;
+      const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="artifactbin:design-system" content="almanac"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/core.js" data-af="core"></script></head><body>${substitute(fixture.newHtml)}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);
       const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;body.publicationBundle.mappings=reuse.mappings(body.publicationBundle);request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');

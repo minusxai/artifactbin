@@ -52,7 +52,7 @@ import { startMailSink, loginViaEmail, isSignedInAs, passTheWelcomePage } from '
 const BASE = new URL(process.argv[2] ?? 'http://localhost:3030').origin;
 const check = createChecker('accounts-and-workspace');
 const stamp = Date.now().toString(36);
-const htmlPage = (body, title = 'Gate page') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/v1/core.js"></script></head><body>${body}</body></html>`;
+const htmlPage = (body, title = 'Gate page') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/core.js"></script></head><body>${body}</body></html>`;
 const sink = await startMailSink();
 const browser = await launchChromium();
 const context = () => browser.newContext({ viewport: { width: 1400, height: 950 } });

@@ -11,7 +11,7 @@ import { POST } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const source = '<!doctype html><html><head><title>Trip plan</title><style>.status{color:rgb(20,90,40)}</style><script type="application/json" data-af="state">{"count":3,"label":"&lt;route&gt;"}</script><script src="/af/v1/core.js"></script><script type="module">import {client,gql} from "@afbin/apollo";</script></head><body><h1 class="status">Trip plan</h1><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"></circle></svg><img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></body></html>';
+const source = '<!doctype html><html><head><title>Trip plan</title><style>.status{color:rgb(20,90,40)}</style><script type="application/json" data-af="state">{"count":3,"label":"&lt;route&gt;"}</script><script src="/af/core.js"></script><script type="module">import {client,gql} from "@afbin/apollo";</script></head><body><h1 class="status">Trip plan</h1><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"></circle></svg><img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></body></html>';
 async function publish(visibility: 'private' | 'unlisted') {
   const actor = await mintAccountToken(`native-download-${visibility}`);
   const response = await POST(request('/api/artifacts', { method: 'POST', token: actor.token, json: { html: source, visibility } }));
@@ -38,7 +38,7 @@ describe('GET /a/<id>/download', () => {
     expect(portable.source).toBe((await getArtifactById(id))!.source);
     expect(portable.identity).toMatchObject({artifactId:id,baseRevision:'1',sourceDigest:sha256Hex(portable.source)});
     expect(new URL(portable.identity!.platformOrigin).origin).toBe(portable.identity!.platformOrigin);
-    expect(doc.querySelector('script[src="/af/v1/core.js"]')).toBeNull();
+    expect(doc.querySelector('script[src="/af/core.js"]')).toBeNull();
   });
   it('lets anyone with an unlisted link download the native document', async () => {
     const { id } = await publish('unlisted');

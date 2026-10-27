@@ -4,7 +4,7 @@ const findProblems=(html:string,options?:Parameters<typeof autofixHtml>[1])=>aut
 import {canonicalizeHtmlPage} from '../../html-page';
 
 const page=(head:string,body='<h1>Hi</h1>')=>`<!doctype html>\n<html>\n<head>\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
-const OK='<meta charset="utf-8">\n<meta name="viewport" content="width=device-width">\n<script src="/af/v1/core.js"></script>';
+const OK='<meta charset="utf-8">\n<meta name="viewport" content="width=device-width">\n<script src="/af/core.js"></script>';
 const rules=(html:string)=>autofixHtml(html).fixes.map(fix=>fix.rule);
 
 describe('autofix rules',()=>{
@@ -20,25 +20,29 @@ describe('autofix rules',()=>{
   expect(formatAutofixReport(result)).toMatch(/^autofix: clean/);
  });
  it('repairs a hand-written core script exactly as the server would',()=>{
-  for(const core of ['<script defer src="/af/v1/core.js"></script>','<script type="module" src="/af/v1/core.js"></script>','<script async data-af="core" src="/af/v1/core.js"></script>']){
-   const result=autofixHtml(page('<meta charset="utf-8"><meta name="viewport" content="x">',`<h1>Hi</h1>${core}<script src="/af/v1/core.js"></script>`));
+  for(const core of ['<script defer src="/af/core.js"></script>','<script type="module" src="/af/core.js"></script>','<script async data-af="core" src="/af/core.js"></script>']){
+   const result=autofixHtml(page('<meta charset="utf-8"><meta name="viewport" content="x">',`<h1>Hi</h1>${core}<script src="/af/core.js"></script>`));
    expect(result.fixes.map(fix=>fix.rule)).toEqual(['core-script']);
-   expect(result.html.match(/af\/v1\/core\.js/g)).toHaveLength(1);
+   expect(result.html.match(/af\/core\.js/g)).toHaveLength(1);
    // The server's own canonical pass finds nothing left to move.
    expect(canonicalizeHtmlPage(result.html).html.replace(/ data-af-id="[^"]+"/g,'')).toBe(result.html);
   }
  });
+ it('keeps a stored page\'s legacy /af/v1/core.js script: it is still the core, served as an alias',()=>{
+  const html=page('<meta charset="utf-8"><meta name="viewport" content="x"><script src="/af/v1/core.js"></script>');
+  const result=autofixHtml(html);expect(result.fixes).toEqual([]);expect(result.routine).toEqual([]);expect(result.html).toBe(html);
+ });
  it('adds a missing core as routine, not as an author fix',()=>{
   const result=autofixHtml(page('<meta charset="utf-8"><meta name="viewport" content="x">'));
-  expect(result.fixes).toEqual([]);expect(result.routine).toEqual(['added core script']);expect(result.html).toContain('<script src="/af/v1/core.js"></script>');
+  expect(result.fixes).toEqual([]);expect(result.routine).toEqual(['added core script']);expect(result.html).toContain('<script src="/af/core.js"></script>');
  });
  it('adds missing charset and viewport metadata first in head',()=>{
-  const result=autofixHtml(page('<script src="/af/v1/core.js"></script>'));
+  const result=autofixHtml(page('<script src="/af/core.js"></script>'));
   expect(result.fixes.map(fix=>fix.rule)).toEqual(['charset','viewport']);
   expect(result.html.indexOf('<meta charset="utf-8">')).toBeLessThan(result.html.indexOf('name="viewport"'));
   expect(result.html.indexOf('name="viewport"')).toBeLessThan(result.html.indexOf('core.js'));
   expect(result.fixes[0]!.after[0]!.line).toBeGreaterThan(0);
-  expect(rules(page('<meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="x"><script src="/af/v1/core.js"></script>'))).toEqual([]);
+  expect(rules(page('<meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="x"><script src="/af/core.js"></script>'))).toEqual([]);
  });
  it('refuses inline script syntax errors at the HTML line, for classic, module and JSON blocks',()=>{
   const html=page(OK,'<h1>Hi</h1>\n<script>\nconst ok = 1;\nconst x = ;\n</script>\n<script type="module">import {a} from "./a.js"; await a;</script>\n<script type="application/json" data-af="state">{bad}</script>');
@@ -77,7 +81,7 @@ describe('autofix rules',()=>{
   expect(autofixHtml(custom).html).toBe(custom);
  });
  it('is deterministic and idempotent',()=>{
-  const html=page('<title>t</title>','<p>x</p><script defer src="/af/v1/core.js"></script>');
+  const html=page('<title>t</title>','<p>x</p><script defer src="/af/core.js"></script>');
   const once=autofixHtml(html).html;
   expect(autofixHtml(html).html).toBe(once);
   expect(autofixHtml(once).html).toBe(once);

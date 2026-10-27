@@ -1,3 +1,4 @@
+import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
@@ -6,15 +7,15 @@ import { normalizeDesignSelection } from './design-system.ts';
 export { normalizeDesignSelection, htmlAppearance } from './design-system.ts';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings,HtmlAssetLinks } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
-const CORE='/af/v1/core.js';
+const CORE=RUNTIME_CORE_PATH;
 const allElements=(html:string)=>{const document=parseSource(html);return {...document,all:[...document.elements,...document.templateElements]};};
 type SourceElement=import('./html-source').Element;
 /** The one blocking core the server requires: exactly one, first script in <head>, plain src. Shared by publish and autofix. */
 export function repairCoreScript(input:string):{html:string;changed:boolean;removed:SourceElement[]}{
  let html=input,document=allElements(html);
- const cores=document.all.filter(element=>element.tagName==='script'&&(attribute(element,'data-af')==='core'||attribute(element,'src')===CORE));
+ const cores=document.all.filter(element=>element.tagName==='script'&&(attribute(element,'data-af')==='core'||isRuntimeCoreSrc(attribute(element,'src'))));
  const firstScript=document.elements.find(element=>element.tagName==='script');
- const valid=cores.length===1&&cores[0]===firstScript&&cores[0]?.parentNode===document.head&&attribute(cores[0],'src')===CORE&&attribute(cores[0],'async')===null&&attribute(cores[0],'defer')===null&&attribute(cores[0],'type')===null;
+ const valid=cores.length===1&&cores[0]===firstScript&&cores[0]?.parentNode===document.head&&isRuntimeCoreSrc(attribute(cores[0],'src'))&&attribute(cores[0],'async')===null&&attribute(cores[0],'defer')===null&&attribute(cores[0],'type')===null;
  if(valid)return {html,changed:false,removed:[]};
  const retained=cores[0]&&attribute(cores[0],'data-af-id');
  html=applyEdits(html,cores.map(element=>removeElement(html,element)));

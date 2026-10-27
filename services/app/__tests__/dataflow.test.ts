@@ -60,7 +60,7 @@ async function fixture() {
     visibility: "public",
   });
   const html = nativeHtml(
-    `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/v1/core.js" data-af="core"></script>`,
+    `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/core.js" data-af="core"></script>`,
   );
   const id = await publish({ html, visibility: "public" });
   const run = async (

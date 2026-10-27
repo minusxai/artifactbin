@@ -41,7 +41,7 @@ const source = `<!doctype html><html><head><title>Portable native page</title>
 <style>body{font-family:system-ui;background:#fff;color:#17202b}.status{color:rgb(20,90,40)}</style>
 <link rel="af-backend" data-af-name="garden" href="./garden.ts">
 <script type="application/json" data-af="state">{"count":3}</script>
-<script src="/af/v1/core.js"></script></head><body>
+<script src="/af/core.js"></script></head><body>
 <h1 class="status">Portable native page</h1><output id="count">Starting</output>
 <button id="increment">Increment locally</button><button id="shared">Change shared job</button><output id="outcome"></output>
 <svg id="portable-author-svg" viewBox="0 0 10 10" width="40" height="40"><circle cx="5" cy="5" r="4" fill="#145a28"></circle></svg>

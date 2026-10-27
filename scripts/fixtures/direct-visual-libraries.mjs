@@ -10,7 +10,7 @@ import {connectAgent} from '../gates/lib/cli-connection.mjs';
 import {documentFrame} from '../gates/lib/page-facts.mjs';
 /** @param {{pele:string,deck:string}} libraries */
 export function directVisualSource({pele,deck}) {
- return `<!doctype html><html><head><title>Direct library proof</title><script src="/af/v1/core.js" data-af="core"></script></head><body><div id="diagram"></div><div id="map" style="width:400px;height:240px;position:relative"></div><output id="direct-status"></output><button id="direct-update">Update direct visuals</button><button id="direct-dispose">Dispose direct visuals</button><script type="module">
+ return `<!doctype html><html><head><title>Direct library proof</title><script src="/af/core.js" data-af="core"></script></head><body><div id="diagram"></div><div id="map" style="width:400px;height:240px;position:relative"></div><output id="direct-status"></output><button id="direct-update">Update direct visuals</button><button id="direct-dispose">Dispose direct visuals</button><script type="module">
  import {render} from ${JSON.stringify(pele)};import {Deck,MapView,ScatterplotLayer} from ${JSON.stringify(deck)};
  await document.fonts.ready;
  const diagram=document.querySelector('#diagram'),host=document.querySelector('#map'),status=document.querySelector('#direct-status');let revision=0,disposed=false,resolveFrame;const frame=()=>new Promise(resolve=>{resolveFrame=resolve;});
@@ -40,7 +40,7 @@ export async function exerciseDirectVisualLibraries({browser,page,root,session,d
  // Verify the exact fenced examples shipped in this archive, not copied substitutes.
  for(const name of ['diagrams','maps']) {
   const reference=await readFile(join(skill,'references',name+'.md'),'utf8');const snippet=reference.match(/```html\n([\s\S]*?)```/)?.[1];assert.ok(snippet,'installed '+name+' example');
-  const source='<!doctype html><html data-af-dark="false"><head>'+(!snippet.includes('data-af="core"')?'<script src="/af/v1/core.js" data-af="core"></script>':'')+'</head><body>'+snippet+'</body></html>';
+  const source='<!doctype html><html data-af-dark="false"><head>'+(!snippet.includes('data-af="core"')?'<script src="/af/core.js" data-af="core"></script>':'')+'</head><body>'+snippet+'</body></html>';
   const filename='direct-doc-'+name+'.html';await writeFile(join(root,filename),source);await page.goto(new URL(filename,session.url).href);
   const verifyExample=async(target)=>{
    const canvas=target.locator('#map canvas'),svg=target.locator('#workflow svg');

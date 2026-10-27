@@ -3,9 +3,9 @@ import {skillTree} from '@/lib/skills';
 import {buildPreviewParser,buildPreviewDatasets,buildToolboxPlatform} from '@/lib/skills/preview-assets.server';
 import {buildHtmlAssets} from '@/lib/html-runtime/build.server';
 import {registeredLibrarySources} from '@/lib/libraries/assets.server';
-import {skillFontFiles} from '@/lib/skills/font-assets.server';
 import {skillPackageFiles,skillZip} from '@/lib/skills/package';
-/** The public HTTP author skill; the recipient chooses their harness directory. */
+/** The public HTTP author skill; the recipient chooses their harness directory. Fonts are not packaged (D16): pages and the
+ * local preview load them from the platform's /af/fonts/. */
 export async function GET(request:Request){
  const files=skillPackageFiles(skillTree(),baseUrl(request));
  files['scripts/toolbox-config.mjs']='export default '+JSON.stringify(new URL(baseUrl(request)).origin)+';\n';
@@ -14,7 +14,7 @@ export async function GET(request:Request){
  files['scripts/toolbox-platform.mjs']=await buildToolboxPlatform();
  files['scripts/preview-runtime.mjs']=`export default ${JSON.stringify(await buildHtmlAssets())};\n`;
  files['scripts/preview-libraries.mjs']=`export default ${JSON.stringify(await registeredLibrarySources())};\n`;
- return new Response(skillZip({...files,...skillFontFiles(files)}),{headers:{
+ return new Response(skillZip(files),{headers:{
   'Content-Type':'application/zip','Content-Disposition':'attachment; filename="artifactbin.zip"','Cache-Control':'no-store',
  }});
 }

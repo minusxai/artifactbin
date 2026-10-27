@@ -64,7 +64,7 @@ export async function packPreviewExport({html,pathname,load,libraries={}}){
   const attr=name=>element.attrs.find(attr=>attr.name===name),get=name=>attr(name)?.value,set=(name,value)=>{const found=attr(name);if(found)found.value=value;else element.attrs.push({name,value});};
   const src=get('src'),type=get('type'),platform=get('data-af');
   if(element.tagName==='script'){
-   if(!src&&['runtime','apollo','reader','chrome','portable-engine','portable','core'].includes(platform)||src==='/af/v1/core.js'||type==='importmap'||type&&type!=='module'&&!JS.has(type))continue;
+   if(!src&&['runtime','apollo','reader','chrome','portable-engine','portable','core'].includes(platform)||src==='/af/core.js'||src==='/af/v1/core.js'||type==='importmap'||type&&type!=='module'&&!JS.has(type))continue;
    if(src){if(type==='module'){const alias=await module(resolve(src,pathname));set('src',data('text/javascript',Buffer.from('import '+JSON.stringify(alias)+';')));}else{const url=resolve(src,pathname),resource=await read(url);if(!JS.has(mime(resource.contentType)))throw Error('Local script MIME is not JavaScript');if(parseImports(text(resource.bytes))[0].some(item=>item.d!==-2))throw Error('Classic scripts with module dependencies cannot be saved');set('src',data(mime(resource.contentType),resource.bytes));}}
    else if(type==='module'){const source=element.childNodes.map(node=>node.value??'').join('');element.childNodes=[{nodeName:'#text',value:(await rewriteModule(source,pathname)).replace(/<\/script/gi,'<\\/script'),parentNode:element}];}
    element.attrs=element.attrs.filter(attr=>attr.name!=='integrity');

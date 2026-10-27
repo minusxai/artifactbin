@@ -8,7 +8,7 @@ describe('native retained journey fixtures',()=>{
   const dom=new JSDOM(source),document=dom.window.document;
   expect(document.doctype.name).toBe('html');expect(document.title).toBe('Fixture');
   expect(document.querySelectorAll('script[data-af="core"]').length).toBe(1);
-  expect(document.querySelector('script[data-af="core"]').getAttribute('src')).toBe('/af/v1/core.js');
+  expect(document.querySelector('script[data-af="core"]').getAttribute('src')).toBe('/af/core.js');
   expect(JSON.parse(document.querySelector('script[data-af="state"]').textContent)).toEqual({picture:1});
   expect(document.querySelector('[data-af-slide]').textContent).toBe('Visible slide');
  });
