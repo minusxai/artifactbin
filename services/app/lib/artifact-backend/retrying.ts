@@ -7,6 +7,9 @@
 import type { RetryOptions } from '@/lib/http/retry';
 import { retryLazily } from '@/lib/http/retry-lazily';
 
+// The comment backend loads after the reader shell; fetch the policy now so a failed write retries without waiting for it.
+void import('@/lib/http/retry').catch(() => {});
+
 export const RETRY_TUNING: { policy?: RetryOptions['policy'] } = {};
 
 const listeners = new Set<(retrying: boolean) => void>();

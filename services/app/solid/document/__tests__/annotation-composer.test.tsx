@@ -416,10 +416,9 @@ describe('the annotation composer', () => {
     await flush();
     replaceComment(screen.getByLabelText('Annotation comment'), 'Retry me');
     fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush(); await flush();
-    // Automatic retries (same key) ran out, only then does the error show.
-    expect(keys).toHaveLength(3);
-    expect(screen.getByRole('alert')).toBeTruthy();
+    // Automatic retries (same key, after the lazily loaded policy) ran out, only then does the error show.
+    await waitFor(() => expect(keys).toHaveLength(3));
+    expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Retry me');
     fail = false;
     fireEvent.click(screen.getByLabelText('Save annotation'));
