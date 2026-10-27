@@ -102,3 +102,37 @@ This wrapper removes ordinary command invocations/status handoffs; it does not
 replace those decisions.
 
 Run host behavior tests with `python3 -m unittest discover -s tests/migration_batch -v`.
+
+Conversion batches use `conversion.py` with a private, hash-bound configuration
+matching `conversion_contract.py`. It accepts up to 100 unique reserved latest
+heads and skips accepted IDs proved by an immutable predecessor chain. A trusted
+local adapter runs existing snapshot/preparation/converter APIs and emits one
+review packet per head. Supported local assemblies and explicit unsupported
+patterns remain separate from final artifact acceptance. This command grants no
+browser or production lease.
+
+Run `python3 scripts/migration_batch/conversion.py --config CONFIG --sha256 SHA
+--root OUTPUT --db SHARED_DB`. Restart that exact invocation after a controller
+failure: existing detached workers and sealed outputs are reused. Two local
+conversion workers run at a time; the shared database controller lock prevents
+another batch controller or generation from duplicating an active conversion.
+The normal browser/writer resource gates remain separate. A shared converter fix
+uses a new adapter hash and new output directories, then `--only ID ...` reruns
+only affected heads. Earlier outputs remain immutable and the summary retains
+untouched heads. Exceptions are grouped by code in `summary.json`.
+
+The adapter must bind the current source row, document, identity, referenced
+resource versions/policies/object bytes and producer/component revisions; missing
+or changed input is an exception. Snapshot reuse is valid only for its recorded
+read time. Recheck current source heads immediately before an import. Never use
+an old archive as a substitute for a changed latest head.
+
+Before future once-apply manifests, run `preflight.py --config READER_CLI_CONFIG`
+as a read stage. The normal preservation reader requires the CLI config with
+`receiptRoot`, `batchPath`, `planPath`, and `outputDirectory`; a pipeline context
+is not that contract. The live pilot caught this argument error after its one
+successful apply. An independently reviewed read-only recovery completed the
+full reader and count without applying again. `reconcile.py` permits exact,
+independently bound adoption of completed **read** outputs only; it cannot adopt
+an uncertain write or execute a command. Preserve the original failure and its
+reviewed recovery.
