@@ -23,9 +23,16 @@ on:
       - 'scripts/ci/performance-report.mjs'
       - 'scripts/build/size-targets.mjs'
       - 'scripts/lib/document-views.mjs'
+      - 'scripts/lib/shell-graph.mjs'
       - 'scripts/fixtures/page-speed/**'
       - '.github/workflows/page-speed.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'timing (throttled comparison) or size (the unthrottled size pass pushes and pull requests run)'
+        type: choice
+        options: [ timing, size ]
+        default: timing
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -94,8 +101,9 @@ jobs:
       - name: Measure head
         env:
           EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
         run: |
-          if [ "$EVENT" = workflow_dispatch ]; then
+          if [ "$EVENT" = workflow_dispatch ] && [ "$MODE" != size ]; then
             node scripts/ci/performance-loads.mjs . page-speed/head.json
           else
             node scripts/ci/performance-loads.mjs . page-speed/head.json --size-only
@@ -211,8 +219,9 @@ jobs:
         if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
         env:
           EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
         run: |
-          if [ "$EVENT" = workflow_dispatch ]; then
+          if [ "$EVENT" = workflow_dispatch ] && [ "$MODE" != size ]; then
             node scripts/ci/performance-loads.mjs .perf-base page-speed/base.json
           else
             node scripts/ci/performance-loads.mjs .perf-base page-speed/base.json --size-only
