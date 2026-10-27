@@ -26,3 +26,5 @@ test('single-value retains exact config, query source and bare sizing without a 
  node.attributes.push({name:'height',start:0,end:1,value:{static:true,json:'10px'}});result=mapNativeCharts(a);assert.equal(result.mappings[0]!.height,48);
  node.attributes.find(x=>x.name==='height')!.value={static:true,json:'160px'};assert.equal(mapNativeCharts(a).mappings[0]!.height,160);
 });
+
+test('flow GridItem charts retain authored height while canvas cells fill their fixed box',()=>{for(const mode of ['flow','canvas']){const a=fixture(),chart=a.nodes[0]!;if(chart.type!=='element')throw Error();chart.attributes.find(x=>x.name==='height')!.value={static:true,json:'360px'};const item={...chart,tag:'GridItem',graphKey:'item',attributes:[],children:[chart]};a.nodes=[{...item,tag:'Grid',graphKey:'grid',attributes:[{name:'mode',start:0,end:1,value:{static:true,json:mode}}],children:[item]}];const mapped=mapNativeCharts(a).mappings[0]!;assert.equal(mapped.inGridItem,mode!=='flow');assert.equal(mapped.height,360);assert.equal(verifyNativeChartMapping(a,mapped),true);}});

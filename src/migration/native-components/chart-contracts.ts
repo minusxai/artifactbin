@@ -4,7 +4,9 @@ export interface NativeChartMapping {
  kind:'vega-lite'|'table'|'single_value';data:{kind:'table'|'ref';name:string};
  /** Exact saved attributes, including viz.spec. No normalized replacement recipe. */
  props:Readonly<Record<string,NativeJson>>;
- height:number;inGridItem:boolean;sha256:string;
+ height:number;
+ /** True only for fixed canvas GridItems; flow-grid charts retain their authored pixel height. */
+ inGridItem:boolean;sha256:string;
 }
 export interface NativeChartAdapter {specifier:string;sha256:string;dependencies:readonly {path:string;sha256:string}[]}
 export interface NativeChartMappingResult {mappings:readonly NativeChartMapping[];blockers:readonly {sourceNode:string;code:string}[]}
