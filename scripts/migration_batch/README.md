@@ -149,3 +149,32 @@ modules and all inputs by hash in the tail job. This prevents stale copied
 expected maps without weakening the normal preservation reader.
 
 The latest-selection helper creates an immutable alternate plan and selection for the same agreed ID set when a verified current source version advances. It preserves old plan rows and receipt metadata in provenance, requires mapped source identity and a read-only current-row proof, rejects history and rollback, and updates changed receipts to one current revision with no archived rows. It grants no import authority.
+
+## Functional smoke
+
+`smoke.mjs` replaces per-batch private literal probes. It checks what a reader relies
+on, on both implementations, keyed by authored `id` (both readers render it; never
+`data-af-id` on the original): literal text exactly, dynamic text equal across sides,
+`Cell`/`Chart`/`DataTable`/`Mermaid` loaded with equal values, mark counts and headers,
+and controls present and labelled. Pages with data, layout components, loops and
+conditions are in scope. Only binding defects refuse: packet/result/source digests,
+duplicate ids, or a data component or control without an id.
+
+```sh
+node scripts/migration_batch/smoke.mjs prepare --packet REVIEW_PACKET --sha256 SHA --output NEW_DIR
+node scripts/migration_batch/smoke.mjs compare --contract NEW_DIR/contract.json --source SOURCE_OUT --target TARGET_OUT --output RESULT
+```
+
+`prepare` is a `read` step: it writes `contract.json`, a self-contained `probe.mjs` for the
+existing `mountImportedPilot` camera hook, and `provenance.json`. Put the same probe in the
+source and target capture bundles. The probe waits until every present data component is
+loaded and idle (not merely `aria-busy="false"`: served cells start idle with a placeholder)
+and two observations agree, then writes `smoke-<side>-<state>-<viewport>-<normal|regression>.json`.
+An unsettled page is recorded, not thrown, so screenshots still complete.
+
+`compare` exits 0 `pass`, 1 `fail` (the converted page is wrong: missing or pending data,
+changed text or values, missing controls) or 2 `exception` (the original did not render
+that data or text, so nothing was proved). Warnings — visibility, virtualized row counts,
+chart mark labels, layout-only ids — go to the reviewer. Mutations, author scripts and
+control behavior are listed under `notExercised`; this initial-state smoke does not accept
+them. Screenshots, practical readability and final review remain required.

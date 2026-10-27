@@ -1,0 +1,8 @@
+export type SmokeKind='element'|'control'|'cell'|'chart'|'table'|'diagram'|'loop';
+export interface SmokeEntry {id:string;tag:string;kind:SmokeKind;repeated:boolean;conditional:boolean;textLeaf:boolean;expectedText?:string;query?:string|null;label?:string|null}
+export interface SmokeContract {format:'migration-smoke-contract-v1';key:{sourceId:string;version:number};sourceSha256:string;scope:string;entries:SmokeEntry[];notExercised:{controls:string[];mutations:string[];scripts:number;conditionalIds:number;repeatedIds:number};productionWrites:0;acceptanceClaimed:false;sha256:string}
+export interface SmokeData {loaded:boolean;value?:string;state?:string|null;surface?:boolean;marks?:number;labels?:string[];rows?:number;headers?:string[]}
+export interface SmokeInstance {visible:boolean;busy:boolean;text:string;textLength:number;data?:SmokeData}
+export interface SmokeObservation {format:'migration-smoke-observation-v1';key:SmokeContract['key'];contractSha256:string;readerPageId:string;state:string;viewport:{width:number;height:number};regression:boolean;settled:boolean;pending:string[];side:'source'|'target';title:string;entries:Record<string,{count:number;instances:SmokeInstance[]}>}
+export interface SmokeFinding {id:string|null;reason:string;detail?:unknown}
+export interface SmokeComparison {format:'migration-smoke-comparison-v1';key:SmokeContract['key'];contractSha256:string;state:string;viewport:{width:number;height:number};status:'pass'|'fail'|'exception';checked:number;failures:SmokeFinding[];exceptions:SmokeFinding[];warnings:SmokeFinding[];notExercised:SmokeContract['notExercised'];productionWrites:0;acceptanceClaimed:false}
