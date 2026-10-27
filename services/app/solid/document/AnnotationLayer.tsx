@@ -527,7 +527,17 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!mayCreate()) return false;
     setBusy(true);
     try {
-      const wire = await backend.actOnAnnotation(annId, body);
+      let wire: AnnotationWire;
+      try { wire = await backend.actOnAnnotation(annId, body); }
+      catch (cause) {
+        // A resolve/reopen against a thread that moved: show the thread as it now stands instead of a generic error.
+        if (cause instanceof BackendRequestError && cause.code === 'annotation_conflict') {
+          const [open, resolved] = await Promise.all([backend.listAnnotations('open'), backend.listAnnotations('resolved')]).catch(() => [[], []]);
+          const fresh = [...open, ...resolved].find((row) => row.id === annId);
+          if (fresh) replaceThread(fresh);
+        }
+        throw cause;
+      }
       if (body.resolve && wire.status === 'resolved') {
         const revisions = locallyResolvedRevisions.get(annId) ?? new Set<number | undefined>();
         revisions.add(wire.revision);

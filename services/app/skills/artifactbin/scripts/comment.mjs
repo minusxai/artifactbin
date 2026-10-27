@@ -18,7 +18,7 @@ export async function commentCommand({sub,values,positionals},options={}){
   requireFlags(values,['comment','active']);if(!/^[A-Za-z0-9_-]+$/.test(values.comment))throw new ToolError('invalid_comment_id','Invalid comment ID.',2);
   method='PUT';route+='/'+values.comment+'/reactions';body={kind:enumValue(values.kind??'thumbs_up',['thumbs_up'],'kind'),active:enumValue(values.active,['true','false'],'active')==='true'};
  }else{
-  requireFlags(values,[sub==='edit'?'comment':'thread','expected-revision']);const thread=values[sub==='edit'?'comment':'thread'];if(!/^[A-Za-z0-9_-]+$/.test(thread))throw new ToolError('invalid_comment_id','Invalid comment/thread ID.',2);route+='/'+thread;body.expected_revision=integer(values['expected-revision'],'expected_revision',0);
+  requireFlags(values,[sub==='edit'?'comment':'thread',...(sub==='reply'&&!values.resolve?[]:['expected-revision'])]);const thread=values[sub==='edit'?'comment':'thread'];if(!/^[A-Za-z0-9_-]+$/.test(thread))throw new ToolError('invalid_comment_id','Invalid comment/thread ID.',2);route+='/'+thread;if(values['expected-revision']!==undefined)body.expected_revision=integer(values['expected-revision'],'expected_revision',0);
   if(sub==='edit')method='PATCH';else if(sub==='reply'){body.reply=body.body;delete body.body;if(values.resolve)body.resolve=true;}else body[sub==='resolve'?'resolve':'reopen']=true;
  }
  const journal=await createJournal(journalIntent({server,method,path:route,body,operation:'comment'}),{file:values.request,root:client.root});

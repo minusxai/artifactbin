@@ -145,6 +145,20 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A check without steps never reads as a clean pass; it asks for steps.
  expect(deck).toMatch(/--steps/);
 });
+it('replies without --expected-revision but still requires it to resolve or edit',async()=>{
+ const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-reply-')),calls:any[]=[],file=path.join(root,'body.md');await writeFile(file,'Thanks');
+ const options={env:{ARTIFACTBIN_URL:'https://example.test',ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{calls.push({url:String(url),...init});return Response.json({id:'ann_root',revision:2,thread:[]});}};
+ try{
+  await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file},positionals:['PAGE12']},options);
+  expect(calls[0].url).toBe('https://example.test/api/artifacts/PAGE12/annotations/ann_root');expect(JSON.parse(calls[0].body)).toEqual({reply:'Thanks'});
+  await expect(commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,resolve:true},positionals:['PAGE12']},options)).rejects.toThrow();
+  await expect(commentCommand({sub:'resolve',values:{thread:'ann_root'},positionals:['PAGE12']},options)).rejects.toThrow();
+  await commentCommand({sub:'reply',values:{thread:'ann_root','body-file':file,resolve:true,'expected-revision':'3'},positionals:['PAGE12']},options);
+  expect(JSON.parse(calls[1].body)).toEqual({reply:'Thanks',expected_revision:3,resolve:true});expect(calls).toHaveLength(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('sets independent desired comment reaction state and replays the exact intent',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
