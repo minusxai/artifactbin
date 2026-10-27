@@ -115,6 +115,8 @@ export async function inspectPage(page,options,task){
      for(let box=el;box;box=box===slide?null:box.parentElement){
       const b=box.getBoundingClientRect(),style=getComputedStyle(box);
       if(box!==slide&&style.overflowX==='visible'&&style.overflowY==='visible')continue;
+      // An HTML box clips only content that overflows it; a tall display font's glyph box poking past a hidden-overflow box is not a clip.
+      if(box!==slide&&box instanceof HTMLElement&&box.scrollHeight<=box.clientHeight+1&&box.scrollWidth<=box.clientWidth+1)continue;
       const by=Math.max(b.top-r.top,r.bottom-b.bottom,b.left-r.left,r.right-b.right);
       // A font's em box overhangs a tight line box without clipping visible glyphs; ignore overhang within ~15% of the font size.
       if(by>Math.max(1,0.15*parseFloat(s.fontSize||'16'))){clipped.push({slide:index+1,text:n.textContent.trim().slice(0,48),px:Math.round(by),by:box===slide?'slide':box.tagName.toLowerCase()+(box.className&&typeof box.className==='string'?'.'+box.className.trim().split(/\s+/)[0]:'')});break;}

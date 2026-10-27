@@ -113,6 +113,9 @@ describe('installed native author examples',()=>{
    }
    await (await import('node:fs/promises')).unlink(downloaded.baseline);
    await expect(publishCommand({values:{server},positionals:[downloaded.source]},options)).rejects.toMatchObject({code:'baseline_missing'});
+   // Only markup carries page identity: a new page whose script selects [data-af-id="..."] publishes as new.
+   const scripted=path.join(project,'scripted.html');await writeFile(scripted,'<h1>New</h1><script type="module">document.querySelector(`[data-af-id="row-1"]`)</script>');
+   expect((await publishCommand({values:{server},positionals:[scripted]},options)).version).toBe(1);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('keeps a published backend href in the author source so later backend edits are sent',async()=>{
