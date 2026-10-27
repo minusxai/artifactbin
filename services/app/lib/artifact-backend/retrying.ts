@@ -2,6 +2,8 @@
  * The reader backend's face of the shared retry policy (lib/http/retry): requests go through `retried`, and a
  * surface that wants a quiet "retrying…" subscribes with `watchRetrying`. The policy itself lives only in lib/http.
  */
+// The policy is only ever imported lazily (lib/http/retry-lazily): a module imported both ways needs a namespace helper
+// from the large shared chunk, which every chunk that imports it would then load.
 import type { RetryOptions } from '@/lib/http/retry';
 
 export const RETRY_TUNING: { policy?: RetryOptions['policy'] } = {};

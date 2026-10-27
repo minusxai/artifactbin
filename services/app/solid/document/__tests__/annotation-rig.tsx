@@ -136,6 +136,9 @@ export function installAnnotationFetch() {
 /** Let every pending request and its JSON body settle. */
 export const flush = async () => {
   for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  // The retry policy loads lazily (lib/http/retry-lazily): let a pending import land before the request it gates.
+  await vi.dynamicImportSettled();
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
