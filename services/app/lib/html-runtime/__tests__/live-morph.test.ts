@@ -61,6 +61,7 @@ describe('native HTML live morph',()=>{
   expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('Name <input','Full name <input')),SCRIPTS)).toThrow(/interactive/);
   expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('<p data-af-id="p2">Second.</p>','<p data-af-id="p2">Second.</p><button data-af-id="go">Go</button>')),SCRIPTS)).toThrow(/interactive/);
   expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('<p data-af-id="p1">First draft.</p>','<p data-af-id="p1" onclick="go()">First draft.</p>')),SCRIPTS)).toThrow(/interactive/);
+  expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('<input data-af-id="i" name="n">','')),SCRIPTS)).toThrow(/interactive/);
   // The chart container is queried by its class: changing it could break what the script wired at load.
   expect(()=>morphHtmlVersion(document,served(1,V1),served(2,V1.replace('<div data-af-id="c" class="chart"></div>','<div data-af-id="c" class="chart">Loading</div>')),SCRIPTS)).toThrow(/named in the page scripts/);
   // Unreadable script files: a changed element with an id or class cannot be cleared.
@@ -76,7 +77,7 @@ describe('applyHtmlVersion (inside the frame)',()=>{
   const next=served(2,V1.replace('Second.','Second, edited.'));
   const fetchFn=vi.fn(async(url:string)=>url.includes('/af/v1/')||url.endsWith('.js')?new Response(''):new Response(next));
   const applied=await applyHtmlVersion(window,{revision:'1'},2,fetchFn as unknown as typeof fetch);
-  expect(applied.revision).toBe('2');expect(String(fetchFn.mock.calls[0]![0])).not.toContain('_pt=');
+  expect(applied.revision).toBe('2');expect(String(fetchFn.mock.calls[0]![0])).not.toContain('_pt=');expect((fetchFn.mock.calls[0] as unknown as [string,RequestInit])[1].headers).toEqual({'x-artifactbin-live-version':'1'});
   expect(document.querySelector('[data-af-id="p2"]')!.textContent).toBe('Second, edited.');
   expect((window as unknown as Record<symbol,unknown>)[LOADED_SOURCE]).toBe(next);
  });

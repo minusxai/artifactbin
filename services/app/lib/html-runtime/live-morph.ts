@@ -17,6 +17,9 @@
  * does not name (platform overlays, script-made nodes) are left where they are.
  */
 import {heldNodes,morphChildren,type MorphContext} from '../islands/morph/dom';
+import {LIVE_VERSION_HEADER} from './live-morph-contract';
+/** server/pages-host's one-time ticket parameter (lib/http/pages-origin PAGES_TICKET_PARAM), never part of the document's address. */
+const PAGES_TICKET='_pt';
 
 /** The parent reloads instead. */
 export class VersionRefused extends Error {}
@@ -142,7 +145,7 @@ export async function pageScripts(doc:Document,fetchFn:typeof fetch):Promise<str
   const src=script.getAttribute('src');
   if(src){if(!/\/af\/v1\//.test(src))sources.push(new URL(src,doc.baseURI).href);}else parts.push(script.textContent??'');
  }
- await Promise.all(sources.map(async url=>{try{const response=await fetchFn(url,{credentials:'omit'});if(!response.ok)throw Error();parts.push(await response.text());}catch{complete=false;}}));
+ await Promise.all(sources.map(async url=>{try{const response=await fetchFn(url,{credentials:'same-origin'});if(!response.ok)throw Error();parts.push(await response.text());}catch{complete=false;}}));
  return complete?parts.join('\n'):null;
 }
 
@@ -154,8 +157,9 @@ export interface VersionApplied {revision:string;savedNodeIds:string[]}
 export async function applyHtmlVersion(win:Window,config:{revision:string;savedNodeIds?:readonly string[]},version:number,fetchFn:typeof fetch=win.fetch.bind(win)):Promise<VersionApplied>{
  const holder=win as unknown as Record<symbol,unknown>,loaded=holder[LOADED_SOURCE];
  if(typeof loaded!=='string')throw refuse('this document kept no copy of its source');
- const address=new URL(win.location.href);address.searchParams.delete('_pt');address.hash='';
- const response=await fetchFn(address.href,{credentials:'same-origin',cache:'no-store'});
+ const address=new URL(win.location.href);address.searchParams.delete(PAGES_TICKET);address.hash='';
+ // Marked so the read is not counted as another view of the page (app/a/[id]/raw).
+ const response=await fetchFn(address.href,{credentials:'same-origin',cache:'no-store',headers:{[LIVE_VERSION_HEADER]:'1'}});
  if(!response.ok)throw refuse(`the new version answered ${response.status}`);
  const next=await response.text();
  const revision=Number(runtimeOf(new DOMParser().parseFromString(next,'text/html')).revision);

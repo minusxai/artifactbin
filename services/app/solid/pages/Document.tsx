@@ -200,10 +200,12 @@ export function DocumentPage(): JSX.Element {
     onPublication: page.surface.format === 'html' ? (version, editId) => followHtmlVersion({
       version, frame: archivedNow() ? null : runtimeRef.current,
       reload: () => replaceDocument(window.location.href),
+      // The frame draws the newest version it is served: this one, or one published since (then announced next).
       refresh: async (drawn, revision) => {
-        if (revision !== String(drawn)) return false;
+        const shown = Number(revision);
+        if (!Number.isInteger(shown) || shown < drawn) return false;
         if (refreshTree && !(await refreshTree())) return false;
-        setHtmlHead({ version: drawn, editId: editId ?? '' });
+        setHtmlHead({ version: shown, editId: editId ?? '' });
         return true;
       },
     }).then((outcome) => outcome === 'morphed' ? undefined : new Promise<never>(() => { /* the page is reloading */ })) : undefined,

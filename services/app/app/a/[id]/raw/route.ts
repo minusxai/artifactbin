@@ -1,5 +1,6 @@
 import {nativeHtmlPresentation} from '@/lib/serving/native-html-presentation.server';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
+import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
  * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
@@ -167,7 +168,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
-      if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
+      // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
+      if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void trackEvent('view', artifact.id, { userId: actor.userId });
       return new Response(await nativeHtmlPresentation(rendered.html,row,domain), { headers: responseHeaders(etag) });
     }
     case 'file': return serveStoredFile(request, artifact);
