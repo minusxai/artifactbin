@@ -136,15 +136,23 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
  async function request(body){
   if(requester)return requester(body);
   const response=await fetcher(server+'/api/browser-sessions',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Origin:server},body:JSON.stringify(body)});
-  const result=await response.json();if(!response.ok)throw Error('Browser session refused (HTTP '+response.status+'): '+(result.error?.code??result.error??'unknown'));return result;
+  const result=await response.json();
+  if(!response.ok){const code=result.error?.code??result.error??'unknown';
+   // The server holds a few browser sessions at once; a full server is a known, retryable state, not an unexplained failure.
+   if(code==='SESSION_CAPACITY'||code==='SESSION_ACTOR_CAPACITY')throw new ToolError('browser_busy',result.error?.message??'All browser sessions are in use.',1,'Run checks one at a time; wait a few seconds and retry.');
+   throw Error('Browser session refused (HTTP '+response.status+'): '+code);}
+  return result;
  }
  try{
   for(const viewport of viewports){
    const execution_id=randomUUID();
    const body={op:'script',session_id,execution_id,create:!accepted,code:checkScript({target,viewports:[viewport],steps,capture}),...(accepted||!viewer?{}:{viewer})};
    let run;
-   try{run=await request(body);accepted=true;}
+   // Creating the session waits up to ~20 s for a free browser slot before reporting browser_busy.
+   const submit=async()=>{for(let attempt=0;;attempt++){try{return await request(body);}catch(error){if(error?.code!=='browser_busy'||accepted||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}}};
+   try{run=await submit();accepted=true;}
    catch(error){
+    if(error?.code==='browser_busy')throw error;
     // A lost submission response may still have executed. Observe the same receipt; never replay actions.
     try{run=await request({op:'status',session_id,execution_id});accepted=run.session_id===session_id;}catch{throw error;}
    }

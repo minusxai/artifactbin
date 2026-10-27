@@ -56,6 +56,21 @@ it('keeps hosted execution receipts, reports partial failure, and closes the ses
  expect(JSON.stringify(requests)).not.toContain('test-token');
 });
 
+it('waits for a free browser session and names a full server instead of failing opaquely',async()=>{
+ const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const ok={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}};
+ const busy=()=>Response.json({error:{code:'SESSION_ACTOR_CAPACITY',message:'One credential may hold at most 2 browser sessions at once.'}},{status:429});
+ let refusals=1;const ops:string[]=[];
+ const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+  const body=JSON.parse(String(init?.body));ops.push(body.op);
+  if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  if(body.op==='script'&&refusals-->0)return busy();
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:ok});
+ });
+ expect(run.smokePassed).toBe(true);expect(ops.filter(op=>op==='script')).toHaveLength(2);expect(ops).not.toContain('status');
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token'},async()=>busy())).rejects.toMatchObject({code:'browser_busy',message:expect.stringContaining('at most 2 browser sessions')});
+},40000);
+
 it('collects errors, separates only known telemetry, and catches overflow without implying visual acceptance',async()=>{
  const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};let taskRan=false;
