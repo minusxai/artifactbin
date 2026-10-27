@@ -11,6 +11,8 @@ import { listAnnotationPageFor, listAnnotationsFor } from '@/lib/annotations';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { GET as myListAnnotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { getDb, measureQueries } from '@/lib/platform';
+import { artifactQuery } from '@/lib/artifacts/document';
+import { createDocumentGraph } from '@/lib/document';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -90,20 +92,26 @@ it('keeps native source GET independent of comment volume and exposes threads on
 });
 
 /** A ~2.5 MB page: the access decision for its comments must not read it. */
-const BIG_DOC = `<p data-af-id="intro">An introduction paragraph.</p><div data-af-id="findings">Revenue grew 40% in Q3.</div>${Array.from({ length: 12000 }, (_, i) => `<p>Filler paragraph number ${i} with enough words to weigh about two hundred bytes of markup, repeated until the page is large.</p>`).join('')}`;
+const BIG_FILLER = `${Array.from({ length: 12000 }, (_, i) => `<p>Filler paragraph number ${i} with enough words to weigh about two hundred bytes of markup, repeated until the page is large.</p>`).join('')}`;
 
+/** The stored form of DOC plus BIG_FILLER, built once for the file: the publish pipeline is not what these tests are about. */
+let bigStored: string | undefined;
+
+/**
+ * The large page is seeded cheaply: the artifact and its threads are created through the normal routes on the small
+ * DOC (whose node ids the anchors name), then the stored document is swapped for the graph of DOC followed by BIG_FILLER in one UPDATE. The
+ * result is the same row a publish of that page would leave (same intro/findings nodes, same preserved source), without
+ * pushing 2.5 MB through publish validation and a per-comment re-read of it.
+ */
 async function seedBig(threads: number) {
-  const t = await mintToken('agent');
-  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml(BIG_DOC) } }));
-  const doc = (await made.json()) as { id: string; edit_id: string };
-  expect(made.status).toBe(201);
-  const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-  const tokenActor = identityForUser(t.userId!, t.id, t.email!);
-  for (let i = 0; i < threads; i++) {
-    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { anchor: nativeAnchor(i % 2 ? 'findings' : 'intro'), edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
-    expect(res.status, await res.clone().text()).toBe(201);
+  const f = await seed(threads);
+  if (bigStored === undefined) {
+    const small = (await artifactQuery<{ source: string }>(f.db, 'SELECT document, source FROM artifacts WHERE id = $1', [f.doc.id])).rows[0]!.source;
+    bigStored = JSON.stringify(createDocumentGraph(small.replace(/^<!doctype html>/i, '').replace('</body>', `${BIG_FILLER}</body>`), 1, { preserveSource: true }));
   }
-  return { t, doc, actor, tokenActor };
+  await f.db.query('UPDATE artifacts SET document = $1::jsonb WHERE id = $2', [bigStored, f.doc.id]);
+  const actor = { credential: 'session' as const, userId: f.t.userId!, email: f.t.email!, emailVerified: true };
+  return { t: f.t, doc: f.doc, actor, tokenActor: f.tokenActor };
 }
 
 /** Run `work` and count the statements IT issued (its async context only, never background work) that returned a document or source. */
