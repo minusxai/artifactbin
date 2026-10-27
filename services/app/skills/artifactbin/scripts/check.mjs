@@ -36,7 +36,9 @@ export async function inspectPage(page,options,task){
  // A main-frame navigation (e.g. a step's reload) cancels requests that started before it; those aborts are not page failures.
  let navigation=0;const started=new WeakMap();
  page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigation++;started.set(request,navigation);});
- page.on('requestfailed',request=>{const item={url:request.url(),error:request.failure()?.errorText};const aborted=item.error==='net::ERR_ABORTED'&&started.get(request)<navigation;record(classify(item.url)||aborted?telemetry:failedRequests,aborted?{...item,reason:'navigation'}:item);});
+ // The reader's own comment fetch is cancelled whenever a step reloads or navigates; it is reader chrome, not the page.
+ const readerFetch=(value)=>{try{const url=new URL(value);return url.origin===new URL(page.url()).origin&&/^\/api\/my\/artifacts\/[A-Za-z0-9]+\/annotations$/.test(url.pathname);}catch{return false;}};
+ page.on('requestfailed',request=>{const item={url:request.url(),error:request.failure()?.errorText};const aborted=item.error==='net::ERR_ABORTED'&&(started.get(request)<navigation||readerFetch(item.url));record(classify(item.url)||aborted?telemetry:failedRequests,aborted?{...item,reason:'navigation'}:item);});
  page.on('response',response=>{if(response.status()>=400){const item={url:response.url(),status:response.status()};record(classify(item.url)?telemetry:httpErrors,item);}});
  page.setDefaultTimeout(options.timeoutMs??4000);
  const evidence={viewport:options.viewport,pageErrors,consoleErrors,failedRequests,httpErrors,telemetry,text:'',overflow:null,task:null};
