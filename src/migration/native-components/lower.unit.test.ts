@@ -249,3 +249,12 @@ test('source-bound outer reader deck retains authored wrapper and slide identiti
  const before=JSON.stringify(source);const result=lowerNativeComponents({...source,readerDeckRail:true});assert.equal(result.status,'complete',JSON.stringify({blockers:result.blockers,requirements:result.requirements}));assert.doesNotMatch(result.html!,/<af-slide-deck/);assert.match(result.html!,/<div[^>]*aria-label="Authored deck"[^>]*>/);assert.equal((result.html!.match(/<af-slide /g)||[]).length,2);assert.equal(result.modules.filter(m=>m.name==='slide-deck').length,1);assert.equal(JSON.stringify(source),before);
  const ordinary=lowerNativeComponents(source);assert.equal(ordinary.status,'complete');assert.match(ordinary.html!,/<af-slide-deck/);
 });
+
+test('source DataTable projects intrinsic header interaction without changing ordinary elements or admitting author overrides',()=>{
+ const result=lowerNativeComponents(input([element('DataTable',{height:'240px'})]));
+ assert.equal(result.status,'complete');assert.match(result.html!,/header-interaction="source"/);
+ const ordinary=lowerNativeComponents(input([element('table',{},[element('tr',{},[element('th',{},[text('Header')])])])]));
+ assert.doesNotMatch(ordinary.html!,/header-interaction/);
+ const override=lowerNativeComponents(input([element('DataTable',{headerInteraction:'keyboard'})]));
+ assert.equal(override.status,'blocked');assert.ok(override.blockers.some(b=>b.code==='unsupported-attribute'));
+});
