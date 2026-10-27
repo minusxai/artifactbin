@@ -102,6 +102,10 @@ export interface NativeOperationBlocker {
   sourceNode: string;
   operation: string;
 }
+/** A static visualization retains its literal source Value node and complete ordered table. */
+export type NativeVisualizationSourceBinding =
+  | {kind:"query-result";name:string}
+  | {kind:"static-table-value";name:string;sourceNode:string;sourceNodeSha256:string;rowsSha256:string;columnsSha256:string};
 export interface NativeOperationProof {
   kind: "query" | "mutation" | "visualization";
   name: string;
@@ -110,6 +114,7 @@ export interface NativeOperationProof {
   route: NativeOperationRoute;
   dependencies: readonly string[];
   requiredGuarantees: readonly NativeOperationGuarantee[];
+  visualizationSource?: NativeVisualizationSourceBinding;
   /** A matching receipt is preparation evidence, never a runtime or visual parity pass. */
   status: "attested-plan" | "blocked";
 }

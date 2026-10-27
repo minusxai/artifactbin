@@ -90,7 +90,13 @@ export interface NativeBindingViewer {
   document: string;
   responsePath: readonly [string, "viewer", "id"];
 }
+/** Only attested literal-table visualization sources, scoped to their exact chart node. */
+export interface NativeStaticTableVisualizationSource {
+ chartSourceNode:string;
+ binding:Extract<import('./operations-contracts.ts').NativeVisualizationSourceBinding,{kind:'static-table-value'}>;
+}
 export interface NativeBindingsInput {
+  staticTableSources?:readonly NativeStaticTableVisualizationSource[];
   navigation?:import("./resource-navigation-contracts.ts").NativeNavigationPolicy;
   urls?:readonly {source:string;target:string;sha256:string}[];
   componentRecipes?:readonly import("./component-presentation-contracts.ts").NativeComponentRecipe[];

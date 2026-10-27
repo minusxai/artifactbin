@@ -6,6 +6,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const requestId=()=>{if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const bytes=crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;const hex=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join('');return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);};
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},tableErrors={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
+ for(const [name,table]of Object.entries(plan.staticTables??{})){tables[name]=table.rows;tableData[name]=table;}
  const cells=new WeakMap(),committedResets=new Set();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
@@ -61,7 +62,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
    }
    if(target.kind==='url'){const url=projectUrl(read(target.expression,row),target.attribute,plan.navigation,plan.urls);if(url===null)host.removeAttribute(target.attribute);else host.setAttribute(target.attribute,url);}
    if(target.kind==='property'){
-    const binding=target.writeback;let projection=target.property==='data'?(plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null):read(target.expression,row);
+    const binding=target.writeback;let projection=target.property==='data'?(Object.hasOwn(plan.staticTables??{},target.expression.name)?tableData[target.expression.name]:plan.viewer&&!viewerReady?null:tableData[target.expression.name]??null):read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
     if(target.property==='options'){const table=plan.viewer&&!viewerReady?null:tableData[target.expression.name],columns=table?.columns??[],value=columns[0]?.name,label=columns[1]?.name;projection=table&&value?table.rows.map(row=>({value:String(row[value]??''),label:label?String(row[label]??row[value]??''):String(row[value]??'')})):[];}
     host[target.property]=projection;

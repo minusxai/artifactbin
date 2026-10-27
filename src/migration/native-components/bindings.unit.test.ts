@@ -1,3 +1,4 @@
+import {nativeDigest} from './selection.ts';
 import {buildNativeCellAdapter} from './cell-build.ts';
 import type {NativeAssemblyFile} from './assemble-contracts.ts';
 import { test } from "node:test";
@@ -1639,4 +1640,17 @@ test('row URL bindings update keyed anchors and remove unsafe stale URLs',async(
  const response=(url:string)=>{const value=answer('one');value.data.records.evaluate.tables[0]!.rows[0]!.cells[1]!.text=url;return value;};
  try{port.remotes[0]!.next(response('https://example.com/one'));const anchor=host.children[0]!.children[0]!;assert.equal(anchor.getAttribute('href'),'https://example.com/one');port.remotes[0]!.next(response('javascript:alert(1)'));assert.equal(host.children[0]!.children[0],anchor);assert.equal(anchor.getAttribute('href'),null);port.remotes[0]!.next(response('mailto:hello@example.com'));assert.equal(anchor.getAttribute('href'),'mailto:hello@example.com');}finally{await runtime.close();}
  const unsupported=emitNativeBindings(input([anchor],[{kind:'url',sourceNode:'url-anchor',afId:'url-anchor',attribute:'href'}]));assert.equal(unsupported.status,'blocked');
+});
+
+function staticTableBindingInput():NativeBindingsInput {
+ const rows=[{label:'first',amount:2},{label:'second',amount:1}],columns=[{name:'label',type:'string'},{name:'amount',type:'number'}],value=el('literal-source','Value',{name:'items',type:'table',value:rows}),chart=el('chart','Chart',{data:'$items'}),i=input([value,chart],[{kind:'property',sourceNode:'chart',afId:'chart',property:'data',attribute:'data'}]);
+ i.analysis.flow.values=[{name:'items',kind:'table',rows,columns,start:0,end:1}];i.staticTableSources=[{chartSourceNode:'chart',binding:{kind:'static-table-value',name:'items',sourceNode:'literal-source',sourceNodeSha256:nativeDigest(value),rowsSha256:nativeDigest(rows),columnsSha256:nativeDigest(columns)}}];return i;
+}
+test('literal table chart receives the exact ordered decoded table without remote queries or viewer state',async()=>{
+ const i=staticTableBindingInput(),result=emitNativeBindings(i);assert.equal(result.status,'complete');if(result.status!=='complete')return;assert.deepEqual({...result.localDefaults},{});const doc=new Doc(),chart=new Element('af-vega',{'data-af-id':'chart'});doc.body.append(chart);const port=client({}),runtime=await execute(result.authorJs,port,doc);
+ try{assert.deepEqual((chart as any).data,{columns:i.analysis.flow.values[0]!.columns,rows:i.analysis.flow.values[0]!.rows});assert.equal(port.remotes.length,0);assert.equal(port.writes.length,0);runtime.module.dispose();assert.equal(port.remotes.length,0);}finally{await runtime.close();}
+});
+test('static source binding cannot authorize unrelated nodes, altered tables, duplicate names or scalar/control reads',()=>{
+ const changes:Array<(i:NativeBindingsInput)=>void>=[i=>{i.staticTableSources=[]},i=>{i.staticTableSources=[...i.staticTableSources!,...i.staticTableSources!]},i=>{i.staticTableSources![0]!.binding.rowsSha256='0'.repeat(64)},i=>{i.analysis.nodes[0]!.graphKey='replacement'},i=>{i.analysis.flow.values.push(structuredClone(i.analysis.flow.values[0]!))},i=>{i.analysis.flow.values[0]!.rows=[{label:'first',amount:99}]},i=>{(i.analysis.nodes[1]as any).tag='Select';(i.targets[0]as any).property='options';(i.targets[0]as any).attribute='options'}];
+ for(const change of changes){const i=staticTableBindingInput();change(i);assert.equal(emitNativeBindings(i).status,'blocked');}
 });
