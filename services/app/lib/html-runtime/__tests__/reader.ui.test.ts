@@ -83,3 +83,16 @@ it('removes the message listener on cleanup and keeps the frame hash contract', 
   mock.deliver({ type: 'mx:reader-mode', mode: 'dark' });
   expect(mock.root.hasAttribute('data-af-dark')).toBe(false);
 });
+
+it('switches the design system live on the owner command, keeping the given mode, and ignores malformed names', () => {
+  const mock = createReaderWindow();
+  const stop = installHtmlReaderCommands(mock.win, 'https://platform.example');
+  mock.deliver({ type: 'mx:design-system', name: 'nocturne', mode: 'dark' });
+  expect(mock.root.getAttribute('data-af-design-system')).toBe('nocturne');
+  expect(mock.root.getAttribute('data-af-dark')).toBe('true');
+  mock.deliver({ type: 'mx:design-system', name: 'Not A System"]', mode: 'light' });
+  mock.deliver({ type: 'mx:design-system', name: 'redline' });
+  expect(mock.root.getAttribute('data-af-design-system')).toBe('nocturne');
+  expect(mock.root.getAttribute('data-af-dark')).toBe('true');
+  stop();
+});

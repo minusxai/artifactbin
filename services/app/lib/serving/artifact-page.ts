@@ -1,3 +1,5 @@
+import {htmlAppearance} from '@/lib/html-page';
+import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
@@ -275,7 +277,10 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const capturedColor = exporting ? captureColor(request.url) : null;
   // Captures use their requested mode; readers keep their own preference.
   const readerPick = framing && !exporting ? readerPickOf(request) : null;
-  const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
+  // An HTML page's design system and default mode are what its core applies (lib/html-page/design-system): the owner's
+  // saved choice, else the page's own meta, and the system's own default mode — so the reader's toggle starts right.
+  const look = nativeHtml ? htmlAppearance(row.source ?? '', designSystemChoice(artifact.meta)) : null;
+  const design = look ? { theme: (look.designSystem ?? null) as StoryDesignName | null, colorMode: capturedColor ?? look.mode } : resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
   const ownerScope = role === 'owner' ? actor : null;

@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { POST } from '@/app/api/artifacts/route';
-import { GET as read, PUT } from '@/app/api/artifacts/[id]/route';
+import { GET as read, PUT, PATCH } from '@/app/api/artifacts/[id]/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { GET as systemsSheet, HEAD as systemsHead } from '@/app/af/styles.css/route';
@@ -209,4 +209,26 @@ it('publishing through the HTTP API stores the design system as head metadata (D
  const stored=(await artifacts.getArtifactById((await response.json()).id))!.source!;
  expect(stored).toContain('<meta name="artifactbin:design-system" content="riso"');
  expect(stored).not.toMatch(/data-af-dark|data-af-design-system=|data-af="design-system"/);
+});
+
+it('lets an owner pick the design system as page metadata: 13 systems or null, applied by the core and the reader (D4)',async()=>{
+ const actor=await mintAccountToken('native-owner-theme');
+ const html='<!doctype html><html><head><title>Owner</title><meta name="artifactbin:design-system" content="redline"></head><body><p>x</p></body></html>';
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html,visibility:'private'}}));
+ const {id,state}=await created.json() as {id:string;state:string};
+ const etag=async()=>(await raw(markPagesRequest(request(`/a/${id}/raw`,{token:actor.token}),{id,self:`https://${id}.pages.example.test`,site}),params(id))).headers.get('etag');
+ const appearance=async()=>JSON.parse(new JSDOM(await (await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id))).text()).window.document.querySelector('[data-af="runtime"]')!.textContent!).appearance;
+ expect(await appearance()).toEqual({designSystem:'redline',mode:'light'});
+ const story=await PATCH(request(`/api/artifacts/${id}`,{method:'PATCH',token:actor.token,json:{theme:'modernist',expectedState:state}}),params(id));
+ expect(story.status).toBe(400);expect((await story.json()).allowed).toHaveLength(13);
+ const picked=await PATCH(request(`/api/artifacts/${id}`,{method:'PATCH',token:actor.token,json:{theme:'nocturne',expectedState:state}}),params(id));
+ expect(picked.status,await picked.clone().text()).toBe(200);
+ const row=await artifacts.getArtifactById(id);expect(row!.version).toBe(1);expect(row!.source).toContain('content="redline"');
+ expect(await appearance()).toEqual({designSystem:'nocturne',mode:'dark'});
+ const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:actor.userId!,email:actor.email??undefined}}),id,{pages:site});
+ expect(answer.body).toMatchObject({surface:{theme:'nocturne',colorMode:'dark'}});
+ const before=await etag();
+ const cleared=await PATCH(request(`/api/artifacts/${id}`,{method:'PATCH',token:actor.token,json:{theme:null,expectedState:(await picked.json()).state}}),params(id));
+ expect(cleared.status).toBe(200);expect(await appearance()).toEqual({designSystem:'redline',mode:'light'});
+ expect(await etag()).not.toBe(before);
 });

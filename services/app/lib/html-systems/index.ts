@@ -26,3 +26,9 @@ export function htmlSystemFontPaths(names: readonly string[]): string[] {
   return [...new Set([...htmlSystemsCss(names).matchAll(/url\("(\/fonts\/[^"]+)"\)/g)].map((match) => match[1]!))];
 }
 
+
+/** The owner's saved choice in page metadata (`meta.theme`), when it names a system HTML pages serve. */
+export function designSystemChoice(meta: unknown): string | null {
+  const theme = meta && typeof meta === 'object' ? (meta as { theme?: unknown }).theme : undefined;
+  return isHtmlSystem(theme) ? theme : null;
+}
