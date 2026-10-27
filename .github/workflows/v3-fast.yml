@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22.22.3
+          node-version: 22.23.4
       # Key covers OS, Node, the lockfile, .npmrc and every workspace manifest, so any
       # dependency change misses and runs a full `npm ci`. Only the exact key restores.
       - id: deps
@@ -35,7 +35,7 @@ jobs:
             node_modules
             services/*/node_modules
             docs/proposals/runner-validation/node_modules
-          key: v3-fast-nm-${{ runner.os }}-${{ runner.arch }}-node22.22.3-${{ hashFiles('package-lock.json', '.npmrc', '.nvmrc', 'package.json', 'services/*/package.json', 'docs/proposals/runner-validation/package.json') }}
+          key: v3-fast-nm-${{ runner.os }}-${{ runner.arch }}-node22.23.4-${{ hashFiles('package-lock.json', '.npmrc', '.nvmrc', 'package.json', 'services/*/package.json', 'docs/proposals/runner-validation/package.json') }}
       # Full pinned install includes workspace native dependencies and every postinstall.
       # No browser download, server build, or service is a prerequisite for the fast lane.
       - if: steps.deps.outputs.cache-hit != 'true'
