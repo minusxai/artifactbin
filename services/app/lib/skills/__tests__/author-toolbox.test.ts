@@ -213,7 +213,7 @@ it('lists local autofix problems at the top of a saved check summary',async()=>{
  const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const digest=checkDigest({ok:true,smokePassed:true,checks:[],autofix:{file:'/',problems:[{rule:'duplicate-id',line:4,column:2,message:'duplicate id "a" (first at line 3)'}]}},'qa.json');
  expect(digest.split('\n')[0]).toBe('autofix: 1 problem to fix by hand');expect(digest.split('\n')[1]).toContain(':4:2 duplicate id');expect(digest.split('\n')[2]).toMatch(/^check completed/);
-
+});
 it('summarizes duplicate and unstable data-af-id evidence without overstating either',async()=>{
  const {checkDigest}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
  const {summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
