@@ -151,11 +151,11 @@ export function DocumentPage(): JSX.Element {
    * The HTML version this page and its frame show: the served one, then each version the frame drew in place
    * (followHtmlVersion). The frame's relayed queries, presence and selection classify against it.
    */
-  const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 1, editId: page?.surface?.editId ?? '' });
+  const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 0, editId: page?.surface?.editId ?? '' });
   /** The drawn version's tree, fetched again once the frame holds one (set when the frame is adopted). */
   let refreshTree = (): Promise<JsxNode[] | null | undefined> => Promise.resolve(undefined);
   const reload = () => replaceDocument(window.location.href);
-  const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? htmlHead().version), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
+  const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? (htmlHead().version || 1)), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
   const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
@@ -201,7 +201,7 @@ export function DocumentPage(): JSX.Element {
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
     onPublication: page.surface.format === 'html' ? (version, editId) => import('../document/follow-html-version').then(({ followPublication }) => followPublication({
       version, editId, frame: archivedNow() ? null : runtimeRef.current, tree: () => refreshTree(), show: setHtmlHead, reload,
-    })).catch(reload) : undefined,
+    }), reload) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,
     since: page.surface.runtime?.data.dataflow?.results?.since,
@@ -277,7 +277,7 @@ export function DocumentPage(): JSX.Element {
       editId: () => htmlHead().editId,
       source: () => null,
       htmlContext: page.surface?.format === 'html' ? () => ({
-        revision: String(page.archived?.version ?? htmlHead().version),
+        revision: String(page.archived?.version ?? (htmlHead().version || 1)),
         readOnly: !!page.archived,
         uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
       }) : undefined,
@@ -320,7 +320,7 @@ export function DocumentPage(): JSX.Element {
       served.remove();
     });
   });
-  const currentVersion = () => page?.archived?.version ?? live()?.version ?? (page?.surface?.format === 'html' ? htmlHead().version : page?.surface?.version) ?? 0;
+  const currentVersion = () => page?.archived?.version ?? live()?.version ?? htmlHead().version;
   /**
    * The head the page SHOWS: the newest of the version it loaded and the version the live stream
    * drew in place. Comments, screenshots and their images are made against it — the id the page loaded with is a
@@ -328,9 +328,8 @@ export function DocumentPage(): JSX.Element {
    */
   const shownEditId = () => {
     const heads = [
-      { version: page?.surface?.version ?? 0, editId: page?.surface?.editId },
+      htmlHead(),
       { version: live()?.version ?? -1, editId: live()?.editId },
-      { version: htmlHead().version, editId: htmlHead().editId },
     ];
     return heads.reduce((best, head) => (head.editId && head.version > best.version ? head : best), { version: -1, editId: undefined as string | undefined }).editId;
   };

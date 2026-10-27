@@ -1,10 +1,10 @@
 import type {AnnotationWire} from './store';
+import {retryLazily} from '@/lib/http/retry-lazily';
 /** The document overlay needs all roots, while HTTP keeps each response bounded. */
 export async function readAnnotationPages(url:string,options:RequestInit={}):Promise<AnnotationWire[]>{
  const annotations=new Map<string,AnnotationWire>(),seen=new Set<string>();let cursor:string|undefined;
  for(;;){
   const page=cursor?`${url}${url.includes('?')?'&':'?'}cursor=${encodeURIComponent(cursor)}`:url;
-  const {retryLazily}=await import('@/lib/http/retry-lazily');
   const {response}=await retryLazily(()=>fetch(page,{credentials:'same-origin',...options}),{signal:options.signal??undefined});
   if(!response.ok)throw new Error(`Annotation read failed (HTTP ${response.status})`);
   const body=await response.json();if(!Array.isArray(body.annotations))throw new Error('Invalid annotation page');

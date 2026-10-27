@@ -5,7 +5,8 @@ import {openLiveStream} from '@/lib/http/live-stream';
 import {readAnnotationPages} from '@/lib/annotations/pages';
 import type {ArtifactHead,ReaderArtifactBackend} from './types';
 // The reader's reads ride out a restart without carrying the comment backend's retry listeners (./retrying).
-const retried=async(send:()=>Promise<Response>)=>(await (await import('@/lib/http/retry-lazily')).retryLazily(send)).response;
+import {retryLazily} from '@/lib/http/retry-lazily';
+const retried=async(send:()=>Promise<Response>)=>(await retryLazily(send)).response;
 const JSON_HEADERS={'Content-Type':'application/json'};
 /** Anonymous mode is a read-only caller boundary, not account authorization. */
 export interface ReaderHttpOptions {anonymous?:boolean}
