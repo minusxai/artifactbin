@@ -1,11 +1,15 @@
 /**
- * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting and copy buttons; unsafe or unsupported content is rejected.
- * Import:  import {registerMarkdown} from './components/markdown.js'; registerMarkdown();  (load the .js in the browser; this .ts is the readable contract)
- * Props: source (property wins over the source attribute, then the initial text)
- * Usage:
+ * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting and copy buttons;
+ *   unsafe or unsupported content is rejected.
+ * Usage: import '@afbin/markdown';  (registers the tags; this .ts is the readable contract)
+ * Props: source (property wins over the source attribute, then the initial text).
+ * Examples:
  *   <af-markdown>## Notes\n- one\n- two</af-markdown>
+ * Gotchas: the initial text is read once as the source; later edits go through source.
  */
-/** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay code without changing its layout.
+import { registerComponent } from './register-component';
+/** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay
+ * code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
 import { markdownContent } from '../markdown/content';
@@ -101,27 +105,33 @@ const readerBareTypography=STORY_BARE_TYPOGRAPHY_CSS
  .replaceAll(':where([data-mx-story-root])',':where(af-markdown .mx-markdown)')
  .replaceAll(':where([data-mx-story-root]:not([data-mx-styled]))',':where(af-markdown):not(*)');
 const markdownStyles=`
-:where(af-markdown .mx-markdown,af-markdown .mx-markdown *){box-sizing:border-box;margin:0;padding:0;border:0 solid}
-:where(af-markdown pre,af-markdown code,af-markdown kbd,af-markdown samp){font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace);font-feature-settings:normal;font-variation-settings:normal;font-size:1em}
+:where(af-markdown .mx-markdown,af-markdown .mx-markdown *){box-sizing:border-box;margin:0;` +
+  `padding:0;border:0 solid}
+:where(af-markdown pre,af-markdown code,af-markdown kbd,` +
+  `af-markdown samp){font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Monaco,` +
+  `Consolas,"Liberation Mono","Courier New",monospace);font-feature-settings:normal;` +
+  `font-variation-settings:normal;font-size:1em}
 ${scopeMarkdownCss(MARKDOWN_CSS)}
 /* The original reader's Markdown sheet follows the application preflight,
    which leaves code at its parent size. Restore that final cascade after the
    shared Markdown rules, for inline and fenced code alike. */
 :where(af-markdown .mx-markdown code){font-size:1em}
 ${readerBareTypography}
-af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;` +
+  `-webkit-overflow-scrolling:touch}
 af-markdown{display:block}
 af-markdown .mx-markdown > :first-child{margin-block-start:0}
 af-markdown pre{position:relative;overflow:auto}
-af-markdown pre button{position:absolute;top:.5rem;right:.5rem;opacity:0;padding:.25rem .5rem;color:var(--foreground,CanvasText);background:var(--background,Canvas);border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - .25rem));font:inherit;cursor:pointer}
+af-markdown pre button{position:absolute;top:.5rem;right:.5rem;opacity:0;padding:.25rem .5rem;` +
+  `color:var(--foreground,CanvasText);background:var(--background,Canvas);` +
+  `border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,` +
+  `.625rem) - .25rem));font:inherit;cursor:pointer}
 af-markdown pre:hover button,af-markdown pre:focus-within button{opacity:1}
 af-markdown pre button:hover{background:var(--muted,Canvas)}
 af-markdown pre button:focus-visible{outline:2px solid var(--ring,Highlight);outline-offset:2px}
 `;
-export function registerMarkdown(registry:CustomElementRegistry=customElements,doc:Document=
-  document):void {
-if(!doc.querySelector('style[data-af-markdown-styles]')) {const style=doc.createElement('style');
-   style.setAttribute('data-af-markdown-styles','');style.textContent=markdownStyles;
-   doc.head.append(style);}
- if(!registry.get('af-markdown')) registry.define('af-markdown',AfMarkdown);
-}
+registerComponent({
+  styleKey: 'af-markdown-styles',
+  styles: markdownStyles,
+  elements: { 'af-markdown': AfMarkdown },
+});

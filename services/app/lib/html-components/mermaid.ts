@@ -1,17 +1,23 @@
 /**
- * <af-mermaid>: legacy wrapper for a Mermaid diagram (new diagrams: references/diagrams.md); bundled renderer with visible errors and an image fallback.
- * Import:  import {registerMermaid} from './components/mermaid.js'; registerMermaid();  (load the .js in the browser; this .ts is the readable contract)
- * Props: code, title, colorMode (auto|light|dark), storedImage={src,type,width,height}; retry()
- * Usage:
+ * <af-mermaid>: legacy wrapper for a Mermaid diagram (new diagrams: references/diagrams.md);
+ *   bundled renderer with visible errors and an image fallback.
+ * Usage: import '/af/components/mermaid.js';  (legacy, served by URL only;
+ *   this .ts is the readable contract)
+ * Props: code, title, colorMode (auto|light|dark), storedImage={src,type,width,height}; retry().
+ * Examples:
  *   document.querySelector('af-mermaid').code="graph TD; A-->B";
+ * Gotchas: the renderer loads lazily on first draw; a stored image is dropped when the source,
+ *   theme or font changes.
  */
+import { registerComponent } from './register-component';
 import type { MermaidImage } from '../mermaid-images/mermaid-render';
 /** Property code takes precedence over the code attribute, then initial literal text.
  * A stored image belongs to the current source; source/theme/font changes invalidate it. */
 export interface MermaidContract { code: string; title: string; colorMode: 'light' | 'dark' |
   'auto'; storedImage: MermaidImage | null; retry(): void }
 import { mermaidSourceError } from '../jsx/mermaid-source';
-/** Intentional lazy browser engine boundary; bundled from the pinned reader renderer, never a CDN. */
+/** Intentional lazy browser engine boundary; bundled from the pinned reader renderer,
+ * never a CDN. */
 const draw = async (element:HTMLElement,code:string,dark:boolean,live:()=>boolean) => {
   const renderer=await import('../mermaid-images/reader-draw');return live(
   ) ? renderer.drawForReader(element,code,dark,live) : null;};
@@ -82,10 +88,12 @@ status('Rendering diagram…');void draw(this,this.code,this.dark(),live).then(r
     'Could not render this diagram. Check its Mermaid syntax, then retry.',true);}});
  }
 }
-export function registerMermaid(registry:CustomElementRegistry=customElements,doc:Document=
-  document):void {
-if(!doc.querySelector('style[data-af-mermaid-styles]')){const style=doc.createElement('style');
-   style.setAttribute('data-af-mermaid-styles','');style.textContent=
-   'af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;line-height:1.25rem;font-weight:500;margin-bottom:.5rem}af-mermaid img{display:block;max-width:100%;height:auto}';doc.head.append(style);}
- if(!registry.get('af-mermaid'))registry.define('af-mermaid',AfMermaid);
-}
+const mermaidStyles = 'af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}' +
+  'af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;' +
+  'line-height:1.25rem;font-weight:500;margin-bottom:.5rem}' +
+  'af-mermaid img{display:block;max-width:100%;height:auto}';
+registerComponent({
+  styleKey: 'af-mermaid-styles',
+  styles: mermaidStyles,
+  elements: { 'af-mermaid': AfMermaid },
+});

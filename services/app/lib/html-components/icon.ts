@@ -1,10 +1,13 @@
 /**
  * <af-icon>: local Lucide glyph; no runtime fetch.
- * Import:  import {registerIcon} from './components/icon.js'; registerIcon();  (load the .js in the browser; this .ts is the readable contract)
- * Props: name, size, label (accessible name; omit for decorative)
- * Usage:
+ * Usage: import '@afbin/icon';  (registers the tags; this .ts is the readable contract)
+ * Props: name, size, label (accessible name; omit for decorative).
+ * Examples:
  *   <af-icon name="check" size="16" label="Done"></af-icon>
+ * Gotchas: glyphs are bundled; an unknown name renders the circle-question-mark glyph. size
+ *   accepts a number or a CSS length; anything else falls back to the default.
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import { iconMarkup } from './icon-glyphs';
 
 /** Public author-facing properties supported by `<af-icon>`. */
@@ -15,7 +18,10 @@ const DEFAULT_CLASS = 'inline-block shrink-0 align-[-0.125em]';
 function safeSize(value: string | number | null): string {
 if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? String(value) :
     DEFAULT_SIZE;
-  if (value && /^(?:\d+(?:\.\d+)?)(?:px|em|rem|ch|vw|vh|%)?$/.test(value.trim())) return value.trim();
+  // Bare number or a number with one CSS length unit; anything else falls back to the default.
+  if (value && /^(?:\d+(?:\.\d+)?)(?:px|em|rem|ch|vw|vh|%)?$/.test(value.trim())) {
+    return value.trim();
+  }
   return DEFAULT_SIZE;
 }
 
@@ -31,12 +37,16 @@ static observedAttributes = ['name', 'size', 'stroke-width', 'theme', 'label', '
   private propertyLabel: string | null = null;
   private svg: SVGSVGElement | undefined;
 
-  get name(): string { return this.nameIsSet ? this.propertyName : this.getAttribute('name') ?? ''; }
+  get name(): string {
+    return this.nameIsSet ? this.propertyName : this.getAttribute('name') ?? '';
+  }
 set name(value: string) { this.nameIsSet = true; this.propertyName = String(value ?? ''); this.sync(
     ); }
 get size(): string | number { return this.sizeIsSet ? this.propertySize : this.getAttribute(
     'size') ?? DEFAULT_SIZE; }
-  set size(value: string | number) { this.sizeIsSet = true; this.propertySize = value; this.sync(); }
+  set size(value: string | number) {
+    this.sizeIsSet = true; this.propertySize = value; this.sync();
+  }
 get label(): string | null { return this.labelIsSet ? this.propertyLabel : this.getAttribute(
     'label'); }
 set label(value: string | null) { this.labelIsSet = true; this.propertyLabel =
@@ -108,11 +118,10 @@ af-icon{display:inline-block;vertical-align:-.125em;color:inherit}
 af-icon>svg[data-af-icon]{display:block;flex:none;color:inherit;stroke:currentColor}
 `;
 
-export function registerIcon(registry: CustomElementRegistry = customElements, document: Document =
-  globalThis.document): void {
-  if (!document.querySelector('style[data-af-icon-styles]')) {
-const style = document.createElement('style'); style.setAttribute('data-af-icon-styles', '');
-      style.textContent = iconStyles; document.head.append(style);
-  }
-  if (!registry.get('af-icon')) registry.define('af-icon', AfIcon);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const iconComponent: ComponentDescriptor = {
+  styleKey: 'af-icon-styles',
+  styles: iconStyles,
+  elements: { 'af-icon': AfIcon },
+};
+registerComponent(iconComponent);

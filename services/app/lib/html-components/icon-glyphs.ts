@@ -1,4 +1,4 @@
-/** Internal helper for af-icon; not a public entry point. */
+/** Internal: bundled Lucide glyph catalog for af-icon. Used by: icon.ts. */
 /** Local Lucide glyph catalog. Bundled with the component; no runtime fetches. */
 import * as lucide from 'lucide-static';
 

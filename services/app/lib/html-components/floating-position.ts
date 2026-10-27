@@ -1,4 +1,7 @@
-/** Internal helper for af-popover, af-tooltip and af-date-picker; not a public entry point. */
+/**
+ * Internal: anchors floating panels and orders nested overlays for Escape dismissal.
+ * Used by: popover.ts, tooltip.ts, date-picker.ts.
+ */
 import {floatingPosition,type FloatingSide} from './floating-geometry';
 export {floatingPosition} from './floating-geometry';
 export type {FloatingSide,FloatingRect,FloatingPosition} from './floating-geometry';

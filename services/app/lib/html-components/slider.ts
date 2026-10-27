@@ -1,11 +1,13 @@
 /**
  * <af-slider>: numeric range control.
- * Import:  import {registerSlider} from './components/slider.js'; registerSlider();  (load the .js in the browser; this .ts is the readable contract)
- * Props: value (number), min, max, step, disabled, label
- * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
- * Usage:
+ * Usage: import '@afbin/slider';  (registers the tags; this .ts is the readable contract)
+ * Props: value (number), min, max, step, disabled, label.
+ * Events: af-change (bubbles) with event.detail.value.
+ * Examples:
  *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
+ * Gotchas: reflect your Apollo value back for controlled use.
  */
+import { registerComponent } from './register-component';
 import { format as d3format } from 'd3-format';
 
 /** Numeric value exposed by the author-facing range control. */
@@ -117,7 +119,9 @@ if (this.dispatchEvent(change) && !this.controlled && !this.hasAttribute('value'
     const min = Number.isFinite(Number(input.min)) ? Number(input.min) : 0;
     input.value = String(value ?? min);
     this.labelElement!.htmlFor = input.id;
-    if (this.hasAttribute('label')) this.labelElement!.textContent = this.getAttribute('label') ?? '';
+    if (this.hasAttribute('label')) {
+      this.labelElement!.textContent = this.getAttribute('label') ?? '';
+    }
 this.readout!.textContent = value === null ? '—' : `${this.getAttribute('prefix') ??
       ''}${this.formatValue(value)}${this.getAttribute('suffix') ?? ''}`;
   }
@@ -130,25 +134,31 @@ this.readout!.textContent = value === null ? '—' : `${this.getAttribute('prefi
 }
 
 const sliderStyles = `
-af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:11rem;vertical-align:top;font:inherit;color:inherit}
-af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;font-size:11px;font-weight:500;line-height:1.5}
-af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
-af-slider>input[type=range]{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:100%;height:6px;margin:0;padding:0;border:0;border-radius:9999px;background:var(--border,#d4d4d4);font:inherit}
-af-slider>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
-af-slider>input[type=range]::-moz-range-track{height:6px;border:0;border-radius:9999px;background:var(--border,#d4d4d4)}
-af-slider>input[type=range]::-moz-range-progress{height:6px;border-radius:9999px;background:var(--border,#d4d4d4)}
-af-slider>input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
+af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:11rem;` +
+  `vertical-align:top;font:inherit;color:inherit}
+af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;` +
+  `gap:.75rem;font-size:11px;font-weight:500;line-height:1.5}
+af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;` +
+  `text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
+af-slider>input[type=range]{-webkit-appearance:none;appearance:none;box-sizing:border-box;` +
+  `width:100%;height:6px;margin:0;padding:0;border:0;border-radius:9999px;` +
+  `background:var(--border,#d4d4d4);font:inherit}
+af-slider>input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;` +
+  `width:16px;height:16px;border:0;border-radius:9999px;background:var(--primary,currentColor);` +
+  `box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
+af-slider>input[type=range]::-moz-range-track{height:6px;border:0;border-radius:9999px;` +
+  `background:var(--border,#d4d4d4)}
+af-slider>input[type=range]::-moz-range-progress{height:6px;border-radius:9999px;` +
+  `background:var(--border,#d4d4d4)}
+af-slider>input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;` +
+  `border-radius:9999px;background:var(--primary,currentColor);` +
+  `box-shadow:0 1px 3px 0 rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1)}
 af-slider>input[type=range]:disabled{opacity:.5}
 af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:11px}
 `;
 
-export function registerSlider(registry: CustomElementRegistry = customElements, document:
-  Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-slider-styles]')) {
-    const style = document.createElement('style');
-    style.setAttribute('data-af-slider-styles', '');
-    style.textContent = sliderStyles;
-    document.head.append(style);
-  }
-  if (!registry.get('af-slider')) registry.define('af-slider', AfSlider);
-}
+registerComponent({
+  styleKey: 'af-slider-styles',
+  styles: sliderStyles,
+  elements: { 'af-slider': AfSlider },
+});
