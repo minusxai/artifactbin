@@ -1,3 +1,4 @@
+/** Internal helper for af-input and af-textarea; not a public entry point. */
 /** Author-facing contract shared by the native text and textarea controls. */
 export interface TextControlContract {
   value: string | number | null | undefined;

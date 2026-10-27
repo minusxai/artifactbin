@@ -8,6 +8,12 @@ const OK='<meta charset="utf-8">\n<meta name="viewport" content="width=device-wi
 const rules=(html:string)=>autofixHtml(html).fixes.map(fix=>fix.rule);
 
 describe('autofix rules',()=>{
+ it('names invalid install metadata that publish would silently ignore',()=>{
+  const bad=findProblems(page(OK+'\n<meta name="artifactbin:pwa-theme-color" content="green">\n<meta name="artifactbin:pwa-icon" content="logo.png">\n<meta name="artifactbin:pwa-nmae" content="x">'));
+  expect(bad.map(problem=>problem.rule)).toEqual(['pwa-metadata','pwa-metadata','pwa-metadata']);
+  expect(bad[0]!.message).toContain('six-digit hex');expect(bad[2]!.message).toContain('unknown setting');
+  expect(findProblems(page(OK+'\n<meta name="artifactbin:pwa-enabled" content="true">\n<meta name="artifactbin:pwa-theme-color" content="#234b35">'))).toEqual([]);
+ });
  it('leaves a correct page byte-identical and reports clean',()=>{
   const html=page(OK),result=autofixHtml(html,{exists:()=>true});
   expect(result.html).toBe(html);expect(result.changed).toBe(false);

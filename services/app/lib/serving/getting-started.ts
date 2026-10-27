@@ -23,7 +23,7 @@ export function gettingStarted(base:string,deployment?:DeploymentState):GettingS
    {kind:'text',text:`Ask your agent to use the artifactbin author skill. Read ${origin}/llms/http-auth for email sign-in and origin-scoped credential storage. Reuse existing credentials. Authenticate as the recipient: a shared link does not transfer the sender’s login or grant edit access.`},
   ]},
   {id:'author',title:'Create or edit through HTTP',blocks:[
-   {kind:'text',text:`Read ${origin}/llms/html-authoring for native HTML creation and conditional replacement. Preserve artifact identity and observed version conditions when editing. Read ${origin}/llms/html-datasets for linked datasets, schema discovery and authorized reads and writes. Verify the published result and share its returned URL.`},
+   {kind:'text',text:`Read ${origin}/llms.txt for native HTML creation and editing with the skill's scripts. Preserve artifact identity when editing. Read ${origin}/llms/datasets for linked datasets, schema discovery and authorized reads and writes. Verify the published result and share its returned URL.`},
   ]},
  ];
  if(deployment?.mode==='company')sections.push({id:'deployment',title:'Use your deployment',blocks:[{kind:'text',text:buildSetupInstructions({serverOrigin:origin,...(deployment.setup_complete&&deployment.default_group?{groupHandle:deployment.default_group.handle,setDefault:true}:{})})}]});

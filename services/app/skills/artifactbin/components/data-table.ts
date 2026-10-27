@@ -1,3 +1,14 @@
+/**
+ * <af-data-table>: sortable, virtualized table; the app owns edits, drafts and transport.
+ * Import:  import {registerDataTable} from './components/data-table.js'; registerDataTable();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: data={rows,columns} (columns are schema {name,type}); display columns=[{col,title,fmt}], rowKey (stable, unique), sort, height, sticky, transpose; cellRenderers, templates
+ * Server source: source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}
+ * Events: af-sort-change (sort) and af-edit-intent ({row,key,column,value})
+ * Keep state and record identity outside virtualized cells.
+ * Usage:
+ *   table.data={rows:[{id:1,name:"Ada"}],columns:[{name:"id",type:"number"},{name:"name",type:"string"}]};
+ *   table.rowKey="id";
+ */
 import {
   barFraction,
   cellTint,

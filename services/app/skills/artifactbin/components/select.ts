@@ -1,3 +1,13 @@
+/**
+ * <af-select>: dropdown select; assign options as a property.
+ * Import:  import {registerSelect} from './components/select.js'; registerSelect();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: options (scalars or {value,label} objects), value, multiple, allowCreate, disabled
+ * Note: values stay typed from your options through af-change
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   const select=document.querySelector('af-select');
+ *   select.options=[{value:"a",label:"Alpha"},{value:"b",label:"Beta"}];
+ */
 import { draftCommit, normalizeOptions, normalizeSelection, optionInput, selectKey } from './select-model';
 export type AfSelectScalar = string | number | boolean;
 export type AfSelectValue = AfSelectScalar | null | AfSelectScalar[];

@@ -1,3 +1,11 @@
+/**
+ * <af-input>: single-line text control.
+ * Import:  import {registerInput} from './components/input.js'; registerInput();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value, label, placeholder, native constraints (required, maxlength, pattern, ...)
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-input id="search" label="Search"></af-input>
+ */
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
 
 class AfInput extends HTMLElement implements TextControlContract {

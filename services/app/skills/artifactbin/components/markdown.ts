@@ -1,3 +1,10 @@
+/**
+ * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting and copy buttons; unsafe or unsupported content is rejected.
+ * Import:  import {registerMarkdown} from './components/markdown.js'; registerMarkdown();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: source (property wins over the source attribute, then the initial text)
+ * Usage:
+ *   <af-markdown>## Notes\n- one\n- two</af-markdown>
+ */
 /** Generated Markdown retains reader bare typography/table scrolling; copy controls overlay code without changing its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }

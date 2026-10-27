@@ -8,39 +8,39 @@ description: >-
 
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Load the core once with `<script src="/af/v1/core.js" data-af="core"></script>`; it provides the `@afbin/apollo` import and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`); that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`; design-system CSS colours its `tok-*` classes. No JSX, framework compilation, injected state globals or account credentials belong in a page.
 
-Server: [[ base ]]. Reuse this origin’s saved credentials; [authentication](references/http-auth.md) explains email sign-in and refresh. Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
+Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
 
 For an existing page, read its canonical `html`, `version` and `state`, preserve `data-af-id` identities, edit the HTML and publish to the same ID. For new work, choose the content and one design system, then write the page file directly as a compact first version, aiming under 30 KB: keep reasoning to a short plan and never draft the page's CSS, JS or copy there first; publish and share its returned URL before extending it. A URL-only request gets the URL alone.
 
-Direct HTTP: create with `POST /api/artifacts`; replace with `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable `Idempotency-Key`. On 409, read the new head and reconcile; never attach it to stale source.
+Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace with `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable `Idempotency-Key`. On 409, read the new head and reconcile; never attach it to stale source.
 
-## Author and publish
+## Core flows
 
-[[ authorCommands ]]
+Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn one, read the top of it (`head -30 scripts/NAME.mjs`: purpose, usage, flags, examples, gotchas; `--help` prints the same text). Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in (`node scripts/auth.mjs status`; its top covers login and refresh). Groups, ACLs, secrets and trash have no script.
 
-Every script supports complete offline `--help`, `--server ORIGIN`, `--json` and exclusive `--output FILE` where applicable. Use the archive’s Node scripts, never shell-built HTTP wrappers; read `--help`, not script source; [authentication](references/http-auth.md) reuses the same private origin-bound grant. Groups, ACLs, secrets and trash remain explicit HTTP operations.
-
-1. Read [native HTML publication](references/html-authoring.md). New source: `node scripts/publish.mjs ./project/index.html`; local CSS, images, fonts and backend files publish together. Existing source: `node scripts/read.mjs ID --output page.html`, edit its canonical IDs, then `node scripts/publish.mjs page.html`. Publish rewrites that file and its `.af.json` companion in place with the canonical result (it carries the `data-af-id`s), so keep editing and publishing that same file, never regenerate the page from scratch, and leave `data-af-id` off new static elements; never copy or hand-edit companions. Its external immutable journal supports `--resume FILE` after an uncertain write; no new key or identity. Publish and serve run autofix and print what it changed (`autofix:`); run `node scripts/autofix.mjs FILE` yourself only for a file you aren't publishing. A bare `POST /api/artifacts` refuses unresolved local dependencies.
-2. Read [state and JavaScript](references/html-runtime.md), including explicit field declarations for saved comment views. All page state goes through `client` from `@afbin/apollo`. Top-level local state is private to each viewer’s browser. Shared data lives behind declared dataset/backend namespaces. Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files. Elements your script creates (list rows, cards, table rows, labels) each need a `data-af-id` that is unique on the page and identical on every render, built as `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id; amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount them under a container present in the saved HTML. See [dynamic elements](references/html-runtime.md#dynamic-elements-and-comments).
-3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Keep `design-systems/` and the packaged `fonts/` inside the project root; link `./design-systems/NAME.css` from root-level HTML (adjust for subfolders). Preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; optional native components below need explicit registration.
-4. For a deck read [slides and image capture](references/html-authoring.md#slides-and-image-capture): stack full-viewport `<section data-af-slide>` elements, mark the nav `data-af-deck-chrome` and move between slides with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read positions mid-scroll). Keep each slide simple (a heading, a few lines and at most one chart or diagram) so the page stays small. The check's slide summary confirms export; don't export slides to test them, just reply with `slide=N` links. For a CSV/dashboard read [datasets](references/html-datasets.md). For a shared app read [backend files](references/html-backends.md) before modeling identity or writes. A readable page grants no dataset write access. Use authenticated account identity, never a name typed into a form, to authorize actions.
-5. Publish as soon as the first version renders, then run `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run) (add `--viewport 1200x630` for slides). [Operations](references/html-operations.md) covers steps: each steps file gets 6 s per viewport, so keep one concern per file; each viewport runs concurrently in its own fresh browser session (no shared local state); set each value explicitly (select the exact option, never toggle) and after every click `waitForFunction` the expected text before reading it; click the page before `page.keyboard`. Write one short steps file that waits for your data and checks the requested values and behaviour, run the check once, fix only what fails, and rerun once. You are done when those work and the summary shows no errors, overflow, contrast, clipping or overlap: send the link and what you tested, then stop. The summary is your layout evidence: don't write your own layout or pixel scripts, re-export or re-check, and skip optional polish. If you can view images, open the screenshot paths in the `--output` file; otherwise don't open them and say appearance is unverified.
-
-For HTML comment anchors and server-side browser verification, read [HTML operations](references/html-operations.md). It describes the native HTML anchor contract and how to inspect the sandboxed document frame.
+- **New page.** Write `index.html`: one [design system](references/html-design-systems.md) (the installed `design-systems/NAME.css`, linked from the project; keep its fonts, colors and type roles), compact (about 30 KB), the core script tag, state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
+  - Decks: stack full-viewport `<section data-af-slide>` elements (each simple: a heading, a few lines, at most one chart or diagram), mark the nav `data-af-deck-chrome`, and move with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read mid-scroll). Slide images are a 1200x630 viewport; reply with `slide=N` links (`export.mjs --slide N`) instead of testing exports.
+  - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files. Use authenticated account identity, never a name typed into a form, to authorize actions.
+- **Check.** `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run; add `--viewport 1200x630` for slides). Write one short steps file that waits for your data and checks the requested values and behaviour; set values explicitly and `waitForFunction` the expected text after each click. Fix only what fails, rerun once. Done means those pass and the summary shows no errors, overflow, contrast, clipping, overlap or duplicate ids: send the link and what you tested, then stop. The summary is your layout evidence: no own pixel scripts, re-exports or polish. If you can view images, open the screenshot paths in the `--output` file; otherwise don't and say appearance is unverified.
+- **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then `node scripts/publish.mjs page.html`; keep editing and publishing the same file and never regenerate the page from scratch. Keep every existing `data-af-id`; new static elements may omit it. Elements your script creates (list rows, cards, table rows, labels) each need a `data-af-id` that is unique on the page and identical on every render, built as `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id; amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount them under a container present in the saved HTML ([dynamic elements](references/runtime.md#dynamic-elements-and-comments)).
+- **Answer comments.** `node scripts/comment.mjs list ID`. If a comment asks for a change, make the edit first, then `node scripts/comment.mjs reply ID --thread T --body-file reply.txt` (add `--resolve --expected-revision R` when done). Anchors are described at the top of `comment.mjs`.[% if not shipped %] Direct-HTTP agents: [authentication](references/http-auth.md) and [comment anchors and browser sessions](references/html-operations.md).[% endif %]
+- **Monitor.** `node scripts/comment.mjs watch ID` streams new comments.
+- **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md). Shared apps and backend files: [backends](references/backends.md) (read before modeling identity or writes; a readable page grants no dataset write access). `node scripts/graphql.mjs schema ID` for the linked schema, `node scripts/export.mjs ID --format html --output copy.html` for a portable copy.
+- **Network and install.** To call an external API add `<meta name="csp-connect" content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`, `csp-frame`, `csp-media`); readers are asked to allow new origins and publish rejects invalid declarations. For an installable page use the `artifactbin:pwa-enabled`, `-name`, `-short-name`, `-theme-color`, `-background-color` and `-icon` metas in `<head>`; autofix explains invalid values.
 
 ## Optional HTML components
 
-Copy the installed `components/` module graph into the project and import its compiled `.js` registrations. Read [usage and contracts](references/html-components.md); `.ts` is readable source, not a browser script. The 24 UI elements below require explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain available for compatibility; new diagrams and maps use the direct libraries.
+Copy the installed `components/` directory into the project (all of it: helpers and engine chunks come along) and import the compiled `.js` registrations, e.g. `import {registerInput} from './components/input.js'; registerInput();` after the core script tag; repeat calls are safe. To learn an element, read the comment at the top of its `.ts` (`head -30 components/NAME.ts`: import line, attributes, events, usage); the `.ts` is readable source, not a browser script. Most controls emit a bubbling `af-change` with `event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view goes away. Elements use light DOM and the page's design-system tokens, carry no credentials, and need explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain for compatibility; new diagrams and maps use the direct libraries below.
 
-| Purpose | Retained elements |
+| Purpose | Elements (see `components/NAME.ts`) |
 |---|---|
-| [Controls](references/html-components.md#controls-and-composition) | `af-button`, `af-input`, `af-textarea`, `af-slider`, `af-switch`, `af-select`, `af-segmented`, `af-date-picker` |
-| [Navigation/disclosure](references/html-components.md#controls-and-composition) | `af-tabs`, `af-accordion`, `af-collapsible` |
-| [Overlays](references/html-components.md#controls-and-composition) | `af-dialog`, `af-popover`, `af-tooltip` |
-| [Identity/status](references/html-components.md#content-and-data) | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
-| [Prose/diagrams](references/html-components.md#content-and-data) | `af-markdown`, `af-isometric` |
-| [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload` |
-| [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
+| Controls | `af-button`, `af-input`, `af-textarea`, `af-slider`, `af-switch`, `af-select`, `af-segmented`, `af-date-picker` |
+| Navigation/disclosure | `af-tabs`, `af-accordion`, `af-collapsible` |
+| Overlays | `af-dialog`, `af-popover`, `af-tooltip` |
+| Identity/status | `af-avatar`, `af-user`, `af-icon`, `af-progress` |
+| Prose/diagrams | `af-markdown`, `af-isometric` |
+| Data/media | `af-data-table`, `af-file-upload` |
+| Slides | `af-slide-deck` (with `af-slide`) |
 
 For native HTML visualizations, use the direct library APIs rather than a custom chart or map element. Choose the guide that fits the work:
 
@@ -52,33 +52,34 @@ For native HTML visualizations, use the direct library APIs rather than a custom
 
 The guides give the exact shipped ESM imports, theming, resizing, cleanup and offline limits. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
+## Sharing and access
+
+A link never carries your login: whoever opens it signs in as themselves. Visibility only controls who can read; editing, comments and dataset writes are separate permissions.
+
+- "Make it public": `node scripts/publish.mjs page.html --visibility public` (the default is unlisted).
+- "Share it with my team": `node scripts/publish.mjs page.html --group HANDLE`. Group editors can edit, viewers can read.
+- "Let readers submit something": a readable page grants no writes; use a backend mutation with a role directive ([backend permissions](references/backends.md)).
+- Cursors and reader presence are the platform's; don't build them.
+
 ## Preserve the document
 
-Every saved page version remains available. Keep stable `data-af-id` attributes when moving or editing elements. Never reuse an ID removed in an earlier version. Newly authored static elements may omit IDs and receive server-assigned identities; save the canonical returned HTML before the next edit. Script-created elements follow the ID rule in step 2; the platform scopes their comments automatically. HTML `id` remains available for ordinary browser anchors and selectors.
-
-Use `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platform blocks. Color mode/design selection belongs on `<html data-af-dark="false" data-af-design-system="NAME">`. Page scripts execute on the page’s runner origin, separately from account credentials.
+Every saved page version remains available; never reuse an ID removed in an earlier version, and save the canonical returned HTML before the next edit. A 409 or a refused baseline means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser anchors and selectors. Use `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platform blocks; color mode and design selection belong on `<html data-af-dark="false" data-af-design-system="NAME">`. Page scripts execute on the page's runner origin, separately from account credentials.
 
 ## Installed resources
 
 [Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/` folder into your harness’s skill directory, then reload skills. The archive is one `artifactbin/` skill folder. Read only the guide needed for the task:
 
-- [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
-- [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
-- [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
-- [HTML components](references/html-components.md): registrations, properties, events and app-owned adapters.
-- [HTML comments, reactions and browser verification](references/html-operations.md): native anchors, server browser sessions and runner-frame inspection.
+- [Runtime](references/runtime.md): Apollo local state, remote namespaces and offline behavior.
 - [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and Vega/Vega-Lite guidance.
 - [Diagrams](references/diagrams.md): Pele rendering of Mermaid syntax, themes, lifecycle and offline behavior.
 - [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data limits.
-- [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
-- [Installable pages](references/html-authoring.md#installable-page-presentation) and [slides](references/html-authoring.md#slides-and-image-capture): static head metadata and explicit capture boundaries.
-- [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.
-- [Datasets](references/html-datasets.md): CSV import, schema discovery and stable dataset IDs.
-- [Backend files](references/html-backends.md): TypeScript resolvers, shared stores and permissions.
+- [Offline images](references/runtime.md#portable-images): download limits.
+- [Datasets](references/datasets.md): CSV import, schema discovery and stable dataset IDs.
+- [Backend files](references/backends.md): TypeScript resolvers, shared stores and permissions.
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
-- [Examples and verification](references/html-examples.md): report, CSV dashboard and shared task app.
+- `examples/` (report, CSV dashboard, shared task app): each file's top comment says what it shows and which files go with it.
 
-Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); [local preview](references/html-preview.md) covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.
+Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); the top of `scripts/serve.mjs` covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.
 
 Scripts are helpers inside this skill, not installed global product commands. Existing `preview.mjs` and `publication-bundle.mjs` entrypoints are compatibility shims; use the verb commands above.
 [% else %]
@@ -185,12 +186,9 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
 [% endif %]
   - [http-auth.md](references/http-auth.md) — HTTP sign-in, storage and refresh
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
-  - [comment-reactions.md](references/comment-reactions.md) — Account reactions and counts
   - [html-operations.md](references/html-operations.md) — Native HTML comments and runner-frame browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
   - [http-document-graph.md](references/http-document-graph.md) — Advanced graph updates
-  - [local-files.md](references/local-files.md) — Local preview, source comparison and deliberate saving
-  - [publication-bundles.md](references/publication-bundles.md) — Native HTML project dependencies
   - [publishing.md](references/publishing.md) — Sync, identity and conflict recovery
   - [publishing-annotations.md](references/publishing-annotations.md) — Read and reply to comments
   - [publishing-datasets.md](references/publishing-datasets.md) — Publish datasets and media

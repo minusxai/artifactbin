@@ -1,3 +1,4 @@
+/** Internal helper for af-deck-gl; not a public entry point. */
 import { Deck } from "@deck.gl/core";
 import { MapLibreOverlay } from "@deck.gl/maplibre";
 import * as maplibre from "maplibre-gl";

@@ -1,3 +1,4 @@
+/** Internal helper for af-popover, af-tooltip and af-date-picker; not a public entry point. */
 import {floatingPosition,type FloatingSide} from './floating-geometry';
 export {floatingPosition} from './floating-geometry';
 export type {FloatingSide,FloatingRect,FloatingPosition} from './floating-geometry';

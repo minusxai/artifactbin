@@ -1,3 +1,4 @@
+/** Internal helper for af-file-upload; not a public entry point. */
 /** Upload policy is browser guidance; the injected adapter enforces authorization and byte validation. */
 export interface AfUploadFile { ref: string; name: string; contentType?: string; size?: number }
 interface AfUploadContext { dataset: string; signal: AbortSignal }

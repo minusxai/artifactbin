@@ -1,3 +1,12 @@
+/**
+ * <af-popover>: anchored popover.
+ * Import:  import {registerPopover} from './components/popover.js'; registerPopover();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: open (boolean)
+ * Parts: af-popover-trigger (use a native button inside), af-popover-content
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-popover><af-popover-trigger><button>Info</button></af-popover-trigger><af-popover-content>Hello</af-popover-content></af-popover>
+ */
 import {floatingVisibility,identifyFloating,positionFloating,topFloating} from './floating-position';
 export interface PopoverChangeDetail { value: boolean }
 export interface PopoverContract { open: boolean | undefined }

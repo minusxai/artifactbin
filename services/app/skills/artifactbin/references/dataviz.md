@@ -6,7 +6,7 @@ description: Chart choice, truthful encodings and Vega-Lite or Vega authoring fo
 
 Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use documented runtime imports; assume no globals, embed helper or automatic theme.
 
-Name question, unit, grain, source, period, timezone and missing/partial data. Read [runtime](html-runtime.md) and [datasets](html-datasets.md).
+Name question, unit, grain, source, period, timezone and missing/partial data. Read [runtime](runtime.md) and [datasets](datasets.md).
 
 ## Bootstrap
 

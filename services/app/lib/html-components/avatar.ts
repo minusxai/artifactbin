@@ -1,3 +1,11 @@
+/**
+ * <af-avatar>: image with a fallback.
+ * Import:  import {registerAvatar} from './components/avatar.js'; registerAvatar();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: size (sm|default|lg)
+ * Parts: af-avatar-image src alt, af-avatar-fallback
+ * Usage:
+ *   <af-avatar><af-avatar-image src="me.png" alt="Ada"></af-avatar-image><af-avatar-fallback>A</af-avatar-fallback></af-avatar>
+ */
 export type AvatarSize = 'sm' | 'default' | 'lg';
 export type AvatarStatus = 'idle' | 'loading' | 'loaded' | 'error';
 export interface AvatarContract { size: AvatarSize; status: AvatarStatus }

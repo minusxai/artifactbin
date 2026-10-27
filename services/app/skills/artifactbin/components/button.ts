@@ -1,3 +1,11 @@
+/**
+ * <af-button>: native light-DOM button; authored label or children.
+ * Import:  import {registerButton} from './components/button.js'; registerButton();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: variant (default|destructive|outline|secondary|ghost|link), size (default|xs|sm|lg|icon|icon-xs|icon-sm|icon-lg), type, disabled, busy
+ * Events: the native click
+ * Usage:
+ *   <af-button variant="outline" size="sm">Save</af-button>
+ */
 /** Public attributes and forwarded properties supported by the native light-DOM button. */
 export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
 export type ButtonSize = 'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg';

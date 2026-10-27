@@ -1,3 +1,11 @@
+/**
+ * <af-segmented>: segmented single-choice control.
+ * Import:  import {registerSegmented} from './components/segmented.js'; registerSegmented();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: options (scalars or {value,label} objects), value (typed as authored)
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   document.querySelector('af-segmented').options=["Day","Week","Month"];
+ */
 /** Option values remain typed from the author's options property through af-change. */
 export type SegmentedValue = string | number | boolean | null;
 export interface SegmentedOption { value: SegmentedValue; label: string }

@@ -1,3 +1,4 @@
+/** Internal helper for af-isometric; not a public entry point. */
 import type { IsometricSpec } from "../jsx/isometric-spec";
 export interface IsometricOptions extends Omit<
   IsometricSpec,

@@ -1,5 +1,5 @@
 ---
-name: html-datasets
+name: datasets
 description: CSV import, dataset schema discovery, stable IDs and permission-aware GraphQL reads and writes.
 ---
 ## Read first

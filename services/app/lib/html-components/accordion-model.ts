@@ -1,3 +1,4 @@
+/** Internal helper for af-accordion; not a public entry point. */
 export type AccordionType = 'single' | 'multiple';
 /** Item values identify selections; items with the same value share open state. */
 export type AccordionValue = string | string[];

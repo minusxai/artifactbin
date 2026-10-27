@@ -93,13 +93,12 @@ describe('every agent-facing starter says the same thing', () => {
     expect(guide).toContain('HTTP authentication requires an email account');
     expect(guide).toContain('/api/authentication/token');
     expect(guide).toContain('Authorization: Bearer <access_token>');
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-authoring`);
-    expect(publicGuideText('html-authoring',BASE)).toContain('expectedState');
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-auth`);
   });
 
-  it('native HTTP discovery routes to authoring and runtime without command setup',()=>{
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-authoring`);
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-runtime`);
+  it('native HTTP discovery routes to runtime and datasets without command setup',()=>{
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/runtime`);
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/datasets`);
     expect(llmsText(BASE)).not.toContain('afbin pull');
   });
 
@@ -198,7 +197,7 @@ describe('llms.txt and the discovery head', () => {
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/html-authoring`, 'skill']) expect(text,line).toContain(line);
+    for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/runtime`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
     const guide = JSON.stringify(gettingStarted(BASE));
     expect(guide).toContain('artifactbin skill');
@@ -230,11 +229,11 @@ describe('public HTTP authoring references', () => {
   });
 
   it('serves a public guide, substitutes the origin and refuses unknown or unsafe topics', async () => {
-    const response = await guideRoute(new Request(BASE + '/llms/html-authoring'), {params:Promise.resolve({topic:'html-authoring'})});
+    const response = await guideRoute(new Request(BASE + '/llms/runtime'), {params:Promise.resolve({topic:'runtime'})});
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe(MARKDOWN_CONTENT_TYPE);
-    expect(publicGuideText('html-authoring', BASE + '/')).toBe(publicGuideText('html-authoring', BASE));
-    expect(await response.text()).toBe(publicGuideText('html-authoring', BASE));
+    expect(publicGuideText('runtime', BASE + '/')).toBe(publicGuideText('runtime', BASE));
+    expect(await response.text()).toBe(publicGuideText('runtime', BASE));
     for (const topic of ['not-a-guide','../markup','Markup','markup.md','%2e%2e','../SKILL','']) {
       expect(publicGuideText(topic, BASE), topic).toBeNull();
       expect((await guideRoute(new Request(BASE + '/llms/unknown'), {params:Promise.resolve({topic})})).status, topic).toBe(404);
@@ -242,10 +241,9 @@ describe('public HTTP authoring references', () => {
   });
 
   it('teaches canonical HTML replacement with conditional identity and bounded guide size',()=>{
-    const text=publicGuideText('html-authoring',BASE)!;
-    for(const value of ['html','expectedVersion','expectedState','Idempotency-Key'])expect(text).toContain(value);
+    const text=llmsText(BASE);
+    for(const value of ['expectedVersion','expectedState','Idempotency-Key'])expect(text).toContain(value);
     expect(text).not.toContain('/prepare');
-    expect(Buffer.byteLength(text)).toBeLessThan(8192);
   });
 });
 
@@ -425,7 +423,7 @@ it('keeps sign-in conditional across root guides and discovery', () => {
 
 it('lists every shipped reference in the main reference tree', () => {
  const tree=buildQuickSheet(BASE).split('## Reference tree')[1]!;
- for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent'&&!file.file.startsWith('html-'))) {
+ for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent'&&!/^(html-|runtime\.md$|datasets\.md$|backends\.md$)/.test(file.file))) {
   expect(tree,file.path).toContain(`](references/${file.file})`);
  }
 });

@@ -1,3 +1,10 @@
+/**
+ * <af-mermaid>: legacy wrapper for a Mermaid diagram (new diagrams: references/diagrams.md); bundled renderer with visible errors and an image fallback.
+ * Import:  import {registerMermaid} from './components/mermaid.js'; registerMermaid();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: code, title, colorMode (auto|light|dark), storedImage={src,type,width,height}; retry()
+ * Usage:
+ *   document.querySelector('af-mermaid').code="graph TD; A-->B";
+ */
 import type { MermaidImage } from '../mermaid-images/mermaid-render';
 /** Property code takes precedence over the code attribute, then initial literal text.
  * A stored image belongs to the current source; source/theme/font changes invalidate it. */

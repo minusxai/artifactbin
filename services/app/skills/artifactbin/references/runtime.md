@@ -1,5 +1,5 @@
 ---
-name: html-runtime
+name: runtime
 description: Normal HTML scripts and Apollo state, viewer-local persistence, shared namespaces and offline behavior.
 ---
 ## Read first
@@ -49,7 +49,7 @@ document.querySelector('#jobs').append(item);
 
 Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Use distinct prefixes for different lists and roles; avoid duplicate IDs (`check.mjs` fails on duplicates and warns when IDs differ between two loads). Never reuse a deleted job’s IDs, or borrow a source element’s identity.
 
-Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. For HTTP comments use the native HTML `html-node` anchor in [HTML operations](html-operations.md). JSX `node_id` is not an HTML anchor.
+Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. Comment anchors are described at the top of `scripts/comment.mjs`. JSX `node_id` is not an HTML anchor.
 
 ## Saved comment views
 
@@ -114,4 +114,4 @@ Replace the example ID with a real admitted image artifact. Download packs reada
 Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials. Test the downloaded file without a network.
 
 
-For an unpublished local project, read [private local preview](html-preview.md).
+For an unpublished local project, read the top of `scripts/serve.mjs`.

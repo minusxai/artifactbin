@@ -1,3 +1,10 @@
+/**
+ * <af-icon>: local Lucide glyph; no runtime fetch.
+ * Import:  import {registerIcon} from './components/icon.js'; registerIcon();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: name, size, label (accessible name; omit for decorative)
+ * Usage:
+ *   <af-icon name="check" size="16" label="Done"></af-icon>
+ */
 import { iconMarkup } from './icon-glyphs';
 
 /** Public author-facing properties supported by `<af-icon>`. */

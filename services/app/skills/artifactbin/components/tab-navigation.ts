@@ -1,3 +1,4 @@
+/** Internal helper for af-tabs; not a public entry point. */
 /** Navigation among the enabled triggers, independent of DOM focus and selection. */
 export interface TabNavigation {
   key:string;

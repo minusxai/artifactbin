@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {isPublicSkillTopic} from '../skills/public-surface';
+import {isPublicSkillTopic,isShippedSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText} from '@/lib/serving/agent-references.server';
@@ -56,16 +56,15 @@ describe('installable shared skill folder',()=>{
   expect(Object.keys(expected)).not.toContain('scripts/credentials.mjs');
   expect(Object.keys(cli)).not.toContain('scripts/credentials.mjs');
   for(const [transport,files] of [['http',expected],['cli',cli]] as const){
-   for(const {file,text} of renderTree(skillTree(),origin,transport)){
-    if(transport==='http'&&file.ref&&!isPublicSkillTopic(file.file.replace(/\.md$/,'')))continue;
+   for(const {file,text} of renderTree(skillTree(),origin,transport,transport==='http')){
+    if(transport==='http'&&file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
     expect(files[file.path.replace(/^artifactbin\//,'')],`${transport}: ${file.path}`).toBe(skillFileWithFrontmatter(file,text));
    }
   }
   expect(expected['scripts/publish.mjs']).toContain('sendPublication');
   expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
-  expect(expected['references/html-datasets.md']).toContain('dataset');
-  expect(expected['references/html-uploads.md']).toContain('uploadFile');
-  expect(publicGuideText('html-uploads',origin)).toContain('uploadFile');
+  expect(expected['references/datasets.md']).toContain('dataset');
+  expect(expected['components/file-upload.ts']).toContain('uploadFile');
   expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
@@ -150,8 +149,8 @@ describe('installable shared skill folder',()=>{
  });
  it('leaves room in the packaged data guide for origin expansion',()=>{
   const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
-  expect(Buffer.byteLength(files['references/html-datasets.md']!)).toBeLessThanOrEqual(7992);
-  expect(Buffer.byteLength(publicGuideText('html-datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(files['references/datasets.md']!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(publicGuideText('datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
  });
  it('rejects arbitrary archive members and traversal',()=>{
   for(const name of ['../SKILL.md','scripts/../other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');

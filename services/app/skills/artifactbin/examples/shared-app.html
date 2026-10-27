@@ -1,4 +1,10 @@
 <!doctype html>
+<!--
+Example: a shared task board with role-protected backend mutations; its display filter is local to each viewer.
+Goes with the backend file next to it in examples/ (the resolvers, linked from this page by af-backend; publish them together).
+Verify an editor's allowed action and a viewer's refusal (separate check runs, --viewer self and guest); the local filter must stay private
+to each browser profile, while shared task changes show after a fresh remote read. Offline, remote writes must report that they are unavailable.
+-->
 <html lang="en" data-af-design-system="almanac" data-af-dark="false">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

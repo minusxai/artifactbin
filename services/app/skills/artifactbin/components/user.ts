@@ -1,3 +1,15 @@
+/**
+ * <af-user>: person card; the app supplies identity (no account lookup happens in the element).
+ * Import:  import {registerUser} from './components/user.js'; registerUser();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: person={id,name,handle,image,profileHref}, loading, error, identityState (unknown|missing|deleted), mode (user|avatar|handle), size (sm|md|lg)
+ * To resolve a User ID from a linked dataset's typed user column, query that authorized namespace:
+ *   const {data}=await client.query({query:gql`query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}`,variables:{ids:[userId]}});
+ *   element.person=data.bookings.people.find(p=>p.id===userId)??null;
+ * Only IDs present in that dataset's typed user columns resolve (at most 100 per request; dataset read permission is checked
+ * before and after). Offline preview cannot resolve account cards. Keep an absent card null; never invent a name from the ID.
+ * Usage:
+ *   element.person={id:"u1",name:"Ada",handle:"ada",image:null,profileHref:"/u/ada"};
+ */
 import { personFaceBackground, personInitial } from '../islands';
 
 export type UserSize = 'sm' | 'md' | 'lg';

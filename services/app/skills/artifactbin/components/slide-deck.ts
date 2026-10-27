@@ -1,3 +1,19 @@
+/**
+ * <af-slide-deck>: keyboard-navigable deck of af-slide children with presentation and print behaviour. Its slides are not export-marked: for slide images use your own data-af-slide sections.
+ * Import:  import {registerSlideDeck} from './components/slide-deck.js'; registerSlideDeck();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: index (zero-based; you own it)
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Slide IDs stay stable when reordered or edited. Check keyboard navigation and print layout in the actual page.
+ * Usage:
+ *   <script type="application/json" data-af="state">{"index":0}</script>
+ *   <af-slide-deck data-af-id="quarterly-deck" index="0"><af-slide data-af-id="quarterly-intro"><h1>Review</h1></af-slide>
+ *   <af-slide data-af-id="quarterly-next"><h2>Next</h2></af-slide></af-slide-deck>
+ *   import {client,gql} from "@afbin/apollo"; import {registerSlideDeck} from "./components/slide-deck.js"; registerSlideDeck();
+ *   const deck=document.querySelector("af-slide-deck"), q=gql`{index}`;
+ *   const sub=client.watchQuery({query:q}).subscribe(({data})=>{if(deck.index!==data.index)deck.index=data.index;});
+ *   deck.addEventListener("af-change",e=>client.updateQuery({query:q},s=>({...s,index:e.detail.value})));
+ *   window.addEventListener("pagehide",()=>sub.unsubscribe(),{once:true});
+ */
 import { slideIndex, slideKeyIndex, visibleSlideIndex, type SlideDeckChangeDetail, type SlideDeckContract } from './slide-navigation';
 
 let sequence=0;

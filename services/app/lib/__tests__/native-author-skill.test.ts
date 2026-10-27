@@ -17,10 +17,12 @@ describe('one installable native HTML author skill',()=>{
  it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const snippets=(name:string)=>Array.from(files['references/'+name+'.md']!.matchAll(/```html\n([\s\S]*?)```/g),match=>match[1]!);
-  const head=snippets('html-authoring').find(html=>html.includes('artifactbin:pwa-enabled'))!;
-  expect(head).toBeTruthy();
+  // The install metadata is named in SKILL.md; its values are validated by the native reader and by autofix.
+  const skill=files['SKILL.md']!;
+  for(const name of ['artifactbin:pwa-enabled','-name','-short-name','-theme-color','-background-color','-icon'])expect(skill).toContain(name);
+  const head='<meta name="artifactbin:pwa-enabled" content="true"><meta name="artifactbin:pwa-name" content="Garden tasks"><meta name="artifactbin:pwa-short-name" content="Garden"><meta name="artifactbin:pwa-theme-color" content="#234b35"><meta name="artifactbin:pwa-background-color" content="#ffffff"><meta name="artifactbin:pwa-icon" content="ref:Ab1234">';
   expect(htmlPwaSettings('<html><head>'+head+'</head><body></body></html>')).toEqual({enabled:true,name:'Garden tasks',shortName:'Garden',themeColor:'#234b35',backgroundColor:'#ffffff',icon:'Ab1234'});
-  const image=snippets('html-runtime').find(html=>html.includes('ref:abc123'))!;
+  const image=snippets('runtime').find(html=>html.includes('ref:abc123'))!;
   expect(image).toBeTruthy();
   const html='<html><head></head><body>'+image+'</body></html>';
   const packed=await packOfflineHtmlImages({html,admittedIds:['abc123'],loadImage:async()=>({bytes:new Uint8Array([1,2,3]),mime:'image/png'}),maxBytes:10000});
@@ -29,7 +31,7 @@ describe('one installable native HTML author skill',()=>{
  });
  it('executes the documented namespace input mutation against the composed backend SDL',async()=>{
   const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
-  const guide=publicGuideText('html-backends',BASE)!;
+  const guide=publicGuideText('backends',BASE)!;
   const query=guide.match(/gql`(mutation Save[^`]+)`/)?.[1];
   expect(query).toBeTruthy();
   const schema=composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'input BudgetInput {category:String!,amount:Int!} type Query {count:Int} type Mutation {save(items:[BudgetInput!]!):Boolean!}'}]);
@@ -51,14 +53,16 @@ describe('one installable native HTML author skill',()=>{
   expect(json).toBeTruthy();
   const anchor=JSON.parse(json!);
   expect(parseHtmlNodeAnchor(anchor)).toEqual(anchor);
-  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs','overflow','comment.mjs watch'])expect(guide).toContain(value);
-  const browserExample=[...guide.matchAll(/```js\n([\s\S]*?)```/g)][1]?.[1];
-  expect(browserExample).toContain('page.getByRole');
-  expect(browserExample).toMatch(/throw Error\(/);
-  expect(browserExample).not.toContain('frameLocator(');
+  for(const value of ['/api/artifacts/${artifactId}/annotations','String(head.version)','next_cursor','cursor','data-af-id','iframe[data-mx-document-frame]','page.getByRole','page.locator','page.mainFrame()','scripts/check.mjs'])expect(guide).toContain(value);
   const files=skillPackageFiles(skillTree(),BASE);
-  expect(files['references/html-operations.md']).toContain('iframe[data-mx-document-frame]');
-  expect(publicGuideText('html-examples',BASE)).toContain('registerSlideDeck');
+  expect(guide).toContain('iframe[data-mx-document-frame]');
+  // What used to live in the guide now ships at the top of the scripts and component sources.
+  const check=files['scripts/check.mjs']!,comment=files['scripts/comment.mjs']!;
+  for(const value of ['page.getByRole','page.mainFrame()','overflow','--viewer'])expect(check).toContain(value);
+  expect(check.slice(0,check.indexOf('import'))).not.toContain('frameLocator(');
+  expect(comment).toContain('watch');expect(comment).toContain('react');
+  expect(files['components/slide-deck.ts']).toContain('registerSlideDeck');
+  for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);
@@ -103,5 +107,21 @@ describe('one installable native HTML author skill',()=>{
     if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(role:EDITOR)');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
+ });
+});
+
+describe('the shipped skill folder',()=>{
+ it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
+  const files=skillPackageFiles(skillTree(),BASE);
+  // Design-system guides are listed apart: they are generated and owned by their own workstream.
+  const refs=Object.keys(files).filter(name=>/^references\//.test(name)&&!/^references\/(?:html-system-[a-z0-9-]+|html-design-systems)\.md$/.test(name)).sort();
+  expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/maps.md','references/runtime.md']);
+  // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.
+  expect(files['SKILL.md']).not.toMatch(/http-auth|html-operations/);
+  for(const topic of ['http-auth','html-operations']){
+   expect(files[`references/${topic}.md`],topic).toBeUndefined();
+   expect(publicGuideText(topic,BASE),topic).toBeTruthy();
+   expect(llmsText(BASE)).toContain(`${BASE}/llms/${topic}`);
+  }
  });
 });

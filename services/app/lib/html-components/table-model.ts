@@ -1,3 +1,4 @@
+/** Internal helper for af-data-table; not a public entry point. */
 import type { DatasetColumn, Row } from "@/lib/dataflow";
 import { keyedRowsError } from "@/lib/story-ui/row-key";
 import type { SortSpec } from "@/lib/story-ui/data-table";

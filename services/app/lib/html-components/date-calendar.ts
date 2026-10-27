@@ -1,3 +1,4 @@
+/** Internal helper for af-date-picker; not a public entry point. */
 export interface CalendarMonth { year: number; month: number }
 export interface CalendarDay { value: string; day: number; inMonth: boolean }
 export interface DateBounds { min?: string | null; max?: string | null }

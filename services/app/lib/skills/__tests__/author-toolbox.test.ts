@@ -253,8 +253,73 @@ it('teaches script-created element IDs in the main steps and no longer names dat
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
  for(const block of ['state','core','design-system'])expect(skill).toContain(`data-af="${block}"`);
- const steps=skill.slice(skill.indexOf('## Author and publish'),skill.indexOf('## Preserve the document'));
- expect(steps).toContain('afId');expect(steps).toContain('references/html-runtime.md#dynamic-elements-and-comments');
- const runtime=await readFile(new URL('../../../skills/artifactbin/references/html-runtime.md',import.meta.url),'utf8');
+ const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
+ expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
+ const runtime=await readFile(new URL('../../../skills/artifactbin/references/runtime.md',import.meta.url),'utf8');
  expect(runtime).toContain('## Dynamic elements and comments');
+});
+it('publish --group resolves the group first and sends an explicit destination only when you can edit it',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {publishCommand}=await import('../../../skills/artifactbin/scripts/toolbox-publish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'publish-group-')),server='https://example.test';
+ try{
+  const file=path.join(root,'index.html');await writeFile(file,'<!doctype html><html><head><meta charset="utf-8"><title>T</title></head><body><h1>Hi</h1></body></html>');
+  const seen:string[]=[];let role='editor';
+  const fetcher=async(url:any)=>{seen.push(new URL(String(url)).pathname);return Response.json({group:{id:'grp_team',handle:'team',role}});};
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'private-fixture',ARTIFACTBIN_HOME:root},fetcher,log:()=>{}};
+  const planned=await publishCommand({values:{server,'dry-run':true,group:'@team'},positionals:[file]},options);
+  expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
+  expect(await publishCommand({values:{server,'dry-run':true},positionals:[file]},options)).not.toHaveProperty('destination');
+  role='viewer';
+  await expect(publishCommand({values:{server,'dry-run':true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'group_not_editor'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('exports the same DESCRIPTION the registry reads, from each real script',async()=>{
+ const {COMMANDS}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
+ const {descriptionOf}=await import('../../../skills/artifactbin/scripts/toolbox-description.mjs');
+ for(const name of Object.keys(COMMANDS)){
+  const module=await import(`../../../skills/artifactbin/scripts/${name}.mjs`);
+  expect(module.DESCRIPTION,name).toBe(descriptionOf(name));
+ }
+});
+it('quotes every user-facing command in Core flows with flags and verbs its script description documents',async()=>{
+ const {renderSkill,skillTree}=await import('@/lib/skills');
+ const {COMMANDS:registry}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
+ const {describe,descriptionOf}=await import('../../../skills/artifactbin/scripts/toolbox-description.mjs');
+ const COMMANDS:Record<string,any>=registry;
+ const skill=renderSkill(skillTree().get('artifactbin/SKILL.md')!,{base:'https://example.test',transport:'http'});
+ const flows=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
+ expect(flows.length).toBeGreaterThan(500);
+ // Every command (the autofix helper included) appears in the flows, each as a real invocation.
+ const calls=[...flows.matchAll(/node scripts\/(\w+)\.mjs([^`]*)`/g)];
+ for(const name of Object.keys(COMMANDS))expect(calls.some(call=>call[1]===name),name).toBe(true);
+ for(const [,name,rest] of calls){
+  expect(COMMANDS[name!],name).toBeDefined();
+  const description=descriptionOf(name!);
+  // Flags used in the flows are documented by the script itself; so is a leading verb (list, reply, watch ...).
+  for(const flag of rest!.match(/--[a-z-]+/g)??[])expect(description,`${name} ${flag}`).toContain(flag);
+  const verb=rest!.trim().split(/\s+/)[0]!;
+  if(COMMANDS[name!].sub&&Object.hasOwn(COMMANDS[name!].sub,verb))expect(description,`${name} ${verb}`).toContain(verb);
+ }
+ // The summary line of each command is the short description an agent sees at the top of its script.
+ for(const name of Object.keys(COMMANDS))expect(describe(name).summary).toBe(descriptionOf(name).split('\n')[0]);
+});
+
+const scripts=new URL('../../../skills/artifactbin/scripts/',import.meta.url);
+it('keeps one DESCRIPTION per command at the very top of its script, and --help prints exactly that',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const {COMMANDS:registry}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
+ const {commandHelp,descriptionOf,describe}=await import('../../../skills/artifactbin/scripts/toolbox-description.mjs');
+ const COMMANDS:Record<string,any>=registry;
+ for(const name of Object.keys(COMMANDS)){
+  const source=await readFile(new URL(`${name}.mjs`,scripts),'utf8');
+  // A comment, then the export, before any import: an agent running head sees it.
+  expect(source.indexOf('export const DESCRIPTION'),name).toBeLessThan(source.indexOf('import '));
+  expect(source.split('\n')[0],name).toMatch(/^\/\*\*? .*\*\/$|^\/\//);
+  expect(commandHelp(name)).toBe(descriptionOf(name)+'\n');
+  expect(describe(name).summary.length,name).toBeGreaterThan(10);
+  // Every flag the parser accepts is explained where the reader looks.
+  const flags=[...Object.keys(COMMANDS[name].flags??{}),...(Object.values(COMMANDS[name].sub??{}) as object[]).flatMap(group=>Object.keys(group))];
+  for(const flag of flags)expect(descriptionOf(name),`${name} --${flag}`).toContain('--'+flag);
+ }
 });

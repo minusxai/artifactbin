@@ -130,7 +130,7 @@ Set a nonzero height on the host. Observe its actual box so maps resize when a p
 
 ## Data and network limits
 
-The module and its included layer packages are pinned and packaged with an admitted native page dependency. The example above is self-contained and works without network access. It does not include a basemap provider or tile service. Add a basemap only when you have selected and disclosed its provider, network requirements and applicable terms. External tiles and remote data can fail or be unavailable offline. For application data, use the authorized dataset/backend APIs described in [HTML runtime](html-runtime.md) and pass the returned rows into deck.gl; do not put account credentials in URLs or page code.
+The module and its included layer packages are pinned and packaged with an admitted native page dependency. The example above is self-contained and works without network access. It does not include a basemap provider or tile service. Add a basemap only when you have selected and disclosed its provider, network requirements and applicable terms. External tiles and remote data can fail or be unavailable offline. For application data, use the authorized dataset/backend APIs described in [HTML runtime](runtime.md) and pass the returned rows into deck.gl; do not put account credentials in URLs or page code.
 
 The legacy `<af-deck-gl>` element remains available for existing pages. New native HTML pages should use this direct API.
 

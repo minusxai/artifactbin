@@ -28,7 +28,7 @@ import {normalizeDesignSelection} from '../html-page/design-system.ts';
 initSync();
 
 type AutofixRule = 'core-script' | 'charset' | 'viewport' | 'design-system-meta' | 'design-system-link';
-type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset';
+type AutofixProblemRule = 'script-syntax' | 'duplicate-data-af-id' | 'duplicate-id' | 'missing-asset' | 'pwa-metadata';
 interface AutofixLine { line: number; text: string }
 interface AutofixFix { rule: AutofixRule; reason: string; before: AutofixLine[]; after: AutofixLine[] }
 interface AutofixProblem { rule: AutofixProblemRule; line: number; column: number; snippet: string; message: string }
@@ -140,12 +140,33 @@ function findProblems(html: string, options: AutofixOptions = {}): AutofixProble
   // Template contents are cloned many times; their ids only collide once stamped, which is the script's concern.
   duplicates('duplicate-id', 'id', document.elements);
 
+  // Install metadata is read leniently at publish time (an invalid value is silently ignored), so say what is wrong here.
+  for (const element of document.elements) {
+    if (element.tagName !== 'meta' || element.parentNode !== document.head) continue;
+    const name = attribute(element, 'name') ?? '', value = attribute(element, 'content');
+    if (!name.startsWith('artifactbin:pwa-') || value === null) continue;
+    const bad = pwaMetaProblem(name.slice('artifactbin:pwa-'.length), value);
+    if (bad) problems.push({ rule: 'pwa-metadata', line: lineOf(html, element), column: element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, element)), message: `${name}: ${bad}; the setting is ignored` });
+  }
+
   if (options.exists) {
     for (const ref of localReferences(document.elements, document.templateElements)) {
       if (!options.exists(ref.path)) problems.push({ rule: 'missing-asset', line: lineOf(html, ref.element), column: ref.element.sourceCodeLocation?.startCol ?? 1, snippet: clip(startTag(html, ref.element)), message: `local file not found: ${ref.value}` });
     }
   }
   return problems.sort((a, b) => a.line - b.line || a.column - b.column);
+}
+
+/** Why an install-metadata value would be ignored, or undefined when it is valid (the same limits as htmlPwaSettings). */
+function pwaMetaProblem(field: string, value: string): string | undefined {
+  if (field === 'enabled') return value === 'true' || value === 'false' ? undefined : 'content must be true or false';
+  if (field === 'icon') return /^ref:[a-zA-Z0-9]{6,12}$/.test(value) ? undefined : 'content must be ref:ID of a readable image artifact (6-12 letters or digits)';
+  if (field === 'theme-color' || field === 'background-color') return /^#[0-9a-fA-F]{6}$/.test(value) ? undefined : 'content must be a six-digit hex color such as #234b35';
+  if (field === 'name' || field === 'short-name') {
+    const max = field === 'name' ? 100 : 30;
+    return value.trim() && value.length <= max ? undefined : `content must be nonblank and at most ${max} characters`;
+  }
+  return 'unknown setting; use enabled, name, short-name, icon, theme-color or background-color';
 }
 
 const REMOTE = /^(?:[a-z][a-z\d+.-]*:|\/|#|\$|\{)/i;

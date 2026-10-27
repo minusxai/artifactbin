@@ -70,9 +70,16 @@ export async function publishCommand({values,positionals},options={}){
  if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.expectedState=baseline.state;}
  else body.visibility='unlisted';
  if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],'visibility');if(values.title!==undefined)body.title=values.title;
+ // --group HANDLE: create the page directly in a group you can edit. The server refuses a destination that conflicts with the parent's owner.
+ if(values.group!==undefined){
+  if(baseline)throw new ToolError('group_not_for_update','--group places a new page; it never moves an existing one.',2,'Drop --group (updates keep their owner) or use --create for a new page.');
+  const detail=await client.request('/api/groups/'+encodeURIComponent(values.group.replace(/^@/,'')));
+  if(detail.group?.role!=='editor')throw new ToolError('group_not_editor','Publishing into a group needs editor access in it.',3,'Ask a group editor for editor access, or publish without --group.');
+  body.destination={type:'group',id:detail.group.id};
+ }
  if(values['dry-run']){
   const report=fixed&&(await import('./preview-html.mjs')).formatAutofixReport(fixed,{file:path.basename(file),landed:'dry run; nothing written',dryRun:true,routine:fixed.routine});if(report)log(report);
-  return {dryRun:true,...(fixed?{autofix:(await import('./autofix.mjs')).autofixDetail(fixed,report)}:{}),server,type,method:baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,'base64').length}))??[],note:'Local planning only; access, backend execution and rendering remain unverified.'};
+  return {dryRun:true,...(body.destination?{destination:body.destination}:{}),...(fixed?{autofix:(await import('./autofix.mjs')).autofixDetail(fixed,report)}:{}),server,type,method:baseline?'PUT':'POST',artifact:baseline?.id??null,files:body.publicationBundle?.files.map(file=>({path:file.path,contentType:file.contentType,bytes:Buffer.from(file.base64,'base64').length}))??[],note:'Local planning only; access, backend execution and rendering remain unverified.'};
  }
  const intent=journalIntent({server,method:baseline?'PUT':'POST',path:'/api/artifacts'+(baseline?'/'+baseline.id:''),body,operation:'publish',source:{file,sha256:hash(bytes),root,entryPath},baseline});
  intent.source.output=path.join(path.dirname(file),path.basename(file,extension)+'.canonical-'+intent.key.slice(0,8)+(type==='html'?'.html':extension||'.bin'));

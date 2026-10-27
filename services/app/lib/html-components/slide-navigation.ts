@@ -1,3 +1,4 @@
+/** Internal helper for af-slide-deck; not a public entry point. */
 /** Author-owned zero-based selection. Empty decks expose -1 and never emit an empty selection intent. */
 export interface SlideDeckChangeDetail { value: number }
 export interface SlideDeckContract { index: number | undefined }

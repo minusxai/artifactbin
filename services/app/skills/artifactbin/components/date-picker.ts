@@ -1,3 +1,11 @@
+/**
+ * <af-date-picker>: date field with a calendar popup.
+ * Import:  import {registerDatePicker} from './components/date-picker.js'; registerDatePicker();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: value ("YYYY-MM-DD" or null), min, max, disabled
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-date-picker label="Due" min="2026-01-01"></af-date-picker>
+ */
 import { floatingVisibility, identifyFloating, positionFloating, topFloating } from './floating-position';
 import { inBounds, localToday, monthGrid, moveMonth, validDate, type CalendarMonth } from './date-calendar';
 export interface AfDatePickerChangeDetail { value: string | null }

@@ -32,4 +32,4 @@ The stylesheet carries light/dark variables, font faces and typography. Use sema
 
 Start with the reader’s decision and the subject’s own visual material. Give the opening a concrete point, choose one expressive moment and let typography establish hierarchy. Do not turn every paragraph into an identical card. Use real data in charts, label assumptions and make comparisons legible. Keep prose under about 80 characters per line and controls usable by keyboard.
 
-Verify desktop, 390px, long values, missing data, font fallback and both chosen color modes. Reuse the same system when editing an existing page unless asked to redesign it. The [installed examples](html-examples.md) show report, chart and shared-app compositions using these generated assets.
+Verify desktop, 390px, long values, missing data, font fallback and both chosen color modes. Reuse the same system when editing an existing page unless asked to redesign it. The installed examples/ folder shows report, chart and shared-app compositions using these generated assets.

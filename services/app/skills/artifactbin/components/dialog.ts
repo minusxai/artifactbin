@@ -1,3 +1,12 @@
+/**
+ * <af-dialog>: modal dialog; af-change announces a cancelable request and never persists state.
+ * Import:  import {registerDialog} from './components/dialog.js'; registerDialog();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: open (boolean)
+ * Parts: af-dialog-trigger (use a native button inside), af-dialog-content
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-dialog><af-dialog-trigger><button>Open</button></af-dialog-trigger><af-dialog-content>Hello</af-dialog-content></af-dialog>
+ */
 /** Author-owned visibility: af-change announces a cancelable request, never persists state. */
 export interface DialogChangeDetail { value: boolean }
 /** Content aria-label/labelledby/describedby are forwarded; authored names outrank derived parts. */

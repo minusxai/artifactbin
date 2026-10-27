@@ -1,3 +1,13 @@
+/**
+ * <af-accordion>: stacked disclosure items.
+ * Import:  import {registerAccordion} from './components/accordion.js'; registerAccordion();  (load the .js in the browser; this .ts is the readable contract)
+ * Props: type ("single" uses a string value, "multiple" a string-array value), value
+ * Parts: af-accordion-item value="a" containing af-accordion-trigger and af-accordion-content
+ * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
+ * Usage:
+ *   <af-accordion type="single" value="a"><af-accordion-item value="a">
+ *   <af-accordion-trigger>Why</af-accordion-trigger><af-accordion-content>Because.</af-accordion-content></af-accordion-item></af-accordion>
+ */
 import {
   equalAccordionValue,
   normalizeAccordionValue,

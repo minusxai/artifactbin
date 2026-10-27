@@ -16,7 +16,7 @@ Authenticate with an email account using the [direct HTTP sign-in and credential
 - Policy: `GET /api/artifacts/<id>/policy` for `revision`, then `PUT` with `policy` and `expectedPolicyRevision`, separately from content.
 - Markup edits preserve graph reads/claims and node identity; raw JSX does not replace that contract. See [JSX authoring](http-authoring.md) and [graph wire fields](http-document-graph.md).
 - `GET/POST /api/artifacts/<id>/annotations`: read/create comments with a body and node/quote anchor; permissions apply.
-- `PUT /api/artifacts/<id>/annotations/<comment_id>/reactions`: set your account reaction with `{kind:"thumbs_up",active:true|false}`; see [native comment reactions](comment-reactions.md).
+- `PUT /api/artifacts/<id>/annotations/<comment_id>/reactions`: set your account reaction with `{kind:"thumbs_up",active:true|false}`; `scripts/comment.mjs react` wraps it.
 - `PATCH /api/artifacts/<id>/annotations/<comment_id>`: edit the text of a comment you wrote; see [comments](#comments-create-reply-edit-resolve-and-reopen).
 - `DELETE /api/artifacts/<id>`: move to trash.
 
