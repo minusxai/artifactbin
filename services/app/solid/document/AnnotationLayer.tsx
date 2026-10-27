@@ -30,6 +30,7 @@ import MessageSquare from 'lucide-solid/icons/message-square';
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations/store';
+import { RetryingNote } from './RetryingNote';
 import type { AnnotationActionBody, ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
@@ -1018,6 +1019,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               </div>
             </CommentMarkdownField>
             <Show when={selection()?.viewStateError}><p role="status" class="mb-2 text-xs text-muted">{selection()?.viewStateError}</p></Show>
+            <RetryingNote backend={backend} active={busy()} />
             <Show when={failure()}><p role="alert" class="mb-2 font-mono text-2xs text-danger">{failure()}</p></Show>
             <div class="flex items-center justify-end gap-2">
               <CommentSubmitHint action="comment" />

@@ -28,7 +28,7 @@ export async function optionalFile(file){try{return await readFile(file);}catch(
 export async function exclusive(file,bytes){await writeFile(file,bytes,{flag:'wx',mode:0o600});}
 export async function safeParent(file){const parent=await realpath(path.dirname(path.resolve(file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
-export function makeClient(server,{env=process.env,fetcher=fetch}={}){
+export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays=undefined}={}){
  server=serverOrigin(server);const root=credentialRoot(env);
  async function grant(){
   if(env.ARTIFACTBIN_TOKEN){if(env.ARTIFACTBIN_URL!==server)throw new ToolError('credential_origin_mismatch','Environment grant belongs to another origin.',3);return {server,token:env.ARTIFACTBIN_TOKEN};}
@@ -38,12 +38,13 @@ export function makeClient(server,{env=process.env,fetcher=fetch}={}){
   return saved;
  }
  /** @param {string} route @param {any} options */
- async function request(route,{method='GET',body,headers={},unsafe=false,raw=false,timeoutMs=30000,authenticated=true,signal}={}){
+ async function request(route,{method='GET',body,headers={},unsafe=false,safeToRepeat=false,raw=false,timeoutMs=30000,authenticated=true,signal}={}){
   const url=new URL(route,server);if(url.origin!==server||!route.startsWith('/')||route.startsWith('//')||route.includes('\\'))throw new ToolError('origin_mismatch','Refused a request outside the selected origin.',2);
   let connection=authenticated?await grant():null;
   for(let attempt=0;attempt<2;attempt++){
    let response;
-   try{response=await fetcher(url,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{Authorization:'Bearer '+connection.token}:{}),...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});}
+   // Transient outage (a deploy restart): the shared policy (lib/http/retry) retries network errors and 502/503/504 — reads, declared-safe requests and keyed writes only, the same Idempotency-Key every time; never 4xx.
+   try{response=(await (await platform()).retryFetch(()=>fetcher(url,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{Authorization:'Bearer '+connection.token}:{}),...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),{method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{delaysMs:retryDelays}:undefined})).response;}
    catch{throw new ToolError(unsafe?'outcome_unknown':'network_unavailable',unsafe?'Write outcome is unknown.':'Server request failed.',unsafe?5:1,unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before another write.':'Retry this read later.');}
    if(response.status===401&&attempt===0&&connection?.refreshToken){const shared=await platform();connection=await shared.refreshCredentials(connection,root,{fetch:fetcher});continue;}
    if(response.ok){if(raw)return response;try{return await response.json();}catch{throw new ToolError(unsafe?'outcome_unknown':'invalid_response',unsafe?'Write response could not be read; outcome is unknown.':'Server response was not valid JSON.',unsafe?5:1,unsafe?'Resume only the saved supported journal; reconcile arbitrary mutations before another write.':'Retry this read later.');}}

@@ -6,3 +6,4 @@ export {parse,getOperationAST,validate,buildSchema} from 'graphql';
 export {inspectPublicationBundle,authoringHtml} from '../../../lib/html-publication-bundle/plan.ts';
 export {recoverPortableSource} from '../../../lib/html-runtime/portable-source.ts';
 export {previewBackendLinks} from './preview-html.mjs';
+export {retryFetch} from '../../../lib/http/retry.ts';

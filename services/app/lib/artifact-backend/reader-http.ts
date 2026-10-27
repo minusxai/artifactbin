@@ -4,6 +4,7 @@ import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type Art
 import {openLiveStream} from '@/lib/http/live-stream';
 import {readAnnotationPages} from '@/lib/annotations/pages';
 import type {ArtifactHead,ReaderArtifactBackend} from './types';
+import {retried} from './retrying';
 const JSON_HEADERS={'Content-Type':'application/json'};
 /** Anonymous mode is a read-only caller boundary, not account authorization. */
 export interface ReaderHttpOptions {anonymous?:boolean}
@@ -17,7 +18,7 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
     },
 
     async load() {
-      const res = await (options.anonymous?fetch(mine,{credentials}):fetch(mine));
+      const res = await retried(() => options.anonymous?fetch(mine,{credentials}):fetch(mine));
       return res.ok ? ((await res.json()) as ArtifactHead) : null;
     },
     async publishPresence(input: PresencePublication) {
@@ -45,7 +46,7 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
       return () => stream.close();
     },
     async liveFrame() {
-      const r = await fetch(`/a/${id}/events/frame`, { credentials });
+      const r = await retried(() => fetch(`/a/${id}/events/frame`, { credentials }));
       return r.ok ? ((await r.json()) as ArtifactLiveEvent) : null;
     },
  };

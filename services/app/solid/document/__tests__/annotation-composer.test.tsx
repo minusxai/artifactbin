@@ -6,6 +6,7 @@ import { replaceComment } from './comment-input';
  * both are discarded the moment the thing they describe changes: a different durable node at the
  * same path, a widened target, a removed id. A caret comment carries no quote and is still a comment.
  */
+import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
@@ -410,19 +411,23 @@ describe('the annotation composer', () => {
       }
       return fallback(url, init);
     });
+    RETRY_TUNING.policy = { delaysMs: [0, 0] };
     layer({ initialSelection: TEXT() });
     await flush();
     replaceComment(screen.getByLabelText('Annotation comment'), 'Retry me');
     fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
+    await flush(); await flush();
+    // Automatic retries (same key) ran out, only then does the error show.
+    expect(keys).toHaveLength(3);
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Retry me');
     fail = false;
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(4);
     expect(keys[0]).toBeTruthy();
-    expect(keys[1]).toBe(keys[0]);
+    expect(new Set(keys).size).toBe(1);
+    delete RETRY_TUNING.policy;
   });
 });
 
