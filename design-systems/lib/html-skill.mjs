@@ -6,22 +6,8 @@ import {varsMap} from './runtime.mjs';
 import {packagedFontFaces} from './packaged-fonts.mjs';
 const ROOT=path.join(REPO,'services/app/skills/artifactbin');
 const cell=value=>String(value).replaceAll('|','\\|').replaceAll('\n',' ');
-/** Highlighted-code token colours for the hosted `highlight` library (`tok-` class prefix); variables only. */
-export const TOKEN_RULES=[
- [['comment','quote','meta'],'color:var(--muted-foreground);font-style:italic'],
- [['keyword','selector-tag','doctag'],'color:var(--primary)'],
- [['string','regexp','template-variable','addition'],'color:var(--chart-2)'],
- [['number','literal','symbol','bullet'],'color:var(--chart-3)'],
- [['title','section','selector-id','selector-class'],'color:var(--accent)'],
- [['title.class_','type','built_in','class'],'color:var(--chart-4)'],
- [['attr','attribute','property','variable','params'],'color:var(--chart-1)'],
- [['tag','operator','punctuation'],'color:var(--muted-foreground)'],
- [['name'],'color:var(--primary)'],
- [['deletion'],'color:var(--destructive)'],
- [['emphasis'],'font-style:italic'],
- [['strong'],'font-weight:700'],
-];
-const tokenCss=selector=>TOKEN_RULES.map(([names,rule])=>`${names.map(name=>`${selector} .tok-${name}`).join(', ')} { ${rule}; }`).join('\n');
+import {TOKEN_RULES,tokenRuleCss} from './token-colors.mjs';
+const tokenCss=selector=>TOKEN_RULES.map(rule=>`${rule.names.map(name=>`${selector} .tok-${name}`).join(', ')} { ${tokenRuleCss(rule)}; }`).join('\n');
 export function nativeSystemCss(slug){
  const spec=loadSpec(slug),selector=`:root[data-af-design-system="${slug}"]`;
  const vars=mode=>Object.entries(varsMap(spec,mode)).map(([key,value])=>`  ${key}: ${value};`).join('\n');
