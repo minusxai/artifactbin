@@ -10,7 +10,7 @@
  * Mermaid in scripts/__tests__/story-runtime-mermaid.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import mermaid from 'mermaid';
+import {detectType} from 'pele';
 import { MERMAID_DIAGRAMS, mermaidDiagramKind } from '../mermaid-source';
 
 const cases: Array<[string, string]> = [
@@ -93,16 +93,9 @@ describe('odd input', () => {
     expect(mermaidDiagramKind('not a diagram\nflowchart LR')).toBeNull();
   });
 
-  it('keeps Mermaid\'s detector order: flowchart-elk is not a plain flowchart', () => {
-    expect(mermaidDiagramKind('flowchart-elk LR\n  a --> b')).toBe('flowchart-elk');
-  });
-
-  it('keeps Mermaid\'s C4 quirk: C4Container matches wherever it appears', () => {
-    // Mermaid's own regex is /^\s*C4Context|C4Container|.../ — only the first
-    // alternative is anchored. The kind must follow what Mermaid loads.
+  it('recognizes C4 only as the source keyword, following Pele', () => {
     expect(mermaidDiagramKind('C4Container\n  title T')).toBe('c4');
-    // …and, because C4 is registered before flowcharts, a flowchart that names one.
-    expect(mermaidDiagramKind('flowchart LR\n  a[C4Container] --> b')).toBe('c4');
+    expect(mermaidDiagramKind('flowchart LR\n  a[C4Container] --> b')).toBe('flowchart');
   });
 
   it('is null for front matter and init directives — the kit refuses to draw them', () => {
@@ -119,37 +112,16 @@ describe('odd input', () => {
   });
 });
 
-describe('the layouts each kind reaches under the kit\'s configuration', () => {
-  const layouts = (kind: string) => MERMAID_DIAGRAMS.find((d) => d.kind === kind)?.layouts;
-
-  it('Mermaid 12 lays these out with elk by default — the elk layout is what draws them', () => {
-    for (const kind of ['flowchart', 'flowchart-elk', 'class', 'state', 'er', 'requirement', 'agentflow', 'usecase']) {
-      expect(layouts(kind), kind).toEqual(['elk']);
-    }
-  });
-
-  it('mindmap lays out with cose-bilkent, swimlanes with their own', () => {
-    expect(layouts('mindmap')).toEqual(['cose-bilkent']);
-    expect(layouts('swimlane')).toEqual(['swimlane']);
-  });
-
-  it('the rest draw without a layout engine', () => {
-    for (const kind of ['sequence', 'gantt', 'pie', 'architecture', 'journey', 'gitGraph', 'timeline']) {
-      expect(layouts(kind), kind).toEqual([]);
-    }
-  });
-});
-
-describe('agrees with the installed Mermaid about every input above', () => {
+describe('maps retained syntax kinds to the installed Pele detector', () => {
   /*
    * The table is a copy of Mermaid's detectors, so it is checked against the
    * real thing: whatever Mermaid decides for a source is what it will load,
    * and the preload must name the same kind or it downloads the wrong code.
    */
-  mermaid.initialize({ startOnLoad: false });
-  const byMermaidId = new Map(MERMAID_DIAGRAMS.map((d) => [d.mermaid, d.kind]));
+
+  const byMermaidId = new Map([['git', 'gitGraph'], ['quadrantChart', 'quadrant'], ['treeview', 'treeView']]);
   const detected = (code: string): string | null => {
-    try { return byMermaidId.get(mermaid.detectType(code)) ?? `unmapped:${mermaid.detectType(code)}`; } catch { return null; }
+    try { const type=detectType(code); return type ? byMermaidId.get(type) ?? type : null; } catch { return null; }
   };
   const corpus = [
     ...cases.map(([code]) => code),
@@ -166,7 +138,7 @@ describe('agrees with the installed Mermaid about every input above', () => {
   ];
   for (const code of corpus) {
     it(JSON.stringify(code.slice(0, 40)), () => {
-      expect(mermaidDiagramKind(code)).toBe(detected(code));
+      const kind=mermaidDiagramKind(code); expect(kind==='flowchart-elk'?'flowchart':kind?.startsWith('railroad-')?'railroad':kind).toBe(detected(code));
     });
   }
 });

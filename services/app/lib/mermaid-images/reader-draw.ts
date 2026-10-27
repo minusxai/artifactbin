@@ -1,6 +1,6 @@
 /**
  * A READER'S OWN MERMAID DRAWING, framework-free: the palette the document's theme resolves to (tokens as
- * hex, through a canvas — Mermaid's colour math cannot parse `oklch(...)`), the fonts it waits for, and
+ * hex through a canvas for portable image colors), the fonts it waits for, and
  * what a drawing is marked with for the harvest (lib/mermaid-images). ONE implementation for both readers:
  * the compiled reader's Solid Mermaid (lib/islands/kit/mermaid) draws through
  * `drawForReader`, so every reader draws and marks identically.
@@ -12,9 +12,8 @@ import { embedPageFonts, pageFontFaces } from '@/lib/mermaid-images/mermaid-font
 import { inUnicodeRange, unquote } from '@/lib/mermaid-images/svg-text';
 
 /**
- * The document's theme as Mermaid needs it: tokens resolved to hex (its colour
- * math expects hex, and modern CSS colours would not parse), plus the type the
- * host element already renders in.
+ * The document's theme as a standalone SVG image needs it: concrete colors and
+ * the font stacks the host element already renders in.
  */
 export function paletteFor(element: HTMLElement, dark: boolean): MermaidPalette {
   const style = getComputedStyle(element);
@@ -65,14 +64,10 @@ function mermaidPaletteKey(palette: MermaidPalette): string {
 }
 
 /**
- * WHAT MERMAID WOULD MEASURE HERE: the SVG text box — width, height and y,
- * what Mermaid's own label measurement reads — of the label face at the label
- * size and of the edge-label face at its 11px (lib/mermaid-images/mermaid-render
- * documentStyles), over a fixed Latin probe plus the diagram's own other
- * characters. Measured in the page, as Mermaid measures, so every platform
- * difference that moves a drawing shows here: hinted (whole-pixel) advances,
- * another engine's line box, a system face another machine lacks. Null where
- * nothing lays text out (jsdom).
+ * Font stability evidence for the two faces Pele can draw: body labels and
+ * inline monospace labels, both at the configured base size. These SVG box
+ * probes detect font/platform changes; Pele itself lays out with canvas text
+ * measurements. Null where the DOM has no text layout (jsdom).
  */
 function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | null {
   if (typeof document === 'undefined' || !document.body) return null;
@@ -92,7 +87,7 @@ function measureFaces(palette: MermaidPalette, code: string): MermaidMetrics | n
       return [width, height, y];
     };
     const label = box(palette.fontFamily, palette.fontSize);
-    const edge = box(palette.fontMono, '11px');
+    const edge = box(palette.fontMono, palette.fontSize);
     return label && edge ? parseMermaidMetrics([...label, ...edge].join(',')) : null;
   } finally {
     svg.remove();
@@ -162,7 +157,7 @@ function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
   const text = METRICS_PROBE + ownCharacters(code);
   const loaded = Promise.all([
     fonts.load(`${palette.fontSize} ${palette.fontFamily}`, text),
-    fonts.load(`11px ${palette.fontMono}`, text),
+    fonts.load(`${palette.fontSize} ${palette.fontMono}`, text),
   ]).then(() => fonts.ready).then(() => undefined, () => undefined);
   return Promise.race([loaded, new Promise<void>(resolve => setTimeout(resolve, 3000))]);
 }

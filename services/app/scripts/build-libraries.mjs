@@ -4,12 +4,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { precompressFile } from './precompress.mjs';
+import {removeRetiredLibraryOutput} from './library-output.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** @typedef {{package:string,version:string,entry:string,bundledPackages?:Record<string,string>,aliases?:Record<string,{package:string,version:string}>}} LibrarySpec */
 /** @type {Record<string, LibrarySpec>} */
 const registry = JSON.parse(readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
 const require = createRequire(import.meta.url);
+// Remove the exact retired platform runtime even on incremental builds.
+removeRetiredLibraryOutput(path.join(root,'public/libraries'));
+
 // These packages are bundled here; production serves only the emitted modules.
 const packageSpec = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 // Some libraries also power server SVG rendering; those retain their runtime pin.

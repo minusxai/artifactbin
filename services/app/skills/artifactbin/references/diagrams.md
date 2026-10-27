@@ -1,96 +1,101 @@
 ---
 name: diagrams
-description: Author Mermaid diagrams directly in native HTML pages.
+description: Author native HTML diagrams with Pele and Mermaid syntax.
 ---
 
 ## Read first
 
-Use the pinned Mermaid ESM module directly. It is a JavaScript library, not a platform custom element. Keep diagram source in the page, initialize Mermaid before rendering, and render into a page-owned element.
-
-## Contents
-
-[Example](#minimal-example) · [Theme](#theme-updates-and-cleanup) · [Offline](#offline-and-data-limits) · [API](#api-reference)
+Use the pinned Pele direct library. It reads Mermaid syntax and produces SVG with its own layout. Mermaid is the source language; Mermaid.js is not shipped. The retained `<af-mermaid>` element is also backed by Pele. Existing saved image snapshots remain images.
 
 ## Minimal example
 
+Load the chosen design-system CSS as usual. Map its semantic tokens to Pele so light/dark colors update through CSS without rerendering:
+
 ```html
+<style>
+.diagram {
+  width: 100%; min-width: 0; overflow: auto;
+  --pele-bg: var(--background);
+  --pele-fg: var(--foreground);
+  --pele-muted: var(--muted-foreground);
+  --pele-line: var(--foreground);
+  --pele-surface: var(--card);
+  --pele-surface-alt: var(--muted);
+  --pele-border: var(--border);
+  --pele-accent: var(--primary);
+  --pele-critical: var(--destructive);
+  --pele-error: var(--destructive);
+  --pele-font: var(--font-body);
+  --pele-font-mono: var(--font-mono);
+  --pele-series-1: var(--chart-1);
+  --pele-series-2: var(--chart-2);
+  --pele-series-3: var(--chart-3);
+  --pele-series-4: var(--chart-4);
+  --pele-series-5: var(--chart-5);
+}
+</style>
 <figure>
-  <div id="workflow" data-af-id="workflow-diagram" role="img" aria-label="A request is reviewed, then approved or returned"></div>
+  <div id="workflow" class="diagram" data-af-id="workflow-diagram"
+    role="img" aria-label="Draft moves to review, then approval or changes"></div>
   <figcaption>Request review flow</figcaption>
-  <p id="workflow-error" data-af-id="workflow-status" role="status" hidden></p>
+  <p id="workflow-status" data-af-id="workflow-status" role="status" hidden></p>
 </figure>
 <script type="module">
-import mermaid from "/libraries/mermaid-12.0.0/index.js";
-
+import {mount} from "/libraries/pele-flowchart-1.12.0/index.js";
 const target = document.querySelector("#workflow");
+const status = document.querySelector("#workflow-status");
 const source = `flowchart LR
   Draft --> Review
   Review -->|approved| Done
   Review -->|changes| Draft`;
-const error = document.querySelector("#workflow-error");
-let generation = 0;
-let disposed = false;
-
-async function render() {
-  const request = ++generation;
-  const isDark = document.documentElement.dataset.afDark === "true";
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    theme: "base",
-    themeVariables: {
-      background: isDark ? "#171923" : "#ffffff",
-      primaryColor: isDark ? "#283348" : "#e8f1ff",
-      primaryTextColor: isDark ? "#f4f6fb" : "#172033",
-      lineColor: isDark ? "#a9bddb" : "#45556f"
-    },
-    fontFamily: "system-ui, sans-serif"
-  });
-  try {
-    await document.fonts.ready;
-    const {svg, bindFunctions} = await mermaid.render(`workflow-${request}`, source);
-    if (disposed || request !== generation) return;
-    target.innerHTML = svg;
-    bindFunctions?.(target);
-    error.hidden = true;
-    error.textContent = "";
-  } catch {
-    if (disposed || request !== generation) return;
-    target.replaceChildren();
-    error.hidden = false;
-    error.textContent = "Diagram unavailable. The workflow is described in the caption.";
+await document.fonts.ready;
+const diagram = mount(target, source, {
+  zoom: "auto",
+  onRender() { status.hidden = true; status.textContent = ""; },
+  onError() {
+    status.hidden = false;
+    status.textContent = "Diagram unavailable. The workflow is described in the caption.";
   }
-}
-
-const themeObserver = new MutationObserver(() => void render());
-themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ["data-af-dark"]});
-window.addEventListener("pagehide", dispose, {once: true});
-function dispose() {
-  disposed = true;
-  generation++;
-  themeObserver.disconnect();
-  target.replaceChildren();
-  window.removeEventListener("pagehide", dispose);
-}
-void render();
+});
+window.addEventListener("pagehide", () => diagram.destroy(), {once: true});
 </script>
 ```
 
-Use a unique render ID for every diagram. Mermaid returns generated SVG; insert only the SVG returned by Mermaid, not user-provided markup. Keep `securityLevel: "strict"` for untrusted or shared text and do not add HTML labels from untrusted data.
+`mount()` measures CSS fonts, adapts to container resizes, and redraws after pending web fonts load. Use a container whose width is independent of the SVG. Some diagrams still need more room. Keep the default automatic zoom controls for dense diagrams, and verify that readers can enlarge and pan them on a phone. Use `responsive: false` with an overflowing container when full-size text and horizontal scrolling are preferable to fitting the SVG. At narrow widths supported layouts can switch direction; use `autoDirection: false` if source direction carries meaning. Check the actual mobile layout.
 
-## Theme, updates and cleanup
+## Choose a module
 
-Mermaid does not automatically use the page's design-system tokens. The example observes `data-af-dark`, sets explicit `themeVariables`, and rerenders when the page theme changes. Resolve concrete colors from the chosen design system when its palette matters. Await `document.fonts.ready` before rendering so the saved diagram uses the intended font metrics. The status text gives readers an accessible fallback if rendering fails.
+| Import | Available diagrams |
+|---|---|
+| `/libraries/pele-1.12.0/index.js` | All built-in Pele types |
+| `/libraries/pele-flowchart-1.12.0/index.js` | Flowchart only |
+| `/libraries/pele-sequence-1.12.0/index.js` | Sequence only |
+| `/libraries/pele-er-1.12.0/index.js` | Entity relationship only |
 
-For changing diagrams, keep a monotonically increasing render generation. Ignore a completed render if a newer render has started, then replace the target's contents and bind functions for the current generation only. Remove the SVG and any page-owned listeners when the containing view is disposed. Mermaid has no per-render `finalize()` method; do not leave app-owned theme observers or listeners running after disposal.
+Each URL is a pinned, self-contained browser module. Prefer a per-type module when only that type is needed; use the full module for other or mixed types. Load an optional diagram with `await import("/libraries/pele-sequence-1.12.0/index.js")` only when needed. Keep literal import URLs so offline packaging can discover them. Each module has independent registration state: keep `mount`, `render`, `supports` and error imports on the same entry. The upstream `pele/lazy` API is not exposed at a platform URL.
 
-## Offline and data limits
+## Theme, updates and errors
 
-The versioned module is included with the saved page's admitted library assets, so rendering the source above needs no CDN. A diagram that references remote images, fonts or application data still depends on those resources being available and admitted. Prefer labels and inline diagram syntax for a portable saved page; show an explicit unavailable state when a separately loaded resource is missing.
+Pele SVG uses inherited CSS variables; the design system's `data-af-dark` change updates colors automatically. Override variables on the diagram container to customize it. Fixed `style`, `classDef` and `linkStyle` source colors override the theme, so avoid them when the diagram must adapt to dark mode. Set series colors 6–8 explicitly if using more than five categories.
 
-The legacy `<af-mermaid>` component remains available for existing pages. New native HTML pages should use this direct API.
+Call `diagram.update(newSource)` for changes, `diagram.refresh()` after changing font families or moving the container, and `diagram.destroy()` when disposing the view. `mount` and `update` display syntax errors as text; `diagram.error` reports the failure, and a failed update leaves the prior SVG dimmed. Keep an accessible caption/status. Never insert an error message with `innerHTML`: it can contain diagram source.
+
+For static generation, `render(source, {fontFamily, maxWidth, idPrefix})` returns `{svg, width, height, type, links}` synchronously and throws `PeleError` on failure. Use a unique `idPrefix` for every SVG. Pass the measured font family used by CSS. Insert only SVG generated by the library. `mount` assigns unique IDs itself and optionally offers keyboard/pointer zoom (`zoom: true` or the default `"auto"`).
+
+## Compatibility and links
+
+Pele supports the built-in Mermaid 12.1 diagram syntax, with different positions, spacing and edge paths. It is not a pixel-equivalent Mermaid renderer. Arbitrary HTML labels, Mermaid themes/`themeVariables`, JavaScript `click` callbacks and external Mermaid plugins are unsupported. Use SVG text labels and CSS variables. Custom math and icon resolvers require separately supplied trusted renderers; without a math resolver TeX stays text.
+
+URL `click` links work; JavaScript callbacks are ignored. Default schemes are HTTP, HTTPS, mailto and tel; unsafe schemes are filtered. For untrusted diagrams restrict `linkSchemes`, set `links: false` or `images: false` as appropriate. Do not pass untrusted markup through icon/math/sanitize callbacks. Errors and source/output/edge limits are part of the API, not reasons to retry indefinitely.
+
+## Offline and retained elements
+
+Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; keep design-system fonts inside the project and prefer portable text labels. Library cost is paid only by pages that import it.
+
+The retained `<af-mermaid>` element keeps its `code`, `title`, `colorMode`, `storedImage` and `retry()` contract, with Pele drawing live output. Its output is an image, so source click links are not interactive; use the direct API above when links are needed. Changes to fonts, source and theme redraw through the same image renderer. Stored immutable SVGs remain content. Previously downloaded self-contained files keep their embedded code; a server upgrade cannot rewrite those files.
+
+Mermaid.js `initialize`, `run`, `render(id, source)` and `bindFunctions` are not Pele APIs. Update owned direct-library scripts to `mount(container, source)` or `render(source, options)`; do not simply change an import URL. Unsupported HTML labels, callbacks, plugins and special math/icon rendering need an explicit alternative, not a silent conversion.
 
 ## API reference
 
-- [Mermaid 12 API](https://mermaid.js.org/config/usage.html)
-- [Security configuration](https://mermaid.js.org/config/schema-docs/config.html#securitylevel)
+- [Pele API](https://pele.run/api), [theming](https://pele.run/theming), [compatibility](https://pele.run/compatibility), [security](https://pele.run/security)

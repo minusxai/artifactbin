@@ -6,26 +6,16 @@ import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
 /** @typedef {{sourceDir: string, outputDir: string, appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
 const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
 const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
-const ELK_ASSET='engine-mermaid-elk.js';
-/** Keep the author-facing lazy engine boundary, but flatten third-party internal
- * chunks. Mermaid otherwise exceeds publication's 99-file cap; its complete
- * renderer exceeds 4MB even minified, so its large ELK solver stays a separate
- * local module. No chart/layout registration is removed. */
-function boundedEngines(appDir, packed) {
+/** Flatten optional engines while retaining the author-facing lazy boundary.
+ * Pele's complete graph fits a single portable module without external solvers. */
+function boundedEngines(appDir) {
   const renderer=path.resolve(appDir,'lib/mermaid-images/reader-draw.ts');
   const deck=path.resolve(appDir,'lib/html-components/deck-gl-engine.ts');
   return {name:'bounded-component-engines',setup(builder){
-    builder.onResolve({filter:/^\.\/engine-mermaid-elk\.js$/},()=>({path:`./${ELK_ASSET}`,external:true}));
     builder.onLoad({filter:/(?:reader-draw|deck-gl-engine)\.ts$/},async ({path:filename})=>{
       if(filename!==renderer && filename!==deck) return;
-      const mermaid=filename===renderer;
-      const options={bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',minify:true,logLevel:'silent',alias:{'@':path.resolve(appDir)}};
-      const result=await build({...options,entryPoints:[filename],external:mermaid?['elkjs/lib/elk.bundled.js']:[]});
-      if(mermaid){
-        const elk=await build({...options,entryPoints:['elkjs/lib/elk.bundled.js'],absWorkingDir:path.resolve(appDir,'../..')});
-        packed.set(ELK_ASSET,elk.outputFiles[0].text);
-      }
-      return {contents:result.outputFiles[0].text.replaceAll('"elkjs/lib/elk.bundled.js"',`"./${ELK_ASSET}"`),loader:'js',resolveDir:path.dirname(filename)};
+      const result=await build({bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',minify:true,logLevel:'silent',alias:{'@':path.resolve(appDir)},entryPoints:[filename]});
+      return {contents:result.outputFiles[0].text,loader:'js',resolveDir:path.dirname(filename)};
     });
   }};
 }
@@ -45,7 +35,7 @@ export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR,r
   const sources=await Promise.all(names.map(async name=>({name,content:await readFile(path.join(sourceDir,name),'utf8')})));
   const packed=new Map();
   const result=await build({entryPoints:names.map(name=>path.join(sourceDir,name)),outdir:outputDir,
-    bundle:true,splitting:true,minify:true,plugins:[boundedEngines(appDir,packed)],write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
+    bundle:true,splitting:true,minify:true,plugins:[boundedEngines(appDir)],write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
     entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent'});
   for(const output of Object.values(result.metafile.outputs)) for(const dependency of output.imports) {
     if(dependency.external && !packed.has(dependency.path.replace(/^\.\//,''))) throw new Error(`HTML components must bundle module dependency: ${dependency.path}`);

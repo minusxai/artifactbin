@@ -20,11 +20,6 @@
       }
     }
   },
-  "mermaid": {
-    "package": "mermaid",
-    "version": "12.0.0",
-    "entry": "mermaid.js"
-  },
   "deck-gl": {
     "package": "@deck.gl/core",
     "version": "9.4.0",
@@ -33,5 +28,25 @@
       "@deck.gl/layers": "9.4.0",
       "@deck.gl/aggregation-layers": "9.4.0"
     }
+  },
+  "pele": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele.js"
+  },
+  "pele-flowchart": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-flowchart.js"
+  },
+  "pele-sequence": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-sequence.js"
+  },
+  "pele-er": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-er.js"
   }
 }
