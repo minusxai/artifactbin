@@ -14,25 +14,25 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-kraft` | #f3ecdc | #14201a |
-| `--ds-kraft-raised` | #faf6ec | #1b2a22 |
-| `--ds-kraft-sunk` | #e8dfca | #0e1712 |
-| `--ds-line` | #c9bc9c | #35493d |
-| `--ds-ink` | #16140f | #ede6d6 |
-| `--ds-ink-muted` | #5b5344 | #a9b3a4 |
-| `--ds-vermilion` | #e5481b | #ff6a3d |
-| `--ds-on-vermilion` | #16140f | #16140f |
-| `--ds-vermilion-soft` | #f9d9cc | #3a1d14 |
-| `--ds-hazard` | #f2b705 | #f2b705 |
-| `--ds-hazard-soft` | #f8ecc0 | #3a2f08 |
-| `--ds-caution` | #7a5a00 | #f2b705 |
-| `--ds-open` | #1f7a4d | #7fd99f |
-| `--ds-open-soft` | #d9ebdf | #17352a |
-| `--ds-booked` | #5b5344 | #a9b3a4 |
-| `--ds-negative` | #b3261e | #ff6a5a |
-| `--ds-negative-soft` | #f3d4d0 | #3a1a14 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-kraft` | #f3ecdc | #14201a | Page ground: kraft paper by day; the chalkboard at night. |
+| `--ds-kraft-raised` | #faf6ec | #1b2a22 | Sheets, slots, fields. |
+| `--ds-kraft-sunk` | #e8dfca | #0e1712 | Wells, column heads, code. |
+| `--ds-line` | #c9bc9c | #35493d | Hairline rules; the grid of the sheet; the hatch. |
+| `--ds-ink` | #16140f | #ede6d6 | Marker by day, chalk by night: all text, the 2px grid, the stamp outline. |
+| `--ds-ink-muted` | #5b5344 | #a9b3a4 | Secondary text, timestamps, the small print. |
+| `--ds-vermilion` | #e5481b | #ff6a3d | The pick: your slot, the primary action, the stamp. One per view. |
+| `--ds-on-vermilion` | #16140f | #16140f | Text on vermilion fills. |
+| `--ds-vermilion-soft` | #f9d9cc | #3a1d14 | Ground for the selected row and the picked slot halo. |
+| `--ds-hazard` | #f2b705 | #f2b705 | Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink. |
+| `--ds-hazard-soft` | #f8ecc0 | #3a2f08 | Ground for warnings. |
+| `--ds-caution` | #7a5a00 | #f2b705 | Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard. |
+| `--ds-open` | #1f7a4d | #7fd99f | Open, available, confirmed: the stamp green. Always with a word. |
+| `--ds-open-soft` | #d9ebdf | #17352a | Ground for confirmed bookings. |
+| `--ds-booked` | #5b5344 | #a9b3a4 | Signed out by someone else: hatched, never red. |
+| `--ds-negative` | #b3261e | #ff6a5a | Failed, overdue, broken. |
+| `--ds-negative-soft` | #f3d4d0 | #3a1a14 | Ground for failures. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

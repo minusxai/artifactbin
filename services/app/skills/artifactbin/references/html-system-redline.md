@@ -14,25 +14,25 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-paper` | #EEEADE | #20201D |
-| `--ds-paper-raised` | #F6F3EA | #2A2A26 |
-| `--ds-paper-sunk` | #E2DDCC | #171715 |
-| `--ds-line` | #C9C3B0 | #3D3D37 |
-| `--ds-ink` | #20201D | #EEEADE |
-| `--ds-ink-soft` | #5C5A52 | #B3B0A3 |
-| `--ds-on-ink` | #EEEADE | #20201D |
-| `--ds-red` | #F04E38 | #F04E38 |
-| `--ds-on-red` | #20201D | #20201D |
-| `--ds-red-ink` | #B42D1C | #FF6A55 |
-| `--ds-red-soft` | #F9D5CF | #4A1D17 |
-| `--ds-positive` | #2A9D5C | #5EC98A |
-| `--ds-positive-soft` | #D7EFE0 | #143524 |
-| `--ds-caution` | #B8841A | #F0BD57 |
-| `--ds-caution-soft` | #FAECC9 | #42310A |
-| `--ds-negative` | #F04E38 | #F04E38 |
-| `--ds-negative-soft` | #F9D5CF | #4A1D17 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-paper` | #EEEADE | #20201D | Page ground and the paper slide surface. |
+| `--ds-paper-raised` | #F6F3EA | #2A2A26 | Cards, fields, the paper stage inside an ink page. |
+| `--ds-paper-sunk` | #E2DDCC | #171715 | Wells, tracks, table stripes, off dots. |
+| `--ds-line` | #C9C3B0 | #3D3D37 | Hairline rules: list rows, footers, the slide foot. |
+| `--ds-ink` | #20201D | #EEEADE | Type, rules, the ink slide surface, the ink half of the split bar. |
+| `--ds-ink-soft` | #5C5A52 | #B3B0A3 | Secondary text, captions, muted eyebrows. |
+| `--ds-on-ink` | #EEEADE | #20201D | Type on an ink surface. |
+| `--ds-red` | #F04E38 | #F04E38 | The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night. |
+| `--ds-on-red` | #20201D | #20201D | Type on red: ink, never paper, so red surfaces stay printed, not glowing. |
+| `--ds-red-ink` | #B42D1C | #FF6A55 | Red as text on paper: one word in a headline, a link, a delta. |
+| `--ds-red-soft` | #F9D5CF | #4A1D17 | Ground for selected rows and red callouts; text on it is ink. |
+| `--ds-positive` | #2A9D5C | #5EC98A | Up, done, approved. Always with a word or a glyph. |
+| `--ds-positive-soft` | #D7EFE0 | #143524 | Ground for success callouts. |
+| `--ds-caution` | #B8841A | #F0BD57 | Pending, waiting, at capacity. |
+| `--ds-caution-soft` | #FAECC9 | #42310A | Ground for warning callouts. |
+| `--ds-negative` | #F04E38 | #F04E38 | Down, failed, refused. The same red: errors are loud, there is one red. |
+| `--ds-negative-soft` | #F9D5CF | #4A1D17 | Ground for error callouts. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

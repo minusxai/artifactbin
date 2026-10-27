@@ -14,26 +14,26 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-paper` | #F2E7D6 | #1B241B |
-| `--ds-card` | #F8F1E6 | #243024 |
-| `--ds-band` | #E7CFB4 | #2E3B2E |
-| `--ds-screen` | #C8D1A9 | #3A4A36 |
-| `--ds-paper-sunk` | #E8DBC6 | #141B14 |
-| `--ds-line` | #CBBFA9 | #3C4A3C |
-| `--ds-ink` | #374836 | #F2E7D6 |
-| `--ds-ink-muted` | #6B7A69 | #A9B5A6 |
-| `--ds-accent` | #B44E30 | #E07A58 |
-| `--ds-on-accent` | #F2E7D6 | #1B241B |
-| `--ds-accent-soft` | #F0D9CD | #4A2A1E |
-| `--ds-mauve` | #846B94 | #B7A3C4 |
-| `--ds-positive` | #3E6B3C | #8FC28C |
-| `--ds-positive-soft` | #DCE6C9 | #263A26 |
-| `--ds-caution` | #8C6A1E | #E0B65A |
-| `--ds-caution-soft` | #F3E5BE | #3E3218 |
-| `--ds-negative` | #B44E30 | #E07A58 |
-| `--ds-negative-soft` | #F0D9CD | #4A2A1E |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-paper` | #F2E7D6 | #1B241B | Page ground: warm, uncoated. In Night the ink becomes the ground. |
+| `--ds-card` | #F8F1E6 | #243024 | Cards, tickets, dialogs: a lighter sheet on the paper. |
+| `--ds-band` | #E7CFB4 | #2E3B2E | The hero band and arch panels: a deeper warm ground that holds one big thing. |
+| `--ds-screen` | #C8D1A9 | #3A4A36 | The soft green ground inside a device or a figure. |
+| `--ds-paper-sunk` | #E8DBC6 | #141B14 | Wells, code, inactive tracks, stripes. |
+| `--ds-line` | #CBBFA9 | #3C4A3C | Hairlines at a quarter strength. The only border in the system. |
+| `--ds-ink` | #374836 | #F2E7D6 | Forest green: all text, all rules, the first series. |
+| `--ds-ink-muted` | #576355 | #A9B5A6 | Secondary text at 65%: captions, notes, metadata. |
+| `--ds-accent` | #B44E30 | #E07A58 | Terracotta: the one word in a headline, the filled button, the progress bar, the second series. |
+| `--ds-on-accent` | #F2E7D6 | #1B241B | Text on terracotta. |
+| `--ds-accent-soft` | #F0D9CD | #4A2A1E | Ground for accent tags and the selected state. |
+| `--ds-mauve` | #846B94 | #B7A3C4 | The third series and nothing else. |
+| `--ds-positive` | #3E6B3C | #8FC28C | Success text and the kept share, with a word. |
+| `--ds-positive-soft` | #DCE6C9 | #263A26 | Ground for success callouts and positive tags. |
+| `--ds-caution` | #775A1A | #E0B65A | Warnings as text: an ochre on paper. |
+| `--ds-caution-soft` | #F3E5BE | #3E3218 | Ground for warning callouts. |
+| `--ds-negative` | #B44E30 | #E07A58 | Errors share the terracotta; there is no second red. |
+| `--ds-negative-soft` | #F0D9CD | #4A2A1E | Ground for error callouts. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

@@ -14,30 +14,30 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-cream` | #fff9f2 | #221433 |
-| `--ds-cream-raised` | #ffffff | #2e1c45 |
-| `--ds-cream-sunk` | #ffefe3 | #1a0f29 |
-| `--ds-line` | #f0d9d0 | #45306a |
-| `--ds-ink` | #2b1b3d | #fff4f8 |
-| `--ds-ink-muted` | #6e5a80 | #c9b6d9 |
-| `--ds-rim` | #ffffff | #2e1c45 |
-| `--ds-strawberry` | #ff5c8a | #ff6e98 |
-| `--ds-on-strawberry` | #2b1b3d | #2b1b3d |
-| `--ds-strawberry-soft` | #ffe1ea | #4a2340 |
-| `--ds-mango` | #ffb01f | #ffbb3d |
-| `--ds-lime` | #8be04d | #9beb5e |
-| `--ds-blueberry` | #5b7cff | #7a95ff |
-| `--ds-on-blueberry` | #ffffff | #120a1f |
-| `--ds-grape` | #b96cff | #c78aff |
-| `--ds-lilac` | #eadff5 | #3b2a55 |
-| `--ds-positive` | #3e8a14 | #9beb5e |
-| `--ds-positive-soft` | #e6f8d6 | #213a14 |
-| `--ds-caution` | #9a5e00 | #ffbb3d |
-| `--ds-caution-soft` | #fff0cc | #3d2b08 |
-| `--ds-negative` | #c2185b | #ff6e98 |
-| `--ds-negative-soft` | #ffe1ea | #4a2340 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-cream` | #fff9f2 | #221433 | Page ground: cream white by day; the night parlour, deep plum, after dark. |
+| `--ds-cream-raised` | #ffffff | #2e1c45 | Cards, stickers, fields. |
+| `--ds-cream-sunk` | #ffefe3 | #1a0f29 | Wells, the sprinkle band ground, code. |
+| `--ds-line` | #f0d9d0 | #45306a | Soft rules. Never the edge of a sticker; stickers use ink. |
+| `--ds-ink` | #2b1b3d | #fff4f8 | Plum ink: text, the 3px sticker outline, the hard drop. Never black. |
+| `--ds-ink-muted` | #6e5a80 | #c9b6d9 | Secondary text and captions. |
+| `--ds-rim` | #ffffff | #2e1c45 | The sticker rim: a 3px halo outside the ink outline, like a die-cut sticker. |
+| `--ds-strawberry` | #ff5c8a | #ff6e98 | The brand. Primary actions, the hero blob, the first chart series. |
+| `--ds-on-strawberry` | #2b1b3d | #2b1b3d | Text on strawberry. |
+| `--ds-strawberry-soft` | #ffe1ea | #4a2340 | Ground for selected rows and the strawberry tag. |
+| `--ds-mango` | #ffb01f | #ffbb3d | The second candy: NEW stickers, prices, the sun. |
+| `--ds-lime` | #8be04d | #9beb5e | The third candy: done, fresh, yes. |
+| `--ds-blueberry` | #5b7cff | #7a95ff | The fourth candy: links, focus, the second chart series. |
+| `--ds-on-blueberry` | #ffffff | #120a1f | Text on blueberry. |
+| `--ds-grape` | #b96cff | #c78aff | The fifth candy: the fifth series, a sprinkle. |
+| `--ds-lilac` | #eadff5 | #3b2a55 | The quiet fill: muted shapes in drawings, the inactive track. |
+| `--ds-positive` | #3e8a14 | #9beb5e | Done, fresh, yes. Lime as text is darkened on cream. |
+| `--ds-positive-soft` | #e6f8d6 | #213a14 | Ground for done rows and positive tags. |
+| `--ds-caution` | #9a5e00 | #ffbb3d | Almost, low, soon. Mango as text is darkened on cream. |
+| `--ds-caution-soft` | #fff0cc | #3d2b08 | Ground for caveats. |
+| `--ds-negative` | #c2185b | #ff6e98 | Sold out, oops, no. Strawberry as text is darkened on cream. |
+| `--ds-negative-soft` | #ffe1ea | #4a2340 | Ground for sold-out rows. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

@@ -14,27 +14,27 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-vellum` | #eeede6 | #0f1b2d |
-| `--ds-vellum-raised` | #f7f6f1 | #15253d |
-| `--ds-vellum-sunk` | #e3e1d7 | #0a1322 |
-| `--ds-grid` | #d9d7cc | #1f3350 |
-| `--ds-ink` | #16181c | #e9eef7 |
-| `--ds-ink-muted` | #4a4f58 | #9fb0c8 |
-| `--ds-cobalt` | #2a5bd7 | #8fb4ff |
-| `--ds-on-cobalt` | #ffffff | #0a1322 |
-| `--ds-cobalt-soft` | #dfe7fb | #1b2f55 |
-| `--ds-vermilion` | #ff781f | #ff9747 |
-| `--ds-on-vermilion` | #16181c | #16181c |
-| `--ds-vermilion-ink` | #963b00 | #ffaf6b |
-| `--ds-vermilion-soft` | #ffd4b5 | #3b2413 |
-| `--ds-positive` | #1f7a4d | #6fd49a |
-| `--ds-positive-soft` | #dcefe3 | #113426 |
-| `--ds-caution` | #685500 | #ffe83d |
-| `--ds-caution-soft` | #ffe83d | #343b0f |
-| `--ds-negative` | #c2320a | #ff7a4d |
-| `--ds-negative-soft` | #ffe0d6 | #3b1a10 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-vellum` | #eeede6 | #0f1b2d | Page ground: cool drafting vellum by day, Prussian blueprint by night. |
+| `--ds-vellum-raised` | #f7f6f1 | #15253d | Sheets, panels, fields. |
+| `--ds-vellum-sunk` | #e3e1d7 | #0a1322 | Wells, code, title-block cells. |
+| `--ds-grid` | #d9d7cc | #1f3350 | 24px drafting grid and hairline rules. Page grids use this at half strength; readable blocks have solid vellum backgrounds. |
+| `--ds-ink` | #16181c | #e9eef7 | Line-work and primary text. 1px for construction, 2px for the object. |
+| `--ds-ink-muted` | #4a4f58 | #9fb0c8 | Secondary text, dimension figures, notes. |
+| `--ds-cobalt` | #2a5bd7 | #8fb4ff | Hierarchy and annotation: headline emphasis, sheet numbers, dimensions, links and the primary action. |
+| `--ds-on-cobalt` | #ffffff | #0a1322 | Text on cobalt fills. |
+| `--ds-cobalt-soft` | #dfe7fb | #1b2f55 | Pale blue evidence panels, title blocks and selected regions of a drawing. |
+| `--ds-vermilion` | #ff781f | #ff9747 | Fluorescent safety orange for revision fills, outlines and changed parts; use on-vermilion for text on the fill. |
+| `--ds-on-vermilion` | #16181c | #16181c | Text on vermilion fills. |
+| `--ds-vermilion-ink` | #963b00 | #ffaf6b | Readable orange ink for revision text on vellum and pale orange. |
+| `--ds-vermilion-soft` | #ffd4b5 | #3b2413 | Warm orange ground for revision notes and changed regions. |
+| `--ds-positive` | #1f7a4d | #6fd49a | Verified, passed, released. Always with a word. |
+| `--ds-positive-soft` | #dcefe3 | #113426 | Ground for verified rows. |
+| `--ds-caution` | #685500 | #ffe83d | Assumed, pending review. |
+| `--ds-caution-soft` | #ffe83d | #343b0f | Warm fluorescent yellow for small assumption tags and short highlighted phrases; never a paragraph or full-width panel. |
+| `--ds-negative` | #c2320a | #ff7a4d | Failed or blocked. Always pair with a word. |
+| `--ds-negative-soft` | #ffe0d6 | #3b1a10 | Ground for failures. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|

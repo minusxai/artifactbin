@@ -77,7 +77,7 @@
   },
   {
    "name": "ink-muted",
-   "light": "#6B7A69",
+   "light": "#576355",
    "dark": "#A9B5A6",
    "usage": "Secondary text at 65%: captions, notes, metadata.",
    "group": "Ink"
@@ -126,7 +126,7 @@
   },
   {
    "name": "caution",
-   "light": "#8C6A1E",
+   "light": "#775A1A",
    "dark": "#E0B65A",
    "usage": "Warnings as text: an ochre on paper.",
    "group": "Status"

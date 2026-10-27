@@ -51,6 +51,7 @@ export async function inspectPage(page,options,task){
   // The reader shows an aria-busy "Loading page…" placeholder first; measure the page, not the placeholder.
   await page.waitForFunction(()=>!document.querySelector('[aria-busy="true"]'),null,{timeout:5000}).catch(()=>{});
   if(task){
+   evidence.steps=true;
    // Name the steps-file call that failed or was still pending, so a bare Playwright timeout points at its line.
    const pending=new Set();let failed=null;
    const show=arg=>{try{return typeof arg==='function'?String(arg):JSON.stringify(arg);}catch{return String(arg);}};
@@ -70,8 +71,11 @@ export async function inspectPage(page,options,task){
   await page.evaluate(()=>Promise.race([Promise.all([document.fonts?.ready,...document.getAnimations().map(animation=>animation.finished.catch(()=>{}))]).then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))),new Promise(resolve=>setTimeout(resolve,1000))])).catch(()=>{});
   evidence.text=(await page.locator('body').innerText({timeout:1000})).slice(0,24000);
   evidence.overflow=await page.locator('html').evaluate(html=>{
-   const content=Math.max(html.scrollWidth,html.ownerDocument.body.scrollWidth);
-   return {viewport:html.clientWidth,content,fits:content<=html.clientWidth+1};
+   const content=Math.max(html.scrollWidth,html.ownerDocument.body.scrollWidth),fits=content<=html.clientWidth+1;
+   // Name the outermost elements that stick out, so a page-width overflow points at its cause.
+   const name=e=>e.tagName.toLowerCase()+(e.id?'#'+e.id:'')+(typeof e.className==='string'&&e.className.trim()?'.'+e.className.trim().split(/\s+/)[0]:'');
+   const wide=fits?[]:[...html.ownerDocument.body.querySelectorAll('*')].filter(e=>e.getBoundingClientRect().right>html.clientWidth+1&&!(e.parentElement&&e.parentElement!==html.ownerDocument.body&&e.parentElement.getBoundingClientRect().right>html.clientWidth+1));
+   return {viewport:html.clientWidth,content,fits,...(wide.length?{culprits:wide.slice(0,3).map(e=>({element:name(e),right:Math.round(e.getBoundingClientRect().right)}))}:{})};
   },undefined,{timeout:1000});
   // Text colour against its resolved solid background (WCAG ratio); agents without image input cannot see contrast.
   evidence.contrast=await page.locator('html').evaluate(()=>{

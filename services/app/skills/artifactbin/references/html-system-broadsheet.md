@@ -14,23 +14,23 @@ Use normal `class="t-title"` etc. Pick a layout for this content; these assets p
 
 ## Color and typography
 
-| Token | Light | Dark |
-|---|---|---|
-| `--ds-newsprint` | #f6efe0 | #141210 |
-| `--ds-newsprint-raised` | #fbf6ea | #1d1a16 |
-| `--ds-newsprint-sunk` | #ebe2cd | #0e0c0a |
-| `--ds-line` | #cfc3a6 | #3a342b |
-| `--ds-ink` | #1f1b16 | #efe6d2 |
-| `--ds-ink-muted` | #5c5345 | #ada28b |
-| `--ds-red` | #b8371f | #ff6a4d |
-| `--ds-on-red` | #f6efe0 | #141210 |
-| `--ds-red-soft` | #f3dcd5 | #3a1812 |
-| `--ds-positive` | #2f6b3a | #8ed29a |
-| `--ds-positive-soft` | #dcebd8 | #15301b |
-| `--ds-caution` | #8a5a00 | #f2c14e |
-| `--ds-caution-soft` | #f3e5c0 | #332508 |
-| `--ds-negative` | #b8371f | #ff6a4d |
-| `--ds-negative-soft` | #f3dcd5 | #3a1812 |
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--ds-newsprint` | #f6efe0 | #141210 | Page ground: newsprint by day; the late edition by night. |
+| `--ds-newsprint-raised` | #fbf6ea | #1d1a16 | Boxes, plates, fields. |
+| `--ds-newsprint-sunk` | #ebe2cd | #0e0c0a | Tint boxes, the classifieds, code. |
+| `--ds-line` | #cfc3a6 | #3a342b | Column rules and hairlines. |
+| `--ds-ink` | #1f1b16 | #efe6d2 | Printer’s ink: text, rules, the masthead. |
+| `--ds-ink-muted` | #5c5345 | #ada28b | Secondary text, datelines, the small print. |
+| `--ds-red` | #b8371f | #ff6a4d | One ranunculus red: the second word in a headline, the pull figure, the link. Never a fill larger than a word. |
+| `--ds-on-red` | #f6efe0 | #141210 | Text on red fills (rare). |
+| `--ds-red-soft` | #f3dcd5 | #3a1812 | Ground for the one tinted box per page. |
+| `--ds-positive` | #2f6b3a | #8ed29a | Continued, approved. In the ledger only. |
+| `--ds-positive-soft` | #dcebd8 | #15301b | Ground for positive rows. |
+| `--ds-caution` | #8a5a00 | #f2c14e | Provisional, small sample. |
+| `--ds-caution-soft` | #f3e5c0 | #332508 | Ground for caveats. |
+| `--ds-negative` | #b8371f | #ff6a4d | Declined, failed. Shares the red. |
+| `--ds-negative-soft` | #f3dcd5 | #3a1812 | Ground for negative rows. |
 
 | Role | Family | Size / line height | Use |
 |---|---|---|---|
