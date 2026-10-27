@@ -73,6 +73,23 @@ it('checks each viewport in its own fresh session, concurrently, and reports the
  expect(peak).toBe(2);expect(run.checks.map((check:any)=>check.viewport.width)).toEqual([1280,390]);
 });
 
+it('runs several steps files in order in each viewport session and labels each result',async()=>{
+ const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const requests:any[]=[];
+ const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],steps:[{name:'read.mjs',code:'return "read"'},{name:'save.mjs',code:'return "save"'}],server:'https://example.test',token:'test-token'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+  const body=JSON.parse(String(init?.body));requests.push(body);
+  if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width:390},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true},steps:true}});
+ });
+ const scripts=requests.filter(request=>request.op==='script');
+ // One session per viewport, one execution per file, in the order given.
+ expect(new Set(scripts.map(request=>request.session_id)).size).toBe(1);
+ expect(new Set(scripts.map(request=>request.execution_id)).size).toBe(2);
+ expect(scripts[0].code).toContain('"read"');expect(scripts[1].code).toContain('"save"');
+ expect(run.checks.map((check:any)=>check.stepsFile)).toEqual(['read.mjs','save.mjs']);
+ expect(requests.filter(request=>request.op==='close')).toHaveLength(1);
+});
+
 it('waits for a free browser session and names a full server instead of failing opaquely',async()=>{
  const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const ok={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}};

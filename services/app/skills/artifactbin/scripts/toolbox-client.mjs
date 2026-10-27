@@ -83,7 +83,7 @@ export function checkDigest(envelope,file){
   const few=(items,show,n=5,total=items?.length??0)=>(items??[]).slice(0,n).map(show).join('; ')+(total>n?`; +${total-n} more`:'');
   const slides=!check.slides?'':`; slides ${check.slides.count} exportable, ${check.slides.clipped?`${check.slides.clipped} clipped (${few(check.slides.items,cut=>`slide ${cut.slide} "${cut.text}" by ${cut.by} ${cut.px}px`,5,check.slides.clipped)})`:'none clipped'}${check.slides.overlapping?`, ${check.slides.overlapping} overlapping (${few(check.slides.overlaps,o=>`slide ${o.slide} "${o.text}" over "${o.over}"`,3,check.slides.overlapping)})`:''}`;
   const contrast=check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; ${few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.color?' '+low.color:''}`,5,check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
-  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
+  lines.push(`  ${check.viewport.width}x${check.viewport.height}${check.stepsFile?' '+check.stepsFile:''}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
  }
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.

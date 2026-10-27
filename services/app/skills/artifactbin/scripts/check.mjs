@@ -148,6 +148,7 @@ function origin(value){const url=new URL(value);if(!['https:','http:'].includes(
 /** @param {any} options */
 export async function checkHosted({target,viewports,steps='',viewer,server,token=undefined,requester=undefined,capture=false},fetcher=fetch){
  server=origin(server);if(!token&&!requester)throw Error('Supply ARTIFACTBIN_TOKEN outside page code.');
+ const stepFiles=Array.isArray(steps)&&steps.length?steps:[{name:'',code:Array.isArray(steps)?'':steps}];
  async function request(body){
   if(requester)return requester(body);
   const response=await fetcher(server+'/api/browser-sessions',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Origin:server},body:JSON.stringify(body)});
@@ -160,9 +161,12 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
  }
  // Each viewport runs in its own fresh session, concurrently: no viewer-local state leaks between viewports and the check takes the slowest viewport's time, not the sum.
  async function inspectViewport(viewport){
-  const session_id=randomUUID(),execution_id=randomUUID(),out=[];let accepted=false;
+  const session_id=randomUUID(),out=[];let accepted=false;
   try{
-   const body={op:'script',session_id,execution_id,create:true,code:checkScript({target,viewports:[viewport],steps,capture}),...(viewer?{viewer}:{})};
+   // Several steps files run one after another in this viewport's session, each in its own execution with its own deadline.
+   for(const [index,file] of stepFiles.entries()){
+   const execution_id=randomUUID();
+   const body={op:'script',session_id,execution_id,...(index===0?{create:true}:{}),code:checkScript({target,viewports:[viewport],steps:file.code,capture:capture&&index===0}),...(viewer&&index===0?{viewer}:{})};
    let run;
    // Creating the session waits up to ~20 s for a free browser slot before reporting browser_busy.
    const submit=async()=>{for(let attempt=0;;attempt++){try{return await request(body);}catch(error){if(error?.code!=='browser_busy'||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}}};
@@ -176,7 +180,9 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
    for(const deadline=Date.now()+25000;['queued','running'].includes(run.status)&&Date.now()<deadline;){
     await new Promise(resolve=>setTimeout(resolve,250));run=await request({op:'status',session_id,execution_id});
    }
-   out.push(run.status==='completed'?run.result:{viewport,error:run.error??run.status,session_id,execution_id,pages:run.pages});
+   const result=run.status==='completed'?run.result:{viewport,error:run.error??run.status,session_id,execution_id,pages:run.pages};
+   out.push(file.name?{...result,stepsFile:file.name}:result);
+   }
   }finally{if(accepted)try{await request({op:'close',session_id});}catch(error){out.push({error:'Session cleanup failed: '+error.message});}}
   return out;
  }
@@ -192,7 +198,8 @@ export async function checkLocal({target,viewports,steps='',capture=false},chrom
   const context=await browser.newContext({serviceWorkers:'block'});
   await context.route('**/*',route=>{const url=new URL(route.request().url());return url.origin===selected.origin?route.continue():route.abort('blockedbyclient');});
   const checks=[];
-  for(const viewport of viewports){const page=await context.newPage();try{checks.push(await inspectPage(page,{target,viewport,capture},steps?new (Object.getPrototypeOf(async function(){}).constructor)('page',steps):null));}finally{await page.close();}}
+  const files=Array.isArray(steps)&&steps.length?steps:[{name:'',code:Array.isArray(steps)?'':steps}],AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  for(const viewport of viewports)for(const [index,file] of files.entries()){const page=await context.newPage();try{const check=await inspectPage(page,{target,viewport,capture:capture&&index===0},file.code?new AsyncFunction('page',file.code):null);checks.push(file.name?{...check,stepsFile:file.name}:check);}finally{await page.close();}}
   return summarizeCheck(checks);
  }finally{await browser.close();}
 }
@@ -200,7 +207,9 @@ export async function checkCommand({values,positionals},options={}){
  const input=positional(positionals),widths=values.viewport??['1280x800','390x844'];
  if(widths.length>8)throw new ToolError('viewport_limit','At most eight viewports are supported.',2);
  const viewports=widths.map(value=>{const match=/^(\d+)x(\d+)$/.exec(value);if(!match||[match[1],match[2]].some(n=>Number(n)<240||Number(n)>3840))throw new ToolError('invalid_viewport','Use WIDTHxHEIGHT with dimensions from 240 to 3840.',2);return {width:Number(match[1]),height:Number(match[2])};});
- const steps=values.steps?await readFile(values.steps,'utf8'):'';if(Buffer.byteLength(steps)>48000)throw new ToolError('steps_too_large','Task steps exceed 48 KB.',2);
+ // Repeat --steps for separate concerns: each file gets its own deadline in the same check run.
+ const stepNames=[values.steps??[]].flat(),steps=await Promise.all(stepNames.map(async name=>({name:stepNames.length>1?path.basename(name):'',code:await readFile(name,'utf8')})));
+ if(Buffer.byteLength(steps.map(file=>file.code).join(''))>48000)throw new ToolError('steps_too_large','Task steps exceed 48 KB.',2);
  let result;
  const local=/^http:\/\//.test(input)&&!/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
  if(local){
