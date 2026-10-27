@@ -67,3 +67,14 @@ it('builds the highlight library with the web language set and tok- classes',asy
  expect(out).toContain('class="tok-keyword"');expect(out).toContain('tok-string');
  expect(typeof module.highlightAll).toBe('function');
 });
+it('changes the script fingerprint when a versioned path becomes @afbin/<name>, but import-map entries never enter it',async()=>{
+ const {scriptFingerprint}=await import('../../html-autofix');
+ const page=(spec:string)=>`<html><head></head><body><script type="module">import * as vega from "${spec}";console.log(vega);</script></body></html>`;
+ const versioned=scriptFingerprint(page('/libraries/vega-6.3.1/index.js')),bare=scriptFingerprint(page('@afbin/vega'));
+ expect(versioned).not.toBe(bare);
+ // The fingerprint reads the authored source only; the generated map and runtime JSON are added at assembly.
+ expect(scriptFingerprint(page('@afbin/vega'))).toBe(bare);
+ const assembled=assembleHtmlPage({html:page('@afbin/vega'),core:'/*c*/',config:{...base,libraries:libraryImports(undefined)}});
+ expect(runtime(assembled).libraries['@afbin/vega']).toBeDefined();
+ expect(scriptFingerprint(page('@afbin/vega'))).toBe(bare);
+});
