@@ -36,6 +36,7 @@ export interface NativeAssemblyBackend {
 export interface NativeAssemblyModule {name:string;register:string;specifier:string;sha256:string}
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
+ slidePreviewSources?:readonly import("./slide-preview-resource-contracts.ts").NativeSlidePreviewSourceImage[];
  navigation?:import("./resource-navigation-contracts.ts").NativeNavigationPolicy;
  people?:import("./person-contracts.ts").NativeBindingPeople;
  authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];

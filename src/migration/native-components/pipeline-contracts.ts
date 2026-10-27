@@ -76,6 +76,7 @@ export interface NativePipelineReceiptIndex {
 }
 
 export interface NativePipelineStyleSnapshot {
+ previewImageSourceRows?:readonly import("./slide-preview-resource-contracts.ts").NativeSlidePreviewSourceRow[];
  sourceSha256:string;analysisSha256:string;compilerSha256:string;
  sourceFiles:readonly {path:string;sha256:string}[];sheets:readonly {attr:string;css:string}[];
  htmlAttributes:Record<string,string>;storyAttributes:Record<string,string>;

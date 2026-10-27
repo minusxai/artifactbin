@@ -1,3 +1,4 @@
+import {nativeDigest}from'./selection.ts';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {promisify} from 'node:util';
@@ -15,5 +16,5 @@ export async function nativeStyleCompilerProof(root:string):Promise<{compilerSha
 export interface NativeRetainedStyleInput {document:unknown;sourceSha256:string;analysisSha256:string;compiledCss:string|null;cssCompileVersion?:string|null;theme:string|null;colorMode:'light'|'dark'|null;refRows?:readonly Record<string,unknown>[]}
 export async function extractNativeStyleSnapshot(input:NativeRetainedStyleInput,legacyRoot:string,proof:Awaited<ReturnType<typeof nativeStyleCompilerProof>>):Promise<NativeStyleSnapshot>{
  const result=await externalCompile<Pick<NativeStyleSnapshot,'sheets'|'htmlAttributes'|'storyAttributes'|'inlineStyles'|'presentationUrls'|'resourcePatches'|'componentRecipes'|'storyColumn'>,NativeRetainedStyleInput>(input,{legacyRoot},'../../native-components/styles-runner.mts');
- return {...result,...proof,sourceSha256:input.sourceSha256,analysisSha256:input.analysisSha256};
+ const imageRows=(input.refRows??[]).filter(row=>row.format==='image').map(row=>({row:structuredClone(row),rowSha256:nativeDigest(row)}));if(new Set(imageRows.map(entry=>entry.row.id)).size!==imageRows.length)throw Error('preview_placeholder_duplicate_source_row');return {...result,...(imageRows.length?{previewImageSourceRows:imageRows}:{}),...proof,sourceSha256:input.sourceSha256,analysisSha256:input.analysisSha256};
 }

@@ -4,6 +4,7 @@ import type {NativeComponentRecipe,NativeStoryColumn} from './component-presenta
 import {nativeDigest} from './selection.ts';
 import {closeNativeResources,rewriteNativeCss,resourceSha256,type NativeResourceAsset,type NativeResourceClosure} from './resources.ts';
 export interface NativeStyleSnapshot {
+ previewImageSourceRows?:readonly import("./slide-preview-resource-contracts.ts").NativeSlidePreviewSourceRow[];
  componentRecipes?:readonly NativeComponentRecipe[];
  /** The served compiler column participates in the source root's styled classification. */
  storyColumn?:NativeStoryColumn;
