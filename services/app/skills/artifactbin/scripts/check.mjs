@@ -48,6 +48,8 @@ export async function inspectPage(page,options,task){
   // Do not wait for networkidle: charts, telemetry and subscriptions can remain active.
   if(options.hosted)await page.mainFrame().locator('iframe[data-mx-document-frame]').waitFor({timeout:2000});
   await page.locator('body').waitFor({timeout:2000});
+  // The reader shows an aria-busy "Loading page…" placeholder first; measure the page, not the placeholder.
+  await page.waitForFunction(()=>!document.querySelector('[aria-busy="true"]'),null,{timeout:5000}).catch(()=>{});
   if(task){
    // Name the steps-file call that failed or was still pending, so a bare Playwright timeout points at its line.
    const pending=new Set();let failed=null;
@@ -142,7 +144,6 @@ function origin(value){const url=new URL(value);if(!['https:','http:'].includes(
 /** @param {any} options */
 export async function checkHosted({target,viewports,steps='',viewer,server,token=undefined,requester=undefined,capture=false},fetcher=fetch){
  server=origin(server);if(!token&&!requester)throw Error('Supply ARTIFACTBIN_TOKEN outside page code.');
- const session_id=randomUUID(),checks=[];let accepted=false;
  async function request(body){
   if(requester)return requester(body);
   const response=await fetcher(server+'/api/browser-sessions',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',Origin:server},body:JSON.stringify(body)});
@@ -153,13 +154,14 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
    throw Error('Browser session refused (HTTP '+response.status+'): '+code);}
   return result;
  }
- try{
-  for(const viewport of viewports){
-   const execution_id=randomUUID();
-   const body={op:'script',session_id,execution_id,create:!accepted,code:checkScript({target,viewports:[viewport],steps,capture}),...(accepted||!viewer?{}:{viewer})};
+ // Each viewport runs in its own fresh session, concurrently: no viewer-local state leaks between viewports and the check takes the slowest viewport's time, not the sum.
+ async function inspectViewport(viewport){
+  const session_id=randomUUID(),execution_id=randomUUID(),out=[];let accepted=false;
+  try{
+   const body={op:'script',session_id,execution_id,create:true,code:checkScript({target,viewports:[viewport],steps,capture}),...(viewer?{viewer}:{})};
    let run;
    // Creating the session waits up to ~20 s for a free browser slot before reporting browser_busy.
-   const submit=async()=>{for(let attempt=0;;attempt++){try{return await request(body);}catch(error){if(error?.code!=='browser_busy'||accepted||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}}};
+   const submit=async()=>{for(let attempt=0;;attempt++){try{return await request(body);}catch(error){if(error?.code!=='browser_busy'||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}}};
    try{run=await submit();accepted=true;}
    catch(error){
     if(error?.code==='browser_busy')throw error;
@@ -170,11 +172,13 @@ export async function checkHosted({target,viewports,steps='',viewer,server,token
    for(const deadline=Date.now()+25000;['queued','running'].includes(run.status)&&Date.now()<deadline;){
     await new Promise(resolve=>setTimeout(resolve,250));run=await request({op:'status',session_id,execution_id});
    }
-   if(run.status!=='completed'){checks.push({viewport,error:run.error??run.status,session_id,execution_id,pages:run.pages});break;}
-   checks.push(run.result);
-  }
- }finally{if(accepted)try{await request({op:'close',session_id});}catch(error){checks.push({error:'Session cleanup failed: '+error.message});}}
- return summarizeCheck(checks);
+   out.push(run.status==='completed'?run.result:{viewport,error:run.error??run.status,session_id,execution_id,pages:run.pages});
+  }finally{if(accepted)try{await request({op:'close',session_id});}catch(error){out.push({error:'Session cleanup failed: '+error.message});}}
+  return out;
+ }
+ const settled=await Promise.allSettled(viewports.map(inspectViewport));
+ const busy=settled.find(result=>result.status==='rejected');if(busy)throw busy.reason;
+ return summarizeCheck(settled.flatMap(result=>result.value));
 }
 export async function checkLocal({target,viewports,steps='',capture=false},chromium){
  const selected=checkTarget(target);if(selected.mode!=='local')throw Error('Local checks require a loopback preview URL.');

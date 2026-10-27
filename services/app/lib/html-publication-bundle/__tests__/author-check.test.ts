@@ -56,6 +56,23 @@ it('keeps hosted execution receipts, reports partial failure, and closes the ses
  expect(JSON.stringify(requests)).not.toContain('test-token');
 });
 
+it('checks each viewport in its own fresh session, concurrently, and reports them in viewport order',async()=>{
+ const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const requests:any[]=[];let running=0,peak=0;
+ const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:1280,height:800},{width:390,height:844}],server:'https://example.test',token:'test-token'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+  const body=JSON.parse(String(init?.body));requests.push(body);
+  if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
+  running++;peak=Math.max(peak,running);await new Promise(resolve=>setTimeout(resolve,20));running--;
+  const width=JSON.parse(body.code.match(/"viewport":(\{[^}]*\})/)[1]).width;
+  return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:{viewport:{width},pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:width,content:width,fits:true}}});
+ });
+ const scripts=requests.filter(request=>request.op==='script');
+ expect(scripts).toHaveLength(2);expect(scripts.every(request=>request.create)).toBe(true);
+ expect(new Set(scripts.map(request=>request.session_id)).size).toBe(2);
+ expect(requests.filter(request=>request.op==='close').map(request=>request.session_id).sort()).toEqual(scripts.map(request=>request.session_id).sort());
+ expect(peak).toBe(2);expect(run.checks.map((check:any)=>check.viewport.width)).toEqual([1280,390]);
+});
+
 it('waits for a free browser session and names a full server instead of failing opaquely',async()=>{
  const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const ok={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}};
@@ -74,7 +91,7 @@ it('waits for a free browser session and names a full server instead of failing 
 it('collects errors, separates only known telemetry, and catches overflow without implying visual acceptance',async()=>{
  const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const listeners:Record<string,Function>={};let taskRan=false;
- const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},goto:async()=>{
+ const page={url:()=>'https://example.test/a/PAGE12',on:(name:string,fn:Function)=>{listeners[name]=fn;},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},goto:async()=>{
   listeners.pageerror!(Error('intentional regression'));
   for(const url of ['https://example.test/api/page/artifact/PAGE12/view','https://example.test/data.json','https://other.test/api/page/artifact/PAGE12/view'])listeners.requestfailed!({url:()=>url,failure:()=>({errorText:'failed'})});
  },locator:()=>({waitFor:async()=>{},innerText:async()=>'Fixture',evaluate:async()=>({viewport:390,content:900,fits:false})})};
@@ -108,9 +125,19 @@ it('keeps check diagnostics top-level on failure and preserves the legacy detail
 it('captures a bounded viewport and labels hosted shell scope without a full body capture',async()=>{
  const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const captures:unknown[]=[];
- const page={url:()=> 'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},goto:async()=>{},mainFrame:()=>({locator:()=>({waitFor:async()=>{}})}),locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})}),screenshot:async(options:unknown)=>{captures.push(options);return Buffer.from('fixture');}};
+ const page={url:()=> 'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},waitForFunction:async()=>{},goto:async()=>{},mainFrame:()=>({locator:()=>({waitFor:async()=>{}})}),locator:()=>({waitFor:async()=>{},innerText:async()=>'Ready',evaluate:async()=>({viewport:390,content:390,fits:true})}),screenshot:async(options:unknown)=>{captures.push(options);return Buffer.from('fixture');}};
  const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844},hosted:true,capture:true});
  expect(captures).toEqual([{fullPage:false,timeout:1000}]);expect(result).toMatchObject({screenshot:{scope:'reader-viewport'}});
+});
+
+it('measures the page only after the reader loading placeholder is gone',async()=>{
+ const {inspectPage}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ let busy=true;const order:string[]=[];
+ const page={url:()=>'https://example.test/a/PAGE12',on:()=>{},setDefaultTimeout:()=>{},setViewportSize:async()=>{},goto:async()=>{},evaluate:async()=>{},
+  waitForFunction:async(fn:Function)=>{const doc=(globalThis as any).document;(globalThis as any).document={querySelector:()=>busy?{}:null};try{expect(fn()).toBe(false);busy=false;expect(fn()).toBe(true);}finally{(globalThis as any).document=doc;}order.push('ready');},
+  locator:()=>({waitFor:async()=>{},innerText:async()=>{order.push('text');return busy?'Loading page…':'Ready';},evaluate:async()=>({viewport:390,content:390,fits:true})})};
+ const result=await inspectPage(page,{target:'/a/PAGE12',viewport:{width:390,height:844}});
+ expect(result.text).toBe('Ready');expect(order.indexOf('ready')).toBeLessThan(order.indexOf('text'));
 });
 
 it('fails smoke when visible text is effectively invisible against its background',async()=>{
