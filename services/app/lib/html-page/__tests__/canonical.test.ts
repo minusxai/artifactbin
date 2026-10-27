@@ -26,3 +26,19 @@ describe('canonical HTML publication', () => {
   expect(()=>canonicalizeHtmlPage('<p data-af-id="x"></p><template><p data-af-id="x"></p></template>')).toThrow('Duplicate');
  });
 });
+
+describe('the core script is platform-added: pages work with or without it',()=>{
+ const page=(head:string)=>`<!doctype html><html><head><meta charset="utf-8">${head}</head><body><h1>Hi</h1></body></html>`;
+ const cores=(html:string)=>[...html.matchAll(/<script[^>]*src="(\/af\/(?:v1\/)?core\.js)"/g)].map(match=>match[1]);
+ it('adds exactly one core, first in head, when the page has none',()=>{
+  const html=canonicalizeHtmlPage(page('<title>T</title>')).html;
+  expect(cores(html)).toEqual(['/af/core.js']);
+  expect(html.indexOf('/af/core.js')).toBeLessThan(html.indexOf('<title'));
+ });
+ it('keeps one written core, current or legacy, without duplicating it',()=>{
+  for(const src of ['/af/core.js','/af/v1/core.js']){
+   const html=canonicalizeHtmlPage(page(`<script src="${src}" data-af="core"></script><title>T</title>`)).html;
+   expect(cores(html)).toEqual([src]);
+  }
+ });
+});

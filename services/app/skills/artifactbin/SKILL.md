@@ -6,19 +6,24 @@ description: >-
 [% if transport == "http" %]
 ## Read first
 
-A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Load the core once with `<script src="/af/core.js" data-af="core"></script>`; it provides the `@afbin/apollo` import and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`); that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`; design-system CSS colours its `tok-*` classes. No JSX, framework compilation, injected state globals or account credentials belong in a page.
+A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`); that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`. No JSX, framework compilation, injected state globals or account credentials belong in a page.
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
 
-For an existing page, read its canonical `html`, `version` and `state`, preserve `data-af-id` identities, edit the HTML and publish to the same ID. For new work, choose the content and one design system, then write the page file directly as a compact first version, aiming under 30 KB: keep reasoning to a short plan and never draft the page's CSS, JS or copy there first; publish and share its returned URL before extending it. A URL-only request gets the URL alone.
+Write the page file directly as a compact first version: keep reasoning to a short plan and never draft the page's CSS, JS or copy there first; publish and share its returned URL before extending it.
 
 Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace with `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable `Idempotency-Key`. On 409, read the new head and reconcile; never attach it to stale source.
+
+## You write / the platform adds
+
+- **You write:** a normal HTML file; one `<meta name="artifactbin:design-system" content="NAME">`; imports from `@afbin/<name>` (`apollo`, `highlight`, the libraries); your own CSS and JS; a `data-af-id` only to keep ones you were given.
+- **The platform adds:** the core runtime and import map, the design-system stylesheet and fonts, the `<html>` design and dark-mode attributes, stable `data-af-id`s (carried forward on edits), autofix of common mistakes (reported as `autofix:`), code-highlighting colours, reader presence and comments, and the owner's design-system picker. A core tag, `<html data-af-*>` attributes or a copied stylesheet link you write anyway still works: publish moves or removes them.
 
 ## Core flows
 
 Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--output FILE`. To learn one, read the top of it (`head -30 scripts/NAME.mjs`: purpose, usage, flags, examples, gotchas; `--help` prints the same text). Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in (`node scripts/auth.mjs status`; its top covers login and refresh). Groups, ACLs, secrets and trash have no script.
 
-- **New page.** Write `index.html`: pick one design system from the table and name it in `<head>` with `<meta name="artifactbin:design-system" content="NAME">`; the platform serves the stylesheet, sets the `<html>` attributes and hosts the fonts, so copy and link nothing. Read `design-systems/NAME.css` for its exact tokens, type-role classes (`t-title`, …) and what each colour is for. Keep the page compact (about 30 KB), with the core script tag and state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
+- **New page.** Write `index.html`: pick one design system from the table and name it in `<head>` with `<meta name="artifactbin:design-system" content="NAME">`; the platform serves the stylesheet, sets the `<html>` attributes and hosts the fonts, so copy and link nothing. Read `design-systems/NAME.css` for its exact tokens, type-role classes (`t-title`, …) and what each colour is for. Keep the page compact (about 30 KB), with state through `client` from `@afbin/apollo` ([runtime](references/runtime.md)). Optionally preview with `node scripts/serve.mjs ./project`, then `node scripts/publish.mjs index.html`. Publish autofixes the page and prints an `autofix:` report; read it (`node scripts/autofix.mjs FILE` only for a file you aren't publishing). Publish as soon as the first version renders and share the returned URL; a URL-only request gets the URL alone.
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -34,7 +39,7 @@ Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--out
   | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
-  - Design: start from the reader's decision and the subject's own visual material; give the opening a concrete point, one expressive moment, and let typography set the hierarchy (no identical cards for every paragraph). Use real data in charts, label assumptions, keep lines under about 80 characters and controls keyboard-usable. Reuse the same system when editing a page unless asked to redesign it.
+  - Design: start from the reader's decision and the subject's own visual material; give the opening a concrete point, one expressive moment, and let typography set the hierarchy (no identical cards for every paragraph). Use real data in charts, label assumptions, keep lines under about 80 characters and controls keyboard-usable.
   - Decks: stack full-viewport `<section data-af-slide>` elements (each simple: a heading, a few lines, at most one chart or diagram), mark the nav `data-af-deck-chrome`, and move with `scrollIntoView({behavior:'auto'})` (smooth scrolling makes steps read mid-scroll). Slide images are a 1200x630 viewport; reply with `slide=N` links (`export.mjs --slide N`) instead of testing exports.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files. Use authenticated account identity, never a name typed into a form, to authorize actions.
 - **Check.** `node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json` (a new `--output` name each run; add `--viewport 1200x630` for slides). Write one short steps file that waits for your data and checks the requested values and behaviour; set values explicitly and `waitForFunction` the expected text after each click. Fix only what fails, rerun once. Done means those pass and the summary shows no errors, overflow, contrast, clipping, overlap or duplicate ids: send the link and what you tested, then stop. The summary is your layout evidence: no own pixel scripts, re-exports or polish. If you can view images, open the screenshot paths in the `--output` file; otherwise don't and say appearance is unverified.
@@ -46,7 +51,7 @@ Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--out
 
 ## Optional HTML components
 
-Copy the installed `components/` directory into the project (all of it: helpers and engine chunks come along) and import the compiled `.js` registrations, e.g. `import {registerInput} from './components/input.js'; registerInput();` after the core script tag; repeat calls are safe. To learn an element, read the comment at the top of its `.ts` (`head -30 components/NAME.ts`: import line, attributes, events, usage); the `.ts` is readable source, not a browser script. Most controls emit a bubbling `af-change` with `event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view goes away. Elements use light DOM and the page's design-system tokens, carry no credentials, and need explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain for compatibility; new diagrams and maps use the direct libraries below.
+Copy the installed `components/` directory into the project (all of it: helpers and engine chunks come along) and import the compiled `.js` registrations, e.g. `import {registerInput} from './components/input.js'; registerInput();`; repeat calls are safe. To learn an element, read the comment at the top of its `.ts` (`head -30 components/NAME.ts`: import line, attributes, events, usage); the `.ts` is readable source, not a browser script. Most controls emit a bubbling `af-change` with `event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view goes away. Elements use light DOM and the page's design-system tokens, carry no credentials, and need explicit registration. The legacy `af-mermaid` and `af-deck-gl` wrappers remain for compatibility; new diagrams and maps use the direct libraries below.
 
 | Purpose | Elements (see `components/NAME.ts`) |
 |---|---|
@@ -66,7 +71,7 @@ For native HTML visualizations, use the direct library APIs rather than a custom
 | Interactive maps and geospatial layers | [deck.gl](references/maps.md) |
 | Flowcharts, sequences and other diagrams | [Pele](references/diagrams.md) |
 
-The guides give the exact shipped ESM imports, theming, resizing, cleanup and offline limits. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
+The guides give the exact imports, theming, resizing, cleanup and offline limits.
 
 ## Sharing and access
 
@@ -79,7 +84,7 @@ A link never carries your login: whoever opens it signs in as themselves. Visibi
 
 ## Preserve the document
 
-Every saved page version remains available; never reuse an ID removed in an earlier version, and save the canonical returned HTML before the next edit. A 409 or a refused baseline means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser anchors and selectors. Use `data-af="state"` and `data-af="core"` for platform blocks; the design system is the head meta, never attributes on `<html>`. Page scripts execute on the page's runner origin, separately from account credentials.
+Every saved page version remains available; never reuse an ID removed in an earlier version, and save the canonical returned HTML before the next edit. A 409 or a refused baseline means someone else edited: read again and reapply. HTML `id` remains available for ordinary browser anchors and selectors. Initial viewer state goes in `<script type="application/json" data-af="state">`. Page scripts execute on the page's runner origin, separately from account credentials.
 
 ## Installed resources
 
