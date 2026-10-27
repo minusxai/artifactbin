@@ -1,0 +1,30 @@
+/** The active system for exports and offline copies: its rules and faces inline, its font bytes admitted for embedding. */
+import {lstatSync,readFileSync} from 'node:fs';
+import path from 'node:path';
+import {parse,parseFragment,serialize,type DefaultTreeAdapterMap} from 'parse5';
+import {htmlAppearance} from '../html-page/design-system';
+import {htmlSystemFontPaths,htmlSystemsCss} from './index';
+
+export interface OfflineSystemStyle { html: string; resources: Array<{url:string;contentType:string;bytes:Uint8Array}> }
+
+/** Prepend `<style data-af="platform-styles">` with only the page's resolved system; no system, no change. */
+export function withOfflineSystemStyle(html:string,baseUrl:string,ownerChoice?:string|null):OfflineSystemStyle{
+ const {designSystem}=htmlAppearance(html,ownerChoice);
+ if(!designSystem)return {html,resources:[]};
+ const document=parse(html);
+ const root=document.childNodes.find((node):node is DefaultTreeAdapterMap['element']=>node.nodeName==='html');
+ const head=root?.childNodes.find((node):node is DefaultTreeAdapterMap['element']=>node.nodeName==='head');
+ if(!head)return {html,resources:[]};
+ const style=parseFragment(`<style data-af="platform-styles"></style>`).childNodes[0] as DefaultTreeAdapterMap['element'];
+ const css=htmlSystemsCss([designSystem]);
+ style.childNodes=[{nodeName:'#text',value:css,parentNode:style} as DefaultTreeAdapterMap['textNode']];
+ style.parentNode=head;head.childNodes.unshift(style);
+ const fonts=path.resolve('public/fonts');
+ if(!lstatSync(fonts).isDirectory()||lstatSync(fonts).isSymbolicLink())throw Error('Hosted fonts are unavailable');
+ const resources=htmlSystemFontPaths([designSystem]).map(fontPath=>{
+  const file=path.resolve('public',fontPath.slice(1));
+  if(!file.startsWith(fonts+path.sep)||lstatSync(file).isSymbolicLink())throw Error('Unsupported font path');
+  return {url:new URL(fontPath,baseUrl).href,contentType:'font/woff2',bytes:new Uint8Array(readFileSync(file))};
+ });
+ return {html:serialize(document),resources};
+}

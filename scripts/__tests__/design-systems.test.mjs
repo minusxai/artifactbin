@@ -180,6 +180,13 @@ it('keeps native theme font delivery and linked-CSS guides generated from the in
   expect(readFileSync(path.join(REFS,'html-system-'+name+'.md'),'utf8')).toBe(nativeSystemMd(name));
  }
 });
+it('keeps the HTML platform stylesheet data generated from the same specs and token rules',async()=>{
+ const {renderHtmlSystems,HTML_SYSTEMS_FILE,HTML_SYSTEM_MODES_FILE,nativeSystemRules}=await import('../../design-systems/lib/html-skill.mjs');
+ const {data,modes}=renderHtmlSystems();
+ expect(readFileSync(HTML_SYSTEMS_FILE,'utf8')).toBe(data);
+ expect(readFileSync(HTML_SYSTEM_MODES_FILE,'utf8')).toBe(modes);
+ for(const name of ROSTER)expect(data).toContain(JSON.stringify(nativeSystemRules(name)));
+});
 it('gives every colour token its use in the native guide and keeps text tokens and reports their contrast',async()=>{
  const {nativeSystemMd}=await import('../../design-systems/lib/html-skill.mjs');
  const lum=hex=>{const [r,g,b]=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*r+0.7152*g+0.0722*b;};

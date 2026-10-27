@@ -106,6 +106,8 @@ try {
     const entry=input.entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);
     if(!entry)throw Error(`Missing real reader URL for ${fixture.id}/${theme}`);
     const url=new URL(entry.url);
+    // The viewer's light/dark choice, as the reader hands it to a framed page (the core reads ?mx-mode=).
+    if(input.implementation==='html')url.searchParams.set('mx-mode',theme);
     if(!['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)&&!url.hostname.endsWith('.lvh.me'))throw Error('Only isolated local reader URLs are allowed');
     const framed=input.fixtureSet==='identity';
     if(framed?!/^\/a\/[a-zA-Z0-9]+$/.test(url.pathname):!url.pathname.endsWith('/raw'))throw Error('Capture the declared real reader mode');

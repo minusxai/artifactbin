@@ -7,17 +7,25 @@ import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
-import {previewHtml,packPreviewExport,autofixHtml,formatAutofixReport} from './preview-html.mjs';
+import {previewHtml,packPreviewExport,autofixHtml,formatAutofixReport,withPlatformStyles} from './preview-html.mjs';
 import {statSync} from 'node:fs';
 import {writeFile,rename} from 'node:fs/promises';
 import {dirname,basename} from 'node:path';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
+import {readFile} from 'node:fs/promises';
 
 // No remote sources, frames, forms, workers or popup permissions. This is a
 // browser resource policy, not an OS/network sandbox for hostile JavaScript.
 export const PRIVATE_CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-downloads";
 const types={'.html':'text/html; charset=utf-8','.htm':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.avif':'image/avif','.woff2':'font/woff2','.woff':'font/woff','.mp4':'video/mp4','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8'};
+/** The platform stylesheet's hosted font files: the skill archive's fonts/, or the app's public/fonts in a source checkout. */
+const PLATFORM_FONT=/^\/fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/;
+async function platformFont(pathname){
+ if(!PLATFORM_FONT.test(pathname))return null;
+ for(const dir of ['../fonts/','../../../public/fonts/']){try{return await readFile(fileURLToPath(new URL(dir+pathname.slice('/fonts/'.length),import.meta.url)));}catch(error){if(error.code!=='ENOENT')throw error;}}
+ return null;
+}
 const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!tail.startsWith('..'+sep)&&tail!=='..'&&!tail.startsWith(sep));};
 /** Start a private loopback server; contract: lib/skills/preview-contract.d.ts. */
 /** Autofix (lib/html-autofix) on the bytes a page is served with; the file changes only when `write` is chosen. */
@@ -81,12 +89,13 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
     const selected=requested==='/'?'/index.html':requested;
     const load=async name=>{
      if(publicLibraries.has(name))return {contentType:'text/javascript',bytes:Buffer.from(publicLibraries.get(name))};
+     const font=await platformFont(name);if(font)return {contentType:'font/woff2',bytes:font};
      const decoded=decodeURIComponent(name);if(!decoded.startsWith('/')||decoded.includes('\\')||decoded.includes('\0')||decoded.split('/').some(part=>part.startsWith('.')))throw Error('Invalid local export path');
      try{let target=base;for(const part of decoded.slice(1).split('/')){target=resolve(target,part);if(!inside(base,target)||(await lstat(target)).isSymbolicLink())throw Error('Symlink or escaping local export dependency refused: '+name);}
       return {contentType:types[extname(target).toLowerCase()]??'application/octet-stream',bytes:await readPreviewFile(base,target)};
      }catch(error){if(error.code==='ENOENT')throw Error('Missing local dependency: '+name);throw error;}
     };
-    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html,pathname:selected,load,libraries:libraryImports});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
+    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html:withPlatformStyles(html),pathname:selected,load,libraries:libraryImports});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
     catch(error){res.setHeader('Content-Type','application/json');return end(error.code==='PREVIEW_LIMIT'?413:422,JSON.stringify({error:'Local export failed: '+(error.code==='ENOENT'?'a project dependency is missing':error.message)}));}
    }
    if(pathname==='/__af_preview/source'){
@@ -101,6 +110,7 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
     return end(200,JSON.stringify({clean:!result.fixes.length&&!result.problems.length,fixes:result.fixes,problems:result.problems,routine:result.routine,file:requested}));
    }
    if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
+   const font=await platformFont(pathname);if(font){res.setHeader('Content-Type','font/woff2');res.setHeader('Content-Length',font.length);return end(200,font);}
    const source=runtimeAssets.get(pathname)??publicLibraries.get(pathname);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');

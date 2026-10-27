@@ -8,6 +8,17 @@ initSync();
 import {admitRuntimeModuleImports} from '../../../lib/html-publication-bundle/runtime-module-imports.ts';
 // The shared autofix rules (lib/html-autofix) reach every script through this bundled module.
 export {autofixHtml,formatAutofixReport,scriptFingerprint,localReferences} from '../../../lib/html-autofix/index.ts';
+import {htmlAppearance} from '../../../lib/html-page/design-system.ts';
+import {htmlSystemsCss} from '../../../lib/html-systems/index.ts';
+/** The platform stylesheet for one local page: only its resolved system, inline first in <head> (lib/html-systems). */
+export function withPlatformStyles(source){
+ const {designSystem}=htmlAppearance(source);if(!designSystem)return source;
+ const document=parse(source),html=document.childNodes.find(node=>node.nodeName==='html'),head=html?.childNodes.find(node=>node.nodeName==='head');
+ const present=node=>node.attrs?.some(attr=>attr.name==='data-af'&&attr.value==='platform-styles')||(node.childNodes??[]).some(present);
+ if(!head||present(document))return source;
+ const style=parseFragment('<style data-af="platform-styles"></style>').childNodes[0];style.childNodes=[{nodeName:'#text',value:htmlSystemsCss([designSystem]),parentNode:style}];
+ style.parentNode=head;head.childNodes.unshift(style);return serialize(document);
+}
 /** Shared server admission distinguishes literal project dependencies from closed runtime URL adapters. */
 export function publicationLocalReferences(source,contentType){
  const moduleReferences=text=>{const imports=parseImports(text)[0],runtime=imports.some(item=>item.n===undefined&&item.d!==-2)?admitRuntimeModuleImports(text):[];return imports.flatMap(item=>{
@@ -29,11 +40,13 @@ export function publicationLocalReferences(source,contentType){
  walk(parse(source));return references;
 }
 export function previewHtml(source,notice,localConfig){
- const document=parse(source);
+ const document=parse(localConfig?withPlatformStyles(source):source);
  const html=document.childNodes.find(node=>node.nodeName==='html');
  html.attrs=html.attrs.filter(attr=>attr.name!=='data-af-private-preview');
  html.attrs.push({name:'data-af-private-preview',value:'true'});
  if(localConfig){
+  // D4: what the core sets on <html> at load, resolved the way the server resolves it.
+  localConfig={appearance:htmlAppearance(source),...localConfig};
   let previous={};
   function removeRuntime(node){if(!node.childNodes)return;node.childNodes=node.childNodes.filter(child=>{if(child.nodeName==='script'&&child.attrs?.some(attr=>attr.name==='data-af'&&attr.value==='runtime')){try{previous=JSON.parse(child.childNodes?.map(part=>part.value??'').join('')||'{}');}catch{}return false;}removeRuntime(child);return true;});}
   removeRuntime(html);

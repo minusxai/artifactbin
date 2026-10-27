@@ -28,7 +28,7 @@ const refuse=(why:string)=>new VersionRefused(why);
 /** Where the core keeps the HTML this document loaded (lib/html-runtime/build.server, captured at readyState interactive). */
 export const LOADED_SOURCE=Symbol.for('afbin.loaded-source');
 
-interface Runtime {revision?:string;savedNodeIds?:string[];scriptFingerprint?:string}
+interface Runtime {revision?:string;savedNodeIds?:string[];scriptFingerprint?:string;appearance?:{designSystem?:string}}
 const runtimeOf=(doc:Document):Runtime=>{try{return JSON.parse(doc.querySelector('script[data-af="runtime"]')?.textContent??'{}') as Runtime;}catch{return {};}};
 const ID='data-af-id';
 const INTERACTIVE=new Set(['button','input','select','textarea','form','a','details','summary','option','optgroup','datalist','dialog','label','output','iframe','object','embed','video','audio','canvas']);
@@ -86,11 +86,14 @@ export function planVersion(loaded:Document,next:Document,scripts:string|null,ol
 }
 
 /** `live` takes the attribute changes `before`→`after` made in the source; attributes a script set are kept. */
+/** <html> attributes the platform owns (lib/html-page/design-system): the core sets them, the source never decides them. */
+const PLATFORM_ROOT=new Set(['data-af-dark','data-af-design-system']);
 function applyAttributes(live:Element,before:Element|undefined,after:Element):void{
  // A script that ran is not changed by its attributes; equal fingerprints say its code did not change.
  if(live.localName==='script')return;
- for(const attr of after.attributes){const was=before?.getAttribute(attr.name);if((was===null||was===undefined||was!==unpinned(attr.name,attr.value))&&live.getAttribute(attr.name)!==attr.value)live.setAttribute(attr.name,attr.value);}
- if(before)for(const attr of before.attributes)if(!after.hasAttribute(attr.name))live.removeAttribute(attr.name);
+ const root=live.localName==='html';
+ for(const attr of after.attributes){if(root&&PLATFORM_ROOT.has(attr.name))continue;const was=before?.getAttribute(attr.name);if((was===null||was===undefined||was!==unpinned(attr.name,attr.value))&&live.getAttribute(attr.name)!==attr.value)live.setAttribute(attr.name,attr.value);}
+ if(before)for(const attr of before.attributes)if(!after.hasAttribute(attr.name)&&!(root&&PLATFORM_ROOT.has(attr.name)))live.removeAttribute(attr.name);
 }
 const SHEET='style,link';
 const isSheet=(element:Element)=>element.localName==='style'||element.localName==='link'&&(element.getAttribute('rel')??'').split(/\s+/).includes('stylesheet');
@@ -132,6 +135,8 @@ export function morphHtmlVersion(doc:Document,loaded:string,next:string,scripts:
  applyAttributes(doc.body,before.body,after.body);
  morphChildren(doc.body,after.body,ctx);
  const runtime=runtimeOf(after);
+ // The new version may name another design system; the viewer's light/dark stays as it is.
+ const system=runtime.appearance?.designSystem;if(typeof system==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(system)&&doc.documentElement.getAttribute('data-af-design-system')!==system)doc.documentElement.setAttribute('data-af-design-system',system);
  return {revision:String(runtime.revision??''),savedNodeIds:[...plan.newIds]};
 }
 

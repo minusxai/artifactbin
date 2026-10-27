@@ -184,3 +184,19 @@ describe('retryFetch', () => {
     expect(onWait.mock.calls).toEqual([[true], [false]]);
   });
 });
+
+describe('retryLazily', () => {
+  it('ends with the first attempt when it is not retryable, and continues the same policy after one that is', async () => {
+    const { retryLazily } = await import('../retry-lazily');
+    const ok = vi.fn(async () => new Response('ok'));
+    await expect(retryLazily(ok)).resolves.toMatchObject({ attempts: 1 });
+    expect(ok).toHaveBeenCalledOnce();
+    const statuses = [503, 502, 200];
+    const send = vi.fn(async () => new Response('', { status: statuses.shift()! }));
+    const result = await retryLazily(send, { policy: { delaysMs: [0, 0, 0], jitter: 0 }, sleep: async () => {} });
+    expect(result.attempts).toBe(3);expect(result.response.status).toBe(200);expect(send).toHaveBeenCalledTimes(3);
+    const once = vi.fn(async () => new Response('', { status: 503 }));
+    await expect(retryLazily(once, { method: 'POST', policy: { delaysMs: [0], jitter: 0 }, sleep: async () => {} })).resolves.toMatchObject({ attempts: 1 });
+    expect(once).toHaveBeenCalledOnce();
+  });
+});

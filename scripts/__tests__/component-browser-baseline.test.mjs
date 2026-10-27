@@ -116,17 +116,17 @@ describe('actual fixture publication payloads',()=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
       for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);if(file.path.startsWith('fonts/'))expect(Buffer.from(file.base64,'base64').equals(await readFile(path.join(repo,'services/app/public',file.path)))).toBe(true);}
-      expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/'))).toHaveLength(20);
-      expect(body.publicationBundle.files.some(file=>file.path==='design-systems/almanac.css')).toBe(true);expect(body.html).toContain('href="./design-systems/almanac.css"');
-      if(bodies.length)expect(Object.keys(body.publicationBundle.mappings).length).toBeGreaterThanOrEqual(21);
+      // The platform serves the design system and its fonts: the page names it and uploads neither.
+      expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/')||file.path.startsWith('design-systems/'))).toHaveLength(0);
+      expect(body.html).toContain('<meta name="artifactbin:design-system" content="almanac">');expect(body.html).not.toContain('design-systems/almanac.css');
       expect(Object.keys(body.publicationBundle.mappings).every(name=>body.publicationBundle.files.some(file=>file.path===name))).toBe(true);
       const result=await publishBundleDependencies(plan,request.idempotencyKey,{create:async()=>{const id='Asset'+(++created);return {id,revision:'v1',address:'/assets/'+id};},reuse:async(name,mapping)=>{reused++;return '/assets/'+mapping.id;}},body.publicationBundle.mappings);
       bodies.push(body);return {id:'Page123',dependencyReceipts:result.receipts};
     }});
-    expect(created).toBeLessThan(100);expect(reused).toBeGreaterThan(1000);
+    expect(created).toBeLessThan(100);expect(reused).toBeGreaterThan(100);
     expect(keys.size).toBe(browserParityFixtures.length*parityThemes.length);
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
-    expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
+    expect(bodies.every(body=>body.html.includes('content="almanac"')&&!body.html.includes('data-af-design-system')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
   it('reuses successful receipts only for reachable unchanged dependency closures',async()=>{
     const {dependencyReceiptCache}=await import('../fixtures/component-baseline/publication.mjs');

@@ -6,6 +6,7 @@ import { parse, parseFragment, serialize, type DefaultTreeAdapterMap } from 'par
 import { assertStorable } from './apollo/storable';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 import type { HtmlAssemblyInput } from './contract';
+import { htmlAppearance } from '../html-page/design-system';
 export type { HtmlAssemblyInput, HtmlRuntimeConfig } from './contract';
 export { createClient, createLocalStore, gql, assertStorable, decodeState, encodeState, readStateFragment, stateUrl } from './apollo/client';
 export type { AfClient, StatePort, RemotePort } from './apollo/apollo-contracts';
@@ -67,6 +68,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     };
     publicConfig.initialState = visit(document);
   }
+  publicConfig.appearance ??= htmlAppearance(input.html, input.designSystem);
   const config = { ...publicConfig, savedNodeIds, ...(!input.offline && appOrigin ? { appOrigin } : {}), offline: input.offline === true };
   const json = JSON.stringify(config).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
@@ -82,6 +84,14 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });
   }
   head.childNodes.unshift(...boot.childNodes);
+  // The platform stylesheet comes right after the core, before every authored style, so authored CSS wins the cascade.
+  const hasPlatformStyles=(node:DefaultTreeAdapterMap['node']):boolean=>'attrs' in node&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='platform-styles')||'childNodes' in node&&node.childNodes.some(hasPlatformStyles);
+  // Only a page with a design system links it: an unstyled page loads no platform CSS or fonts.
+  if(input.systemsHref&&!input.offline&&config.appearance?.designSystem&&!hasPlatformStyles(document)){
+    const link=parseFragment('<link>').childNodes[0] as DefaultTreeAdapterMap['element'];
+    link.attrs=[{name:'rel',value:'stylesheet'},{name:'data-af',value:'platform-styles'},{name:'href',value:input.systemsHref}];
+    link.parentNode=head;head.childNodes.splice(head.childNodes.indexOf(boot.childNodes.at(-1) as DefaultTreeAdapterMap['childNode'])+1,0,link);
+  }
   // The single core import map must see the inert table before it executes.
   // Keep it in the rendered source so portable-source digest validation binds it.
   if(input.offline){const modules=head.childNodes.filter(node=>'attrs'in node&&node.nodeName==='script'&&node.attrs.some(attr=>attr.name==='data-af'&&attr.value===OFFLINE_MODULES_BLOCK));head.childNodes=[...modules,...head.childNodes.filter(node=>!modules.includes(node))];}

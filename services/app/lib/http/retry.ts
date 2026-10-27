@@ -40,6 +40,8 @@ export interface RetryOptions {
   /** Called with true when a wait starts and false when it ends (a "retrying…" note). */
   onWait?: (waiting: boolean) => void;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** The first attempt, already sent by the caller (lib/artifact-backend/retrying loads this module only after it failed). */
+  first?: { response?: Response; failure?: unknown; started: number };
   random?: () => number;
   now?: () => number;
 }
@@ -82,12 +84,15 @@ export async function retryFetch(send: (context: SendContext) => Promise<Respons
   const { signal, onWait, idempotencyKey } = options;
   const sleep = options.sleep ?? defaultSleep, random = options.random ?? Math.random, now = options.now ?? Date.now;
   const repeatable = SAFE_METHODS.has((options.method ?? 'GET').toUpperCase()) || options.safeToRepeat === true || idempotencyKey !== undefined;
-  const started = now();
+  const started = options.first?.started ?? now();
   for (let attempt = 1; ; attempt++) {
-    if (signal?.aborted) throw withAttempts(abortReason(signal), attempt - 1);
     let response: Response | undefined;
     let failure: unknown;
-    try { response = await send({ attempt, idempotencyKey }); } catch (error) { failure = error; }
+    if (attempt === 1 && options.first) ({ response, failure } = options.first);
+    else {
+      if (signal?.aborted) throw withAttempts(abortReason(signal), attempt - 1);
+      try { response = await send({ attempt, idempotencyKey }); } catch (error) { failure = error; }
+    }
     if (response && !isRetryableStatus(response.status)) return { response, attempts: attempt };
     // An abort is the caller's decision, never a transient fault.
     if (failure !== undefined && signal?.aborted) throw withAttempts(failure, attempt);

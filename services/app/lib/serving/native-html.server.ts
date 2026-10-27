@@ -18,6 +18,7 @@ import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styl
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import { ASSETS_ORIGIN } from '@/lib/platform';
+import { PLATFORM_STYLES_PATH } from '@/lib/html-systems';
 import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
@@ -26,6 +27,8 @@ export interface NativeHtmlRender {
   row: Pick<ArtifactRow, 'id' | 'version' | 'source' | 'meta'>;
   appOrigin?: string;
   offline?: boolean;
+  /** The owner's saved design system (page metadata), which wins over the page's own meta. */
+  designSystem?: string | null;
   /** Offline asset-packed rendering, independent of canonical stored source. */
   renderedHtml?: string;
 }
@@ -48,16 +51,16 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
   const rendered=input.offline?input.renderedHtml??source:await nativeHtmlAssets(input.row);
-  const assembly={platformScriptNonce:randomUUID().replaceAll('-',''),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine}:{})};
+  const assembly={platformScriptNonce:randomUUID().replaceAll('-',''),portable,html:nativeHtmlStructuralWrapper(rendered),config,core:await htmlCore(),systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
 export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS):string {
   if (!pages){
     // The opaque raw reader may load only this page's admission-checked linked
-    // stylesheets; do not grant the application's other paths as style sources.
-    const assets=new URL(`/a/${id}/assets`,base).href;
-    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets}`),extensions);
+    // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
+    const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL('/fonts/',base).href}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
@@ -73,13 +76,13 @@ export function nativeHtmlTitle(row:Pick<ArtifactRow,'title'|'source'>):string {
 /** Immutable core bytes identify the runtime without assembling or reading a page. */
 let coreIdentity: Promise<string> | undefined;
 export function nativeHtmlRuntimeIdentity(): Promise<string> {
-  return coreIdentity ??= htmlCore().then(core => {
+  return coreIdentity ??= htmlAssets().then(({core,systems}) => {
     // Production is one emitted server bundle: its digest also names the assembler
     // and route code. Unbundled module reloads get a new cache identity.
     const file = fileURLToPath(import.meta.url);
     const implementation = /\.[cm]?js$/.test(file)
       ? createHash('sha256').update(readFileSync(file)).digest('hex') : `unbundled:${randomUUID()}`;
-    return etagOf({ core, implementation });
+    return etagOf({ core, systems: systems ? createHash('sha256').update(systems).digest('hex') : null, implementation });
   }).catch(error => { coreIdentity = undefined; throw error; });
 }
 
@@ -104,3 +107,15 @@ export async function nativeHtmlApolloResponse(request:Request,digest:string):Pr
 
 /** Same public, digest-verified code store and cache policy as the author engine. */
 export async function nativeHtmlReaderResponse(request:Request,digest:string):Promise<Response>{return nativeHtmlApolloResponse(request,digest);}
+
+/** The platform stylesheet (lib/html-systems) at its one stable address: public, revalidated on every load by its content hash. */
+let systemsTag:string|undefined;
+export async function nativeHtmlSystemsResponse(request:Request):Promise<Response>{
+ const {systems}=await htmlAssets();
+ if(!systems)return new Response('Not found',{status:404});
+ const etag=systemsTag??=`"${createHash('sha256').update(systems).digest('hex')}"`;
+ const headers:Record<string,string>={'content-type':'text/css; charset=utf-8','cache-control':'no-cache','etag':etag,'access-control-allow-origin':'*','x-content-type-options':'nosniff'};
+ if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
+ headers['content-length']=String(new TextEncoder().encode(systems).byteLength);
+ return new Response(request.method==='HEAD'?null:systems,{headers});
+}

@@ -64,7 +64,7 @@ type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => P
  * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
  * per-document modules and speculation rules the module store serves — all content-addressed, all public.
  */
-const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$/;
+const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/af\/styles\.css$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;

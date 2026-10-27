@@ -74,7 +74,7 @@ const READER_SHARED = [
   'lib/html-presence/preferences.ts', 'lib/html-presence/reader-session.ts',
   'lib/html-presence/model.ts', 'lib/html-presence/contract.ts',
   'solid/components/TrustedUi.tsx', 'solid/editor/create-live-artifact.ts', 'solid/lib/document-navigation.ts',
-  'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts',
+  'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts', 'lib/http/retry-lazily.ts',
   'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/serving/artifact-pwa.ts',
   'lib/http/login-href.ts', 'lib/document/display-title.ts', 'lib/edit-protocol/index.ts',
 ];

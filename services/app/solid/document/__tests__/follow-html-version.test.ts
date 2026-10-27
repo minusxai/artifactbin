@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {followHtmlVersion} from '../follow-html-version';
+import {followHtmlVersion,followPublication} from '../follow-html-version';
 import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
 
 /** A frame controller that answers the version command with `answer` (or stays silent). */
@@ -33,5 +33,24 @@ describe('followHtmlVersion',()=>{
   await vi.advanceTimersByTimeAsync(2999);expect(reload).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);await expect(pending).resolves.toBe('reloaded');expect(reload).toHaveBeenCalledOnce();
   const none=vi.fn();await expect(followHtmlVersion({version:8,frame:null,refresh:async()=>true,reload:none})).resolves.toBe('reloaded');expect(none).toHaveBeenCalledOnce();
+ });
+});
+
+describe('followPublication',()=>{
+ it('follows one version at a time, skips versions overtaken while they waited, and moves the trusted head with each drawn version',async()=>{
+  const show=vi.fn(),reload=vi.fn(),answers:Array<()=>void>=[];
+  const listeners=new Set<(event:unknown)=>void>();
+  const controller={update:vi.fn(),subscribe:(listener:(event:unknown)=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
+   send:vi.fn((command:{version:number})=>{answers.push(()=>listeners.forEach(listener=>listener({type:HTML_VERSION_APPLIED,revision:String(command.version)})));})};
+  const tree=vi.fn(async()=>undefined);
+  const five=followPublication({version:5,editId:'five',frame:controller,tree,show,reload});
+  await vi.waitFor(()=>expect(answers).toHaveLength(1));
+  // Announced while 5 is being drawn: 6 is overtaken by 7 before its turn.
+  const six=followPublication({version:6,editId:'six',frame:controller,tree,show,reload});
+  const seven=followPublication({version:7,editId:'seven',frame:controller,tree,show,reload});
+  answers[0]!();await five;
+  await vi.waitFor(()=>expect(answers).toHaveLength(2));answers[1]!();await Promise.all([six,seven]);
+  expect(controller.send.mock.calls.map(call=>call[0].version)).toEqual([5,7]);
+  expect(show.mock.calls).toEqual([[{version:5,editId:'five'}],[{version:7,editId:'seven'}]]);expect(reload).not.toHaveBeenCalled();
  });
 });

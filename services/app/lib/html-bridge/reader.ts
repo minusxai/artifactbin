@@ -4,8 +4,7 @@ export function applyHtmlReaderAppearance(document: Document, command: unknown):
   if (!command || typeof command !== 'object') return false;
   const data = command as Partial<HtmlReaderAppearanceCommand>;
   if (data.type !== 'mx:reader-mode' || (data.mode !== 'light' && data.mode !== 'dark')) return false;
-  if (data.mode === 'dark') document.documentElement.setAttribute('data-af-dark', 'true');
-  else document.documentElement.removeAttribute('data-af-dark');
+  document.documentElement.setAttribute('data-af-dark', data.mode === 'dark' ? 'true' : 'false');
   document.documentElement.style.colorScheme = data.mode;
   return true;
 }

@@ -2,6 +2,8 @@ import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
+import { normalizeDesignSelection } from './design-system.ts';
+export { normalizeDesignSelection, htmlAppearance } from './design-system.ts';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings,HtmlAssetLinks } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
 const CORE='/af/v1/core.js';
@@ -30,6 +32,8 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
  // Materialize implied html/head/body so every actual element receives an identity.
  if(parseSource(html).elements.some(element=>!written(element)))html=serialize(parse(html));
  html=repairCoreScript(html).html;
+ // D2: platform-owned design attributes and copied system stylesheets never enter stored source (lib/html-page/design-system).
+ html=normalizeDesignSelection(html).html;
  const document=allElements(html);
  const previous=new Set(options.previousHtml?allElements(options.previousHtml).all.map(element=>attribute(element,'data-af-id')).filter((id):id is string=>id!==null):[]);
  const allocated=new Set(options.ledger?.allocatedIds??previous);

@@ -19,6 +19,8 @@ export interface HtmlRuntimeConfig {
   initialState?: HtmlJsonObject;
   /** The version's script fingerprint (lib/html-autofix scriptFingerprint): equal values run identical code, so a new version may be morphed in place. */
   scriptFingerprint?: string;
+  /** What the core sets on <html> at load (D4): the design system, when the page has one, and the default colour mode. The viewer's own choice (`?mx-mode=`, reader messages) wins over `mode`. */
+  appearance?: { designSystem?: string; mode: 'light' | 'dark' };
   /** Private preview helper transport; never an account capability. */
   localPreview?: { endpoint: string; schema: import('@artifactbin/contracts').PageSchema };
 }
@@ -27,6 +29,10 @@ export interface HtmlAssemblyInput {
   config: HtmlRuntimeConfig;
   /** Self-contained classic JS. Runs before every authored script. */
   core: string;
+  /** Hosted platform stylesheet (lib/html-systems), linked before authored styles. Omitted offline: exports inline the active system. */
+  systemsHref?: string;
+  /** The owner's saved design system, which wins over the page's own meta. */
+  designSystem?: string | null;
   /** Fresh per-render, page-local admission for generated platform core/importmap only. */
   platformScriptNonce?: string;
   /** Author module carried only by portable exports; hosted pages fetch its immutable asset on import. */
@@ -44,4 +50,4 @@ export interface HtmlAssemblyInput {
 }
 
 /** Code-only immutable build outputs; never page or viewer configuration. */
-export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string }
+export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:string; reader:string; readerPath:string; systems?:string; chrome?:string; chromePath?:string; portableEngine?:string; portableEnginePath?:string; morph?:string; morphPath?:string }

@@ -157,7 +157,7 @@ describe('module graph', () => {
 
     it('ignores imports inside lib/islands and lists only real browser-side importers', () => {
       expect(check({ 'services/app/solid/Popover.tsx': "import '@/lib/islands/trusted-portal';\n", 'services/app/lib/islands/kit/popper.ts': "import '../contract';\n" })).toBe('');
-      expect(ISLANDS_BROWSER_IMPORTERS.filter(entry => !entry.endsWith('/'))).toEqual(['services/app/lib/html-runtime/browser-reader.ts', 'services/app/lib/html-runtime/table-scroll.ts']);
+      expect(ISLANDS_BROWSER_IMPORTERS.filter(entry => !entry.endsWith('/'))).toEqual(['services/app/lib/html-runtime/browser-reader.ts', 'services/app/lib/html-runtime/live-morph.ts', 'services/app/lib/html-runtime/table-scroll.ts']);
       expect(ISLANDS_BROWSER_IMPORTERS.some(entry => entry === 'services/app/lib/offline/')).toBe(false);
     });
   });
