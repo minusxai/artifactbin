@@ -89,7 +89,10 @@ export async function publishCommand({values,positionals},options={}){
  const {autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=await import('./preview-html.mjs');
  const routine=[...fixed.routine,...routineChanges(source,await readFile(done.source,'utf8'),done.identity,baseline)];
  const report=formatAutofixReport(fixed,{file:path.basename(file),landed:fixed.changed?done.updatedInPlace?`also written to ${path.basename(file)}`:`written to ${path.basename(done.source)}`:undefined,routine});log(report);
- return {...done,autofix:autofixDetail({...fixed,routine},report)};
+ // Exact-text edits written against the file as it was before publishing silently miss once ids are added: say so where the agent reads (runTool prints it after the result).
+ const ids=text=>(text.match(/\sdata-af-id\s*=/g)??[]).length,added=ids(await readFile(done.source,'utf8'))-ids(bytes.toString('utf8'));
+ const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.`:null;
+ return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
 }
 /** Platform-owned changes the server made on publish, counted rather than listed: identities and asset links. */
 function routineChanges(sent,saved,identity,baseline){

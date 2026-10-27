@@ -1,0 +1,168 @@
+<!doctype html>
+<!--
+Example: an eight-slide deck starter designed for 1200x630, with prev/next buttons, dots, arrow keys and Home/End, one Vega-Lite chart and one inline-SVG diagram.
+Standalone: no other files. Copy it (cp examples/deck.html index.html), then replace the bracketed placeholder text and figures; never publish the placeholders.
+Publish: node scripts/publish.mjs index.html   Check: node scripts/check.mjs ID --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+Height budget per slide at 630px: a label, a title of at most 2 lines, one visual of at most 300px or at most 3 short items. Label made-up figures "Illustrative".
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="artifactbin:design-system" content="redline">
+<title>[Company] seed deck</title>
+<style>
+*{box-sizing:border-box}
+html{scroll-snap-type:y mandatory}
+body{margin:0;background:var(--ds-paper);color:var(--ds-ink)}
+[data-af-slide]{height:100vh;min-height:560px;scroll-snap-align:start;display:flex;flex-direction:column;gap:20px;padding:44px 64px 84px;overflow:hidden}
+[data-af-slide] h1,[data-af-slide] h2,[data-af-slide] p{margin:0}
+[data-af-slide] h2{max-width:22ch}
+.red{background:var(--ds-red);color:var(--ds-on-red)}
+.ink{background:var(--ds-ink);color:var(--ds-on-ink)}
+.soft{color:var(--ds-ink-soft)}
+.red .soft,.ink .soft{color:inherit}
+.cover{justify-content:center}
+.cover h1{max-width:12ch}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;flex:1;min-height:0}
+.items{list-style:none;margin:0;padding:0;display:grid;gap:18px;max-width:46ch}
+.items li{border-top:2px solid currentColor;padding-top:10px}
+.items b{display:block}
+.figure{height:300px;max-height:300px;min-width:0}
+.figure svg{display:block;width:100%;height:100%}
+.chart{width:100%;height:260px}
+.illustrative{align-self:flex-start;border:1px solid currentColor;padding:2px 8px}
+.numbers{display:flex;gap:56px}
+nav[data-af-deck-chrome]{position:fixed;right:24px;bottom:18px;display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--ds-paper-raised);color:var(--ds-ink);border:1px solid var(--ds-line);z-index:2}
+nav button{font:inherit;color:inherit;background:none;border:1px solid currentColor;padding:4px 10px;cursor:pointer}
+nav button:disabled{opacity:.4;cursor:default}
+nav .dot{width:12px;height:12px;padding:0;border-radius:50%}
+nav .dot[aria-current=true]{background:var(--ds-red);border-color:var(--ds-red)}
+button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}[data-af-slide]{padding:28px 20px 84px;height:auto;min-height:100vh}}
+</style>
+</head>
+<body>
+<main>
+<section data-af-slide class="red cover" aria-label="Slide 1: Cover">
+  <p class="t-label">[Company] · Seed round · 2026</p>
+  <h1 class="t-display-l">[One-line promise of the company]</h1>
+  <p class="t-body-l">[Who it is for, in one sentence.]</p>
+</section>
+<section data-af-slide aria-label="Slide 2: Problem">
+  <p class="t-label soft">02 · Problem</p>
+  <h2 class="t-display-m">[The problem, stated as a cost someone pays today]</h2>
+  <ul class="items t-body">
+    <li><b>[Pain one]</b>[A short sentence with a number.]</li>
+    <li><b>[Pain two]</b>[A short sentence with a number.]</li>
+    <li><b>[Pain three]</b>[A short sentence with a number.]</li>
+  </ul>
+</section>
+<section data-af-slide aria-label="Slide 3: Solution">
+  <p class="t-label soft">03 · Solution</p>
+  <h2 class="t-display-m">[What the product does, in one line]</h2>
+  <div class="figure">
+    <svg viewBox="0 0 900 260" role="img" aria-labelledby="flow-title"><title id="flow-title">[Input] flows to [product], which produces [outcome]</title>
+      <g fill="none" stroke="currentColor" stroke-width="2"><rect x="10" y="80" width="220" height="100"/><rect x="340" y="60" width="220" height="140" fill="var(--ds-red)"/><rect x="670" y="80" width="220" height="100"/><path d="M234 130h96m-12-10 12 10-12 10M564 130h96m-12-10 12 10-12 10"/></g>
+      <g fill="currentColor" font-family="var(--font-mono)" font-size="18" text-anchor="middle"><text x="120" y="136">[Input]</text><text x="450" y="136" fill="var(--ds-on-red)">[Product]</text><text x="780" y="136">[Outcome]</text></g>
+    </svg>
+  </div>
+</section>
+<section data-af-slide aria-label="Slide 4: Market">
+  <p class="t-label soft">04 · Market</p>
+  <h2 class="t-display-m">[Market size in one sentence]</h2>
+  <div class="grid">
+    <div><div id="market" class="chart" role="img" aria-label="[Market sizes: total, serviceable, obtainable]"></div></div>
+    <div class="items t-body"><p>[How the market is counted: who, how many, at what price.]</p><p class="t-label illustrative">Illustrative figures</p></div>
+  </div>
+</section>
+<section data-af-slide aria-label="Slide 5: Traction">
+  <p class="t-label soft">05 · Traction</p>
+  <h2 class="t-display-m">[The strongest proof that it works]</h2>
+  <div class="numbers">
+    <div><p class="t-numeral">[12]</p><p class="t-body-s soft">[customers]</p></div>
+    <div><p class="t-numeral">[3.4×]</p><p class="t-body-s soft">[growth since launch]</p></div>
+    <div><p class="t-numeral">[$40k]</p><p class="t-body-s soft">[monthly revenue]</p></div>
+  </div>
+  <p class="t-label illustrative">Illustrative figures</p>
+</section>
+<section data-af-slide aria-label="Slide 6: Business model">
+  <p class="t-label soft">06 · Business model</p>
+  <h2 class="t-display-m">[How it makes money, in one line]</h2>
+  <ul class="items t-body">
+    <li><b>[Price]</b>[Per unit, per seat or per month.]</li>
+    <li><b>[Buyer]</b>[Who signs and why.]</li>
+    <li><b>[Margin]</b>[What it costs to serve one customer.]</li>
+  </ul>
+</section>
+<section data-af-slide aria-label="Slide 7: Team">
+  <p class="t-label soft">07 · Team</p>
+  <h2 class="t-display-m">[Why this team wins]</h2>
+  <ul class="items t-body">
+    <li><b>[Name], CEO</b>[One relevant past result.]</li>
+    <li><b>[Name], CTO</b>[One relevant past result.]</li>
+  </ul>
+</section>
+<section data-af-slide class="ink" aria-label="Slide 8: The ask">
+  <p class="t-label">08 · The ask</p>
+  <h2 class="t-display-m">[Raising $X to reach a named milestone]</h2>
+  <ul class="items t-body">
+    <li><b>[Use of funds]</b>[Two or three buckets with shares.]</li>
+    <li><b>[Contact]</b>[name@company.com]</li>
+  </ul>
+</section>
+</main>
+<nav data-af-deck-chrome aria-label="Slides">
+  <button id="prev" type="button" aria-label="Previous slide">←</button>
+  <button class="dot" type="button" data-dot="0" aria-label="Slide 1"></button><button class="dot" type="button" data-dot="1" aria-label="Slide 2"></button><button class="dot" type="button" data-dot="2" aria-label="Slide 3"></button><button class="dot" type="button" data-dot="3" aria-label="Slide 4"></button><button class="dot" type="button" data-dot="4" aria-label="Slide 5"></button><button class="dot" type="button" data-dot="5" aria-label="Slide 6"></button><button class="dot" type="button" data-dot="6" aria-label="Slide 7"></button><button class="dot" type="button" data-dot="7" aria-label="Slide 8"></button>
+  <button id="next" type="button" aria-label="Next slide">→</button>
+  <span id="count" class="t-mono" aria-live="polite">01 / 08</span>
+</nav>
+<script type="module">
+import * as vega from '@afbin/vega';
+import {compile} from '@afbin/vega-lite';
+const slides=[...document.querySelectorAll('[data-af-slide]')],dots=[...document.querySelectorAll('[data-dot]')];
+const prev=document.querySelector('#prev'),next=document.querySelector('#next'),count=document.querySelector('#count');
+const pad=n=>String(n).padStart(2,'0');
+let index=0;
+// Show a slide's state without moving; go() also scrolls. Smooth scrolling would make steps read mid-scroll.
+function show(i){
+  index=Math.max(0,Math.min(slides.length-1,i));
+  count.textContent=`${pad(index+1)} / ${pad(slides.length)}`;
+  dots.forEach((dot,n)=>dot.setAttribute('aria-current',String(n===index)));
+  prev.disabled=index===0;next.disabled=index===slides.length-1;
+}
+function go(i){show(i);slides[index].scrollIntoView({behavior:'auto',block:'start'});}
+prev.onclick=()=>go(index-1);next.onclick=()=>go(index+1);
+dots.forEach(dot=>dot.onclick=()=>go(Number(dot.dataset.dot)));
+document.addEventListener('keydown',event=>{
+  if(event.target.closest?.('input,textarea,select,[contenteditable]'))return;
+  const to={ArrowRight:index+1,PageDown:index+1,ArrowLeft:index-1,PageUp:index-1,Home:0,End:slides.length-1}[event.key];
+  if(to===undefined)return;event.preventDefault();go(to);
+});
+// Wheel and touch scrolling snap to slides; keep the counter on the slide under the middle of the view now. Entries can
+// arrive after a later go() (End then Home), so read the current geometry instead of trusting a stale entry.
+const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClientRect();return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};
+const seen=new IntersectionObserver(sync,{threshold:.6});
+slides.forEach(slide=>seen.observe(slide));
+show(0);
+// The chart takes concrete colours from the design system and redraws when the reader switches light/dark.
+const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+let view;
+async function drawMarket(){
+  view?.finalize();
+  const ink=token('--ds-ink'),font=token('--font-body');
+  const spec=compile({width:'container',height:220,background:'transparent',
+    data:{values:[{segment:'Total',value:4.2},{segment:'Serviceable',value:1.1},{segment:'Obtainable',value:0.12}]},
+    mark:{type:'bar',color:token('--ds-red'),cornerRadiusEnd:2},
+    encoding:{y:{field:'segment',type:'nominal',sort:null,title:null},x:{field:'value',type:'quantitative',title:'US$ billions (illustrative)',scale:{zero:true}}},
+    config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--ds-line'),labelFont:font,titleFont:font,labelFontSize:13,titleFontSize:13}}}).spec;
+  view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:document.querySelector('#market'),renderer:'svg',expr:vega.expressionInterpreter});
+  await view.runAsync();
+}
+await drawMarket();
+const theme=new MutationObserver(drawMarket);
+theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark','data-af-design-system']});
+window.addEventListener('pagehide',()=>{theme.disconnect();seen.disconnect();view?.finalize();},{once:true});
+</script>
+</body>
+</html>

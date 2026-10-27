@@ -126,7 +126,7 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // Screenshot paths stay in the saved file; agents without image input otherwise try to open them.
  expect(passed).not.toContain('/tmp/390x844.png');
  // Only a fully clean pass tells the author they may stop.
- expect(passed).toMatch(/clean pass: .*stop/);
+ expect(passed).toMatch(/clean pass: reply now with the link; don't open qa JSON or screenshots/);
  const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},contrast:{checked:9,belowAA:2,unreadable:1,low:[{text:'Stop the loss',ratio:1.01,need:3}]},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
  expect(failed).toContain('check check_failed: smoke failed');
  expect(failed).toMatch(/pageErrors 1: boom; overflow 512>390; contrast 2 below AA \(1 under 2:1; 1\.01:1 "Stop the loss".*\); task error: Expected 7 labels/);
@@ -139,9 +139,10 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // Every listed defect appears, not only the first, so one fix round covers them.
  const many=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:390,height:844},...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:9,belowAA:2,unreadable:0,low:[{text:'Ask',ratio:2.98,need:4.5,color:'rgb(240, 78, 56)'},{text:'Seed',ratio:3.1,need:4.5}]},slides:{count:8,clipped:2,items:[{slide:4,text:'2025',px:2,by:'svg'},{slide:5,text:'0.0',px:18,by:'svg'}],overlapping:0,overlaps:[]}}]},'qa.json');
  for(const text of ['"Ask"','rgb(240, 78, 56)','"Seed"','slide 4 "2025"','slide 5 "0.0"'])expect(many).toContain(text);
- // Contrast items name the element and slide; each kind lists three, then a count.
- const named=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:1200,height:630},...clean,overflow:{viewport:1200,content:1200,fits:true},contrast:{checked:9,belowAA:4,unreadable:0,low:['A','B','C','D'].map(text=>({text,ratio:3.18,need:4.5,element:'p.foot',slide:8}))}}]},'qa.json');
- expect(named).toContain('3.18:1 "A" p.foot slide 8');expect(named).toContain('"C"');expect(named).not.toContain('"D"');expect(named).toContain('+1 more');
+ // Contrast items name the element and slide; each kind lists up to twelve, then a count; assertions print in full.
+ const labels=[...'ABCDEFGHIJKLMN'],assertion='relationship between market size and the illustrative serviceable share is labelled '.repeat(4);
+ const named=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport:{width:1200,height:630},...clean,overflow:{viewport:1200,content:1200,fits:true},contrast:{checked:20,belowAA:14,unreadable:0,low:labels.map(text=>({text,ratio:3.18,need:4.5,element:'p.foot',slide:8}))},steps:{ran:true,passed:true},task:{assertions:[assertion]}}]},'qa.json');
+ expect(named).toContain('3.18:1 "A" p.foot slide 8');expect(named).toContain('"L"');expect(named).not.toContain('"M"');expect(named).toContain('+2 more');expect(named).toContain(assertion.trim());
  expect(passed).not.toContain('slides');
  expect(failed).not.toContain('clean pass');
  expect(deck).not.toContain('clean pass');
@@ -336,7 +337,7 @@ it('does not ask agents to write what the platform adds, and says what each side
  expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);
  expect(http).not.toMatch(/(?:write|add|load|keep)[^.\n]*core (?:script )?tag/i);
  expect(http).not.toMatch(/<html[^>]*data-af-[a-z-]+="/);
- for(const example of ['report','csv-dashboard','shared-app']){
+ for(const example of ['report','csv-dashboard','shared-app','deck']){
   const html=await readFile(new URL(`../../../skills/artifactbin/examples/${example}.html`,import.meta.url),'utf8');
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }

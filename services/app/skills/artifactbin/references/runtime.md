@@ -25,7 +25,9 @@ document.querySelector('#increment').onclick=()=>{
 
 State in `data-af="state"` initializes each viewer’s private browser state, which then persists in that browser across reloads and tabs (so a dark-mode or month choice survives a reload). Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `await client.query({query})` reads it (a Promise); `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
 
-The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A raw authored file can use the core from an absolute server URL for local preview: without a hosted runtime context, only private local state is available. A downloaded page embeds the engine and works without fetching code.
+Dark mode: the runtime sets `<html data-af-dark>` from the reader's light/dark switch; read it. A page toggle keeps its choice in local state and sets `document.documentElement.dataset.afDark` on load and toggle.
+
+The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A downloaded page embeds the engine and works without fetching code.
 
 ## Contents
 
@@ -49,7 +51,7 @@ document.querySelector('#jobs').append(item);
 
 Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Use distinct prefixes for different lists and roles; avoid duplicate IDs (`check.mjs` fails on duplicates and warns when IDs differ between two loads). Never reuse a deleted job’s IDs, or borrow a source element’s identity.
 
-Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. Comment anchors are described at the top of `scripts/comment.mjs`. JSX `node_id` is not an HTML anchor.
+Keep dynamic nodes under a saved source ancestor with stable IDs. Comments target that node or its `ancestorId`; missing or duplicate IDs never fall back by text. Comment anchors are described atop `scripts/comment.mjs`.
 
 ## Saved comment views
 
