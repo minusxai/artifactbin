@@ -59,7 +59,7 @@
   --ds-ink: #20201D;
   --ds-ink-soft: #5C5A52;
   --ds-on-ink: #EEEADE;
-  --ds-red: #EC402B;
+  --ds-red: #F04E38;
   --ds-on-red: #20201D;
   --ds-red-ink: #B42D1C;
   --ds-red-soft: #F9D5CF;
@@ -67,7 +67,7 @@
   --ds-positive-soft: #D7EFE0;
   --ds-caution: #B8841A;
   --ds-caution-soft: #FAECC9;
-  --ds-negative: #EC402B;
+  --ds-negative: #F04E38;
   --ds-negative-soft: #F9D5CF;
   --background: var(--ds-paper);
   --foreground: var(--ds-ink);
@@ -107,7 +107,7 @@
   --ds-ink: #EEEADE;
   --ds-ink-soft: #B3B0A3;
   --ds-on-ink: #20201D;
-  --ds-red: #EC402B;
+  --ds-red: #F04E38;
   --ds-on-red: #20201D;
   --ds-red-ink: #FF6A55;
   --ds-red-soft: #4A1D17;
@@ -115,7 +115,7 @@
   --ds-positive-soft: #143524;
   --ds-caution: #F0BD57;
   --ds-caution-soft: #42310A;
-  --ds-negative: #EC402B;
+  --ds-negative: #F04E38;
   --ds-negative-soft: #4A1D17;
   --background: var(--ds-paper);
   --foreground: var(--ds-ink);

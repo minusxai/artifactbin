@@ -84,6 +84,8 @@ export function checkDigest(envelope,file){
   lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}${check.screenshot?.path?'; screenshot '+check.screenshot.path:''}`);
  }
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
+ // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.
+ if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping))lines.push('  clean pass: if your steps cover the requested behaviour, reply with the link and what you tested, then stop; no exports, re-checks or polish needed.');
  return lines.join('\n')+'\n';
 }
 /** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */
