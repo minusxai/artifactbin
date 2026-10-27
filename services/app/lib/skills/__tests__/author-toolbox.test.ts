@@ -252,7 +252,7 @@ it('teaches script-created element IDs in the main steps and no longer names dat
  const {readFile}=await import('node:fs/promises');
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
  expect(skill).not.toContain('data-af="meta"');
- for(const block of ['state','core'])expect(skill).toContain(`data-af="${block}"`);
+ expect(skill).toContain('data-af="state"');
  expect(skill).toContain('artifactbin:design-system');
  const steps=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
  expect(steps).toContain('afId');expect(steps).toContain('references/runtime.md#dynamic-elements-and-comments');
@@ -322,5 +322,19 @@ it('keeps one DESCRIPTION per command at the very top of its script, and --help 
   // Every flag the parser accepts is explained where the reader looks.
   const flags=[...Object.keys(COMMANDS[name].flags??{}),...(Object.values(COMMANDS[name].sub??{}) as object[]).flatMap(group=>Object.keys(group))];
   for(const flag of flags)expect(descriptionOf(name),`${name} --${flag}`).toContain('--'+flag);
+ }
+});
+it('does not ask agents to write what the platform adds, and says what each side does',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
+ const http=skill.slice(skill.indexOf('transport == "http"'),skill.indexOf('[% else %]'));
+ expect(http).toContain('You write / the platform adds');
+ // No setup boilerplate: the core tag, html design attributes and copied stylesheets are the platform's.
+ expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);
+ expect(http).not.toMatch(/(?:write|add|load|keep)[^.\n]*core (?:script )?tag/i);
+ expect(http).not.toMatch(/<html[^>]*data-af-[a-z-]+="/);
+ for(const example of ['report','csv-dashboard','shared-app']){
+  const html=await readFile(new URL(`../../../skills/artifactbin/examples/${example}.html`,import.meta.url),'utf8');
+  expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }
 });

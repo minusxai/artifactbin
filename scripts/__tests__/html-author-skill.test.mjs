@@ -26,7 +26,7 @@ describe('native author resources',()=>{
    if(name==='repairs-data'){expect(saved.body.dataset).toContain('week,completed,waiting');continue;}
    expect(saved.body.html).toMatch(/^<!doctype html>/);
    expect(saved.body.html).not.toMatch(/\sclassName="|<Helmet>|DATASET_ID/);
-   expect(saved.body.html).toContain('data-af="core"');
+   expect(saved.body.html).not.toContain('core.js');expect(saved.body.html).toContain('artifactbin:design-system');
    expect(saved.body.html).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
