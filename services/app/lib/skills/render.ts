@@ -145,7 +145,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
     const rendered = env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
-      authorCommands: commandTable(),
+      authorCommands: commandTable(file => readFileSync(path.resolve(process.cwd(), 'skills/artifactbin/scripts', file), 'utf8')),
       credentialPath: opts.credentialPath ?? credentialPaths(opts.base, '~/.artifactbin').backingPath,
       transport: opts.transport ?? 'cli',
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
