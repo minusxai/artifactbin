@@ -13,3 +13,13 @@ export interface NativeReviewedComparisonDecision {
  differences:readonly {id:string;description:string;evidence:NativeHostFile}[];
  behaviorComplete:true;sourceTargetComplete:true;
 }
+
+/** Completion-first admission is explicit and independently approved; raw strict evidence stays false. */
+export interface NativePracticalComparisonDecision extends Omit<NativeReviewedComparisonDecision,'format'> {
+ format:'native-practical-comparison-decision-v1';
+ practicalAcceptance:{
+  policy:NativeHostFile;reviewerApproval:NativeHostFile;headEvidence:NativeHostFile;
+  readableContent:true;preservedAssets:true;essentialInteractionsAndData:true;
+  ownershipAccessCommentsPreserved:true;
+ };
+}

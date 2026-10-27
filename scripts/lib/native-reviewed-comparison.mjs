@@ -5,9 +5,11 @@ const sha=x=>createHash('sha256').update(x).digest('hex'),hash=x=>typeof x==='st
 export async function verifyReviewedComparison({root,ref,approvedSha256,context,recipe,result}){
  if(!ref||!hash(ref.sha256)||!approvedSha256?.includes(ref.sha256))fail();
  const base=await realpath(root),bound=async ref=>{if(!ref||!hash(ref.sha256)||typeof ref.path!=='string'||path.isAbsolute(ref.path))fail();const file=await realpath(path.resolve(base,ref.path));if(!file.startsWith(base+path.sep))fail();const bytes=await readFile(file);if(sha(bytes)!==ref.sha256)fail();return bytes;};
- /** @type {import('./native-reviewed-comparison-contract').NativeReviewedComparisonDecision} */
+ /** @type {import('./native-reviewed-comparison-contract').NativeReviewedComparisonDecision | import('./native-reviewed-comparison-contract').NativePracticalComparisonDecision} */
  const d=JSON.parse((await bound(ref)).toString());
- if(d.format!=='native-reviewed-comparison-decision-v1'||d.accepted!==true||d.revisionScope!=='latest'||d.strictPassed!==false||d.behaviorComplete!==true||d.sourceTargetComplete!==true||!isDeepStrictEqual(d.key,recipe.key)||d.assemblySha256!==recipe.assemblySha256||d.sourceRevision!==recipe.sourceRevision||d.targetRevision!==recipe.targetRevision)fail();
+ const practical=d.format==='native-practical-comparison-decision-v1';
+ if(!practical&&d.practicalAcceptance!==undefined)fail();
+ if((!practical&&d.format!=='native-reviewed-comparison-decision-v1')||d.accepted!==true||d.revisionScope!=='latest'||d.strictPassed!==false||d.behaviorComplete!==true||d.sourceTargetComplete!==true||!isDeepStrictEqual(d.key,recipe.key)||d.assemblySha256!==recipe.assemblySha256||d.sourceRevision!==recipe.sourceRevision||d.targetRevision!==recipe.targetRevision)fail();
  for(const [field,name] of [['sourceHeadSha256','sourceHead'],['compiledHtmlSha256','compiledHtml'],['membershipSha256','membership'],['commentsSha256','comments']])if(!hash(d[field])||d[field]!==recipe.inputs[name]?.sha256)fail();
  if(result.status!=='difference'||!isDeepStrictEqual(result.key,recipe.key)||result.assemblySha256!==recipe.assemblySha256||result.comparisonSha256!==d.strictReport?.sha256)fail();
  const strictBytes=await bound(d.strictReport);if(sha(await readFile(result.comparisonPath))!==sha(strictBytes))fail();const strict=JSON.parse(strictBytes.toString());if(!['passed','strictEqual'].includes(d.strictFalseField)||strict[d.strictFalseField]!==false||strict.passed===true||strict.strictEqual===true)fail();
@@ -32,9 +34,18 @@ export async function verifyReviewedComparison({root,ref,approvedSha256,context,
    for(const field of ['sourceSha256','documentSha256','harnessSha256','canonicalSha256'])if(evidence[field]!==input[field])fail();
   }
  }
+ if(practical){
+  const p=d.practicalAcceptance;
+  if(!p||['readableContent','preservedAssets','essentialInteractionsAndData','ownershipAccessCommentsPreserved'].some(field=>p[field]!==true))fail();
+  const [policy,approval]=await Promise.all([p.policy,p.reviewerApproval].map(async ref=>JSON.parse((await bound(ref)).toString())));
+  await bound(p.headEvidence);
+  if(policy.format!=='explicit-user-completion-first-migration-override-v1'||typeof policy.evidenceIntegrity!=='string'||!policy.evidenceIntegrity.trim()||approval.decision!=='approve'||typeof approval.reviewer!=='string'||!approval.reviewer.trim()||typeof approval.criterion!=='string'||!approval.criterion.trim()||approval.policy?.sha256!==p.policy.sha256||approval.packet?.sha256!==p.headEvidence.sha256||!Array.isArray(approval.heads))fail();
+  const matches=approval.heads.filter(h=>h.sourceId===d.key.sourceId&&h.version===d.key.version);
+  if(matches.length!==1||matches[0].sourceNamespace!==undefined&&matches[0].sourceNamespace!==d.key.sourceNamespace||matches[0].assemblySha256!==d.assemblySha256||matches[0].decision!=='approve'||matches[0].strictPassed!==false||matches[0].practicalAccepted!==true)fail();
+ }
  const required=['source','target','assembly','relations','behavior','classification'];
  if(!Array.isArray(d.evidence)||required.some(kind=>!d.evidence.some(e=>e.kind===kind))||d.evidence.some(e=>!required.includes(e.kind)))fail();
  if(!Array.isArray(d.differences)||!d.differences.length||new Set(d.differences.map(e=>e.id)).size!==d.differences.length||d.differences.some(e=>typeof e.id!=='string'||!e.id.trim()||typeof e.description!=='string'||!e.description.trim()))fail();
  for(const e of d.evidence)await bound(e.file);for(const e of d.differences)await bound(e.evidence);
- return {decisionSha256:ref.sha256,strictPassed:false};
+ return {decisionSha256:ref.sha256,strictPassed:false,...(practical?{practicalAccepted:true}:{})};
 }
