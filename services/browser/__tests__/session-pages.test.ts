@@ -144,3 +144,15 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  const refused=await worker.run(`const page=await context.newPage();await page.goto('/');return await page.evaluate(async()=>{window.live.close();window.native.close();return (await fetch('/a/abc123/events')).status});`);
  expect(refused.error).toBeUndefined();expect(refused.result).toBe(404);expect(seen.at(-1)!.actor).toBe(guest);
 },30_000);
+
+// The author check's slide evidence: a clip is text cut off by a box its content overflows, not a tall display
+// font whose glyph box pokes past a hidden-overflow box that holds all its content.
+it('counts a slide clip only where a hidden-overflow box actually overflows', async () => {
+ const {chromium}=await import('playwright');const browser=await chromium.launch();
+ const slides=async(inner:string)=>{const page=await browser.newPage();try{return ((await inspectPage(page,{target:'data:text/html,'+encodeURIComponent(`<html><body style="margin:0"><section data-af-slide style="height:600px;padding:40px;box-sizing:border-box">${inner}</section></body></html>`),viewport:{width:1200,height:630}},null)) as {slides?:{clipped:number,items:{text:string}[]}}).slides;}finally{await page.close();}};
+ try{
+  expect(await slides('<div style="overflow:hidden;height:300px"><h2 style="font-size:62px;line-height:.82;margin:0"><span>Software forever.</span></h2></div>')).toMatchObject({clipped:0});
+  const cut=await slides('<div style="overflow:hidden;height:60px"><p style="margin:0">One</p><p style="margin:0">Two</p><p style="margin:0">Three</p><p style="margin:0">Four hidden line</p></div>');
+  expect(cut?.clipped).toBe(1);expect(cut?.items[0]).toMatchObject({text:'Four hidden line'});
+ }finally{await browser.close();}
+});
