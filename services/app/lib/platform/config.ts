@@ -416,9 +416,33 @@ export function readCliReleaseVersion(candidates: string[] = CLI_RELEASE_CANDIDA
   }
   return '';
 }
+/**
+ * CLI RETIREMENT SWITCH — `CLI__RETIREMENT=on` (read through `env('CLI','RETIREMENT')`; default off).
+ *
+ * CLI_RETIREMENT_VERSION is the final afbin release: every command replaces the skill folders `afbin setup`
+ * installed with the author skill and uninstalls the npm package. Its release had to move public/chat/release.json
+ * to that version (the release workflow requires the pointer to match the package), so while the switch is off
+ * this server keeps advertising CLI_LAST_SERVICE_VERSION instead — in the `X-Artifactbin-CLI-Version` header, the
+ * update-required body and the served /chat/release.json — and no client is pushed to retire.
+ *
+ * Turn it on only after CLI_RETIREMENT_VERSION is published to npm: from then on every 0.5.x CLI with
+ * auto-update enabled installs it after its next successful server command, and `afbin update` installs it too.
+ * A pointer at or below CLI_LAST_SERVICE_VERSION is advertised unchanged, whatever the switch says.
+ */
+export const CLI_RETIREMENT_VERSION = '0.6.0';
+export const CLI_LAST_SERVICE_VERSION = '0.5.55';
+export const cliRetirementEnabled = (): boolean => env('CLI', 'RETIREMENT') === 'on';
+/** The version to advertise for a pointer version: anything past the last service release (the retirement
+ * release or a later fix to it) only while the switch is on. */
+export const advertisedCliVersion = (version: string): string => {
+  const parts = (value: string) => value.split('.').map(Number);
+  const [a, b] = [parts(version), parts(CLI_LAST_SERVICE_VERSION)];
+  const newer = a.length === 3 && a.every(Number.isSafeInteger) && (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0;
+  return newer && !cliRetirementEnabled() ? CLI_LAST_SERVICE_VERSION : version;
+};
 export function cliReleaseVersion(): string {
   cliRelease ??= readCliReleaseVersion();
-  return cliRelease;
+  return advertisedCliVersion(cliRelease);
 }
 
 /**

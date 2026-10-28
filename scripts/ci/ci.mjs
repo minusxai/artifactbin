@@ -227,6 +227,8 @@ if (mode === 'plan') {
   if (needs.plan?.result !== 'success') throw new Error('CI planning failed');
   const plan = JSON.parse(needs.plan.outputs.plan);
   const failed = checkCiResults(plan, Object.fromEntries(Object.entries(needs).map(([job, value]) => [job, value.result])));
+  // `cli-pack` is outside the plan (it runs on every run): it must pass, or be skipped with the whole run.
+  if (needs['cli-pack'] && !['success', 'skipped'].includes(needs['cli-pack'].result)) failed.push('cli-pack');
   if (failed.length) throw new Error(`CI jobs did not succeed: ${failed.join(', ')}`);
   console.log('All selected CI jobs passed.');
 } else if (mode === 'record-tree') {

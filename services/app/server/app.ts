@@ -1,4 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
+import {advertisedCliVersion} from '@/lib/platform/config';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -538,6 +539,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
+  // `afbin update` reads this pointer: it names the same version as X-Artifactbin-CLI-Version, so the CLI
+  // retirement release stays unadvertised until CLI__RETIREMENT is on (lib/platform/config.ts).
+  app.get('/chat/release.json', c => {
+    let pointer: Record<string, unknown>;
+    try { pointer = JSON.parse(readFileSync(path.join(publicDir, 'chat', 'release.json'), 'utf8')); } catch { return c.notFound(); }
+    if (typeof pointer.version === 'string') pointer.version = advertisedCliVersion(pointer.version);
+    c.header('cache-control', 'public, max-age=300');
+    return c.json(pointer);
+  });
   app.all('/chat/*', async c => c.notFound());
   app.all('/install.sh', async c => c.notFound());
   app.all('/login/cli', async c => c.notFound());
