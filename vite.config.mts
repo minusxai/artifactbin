@@ -91,9 +91,16 @@ const staticallyImportedBy = (id: string, getModuleInfo: ModuleInfoOf, reaches: 
   }
   return false;
 };
+/**
+ * The app entry's small HTTP leaves, which lazy pages import too: left alone, each is a chunk of its own, and the retry
+ * door's dynamic import moves the bundler's preload helper out of the entry into a third (+0.6 KB on size target 4,
+ * measured). One chunk holds them.
+ */
+const ENTRY_HTTP = /[\\/]services[\\/]app[\\/]lib[\\/]http[\\/](?:live-stream|retry-lazily)\.ts$|vite[\\/]preload-helper/;
 export const uiChunkName = (id: string, ctx: { getModuleInfo: ModuleInfoOf }): string | null => {
   const getModuleInfo: ModuleInfoOf = (module) => ctx.getModuleInfo(module);
   const info = getModuleInfo(id);
+  if (ENTRY_HTTP.test(id) && staticallyImportedBy(id, getModuleInfo, (_, isEntry) => isEntry)) return 'http';
   // Every static reader dependency was already required before its frame. Keep those
   // shared leaves together rather than one compressed stream per local/hosted importer.
   if (isReaderShared(id) && !info?.dynamicImporters.length && !staticallyImportedBy(id, getModuleInfo, (_, isEntry) => isEntry) && staticallyImportedBy(id, getModuleInfo, at => READER_PAGE.test(at))) return 'reader';

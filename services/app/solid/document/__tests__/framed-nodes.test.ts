@@ -1,7 +1,7 @@
 /**
  * THE FRAMED DOCUMENT'S NODE TREE IS ITS OWN REQUEST (solid/document/create-framed-story): the page draws nothing from it —
  * it is only relayed to the frame's edit controller, which classifies comments and selections against it — so the page's
- * data does not carry it. The bridge attaches when the tree arrives; a transient failure is asked again, a refusal is not.
+ * data does not carry it. The bridge attaches when the tree arrives; a restart is ridden out (lib/http/retry-lazily), a refusal is not.
  */
 import { createRoot } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -43,17 +43,18 @@ describe('asking for the tree', () => {
     expect(odd).toHaveLength(1);
   });
 
-  it('asks again after a server failure or a dropped connection, and gives up after the third try', async () => {
+  it('asks again through the shared retry after a restart answer or a dropped connection, and once for any other failure', async () => {
+    await import('@/lib/http/retry');
     const calls = stubFetch(answer(503), new TypeError('network'), answer(200, { nodes: TREE }));
     const pending = fetchFrameNodes('doc1', '');
-    await vi.runAllTimersAsync();
+    for (let i = 0; i < 40 && calls.length < 3; i++) await vi.advanceTimersByTimeAsync(250);
     expect(await pending).toEqual(TREE);
     expect(calls).toHaveLength(3);
     const failing = stubFetch(answer(500), answer(500), answer(500));
     const never = fetchFrameNodes('doc1', '');
     await vi.runAllTimersAsync();
     expect(await never).toBeNull();
-    expect(failing).toHaveLength(3);
+    expect(failing).toHaveLength(1);
   });
 
   it('stops when the page goes away', async () => {

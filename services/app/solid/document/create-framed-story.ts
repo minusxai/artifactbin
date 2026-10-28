@@ -14,6 +14,7 @@
  */
 import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_DOCUMENT_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/story-runtime/contract';
@@ -127,24 +128,18 @@ export function followFramedValues(win: Window, values: string): void {
 /**
  * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
  * from it — it is only relayed to the frame's edit controller — and on a large document it is most of the page's bytes.
- * `search` carries an archived version's `?version=N`, so the tree is that version's. A transient failure is asked
- * again twice; a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
+ * `search` carries an archived version's `?version=N`, so the tree is that version's. A restart is ridden out by the shared
+ * policy (lib/http/retry-lazily); a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
  */
 export async function fetchFrameNodes(id: string, search: string, signal?: AbortSignal): Promise<JsxNode[] | null> {
   const version = new URLSearchParams(search).get('version');
   const url = `/api/page/artifact/${encodeURIComponent(id)}?part=nodes${version ? `&version=${encodeURIComponent(version)}` : ''}`;
-  for (let attempt = 0; attempt < 3 && !signal?.aborted; attempt++) {
-    try {
-      const response = await fetch(url, { credentials: 'same-origin', signal });
-      if (response.ok) {
-        const part = await response.json() as { nodes?: unknown };
-        return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
-      }
-      if (response.status < 500 && response.status !== 429) return null;
-    } catch { if (signal?.aborted) return null; }
-    await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 500 : 2000));
-  }
-  return null;
+  try {
+    const response = await retryingFetch(url, { credentials: 'same-origin', signal });
+    if (!response.ok) return null;
+    const part = await response.json() as { nodes?: unknown };
+    return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
+  } catch { return null; }
 }
 
 /**

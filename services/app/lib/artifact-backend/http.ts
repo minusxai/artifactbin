@@ -82,7 +82,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
     // ── the document ────────────────────────────────────────────────────────
     async documentFrame(ref) {
       try {
-        const res = await fetch(`/api/page/frame/${encodeURIComponent(ref)}`, { credentials: 'same-origin', cache: 'no-store' });
+        const res = await retried(() => fetch(`/api/page/frame/${encodeURIComponent(ref)}`, { credentials: 'same-origin', cache: 'no-store' }));
         if (!res.ok) return null;
         const body = await res.json() as { src?: unknown };
         return typeof body.src === 'string' ? body.src : null;

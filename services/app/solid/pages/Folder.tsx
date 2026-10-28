@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
@@ -30,7 +31,7 @@ export function FolderPage(props: FolderProps): JSX.Element {
   createEffect(() => { if (props.folder.id !== folder().id) { setFolder(props.folder); setWorkspace(props.workspace); } });
   const reread = () => {
     pageDataChanged();
-    void fetch(`/api/page/artifact/${folder().id}`, { credentials: 'same-origin' })
+    void retryingFetch(`/api/page/artifact/${folder().id}`, { credentials: 'same-origin' })
       .then(response => response.ok ? response.json() as Promise<{ folder?: FolderData; workspace?: AccountWorkspace }> : null)
       .then(page => { if (page?.folder) setFolder(page.folder); if (page?.workspace) setWorkspace(page.workspace); })
       .catch(() => {});

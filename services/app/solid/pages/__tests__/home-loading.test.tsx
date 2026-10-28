@@ -84,7 +84,7 @@ it('drops retained private rows when the core reports an expired session', async
 });
 
 it('retains the shelf and offers retry when only insights fail', async () => {
-  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('part=insights') ? response({}, 503) : response(url.includes('/session') ? session : core))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('part=insights') ? response({}, 500) : response(url.includes('/session') ? session : core))));
   open(); await screen.findByLabelText('Retry workspace insights'); expect(screen.getByLabelText('Open Private document')).toBeInTheDocument(); expect(screen.queryByLabelText('Dashboard metrics')).toBeNull();
 });
 

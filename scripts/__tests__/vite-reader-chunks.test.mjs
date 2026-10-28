@@ -27,3 +27,12 @@ it('compresses the already-eager presence dependency cluster without a new prefe
   expect(grouping([reader,entry], [], target)).toBeNull();
  }
 });
+
+it('keeps the entry\'s retry door, live stream and preload helper in one chunk, and the door with the reader when only the reader imports it',()=>{
+ const door='/repo/services/app/lib/http/retry-lazily.ts';
+ expect(grouping([reader,entry],[],door)).toBe('http');
+ expect(grouping([entry],[],'/repo/services/app/lib/http/live-stream.ts')).toBe('http');
+ expect(grouping([entry],[],'\0vite/preload-helper.js')).toBe('http');
+ expect(grouping([reader,local],[],door)).toBe('reader');
+ expect(grouping([local],[],'/repo/services/app/lib/http/live-stream.ts')).toBeNull();
+});

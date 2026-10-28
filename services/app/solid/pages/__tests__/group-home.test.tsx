@@ -62,7 +62,7 @@ it('recovers Personal with ?personal=1 in one request even though the saved grou
 });
 it('retries a failed bootstrap without exposing group details',async()=>{
  let fail=true;
- vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):fail?Response.json({},{status:503}):bootstrapOf(groupDestination)));
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):fail?Response.json({},{status:500}):bootstrapOf(groupDestination)));
  open();const retry=await screen.findByRole('button',{name:'Retry workspace'});
  expect(screen.queryByRole('heading',{name:'Team'})).toBeNull();
  fail=false;fireEvent.click(retry);expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
