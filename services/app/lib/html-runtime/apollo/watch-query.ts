@@ -29,6 +29,8 @@ export function createQueryWatch<T>(
         running = false,
         pending = !!options.remote,
         dirty = false,
+        /** What this subscriber last received: an identical result is not delivered again. */
+        delivered: string | undefined,
         generation = 0;
       let snapshot: QueryResult = { data: options.empty };
       let last = options.signature(options.state.read());
@@ -53,14 +55,20 @@ export function createQueryWatch<T>(
       };
       const publishResult = () => {
         if (!active) return;
-        next({
+        const result = {
           ...snapshot,
           ...(options.remote?{loading:pending}:{}),
           data: {
             ...options.local(options.state.read()),
             ...snapshot.data,
           } as T,
-        });
+        };
+        // A result identical to the one this subscriber last received (a coalesced refresh that answered the same) is not delivered again.
+        let key: string | undefined;
+        try { key = JSON.stringify(result); } catch { key = undefined; }
+        if (key !== undefined && key === delivered) return;
+        delivered = key;
+        next(result);
       };
       const refresh = (reason?:QueryInvalidation) => {
         if (!active || !options.remote) return;

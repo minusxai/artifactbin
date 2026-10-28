@@ -64,6 +64,23 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
   // Keep the artifact id beside the frame: this primitive can be reused across
   // navigation, and a high version from the previous id must never win.
   const [live, setLive] = createSignal<{ id: string; frame: ArtifactLiveEvent } | null>(null);
+  /**
+   * The last revision forwarded for each native shared name, kept across reconnects for this artifact. Every
+   * (re)connection of the stream opens with a `data` frame naming every name (app/a/[id]/events), so without this
+   * each reconnect re-ran every query of the page although nothing changed. A name is forwarded only when its
+   * revision moved; a frame without revisions (a dataset document, `_members`) is forwarded as it is.
+   */
+  const forwarded = { id: '', revisions: new Map<string, string>() };
+  const changedData = (id: string, frame: ArtifactDataEvent): string[] => {
+    if (forwarded.id !== id) { forwarded.id = id; forwarded.revisions.clear(); }
+    const revisions = frame.revisions ?? {};
+    return frame.datasets.filter((name) => {
+      if (!Object.hasOwn(revisions, name)) return true;
+      if (forwarded.revisions.get(name) === revisions[name]) return false;
+      forwarded.revisions.set(name, revisions[name]!);
+      return true;
+    });
+  };
 
   createEffect(
     on(
@@ -176,7 +193,8 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
             onPresence: viewers => options.onPresence?.(viewers),
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
-              options.onData?.(frame);
+              const datasets = changedData(id, frame);
+              if (datasets.length) options.onData?.(datasets.length === frame.datasets.length ? frame : { ...frame, datasets });
             },
             // Annotations are a PING too: the reader refetches the authorized list.
             onAnnotations: () => {
