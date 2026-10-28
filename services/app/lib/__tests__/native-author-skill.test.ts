@@ -70,7 +70,7 @@ describe('one installable native HTML author skill',()=>{
   const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
-  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
+  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
   // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
@@ -89,7 +89,7 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','garden.ts'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','transactions.csv','garden.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{
@@ -119,7 +119,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('ref:REALDATA123');}
+    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="budget"');expect(plan.backendSources.budget).toBe(saved.body.backendSources.budget);expect(saved.body.backendSources.budget).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });

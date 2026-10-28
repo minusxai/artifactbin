@@ -1,20 +1,22 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Browser smoke and task check of a saved page or a local preview.
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
-Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
+Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--guest-steps FILE]
+       [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 A hosted check (ID, URL or FILE.html) runs in a server browser session: never install Playwright or Chromium; only a
   local serve.mjs preview needs --playwright-module.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
   --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
-  return assertions and throw on failure; --viewer self (default) or guest (hosted only, a fixed-identity server
-  session; the viewer is fixed when the session starts, and the page is signed in as you unless guest);
+  return assertions and throw on failure; --guest-steps FILE also runs a signed-out session on the first
+  viewport after the self run (so it never races its writes), in one summary; --viewer self (default) or
+  guest (hosted only, a fixed-identity server session; the page is signed in as you unless guest);
   --playwright-module FILE (local only: your installed Playwright entrypoint). Common: --server ORIGIN, --json,
   --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
-  node scripts/publish.mjs index.html && (node scripts/check.mjs index.html --steps steps.mjs --output qa-1.json &
-    node scripts/check.mjs index.html --viewer guest --steps guest.mjs --output qa-g1.json & wait)
+  node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+    --guest-steps guest.mjs --output qa-1.json
   steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
                return {assertions:['add shows Saved']}
   guest file:  await page.getByRole('button',{name:'Save'}).click(); await page.waitForFunction(()=>/sign in/i
@@ -925,7 +927,7 @@ export async function checkCommand({values, positionals}, options = {}) {
   let result;
   const local = /^http:\/\//.test(input) && !/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
   if (local) {
-    if (values.viewer || values.server)
+    if (values.viewer || values.server || values['guest-steps'])
       throw new ToolError('local_identity', 'Loopback preview has no platform viewer/server selection.', 2);
     const chromium = await loadChromium(values['playwright-module']);
     result = await checkLocal({target: checkTarget(input).target, viewports, steps, capture: true}, chromium);
@@ -953,6 +955,27 @@ export async function checkCommand({values, positionals}, options = {}) {
       viewer: viewer === 'guest' ? 'guest' : undefined,
       requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
     });
+    // --guest-steps: a signed-out run on the first viewport, after the self run so its reads and
+    // refusals never race the self run's writes on the shared store; one combined summary.
+    if (values['guest-steps']) {
+      if (viewer === 'guest') throw new ToolError('guest_twice', 'Use --guest-steps with the self viewer.', 2);
+      const guestSteps = stepsBody(await readFile(values['guest-steps'], 'utf8'));
+      const guest = await checkHosted({
+        target: '/a/' + id,
+        server,
+        viewports: viewports.slice(0, 1),
+        steps: guestSteps,
+        capture: true,
+        viewer: 'guest',
+        requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
+      });
+      for (const check of guest.checks) check.viewer = 'guest';
+      result = summarizeCheck([...result.checks, ...guest.checks]);
+    }
+    // A deck's slide images, to put in the reply as links (the check already rendered every slide).
+    const count = result.checks.find(check => check?.slides?.count)?.slides.count;
+    if (count)
+      result.slideLinks = Array.from({length: count}, (_, n) => `${server}/a/${id}/export?format=png&slide=${n + 1}`);
   }
   const directory = path.join(credentialRoot(options.env), 'checks', randomUUID());
   let created = false;
@@ -962,7 +985,10 @@ export async function checkCommand({values, positionals}, options = {}) {
         await mkdir(directory, {recursive: true, mode: 0o700});
         created = true;
       }
-      const file = path.join(directory, `${check.viewport.width}x${check.viewport.height}.png`);
+      const file = path.join(
+        directory,
+        `${check.viewport.width}x${check.viewport.height}${check.viewer === 'guest' ? '-guest' : ''}.png`
+      );
       await exclusive(file, Buffer.from(check.screenshot.base64, 'base64'));
       check.screenshot = {
         path: file,

@@ -51,7 +51,7 @@ import {client,gql} from '@afbin/apollo';
 const count=gql\`{count}\`;
 client.watchQuery({query:count}).subscribe(({data})=>document.querySelector('#count').textContent=String(data.count));
 document.querySelector('#increment').onclick=()=>client.updateQuery({query:count},({count})=>({count:count+1}));
-document.querySelector('#shared').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation {garden{setTarget(week:"2026-W01",target:20){week target}}}\`});document.querySelector('#outcome').textContent=result.extensions?.outcomes['garden.setTarget']??'missing';};
+document.querySelector('#shared').onclick=async()=>{const result=await client.mutate({mutation:gql\`mutation {garden{setTarget(category:"Rent",amount:1){category amount}}}\`});document.querySelector('#outcome').textContent=result.extensions?.outcomes['garden.setTarget']??'missing';};
 </script></body></html>`;
 const id = await publish({ html: source, visibility: 'private', backendSources: { garden: readFileSync(path.join(ROOT, 'services/app/skills/artifactbin/examples/garden.ts'), 'utf8') } });
 const response = await fetch(`${BASE}/a/${id}/download`, { headers });

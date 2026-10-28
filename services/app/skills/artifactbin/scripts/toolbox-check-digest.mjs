@@ -53,8 +53,9 @@ export function checkDigest(envelope,file){
     few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.element?' '+low.element:''}${
      low.slide?' slide '+low.slide:''}${low.color?' '+low.color:''}`,12,
      check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
-  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):
-   'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
+  const who=check.viewer==='guest'?'guest ':'';
+  lines.push(`  ${who}${check.viewport.width}x${check.viewport.height}: ${errors.length?
+   errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
  }
  // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke
  // failure.
@@ -74,7 +75,9 @@ export function checkDigest(envelope,file){
  else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
-  "  clean pass: reply now with the link; don't open qa JSON or screenshots.");
+  "  clean pass: reply now with the link; don't open qa JSON or screenshots."+(
+   envelope.slideLinks?.length?"\n  slide images for the reply (don't curl these): "+
+   envelope.slideLinks.join(' '):''));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';

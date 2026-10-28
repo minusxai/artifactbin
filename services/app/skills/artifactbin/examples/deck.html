@@ -2,13 +2,14 @@
 <!--
 Example: an eight-slide deck designed for 1200x630, rendered from one SLIDES array: prev/next
 buttons, dots, arrow keys and Home/End, Vega-Lite charts, SVG flow and 2x2 diagrams.
-Usage: cp examples/deck.html index.html; edit only the SLIDES data below (no drafts elsewhere);
-  don't touch the CSS or JS; write steps.mjs; then node scripts/publish.mjs index.html &&
+Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only SLIDES
+  (no drafts elsewhere, never the CSS or JS); then node scripts/publish.mjs index.html &&
   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
-Gotchas: N requested topics means N slides: fold the cover into the first topic. Slide types:
-  cover/problem {label,title,text,stats≤3}, bullets {items≤3}, chart {mark bar|line, data
-  [{x,y}], format d3 like ".1f"}, flow {steps≤4}, matrix {x,y axis names, points
-  [{label,x,y}] in 0..1}, ask {title,text,items≤3}. Titles ≤2 lines, items one short sentence.
+Gotchas: the sample is the usual pitch order (8 slides: cover with the problem, solution, how it
+  works, market, traction, business model, competition, ask); N topics means N slides. Types:
+  cover {label,title,text,stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y}],
+  format d3 like ".1f"}, flow {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1},
+  ask {title,text,items≤3}. Titles ≤2 lines, items one short sentence.
   Each entry needs a unique id (it keys data-af-id); set illustrative:true on made-up figures.
 -->
 <html lang="en">
@@ -19,13 +20,12 @@ Gotchas: N requested topics means N slides: fold the cover into the first topic.
 <script type="module" id="slides-data">
 // The only part to edit: one entry per slide, rendered by the template below.
 window.SLIDES = [
-  {id:'cover', type:'cover', label:'[Company] · Seed round · 2026',
-    title:'[One-line promise of the company]', text:'[Who it is for, in one sentence.]'},
-  {id:'problem', type:'problem', label:'Problem', title:'[The problem as a cost paid today]',
-    text:'[One sentence on who pays it.]', illustrative:true,
-    stats:[{value:'[41%]', label:'[of something lost]'},
-      {value:'[$2.6B]', label:'[a yearly cost]'}]},
-  {id:'solution', type:'flow', label:'Solution', title:'[What the product does, in one line]',
+  {id:'cover', type:'cover', label:'[Company] · Seed round · [The problem]', illustrative:true,
+    title:'[The problem as a cost paid today]', text:'[Who pays it, and our one-line promise.]',
+    stats:[{value:'[41%]', label:'[of something lost]'}, {value:'[$2.6B]', label:'[yearly cost]'}]},
+  {id:'solution', type:'bullets', label:'Solution', title:'[What the product does, in one line]',
+    items:['[What it replaces]', '[What changes for the buyer]', '[Why now]']},
+  {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
     steps:['[Input]', '[Product]', '[Outcome]']},
   {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
     mark:'bar', format:'.1f', yTitle:'US$ billions', illustrative:true,

@@ -1,197 +1,200 @@
 <!doctype html>
 <!--
-Example: a dashboard over a linked CSV dataset with shared targets in a backend store (signed-in-
-only edits), a per-viewer dark mode in Apollo local state, one Vega-Lite chart and a drill-down
-list. Goes with examples/repairs.csv and the backend file next to it in examples/ (linked by
-af-backend; publish them together).
-Next: in this copy replace only the [bracketed] text and the data (no drafts elsewhere, no new
-  layouts or controls), write steps.mjs and guest.mjs, then run: node scripts/publish.mjs index.html
-  && (node scripts/check.mjs index.html --steps steps.mjs & node scripts/check.mjs index.html
-  --viewer guest --steps guest.mjs & wait)
-Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset) and
-replace the placeholder after ref: below with the returned dataset ID. Copy it as index.html and
-replace only the [bracketed] text and the data; keep its CSS, JS and layout, add no new controls.
-Gotchas: never publish the placeholder. Verify a signed-in edit and a guest's refusal (separate
-check runs, --viewer self and guest), that dark mode survives a reload for one viewer only, and
-chart values against the source cells. Offline, remote writes must report they are unavailable.
+Example: a shared household-budget dashboard rendered from one APP config: KPIs, spend vs target
+per category, a monthly trend and a who-paid chart (Vega-Lite), a drill-down list, a per-viewer
+dark mode (Apollo local state) and a signed-in-only target editor (backend store).
+Usage: cp examples/shared-app.html index.html && cp examples/garden.ts .; publish the CSV first
+  (node scripts/publish.mjs examples/transactions.csv --type dataset), put its ID after ref:, edit
+  only APP and garden.ts's names (no drafts elsewhere), copy shared-app-steps.mjs and
+  shared-app-guest.mjs from examples/ as steps.mjs and guest.mjs and adjust them, then: node
+  scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+  --guest-steps guest.mjs
+Gotchas: the dataset and backend links need different data-af-name values (here transactions and
+  budget). Never publish the ref: placeholder. Sample data ships as generated (≤400 rows); don't
+  retune it. Dark mode is written only when the viewer toggles, so a saved choice survives reloads.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
-<title>[Page title: Garden shed repairs]</title>
-<link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
-<link rel="af-backend" data-af-name="garden" href="./garden.ts">
+<title>[Household budget] · sample data</title>
+<link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID" data-af-mode="live">
+<link rel="af-backend" data-af-name="budget" href="./garden.ts">
+<script type="module" id="app-config">
+// The only part to edit. columns maps roles to the dataset's column labels.
+window.APP = {
+  dataset: 'transactions', backend: 'budget', currency: 'USD',
+  columns: {date: 'date', category: 'category', amount: 'amount', payer: 'payer', note: 'note'},
+  title: '[Household budget]', kicker: '[Our money] · sample data',
+  summary: '[What we planned against what we spent, month by month. Targets are shared; signed-in'
+    + ' members can change them.]',
+  labels: {list: 'Spend vs target', trend: 'Monthly spend', payer: 'Who paid', drill: 'Rows'},
+};
+</script>
 <style>
-*{box-sizing:border-box}body{line-height:1.6}
-main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
-p{max-width:68ch}
-button,input{font:inherit;padding:8px 14px;color:inherit;background:var(--background);
-border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
-button:disabled{opacity:.55;cursor:wait}
-button:focus-visible,input:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
-.muted{opacity:.72}.number{font-variant-numeric:tabular-nums}
+*{box-sizing:border-box}body{line-height:1.5}.number{font-variant-numeric:tabular-nums}
+main{max-width:1120px;margin:auto;padding:clamp(20px,4vw,48px)}.muted{opacity:.7}p{max-width:68ch}
+button,input,select{font:inherit;padding:8px 12px;color:inherit;background:var(--background);
+  border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--primary);outline-offset:2px}[role=status]{min-height:1.5em}
 .toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:clamp(24px,5vw,56px);
-margin-top:24px}
-.layout>*{min-width:0}.chart{width:100%;min-height:260px}.chart svg{max-width:100%;height:auto}
-[role=status]{min-height:1.6em}
-#weeks{list-style:none;margin:0;padding:0}#weeks li{border-top:1px solid var(--border)}
-#weeks button{width:100%;display:flex;justify-content:space-between;border:0;border-radius:0;
-padding:12px 4px;text-align:left}
-#weeks button[aria-pressed=true]{background:var(--accent);color:var(--accent-foreground)}
-#detail{border-top:2px solid currentColor;margin-top:24px;padding-top:16px}
-@media(max-width:720px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}
-main{padding:24px}}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0}
+.kpis div{border-top:2px solid currentColor;padding-top:8px}.kpis b{display:block;font-size:28px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(20px,4vw,48px)}
+.grid>*{min-width:0}.chart{width:100%;min-height:220px}.chart svg{max-width:100%;height:auto}
+#cats{list-style:none;margin:0;padding:0}#cats button{width:100%;text-align:left;border:0;
+  border-top:1px solid var(--border);border-radius:0;padding:10px 4px;display:grid;gap:6px}
+#cats button[aria-pressed=true]{background:var(--accent);color:var(--accent-foreground)}
+.bar{height:8px;background:var(--muted)}.bar i{display:block;height:100%;background:var(--primary)}
+#drill li{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);
+  padding:8px 0}#drill ul{list-style:none;margin:0;padding:0}
+@media(max-width:720px){.grid,.kpis{grid-template-columns:1fr}}
 </style>
-<script type="application/json" data-af="state">{"dark":null,"week":""}</script>
+<script type="application/json" data-af="state">{"dark":null,"month":"","category":""}</script>
 </head><body><main>
-<p class="muted">[Kicker: Community garden] · sample data</p>
-<h1 class="t-display-l">[Title: Garden shed repairs]</h1>
-<p class="lead">[One-sentence summary: tool repairs finished each week against a target the whole
-team shares.] Signed-in members can change a target; your light or dark choice stays yours.</p>
-<div class="toolbar"><button id="dark" type="button" aria-pressed="false">Dark mode</button>
-<button id="refresh" type="button">Refresh</button></div>
+<p id="kicker" class="muted"></p><h1 id="title" class="t-display-l"></h1><p id="summary"></p>
+<div class="toolbar"><label for="month">Month</label><select id="month"></select>
+<button id="dark" type="button" aria-pressed="false">Dark mode</button></div>
 <p id="status" role="status" aria-live="polite">Loading…</p>
-<div class="layout">
-<section><h2 class="t-title">[Chart heading: Completed repairs by week]</h2>
-<div id="chart" class="chart" role="img"
-aria-label="Completed repairs and shared target by week"></div></section>
-<section><h2 class="t-title">[List heading: Weeks]</h2><ul id="weeks"></ul>
-<div id="detail" hidden><h3 id="detail-title" class="t-title"></h3>
-<p id="detail-text" class="number"></p>
-<form id="target-form" class="toolbar"><label for="target">Shared target</label>
-<input id="target" type="number" min="0" max="999" required style="width:7em">
-<button type="submit">Save target</button></form></div></section>
-</div>
-</main>
+<div class="kpis number"><div>Spent<b id="spent">–</b></div><div>Target<b id="target">–</b>
+</div><div>Left<b id="left">–</b></div></div>
+<div class="grid"><section><h2 id="list-title" class="t-title"></h2><ul id="cats"></ul></section>
+<section id="drill"><h2 id="drill-title" class="t-title"></h2><ul id="rows"></ul>
+<form id="editor" class="toolbar" hidden><label for="amount">Shared target</label>
+<input id="amount" type="number" min="0" step="1" required style="width:8em">
+<button type="submit">Save target</button></form></section>
+<section><h2 id="trend-title" class="t-title"></h2><div id="trend" class="chart"></div></section>
+<section><h2 id="payer-title" class="t-title"></h2><div id="payer" class="chart"></div></section>
+</div></main>
 <script type="module">
 import {client,gql,onBackendChange} from '@afbin/apollo';
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
-const preference=gql`{dark week}`;
-const schemaQuery=gql`{repairs{schema{revision tables{id columns{id label}}}}}`;
-const rowsQuery=gql`query
-  Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision
-  rows{id cells{columnId value{string number}}} pageInfo{hasNextPage endCursor}}}}`;
-const targetsQuery=gql`{garden{targets{week target}}}`;
-const setTarget=gql`mutation
-  SetTarget($week:String!,$target:Int!){garden{setTarget(week:$week,target:$target){week
-  target}}}`;
-const status=document.querySelector('#status');
-let rows=[],targets={},week='',shown='',view;
-// Every page of rows at one dataset revision: a change between pages restarts nothing silently,
-// it says so.
+const APP=window.APP,C=APP.columns,$=s=>document.querySelector(s),status=$('#status');
+const money=new Intl.NumberFormat(undefined,{style:'currency',currency:APP.currency});
+const preference=gql`{dark month category}`;
+// Queries name the dataset and backend from APP (gql also takes a plain one-string array).
+const schema=gql([`{${APP.dataset}{schema{revision tables{id columns{id label}}}}}`]);
+const rowsQuery=gql([`query Rows($t:ID!,$after:String){${APP.dataset}{rows(tableId:$t,`
+  +'first:100,after:$after){revision rows{id cells{columnId value{string number}}} pageInfo{'
+  +'hasNextPage endCursor}}}}']);
+const targetsQuery=gql([`{${APP.backend}{targets{category amount}}}`]);
+const setTarget=gql([`mutation Set($c:String!,$a:Float!){${APP.backend}{setTarget(`
+  +'category:$c,amount:$a){category amount}}}']);
+let rows=[],targets={},state={dark:null,month:'',category:''},views={};
+for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,summary:APP.summary,
+  'list-title':APP.labels.list,'trend-title':APP.labels.trend,'payer-title':APP.labels.payer}))
+  $('#'+id).textContent=text;
+// Every row page at one dataset revision; a change between pages is reported, never mixed.
 async function loadRows(){
-  const schema=await client.query({query:schemaQuery});
-  if(schema.errors?.length)throw Error(schema.errors[0].message);
-  const table=schema.data.repairs.schema.tables.find(table=>['week','completed','waiting']
-    .every(label=>table.columns.some(column=>column.label===label)));
-  if(!table)throw Error('Dataset needs week, completed and waiting columns.');
-  const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id])),loaded=[];
+  const found=await client.query({query:schema});
+  if(found.errors?.length)throw Error(found.errors[0].message);
+  const table=found.data[APP.dataset].schema.tables.find(table=>Object.values(C).every(label=>
+    table.columns.some(column=>column.label===label)));
+  if(!table)throw Error(`Dataset needs columns ${Object.values(C).join(', ')}.`);
+  const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id])),out=[];
   let after=null,revision=null;
   do{
-    const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});
+    const result=await client.query({query:rowsQuery,variables:{t:table.id,after}});
     if(result.errors?.length)throw Error(result.errors[0].message);
-    const page=result.data.repairs.rows;
-    if(revision!==null&&revision!==page.revision)
-      throw Error('Dataset changed while reading. Refresh to try again.');
+    const page=result.data[APP.dataset].rows;
+    if(revision!==null&&revision!==page.revision)throw Error('Data changed while loading.');
     revision=page.revision;
     for(const row of page.rows){
-      const cell=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));
-      loaded.push({week:cell[ids.week]?.string,completed:cell[ids.completed]?.number??0,
-        waiting:cell[ids.waiting]?.number??0});
+      const cell=Object.fromEntries(row.cells.map(c=>[c.columnId,c.value])),v=k=>cell[ids[C[k]]];
+      out.push({id:row.id,date:v('date')?.string??'',category:v('category')?.string??'',
+        amount:v('amount')?.number??0,payer:v('payer')?.string??'',note:v('note')?.string??''});
     }
     after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
   }while(after);
-  rows=loaded.filter(row=>row.week).sort((a,b)=>a.week.localeCompare(b.week));
+  rows=out.filter(row=>row.date);
 }
 async function loadTargets(){
   const result=await client.query({query:targetsQuery});
   if(result.errors?.length)throw Error(result.errors[0].message);
-  targets=Object.fromEntries(result.data.garden.targets.map(item=>[item.week,item.target]));
+  targets=Object.fromEntries(result.data[APP.backend].targets.map(t=>[t.category,t.amount]));
 }
-// Concrete colours from the design system; redrawn when dark mode changes.
+const months=()=>[...new Set(rows.map(row=>row.date.slice(0,7)))].sort(),sum=list=>
+  list.reduce((total,row)=>total+row.amount,0);
+const month=()=>months().includes(state.month)?state.month:months().at(-1);
+const inMonth=()=>rows.filter(row=>row.date.startsWith(month()));
+// Script-made nodes take data-af-ids from the record (category or row id), stable across renders.
+const item=(id,tag='li')=>{const n=document.createElement(tag);n.dataset.afId=id;return n;};
+function render(){
+  if(!rows.length)return;
+  const list=inMonth(),cats=[...new Set(rows.map(row=>row.category))].sort(),spent=sum(list);
+  const target=cats.reduce((total,cat)=>total+(targets[cat]??0),0);
+  $('#month').replaceChildren(...months().map(m=>new Option(m,m,false,m===month())));
+  for(const [id,value] of [['spent',spent],['target',target],['left',target-spent]])
+    $('#'+id).textContent=money.format(value);
+  $('#cats').replaceChildren(...cats.map(cat=>{
+    const li=item('cat-'+cat),button=item('cat-'+cat+'-open','button');
+    const got=sum(list.filter(row=>row.category===cat)),goal=targets[cat];
+    button.type='button';button.setAttribute('aria-pressed',String(cat===state.category));
+    button.textContent=`${cat}: ${money.format(got)} of `+(goal!=null?money.format(goal):'no goal');
+    const bar=item('cat-'+cat+'-bar','span');bar.className='bar';
+    bar.append(document.createElement('i'));button.append(bar);
+    bar.firstChild.style.width=Math.min(100,goal?got/goal*100:0)+'%';
+    button.onclick=()=>client.updateQuery({query:preference},s=>({...s,category:cat}));
+    li.append(button);return li;
+  }));
+  const cat=state.category,picked=list.filter(row=>row.category===cat);
+  $('#drill-title').textContent=cat?`${APP.labels.drill}: ${cat}, ${month()}`:'Pick a category';
+  $('#rows').replaceChildren(...picked.map(row=>{
+    const li=item('row-'+row.id),b=item(`row-${row.id}-amount`,'b');
+    li.textContent=`${row.date} ${row.note} (${row.payer})`;b.textContent=money.format(row.amount);
+    li.append(b);return li;}));
+  // Refill the target field only when the category changes, never over what the viewer types.
+  $('#editor').hidden=!cat;
+  if(cat&&$('#editor').dataset.for!==cat){$('#amount').value=targets[cat]??'';
+    $('#editor').dataset.for=cat;}
+  void drawCharts(list);
+}
+// Concrete design-system colours; charts redraw when dark mode changes.
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-async function drawChart(){
-  view?.finalize();
-  const ink=token('--foreground'),values=rows.map(row=>({week:row.week,completed:row.completed,
-    target:targets[row.week]??null}));
-  const spec=compile({width:'container',height:220,background:'transparent',data:{values},
-    encoding:{x:{field:'week',type:'nominal',title:null,axis:{labelAngle:0}}},
-    layer:[{mark:{type:'bar',color:token('--primary')},encoding:{y:{field:'completed',
-      type:'quantitative',title:'Repairs',scale:{zero:true}},tooltip:[{field:'week',
-      type:'nominal'},{field:'completed',type:'quantitative',format:',.0f'}]}},
-      {mark:{type:'tick',color:ink,thickness:3},encoding:{y:{field:'target',
-        type:'quantitative'}}}],
-    config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,
+async function chart(key,values,mark,x,y,xType){
+  views[key]?.finalize();const ink=token('--foreground');
+  const spec=compile({width:'container',height:200,autosize:{type:'fit',contains:'padding'},
+    background:'transparent',data:{values},
+    mark:{type:mark,color:token('--primary'),point:mark==='line'},
+    encoding:{x:{field:x,type:xType,title:null,axis:{labelAngle:0}},y:{field:y,type:'quantitative',
+      title:null,axis:{format:',.0f'}},tooltip:[{field:x,type:xType},{field:y,type:'quantitative',
+      format:',.2f'}]},config:{view:{stroke:null},axis:{labelColor:ink,domainColor:ink,
       tickColor:ink,gridColor:token('--border')}}}).spec;
-  view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:
-    document.querySelector('#chart'),renderer:'svg',expr:vega.expressionInterpreter});
-  await view.runAsync();
+  views[key]=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:$('#'+key),
+    renderer:'svg',expr:vega.expressionInterpreter});await views[key].runAsync();
 }
-// Script-made nodes get data-af-ids from the record (the week), so comments on them survive
-// re-renders.
-function renderWeeks(){
-  const list=document.querySelector('#weeks');list.replaceChildren();
-  for(const row of rows){
-    const item=document.createElement('li');item.dataset.afId='week-'+row.week;
-    const button=document.createElement('button');button.type='button';
-    button.dataset.afId='week-'+row.week+'-open';
-    button.setAttribute('aria-pressed',String(row.week===week));
-    button.textContent=row.week;const value=document.createElement('span');
-    value.className='number';value.dataset.afId='week-'+row.week+'-value';
-    value.textContent=`${row.completed} done${targets[row.week]!=null?' of '+targets[row.week]:''}`;
-    button.append(value);
-    button.onclick=()=>client.updateQuery({query:preference},state=>({...state,week:row.week}));
-    item.append(button);list.append(item);
-  }
-  const row=rows.find(row=>row.week===week),detail=document.querySelector('#detail');
-  detail.hidden=!row;if(!row)return;
-  document.querySelector('#detail-title').textContent=row.week;
-  document.querySelector('#detail-text').textContent=`${row.completed} repairs completed, `+
-    `${row.waiting} waiting. Shared target: ${targets[row.week]??'not set'}.`;
-  // Refill the field only when the week changes, so a shared update never wipes what the viewer
-  // is typing.
-  if(row.week!==shown){document.querySelector('#target').value=targets[row.week]??'';
-    shown=row.week;}
+function drawCharts(list){
+  const trend=months().map(m=>({month:m,total:sum(rows.filter(row=>row.date.startsWith(m)))}));
+  const payers=[...new Set(rows.map(row=>row.payer))]
+    .map(p=>({payer:p,total:sum(list.filter(row=>row.payer===p))}));
+  return Promise.all([chart('trend',trend,'line','month','total','ordinal'),
+    chart('payer',payers,'bar','payer','total','nominal')]);
 }
-function applyDark(dark){
-  if(typeof dark==='boolean')document.documentElement.dataset.afDark=String(dark);
-  document.querySelector('#dark').setAttribute('aria-pressed',
-    String(document.documentElement.dataset.afDark==='true'));
-}
-async function refresh(){
-  status.textContent='Reading the dataset and shared targets…';
-  try{await Promise.all([loadRows(),loadTargets()]);renderWeeks();await drawChart();
-    status.textContent=`Loaded ${rows.length} sample weeks; `+
-      `${Object.keys(targets).length} shared targets.`;}
-  catch(error){status.textContent=error.message||'Could not load the data.';}
-}
-// Local state already holds this viewer's saved choices on the first read; write only when the
-// viewer acts.
-client.watchQuery({query:preference}).subscribe(({data})=>{week=data.week;applyDark(data.dark);
-  if(rows.length)renderWeeks();});
-document.querySelector('#dark').onclick=()=>client.updateQuery({query:preference},state=>
-  ({...state,dark:document.documentElement.dataset.afDark!=='true'}));
-document.querySelector('#refresh').onclick=refresh;
-document.querySelector('#target-form').onsubmit=async event=>{
-  event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;
-  status.textContent='Saving the shared target…';
+const applyDark=dark=>{if(typeof dark==='boolean')document.documentElement.dataset.afDark=dark;
+  $('#dark').setAttribute('aria-pressed',document.documentElement.dataset.afDark==='true');};
+// Local state holds this viewer's saved choices from the first read; write only on a viewer action.
+client.watchQuery({query:preference}).subscribe(({data})=>{state=data;applyDark(data.dark);
+  render();});
+$('#dark').onclick=()=>client.updateQuery({query:preference},s=>({...s,
+  dark:document.documentElement.dataset.afDark!=='true'}));
+$('#month').onchange=event=>client.updateQuery({query:preference},s=>({...s,
+  month:event.target.value}));
+$('#editor').onsubmit=async event=>{
+  event.preventDefault();status.textContent='Saving the shared target…';
   try{
-    const result=await client.mutate({mutation:setTarget,variables:{week,
-      target:Number(document.querySelector('#target').value)}});
+    const result=await client.mutate({mutation:setTarget,
+      variables:{c:state.category,a:Number($('#amount').value)}});
     if(result.errors?.length)throw Error(result.errors[0].message);
-    await loadTargets();renderWeeks();await drawChart();
-    status.textContent=`Saved the ${week} target for everyone.`;
-  }catch(error){status.textContent=(error.message||'Could not save.')+
-    ' Signing in is required to change shared targets.';}
-  finally{button.disabled=false;}
+    await loadTargets();render();
+    status.textContent=`Saved the ${state.category} target for everyone.`;
+  }catch(error){status.textContent=(error.message||'Could not save.')+' Sign in to edit targets.';}
 };
-new MutationObserver(()=>{if(rows.length)void drawChart();}).observe(document.documentElement,
-  {attributes:true,attributeFilter:['data-af-dark']});
-onBackendChange(names=>{if(names.includes('garden'))void loadTargets().then(()=>{renderWeeks();
-  return drawChart();});});
-await refresh();
+new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})
+  .observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
+onBackendChange(names=>{if(names.includes(APP.backend))void loadTargets().then(render);});
+try{await Promise.all([loadRows(),loadTargets()]);render();
+  status.textContent=`Loaded ${rows.length} sample transactions across ${months().length} months.`;
+}catch(error){status.textContent=error.message||'Could not load the data.';}
 </script>
 </body></html>
