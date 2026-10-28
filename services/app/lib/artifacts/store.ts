@@ -1,6 +1,7 @@
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
 import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries/registry';
+import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations/registry';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
@@ -353,13 +354,26 @@ interface VersionSummary {
 }
 
 /** Archive the head as it stands — its author rides along, so history can say who. */
-/** Plans the re-binding of carried registered query programs, or the explicit refusal when one cannot be re-bound. Nothing is written. */
-async function rebindCarriedQueries(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null):Promise<Awaited<ReturnType<typeof planRegisteredQueryRebinds>>|Response>{
-  try{return await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId);}
+/** Registered programs carried to a new page version: what to commit once that version is written. */
+interface CarriedRebinds {queries:readonly RegisteredQueryRebind[];mutations:readonly RegisteredMutationRebind[]}
+const NO_REBINDS:CarriedRebinds={queries:[],mutations:[]};
+/** Plans the re-binding of carried registered query and mutation programs, or the explicit refusal when one cannot be re-bound. Nothing is written. */
+async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null):Promise<{links:HtmlBackendLink[];rebinds:CarriedRebinds}|Response>{
+  try{
+    const queries=await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId);
+    // A query link re-bound above names a version not yet stored, so the mutation plan passes it through unchanged.
+    const mutations=await planRegisteredMutationRebinds(tx,next,queries.links,pageOwnerId);
+    return {links:mutations.links,rebinds:{queries:queries.rebinds,mutations:mutations.rebinds}};
+  }
   catch(error){
     if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
+    if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
     throw error;
   }
+}
+async function commitCarriedRebinds(tx:Queryable,page:{pageId:string;version:number;html:string},rebinds:CarriedRebinds):Promise<void>{
+  await commitRegisteredQueryRebinds(tx,page,rebinds.queries);
+  await commitRegisteredMutationRebinds(tx,page,rebinds.mutations);
 }
 
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
@@ -526,10 +540,10 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     }
 
     // A reverted page names the registered programs of the version it restores; they are re-bound to the new version like any save.
-    let rebinds: readonly RegisteredQueryRebind[] = [];
+    let rebinds: CarriedRebinds = NO_REBINDS;
     if(target.format==='html'){
       const restored=(target.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[];
-      const carried=await rebindCarriedQueries(tx,{pageId:id,version:current.version+1,html:target.source??''},restored.filter((link):link is HtmlBackendLink=>link.kind==='backend'),current.user_id);
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:target.source??''},restored.filter((link):link is HtmlBackendLink=>link.kind==='backend'),current.user_id);
       if(carried instanceof Response)return {notArchived:true,refusal:carried};
       rebinds=carried.rebinds;
       target={...target,meta:{...target.meta,htmlLinks:restored.map(link=>link.kind==='backend'?carried.links.find(next=>next.name===link.name)??link:link)}};
@@ -542,7 +556,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
-    await commitRegisteredQueryRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
+    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
     if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
       const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
@@ -599,7 +613,7 @@ async function replaceScoped(
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
-    let rebinds: readonly RegisteredQueryRebind[] = [];
+    let rebinds: CarriedRebinds = NO_REBINDS;
     const current = (
       await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
@@ -647,8 +661,8 @@ async function replaceScoped(
       if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
       const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
-      // A registered program carried forward (declared again, no replacement source in this save) is re-bound to the new version (registered-page-queries/registry).
-      const carried=await rebindCarriedQueries(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id);
+      // A registered query or mutation program carried forward (declared again, no replacement source in this save) is re-bound to the new version (registered-page-queries/registry, registered-page-mutations/registry).
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id);
       if(carried instanceof Response)return carried;
       rebinds=carried.rebinds;
       input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...(input.htmlDatasets??[])]}};
@@ -715,7 +729,7 @@ async function replaceScoped(
       const swap = ancestorsForMove(current, input.ancestor_ids);
       await tx.query(swap.sql, swap.params);
     }
-    await commitRegisteredQueryRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
+    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
     if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
     else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated.rows[0]);
