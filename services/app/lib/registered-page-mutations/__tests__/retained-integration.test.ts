@@ -10,7 +10,7 @@ import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {prepareRegisteredMutationBackend,commitRegisteredMutationBackend} from '../registry';
-import {createRetainedRegisteredMutation} from '../retained';
+import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import type {MutationProgram} from '../contracts';
 useAppHarness();afterEach(()=>{vi.restoreAllMocks();});
 const signal=()=>new AbortController().signal;

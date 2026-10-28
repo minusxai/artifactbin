@@ -13,10 +13,10 @@ import {
   prepareRegisteredMutationBackend,
   commitRegisteredMutationBackend,
   registeredMutationDescriptor,
-  createRetainedRegisteredMutation,
   type MutationProgram,
 } from "@/lib/registered-page-mutations";
 import { pageGraphql } from "../index";
+import { createRetainedRegisteredMutation } from "../registered-mutations";
 useAppHarness();
 afterEach(() => vi.restoreAllMocks());
 async function fixture() {

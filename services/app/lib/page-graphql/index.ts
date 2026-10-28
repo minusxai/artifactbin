@@ -1,4 +1,5 @@
-import {registeredMutationPlan,registeredMutationInvoker,createRetainedRegisteredMutation} from '@/lib/registered-page-mutations';
+import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
+import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import type {HtmlBackendVersionRecord} from '@/lib/html-backends';
 import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan} from '@/lib/registered-page-queries/registry';

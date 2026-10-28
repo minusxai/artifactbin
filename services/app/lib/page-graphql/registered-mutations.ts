@@ -4,9 +4,9 @@ import {getArtifactById,getArtifactFor,writerFor,grantsOf,grantContext,canReadAr
 import {canWriteDataset,mutateDataset,isMutationRefused} from '@/lib/document-data';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,type HtmlBackendVersionRecord} from '@/lib/html-backends';
-import {createRegisteredMutationService} from './model';
-import {registeredMutationPlan} from './registry';
-import type {MutationContext,RegisteredMutationPorts} from './contracts';
+import {createRegisteredMutationService} from '@/lib/registered-page-mutations/model';
+import {registeredMutationPlan} from '@/lib/registered-page-mutations/registry';
+import type {MutationContext,RegisteredMutationPorts} from '@/lib/registered-page-mutations/contracts';
 const unavailable=()=>Error('registered_mutation_unavailable');
 /** Host factory receives actual request actor and immutable saved page/backend, not page arguments. */
 export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord,revalidateActor:()=>Promise<AccessActor>){
@@ -20,7 +20,8 @@ export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPage
   if(actor.tokenId){const token=(await tx.query<{user_id:string|null}>('SELECT user_id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now()) FOR SHARE',[actor.tokenId])).rows[0];if(!token||token.user_id!==(actor.userId??null))throw unavailable();}
   if(actor.userId&&!(await tx.query('SELECT id FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) FOR SHARE',[actor.userId])).rows.length)throw unavailable();
   const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[page.pageId])).rows[0];
-  const saved=(await tx.query<{source:string;meta:{htmlLinks?:HtmlBackendLink[]}}>('SELECT source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[page.pageId,page.version])).rows[0];
+  // A page saved since import has its current version only in the locked head row; it is archived at the next save.
+  const saved=(await tx.query<{source:string;meta:{htmlLinks?:HtmlBackendLink[]}}>('SELECT source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[page.pageId,page.version])).rows[0]??(current?.version===page.version?current as unknown as {source:string;meta:{htmlLinks?:HtmlBackendLink[]}}:undefined);
   const row=(await tx.query<{backend_id:string;page_id:string;version:string;name:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[]}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[link.backendId,link.version])).rows[0];
   if(!current||current.format!=='html'||current.version!==page.version||current.edit_id!==doc?.edit_id||current.user_id!==backend.ownerId||current.source!==page.html||!saved||saved.source!==page.html||!saved.meta.htmlLinks?.some(value=>value.kind==='backend'&&value.name===link.name&&value.backendId===link.backendId&&value.version===link.version)||!row||row.owner_id!==backend.ownerId)throw unavailable();
   registeredMutationPlan(page,link,{backendId:row.backend_id,pageId:row.page_id,version:row.version,name:row.name,source:row.source,typeDefs:row.type_defs,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings});

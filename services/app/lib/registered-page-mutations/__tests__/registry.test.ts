@@ -1,6 +1,7 @@
 import {it,expect} from 'vitest';
 import type {HtmlPageVersion} from '@artifactbin/contracts';
-import {prepareRegisteredMutationBackend,registeredMutationPlan,registeredMutationDescriptor,registeredMutationSchema,registeredMutationInvoker,createRetainedRegisteredMutation,commitRegisteredMutationBackend} from '../index';
+import {prepareRegisteredMutationBackend,registeredMutationPlan,registeredMutationDescriptor,registeredMutationSchema,registeredMutationInvoker,commitRegisteredMutationBackend} from '../index';
+import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import type {MutationProgram} from '../index';
 const digest='a'.repeat(64),program:MutationProgram={name:'save',kind:'insert',sql:'INSERT INTO form.rows(body) VALUES ($body)',target:{datasetId:'private-dataset',schema:'form',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
 const page:HtmlPageVersion={pageId:'page',version:1,revision:'1',html:'<p data-af-id="n1">Synthetic</p>',nextNodeId:2,links:[]};
