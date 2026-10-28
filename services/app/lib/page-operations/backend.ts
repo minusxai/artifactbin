@@ -24,10 +24,10 @@ export default async function(input,host){
  return await fn(input.args,principal,caps);
  }`;
 }
-/** Runner codes that prove the run was not admitted and may be admitted on a later try (runner queue full or restarting). */
-const BUSY=new Set(['queue_full','runner_closed','runner_unavailable']);
-/** Start errors after which the run may or may not have been admitted (timeout, network, runner 500). */
-const transientStart=(code:string)=>code==='runner_failed'||!/^[a-z][a-z_]{0,63}$/.test(code);
+/** Runner replies that prove the run was not admitted and may be on a later try (queue full, restarting, start threw before admission). */
+const BUSY=new Set(['queue_full','runner_closed','runner_unavailable','runner_failed']);
+/** Start errors with no runner reply (timeout, network, unreadable body): the run may or may not have been admitted. */
+const transientStart=(code:string)=>!/^[a-z][a-z_]{0,63}$/.test(code);
 /** Backoff between start attempts; jittered so concurrent page reads do not retry in lockstep. */
 const START_RETRY_DELAYS_MS=[200,500,1000];
 const pause=(ms:number,signal?:AbortSignal)=>new Promise<void>(resolve=>{const timer=setTimeout(done,ms);function done(){clearTimeout(timer);signal?.removeEventListener('abort',done);resolve();}signal?.addEventListener('abort',done,{once:true});});
