@@ -6,9 +6,3 @@ export interface FastTestClassification {
   eligible: boolean;
   reasons: string[];
 }
-
-export interface FastCheckBudget {
-  startedAt: string;
-  now: number;
-  budgetMs: number;
-}

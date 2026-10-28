@@ -179,14 +179,13 @@ if (mode === 'plan') {
   // A PR is judged on its whole branch (base...head); a push on what it actually added (before..head).
   const paths = usable ? changedPaths(env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`) : null;
   const range = env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`;
-  const v3Push = env.CI__EVENT === 'push' && env.CI__REF === 'refs/heads/artifactbinv3';
   let testedPatch = false;
-  let testedRun = !v3Push && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
+  let testedRun = env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   // THE TREE MISSED: another PR moved the base before this one merged. The PATCH may still be
   // recognisable (`patchIdOf` is invariant to that), and safe to skip re-testing when nothing that
   // changed in the gap it left behind overlaps what it touches (`patchGapIsSafe`) — otherwise this
   // falls straight through to the ordinary affected-modules selection below, unchanged.
-  if (!v3Push && !testedRun && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
+  if (!testedRun && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
     const patchId = patchIdOf(range);
     if (patchId) {
       const candidate = await testedRunForPatch(patchId);
@@ -200,7 +199,7 @@ if (mode === 'plan') {
     // A push with diff evidence is judged like a PR: the modules it changed and their dependents
     // (planCi still widens to everything for manifests, shared packages, CI config or unclassified
     // paths). Only a push with no usable base — a first push, a forced one — runs the full suite.
-    full: v3Push || !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
+    full: !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
     testedRun,
     testedPatch,
   });
