@@ -67,3 +67,17 @@ it('retains protected rows and viewer only for same-session data refresh and cle
  f.jobs.shift()!.resolve({data:{records:{value:'new subject'}}});await tick();
  expect(seen.at(-1)).toEqual({data:{records:{value:'new subject'}},loading:false});sub.unsubscribe();
 });
+
+it('a page can watch every query a registered program admits, plus its viewer, and the cap still bounds runaway watches',()=>{
+ const remote:RemotePort={online:()=>true,subscribe(){return()=>{};},async execute(){return {data:{records:{value:1}}};}};
+ const client=createClient({backends:['records'],state:createLocalStore(),remote});
+ const watch=()=>client.watchQuery({query:gql`{records{value}}`,clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(()=>{});
+ // 64 registered queries and the viewer: a migrated page's controller holds all of them at once.
+ const subscriptions=Array.from({length:65},watch);
+ let refused:unknown;
+ for(let i=0;i<1000&&!refused;i++){try{subscriptions.push(watch());}catch(error){refused=error;}}
+ expect(String(refused)).toContain('Too many remote query subscriptions');
+ subscriptions.pop()!.unsubscribe();
+ const again=watch();
+ again.unsubscribe();for(const subscription of subscriptions)subscription.unsubscribe();
+});
