@@ -1,11 +1,12 @@
 /**
  * <af-segmented>: segmented single-choice control.
- * Import:  import {registerSegmented} from './components/segmented.js'; registerSegmented();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/segmented';  (registers the tags; this .ts is the readable contract)
  * Props: options (scalars or {value,label} objects), value (typed as authored)
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   document.querySelector('af-segmented').options=["Day","Week","Month"];
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 /** Option values remain typed from the author's options property through af-change. */
 export type SegmentedValue = string | number | boolean | null;
 export interface SegmentedOption { value: SegmentedValue; label: string }
@@ -240,9 +241,10 @@ af-segmented .af-segmented-options>button[data-segment-option]:not([data-state=a
 af-segmented .af-segmented-options>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-segmented .af-segmented-options>button[data-segment-option]:disabled{cursor:not-allowed;opacity:.5}
 `;
-export function registerSegmented(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-segmented-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-segmented-styles', ''); style.textContent = segmentedStyles; document.head.append(style);
-  }
-  if (!registry.get('af-segmented')) registry.define('af-segmented', AfSegmented);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const segmentedComponent: ComponentDescriptor = {
+  styleKey: 'af-segmented-styles',
+  styles: segmentedStyles,
+  elements: { 'af-segmented': AfSegmented },
+};
+registerComponent(segmentedComponent);

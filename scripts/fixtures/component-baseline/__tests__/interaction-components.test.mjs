@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import {afterEach,it,expect} from 'vitest';
-import {registerSelect} from '../../../../services/app/lib/html-components/select';
-import {registerDataTable} from '../../../../services/app/lib/html-components/data-table';
+import '../../../../services/app/lib/html-components/select';
+import '../../../../services/app/lib/html-components/data-table';
 import {interactionBaselineFixtures} from '../interaction.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
-registerSelect();registerDataTable();
 afterEach(()=>document.body.replaceChildren());
 const pair=id=>interactionBaselineFixtures.find(fixture=>fixture.id===id);
 const mount=fixture=>{document.body.innerHTML=fixture.newHtml;new Function(fixture.setup)();};

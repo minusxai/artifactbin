@@ -1,11 +1,12 @@
 /**
  * <af-switch>: on/off toggle.
- * Import:  import {registerSwitch} from './components/switch.js'; registerSwitch();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/switch';  (registers the tags; this .ts is the readable contract)
  * Props: checked (boolean), disabled, label
  * Events: af-change with event.detail.value (the new checked state)
  * Usage:
  *   <af-switch label="Notifications"></af-switch>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 export interface AfSwitchChangeDetail {
   value: boolean;
 }
@@ -136,12 +137,10 @@ af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
-export function registerSwitch(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-switch-styles]')) {
-    const style = document.createElement('style');
-    style.setAttribute('data-af-switch-styles', '');
-    style.textContent = switchStyles;
-    document.head.append(style);
-  }
-  if (!registry.get('af-switch')) registry.define('af-switch', AfSwitch);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const switchComponent: ComponentDescriptor = {
+  styleKey: 'af-switch-styles',
+  styles: switchStyles,
+  elements: { 'af-switch': AfSwitch },
+};
+registerComponent(switchComponent);

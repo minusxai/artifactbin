@@ -58,16 +58,18 @@ describe('retained control baseline provenance and authored scenarios',()=>{
       }
     }
   });
-  it('bundles actual candidate registrations and setup without mocks or network transports',async()=>{
+  it('bundles actual candidate self-registering modules and setup without mocks or network transports',async()=>{
     const dom=new JSDOM('<!doctype html><html><head></head><body></body></html>',{runScripts:'outside-only'});
     const {window}=dom;const {document}=window;
     try {
     for(const fixture of controlBaselineFixtures){
       for(const module of fixture.modules){
         const source=await readFile(path.join(repo,'services/app/lib/html-components',module+'.ts'),'utf8');
-        expect(source).toContain(`export function register${module.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('')}`);
+        // Hosted modules register their tags on import: no register* export, one top-level registerComponent call.
+        expect(source).not.toMatch(/export\s+(?:async\s+)?(?:function|const|let)\s+register\w*|export\s*\{[^}]*\bregister\w*/);
+        expect(source).toContain('registerComponent(');
       }
-      const contents=fixture.modules.map(name=>`import {register${name[0].toUpperCase()+name.slice(1)}} from './services/app/lib/html-components/${name}.ts';register${name[0].toUpperCase()+name.slice(1)}();`).join('\n')+'\n'+(fixture.setup??'');
+      const contents=fixture.modules.map(name=>`import './services/app/lib/html-components/${name}.ts';`).join('\n')+'\n'+(fixture.setup??'');
       const result=await build({stdin:{contents,resolveDir:repo},bundle:true,write:false,format:'iife',platform:'browser'});
       document.body.innerHTML=fixture.newHtml;
       // Execute the exact registered component bundle, not an HTML surrogate.

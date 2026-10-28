@@ -48,7 +48,7 @@ import { compressDynamic } from './content-encoding';
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
 const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
 /** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
-const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph)\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:core\.js|(?:apollo|reader)\/[a-f0-9]{64})$|^\/af\/styles\.css$/;
+const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$|^\/af\/(?:core|apollo|reader|chrome|portable|morph)\.js$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/fonts\/[a-z0-9-]+\.woff2$|^\/af\/v1\/(?:core\.js|(?:apollo|reader)\/[a-f0-9]{64})$|^\/af\/styles\.css$/;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 

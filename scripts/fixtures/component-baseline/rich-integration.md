@@ -9,7 +9,7 @@ import { richBrowserParityFixtures } from './rich.mjs';
 // ...existing fixtures, ...richBrowserParityFixtures
 ```
 
-The registration-name resolver must special-case `deck-gl` as `DeckGL`; mechanical PascalCase gives `DeckGl`, which is not an exported API. `slide-deck` correctly resolves to `SlideDeck` and registers both `af-slide-deck` and `af-slide`.
+Candidate pages load each module for its side effect (`componentImport` in `publication.mjs`): hosted components as `import "@afbin/<name>"`, the legacy `deck-gl` and `mermaid` wrappers by URL (`import "/af/components/<name>.js"`). `slide-deck` registers both `af-slide-deck` and `af-slide`.
 
 Before capture, the root mount-ready hook must wait for the implementation-specific real engine predicate:
 

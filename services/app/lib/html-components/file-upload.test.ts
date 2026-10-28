@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { AfFileUpload, registerFileUpload } from './file-upload';
+import { AfFileUpload } from './file-upload';
+import './file-upload';
 import type { AfUploadFile } from './file-upload-model';
-registerFileUpload();
 afterEach(() => document.body.replaceChildren());
 function fixture() { const element = document.createElement('af-file-upload') as AfFileUpload; document.body.append(element); return element; }
 const file = () => new File(['a'], 'photo.png', { type: 'image/png' });

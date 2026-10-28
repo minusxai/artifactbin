@@ -72,8 +72,6 @@ export default {
         'skills/**/*.jsx',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
         'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv},design-systems/*.css}',
-        // Generated source mirrors are reading material; canonical lib/html-components is checked above.
-        'skills/artifactbin/components/*.js',
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)

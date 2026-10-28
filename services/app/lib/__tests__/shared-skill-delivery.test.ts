@@ -30,7 +30,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  });
 });
 
-import {mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -40,6 +40,7 @@ import {publicGuideText} from '@/lib/serving/agent-references.server';
 import teaching from '../../../cli/src/generated/teaching.json';
 import {withTeachingOrigin} from '../../../cli/src/teaching-origin';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
+import {platformOrigin} from '../skills/__tests__/platform-origin';
 
 describe('installable shared skill folder',()=>{
  it('rewrites root/backlinks and anchors on the supplied origin',()=>{
@@ -82,29 +83,34 @@ describe('installable shared skill folder',()=>{
    expect(typeof platform.retryFetch).toBe('function');
    const parser=readFileSync(path.join(dir,'artifactbin/scripts/preview-html.mjs'),'utf8');
    expect(parser).not.toMatch(/from\s*["']parse5/);
-   const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');
-   expect(runtime).toContain('export default ');
-   const assets=JSON.parse(runtime.slice('export default '.length).trim().replace(/;$/, ''));
-   const libraryModule=readFileSync(path.join(dir,'artifactbin/scripts/preview-libraries.mjs'),'utf8');
-   const libraries=JSON.parse(libraryModule.slice('export default '.length).trim().replace(/;$/, ''));
-   expect(Object.keys(libraries)).toContain('/libraries/vega-6.3.1/index.js');expect(Object.keys(libraries)).toContain('/libraries/vega-lite-6.4.3/index.js');
-   expect(assets.core).toContain('@afbin/apollo');
-   expect(assets.reader).toContain('offline');
-   expect(assets.apolloPath).toBe('/af/apollo.js');
-   expect(assets.readerPath).toBe('/af/reader.js');
+   // One copy of the HTML parser and of graphql: toolbox-platform reaches both through its siblings.
+   const toolbox=readFileSync(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs'),'utf8');
+   expect(toolbox).toMatch(/from\s*["']\.\/preview-html\.mjs["']/);expect(toolbox).toMatch(/from\s*["']\.\/preview-datasets\.mjs["']/);expect(Buffer.byteLength(toolbox)).toBeLessThan(60_000);
+   // The archive carries no runtime, library or component bundles: the preview fetches them from the selected server.
+   for(const retired of ['preview-runtime.mjs','preview-libraries.mjs'])expect(existsSync(path.join(dir,'artifactbin/scripts',retired)),retired).toBe(false);
    const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
    expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
    const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
-   const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});
+   const server=await platformOrigin();
+   const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0,platformOrigin:server.base});
    try {
-    for(const [url,source] of Object.entries(libraries)){const response=await fetch(new URL(url,preview.url));expect(response.status).toBe(200);expect(await response.text()).toBe(source);}
-    expect(await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json()).toEqual(assets);
-    for(const [resource,source] of [['/af/core.js',assets.core],...Object.entries(assets).filter(([key])=>key.endsWith('Path')).map(([key,path])=>[path,assets[key.slice(0,-4)]])]){
-     const response=await fetch(new URL(resource,preview.url));
-     expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);
+    const hosted=async(pathname:string)=>{const answer=await fetch(server.base+pathname);expect(answer.status,pathname).toBe(200);return answer.text();};
+    const imports=JSON.parse(await hosted('/af/import-map.json')).imports as Record<string,string>;
+    expect(imports['@afbin/vega']).toBe('/libraries/vega-6.3.1/index.js');expect(imports['@afbin/tabs']).toBe('/af/components/tabs.js');
+    for(const pathname of [imports['@afbin/vega']!,imports['@afbin/vega-lite']!,imports['@afbin/tabs']!,'/af/core.js','/af/apollo.js','/af/reader.js']){
+     const response=await fetch(new URL(pathname,preview.url));
+     expect(response.status,pathname).toBe(200);expect(await response.text(),pathname).toBe(await hosted(pathname));
     }
-   } finally {await preview.close();}
+    expect((await fetch(new URL('/af/components/not-a-component.js',preview.url))).status).toBe(404);
+    const assets=await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json();
+    expect(assets.core).toContain('@afbin/apollo');expect(assets.reader).toContain('offline');
+    expect(assets.apolloPath).toBe('/af/apollo.js');expect(assets.readerPath).toBe('/af/reader.js');
+    expect(assets.apollo).toBe(await hosted('/af/apollo.js'));
+    // Each platform file is fetched once and then served from the preview's memory.
+    const fetched=server.requests.filter(request=>request==='/af/apollo.js').length;
+    await fetch(new URL('/af/apollo.js',preview.url));expect(server.requests.filter(request=>request==='/af/apollo.js').length).toBe(fetched);
+   } finally {await preview.close();await server.close();}
    const project=path.join(dir,'project');mkdirSync(project);
    writeFileSync(path.join(project,'sales.csv'),'amount\n2\n');
    writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Local data</h1>');

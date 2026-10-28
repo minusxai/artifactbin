@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfSlider, registerSlider } from './slider';
+import { AfSlider } from './slider';
+import './slider';
 
-registerSlider();
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '', content = '') {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,expect,it} from 'vitest';
-import {AfMarkdown,registerMarkdown,type MarkdownContract} from './markdown';
+import {AfMarkdown,type MarkdownContract} from './markdown';
+import './markdown';
 import { MARKDOWN_CSS } from '../markdown/styles';
-registerMarkdown();
 afterEach(()=>document.body.replaceChildren());
 it('renders retained GFM with stable headings, highlighting and preserved authored identity',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown; el.textContent='# Hello\n\n~~gone~~\n\n```js\nconst x = 1\n```'; el.setAttribute('data-af-id','author'); document.body.append(el);

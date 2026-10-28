@@ -128,13 +128,24 @@ test('local operations bound concurrency and pass a real abort signal',async()=>
 });
 
 
-test('runtime admission admits split modules only at flat /af/ addresses',async()=>{
- const {runtimeAssetManifest}=await import('../../services/app/skills/artifactbin/scripts/preview-runtime-assets.mjs');
- const source='export const splitModule=true;',path='/af/portable.js';
- const manifest=runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:path});assert.equal(manifest.get(path),source);assert.equal(manifest.get('/af/core.js'),'core()');assert.equal(manifest.get('/af/core.js'),'core()');
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'/af/v1/reader/'+'0'.repeat(64)}),/does not match its source/);
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'https://example.invalid/runtime'}),/does not match its source/);
- assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:'',portableEnginePath:path}),/does not match its source/);
+test('platform modules come only from closed /af/, /libraries/ and /af/components/ paths, fetched once from the selected server',async()=>{
+ const {platformModules}=await import('../../services/app/skills/artifactbin/scripts/preview-platform.mjs');
+ const {withHttpServer}=await import('../../services/test-support/src/net.ts');
+ const requests=[];
+ const files={'/af/core.js':'core()','/af/apollo.js':'export const apollo=1;','/af/reader.js':'export const reader=1;','/af/components/tabs.js':'import "./chunk-abc.js";','/af/components/chunk-abc.js':'export {};','/libraries/fixture-1.0.0/index.js':'export const value=1;','/af/import-map.json':JSON.stringify({imports:{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js','@afbin/evil':'https://evil.test/x.js','not-reserved':'/af/components/tabs.js'}})};
+ const server=await withHttpServer((incoming,reply)=>{requests.push(incoming.url);const body=files[incoming.url];reply.writeHead(body===undefined?404:200,{'content-type':incoming.url.endsWith('.json')?'application/json':'text/javascript'});reply.end(body??'missing');});
+ try{
+  const platform=platformModules({origin:server.base});
+  assert.equal(String(await platform.module('/af/core.js')),'core()');assert.equal(String(await platform.module('/af/v1/core.js')),'core()');
+  assert.equal(String(await platform.module('/af/components/chunk-abc.js')),'export {};');
+  for(const refused of ['/af/../secret.js','/af/components/nested/x.js','/libraries/fixture/index.js','/index.html','/af/styles.css'])assert.equal(await platform.module(refused),null,refused);
+  assert.equal(await platform.module('/af/components/absent.js'),null);
+  assert.deepEqual(await platform.importMap(),{'@afbin/fixture':'/libraries/fixture-1.0.0/index.js','@afbin/tabs':'/af/components/tabs.js'});
+  const runtime=await platform.runtimeAssets();assert.equal(runtime.core,'core()');assert.equal(runtime.apolloPath,'/af/apollo.js');assert.equal(runtime.chrome,undefined);
+  await platform.module('/af/core.js');assert.equal(requests.filter(url=>url==='/af/core.js').length,1);
+  assert.equal(await platformModules({origin:null}).module('/af/core.js'),null);
+  assert.throws(()=>platformModules({origin:'file:///tmp'}),/http\(s\)/);
+ }finally{await server.close();}
 });
 
 test('private preview mounts only admitted versioned library bytes without eval permissions',async()=>{

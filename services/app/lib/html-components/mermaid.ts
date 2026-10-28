@@ -1,10 +1,11 @@
 /**
  * <af-mermaid>: legacy wrapper for a Mermaid diagram (new diagrams: references/diagrams.md); bundled renderer with visible errors and an image fallback.
- * Import:  import {registerMermaid} from './components/mermaid.js'; registerMermaid();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '/af/components/mermaid.js';  (legacy, served by URL only; this .ts is the readable contract)
  * Props: code, title, colorMode (auto|light|dark), storedImage={src,type,width,height}; retry()
  * Usage:
  *   document.querySelector('af-mermaid').code="graph TD; A-->B";
  */
+import { registerComponent } from './register-component';
 import type { MermaidImage } from '../mermaid-images/mermaid-render';
 /** Property code takes precedence over the code attribute, then initial literal text.
  * A stored image belongs to the current source; source/theme/font changes invalidate it. */
@@ -57,7 +58,9 @@ export class AfMermaid extends HTMLElement implements MermaidContract {
   status('Rendering diagram…');void draw(this,this.code,this.dark(),live).then(result=>{if(live()&&result)show(result.image,false);},()=>{if(live()){this.output?.querySelector('[role=status]')?.remove();status('Could not render this diagram. Check its Mermaid syntax, then retry.',true);}});
  }
 }
-export function registerMermaid(registry:CustomElementRegistry=customElements,doc:Document=document):void {
- if(!doc.querySelector('style[data-af-mermaid-styles]')){const style=doc.createElement('style');style.setAttribute('data-af-mermaid-styles','');style.textContent='af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;line-height:1.25rem;font-weight:500;margin-bottom:.5rem}af-mermaid img{display:block;max-width:100%;height:auto}';doc.head.append(style);}
- if(!registry.get('af-mermaid'))registry.define('af-mermaid',AfMermaid);
-}
+const mermaidStyles = 'af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;line-height:1.25rem;font-weight:500;margin-bottom:.5rem}af-mermaid img{display:block;max-width:100%;height:auto}';
+registerComponent({
+  styleKey: 'af-mermaid-styles',
+  styles: mermaidStyles,
+  elements: { 'af-mermaid': AfMermaid },
+});

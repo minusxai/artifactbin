@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfIcon, registerIcon } from './icon';
+import { AfIcon, iconComponent } from './icon';
+import { registerComponent } from './register-component';
 import { iconMarkup, LUCIDE_ICON_COUNT } from './icon-glyphs';
 
-registerIcon();
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '', children = '') {
@@ -64,6 +64,6 @@ describe('af-icon', () => {
   it('keeps multiple icons independent and installs its style once', () => {
     const one = fixture('name="check"'); const two = fixture('name="x" size="12"');
     expect(one.svg.getAttribute('width')).toBe('16'); expect(two.svg.getAttribute('width')).toBe('12');
-    registerIcon(); expect(document.querySelectorAll('style[data-af-icon-styles]')).toHaveLength(1);
+    registerComponent(iconComponent); expect(document.querySelectorAll('style[data-af-icon-styles]')).toHaveLength(1);
   });
 });

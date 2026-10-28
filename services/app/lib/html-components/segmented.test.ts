@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfSegmented, registerSegmented, segmentedStyles, type SegmentedOption } from './segmented';
+import { AfSegmented, segmentedComponent, segmentedStyles, type SegmentedOption } from './segmented';
+import { registerComponent } from './register-component';
 
-registerSegmented();
 afterEach(() => document.body.replaceChildren());
 function fixture(attrs = '', options: readonly (string | number | boolean | null | SegmentedOption)[] = ['S', 'M', 'L']) {
   const host = document.createElement('div'); const element = document.createElement('af-segmented') as AfSegmented;
@@ -106,7 +106,7 @@ describe('native authored segmented control', () => {
     authored.textContent = 'description'; control.prepend(authored);
     const options = buttons(control); control.remove(); document.body.append(control); buttons(control)[0]!.click();
     expect(control.firstElementChild).toBe(authored); expect(authored.dataset.afId).toBe('kept');
-    expect(buttons(control)[1]).toBe(options[1]); registerSegmented();
+    expect(buttons(control)[1]).toBe(options[1]); registerComponent(segmentedComponent);
     expect(document.querySelectorAll('style[data-af-segmented-styles]')).toHaveLength(1);
     let events = 0; control.addEventListener('af-change', () => events++); buttons(control)[2]!.click(); expect(events).toBe(1);
   });

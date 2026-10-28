@@ -202,7 +202,7 @@ it('uploads through the credential-free author port and rejects late or portable
 });
 it('the public initializer uses trusted context, cancels an old subject and keeps a late receipt out of the real control',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
- const {registerFileUpload}=await import('../../html-components/file-upload');registerFileUpload();
+ await import('../../html-components/file-upload');
  const runtime=await import('../browser-client');const events:any[]=[];
  const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'Page123',nodes:[],editId:'2',source:null,uploadContext:{state:'signed-out',scope:'guest'}}});bridges.push(bridge);
  const control=document.createElement('af-file-upload') as import('../../html-components/file-upload').AfFileUpload;control.datasetName='attachments';document.body.append(control);

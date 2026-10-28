@@ -1,11 +1,12 @@
 /**
  * <af-avatar>: image with a fallback.
- * Import:  import {registerAvatar} from './components/avatar.js'; registerAvatar();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/avatar';  (registers the tags; this .ts is the readable contract)
  * Props: size (sm|default|lg)
  * Parts: af-avatar-image src alt, af-avatar-fallback
  * Usage:
  *   <af-avatar><af-avatar-image src="me.png" alt="Ada"></af-avatar-image><af-avatar-fallback>A</af-avatar-fallback></af-avatar>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 export type AvatarSize = 'sm' | 'default' | 'lg';
 export type AvatarStatus = 'idle' | 'loading' | 'loaded' | 'error';
 export interface AvatarContract { size: AvatarSize; status: AvatarStatus }
@@ -176,16 +177,17 @@ af-avatar-group:has(af-avatar[data-size=sm])>af-avatar-group-count{width:1.5rem;
 af-avatar-group-count>svg{width:1rem;height:1rem}
 `;
 
-export function registerAvatar(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-avatar-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-avatar-styles', ''); style.textContent = avatarStyles; document.head.append(style);
-  }
-  for (const [name, ctor] of Object.entries({
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const avatarComponent: ComponentDescriptor = {
+  styleKey: 'af-avatar-styles',
+  styles: avatarStyles,
+  elements: {
     'af-avatar': AfAvatar,
     'af-avatar-image': AfAvatarImage,
     'af-avatar-fallback': AfAvatarFallback,
     'af-avatar-badge': AfAvatarBadge,
     'af-avatar-group': AfAvatarGroup,
     'af-avatar-group-count': AfAvatarGroupCount,
-  })) if (!registry.get(name)) registry.define(name, ctor);
-}
+  },
+};
+registerComponent(avatarComponent);

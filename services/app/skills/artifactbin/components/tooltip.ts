@@ -1,12 +1,13 @@
 /**
  * <af-tooltip>: hover/focus tooltip.
- * Import:  import {registerTooltip} from './components/tooltip.js'; registerTooltip();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/tooltip';  (registers the tags; this .ts is the readable contract)
  * Props: open (boolean)
  * Parts: af-tooltip-trigger (use a native button inside), af-tooltip-content
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-tooltip><af-tooltip-trigger><button>?</button></af-tooltip-trigger><af-tooltip-content>Help</af-tooltip-content></af-tooltip>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import {floatingVisibility,identifyFloating,positionFloating,topFloating} from './floating-position';
 export interface TooltipChangeDetail { value: boolean }
 export interface TooltipContract { open: boolean | undefined }
@@ -170,7 +171,15 @@ export class AfTooltipTrigger extends HTMLElement implements TooltipTriggerContr
 }
 export class AfTooltipContent extends HTMLElement {}
 export const tooltipStyles = `af-tooltip,af-tooltip-provider{display:contents}af-tooltip-trigger{cursor:pointer;line-height:1.5}af-tooltip-trigger>button{box-sizing:border-box;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;line-height:inherit;cursor:inherit}af-tooltip-trigger[disabled]>button,af-tooltip-trigger>button:disabled,af-tooltip-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}af-tooltip-trigger:focus-visible{outline:2px solid var(--ring);outline-offset:2px}af-tooltip-content{box-sizing:border-box;display:block;position:fixed;inset:auto;margin:0;z-index:100;width:max-content;max-width:min(28rem,calc(100vw - 1rem));max-height:calc(100svh - 1rem);overflow:auto;white-space:normal;border:1px solid var(--border);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.375rem .625rem;text-align:left;font-size:.75rem;line-height:1.5;background:var(--popover,var(--background));color:var(--popover-foreground,var(--foreground));box-shadow:var(--shadow-md,0 4px 6px -1px rgb(0 0 0 / 10%),0 2px 4px -2px rgb(0 0 0 / 10%))}af-tooltip-content::after{content:"";position:fixed;pointer-events:none;width:10px;height:5px;left:var(--af-tooltip-arrow-left);top:var(--af-tooltip-arrow-top);background:var(--popover,var(--background));clip-path:polygon(0 0,100% 0,50% 100%);transform:translateX(-50%)}af-tooltip-content[data-side=bottom]::after{transform:translate(-50%,-100%) rotate(180deg)}af-tooltip-content[data-side=left]::after{transform:translate(-25%,-50%) rotate(-90deg)}af-tooltip-content[data-side=right]::after{transform:translate(-75%,-50%) rotate(90deg)}af-tooltip-content[hidden]{display:none!important}`;
-export function registerTooltip(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
- if(!document.querySelector('style[data-af-tooltip-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-tooltip-styles',''); style.textContent = tooltipStyles; document.head.append(style); }
- for(const [name,ctor] of Object.entries({'af-tooltip':AfTooltip,'af-tooltip-provider':AfTooltipProvider,'af-tooltip-trigger':AfTooltipTrigger,'af-tooltip-content':AfTooltipContent})) if(!registry.get(name)) registry.define(name,ctor);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const tooltipComponent: ComponentDescriptor = {
+  styleKey: 'af-tooltip-styles',
+  styles: tooltipStyles,
+  elements: {
+    'af-tooltip': AfTooltip,
+    'af-tooltip-provider': AfTooltipProvider,
+    'af-tooltip-trigger': AfTooltipTrigger,
+    'af-tooltip-content': AfTooltipContent,
+  },
+};
+registerComponent(tooltipComponent);

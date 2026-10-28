@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfSwitch, registerSwitch, type AfSwitchChangeDetail } from './switch';
+import { AfSwitch, switchComponent, type AfSwitchChangeDetail } from './switch';
+import { registerComponent } from './register-component';
 
-registerSwitch();
 afterEach(() => document.body.replaceChildren());
 
 function fixture(attrs = '', content = '') {
@@ -110,11 +110,11 @@ describe('af-switch', () => {
       define: (name: string, ctor: CustomElementConstructor) => { definitions.set(name, ctor); },
     } as unknown as CustomElementRegistry;
     const isolatedDocument = document.implementation.createHTMLDocument('isolated');
-    registerSwitch(registry, isolatedDocument);
-    registerSwitch(registry, isolatedDocument);
+    registerComponent(switchComponent, registry, isolatedDocument);
+    registerComponent(switchComponent, registry, isolatedDocument);
     expect(isolatedDocument.querySelectorAll('style[data-af-switch-styles]')).toHaveLength(1);
     document.body.append(host);
-    registerSwitch();
+    registerComponent(switchComponent);
     expect((host.firstElementChild as AfSwitch).checked).toBe(true);
   });
   it('uses the same two pixel focus ring recipe as the source switch', () => {

@@ -1,0 +1,4 @@
+{
+  "components": ["accordion","avatar","button","collapsible","data-table","date-picker","dialog","file-upload","icon","input","isometric","markdown","popover","progress","segmented","select","slide-deck","slider","switch","tabs","textarea","tooltip","user"],
+  "legacy": ["deck-gl","mermaid"]
+}

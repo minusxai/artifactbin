@@ -1,10 +1,11 @@
 /**
  * <af-deck-gl>: legacy wrapper for a deck.gl map (new maps: references/maps.md); needs WebGL.
- * Import:  import {registerDeckGL} from './components/deck-gl.js'; registerDeckGL();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '/af/components/deck-gl.js';  (legacy, served by URL only: `@afbin/deck-gl` is the deck.gl library)
  * Props: options={data,layers,...}, boundaries, basemap, initialViewState, tooltip/legend
  * Usage:
  *   document.querySelector('af-deck-gl').options={data:rows,layers:[...]};
  */
+import { registerComponent } from './register-component';
 import { validateDeckMap } from "../jsx/deck-spec";
 import { DeckGeneration, type DeckGLOptions } from "./deck-gl-model";
 export type { DeckGLOptions } from "./deck-gl-model";
@@ -104,8 +105,6 @@ export class AfDeckGL extends HTMLElement {
       });
   }
 }
-export function registerDeckGL(
-  registry: CustomElementRegistry = customElements,
-): void {
-  if (!registry.get("af-deck-gl")) registry.define("af-deck-gl", AfDeckGL);
-}
+registerComponent({
+  elements: { 'af-deck-gl': AfDeckGL },
+});

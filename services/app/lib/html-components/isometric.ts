@@ -1,10 +1,11 @@
 /**
  * <af-isometric>: isometric illustration from keyed geometry.
- * Import:  import {registerIsometric} from './components/isometric.js'; registerIsometric();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/isometric';  (registers the tags; this .ts is the readable contract)
  * Props: options={title,parts,...}: keyed geometry, spread/angle/flow, motion
  * Usage:
  *   document.querySelector('af-isometric').options={title:'Stack',parts:[...]};
  */
+import { registerComponent } from './register-component';
 import { isometricScene, type IsoDrawPath } from "../story-ui/isometric";
 import { isometricError } from "../jsx/isometric-spec";
 import {
@@ -218,9 +219,6 @@ export class AfIsometric extends HTMLElement {
       node.setAttribute(key, String(value));
   }
 }
-export function registerIsometric(
-  registry: CustomElementRegistry = customElements,
-): void {
-  if (!registry.get("af-isometric"))
-    registry.define("af-isometric", AfIsometric);
-}
+registerComponent({
+  elements: { 'af-isometric': AfIsometric },
+});

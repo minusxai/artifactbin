@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfTabs, registerTabs, tabsStyles } from './tabs';
+import type { AfTabs } from './tabs';
+import { registerComponent } from './register-component';
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-tabs><af-tabs-list><af-tabs-trigger id="authored-tab" value="a">A</af-tabs-trigger><af-tabs-trigger id="authored-tab" value="b">B</af-tabs-trigger></af-tabs-list><af-tabs-content value="b">B</af-tabs-content></af-tabs>';
 const preUpgradeRoot = preUpgradeHost.firstElementChild as AfTabs;
 Object.defineProperty(preUpgradeRoot, 'value', {value:'b',writable:true,configurable:true});
-registerTabs();
+const { tabsStyles, tabsComponent } = await import('./tabs');
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '') {
@@ -221,7 +222,7 @@ describe('native authored tabs', () => {
     const outer = fixture('default-value="a"'); const inner = fixture('default-value="a"');
     outer.panels[0]!.append(inner.root); inner.triggers[1]!.click();
     expect(outer.root.value).toBe('a'); expect(inner.root.value).toBe('b');
-    registerTabs();
+    registerComponent(tabsComponent);
     expect(document.querySelectorAll('style[data-af-tabs-styles]')).toHaveLength(1);
   });
 });

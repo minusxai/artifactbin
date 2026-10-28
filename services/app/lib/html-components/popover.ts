@@ -1,12 +1,13 @@
 /**
  * <af-popover>: anchored popover.
- * Import:  import {registerPopover} from './components/popover.js'; registerPopover();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/popover';  (registers the tags; this .ts is the readable contract)
  * Props: open (boolean)
  * Parts: af-popover-trigger (use a native button inside), af-popover-content
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-popover><af-popover-trigger><button>Info</button></af-popover-trigger><af-popover-content>Hello</af-popover-content></af-popover>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import {floatingVisibility,identifyFloating,positionFloating,topFloating} from './floating-position';
 export interface PopoverChangeDetail { value: boolean }
 export interface PopoverContract { open: boolean | undefined }
@@ -150,7 +151,18 @@ af-popover-content[hidden]{display:none!important}
 af-popover-header{display:flex;flex-direction:column;gap:.25rem;font-size:.875rem}
 af-popover-title{display:block;font-weight:500}
 af-popover-description{display:block;color:var(--muted-foreground)}`;
-export function registerPopover(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
- if (!document.querySelector('style[data-af-popover-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-popover-styles',''); style.textContent = popoverStyles; document.head.append(style); }
- for(const [name,ctor] of Object.entries({'af-popover':AfPopover,'af-popover-trigger':AfPopoverTrigger,'af-popover-content':AfPopoverContent,'af-popover-anchor':AfPopoverAnchor,'af-popover-header':AfPopoverHeader,'af-popover-title':AfPopoverTitle,'af-popover-description':AfPopoverDescription})) if(!registry.get(name)) registry.define(name,ctor);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const popoverComponent: ComponentDescriptor = {
+  styleKey: 'af-popover-styles',
+  styles: popoverStyles,
+  elements: {
+    'af-popover': AfPopover,
+    'af-popover-trigger': AfPopoverTrigger,
+    'af-popover-content': AfPopoverContent,
+    'af-popover-anchor': AfPopoverAnchor,
+    'af-popover-header': AfPopoverHeader,
+    'af-popover-title': AfPopoverTitle,
+    'af-popover-description': AfPopoverDescription,
+  },
+};
+registerComponent(popoverComponent);

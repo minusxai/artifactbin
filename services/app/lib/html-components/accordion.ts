@@ -1,6 +1,6 @@
 /**
  * <af-accordion>: stacked disclosure items.
- * Import:  import {registerAccordion} from './components/accordion.js'; registerAccordion();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/accordion';  (registers the tags; this .ts is the readable contract)
  * Props: type ("single" uses a string value, "multiple" a string-array value), value
  * Parts: af-accordion-item value="a" containing af-accordion-trigger and af-accordion-content
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
@@ -8,6 +8,7 @@
  *   <af-accordion type="single" value="a"><af-accordion-item value="a">
  *   <af-accordion-trigger>Why</af-accordion-trigger><af-accordion-content>Because.</af-accordion-content></af-accordion-item></af-accordion>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import {
   equalAccordionValue,
   normalizeAccordionValue,
@@ -239,11 +240,15 @@ af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.8
 af-accordion-content[hidden]{display:none!important}
 `;
 
-export function registerAccordion(registry: CustomElementRegistry = customElements,document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-accordion-styles]')) {
-    const style=document.createElement('style'); style.setAttribute('data-af-accordion-styles',''); style.textContent=accordionStyles; document.head.append(style);
-  }
-  for (const [name,ctor] of Object.entries({'af-accordion':AfAccordion,'af-accordion-item':AfAccordionItem,'af-accordion-trigger':AfAccordionTrigger,'af-accordion-content':AfAccordionContent})) {
-    if (!registry.get(name)) registry.define(name,ctor);
-  }
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const accordionComponent: ComponentDescriptor = {
+  styleKey: 'af-accordion-styles',
+  styles: accordionStyles,
+  elements: {
+    'af-accordion': AfAccordion,
+    'af-accordion-item': AfAccordionItem,
+    'af-accordion-trigger': AfAccordionTrigger,
+    'af-accordion-content': AfAccordionContent,
+  },
+};
+registerComponent(accordionComponent);

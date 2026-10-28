@@ -10,10 +10,11 @@ function fixture(files:Record<string,string>){
  return root;
 }
 afterEach(()=>{for(const root of roots.splice(0))rmSync(root,{recursive:true,force:true});});
-it('packages readable component sources and compiled modules alongside existing assets',()=>{
- const files={'components/button.ts':'export interface ButtonProps {}','components/button.js':'customElements.define("af-button", class extends HTMLElement {});','scripts/preview.mjs':'export {};','examples/page.html':'<p>Example</p>','design-systems/plain.css':':root{}'};
+it('packages readable component sources alongside existing assets; compiled modules are hosted, never packaged',()=>{
+ const files={'components/button.ts':'export interface ButtonProps {}','scripts/preview.mjs':'export {};','examples/page.html':'<p>Example</p>','design-systems/plain.css':':root{}'};
  expect(loadSkillAssets(fixture(files))).toEqual(files);
- expect(skillAssetName('components/button.ts')).toBe(true);expect(skillAssetName('components/button.js')).toBe(true);
+ expect(skillAssetName('components/button.ts')).toBe(true);expect(skillAssetName('components/button.js')).toBe(false);expect(skillAssetName('components/chunk-abc123.js')).toBe(false);
+ expect(()=>loadSkillAssets(fixture({...files,'components/button.js':'customElements.define("af-button", class extends HTMLElement {});'}))).toThrow('Unsupported skill asset: components/button.js');
 });
 it('excludes component test and fixture sources from installed packages',()=>{
  expect(loadSkillAssets(fixture({'components/button.ts':'source','components/button.test.ts':'test','components/button.fixture.ts':'fixture'}))).toEqual({'components/button.ts':'source'});

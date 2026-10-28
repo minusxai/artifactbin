@@ -5,7 +5,7 @@ description: Author native HTML diagrams with Pele and Mermaid syntax.
 
 ## Read first
 
-Use the pinned Pele direct library. It reads Mermaid syntax and produces SVG with its own layout. Mermaid is the source language; Mermaid.js is not shipped. The retained `<af-mermaid>` element is also backed by Pele. Existing saved image snapshots remain images.
+Use the pinned Pele direct library. It reads Mermaid syntax and produces SVG with its own layout. Mermaid is the source language; Mermaid.js is not shipped.
 
 ## Minimal example
 
@@ -92,7 +92,7 @@ URL `click` links work; JavaScript callbacks are ignored. Default schemes are HT
 
 Only referenced registered modules enter a downloaded page. The example renders offline without a CDN. Remote images, fonts or application data still require their own admitted resources; keep design-system fonts inside the project and prefer portable text labels. Library cost is paid only by pages that import it.
 
-The retained `<af-mermaid>` element keeps its `code`, `title`, `colorMode`, `storedImage` and `retry()` contract, with Pele drawing live output. Its output is an image, so source click links are not interactive; use the direct API above when links are needed. Changes to fonts, source and theme redraw through the same image renderer. Stored immutable SVGs remain content. Previously downloaded self-contained files keep their embedded code; a server upgrade cannot rewrite those files.
+Pages published earlier with the old `<af-mermaid>` element keep working; new pages use the direct API above. Previously downloaded self-contained files keep their embedded code.
 
 Mermaid.js `initialize`, `run`, `render(id, source)` and `bindFunctions` are not Pele APIs. Update owned direct-library scripts to `mount(container, source)` or `render(source, options)`; do not simply change an import URL. Unsupported HTML labels, callbacks, plugins and special math/icon rendering need an explicit alternative, not a silent conversion.
 

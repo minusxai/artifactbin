@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,8 +8,8 @@ import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
 import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof, settleFiniteFrameAnimations } from '../lib/component-browser-baseline.mjs';
-import {verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
-import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
+import {builtComponentFiles,verifyComponentAssetArchive} from '../lib/component-asset-proof.mjs';
+import {installedFiles,componentImport} from '../fixtures/component-baseline/publication.mjs';
 const repo=path.resolve(import.meta.dirname,'../..');
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
@@ -69,30 +69,26 @@ async function loadCandidateArchive(){
 }
 async function candidateArchive(){
   if(!actualArchive)actualArchive=(async()=>{
-    let archive=await loadCandidateArchive();
-    try{await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});}
+    // Components are platform-hosted: prove the local hosted modules match their sources, then load the
+    // (component-free) archive whose publication helper the fixtures run.
+    const verify=async()=>verifyComponentAssetArchive({root:repo,files:await builtComponentFiles({root:repo})});
+    try{await verify();}
     catch(error){
       if(!/^(?:Missing component build proof|Stale component build:|Served component module closure differs from build|Served component bytes differ from build:)/.test(error.message))throw error;
-      // Preserve actual ZIP validation while refreshing only a missing or stale component build.
+      // Refresh only a missing or stale component build; any other proof failure stays fatal.
       execFileSync(process.execPath,[path.join(repo,'scripts/build/build-html-components.mjs')],{cwd:repo,stdio:'pipe'});
-      archive=await loadCandidateArchive();
-      await verifyComponentAssetArchive({root:repo,files:installedFiles(archive)});
+      await verify();
     }
+    const archive=await loadCandidateArchive();
+    expect([...installedFiles(archive).keys()].filter(name=>/^components\/.+\.js$/.test(name))).toEqual([]);
     return archive;
   })();
   return actualArchive;
 }
-const archiveContents=new WeakMap();
-function archiveMember(archive,relative){
-  let files=archiveContents.get(archive);if(!files){
-    files=new Map();const bytes=Buffer.from(archive.buffer,archive.byteOffset,archive.byteLength);let offset=0;
-    while(bytes.readUInt32LE(offset)===0x04034b50){const length=bytes.readUInt16LE(offset+26),start=offset+30+length+bytes.readUInt16LE(offset+28),end=start+bytes.readUInt32LE(offset+18),name=bytes.subarray(offset+30,offset+30+length).toString();files.set(name,bytes.subarray(start,end));offset=end;}
-    archiveContents.set(archive,files);
-  }
-  const value=files.get('artifactbin/'+relative);if(!value)throw Error('Missing actual HTTP archive member: '+relative);return value;
-}
 
 describe('actual fixture publication payloads',()=>{
+  // A missing or source-stale component build is rebuilt once here, outside the per-test publication budgets.
+  beforeAll(()=>candidateArchive(),180_000);
   it('declares an actual dataset and string state for original upload markup',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const bodies=[];
@@ -105,17 +101,20 @@ describe('actual fixture publication payloads',()=>{
     expect(upload.markup).not.toContain('{{uploadDataset}}');
     expect(upload.theme).toBe('almanac');
   });
-  it('publishes every candidate through the installed component graph within the real API limits',async()=>{
+  it('publishes every candidate importing the hosted components and uploading none of them, within the real API limits',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
-    const repo=path.resolve(import.meta.dirname,'../..');
     const skillArchive=await candidateArchive();
     const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
     const {publishBundleDependencies}=await import('../../services/app/lib/html-publication-bundle/execute.ts');
     const bodies=[],keys=new Set();let created=0,reused=0;
     await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
-      const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
-      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);}
+      const plan=planPublicationBundle(body.html,body.publicationBundle);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
+      // Each fixture module loads by its hosted name (legacy wrappers by /af/components/ URL); nothing component-shaped is uploaded.
+      const fixture=browserParityFixtures[Math.floor(bodies.length/parityThemes.length)];
+      for(const name of fixture.modules)expect(body.html).toContain(componentImport(name));
+      expect(body.html).not.toMatch(/\bregister[A-Z]|\.\/components\//);
+      expect(body.publicationBundle.files.map(file=>file.path)).toEqual([]);expect(plan.dependencies).toEqual([]);
       // The platform serves the design system and its fonts: the page names it and uploads neither.
       expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/')||file.path.startsWith('design-systems/'))).toHaveLength(0);
       expect(body.html).toContain('<meta name="artifactbin:design-system" content="almanac">');expect(body.html).not.toContain('design-systems/almanac.css');
@@ -123,7 +122,7 @@ describe('actual fixture publication payloads',()=>{
       const result=await publishBundleDependencies(plan,request.idempotencyKey,{create:async()=>{const id='Asset'+(++created);return {id,revision:'v1',address:'/assets/'+id};},reuse:async(name,mapping)=>{reused++;return '/assets/'+mapping.id;}},body.publicationBundle.mappings);
       bodies.push(body);return {id:'Page123',dependencyReceipts:result.receipts};
     }});
-    expect(created).toBeLessThan(100);expect(reused).toBeGreaterThan(100);
+    expect({created,reused}).toEqual({created:0,reused:0});
     expect(keys.size).toBe(browserParityFixtures.length*parityThemes.length);
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('content="almanac"')&&!body.html.includes('data-af-design-system')&&body.html.includes('baselineReady'))).toBe(true);
@@ -595,7 +594,11 @@ describe('component gate resource acceptance',()=>{
     vi.doMock('../lib/component-browser-baseline.mjs',()=>({captureBrowserBaseline:async()=>[broken],compareBrowserBaselines,candidateCaptureIssues}));
     vi.stubGlobal('fetch',async(input,init)=>{
       const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
-      return new URL(url).pathname==='/skills/artifactbin.zip'?new Response(archive,{status:200}):originalFetch(input,init);
+      const {pathname}=new URL(url);
+      if(pathname==='/skills/artifactbin.zip')return new Response(archive,{status:200});
+      // The candidate server's hosted modules: this checkout's verified build output.
+      if(/^\/af\/components\/[a-z0-9-]+\.js$/.test(pathname))return new Response(await readFile(path.join(repo,'services/app/lib/build-assets',pathname.slice('/af/'.length))),{status:200});
+      return originalFetch(input,init);
     });
     process.env.COMPONENT_BASELINE__INPUT=config;
     try{

@@ -1,10 +1,11 @@
 /**
  * <af-icon>: local Lucide glyph; no runtime fetch.
- * Import:  import {registerIcon} from './components/icon.js'; registerIcon();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/icon';  (registers the tags; this .ts is the readable contract)
  * Props: name, size, label (accessible name; omit for decorative)
  * Usage:
  *   <af-icon name="check" size="16" label="Done"></af-icon>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import { iconMarkup } from './icon-glyphs';
 
 /** Public author-facing properties supported by `<af-icon>`. */
@@ -95,9 +96,10 @@ af-icon{display:inline-block;vertical-align:-.125em;color:inherit}
 af-icon>svg[data-af-icon]{display:block;flex:none;color:inherit;stroke:currentColor}
 `;
 
-export function registerIcon(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-icon-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-icon-styles', ''); style.textContent = iconStyles; document.head.append(style);
-  }
-  if (!registry.get('af-icon')) registry.define('af-icon', AfIcon);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const iconComponent: ComponentDescriptor = {
+  styleKey: 'af-icon-styles',
+  styles: iconStyles,
+  elements: { 'af-icon': AfIcon },
+};
+registerComponent(iconComponent);

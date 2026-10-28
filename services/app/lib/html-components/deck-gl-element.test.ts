@@ -3,8 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 const adapter = vi.hoisted(() => ({ update: vi.fn(), dispose: vi.fn() }));
 const mount = vi.hoisted(() => vi.fn(() => adapter));
 vi.mock("./deck-gl-engine", () => ({ mountDeckGL: mount }));
-import { AfDeckGL, registerDeckGL } from "./deck-gl";
-registerDeckGL();
+import { AfDeckGL } from "./deck-gl";
+import './deck-gl';
 afterEach(() => {
   document.body.replaceChildren();
   vi.clearAllMocks();

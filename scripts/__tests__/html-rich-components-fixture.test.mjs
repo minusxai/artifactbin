@@ -10,8 +10,8 @@ it('covers all six public shipped-module contracts with unique authored identiti
   expect(()=>transformSync(doc.querySelector('script[type=module]').textContent,{loader:'js',format:'esm'})).not.toThrow();
   expect(doc.documentElement.getAttribute('data-af-dark')).toBe(String(dark));
   const identities=[...doc.querySelectorAll('[data-af-id]')].map(node=>node.getAttribute('data-af-id'));expect(new Set(identities).size).toBe(12);
-  for(const [family,file,id] of richFamilies){expect(doc.querySelector('#'+id)?.getAttribute('data-af-id')).toBe('host-'+id);expect(doc.querySelector('#'+id)?.localName).toBe('af-'+file);expect(html).toContain(`from '/components/${file}.js'`);expect(html).toContain(`register${family}()`);}
-  expect(html).toContain("basemap:'none'");expect(html).not.toMatch(/https?:\/\//);expect(html).not.toContain('mock');
+  for(const [,file,id] of richFamilies){expect(doc.querySelector('#'+id)?.getAttribute('data-af-id')).toBe('host-'+id);expect(doc.querySelector('#'+id)?.localName).toBe('af-'+file);expect(html).toContain(`import '/components/${file}.js';`);}
+  expect(html).not.toMatch(/\bregister[A-Z]/);expect(html).toContain("basemap:'none'");expect(html).not.toMatch(/https?:\/\//);expect(html).not.toContain('mock');
  }
 });
 it('distinguishes retained authored identities from changing generated identities',async()=>{

@@ -19,7 +19,7 @@ import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styl
 
 import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import { ASSETS_ORIGIN } from '@/lib/platform';
-import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH } from '@/lib/html-systems';
+import { PLATFORM_FONTS_PATH, PLATFORM_STYLES_PATH, htmlSystemsCss, isHtmlSystem } from '@/lib/html-systems';
 import {libraryImports} from '@/lib/libraries';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
@@ -113,8 +113,11 @@ export async function nativeHtmlApolloResponse(request:Request,digest:string):Pr
 /** Same public, digest-verified code store and cache policy as the author engine. */
 export async function nativeHtmlReaderResponse(request:Request,digest:string):Promise<Response>{return nativeHtmlApolloResponse(request,digest);}
 
-/** The platform stylesheet (lib/html-systems) at its one stable address: public, revalidated on every load by its content hash. */
+/** The platform stylesheet (lib/html-systems) at its one stable address: public, revalidated on every load by its content hash.
+ * `?system=NAME` answers that one system's sheet (what an offline copy or the skill's local preview inlines). */
 export async function nativeHtmlSystemsResponse(request:Request):Promise<Response>{
+ const system=new URL(request.url).searchParams.get('system');
+ if(system!==null)return isHtmlSystem(system)?publicRevalidatedResponse(request,htmlSystemsCss([system]),'text/css; charset=utf-8'):new Response('Not found',{status:404});
  const {systems}=await htmlAssets();
  if(!systems)return new Response('Not found',{status:404});
  return publicRevalidatedResponse(request,systems,'text/css; charset=utf-8');

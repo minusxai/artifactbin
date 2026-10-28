@@ -6,8 +6,7 @@ import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {verifyComponentAssetArchive} from './lib/component-asset-proof.mjs';
-import {installedFiles} from './fixtures/component-baseline/publication.mjs';
+import {hostedComponentFiles,verifyComponentAssetArchive} from './lib/component-asset-proof.mjs';
 import {publishBaselineFixtures} from './fixtures/component-baseline/publication.mjs';
 export async function publishReaderManifest({implementation,base,source,output,sourceRevision: suppliedRevision, authenticated=false, account: suppliedAccount, fixtureSet,fixtureIds}) {
 baselineLocalOrigin(base);
@@ -32,7 +31,7 @@ let skillArchive,componentAssets;
 if(implementation==='html'){
   const response=await fetch(`${base}/skills/artifactbin.zip`);if(!response.ok)throw Error(`Candidate skill archive unavailable (${response.status})`);
   skillArchive=new Uint8Array(await response.arrayBuffer());if(skillArchive.byteLength>128*1024*1024)throw Error('Candidate skill archive limit exceeded');
-  componentAssets=await verifyComponentAssetArchive({root:source,files:installedFiles(skillArchive)});
+  componentAssets=await verifyComponentAssetArchive({root:source,files:await hostedComponentFiles({root:source,origin:base})});
 }
 const entries=await publishBaselineFixtures({implementation,publish,serverOrigin:base,skillArchive,fixtures,fixtureIds,substitutions});
 const manifest={implementation,sourceRevision,...(fixtureIds?{fixtureIds}:{}),...(componentAssets?{componentAssets}:{}),...(fixtureSet?{fixtureSet,screenshotMode:'document-frame'}:{}),...(account?{account}:{}),output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}${fixtureSet==='identity'?'':'/raw'}`}))};

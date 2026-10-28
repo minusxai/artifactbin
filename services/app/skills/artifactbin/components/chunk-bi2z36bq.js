@@ -1,1 +1,0 @@
-function i(e,n){return n<=0?-1:Math.max(0,Math.min(Number.isFinite(e)?Math.floor(e):0,n-1))}function l(e,n,r){return e==="Home"?i(0,r):e==="End"?i(r-1,r):e==="ArrowRight"||e==="PageDown"||e===" "?i(n+1,r):e==="ArrowLeft"||e==="PageUp"?i(n-1,r):null}function m(e,n){let r=e.length?0:-1;return e.forEach((t,u)=>{t<=n&&(r=u)}),r}export{i as a,l as b,m as c};

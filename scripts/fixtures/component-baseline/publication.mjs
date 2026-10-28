@@ -9,7 +9,9 @@ import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {{idempotencyKey?:string}} PublicationRequestOptions */
 /** @typedef {{path:string,kind:"asset"|"dataset",id:string,revision:string,sha256:string,state?:string}} DependencyReceipt */
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string,dependencyReceipts?:DependencyReceipt[]}>} PublishFixture */
-const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
+/** Hosted components load by their `@afbin/<name>` import-map name; the legacy wrappers have none and load by URL. */
+const LEGACY_COMPONENTS=new Set(['deck-gl','mermaid']);
+export const componentImport=name=>`import "${LEGACY_COMPONENTS.has(name)?`/af/components/${name}.js`:`@afbin/${name}`}";`;
 export const htmlBodyPadding=fixture=>fixture.bareRoot?'0px':'24px';
 /** Select whole fixture definitions without rewriting their states or hashes.
  * @template {{id:string}} T
@@ -68,7 +70,7 @@ export function dependencyReceiptCache(localReferences){
     }
   };
 }
-/** Candidate snapshots use the installed component bytes and normal agent helper. */
+/** Candidate snapshots use the installed agent helper; components are platform-hosted, so pages import them and upload none. */
 export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive,fixtures=browserParityFixtures,fixtureIds,substitutions={}}) {
   fixtures=selectBaselineFixtures(fixtures,fixtureIds);
   const entries=[];
@@ -79,7 +81,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     // Original JSX checkouts have no candidate source or archive. Only this
     // branch installs and executes the selected candidate's normal Node helper.
     const files=installedFiles(skillArchive);staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));
-    for(const [name,bytes]of files)if(/^(?:scripts|components|design-systems)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
+    for(const [name,bytes]of files)if(/^(?:scripts|design-systems)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
     ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs')).href));
     const {publicationLocalReferences}=await import(pathToFileURL(path.join(staging,'scripts/preview-html.mjs')).href);reuse=dependencyReceiptCache(publicationLocalReferences);
   }
@@ -93,7 +95,7 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
       const content=oldJsx.replace(helmet,'');
       body={title:`Component baseline ${fixture.id}`,theme:'almanac',colorMode:theme,markup:`${helmet}<div data-design="tw" className="p-6">${content}</div>`};
     }else if(implementation==='html'){
-      const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+substitute(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
+      const source=fixture.modules.map(componentImport).join('\n')+'\n'+substitute(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
       const code=source.replace(/<\/script/gi,'<\\/script');
       // A root SlideDeck owns the page column beside its rail; don't wrap the
       // whole host in the generic page inset that ordinary HTML fixtures get.

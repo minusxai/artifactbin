@@ -1,6 +1,6 @@
 /**
  * <af-file-upload>: file chooser/drop zone that uploads to a linked live dataset through the trusted platform frame; no credentials in page code.
- * Import:  import {registerFileUpload} from './components/file-upload.js'; registerFileUpload();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/file-upload';  (registers the tags; this .ts is the readable contract)
  * Props: value (file metadata {ref,name,contentType?,size?}[]), datasetName or dataset attribute, adapter, accept, multiple, limits, label
  * Adapter: adapter.upload(file,{dataset,signal}) returns {ref,url,name,contentType,size,replayed?}; optional fileUrl resolves previews
  * Events: af-change with the value and reason upload|remove
@@ -18,6 +18,7 @@
  *   const binding=bindFileUpload(document.querySelector('af-file-upload'),{helperText:'Or drop files here.'});
  *   // binding.setDisabled(true|false) for your own rules; binding.dispose() when removing the view.
  */
+import { registerComponent } from './register-component';
 import { uploadFile, uploadUrl, uploadError, type AfUploadFile, type AfFileUploadAdapter, type AfFileUploadChangeDetail } from './file-upload-model';
 export type { AfUploadFile, AfFileUploadAdapter, AfFileUploadChangeDetail } from './file-upload-model';
 
@@ -164,7 +165,9 @@ function reconcile(target: HTMLElement, source: HTMLElement): void {
   }
   while (target.childNodes.length > index) target.lastChild?.remove();
 }
-export function registerFileUpload(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-file-upload-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-file-upload-styles', ''); style.textContent = 'af-file-upload{display:block;color:var(--foreground,#222)}af-file-upload .af-file-upload-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}af-file-upload .af-file-upload-shell{display:flex;flex-direction:column;gap:.75rem}af-file-upload .af-file-upload-label{font-size:.875rem;font-weight:500;line-height:1.25rem}af-file-upload .af-file-upload-drop{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;border:1px dashed var(--input,#aaa);padding:1rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px))}af-file-upload .af-file-upload-help{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload button{font:inherit;font-size:.875rem;line-height:1.25rem;color:inherit;background:var(--background,#fff);border:1px solid var(--input,#aaa);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem .75rem;box-shadow:0 1px 2px #0000000d;cursor:pointer}af-file-upload button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-file-upload button:disabled{opacity:.5;cursor:not-allowed}af-file-upload li{display:flex;gap:.5rem;align-items:center}af-file-upload .af-file-upload-details{display:flex;min-width:0;flex:1;flex-direction:column}af-file-upload .af-file-upload-details a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}af-file-upload .af-file-upload-size{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload img{border-radius:var(--radius-sm,calc(var(--radius,.625rem) - 4px));width:4rem;height:4rem;object-fit:cover}af-file-upload [role=alert]{color:var(--destructive,#b11)}'; document.head.append(style); }
-  if (!registry.get('af-file-upload')) registry.define('af-file-upload', AfFileUpload);
-}
+const fileUploadStyles = 'af-file-upload{display:block;color:var(--foreground,#222)}af-file-upload .af-file-upload-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}af-file-upload .af-file-upload-shell{display:flex;flex-direction:column;gap:.75rem}af-file-upload .af-file-upload-label{font-size:.875rem;font-weight:500;line-height:1.25rem}af-file-upload .af-file-upload-drop{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;border:1px dashed var(--input,#aaa);padding:1rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px))}af-file-upload .af-file-upload-help{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload button{font:inherit;font-size:.875rem;line-height:1.25rem;color:inherit;background:var(--background,#fff);border:1px solid var(--input,#aaa);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem .75rem;box-shadow:0 1px 2px #0000000d;cursor:pointer}af-file-upload button:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}af-file-upload button:disabled{opacity:.5;cursor:not-allowed}af-file-upload li{display:flex;gap:.5rem;align-items:center}af-file-upload .af-file-upload-details{display:flex;min-width:0;flex:1;flex-direction:column}af-file-upload .af-file-upload-details a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}af-file-upload .af-file-upload-size{font-size:.75rem;color:var(--muted-foreground,#666)}af-file-upload img{border-radius:var(--radius-sm,calc(var(--radius,.625rem) - 4px));width:4rem;height:4rem;object-fit:cover}af-file-upload [role=alert]{color:var(--destructive,#b11)}';
+registerComponent({
+  styleKey: 'af-file-upload-styles',
+  styles: fileUploadStyles,
+  elements: { 'af-file-upload': AfFileUpload },
+});
