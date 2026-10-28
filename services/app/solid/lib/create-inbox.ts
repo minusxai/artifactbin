@@ -1,4 +1,5 @@
 /** Account-only live inbox implementation; anonymous readers do not load it. */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { InboxState } from '@/lib/notifications/inbox';
 import { openLiveStream } from '@/lib/http/live-stream';
@@ -22,12 +23,12 @@ export function createInboxController(ownerId: Accessor<string | null>): InboxCo
     // A request that never answers must end as a failure the reader can retry, not a spinner forever.
     const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), LOAD_TIMEOUT_MS);
     try {
-      const response = await fetch('/api/my/people', input ? { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: abort.signal } : { signal: abort.signal });
+      const response = await retryingFetch('/api/my/people', input ? { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: abort.signal } : { signal: abort.signal });
       if (!response.ok) throw new Error('Could not load notifications');
       const result = await response.json() as InboxState;
       if (!Array.isArray(result.notifications) || !Array.isArray(result.blocks)) throw new Error('Could not load notifications');
       while (result.next != null && result.notifications.length < limit) {
-        const next = await fetch(`/api/my/people?offset=${result.next}`, { signal: abort.signal });
+        const next = await retryingFetch(`/api/my/people?offset=${result.next}`, { signal: abort.signal });
         if (!next.ok) throw new Error('Could not load notifications');
         const page = await next.json() as InboxState;
         result.notifications.push(...page.notifications); result.next = page.next;

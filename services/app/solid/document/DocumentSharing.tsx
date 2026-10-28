@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -129,7 +130,7 @@ export function DocumentSharing(props: {
   onMount(() => {
     if (!canManage()) return;
     const controller = new AbortController();
-    void fetch(endpoint, { signal: controller.signal }).then(async response => {
+    void retryingFetch(endpoint, { signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error('could not load sharing');
       setState(await response.json() as SharingState);
     }).catch(() => { if (!controller.signal.aborted) setError('could not load sharing'); });

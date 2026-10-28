@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 import { Navigate } from '@solidjs/router';
 import { internalRedirectTarget } from '@/lib/http/safe-redirect';
@@ -29,7 +30,7 @@ export function WelcomePage(): JSX.Element {
   const [leaving, setLeaving] = createSignal(false);
   createEffect(() => {
     let alive = true;
-    void fetch('/api/my/profile', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null).then((profile: { username: string | null; image: string | null } | null) => {
+    void retryingFetch('/api/my/profile', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null).then((profile: { username: string | null; image: string | null } | null) => {
       if (alive && profile) { setUsername(profile.username ?? ''); setImage(profile.image); }
     }).catch(() => {});
     onCleanup(() => { alive = false; });

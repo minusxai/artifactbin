@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
 import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
@@ -60,7 +61,7 @@ export function LocalDocumentPage(){
    setIdentity(value.identity);
    const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
    runtimeRef.current=controller;
-   void fetch(`/api/page/artifact/${encodeURIComponent(value.identity.artifactId)}`,{credentials:'omit'}).then(response=>response.ok?response.json():null).then(page=>{if(page?.surface?.title)setTitle(page.surface.title);});
+   void retryingFetch(`/api/page/artifact/${encodeURIComponent(value.identity.artifactId)}`,{credentials:'omit'}).then(response=>response.ok?response.json():null).then(page=>{if(page?.surface?.title)setTitle(page.surface.title);});
   },onMessage(message){
    if(!message||typeof message!=='object')return;
    const data=message as {kind?:string;payload?:FrameBridgeFramePayload};

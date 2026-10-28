@@ -3,6 +3,8 @@
  * ./create-framed-story (the bridge to the frame), which the document page loads only once it has adopted the frame,
  * so the app shell before the frame is ready stays within its page-speed size budget.
  */
+import { retryingFetch } from '@/lib/http/retry-lazily';
+
 /** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
 export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
 
@@ -22,7 +24,7 @@ export function framedDocumentFor(story: HTMLElement, framedOrigin: string | nul
  */
 export async function freshFrameSrc(id: string, search = typeof window === 'undefined' ? '' : window.location.search): Promise<string | null> {
   try {
-    const response = await fetch(`/api/page/frame/${encodeURIComponent(id)}${search}`, { credentials: 'same-origin', cache: 'no-store' });
+    const response = await retryingFetch(`/api/page/frame/${encodeURIComponent(id)}${search}`, { credentials: 'same-origin', cache: 'no-store' });
     if (!response.ok) return null;
     const answer = await response.json() as { src?: unknown };
     return typeof answer.src === 'string' ? answer.src : null;

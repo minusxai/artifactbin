@@ -7,6 +7,7 @@
  * Preload: `usePageIntentPreload` starts a page's fetch on hover, focus or press of a link to it, in
  * parallel with the route's lazy chunk; `adoptPreload` keeps a finished preload from being fetched again.
  */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
 import { createPageDataStore, type PageDataSnapshot } from '@/solid/lib/page-data-store';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
@@ -16,7 +17,7 @@ import { noteServerBuild } from './app-build';
 import { APP_BUILD_HEADER } from '@/lib/http/app-build';
 
 async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(url, { credentials: 'same-origin', signal });
+  const response = await retryingFetch(url, { credentials: 'same-origin', signal });
   // The server's build rides on every answer: a deploy since this page loaded makes the next navigation a full load.
   noteServerBuild(response.headers?.get(APP_BUILD_HEADER));
   if (!response.ok) throw Object.assign(new Error('Could not load page'), { status: response.status });

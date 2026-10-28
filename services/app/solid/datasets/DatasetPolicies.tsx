@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createMemo, createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { parse as parseYaml } from 'yaml';
@@ -43,7 +44,7 @@ function PolicyEditor(props: { artifactId: string; saveTarget?: HTMLElement }): 
   const [deniedText, setDeniedText] = createSignal('');
   onMount(() => {
     let alive = true;
-    void fetch(`/api/my/artifacts/${encodeURIComponent(props.artifactId)}/policy`).then(async response => {
+    void retryingFetch(`/api/my/artifacts/${encodeURIComponent(props.artifactId)}/policy`).then(async response => {
       if (!response.ok) throw new Error('Dataset edit access is required to inspect its data rules.');
       return response.json() as Promise<PolicyState>;
     }).then(value => { if (!alive) return; setState(value); setDraft(value.policy ?? blank(value.tables)); setDeniedText((value.policy?.execution?.functions?.deny ?? []).join(', ')); })

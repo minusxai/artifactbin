@@ -49,8 +49,12 @@ describe('createHttpBackend', () => {
     expect(calls).toEqual([{ url: '/api/page/frame/Doc123', init: { credentials: 'same-origin', cache: 'no-store' } }]);
     stubFetch(json({ error: 'not_found' }, 404));
     await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
-    stubFetch(new TypeError('offline'));
-    await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
+    RETRY_TUNING.policy = { delaysMs: [0], jitter: 0 };
+    try {
+      const offline = stubFetch(new TypeError('offline'));
+      await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
+      expect(offline).toHaveLength(2);
+    } finally { delete RETRY_TUNING.policy; }
   });
 
   it('commits an edit batch and answers with status and body, {} when the body is not JSON', async () => {
