@@ -5,6 +5,8 @@ import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
+// The CLI's generated teaching is produced by the global setup (and by `npm test` before Vitest
+// starts), behind a content-verified cache, not on every config load.
 // The island tests (Solid, lib/islands): jsdom and the Solid JSX transform. Every other project
 // matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
@@ -58,7 +60,7 @@ const ISLANDS_SHARED = globSync([ISLAND_TESTS, SOLID_TESTS], { cwd: import.meta.
 // (scripts/lib/cached-solid.mjs). Tests render client-side (`hydratable` off); the build emits
 // hydratable code. Fresh plugin instances per project: each project has its own Vite server.
 const solidJsdom = () => ({
-  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', 'services/cli/src/preview/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
   server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
 });
 

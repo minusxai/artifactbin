@@ -18,6 +18,11 @@ const proof = (args, env = {}) => run(process.execPath, ['--import', 'tsx', ...a
   cwd: root, env: { ...baseEnv, ...env }, maxBuffer: 16 * 1024 * 1024, timeout: 120_000,
 });
 
+it('reserves draft identities across 12 concurrent CLI processes without duplicates or loss', async () => {
+  const { stdout } = await proof(['scripts/__tests__/reserved-ids-local-proof.ts']);
+  expect(stdout).toContain('PASS actual registration: 12 processes, 100 unique identities');
+}, 150_000);
+
 const dockerAvailable = spawnSync('docker', ['image', 'inspect', 'postgres:17-alpine'], { stdio: 'ignore' }).status === 0;
 describe.skipIf(!dockerAvailable)('reserved ids on pooled PostgreSQL (disposable real server)', () => {
   let container = '';

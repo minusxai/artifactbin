@@ -1,7 +1,7 @@
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {expect,it} from 'vitest';
-import {connectAgent,connectionBrowserCookie} from '../gates/lib/account-connection.mjs';
+import {connectAgent,connectionBrowserCookie} from '../gates/lib/cli-connection.mjs';
 
 it('gets a bearer from the verified email session and retains its separate browser cookie',async()=>{
  const requests=[];

@@ -1,0 +1,133 @@
+import { it, expect } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const root = resolve(import.meta.dirname, '../..');
+
+function writeDeploymentPins(dir, version = '0.1.9') {
+  mkdirSync(join(dir, 'deploy/company'), { recursive: true });
+  for (const name of ['Dockerfile', 'compose.yaml']) {
+    const source = readFileSync(join(root, 'deploy/company', name), 'utf8');
+    writeFileSync(join(dir, 'deploy/company', name), source.replace(/(AFBIN_VERSION=|@afbin\/cli@|artifactbin-company:)\d+\.\d+\.\d+/g, '$1' + version));
+  }
+}
+
+function expectDeploymentPins(dir, version) {
+  const docker = readFileSync(join(dir, 'deploy/company/Dockerfile'), 'utf8');
+  const compose = readFileSync(join(dir, 'deploy/company/compose.yaml'), 'utf8');
+  expect(docker).toContain(`ARG AFBIN_VERSION=${version}\n`);
+  expect(docker).toContain(`ARG AFBIN_PACKAGE=@afbin/cli@${version}\n`);
+  expect(compose.match(/image: artifactbin-company:[^\n]+/g)).toEqual([
+    `image: artifactbin-company:${version}`, `image: artifactbin-company:${version}`,
+  ]);
+  expect(compose).toContain('AFBIN_PACKAGE: ${AFBIN_PACKAGE:-@afbin/cli@' + version + '}');
+}
+
+it('patch bump keeps release versions synchronized without rewriting npm wrappers', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-'));
+  try {
+    mkdirSync(join(dir, 'services/cli'), { recursive: true });
+    mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
+    writeFileSync(join(dir, 'services/app/public/chat/install.sh'), 'npx --yes @afbin/cli@latest setup\n');
+    writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), 'npx.cmd --yes @afbin/cli@latest setup\n');
+    writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
+    mkdirSync(join(dir, 'services/cli/transition'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/transition/afbin'), 'AFBIN_VERSION=0.1.9\n');
+    writeDeploymentPins(dir);
+    const dockerPath = join(dir, 'deploy/company/Dockerfile');
+    const dockerBefore = readFileSync(dockerPath, 'utf8');
+    writeFileSync(dockerPath, dockerBefore.replace('ARG AFBIN_VERSION=0.1.9', 'ARG AFBIN_VERSION=0.1.8'));
+    const refused = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr.toString()).toContain('deploy/company/Dockerfile');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'))).version).toBe('0.1.9');
+    expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe('0.1.9');
+    expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe('0.1.9');
+    expect(readFileSync(join(dir, 'services/cli/transition/afbin'), 'utf8')).toBe('AFBIN_VERSION=0.1.9\n');
+    writeFileSync(dockerPath, dockerBefore);
+    const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
+    expect(run.status, run.stderr.toString()).toBe(0);
+    expectDeploymentPins(dir, '0.1.10');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.10');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'))).packages[''].version).toBe('0.1.10');
+    expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe('0.1.10');
+    expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toBe('npx --yes @afbin/cli@latest setup\n');
+    expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe('0.1.10');
+    expect(readFileSync(join(dir,'services/app/public/chat/install.ps1'),'utf8')).toBe('npx.cmd --yes @afbin/cli@latest setup\n');
+    expect(readFileSync(join(dir, 'services/cli/transition/afbin'), 'utf8')).toBe('AFBIN_VERSION=0.1.10\n');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const [level, next] of [['minor', '0.2.0'], ['major', '1.0.0'], ['patch', '0.1.10']]) {
+  it(`a ${level} bump moves every copy of the version to ${next}`, () => {
+    const dir = mkdtempSync(join(tmpdir(), `afbin-bump-${level}-`));
+    try {
+      mkdirSync(join(dir, 'services/cli'), { recursive: true });
+      mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
+      writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
+      writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
+      writeFileSync(join(dir, 'services/app/public/chat/install.sh'), 'npx --yes @afbin/cli@latest setup\n');
+    writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), 'npx.cmd --yes @afbin/cli@latest setup\n');
+      writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
+      mkdirSync(join(dir, 'services/cli/transition'), { recursive: true });
+      writeFileSync(join(dir, 'services/cli/transition/afbin'), 'AFBIN_VERSION=0.1.9\n');
+      writeDeploymentPins(dir);
+      const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs'), level], { cwd: dir });
+      expect(run.status, run.stderr.toString()).toBe(0);
+      expectDeploymentPins(dir, next);
+      expect(run.stdout.toString()).toContain(`afbin 0.1.9 → ${next}`);
+      expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe(next);
+      expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe(next);
+      expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toBe('npx --yes @afbin/cli@latest setup\n');
+      expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe(next);
+      expect(readFileSync(join(dir, 'services/cli/transition/afbin'), 'utf8')).toBe(`AFBIN_VERSION=${next}\n`);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+it('an unknown bump level is refused before any file changes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-level-'));
+  try {
+    mkdirSync(join(dir, 'services/cli'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
+    const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs'), 'huge'], { cwd: dir });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr.toString()).toContain('patch, minor or major');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('a drifted release pointer stops the bump instead of publishing a mismatched release', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-drift-'));
+  try {
+    mkdirSync(join(dir, 'services/cli'), { recursive: true });
+    mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'services/cli/npm-shrinkwrap.json'), JSON.stringify({version:'0.1.9',packages:{'':{version:'0.1.9'}}}));
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
+    writeFileSync(join(dir, 'services/app/public/chat/install.sh'), 'npx --yes @afbin/cli@latest setup\n');
+    writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), 'npx.cmd --yes @afbin/cli@latest setup\n');
+    writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{"version": "0.1.8", "protocol": 1}\n');
+    writeDeploymentPins(dir);
+    const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
+    expect(run.status).not.toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('the checked-in pointer and CLI package name one release, at this protocol', () => {
+  const version = JSON.parse(readFileSync(join(root, 'services/cli/package.json'), 'utf8')).version;
+  const pointer = JSON.parse(readFileSync(join(root, 'services/app/public/chat/release.json'), 'utf8'));
+  const protocol = /CLI_PROTOCOL_VERSION\s*=\s*(\d+)/.exec(readFileSync(join(root, 'services/contracts/src/cli-auth.ts'), 'utf8'));
+  expectDeploymentPins(root, version);
+  expect(pointer.version).toBe(version);
+  expect(String(pointer.protocol)).toBe(protocol[1]);
+});

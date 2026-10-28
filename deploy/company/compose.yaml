@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: artifactbin
+      POSTGRES_USER: artifactbin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      # TCP, not the socket: during first initialisation the image runs a temporary socket-only server, which a
+      # socket check reports ready moments before it shuts down; restore.sh would then restore into it.
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U artifactbin -d artifactbin']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [database]
+  volume-init:
+    image: artifactbin-company:0.5.55
+    build:
+      context: .
+      args:
+        AFBIN_PACKAGE: ${AFBIN_PACKAGE:-@afbin/cli@0.5.55}
+    user: '0:0'
+    entrypoint: [chown]
+    command: ['${APP_UID:?run init.mjs}:${APP_GID:?run init.mjs}', /data]
+    volumes: [app-data:/data]
+    network_mode: none
+    restart: 'no'
+  app:
+    image: artifactbin-company:0.5.55
+    user: '${APP_UID:?run init.mjs}:${APP_GID:?run init.mjs}'
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres: {condition: service_healthy}
+      volume-init: {condition: service_completed_successfully}
+    volumes:
+      - ./config:/config:ro
+      - app-data:/data
+    networks: [database, frontend]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:7445/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  caddy:
+    build:
+      context: .
+      dockerfile: Caddy.Dockerfile
+      args: {DNS_MODULE: '${DNS_MODULE:?select pinned DNS module}'}
+    restart: unless-stopped
+    depends_on:
+      app: {condition: service_healthy}
+    ports: ['80:80', '443:443']
+    env_file:
+      - path: ./secrets/dns.env
+        format: raw
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./dns-provider.caddy:/etc/caddy/dns-provider.caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [frontend]
+secrets:
+  postgres_password: {file: ./secrets/postgres-password}
+networks:
+  database: {internal: true}
+  frontend: {}
+volumes:
+  postgres-data: {}
+  app-data: {}
+  caddy-data: {}
+  caddy-config: {}

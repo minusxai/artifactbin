@@ -13,7 +13,7 @@ export async function publishReaderManifest({implementation,base,source,output,s
 baselineLocalOrigin(base);
 const account=authenticated||suppliedAccount||fixtureSet==='identity'?validateBaselineAccount(suppliedAccount||{email:`mxmx_test_baseline_${randomUUID()}@example.com`}):undefined;
 const sourceRevision=suppliedRevision || execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-const {connectAgent,signInAccount}=await import(pathToFileURL(path.join(source,'scripts/gates/lib/account-connection.mjs')));
+const {connectAgent,signInAccount}=await import(pathToFileURL(path.join(source,'scripts/gates/lib/cli-connection.mjs')));
 const {token}=await connectAgent(base,account||{});
 const publish=async(body,options={})=>{
   const response=await fetch(`${base}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`,...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});

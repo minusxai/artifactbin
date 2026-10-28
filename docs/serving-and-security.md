@@ -19,7 +19,7 @@ opens, answers and resolves comment threads on it, but never edits) or `can
 edit` (also edits it in place, through the API, reverts, reads history and
 manages its visibility and share list — never deletes it, moves it or takes
 ownership). A public document can have editors; a
-collaborator's own agent edits too, through the connection their account
+collaborator's own agent edits too, through the CLI connection their account
 holds.
 
 Artifacts are born `private` — except images and datasets, born `unlisted`,
@@ -36,7 +36,8 @@ the link you copy is the document you were looking at — and an agent can hand
 you one already narrowed to what you asked about.
 
 **Fork.** Anyone signed in can take a copy of any document they can read, from
-the reader controls on the page — or, for an agent, `POST /api/artifacts/<id>/fork`. Content and settings travel, history, comments
+the reader controls on the page — or, for an agent, `afbin fork <ref>`
+(`POST /api/artifacts/<id>/fork`). Content and settings travel, history, comments
 and shares do not, and the original is never touched. The copy's footer says where it came from — naming and linking the
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
@@ -77,7 +78,7 @@ don't have to make them so by hand.
 static HTML with small interactive islands, assembled as ONE standalone page
 (`lib/compiled-page/assembler`): the document's own origin serves it at `/` (and
 `/a/<id>/raw`), framed by the app page; custom-domain posts, exports
-(`/a/<id>/raw?chrome=0&key=`), and the offline file are the same
+(`/a/<id>/raw?chrome=0&key=`), the offline file and the CLI preview are the same
 page. There is no variant with the app's chrome and no copy inside the app page.
 The response identifies the served path with `x-mx-reader: compiled` (the app
 page that frames a document says the same of what is in its frame). A missing, stale or refused compile is recompiled

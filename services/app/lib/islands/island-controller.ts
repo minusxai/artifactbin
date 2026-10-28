@@ -594,6 +594,7 @@ export function createIslandController({ win, root, islands, nodes: served, port
         }).catch((error) => { if (!disposed) console.error('Failed to mount compiled editor', error); }).finally(() => { editLoading = false; });
         return;
       }
+      // Twin of services/cli/src/preview/edit-controller.ts's parent-command routing (its own loaders and error sink); change both together.
       if (edit) {
         edit.onParentMessage(command);
         if (command.type !== 'mx:annotations' && command.type !== 'mx:selection-actions'

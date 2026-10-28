@@ -1,4 +1,5 @@
-/** Public HTTP skill folder.
+/** Public HTTP skill folder. References are shared with CLI teaching;
+ * templates select HTTP procedures while the CLI compiler selects CLI procedures.
  * Assets are explicit: request input never selects a path or ZIP member. */
 import {loadSkillAssets,skillAssetName,type SkillPackageAssets} from './assets';
 import {isShippedSkillTopic} from './public-surface';
@@ -6,7 +7,7 @@ import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
 export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackageAssets=loadSkillAssets()):Record<string,string>{
  for(const name of Object.keys(assets))if(!skillAssetName(name))throw Error(`Unsupported skill asset: ${name}`);
- return {...assets,...Object.fromEntries(renderTree(tree,base,true).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
+ return {...assets,...Object.fromEntries(renderTree(tree,base,'http',true).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
  * Text members need no filesystem traversal or compression. No binary members: fonts load from the platform (D16). */

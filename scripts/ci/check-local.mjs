@@ -1,5 +1,6 @@
 /** Owning CLI/environment boundary for the two routine local checks. */
 import path from 'node:path';
+import { generateTeaching } from '../lib/generate-teaching.mjs';
 import { runCheck } from '../lib/check-evidence.mjs';
 import { nativeCompiler, typeCheckCommands } from '../lib/type-check.mjs';
 
@@ -33,5 +34,6 @@ try {
   if (args.includes('--dry')) throw new Error('Agents should run npm test directly; discovery is already budgeted.');
   if (label === 'validate' && !nativeCompiler({ root: path.resolve('.') }))
     console.log(`[check] No native TypeScript compiler for ${process.platform}-${process.arch}; type-checking with tsc.`);
+  await generateTeaching();
   process.exitCode = await runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });
 } catch (error) { console.error(`[check] ${error.message}`); process.exitCode = 1; }

@@ -5,6 +5,7 @@ import {isPublicSkillTopic} from '@/lib/skills/public-surface';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
 import { POST as startRoute } from '@/app/api/start/route';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract } from '@/lib/serving';
 import { agentBlurb, existingPaste } from '@/lib/serving';
@@ -17,14 +18,19 @@ import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/serv
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
-import { skillTree } from '@/lib/skills';
+import { skillExample, skillTree } from '@/lib/skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
-import { createUser } from '@/lib/accounts';
+import { createUser, mintToken } from '@/lib/accounts';
+import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
+import { PATCH as editCommentRoute, POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { createBrowserSessions } from '../../../browser/src/sessions';
+import type { Actor, BrowserSessionRequest } from '@artifactbin/contracts';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
+const legacyGuideText=(topic:string,base:string)=>{const file=skillTree().get(`artifactbin/references/${topic}.md`)!;return projectSkillLinks(file,renderSkill(file,{base,transport:'http'}),base);};
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['mint','claim'];
@@ -96,6 +102,13 @@ describe('every agent-facing starter says the same thing', () => {
     expect(llmsText(BASE)).not.toContain('afbin pull');
   });
 
+  it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {
+    const skill = buildQuickSheet(BASE);
+    expect(skill.split(ALLOWED_SENTENCE)).toHaveLength(2);
+    // And it is a prohibition, not an offer: nothing around it tells an agent where to get one.
+    expect(withoutTheException(skill).toLowerCase()).not.toMatch(/mint.*token|print.*token|tokens\/new/);
+  });
+
   it('the starter includes the question for the user and is identical everywhere it is handed over', async () => {
     const all = await surfaces();
     const [, started] = all.find(([name]) => name === 'POST /api/start prompt')!;
@@ -106,6 +119,27 @@ describe('every agent-facing starter says the same thing', () => {
   });
 });
 
+/**
+ * The BRIEF and the CONTRACT — the two surfaces the starter sends an agent to next. Four
+ * single-thought files used to assert one paragraph of this each (`m3-publish-first`,
+ * `brief-auth-rule`, `agent-contract`, `publishing-doc-tokens`); they are one rule about one pair
+ * of functions, so they are one describe. Their byte caps went to skill-tree.test.ts's single
+ * sweep, and their retired-vocabulary lines to case (c) above and to retired-surfaces.test.ts.
+ */
+describe('what the brief and the contract teach next', () => {
+
+  it('teaches reuse before new publication and preserves identity during recovery', () => {
+    const sheet = buildQuickSheet('https://example.test');
+    expect(sheet.indexOf('For a supplied artifact')).toBeLessThan(sheet.indexOf('For a new artifact'));
+    expect(sheet).toContain('Preserve exactly the identity fields returned');
+    expect(sheet).toContain('never add `version` when absent');
+    expect(sheet).toContain('after an uncertain write repeat the same command and arguments');
+    expect(sheet).toContain('references/markup.md');
+    expect(sheet).toContain('references/design.md');
+  });
+
+
+});
 
 
 /**
@@ -117,8 +151,9 @@ describe('every agent-facing starter says the same thing', () => {
  */
 describe('the brief', () => {
   const brief = skillTree().get('artifactbin/SKILL.md')!;
+  const sheet = buildQuickSheet(BASE);
 
-  it('its description is the trigger: links, HTTP and the tasks, within the harness cap', () => {
+  it('its description is the trigger: links, the CLI and the tasks, within the harness cap', () => {
     expect(brief.description.length).toBeLessThanOrEqual(1024);
     for (const trigger of ['artifactbin.dev', 'HTTP', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
       expect(brief.description).toContain(trigger);
@@ -126,6 +161,25 @@ describe('the brief', () => {
     expect(brief.description).toContain('Use for artifactbin.dev');
   });
 
+  it('teaches the task, connection, authoring and verification steps before the example and reference tree', () => {
+    const at = (s: string) => { const i = sheet.indexOf(s); expect(i, s).toBeGreaterThanOrEqual(0); return i; };
+    const order = ['## 0. Understand user need','## 1. Get connected','## 2. Understand create and edit','afbin pull','## 3. Shape the content','## 4. Save, share and verify','## Example','```jsx','## Reference tree'].map(at);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('inlines example.jsx verbatim inside its jsx fence and stays under the always-read cap', () => {
+    const example = skillExample();
+    expect(example).toMatch(/^---\n/);
+    expect(sheet).toContain('```jsx\n' + example.trimEnd() + '\n```');
+    expect(sheet).not.toContain('[[');
+  });
+
+  it('the example teaches the rules the prose no longer repeats', () => {
+    const example = skillExample();
+    for (const rule of ['static JSX', 'className', 'custom CSS lives here', '<Helmet>', '<Import name="sales"', 'sales.rows', 'ref:<id>', '$region', '"$monthly"', 'persistent id', 'never hand-rolled <svg>', '@2xl:', 'edit_id', 'visibility']) {
+      expect(example, rule).toContain(rule);
+    }
+  });
 });
 
 describe('llms.txt and the discovery head', () => {
@@ -165,7 +219,7 @@ describe('public HTTP authoring references', () => {
     for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin' && isPublicSkillTopic(file.file.replace(/\.md$/,'')))) {
       const topic = file.file.replace(/\.md$/, '');
       const actual = publicGuideText(topic, BASE);
-      const expected = projectSkillLinks(file,renderSkill(file,{base:BASE}),BASE);
+      const expected = projectSkillLinks(file,renderSkill(file,{base:BASE,transport:'http'}),BASE);
       expect(actual, topic).toBe(expected);
       expect(actual, topic).not.toMatch(/\[\[|{%/);
       for (const [, linkedTopic] of actual!.matchAll(/\]\(http:\/\/localhost:3000\/llms\/([a-z0-9-]+)/g)) {
@@ -194,6 +248,59 @@ describe('public HTTP authoring references', () => {
 });
 
 
+it('the published HTTP comment example creates, replies, resolves, reopens and edits through real handlers', async () => {
+  const guide = legacyGuideText('http-api',BASE)!;
+  const script = guide.match(/\/\/ BEGIN HTTP COMMENTS\n([\s\S]*?)\/\/ END HTTP COMMENTS/)?.[1];
+  expect(script, 'executable HTTP comment contract is published').toBeTruthy();
+  const user = await createUser({email:'http-comments-contract@example.com'});
+  const token = await mintToken('http-contract', user.id, undefined, {expiresInMs:null});
+  const artifact = await createArtifact('', user.id, {format:'markup', source:'<p id="message">Alpha</p>', content:'<p id="message">Alpha</p>', meta:{}} as never);
+  const localFetch = async (url:string, init?:RequestInit) => {
+    const path = new URL(url).pathname;
+    const annId = path.split('/')[5];
+    const req = request(path, {method:init?.method ?? 'GET', token:token.token, ...(init?.body ? {body:init.body, headers:{'Content-Type':'application/json'}} : {})});
+    const params = {params:Promise.resolve({id:artifact.id, ...(annId ? {annId} : {})})};
+    return annId ? (init?.method === 'PATCH' ? editCommentRoute(req, params) : actOnCommentRoute(req, params)) : init?.method === 'POST' ? createCommentRoute(req, params) : listCommentsRoute(req, params);
+  };
+  const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+  const result = await new AsyncFunction('fetch','base','accessToken','artifactId','nodeId',script + '\nreturn {created,replied,resolved,reopened,edited};')(localFetch, BASE, token.token, artifact.id, 'message');
+  expect(result.created.thread).toHaveLength(1);
+  expect(result.replied.thread).toHaveLength(2);
+  expect(result.resolved.status).toBe('resolved');
+  expect(result.reopened.status).toBe('open');
+  expect(result.reopened.revision).toBeGreaterThan(result.created.revision);
+  expect(result.edited.thread[0]).toMatchObject({body:'Please clarify this paragraph', edited_at:expect.any(String)});
+  expect(result.edited.revision).toBe(result.reopened.revision + 1);
+  // A plain reply only appends and never conflicts; the revision guard is on state changes.
+  const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{resolve:true,expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.edited.revision});
+});
+
+
+it('the published browser example preserves a capacity refusal and only polls and closes accepted sessions', async () => {
+  const script = legacyGuideText('http-api', BASE)!.match(/## Browser preview and interactive QA[\s\S]*?```js\n([\s\S]*?)```/)?.[1];
+  expect(script).toBeTruthy();
+  const sessions = createBrowserSessions(async () => ({run: async () => ({result:'screenshot',pages:[],attachments:[]}), close:async () => {}}));
+  const other: Actor = {credential:'bearer', userId:'another-owner'};
+  const actor: Actor = {credential:'bearer', userId:'example-owner'};
+  const operations: string[] = [];
+  const localFetch = async (_url: string, init: RequestInit) => {
+    const body=JSON.parse(String(init.body));operations.push(body.op);
+    return Response.json(await sessions.request({...body,actor} as BrowserSessionRequest));
+  };
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+  const run=()=>new AsyncFunction('fetch','base','accessToken','artifactId',script)(localFetch,BASE,'test-token','ab3cd9');
+  try {
+    for(const session_id of ['occupied-one','occupied-two'])await sessions.request({actor:other,op:'script',session_id,execution_id:'occupied',create:true,code:''});
+    await expect(run()).rejects.toThrow(/SESSION_CAPACITY.*None of them are yours/);
+    expect(operations).toEqual(['script']);
+    await sessions.request({actor:other,op:'close',session_id:'occupied-one'});
+    operations.length=0;
+    await expect(run()).resolves.toBeUndefined();
+    expect(operations[0]).toBe('script');expect(operations.at(-1)).toBe('close');
+  } finally {await sessions.close();}
+});
 
 it('HTTP guidance preserves rotating credentials across tasks and renews without email login',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
@@ -212,6 +319,12 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(guide).toContain('Do not invent an email');
   expect(guide).toContain('No product installation is needed.');
  });
+ it('teaches the supported local CLI status read without promising live authentication',()=>{
+  const brief=buildQuickSheet(BASE);
+  expect(brief).toContain('`afbin status`');
+  expect(brief).toContain('last observed, no login');
+  expect(brief).toContain('`afbin auth status` is not a status command');
+ });
  it('keeps hosted root guidance within budget at production and custom origins',()=>{
   for(const origin of ['https://app.artifactbin.dev','https://artifacts.acme.example']) {
    const text=llmsText(origin);
@@ -219,12 +332,23 @@ describe('shared instructions after missing credentials and before publishing cl
    expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   }
  });
+ it('grounds numerical claims and comparisons in query results and labels assumptions',()=>{
+  const brief=buildQuickSheet(BASE);
+  expect(brief).toContain('Check numerical claims against query results');
+  expect(brief).toContain('every named series');
+  expect(brief).toContain('Label assumptions');
+ });
 });
 
 it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
  const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
  expect(hint.monitoring.instruction).toContain('background');
  expect(hint.monitoring.instruction).toContain('existing comments');
+ const guide = legacyGuideText('monitoring', DEFAULT_SERVER)!;
+ expect(guide).toContain('Do not wait for the watch process to exit');
+ expect(guide).toContain('head');
+ expect(guide).toContain('wait=0');
+ expect(guide).toContain('Save the returned cursor');
 });
 
 /**
@@ -234,7 +358,13 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  */
 it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
  const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}}).monitoring;
- const surfaces = {instruction};
+ const section = (text:string) => text.split('\n### Monitoring\n')[1]!.split('\n## ')[0]!;
+ const skill = skillTree().get('artifactbin/SKILL.md')!;
+ const surfaces = {
+  instruction,
+  cliSkill: section(renderSkill(skill, {base: DEFAULT_SERVER, transport: 'cli'})),
+  guide: legacyGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
+ };
  for (const [name, text] of Object.entries(surfaces)) {
   expect(text, name).toContain('After the first successful save or local preview');
   expect(text, name).toContain('do not ask first');
@@ -244,8 +374,28 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
   expect(text, name).toContain('plain background job');
   expect(text, name).toContain('between work steps');
  }
+ expect(surfaces.cliSkill).toContain('`afbin comment <url|file> --json`');
+ // Replying is never publishing: an agent asked to keep a page local answered by editing alone and never replied.
+ expect(surfaces.cliSkill).toContain('push it if the page is published');
+ expect(surfaces.cliSkill).toContain('a reply on a local file stays local');
 });
 
+it('reuses an executable HTTP dataset creation example in both guides', async () => {
+ const guides=['http-api','publishing-datasets'].map(topic=>legacyGuideText(topic,BASE));
+ const bodies=guides.map(guide=>{
+  const section=guide.split('## HTTP dataset creation')[1];
+  expect(section).toBeDefined();
+  expect(section).toContain('POST /api/artifacts');
+  const example=section!.match(/```json\n([\s\S]*?)\n```/)?.[1];
+  expect(example).toBeDefined();return JSON.parse(example!);
+ });
+ expect(bodies[0]).toEqual(bodies[1]);
+ const user=await createUser({email:'mxmx_test_dataset_guide@example.test'});
+ const token=await mintToken('dataset-guide',user.id,undefined,{expiresInMs:null});
+ const response=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:token.token,json:bodies[0]}));
+ expect(response.status).toBe(201);
+ const result=await response.json();expect(result.id).toBeTruthy();expect(result.url).toContain('/a/');
+});
 
 it('HTTP authentication is direct and reuses the existing rotating credential store',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
@@ -271,3 +421,9 @@ it('keeps sign-in conditional across root guides and discovery', () => {
  expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
 });
 
+it('lists every shipped reference in the main reference tree', () => {
+ const tree=buildQuickSheet(BASE).split('## Reference tree')[1]!;
+ for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent'&&!/^(html-|runtime\.md$|datasets\.md$|backends\.md$)/.test(file.file))) {
+  expect(tree,file.path).toContain(`](references/${file.file})`);
+ }
+});

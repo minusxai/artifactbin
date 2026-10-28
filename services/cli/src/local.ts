@@ -1,0 +1,50 @@
+import {workspaceOwnership} from './workspace-ownership';
+import {isProgramFile} from './program-file';
+import {readConflicts} from './conflict-state';
+import type {ShareEntry} from '@artifactbin/contracts';
+import {createTwoFilesPatch} from 'diff';
+import {type LocalDocument} from './document';
+import {baselineOf,inspectWorkspace,type LocalFile,type Snapshot,type Workspace} from './workspace';
+import {readResourceSource} from './resource-file';
+import {skillStatus} from './skill-install';
+import {isDatasetFile} from './dataset-file';
+import {extname} from 'node:path';
+export function snapshotDocument(snapshot:Snapshot):LocalDocument{
+ return{metadata:{...(snapshot.shares!==undefined?{shares:snapshot.shares as ShareEntry[]}:{}),...(snapshot.description!==undefined?{description:snapshot.description as string|null}:{}),...(snapshot.colorMode!==undefined?{colorMode:snapshot.colorMode as 'light'|'dark'|null}:{}),id:snapshot.id,title:snapshot.title??null,theme:snapshot.theme??null,template:snapshot.template??null,
+  ...(snapshot.visibility?{visibility:snapshot.visibility}:{}),link:snapshot.link_role??'viewer',folder:snapshot.parent_id??null,
+  edit_id:snapshot.edit_id,head_version:snapshot.version,state:snapshot.state},body:snapshot.markup??''};
+}
+export async function localStatus(workspace:Workspace,paths?:string[],home?:string,env?:NodeJS.ProcessEnv,server?:string){
+ const conflicts=await readConflicts(workspace.home,workspace.root);
+ return{remote:'last_observed',server:workspace.tracking?.server??null,accounts:await workspaceOwnership(workspace,env,server),files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),...(home!==undefined?{skills:await skillStatus(home,env)}:{})};
+}
+export async function localDiff(workspace:Workspace,paths?:string[]){
+ const files=await inspectWorkspace(workspace,paths);
+ const diffs:Array<{path:string;diff:string;resource?:string}>=[];
+ for(const file of files.filter(file=>file.status!=='unchanged')){
+  const before=file.tracked?(await baselineOf(workspace,file.path,file.tracked))?.toString()??'':'';
+  const after=file.bytes?.toString()??'';
+  if(before!==after)diffs.push({path:file.path,diff:file.document||file.resource||isProgramFile(file.path)?createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${file.path}: ${file.status}`});
+  const source=await localSourceDiff(workspace,file);if(source)diffs.push(source);
+ }
+ return{remote:'last_observed',diffs};
+}
+export async function localSourceDiff(workspace:Workspace,file:LocalFile){
+ if(!file.resource)return;
+ const source=await readResourceSource(file.resource,file.path,workspace.root);if(!source||source.bytes===file.tracked?.source?.bytes)return;
+ const before=Buffer.from(file.tracked?.source?.bytes??'','base64').toString(),after=Buffer.from(source.bytes,'base64').toString();
+ const text=(isDatasetFile(source.path)||extname(source.path).toLowerCase()==='.jsx');
+ return{path:source.path,resource:file.path,diff:text?createTwoFilesPatch(`base/${source.path}`,`local/${source.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${source.path} differs`};
+}
+/**
+ * `afbin list` where nothing can be listed remotely without a sign-in: an untracked local workspace and no
+ * saved credential for the selected server. The workspace's own files answer, and say what the server
+ * listing needs, instead of a device sign-in the person never asked for.
+ */
+export async function localList(workspace:Workspace,server:string){
+ const artifacts=(await inspectWorkspace(workspace)).filter(file=>file.bytes).map(file=>{
+  const metadata=file.document?.metadata??file.resource;
+  return {path:file.path,id:metadata?.id??null,title:file.document?.metadata.title??file.resource?.title??null,published:metadata?.head_version!==undefined};
+ });
+ return {local:true,root:workspace.root,artifacts,next_cursor:null,remote:`Not signed in to ${server}: these are this workspace's local files. Run afbin auth to list the artifacts on ${server}.`};
+}

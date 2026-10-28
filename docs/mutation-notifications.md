@@ -60,9 +60,9 @@ Existing block and test-user isolation rules apply. Unknown, deleted or ineligib
 
 ## Agent instructions
 
-For existing artifacts, agents should use named query reads and named writes through the HTTP API (see `<origin>/llms/datasets`). Use browser sessions (`POST /api/browser-sessions`) to test newly authored UI, browser-local state and row/cell actions that a headless HTTP client cannot invoke.
+For existing artifacts, agents should use named afbin query reads and named writes. Use sessions to test newly authored UI, browser-local state and row/cell actions that the headless CLI cannot invoke.
 
-These authenticated named operations already use POST. This change does not add a GET alias.
+The commands are afbin query ID --name tasks and afbin query ID --write --name change_status --param task_id=... --param status=.... These authenticated named operations already use POST. This change does not add a GET alias.
 
 UI write testing must use an isolated copy with copied writable datasets. A local draft can still reference the original datasets. Publish the isolated data and update Imports before testing; never fall back to writing the original.
 

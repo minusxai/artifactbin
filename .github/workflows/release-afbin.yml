@@ -1,0 +1,70 @@
+name: Release afbin
+
+# Maintainer dispatch bumps the npm CLI version on main. CI builds one npm tarball,
+# tests those exact bytes on every supported platform, then release-cli.yml publishes it.
+# AUTOMATION_TOKEN is required because a repository-token push cannot start CI or
+# bypass main's PR requirement. This operation does not ship a standalone executable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: Which part of the version to bump
+        type: choice
+        required: true
+        default: patch
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref != 'refs/heads/artifactbinv3'
+    name: Bump the CLI and commit the version to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HAS_PAT: ${{ secrets.AUTOMATION_TOKEN != '' }}
+    steps:
+      - name: Require the automation token
+        if: env.HAS_PAT != 'true'
+        run: |
+          echo "::error::AUTOMATION_TOKEN is not set — a release is a push to main by an admin's PAT, and the repository token can neither bypass the ruleset nor start main's CI."
+          exit 1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          token: ${{ secrets.AUTOMATION_TOKEN }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Bump the npm CLI and release pointer
+        id: bump
+        env:
+          LEVEL: ${{ inputs.level }}
+        run: |
+          set -euo pipefail
+          case "$LEVEL" in patch|minor|major) ;; *) echo "::error::unknown level $LEVEL"; exit 1;; esac
+          npm run release:cli -- "$LEVEL"
+          version=$(node -p "require('./services/cli/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Commit the version to main
+        env:
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Authored as whoever dispatched the release; commits on main are title-only.
+          git config user.name "$ACTOR"
+          git config user.email "$ACTOR_ID+$ACTOR@users.noreply.github.com"
+          git add -A
+          git commit -m "Release afbin $VERSION"
+          # The diff is the version and nothing else, so main's CI selects the release jobs only
+          # (scripts/ci/ci.mjs plan). Never forced: a main that moved since checkout refuses the push
+          # and the dispatch is simply run again.
+          git push origin HEAD:main
+          echo "Released afbin $VERSION as $(git rev-parse HEAD) on main; its CI tests and publishes the npm package." >> "$GITHUB_STEP_SUMMARY"

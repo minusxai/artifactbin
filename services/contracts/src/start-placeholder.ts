@@ -14,14 +14,12 @@
 const WAITING_LINE = 'Waiting for your agent…';
 /** For a reader that keeps only the page's TEXT (a fetch tool that renders HTML to markdown drops the
  * head tags and the tail comment): the way on, in the document itself. Screen-reader-only for people. */
-const AGENT_LINE = "Agents: edit this document with the artifactbin author skill or direct HTTP API — read /llms.txt on this site.";
-/** The line starters saved before the CLI left carry; they still count as untouched starters. */
-const EARLIER_AGENT_LINE = "Agents: edit this document with the afbin CLI or direct HTTP API — read /llms.txt on this site for both paths.";
+const AGENT_LINE = "Agents: edit this document with the afbin CLI or direct HTTP API — read /llms.txt on this site for both paths.";
 const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
 /** Source gains generated node IDs during compilation. Match the fixed starter
  * text only on its first version; never show setup over an agent's first edit. */
 export const isStartPlaceholder = (source: string | null, version: number): boolean =>
-  version === 1 && !!source && ((source.includes(AGENT_LINE) || source.includes(EARLIER_AGENT_LINE)) && source.includes(WAITING_LINE) || /^<article\s+id="artifact-starter"\s*(?:\/>|>\s*<\/article>)$/.test(source.trim()));
+  version === 1 && !!source && (source.includes(AGENT_LINE) && source.includes(WAITING_LINE) || /^<article\s+id="artifact-starter"\s*(?:\/>|>\s*<\/article>)$/.test(source.trim()));
 /** No setup UI is saved in a typed starter. The app owns its agent instructions. */
 export const EMPTY_ARTIFACT_MARKUP = '<article id="artifact-starter"></article>';
 export const START_PLACEHOLDER_MARKUP =

@@ -24,7 +24,7 @@ export { carriesRef, EMPTY_DATAFLOW, isEmptyDataflow, refName, scalarMatches } f
 export { collectRefNameUses } from './ref-name-uses';
 
 // Built-ins: the platform's own inputs and tables, and the reader's zone.
-export { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
+export { BUILTIN_INPUTS, BUILTIN_TABLES, CLOCK_FUNCTIONS, platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
 
 // Questions asked of a compiled dataflow.
 export type { ImportTables } from './compiled-flow';
@@ -58,6 +58,7 @@ export { DataflowResultError, evaluateDataflow, evaluateDataflowMany } from './e
 export type { ImageAssetAnswer, ImageRefData, RefDataMap } from './ref-data';
 export { imageRefData, rawUrl } from './ref-data';
 export { imageReferenceId } from './image-source';
+export { REFERENCE_POSITIONS } from './reference-positions';
 
 // Cell display.
 export type { NumberAgg } from './number-aggregation';

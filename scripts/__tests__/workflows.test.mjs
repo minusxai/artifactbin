@@ -26,10 +26,10 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'codeql.yml', 'page-speed.yml']) {
+    for (const file of ['ci.yml', 'release-cli.yml', 'codeql.yml', 'page-speed.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
-      expect(refs.length, file).toBeGreaterThan(0);
+      if (file !== 'release-cli.yml') expect(refs.length, file).toBeGreaterThan(0);
       for (const ref of refs) expect(ref, `${file}: ${ref}`).toMatch(/@[0-9a-f]{40}$/);
     }
   });
@@ -50,8 +50,9 @@ describe('dependency security', () => {
 });
 
 /**
- * NO COMPOSE JOB HERE, AND NO IMAGE JOB EITHER. The container distribution was retired with its
- * Dockerfile and compose file, and split-deployment CI belongs to the production server repository.
+ * NO COMPOSE JOB HERE, AND NO IMAGE JOB EITHER. The open-source distribution is the CLI and
+ * `afbin serve`; the container distribution was retired with its Dockerfile and compose file, and
+ * split-deployment CI belongs to the production server repository, not this one.
  */
 describe('OSS single-host ownership', () => {
   it('builds no container and leaves split deployment CI to production', () => {
@@ -70,7 +71,8 @@ describe('OSS single-host ownership', () => {
 });
 
 /**
- * NO GATE WAITS FOR THE `build` JOB. The shards used to poll it and download its artifact.
+ * NO GATE WAITS FOR THE `build` JOB. The shards used to poll it and download its artifact, which put
+ * the CLI's host runtime and type declarations (no gate reads either) on every run's critical path.
  * Each shard now builds what it runs, in the background while it provisions browsers.
  */
 describe('ci.yml: the gates build what they run, off the build job', () => {
@@ -81,8 +83,8 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
       expect(String(step.uses ?? '')).not.toMatch(/^actions\/download-artifact@/);
       expect(String(step.run ?? '')).not.toContain('.name == "build"');
     }
-    expect(ci.jobs.build.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact'))).toEqual([]);
-    const start = steps.find((step) => step.name === 'Build the app and server in the background');
+    expect(ci.jobs.build.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['afbin-npm-packages']);
+    const start = steps.find((step) => step.name === 'Build the app, server and CLI bundle in the background');
     const wait = steps.find((step) => step.name === "Wait for this shard's build");
     // Every stream redirected and the group backgrounded, or the runner holds the step open until it ends.
     expect(start?.run).toContain('node scripts/build/build-gate-inputs.mjs');
@@ -96,7 +98,9 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     expect(steps.indexOf(start)).toBeLessThan(at('Install selected gate browsers'));
     expect(steps.indexOf(wait)).toBeGreaterThan(at('Prepare isolated browser session workers'));
     expect(steps.indexOf(wait)).toBeLessThan(at('every gate, two servers'));
-    expect(steps.map((step) => step.run)).not.toContain('npm run build');
+    for (const command of ['npm run build', 'npm run build -w services/cli']) {
+      expect(steps.map((step) => step.run), command).not.toContain(command);
+    }
     // A build of these exact sources already cached skips building: the shard restores the entry
     // `build` saved, under the same key and paths, and never writes one itself.
     const save = ci.jobs.build.steps.find((step) => step.id === 'build-cache');
@@ -112,7 +116,9 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
     const miss = "steps.build-cache.outputs.cache-hit != 'true'";
     expect(start.if).toBe(miss);
     expect(wait.if).toBe(miss);
-    expect(ci.jobs.build.steps.find((step) => step.run === 'npm run build')?.if).toBe(miss);
+    for (const command of ['npm run build -w services/cli', 'node scripts/build/build-server.mjs dist/server.mjs']) {
+      expect(ci.jobs.build.steps.find((step) => step.run === command)?.if, command).toBe(miss);
+    }
     // Every Chromium cache keys on what pins the browser, never on the whole lockfile.
     for (const [name, job] of Object.entries(ci.jobs)) {
       for (const step of job.steps ?? []) {
@@ -120,12 +126,90 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
       }
     }
   });
-  it('builds the gate inputs with the root build, which bundles the app and the gate server', () => {
+  it('builds the gate inputs with the CLI bundle options, not a second bundle definition', () => {
     const source = readFileSync(path.join(root, 'scripts/build/build-gate-inputs.mjs'), 'utf8');
+    expect(source).toContain("from '../../services/cli/scripts/bundle-options.mjs'");
     expect(source).toContain("execFileSync('npm', ['run', 'build']");
-    const root_ = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-    expect(root_.scripts.build).toContain('node scripts/build/build-server.mjs dist/server.mjs');
-    expect(ci.jobs.build.steps.filter((step) => step.run === 'npm run build')).toHaveLength(1);
+  });
+  it('builds the app once through the CLI host and still bundles the gate server', () => {
+    const commands = ci.jobs.build.steps.map((step) => step.run);
+    const cli = commands.indexOf('npm run build -w services/cli');
+    const server = commands.indexOf('node scripts/build/build-server.mjs dist/server.mjs');
+    expect(readFileSync(path.join(root, 'services/cli/scripts/build-host.mjs'), 'utf8'))
+      .toContain("'build','-w','services/app'");
+    expect(commands).not.toContain('npm run build');
+    expect(cli).toBeGreaterThan(-1);
+    expect(server).toBeGreaterThan(cli);
+  });
+});
+
+describe('source host compatibility matrix', () => {
+  it('runs source bundle and installed npm package against the ID-first host', () => {
+    const steps = ci.jobs['reference-compatibility'].steps;
+    const candidate = steps.find(step => step.name === 'ID-first conformance for source bundle and installed npm package');
+    expect(candidate?.['working-directory']).toBe('.');
+    expect(candidate?.run).toContain('afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs');
+    expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
+    expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
+    expect(ci.jobs['reference-compatibility'].strategy.matrix.include).toEqual([
+      {proof:'accounts-source-email',cli:'source',credential:''},
+      {proof:'accounts-npm-email',cli:'npm',credential:''},
+      {proof:'accounts-source-oauth',cli:'source',credential:'outbox-oauth'},
+      {proof:'team',cli:'source',credential:''},
+    ]);
+    expect(candidate.if).toBe("matrix.proof != 'team'");
+    expect(candidate.env.CONFORMANCE__CREDENTIAL_SOURCE).toBe('${{ matrix.credential }}');
+    expect(candidate.run.match(/node scripts\/gates\.mjs/g)).toHaveLength(1);
+    expect(candidate.run).not.toMatch(/&|wait_pair|ci_pids/);
+    expect(steps.find(step=>step.name==='Install real package artifacts outside the checkout').if).toBe("matrix.cli == 'npm'");
+
+    expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');
+  });
+});
+
+describe('one immutable npm artifact supplies every release acceptance',()=>{
+  it('packs once, runs the same tarball on every supported OS/runtime, and publishes those bytes',()=>{
+    const pack=ci.jobs['cli-pack'];
+    expect(pack).toBeDefined();
+    expect(pack.permissions).toEqual({contents:'read','id-token':'write',actions:'read'});
+    const signing=pack.steps.find(step=>step.run?.includes('npm-provenance.mjs sign'));
+    expect(signing.if).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(signing.run).not.toContain('GITHUB_SHA=');
+    expect(pack.steps.find(step=>step.with?.name==='afbin-npm-release').with.path).toContain('*.sigstore');
+    expect(pack.steps.some(step=>step.run?.includes('pack:release'))).toBe(true);
+    const matrix=ci.jobs.cli;
+    expect(matrix.needs).toEqual(['plan']);
+    expect(matrix.steps.some(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'))).toBe(true);
+    expect(String(matrix.strategy.matrix.node)).toContain('["22.23.4","24.22.1"]');
+    expect(String(matrix.strategy.matrix.os)).toContain('"windows-2022"');
+    const nodeSetups = matrix.steps.filter(step => step.uses?.startsWith('actions/setup-node@'));
+    expect(nodeSetups).toHaveLength(2);
+    expect(nodeSetups[0].if).toBe("matrix.phase != 'native'");
+    expect(matrix.steps.indexOf(nodeSetups[0])).toBeLessThan(matrix.steps.findIndex(step => step.id === 'install'));
+    expect(nodeSetups[1].with['node-version']).toBe('${{ matrix.node }}');
+    const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
+    expect(install.if).toContain("matrix.phase != 'native'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native' && runner.os != 'Windows'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks on Windows')?.if).toBe("matrix.phase != 'native' && runner.os == 'Windows'");
+    const seed=matrix.steps.find(step=>step.name==="Download and verify this attempt's platform seed");
+    expect(seed?.if).toBeUndefined();
+    expect(seed?.run).toContain('ci-artifact-wait.mjs --extract');
+    expect(seed?.run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+    expect(seed?.run).toContain('npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar');
+    const seedDownload=matrix.steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+    expect(seedDownload).toBeUndefined();
+    expect(matrix.steps.find(step => step.with?.name?.startsWith('npm-local-journey-'))?.if).toBe("failure() && matrix.phase != 'native'");
+    for(const job of ['reference-compatibility']){
+      const download=ci.jobs[job].steps.find(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-release');
+      expect(download,job).toBeDefined();
+    }
+    expect(matrix.steps.some(step=>step.run?.includes('--extract-candidate'))).toBe(true);
+    expect(matrix.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain('--parallel-bootstrap');
+    const release=readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8');
+    expect(release).toContain('npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts');
+    expect(release).toContain('afbin-npm-release');
+    expect(release).not.toContain('afbin-darwin');
+    expect(existsSync(path.join(root,'.github/workflows/cli-runtime.yml'))).toBe(false);
   });
 });
 
@@ -198,7 +282,7 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
   it('scopes a pull request by the push trigger paths and treats anything unreadable as relevant', () => {
     const paths = ['services/app/**', 'package-lock.json', '.github/workflows/page-speed.yml'];
     const pr = { EVENT: 'pull_request', PR_BASE: 'b', PR_HEAD: 'h' };
-    expect(isRelevant(pr, paths, () => ['docs/a.md', 'services/sql/src/x.ts'])).toBe(false);
+    expect(isRelevant(pr, paths, () => ['docs/a.md', 'services/cli/src/x.ts'])).toBe(false);
     expect(isRelevant(pr, paths, () => ['docs/a.md', 'services/app/lib/x.ts'])).toBe(true);
     expect(isRelevant(pr, paths, () => ['package-lock.json'])).toBe(true);
     expect(isRelevant(pr, paths, () => ['services/application/x.ts'])).toBe(false);

@@ -42,7 +42,7 @@ const viewerKey = (viewer: ViewerChoice | undefined): string | undefined =>
  */
 function capacityRefusal(limit: 'server' | 'actor', capacity: SessionCapacity, yours: string[]): BrowserSessionResult {
   const way = yours.length
-    ? `Your open sessions: ${yours.join(', ')}. Close one you are done with (${yours.map(id => `{op:'close',session_id:'${id}'}`).join(' or ')}), then create the new session again.`
+    ? `Your open sessions: ${yours.join(', ')}. Close one you are done with (${yours.map(id => `afbin sessions close ${id}`).join(' or ')}), then create the new session again.`
     : `None of them are yours: wait a minute and create the session again (a session ends when its owner closes it or after ${SESSION_LIMITS.idleMs / 60000} idle minutes).`;
   const error = limit === 'actor'
     ? { code: 'SESSION_ACTOR_CAPACITY', message: `One credential may hold at most ${capacity.sessionsPerActor} browser sessions at once on this server, and you hold ${yours.length}. ${way}` }

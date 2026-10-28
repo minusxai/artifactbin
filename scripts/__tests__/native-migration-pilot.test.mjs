@@ -64,7 +64,7 @@ it('normal publication helper receives the complete declared inline stylesheet c
   const input={bundleFiles:[{path:'index.html',sha256:sha(html)},{path:'assets/theme.css',sha256:sha(css)}]};
   const prepared=await prepareNativePilotSnapshot({prepareBundle,input,bundle,server:'http://localhost:3030'});
   expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies.map(d=>d.path)).toEqual(['assets/theme.css']);
-  const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/lib/component-baseline-evidence.mjs');expect(closure).toContain('scripts/gates/lib/account-connection.mjs');
+  const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/lib/component-baseline-evidence.mjs');expect(closure).toContain('scripts/gates/lib/cli-connection.mjs');
  }finally{await rm(bundle,{recursive:true,force:true});}
 });
 

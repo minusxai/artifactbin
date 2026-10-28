@@ -188,7 +188,7 @@ function braceNotes(count: BraceCount): string[] {
   if (count.collapsed.length) notes.push(`collapsed ${count.collapsed.length} \`${names(count.collapsed)}={{{\` opening${count.collapsed.length === 1 ? '' : 's'}`);
   if (count.strays.length) {
     // Every site says "line N" in full, never "lines 2, 3": the CLI moves a body line onto its FILE
-    // line by rewriting `\bline (\d+)\b` past the YAML fence, and a plural
+    // line by rewriting `\bline (\d+)\b` past the YAML fence (cli/src/validation.ts), and a plural
     // "lines" matches none of it — the notice would name lines that are wrong by the fence's height.
     const lines = count.strays.map((site) => `line ${site.line}`);
     notes.push(`removed ${count.removed} closing brace${count.removed === 1 ? '' : 's'} after \`${names(count.strays.map((site) => site.attr))}={\` on ${lines.join(', ')}`);

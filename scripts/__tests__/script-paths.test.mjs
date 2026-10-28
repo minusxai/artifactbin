@@ -1,7 +1,7 @@
 /**
- * EVERY `scripts/` PATH A WORKFLOW OR A PACKAGE SCRIPT NAMES EXISTS IN THE TREE. Some callers never run
- * on a pull request (main-only jobs, dispatch-only workflows), so a stale path there fails long after the
- * change that broke it; this check fails the fast suite instead.
+ * EVERY `scripts/` PATH A WORKFLOW OR A PACKAGE SCRIPT NAMES EXISTS IN THE TREE. Several callers never run
+ * on a pull request (the CLI matrix, the nightly, dispatch-only release workflows), so a stale path there
+ * fails a release or a nightly long after the change that broke it; this check fails the fast suite instead.
  *
  * THE EXTRACTION RULE, mechanically:
  *   - A reference is a token `[./]*(segment/)*scripts/<rest>` (letters, digits, `_ . / * -`), not preceded by
@@ -123,8 +123,8 @@ function repoOnDisk() {
 describe('the extraction rule', () => {
   const files = [
     'scripts/ci/ci.mjs', 'scripts/lib/ci-elapsed.mjs', 'scripts/ci/npm-acceptance/package-lock.json', 'scripts/fixtures/page-speed/a.html',
-    'scripts/build/build-islands.mjs', 'services/app/scripts/build-server-reader.mjs', 'services/runner/scripts/test-installed-npm.mjs',
-    'services/runner/scripts/generate-teaching.mjs',
+    'scripts/build/build-islands.mjs', 'services/app/scripts/build-server-reader.mjs', 'services/cli/scripts/test-installed-npm.mjs',
+    'services/cli/scripts/generate-teaching.mjs',
   ];
   const workflow = [
     'on:',
@@ -137,7 +137,7 @@ describe('the extraction rule', () => {
     '      # the elapsed summary lives in scripts/lib/ci-elapsed.mjs.',
     '      - run: (cd services/app && node scripts/build-server-reader.mjs && node ../../scripts/build/build-islands.mjs)',
     '      - run: node scripts/test-installed-npm.mjs ${{ hashFiles(\'scripts/ci/npm-acceptance/package-lock.json\') }}',
-    '        working-directory: services/runner',
+    '        working-directory: services/cli',
     '      - run: npm ci --prefix scripts/ci/npm-acceptance && node "$RUNNER_TEMP/scripts/elsewhere.mjs"',
     '      - uses: actions/cache@x',
     '        with:',
@@ -145,7 +145,7 @@ describe('the extraction rule', () => {
     '      - run: node scripts/ci/ci.mjs',
     '',
   ].join('\n');
-  const packages = [{ file: 'services/app/package.json', scripts: { teach: 'node ../runner/scripts/generate-teaching.mjs', islands: 'node ../../scripts/build/build-islands.mjs' } }];
+  const packages = [{ file: 'services/app/package.json', scripts: { teach: 'node ../cli/scripts/generate-teaching.mjs', islands: 'node ../../scripts/build/build-islands.mjs' } }];
 
   it('resolves run text from its working directory and cd, everything else from the root, packages from their directory', () => {
     expect(missingScriptPaths({ files, workflows: [{ file: 'w.yml', text: workflow }], packages })).toEqual({ checked: 11, problems: [] });

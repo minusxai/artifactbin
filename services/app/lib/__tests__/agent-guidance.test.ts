@@ -12,6 +12,7 @@
  * tests pin the ones whose absence produced that page.
  */
 import { describe, it, expect } from 'vitest';
+import { renderDoc } from '@/test/helpers/skill-docs';
 import { COMPUTED_FIGURE_RULE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '@artifactbin/contracts';
 
 describe('the markup field description', () => {
@@ -39,8 +40,8 @@ describe('the markup field description', () => {
     expect(text).toMatch(/<script>: an ES module in the document/);
   });
 
-  it('shows the data vocabulary inline', () => {
-    expect(text).not.toContain('afbin');
+  it('points at the installed local reference', () => {
+    expect(text).toContain('afbin help markup');
     expect(text).toContain('<Import name="d" src="ref:<id>" />');
     expect(text).not.toContain('public.rows');
     // That it never sends an agent to a remote /docs/ page is retired-surfaces.test.ts's row
@@ -82,6 +83,9 @@ describe('figures must be computed, not typed', () => {
     expect(MARKUP_FIELD_GUIDANCE).toContain(COMPUTED_FIGURE_RULE);
   });
 
+  it('and in the component reference, for an agent that fetches docs instead', () => {
+    expect(renderDoc('artifactbin/references/markup-data.md', 'https://example.test')).toContain(COMPUTED_FIGURE_RULE);
+  });
 });
 
 describe('the sheetUrl description', () => {

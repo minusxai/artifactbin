@@ -1,0 +1,59 @@
+import {createHash} from 'node:crypto';
+import {State,HOME_SCOPE} from './state';
+import {remoteStateKey,type RemoteLocalState} from './remote-state';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {join,delimiter} from 'node:path';
+import {configDir,remoteChildEnv,remoteWorkerEnv,remotePermissionEnv} from './config';
+import {HttpClient} from './http';
+import {runRemote} from './runner';
+import {createRemoteContextBridge} from './remote-context-bridge';
+import {REMOTE_CONTEXT_ARG} from './entry-args';
+import {REMOTE_REVIEW_POLICY,remoteArguments} from './remote-context';
+import type {RemoteWorkerInput} from './remote-launch';
+import {releaseClaudeConversationReservation,saveClaudeConversation} from './claude-conversation';
+/** The detached worker owns its terminal; launch credentials exist only in memory. */
+export async function remoteWorkerMain():Promise<void>{
+ const input=await new Promise<RemoteWorkerInput>((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(new Error('Missing remote startup input.')),10000);
+  process.once('message',value=>{clearTimeout(timer);resolve(value as RemoteWorkerInput);});
+ });
+ const controller=new AbortController();let started=false;
+ const parentGone=()=>{if(!started)controller.abort();};process.once('disconnect',parentGone);
+ const phase=(phase:string)=>{if(process.connected)process.send?.({type:'remote-startup',phase});};
+ phase('private-state');
+ const state=await State.open(input.home);
+ // State.open protects this parent. mkdtemp creates a fresh 0700 child on Unix and inherits its
+ // private ACL on Windows, avoiding a second PowerShell launch for a redundant nested boundary.
+ let directory:string;
+ try{phase('context');directory=await mkdtemp(join(configDir(input.home),'remote-context-'));}catch(error){state.close();throw error;}
+ let stateKey:string|undefined;let exitCode=1;let bridge:Awaited<ReturnType<typeof createRemoteContextBridge>>|undefined;
+ const stopTimer=setInterval(()=>{if(stateKey&&state.get<RemoteLocalState>(HOME_SCOPE,'remote-agent',stateKey)?.value.stopRequested)controller.abort();},500);
+ try{
+  // Use this CLI build from the helper, even when a different afbin is installed globally.
+  const invocation=[process.execPath,...process.execArgv,process.argv[1]!];
+  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+  const client=new HttpClient({connection:input.connection,home:input.home});
+  phase('relay');
+  const code=await runRemote({client,command:input.command,args:input.args,name:input.name,cwd:input.cwd,interactive:false,managed:true,commentCommand:join(directory,'afbin'),signal:controller.signal,
+   prepare:async session=>{
+    if(process.platform!=='win32')bridge=await createRemoteContextBridge({id:session.id,proof:session.runnerKey,home:configDir(input.home),server:client.connection.server,connection:client.connection});
+    await writeFile(join(directory,'afbin'),`#!/bin/sh\nexec ${(bridge?[...invocation,REMOTE_CONTEXT_ARG,bridge.path,session.id]:invocation).map(quote).join(' ')} "$@"\n`,{mode:0o700});
+    const context=join(directory,'context.md');
+    await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nThe exact CLI executable for this session is ${JSON.stringify(join(directory,'afbin'))}. Use this absolute executable for EVERY afbin command in this policy; login shells can replace PATH.\n\nAfter reading this context, run: ${quote(join(directory,'afbin'))} remote --ready ${session.id}\nIf the command reports remote_context_blocked, use your harness’s existing approval flow to request approval for that exact command and retry after approval; do not change sandbox, shell environment policy, or permissions. If approvals are unavailable or denied, report the block and wait for the operator. Then wait for tagged comments. If the operator enters a manual terminal task, run that readiness command again only after the manual task is finished and no approval is pending.\n\n## Handoff (context)\n${input.history??'No additional history supplied.'}\n`,{mode:0o600});
+    return {args:remoteArguments(input.command,input.args,`Read the private handoff at ${JSON.stringify(context)} and follow its remote-review workflow. Do not edit anything until a tagged request arrives.`),env:remotePermissionEnv(input.command,remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,client.connection)))};
+   },
+   onStarted:session=>{stateKey=remoteStateKey(client.connection.server,session.id);state.transaction(()=>{state.put(HOME_SCOPE,'remote-agent',stateKey!,{id:session.id,server:client.connection.server,pid:process.pid,directory,historyDigest:createHash('sha256').update(input.history??'').digest('hex'),stopRequested:false} satisfies RemoteLocalState);if(input.conversation)saveClaudeConversation(state,client.connection.server,session.id,input.conversation);if(input.resumeReservation)releaseClaudeConversationReservation(state,input.resumeReservation);});started=true;process.send?.({id:session.id,name:input.name,url:`${client.connection.server}/chat?session=${session.id}`,status:'starting',pid:process.pid});},
+  });
+  exitCode=code;process.exitCode=code;
+ }catch(error){
+  if(process.connected)process.send?.({error:error instanceof Error?error.message:'Remote startup failed'});
+  process.exitCode=1;
+ }finally{
+  clearInterval(stopTimer);
+  try{await bridge?.close();}finally{
+  if(stateKey){const record=state.get<RemoteLocalState>(HOME_SCOPE,'remote-agent',stateKey);if(record)state.put(HOME_SCOPE,'remote-agent',stateKey,{...record.value,exitCode});}
+  state.close();
+  process.off('disconnect',parentGone);if(process.connected)process.disconnect();await rm(directory,{recursive:true,force:true});
+  }
+ }
+}

@@ -1,12 +1,195 @@
-/** The shared CI artifact waiter (scripts/lib/ci-artifact-wait.mjs), which the server repository's CI imports. */
+/** Required checks consume the package they prove without redundant serial acceptance. */
 import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync,existsSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
+import yaml from 'yaml';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {gzipSync} from 'node:zlib';
+import {planCi} from '../lib/ci-plan.mjs';
 import {createHash} from 'node:crypto';
+const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
+describe('release critical path',()=>{
+ it('runs Intel preview/export through the supported-platform experience proof once',()=>{
+  const jobs=workflow().jobs;
+  expect(jobs['cli-preview']).toBeUndefined();
+  expect(jobs.cli.steps.some(step=>step.run?.includes('test-installed-npm.mjs ${{ matrix.phase }}'))).toBe(true);
+ });
+ it('starts ID-first conformance from the packed candidate instead of waiting on unrelated native proofs',()=>{
+  const job=workflow().jobs['reference-compatibility'];
+  // Prepares beside cli-pack and waits for exactly this attempt's two artifacts through the shared waiter.
+  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
+  const wait=job.steps.findIndex(step=>step.name==="Wait for this attempt's packed candidate and source build");
+  for(const name of ['afbin-npm-release','afbin-reference-build']){
+   expect(job.steps[wait].run).toContain(`ci-artifact-wait.mjs --wait-only "\${{ github.repository }}" "\${{ github.run_id }}" "\${{ github.run_attempt }}" ${name}`);
+   expect(job.steps.findIndex(step=>step.with?.name===name)).toBeGreaterThan(wait);
+  }
+  expect(job.steps[wait].env.GH_TOKEN).toBe('${{ github.token }}');
+  expect(job.steps.findIndex(step=>step.name==='Prepare standalone sandbox worker')).toBeLessThan(wait);
+  const pack=workflow().jobs['cli-pack'].steps,reference=pack.findIndex(step=>step.with?.name==='afbin-reference-build');
+  // Seeds first: every native consumer installs from one; the reference proofs have the longer slack.
+  expect(reference).toBeGreaterThan(pack.findIndex(step=>step.with?.name==='afbin-npm-dependency-seed-macOS-ARM64'));
+  expect(reference).toBe(pack.length-1);
+  expect(job.needs).not.toContain('cli');
+  expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(true);
+ });
+});
+
+it('supplies ordinary composition the cached exact-tree universal package before pruning the host',()=>{
+ const jobs=workflow().jobs,steps=jobs.build.steps;
+ const pack=steps.findIndex(step=>step.run?.includes('pack:release'));
+ const prune=steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
+ const upload=steps.find(step=>step.with?.name==='afbin-npm-packages');
+ expect(pack).toBeGreaterThan(steps.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
+ expect(prune).toBeGreaterThan(pack);
+ expect(steps[pack].run).toContain('dist/npm-candidate');
+ expect(upload.with.path).toBe('dist/npm-candidate/*.tgz');
+ expect(upload.if).toBe("needs.plan.outputs.cli-pack != 'true'");
+ expect(steps[pack].if).toContain("needs.plan.outputs.cli-pack != 'true'");
+ const cache=steps.find(step=>step.id==='build-cache');
+ expect(cache.with.path).toMatch(/^dist$/m);
+ expect(cache.with.key).toContain('app-build-v4-');
+ expect(cache.with.key).toContain('needs.plan.outputs.cli-pack');
+ expect(jobs['reference-compatibility'].steps.find(step=>step.with?.name==='afbin-npm-packages')).toBeUndefined();
+ const release=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-packages');
+ expect(release.with.path).toBe('services/cli/dist/packages/*.tgz');
+ expect(release.if).toBeUndefined();
+});
+it('selects exactly one package producer for ordinary, company-only and CLI changes',()=>{
+ const jobs=workflow().jobs;
+ const ordinaryUpload=jobs.build.steps.find(step=>step.with?.name==='afbin-npm-packages');
+ expect(ordinaryUpload.if).toBe("needs.plan.outputs.cli-pack != 'true'");
+ expect(jobs['cli-pack'].if).toBe("needs.plan.outputs.cli-pack == 'true'");
+ for(const path of ['services/app/solid/index.tsx','deploy/company/backup.sh','services/cli/src/index.ts']) {
+  const plan=planCi([path],{cliRelease:path.startsWith('services/cli/')});
+  const owners=[plan.jobs.build && !plan.cliPack,plan.cliPack].filter(Boolean);
+  expect(owners, path).toHaveLength(1);
+ }
+ const company=planCi(['deploy/company/backup.sh']);
+ expect(company.companyContainer).toBe(true);
+ expect(company.cliRelease).toBe(false);
+ expect(company.cliPack).toBe(true);
+ const cacheKey=jobs.build.steps.find(step=>step.id==='build-cache').with.key;
+ expect(jobs.gates.steps.find(step=>step.id==='build-cache').with.key).toBe(cacheKey);
+});
+it('does not compile the app twice or repeat email-source conformance in the reference proof',()=>{
+ const steps=workflow().jobs['reference-compatibility'].steps;
+ expect(steps.find(step=>step.name==='Build OSS host').run).toBe('node scripts/build/build-server.mjs dist/server.mjs');
+ const command=steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').run;
+ expect(command.match(/node scripts\/gates\.mjs/g)).toHaveLength(1);
+ expect(command).not.toContain('wait_pair');
+ expect(steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').env.CONFORMANCE__CREDENTIAL_SOURCE).toBe('${{ matrix.credential }}');
+});
+it('warms the complete ordinary package cache without a nonexistent plan dependency',()=>{
+ const job=workflow().jobs['warm-caches'];
+ expect(job.needs).toBeUndefined();
+ const cache=job.steps.find(step=>step.id==='build-cache');
+ expect(cache.with.key).not.toContain('needs.');
+ expect(cache.with.key).toMatch(/-npm-false-pack-false$/);
+ const pack=job.steps.findIndex(step=>step.run?.includes('pack:release'));
+ const prune=job.steps.findIndex(step=>step.run?.includes('rm -rf services/cli/dist/runtime'));
+ expect(pack).toBeGreaterThan(job.steps.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
+ expect(prune).toBeGreaterThan(pack);
+ expect(job.steps[pack].run).toContain('dist/npm-candidate');
+});
+it('requires one isolated cold Windows bootstrap whenever the native CLI matrix is selected',()=>{
+ const jobs=workflow().jobs,job=jobs['cli-bootstrap'];
+ expect(job).toBeDefined();
+ expect(job.needs).toEqual(['plan']);
+ expect(job.if).toBe("needs.plan.outputs.cli-bootstrap == 'true'");
+ expect(job['runs-on']).toBe('windows-2022');
+ expect(job.strategy).toBeUndefined();
+ expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(false);
+ const proof=job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
+ expect(proof.shell).toBe('powershell');expect(proof.run).toContain('-WaitForArtifact');
+ expect(jobs.test.needs).toContain('cli-bootstrap');
+ expect(jobs['notify-consumer'].needs).toContain('cli-bootstrap');
+ expect(jobs.cli.steps.find(step=>step.name==='Same-tarball native npm and warmed offline acceptance').run).toContain("runner.os != 'Windows'");
+});
+
+it('keeps published Windows installer checks outside the required PR chain',()=>{
+ const release=yaml.parse(readFileSync(new URL('../../.github/workflows/windows-install-smoke.yml',import.meta.url),'utf8'));
+ expect(release.on).toEqual({workflow_dispatch:{inputs:{version:{description:'Expected published latest CLI version',required:true,type:'string'}}}});
+ expect(Object.keys(release.jobs)).toEqual(['install']);
+ expect(release.jobs.install['runs-on']).toBe('windows-2022');
+ expect(release.jobs.install['timeout-minutes']).toBeLessThanOrEqual(7);
+ const proof=release.jobs.install.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1'));
+ expect(proof.run).toContain('-PublishedVersion $env:EXPECTED_VERSION');
+ expect(proof.env.EXPECTED_VERSION).toBe('${{ inputs.version }}');
+});
+it('restores normalized tooling and content-verified reader builds before release packing',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps;
+ const install=pack.find(step=>step.id==='install'),reference=jobs['reference-compatibility'].steps.find(step=>step.id==='install');
+ expect(install?.with).toEqual(reference.with);
+ expect(pack.find(step=>step.run==='npm ci')?.if).toBe("steps.install.outputs.cache-hit != 'true'");
+ const reader=pack.find(step=>step.id==='test-builds');
+ expect(reader?.with.path).toContain('node_modules/.cache/build-islands.json');
+ expect(pack.indexOf(reader)).toBeLessThan(pack.findIndex(step=>step.run?.includes('npm run build -w services/cli')));
+});
+it('hands the source build from the current pack run to reference proof without recompiling',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps,reference=jobs['reference-compatibility'].steps;
+ const archive=pack.find(step=>step.name==='Archive the source build for reference conformance');
+ expect(archive?.run).toContain('services/cli/dist');
+ expect(archive?.run).toContain('services/app/lib/build-assets');
+ const upload=pack.find(step=>step.with?.name==='afbin-reference-build');
+ const download=reference.find(step=>step.with?.name==='afbin-reference-build');
+ expect(upload?.with.path).toBe('afbin-reference-build.tar');
+ expect(download?.with['run-id']).toBeUndefined();
+ expect(download?.with.path).toBe('.');
+ expect(reference.some(step=>step.run?.includes('npm run build -w services/cli'))).toBe(false);
+ expect(reference.some(step=>step.run==='tar -xf afbin-reference-build.tar')).toBe(true);
+ expect(pack.indexOf(archive)).toBeGreaterThan(pack.findIndex(step=>step.run==='npm run pack:release -w services/cli'));
+});
+it('splits independent credential and database host proofs into required parallel lanes',()=>{
+ const job=workflow().jobs['reference-compatibility'];
+ expect(job.strategy?.matrix.include.map(({proof})=>proof)).toEqual(['accounts-source-email','accounts-npm-email','accounts-source-oauth','team']);
+ expect(job.steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').if).toBe("matrix.proof != 'team'");
+ expect(job.steps.find(step=>step.name==='Team hosts with isolated PGLite and PostgreSQL').if).toBe("matrix.proof == 'team'");
+ expect(job.strategy['fail-fast']).toBe(false);
+});
+it('separates CPU-heavy installed proofs while retaining every platform journey',()=>{
+ const job=workflow().jobs.cli;
+ const proofs=job.steps.filter(step=>step.run?.includes('test-installed-npm.mjs'));
+ expect(proofs.map(step=>step.if)).toEqual(["matrix.phase == 'runtime'","matrix.phase == 'preview' || matrix.phase == 'local'"]);
+ expect(proofs[0].run).toContain('test-installed-npm.mjs runtime');
+ expect(proofs[1].run).toContain('test-installed-npm.mjs ${{ matrix.phase }}');
+});
+
+it('overlaps the same standard-user bootstrap with pack instead of waiting to create the user',()=>{
+ const job=workflow().jobs['cli-bootstrap'];
+ expect(job.needs).toEqual(['plan']);
+ expect(job.permissions.actions).toBe('read');
+ expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(false);
+ expect(job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1')).run).toContain('-WaitForArtifact');
+ const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
+ // The package is awaited (and fetched) from before the standard-user probes; the child starts before it is needed.
+ expect(source.indexOf("$waiter=Start-Process node -ArgumentList @('scripts/lib/ci-artifact-wait.mjs'")).toBeLessThan(source.indexOf('foreach($expected in @(0,7))'));
+ expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('$waiter.WaitForExit()'));
+ expect(source.indexOf("$phase='wait for exact current-run candidate'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
+ // A child can fail before the package arrives; preserve its cause before parent cleanup.
+ const early=source.match(/if\(\$waiter\.ExitCode -ne 0\)\{([^}]*Waiting for exact current-run package failed[^}]*)\}/)?.[1];
+ expect(early).toBeDefined();
+ expect(early.indexOf('Write-StandardFailure')).toBeGreaterThanOrEqual(0);
+ expect(early.indexOf('Write-StandardFailure')).toBeLessThan(early.indexOf('throw'));
+ const diagnostics=source.slice(source.indexOf('function Write-StandardFailure'),source.indexOf('function Wait-StandardExit'));
+ for(const file of ['failed.json','bootstrap.stdout','bootstrap.stderr'])expect(diagnostics).toContain(file);
+ expect(diagnostics).toContain('-Tail 60');expect(diagnostics).toContain('Substring(0,8192)');
+ expect(diagnostics).toContain('$password,$env:GH_TOKEN');expect(diagnostics).toContain(".Replace($secret,'[redacted]')");
+ expect(source).toContain("$env:npm_config_timing='true'");
+ expect(source).toContain('phase-state.json');expect(source).toContain('phase-events.jsonl');expect(source).toContain('phase-heartbeat.txt');
+ expect(source).toContain('function Write-NpmTimingTail');expect(source).toContain('npm-consumer-args.mjs');
+ expect(source).toContain('diagnostic-timings');expect(source).not.toContain("-Filter '*-debug-0.log'");
+ expect(source.indexOf("Write-PhaseEvent 'running'")).toBeLessThan(source.indexOf('$output=& $Command @Arguments 2>&1'));
+ expect(source).toContain("Write-PhaseEvent 'complete'");
+ expect(source).toContain('Standard-user phase still running:');
+ const upload=job.steps.find(step=>step.name==='Upload Windows bootstrap diagnostics');
+ expect(upload?.if).toBe('always()');
+ expect(upload?.uses).toMatch(/^actions\/upload-artifact@/);
+ expect(upload?.with.path).toBe('services/cli/test-results/windows-bootstrap/');
+ expect(upload?.with['if-no-files-found']).toBe('ignore');
+
+});
 it('waits only for current-attempt artifacts and fails on packaging failures or deadline',async()=>{
  const {waitForCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
  let time=0,calls=0;
@@ -113,6 +296,18 @@ it('binds optional candidate sidecars to the exact package bytes, source, and ru
  expect(()=>validateCandidateProvenance({bundle,metadata:{run_id:run,source_sha:sha},version,bytes:Buffer.from('changed'),run,sha})).toThrow(/subject/);
 });
 
+it('keeps native terminal acceptance strict while exposing bounded startup diagnostics',()=>{
+ const source=readFileSync(new URL('../../services/cli/scripts/test-npm-terminal.mjs',import.meta.url),'utf8');
+ expect(source).toContain('registrationReceived');
+ expect(source).toContain('startupReceipt');
+ expect(source).toContain('exchangeCount');
+ expect(source).toContain('workerSpawned');
+ expect(source).toContain('workerDisconnected');
+ expect(source).toContain("nativeReady ||= output.includes('NATIVE_READY')");
+ expect(source).toContain('.slice(-2000)');
+ expect(source).toContain('},20000)');
+});
+
 it('downloads a specifically named artifact only from the current attempt and verifies its archive',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-named-artifact-'));
  const calls=join(directory,'calls'),gh=join(directory,'gh'),output=join(directory,'seed.zip'),badOutput=join(directory,'bad-seed.zip'),failure=join(directory,'failed.json');
@@ -135,6 +330,55 @@ const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
+it('releases the signed candidate before seed uploads and uses one verified transfer for every platform seed',()=>{
+ const jobs=workflow().jobs,pack=jobs['cli-pack'].steps;
+ const candidate=pack.findIndex(step=>step.with?.name==='afbin-npm-release');
+ const seeds=pack.map((step,index)=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')?index:-1).filter(index=>index>=0);
+ expect(seeds).toHaveLength(5);
+ for(const index of seeds)expect(candidate).toBeLessThan(index);
+ const steps=jobs.cli.steps,download=steps.find(step=>step.name==="Download and verify this attempt's platform seed");
+ expect(download).toBeDefined();expect(download.if).toBeUndefined();
+ expect(download.run).toContain('afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}');
+ expect(download.run).toContain('--extract');
+ expect(steps.some(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}')).toBe(false);
+});
+
+it('prepares consumer prerequisites beside the candidate wait and the candidate install',()=>{
+ const job=workflow().jobs.cli,steps=job.steps;
+ expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
+ const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'));
+ expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
+ // The seed downloads in the background from before the wait and is collected after the candidate.
+ const seed=steps.findIndex(step=>step.name==="Download and verify this attempt's platform seed");
+ expect(seed).toBeLessThan(waiting);expect(steps[seed].run).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &\n$/);
+ const seedWait=steps.findIndex(step=>step.name==="Wait for this attempt's platform seed");
+ expect(seedWait).toBeGreaterThan(waiting);
+ expect(seedWait).toBeLessThan(steps.findIndex(step=>step.name==='Same-tarball native npm and warmed offline acceptance'));
+ // The experience install runs in the background while the browser and its libraries restore, awaited before use.
+ const install=steps.findIndex(step=>step.name==='Install the same candidate for experience checks');
+ const installWait=steps.findIndex(step=>step.name==='Wait for the candidate install');
+ expect(install).toBeGreaterThan(seedWait);
+ for(const id of ['acceptance-browser','acceptance-apt'])expect(steps.findIndex(step=>step.id===id)).toBeGreaterThan(install);
+ expect(installWait).toBeGreaterThan(steps.findIndex(step=>step.name==='Install Linux acceptance browser dependencies'));
+ expect(installWait).toBeLessThan(steps.findIndex(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations'));
+ expect(steps[installWait].if).toBe("matrix.phase != 'native' && runner.os != 'Windows'");
+ expect(steps[install].run).toContain('( set +e; npm run test:npm-package');
+ const windows=steps.find(step=>step.name==='Install the same candidate for experience checks on Windows');
+ expect(windows.if).toBe("matrix.phase != 'native' && runner.os == 'Windows'");expect(windows.shell).toBeUndefined();
+ expect(windows.run).toBe(steps[install].run.slice(steps[install].run.indexOf('npm run'),steps[install].run.indexOf(' > "$RUNNER_TEMP')));
+ expect(steps[installWait].run).toContain('exit "$(cat "$RUNNER_TEMP/candidate-install.status")"');
+ expect(steps[waiting].run).toContain('--wait-only');
+ expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
+ const candidate=steps.findIndex(step=>step.name==='Download the verified exact-version CLI candidate');
+ expect(candidate).toBeGreaterThan(waiting);
+ expect(steps[candidate].shell).toBe('bash');
+ expect(steps[candidate].env.GH_TOKEN).toBe('${{ github.token }}');
+ expect(steps[candidate].env.SOURCE_SHA).toBe('${{ github.sha }}');
+ expect(steps[candidate].env.REQUIRE_SIGNED_CANDIDATE).toContain('github.repository');
+ expect(steps[candidate].run).toContain('--extract-candidate');
+ expect(steps[candidate].run).toContain('$SOURCE_SHA');
+ expect(steps[candidate].run).toContain('$REQUIRE_SIGNED_CANDIDATE');
+});
 it('wait-only CLI checks exact attempt and accepts readiness without downloading a duplicate zip',()=>{
  const directory=mkdtempSync(join(tmpdir(),'afbin-wait-only-'));
  const calls=join(directory,'calls');
@@ -147,6 +391,15 @@ const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.
   expect(result.status,result.stderr).toBe(0);expect(result.stdout).toContain('Ready');
   const requested=readFileSync(calls,'utf8');expect(requested).toContain('/runs/100/attempts/2');expect(requested).not.toContain('/zip');
  }finally{rmSync(directory,{recursive:true,force:true});}
+});
+
+it('builds pack-only candidates without preparing or uploading unused native download seeds',()=>{
+ const steps=workflow().jobs['cli-pack'].steps;
+ const selected=steps.filter(step=>step.run?.includes('prepare-seed')||step.run?.includes('pack-seeds')||step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
+ expect(selected).toHaveLength(7);expect(selected.every(step=>step.if.startsWith("needs.plan.outputs.cli == 'true'"))).toBe(true);
+ expect(steps.find(step=>step.run==='npm run build -w services/cli').if).toBe("needs.plan.outputs.cli != 'true'");
+ expect(steps.find(step=>step.run==='npm run pack:release -w services/cli').if).toBeUndefined();
+ expect(steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
 });
 
 it('reuses current-attempt waiting for prepared CLI packages without accepting other producers or stale artifacts',async()=>{

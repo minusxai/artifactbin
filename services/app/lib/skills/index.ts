@@ -1,6 +1,8 @@
 /**
- * The skill folder (`skills/artifactbin/`): `SKILL.md` (the brief) and `references/*.md`. The server
- * serves them at /llms.txt and /llms/<topic> and packs them into the skill zip.
+ * Build-only authoring sources. The skill folder (`skills/artifactbin/`) is
+ * ONE co-located set: `SKILL.md` (the brief), `example.jsx` (the complete
+ * commented document the brief inlines), and `references/*.md`. The CLI's teaching
+ * compiler renders the brief and the references into its bundle; the server projects the same root and references onto its origin.
  */
 import {buildSkillTree,loadSkillSources,type SkillTree} from './tree';
 export * from './tree';

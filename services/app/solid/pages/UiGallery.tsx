@@ -259,7 +259,7 @@ export default function UiGallery(): JSX.Element {
             <Show when={files().length}><p class="mt-2 text-xs text-muted">Chose {files().join(', ')}</p></Show>
           </Panel>
         </div>
-        <Row label="identity"><span class="size-8"><Avatar image={null} initial="A" userId="alice" size={32} /></span><CopyBlock class="min-w-0 flex-1" label="Copy command" text="node scripts/publish.mjs page.html" /></Row>
+        <Row label="identity"><span class="size-8"><Avatar image={null} initial="A" userId="alice" size={32} /></span><CopyBlock class="min-w-0 flex-1" label="Copy command" text="npm run afbin -- publish page.html" /></Row>
       </Section>
     </div>
 

@@ -8,7 +8,7 @@
  *   node scripts/ci/test-timings.mjs --sums              # print each shard's packed load from the table
  *
  * Files a log does not mention keep their recorded time. No shard carries work outside Vitest (the integration
- * project is a job of its own), so the table holds file times and nothing else.
+ * project and the CLI source suite are jobs of their own), so the table holds file times and nothing else.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';

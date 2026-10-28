@@ -16,7 +16,8 @@
  * worktree's source — tracked and untracked, not ignored: what a checkout of the working tree would
  * hold — is copied from a read-only mount into the container's own `/work`; the dependencies come
  * from a named volume keyed like CI's install cache (`npm ci` on the first run, a copy afterwards);
- * then CI's gate build (scripts/build/build-gate-inputs.mjs: the app and `dist/server.mjs`), restored instead from
+ * then CI's gate build (scripts/build/build-gate-inputs.mjs: the app, `dist/server.mjs` and the CLI
+ * bundle — not the CLI's declarations and host runtime, which no gate reads), restored instead from
  * the `afbin-gate-builds` volume when the build inputs have not changed since it last ran
  * (lib/gate-container.mjs `buildCacheKey`); then `node scripts/gates.mjs --servers=N --only=<gates>`
  * against production servers in the container's own network namespace, with a delegated cgroup and
@@ -128,6 +129,7 @@ async function host({ cpus, memory, servers, gates }) {
     volume = depsVolume({
       lock: normalisedLock(lockText),
       copyAssets: readFileSync(path.join(ROOT, 'services/app/scripts/copy-assets.mjs'), 'utf8'),
+      preparePty: readFileSync(path.join(ROOT, 'services/cli/scripts/prepare-pty.mjs'), 'utf8'),
       image: tag,
     });
     for (const name of [volume, BUILD_VOLUME]) {

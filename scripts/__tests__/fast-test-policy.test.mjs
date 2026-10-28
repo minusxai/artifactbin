@@ -33,6 +33,11 @@ describe('full-suite ownership', () => {
     expect(() => assertFullTestCoverage(['retained.test.ts', 'new.test.mjs'], ['retained.test.ts'])).toThrow('new.test.mjs');
     expect(() => assertFullTestCoverage(['heavy.test.ts'], [])).toThrow('heavy.test.ts');
   });
+  it('recognizes the native CLI runner exactly, without hiding nested or differently named tests', () => {
+    expect(() => assertFullTestCoverage(['services/cli/test/auth.test.ts'], [])).not.toThrow();
+    expect(() => assertFullTestCoverage(['services/cli/test/nested/auth.test.ts'], [])).toThrow();
+    expect(() => assertFullTestCoverage(['services/cli/test/auth.test.mjs'], [])).toThrow();
+  });
 });
 
 describe('reviewed GraphQL resolver dispatch', () => {

@@ -1,0 +1,157 @@
+import {isProgramFile,programFileBytes} from './program-file';
+import {findLocalWorkspace,workspaceCandidates,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
+/**
+ * A workspace is a directory the CLI has registered in its own store. No file is
+ * ever written into it to mark it: discovery walks up from the working directory, within the
+ * bounds of `workspaceCandidates`, and stops at the nearest ancestor that holds a `workspace` record.
+ *
+ * Tracking is hashes, not bytes. `TrackedFile.file` is the sha256 of the local
+ * bytes last accepted, and the base text a diff or a merge needs is derived from
+ * the server snapshot by `baselineOf`.
+ */
+import {realpath} from 'node:fs/promises';
+import {dirname,extname,relative,resolve,sep} from 'node:path';
+import {ARTIFACT_ID_PATTERN,type ArtifactResourceFile} from '@artifactbin/contracts';
+import {homedir} from 'node:os';
+import {normalizeServer} from './config';
+import {CliError} from './commands';
+import {parseDocument,writeDocument,type LocalDocument,type DocumentMetadata} from './document';
+import {digest,readOptional} from './files';
+import {confinedPath} from './journal';
+import {readState,stateFor} from './state-access';
+import type {State} from './state';
+import {snapshotDocument} from './local';
+import {parseResourceFile,readResourceSource,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
+export interface Snapshot {id:string;version:number;edit_id:string;state:string;markup?:string;format?:string;title?:string|null;theme?:string|null;template?:string|null;visibility?:DocumentMetadata['visibility'];link_role?:DocumentMetadata['link'];parent_id?:string|null;[key:string]:unknown}
+/** `file` is the sha256 of the accepted base representation: what the server holds, as it lands locally. */
+export interface TrackedFile {source?:ResourceSource;id:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>}
+export interface WorkspaceTracking {server:string;account:string;files:Record<string,TrackedFile>}
+export interface Workspace {virtualFiles?:Record<string,Buffer>;home:string;root:string;cwd:string;tracking:WorkspaceTracking|null}
+export interface LocalFile {path:string;bytes:Buffer|null;document?:LocalDocument;resource?:ArtifactResourceFile;tracked?:TrackedFile;renamedFrom?:string;status:'new'|'unchanged'|'modified'|'missing'|'renamed'}
+
+/** The workspace record every tracked scope carries: which server and account own it. */
+interface WorkspaceRecord {server:string;account:string}
+interface TrackingUpdate {server:string;account:string;set?:Record<string,TrackedFile>;remove?:string[]}
+/** Synchronous by design: the caller runs it inside one `state.transaction`. */
+export function writeTracking(state:State,root:string,update:TrackingUpdate):void{
+ state.put(root,'workspace',root,{server:normalizeServer(update.server),account:update.account} satisfies WorkspaceRecord);
+ // One path owns an identity: a path that stops tracking, or loses its id to another path, keeps no draft row for it.
+ const taken=new Map(Object.entries(update.set??{}).map(([path,entry])=>[entry.id,path]));
+ for(const path of update.remove??[]){state.delete(root,'tracked',path);state.delete(root,'draft-identity',path);}
+ for(const row of state.list<{id:string}>(root,'draft-identity'))if(taken.has(row.value.id)&&taken.get(row.value.id)!==row.key)state.delete(root,'draft-identity',row.key);
+ for(const [path,entry] of Object.entries(update.set??{}))state.put(root,'tracked',path,entry);
+ if(root!==LOCAL_WORKSPACE_SCOPE)state.put(root,'archive','tracking-mirror/current',{server:normalizeServer(update.server),account:update.account});
+}
+/** Write tracking on its own, when no file change accompanies it. */
+export async function saveTracking(workspace:Workspace,update:TrackingUpdate):Promise<void>{
+ const state=await stateFor(workspace.home);
+ state.transaction(()=>writeTracking(state,workspace.root,{...update}));
+ await mirrorTracking(state,workspace.root,await readLocalWorkspaceState(workspace.root));
+}
+
+/** A durable home intent makes cross-store tracking synchronization replayable. */
+async function mirrorTracking(home:State,root:string,portable:State|null):Promise<void>{
+ const intent=home.get<WorkspaceRecord>(root,'archive','tracking-mirror/current')?.value;if(!intent||!portable)return;
+ portable.transaction(()=>{
+  for(const row of portable.list(LOCAL_WORKSPACE_SCOPE,'tracked'))portable.delete(LOCAL_WORKSPACE_SCOPE,'tracked',row.key);
+  const files=Object.fromEntries(home.list<TrackedFile>(root,'tracked').map(row=>[row.key,row.value]));
+  writeTracking(portable,LOCAL_WORKSPACE_SCOPE,{...intent,set:files});
+ });
+ home.delete(root,'archive','tracking-mirror/current');
+}
+
+const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+/** Discovery is the nearest registered ancestor of the working directory, else the directory itself. */
+export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
+ cwd=await realpath(cwd);
+ const state=await readState(home);
+ const candidates=await workspaceCandidates(cwd,home);
+ const portableRoot=await findLocalWorkspace(cwd,home);
+ const portable=portableRoot?await readLocalWorkspaceState(portableRoot):null;
+ const portableIntent=portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current')?.value;
+ if(state&&portable&&portableRoot&&portableIntent){
+  const target=state,files=Object.fromEntries(portable.list<TrackedFile>(LOCAL_WORKSPACE_SCOPE,'tracked').map(row=>[row.key,row.value]));
+  target.transaction(()=>{
+   for(const row of target.list(portableRoot,'tracked'))target.delete(portableRoot,'tracked',row.key);
+   writeTracking(target,portableRoot,{...portableIntent,set:files});target.delete(portableRoot,'archive','tracking-mirror/current');
+  });
+  portable.delete(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current');
+ }
+ const activeState=state??(portableIntent?await readState(home):null);
+ const legacy=activeState?.nearestWorkspace<WorkspaceRecord>(candidates);
+ if(state&&portable&&legacy?.root===portableRoot)await mirrorTracking(state,legacy.root,portable);
+ const found=legacy&&(!portableRoot||legacy.root===portableRoot)?legacy:portableRoot&&portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?{root:portableRoot,value:portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)!.value}:null;
+ if(state&&portable&&legacy?.root===portableRoot&&!portable.list(LOCAL_WORKSPACE_SCOPE,'archive').some(row=>row.key.startsWith('publication-finalize/')||row.key==='workspace-rebind/current')){
+  const pin=portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?.value;
+  const local=Object.fromEntries(portable.list<TrackedFile>(LOCAL_WORKSPACE_SCOPE,'tracked').map(row=>[row.key,row.value]));
+  const cached=Object.fromEntries(state.list<TrackedFile>(legacy.root,'tracked').map(row=>[row.key,row.value]));
+  if(pin&&(pin.server!==legacy.value.server||pin.account!==legacy.value.account||JSON.stringify(local)!==JSON.stringify(cached)))throw new CliError('tracking_divergence','Home and portable authoring baselines disagree.','Preserve both stores; finish any interrupted push or explicit workspace rebind before proceeding.',{home_store:state.path,portable_store:portable.path,workspace_root:portableRoot},3);
+ }
+ if(!found)return{home,root:portableRoot??cwd,cwd,tracking:null};
+ const {root,value}=found;
+ const trackingStore=legacy===found?activeState!:portable!;
+ const trackingScope=legacy===found?root:LOCAL_WORKSPACE_SCOPE;
+ if(typeof value?.server!=='string'||typeof value.account!=='string')throw new CliError('invalid_tracking','The stored workspace record is incomplete.','Run afbin pull to re-establish tracking for this directory.');
+ normalizeServer(value.server);
+ const files:Record<string,TrackedFile>={};const ids=new Set<string>();
+ for(const record of trackingStore.list<TrackedFile>(trackingScope,'tracked')){
+  const entry=record.value;
+  await confinedPath(root,record.key);
+  if(!entry||!ARTIFACT_ID_PATTERN.test(entry.id)||ids.has(entry.id)||!hash(entry.file)||entry.snapshot?.id!==entry.id||!Number.isSafeInteger(entry.snapshot.version)||entry.snapshot.version<1||!entry.snapshot.edit_id||!hash(entry.snapshot.state))throw new CliError('invalid_tracking',`Invalid tracking entry for ${record.key}.`);
+  ids.add(entry.id);files[record.key]=entry;
+ }
+ return{home,root,cwd,tracking:{server:value.server,account:value.account,files}};
+}
+
+const RESOURCE_TYPES:Record<string,string>={markup:'artifact',program:'artifact',folder:'folder',dataset:'dataset'};
+/**
+ * The accepted base text for a tracked file, derived from the snapshot rather
+ * than stored beside it. Binaries have none: they are compared by hash alone.
+ */
+export async function baselineOf(_workspace:Workspace,path:string,tracked:TrackedFile):Promise<Buffer|null>{
+ if(isProgramFile(path)&&tracked.snapshot.program!==undefined)return programFileBytes((tracked.selected??tracked.snapshot).program);
+ const extension=extname(path).toLowerCase();
+ if(extension==='.jsx'){
+  const head=tracked.snapshot;const chosen=tracked.selected??head;
+  const document=snapshotDocument({...chosen,edit_id:head.edit_id,state:head.state});
+  document.metadata.head_version=head.version;
+  if(tracked.selected)document.metadata.version=tracked.selected.version;
+  return Buffer.from(writeDocument(document));
+ }
+ if(['.yaml','.yml'].includes(extension)){
+  const type=RESOURCE_TYPES[tracked.snapshot.format??'']??'file';
+  const prototype={type,...(tracked.source?{source:tracked.source.declared??relative(dirname(path),tracked.source.path)}:{})} as ArtifactResourceFile;
+  return Buffer.from(writeResourceFile(snapshotResource(tracked.snapshot,prototype)));
+ }
+ return null;
+}
+
+export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Promise<LocalFile[]>{
+ const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))).split(sep).join('/'))):[...Object.keys(workspace.tracking?.files??{}),...Object.values(await localReferenceMap(workspace.root)),...((await readState(workspace.home))?.list(workspace.root,'draft-identity').map(row=>row.key)??[])];
+ const seen=new Map<string,string>();
+ const results:LocalFile[]=[];
+ for(const path of [...new Set(selected)]){
+  const bytes=workspace.virtualFiles?.[path]??await readOptional(await confinedPath(workspace.root,path));
+  let tracked=workspace.tracking?.files[path];
+  let renamedFrom:string|undefined;
+  const document=bytes&&extname(path).toLowerCase()==='.jsx'?parseDocument(bytes.toString()):undefined;
+  const resource=bytes&&['.yaml','.yml'].includes(extname(path).toLowerCase())?parseResourceFile(bytes.toString()):undefined;
+  const identity=document?.metadata??resource;
+  if(identity&&tracked&&identity.id!==tracked.id)throw new CliError('identity_mismatch',`File id ${identity.id??'(missing)'} disagrees with tracked id ${tracked.id} in ${path}.`,'Restore the tracked identity fields, or remove all identity fields from an untracked copy to fork it.');
+  const id=identity?.id??tracked?.id;
+  if(id){
+   const previous=seen.get(id);if(previous&&previous!==path)throw duplicate(id,previous,path);
+   seen.set(id,path);
+   const other=Object.entries(workspace.tracking?.files??{}).find(([p,e])=>p!==path&&e.id===id);
+   if(other){
+    if(await readOptional(await confinedPath(workspace.root,other[0])))throw duplicate(id,other[0],path);
+    tracked=other[1];renamedFrom=other[0];
+   }
+  }
+  const source=resource?await readResourceSource(resource,path,workspace.root):undefined;
+  const sourceChanged=source?.bytes!==tracked?.source?.bytes;
+  results.push({path,bytes,...(document?{document}:{}),...(resource?{resource}:{}),...(tracked?{tracked}:{}),...(renamedFrom?{renamedFrom}:{}),status:!bytes?'missing':renamedFrom?'renamed':!tracked?'new':!sourceChanged&&digest(bytes)===tracked.file?'unchanged':'modified'});
+ }
+ return results;
+}
+function duplicate(id:string,a:string,b:string):CliError{return new CliError('duplicate_identity',`duplicate_identity: ${a} and ${b} both claim ${id}.`,'To fork a copy, remove id, edit_id, head_version, state and version from its fence.');}

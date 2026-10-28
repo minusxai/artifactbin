@@ -472,9 +472,9 @@ function buildId(manifest, halves, graphInputs) {
 
 /**
  * What the `--cache` marker keys on: this script, the lockfile, and every repository file the last build read.
- * The lockfile with workspace versions normalised (scripts/lib/lock-fingerprint.mjs): a workspace's own version
- * line resolves no dependency and reaches no island, yet hashing it raw rebuilt the islands (~30 s, "this build
- * added 0 B") in every test shard.
+ * The lockfile with workspace versions normalised (scripts/lib/lock-fingerprint.mjs): `npm run release:cli`
+ * rewrites only the CLI workspace's own version line, which resolves no dependency and reaches no island, yet
+ * hashing it raw rebuilt the islands (~30 s, "this build added 0 B") in every release run's pack job and test shard.
  */
 export const toolHash = (root = ROOT) => sha256(Buffer.concat([fs.readFileSync(new URL(import.meta.url)), fs.readFileSync(path.join(ROOT, 'services/app/scripts/precompress.mjs')), Buffer.from(normalisedLock(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'))), fs.readFileSync(SQLITE_WASM)]));
 const sourceHashes = (rels) => Object.fromEntries(rels.map((rel) => [rel, fs.existsSync(path.join(ROOT, rel)) ? sha256(fs.readFileSync(path.join(ROOT, rel))) : null]));

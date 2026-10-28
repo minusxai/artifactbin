@@ -9,7 +9,10 @@
  *  - the lookup helper.
  */
 import { describe, it, expect } from 'vitest';
+import { renderDoc } from '@/test/helpers/skill-docs';
 
+/** A genre's authoring guidance is its docs file — `skills/artifactbin/references/templates-<name>.md`, the one copy agents read. */
+const guidanceOf = (name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, 'https://example.test');
 import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES } from '../story-templates';
 
 describe('STORY_TEMPLATES registry', () => {
@@ -27,5 +30,51 @@ describe('STORY_TEMPLATES registry', () => {
       for (const beat of t.beats) expect(beat.length).toBeGreaterThan(0);
     }
   });
-});
 
+  it('every guidance is a className-first mini-skill with no INLINE style escape hatch', () => {
+    for (const t of STORY_TEMPLATES) {
+      const guidance = guidanceOf(t.name);
+      expect(guidance.length, `${t.name}.guidance`).toBeGreaterThan(400);
+      // A skeleton or kit snippets — either way, concrete markup with literal classes.
+      expect(guidance, `${t.name} markup snippet`).toMatch(/className="/);
+      expect(guidance, `${t.name} legacy class attr`).not.toMatch(/\bclass="/);
+      // Authored <style> BLOCKS are allowed vocabulary (no-inline-style policy) and guidance
+      // may reference them; inline style attributes remain banned everywhere.
+      expect(guidance, `${t.name} inline style`).not.toMatch(/\sstyle=\{|\sstyle="/);
+      expect(guidance, `${t.name} Do section`).toMatch(/\bDo\b/);
+      expect(guidance, `${t.name} Don't section`).toContain("Don't");
+    }
+  });
+
+  it('deck: the accent divider is a PICKABLE slide type, not just document structure', () => {
+    // The bug this pins: an author filling N slots shops from the SLIDE TYPES menu. A divider
+    // described only under "acts" (structure, conditional on deck length) gets dropped from every
+    // short deck, and the deck ships with no saturated slide at all.
+    const guidance = guidanceOf('deck');
+    // Bounded by the Do list, not by the skeleton: the skeleton LEADS the page (it is the
+    // thing agents copy, so it sits in the top half), so slicing to it would read backwards.
+    const start = guidance.indexOf('SLIDE TYPES');
+    const slideTypes = guidance.slice(start, guidance.indexOf('\nDo\n', start));
+    expect(slideTypes, 'deck SLIDE TYPES block').toMatch(/divider/i);
+    // No floor any more: since 3 Oct 2026 the divider is one composition's device, not every deck's duty.
+  });
+
+  it('deck: every slide is a <Slide>, never a raw <section>', () => {
+    // guidance told authors "never a raw <section> for a slide" and then built the divider out of
+    // one — the contradiction lands on the exact construct short decks already skip.
+    // (the prose prohibition "never a raw `<section>`" is fine — only authored markup is banned)
+    expect(guidanceOf('deck'), 'deck raw <section> slide').not.toMatch(/<section\s/);
+  });
+
+  it('scrolly guidance describes the supported ordinary-flow chapter contract', () => {
+    const guidance = guidanceOf('scrolly');
+    expect(guidance).toContain('ordinary document flow');
+    expect(guidance).toContain('same named question');
+    expect(guidance).not.toMatch(/live reader handles the figure|platform's scroll scene/);
+    for (const name of ['dossier', 'drafting', 'volta']) {
+      const system = renderDoc(`artifactbin/references/system-${name}.md`, 'https://example.test');
+      expect(system).toContain('ordinary document flow');
+      expect(system).not.toMatch(/sticky is set by the live reader|sticky figure is the template/);
+    }
+  });
+});
