@@ -173,6 +173,9 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     visit(doc, nodes, 0, parent, first);
     return decorations;
   };
+  // The host may acknowledge local typing after composition settles. Its unchanged
+  // last input is not a replacement draft and must not replay over the live view.
+  let incomingSource = serializeJsx(props().nodes);
   const state = { composing: false };
   /** Typing ProseMirror has drawn but the page has not been handed yet: one undo step, one source edit. */
   let held: { group: string; before: ReturnType<typeof captureBookmark>; maps: ReturnType<typeof mergeIdentityMaps> } | null = null;
@@ -466,8 +469,15 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
     },
     sync(nodes) {
       if (state.composing) return;
+      const nextSource = serializeJsx(nodes);
+      const unchangedInput = nextSource === incomingSource;
       // The page's source never replaces typing it has not been handed: hand it over first.
       flush();
+      if (unchangedInput) {
+        view.updateState(view.state);
+        return;
+      }
+      incomingSource = nextSource;
       // Compare engine to engine: parsing collapses source whitespace, so the incoming source is
       // compared in its parsed form — an echo of our own edit, or a reindent, rebuilds nothing.
       const doc = editorDocument(nodes);
