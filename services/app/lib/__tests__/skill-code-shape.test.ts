@@ -8,14 +8,14 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
+import {readFileSync} from 'node:fs';
 import {loadSkillAssets} from '../skills/assets';
+import {skillTree} from '../skills';
+import {joinSoftBreaks} from '../skills/tree';
 
 const ROOT = fileURLToPath(new URL('../../skills/artifactbin/', import.meta.url));
 const MAX_LINES = 200;
 const MAX_WIDTH = 100;
-// TODO(D19 follow-up): these change every round of the speed loop; split check.mjs and rewrap both
-// (and SKILL.md, which is outside this set) in a follow-up PR once it settles, then delete this list.
-const PENDING_FOLLOW_UP = new Set(['scripts/check.mjs', 'scripts/publish.mjs']);
 
 /** The first comment of a file (after a shebang or an HTML doctype), with comment markers and `*` gutters removed. */
 function leadingComment(source: string): string | null {
@@ -117,7 +117,6 @@ it('every shipped hand-written code file has its header and fits 200 lines of 10
   const problems: string[] = [];
   const kinds = new Set<CodeKind>();
   for (const [name, source] of Object.entries(assets)) {
-    if (PENDING_FOLLOW_UP.has(name)) continue;
     const kind = kindOf(name, source, commands);
     kinds.add(kind);
     for (const problem of [...headerProblems(kind, source), ...lengthProblems(kind, source)])
@@ -127,4 +126,20 @@ it('every shipped hand-written code file has its header and fits 200 lines of 10
   // Every rule has real files behind it, so a broken classifier cannot pass vacuously.
   for (const kind of ['generated', 'command', 'component', 'internal', 'example'] as const)
     expect(kinds, kind).toContain(kind);
+});
+
+// SKILL.md is outside the asset set: its source wraps at 100 columns too, and the tree joins the
+// wrapped lines back so the served text keeps one paragraph, list item or table row per line.
+it('SKILL.md fits 100 columns and only its soft wraps change when served', () => {
+  const source = readFileSync(path.join(ROOT, 'SKILL.md'), 'utf8');
+  const wide = source.split('\n').flatMap((line, index) =>
+    line.length > MAX_WIDTH ? [`SKILL.md line ${index + 1} is ${line.length} chars`] : []);
+  expect(wide).toEqual([]);
+  const body = (text: string) => text.slice(text.indexOf('\n---\n') + 5);
+  const served = joinSoftBreaks(body(source));
+  expect(served.split(/\s+/)).toEqual(body(source).split(/\s+/));
+  expect(served.split('\n').length).toBeLessThan(body(source).split('\n').length);
+  expect(skillTree().get('artifactbin/SKILL.md')!.body).toBe(served);
+  expect(joinSoftBreaks('- a\n  b 2)\nc\n1) d\n| x |\n| y\n  z |\n```\ne\nf\n```\ng')).toBe(
+    '- a b 2) c\n1) d\n| x |\n| y z |\n```\ne\nf\n```\ng');
 });

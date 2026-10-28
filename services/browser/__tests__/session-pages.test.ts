@@ -10,7 +10,7 @@
  */
 import { afterEach, expect, it } from 'vitest';
 import {build} from 'esbuild';
-import {inspectPage} from '../../app/skills/artifactbin/scripts/check.mjs';
+import {inspectPage,inspectSource} from '../../app/skills/artifactbin/scripts/check.mjs';
 import {fileURLToPath} from 'node:url';
 import { FORWARDED_HOST, type Actor } from '@artifactbin/contracts';
 import { createSessionProcess } from '../src/session-process';
@@ -128,7 +128,7 @@ it('delivers successive real SSE segments through the isolated worker, catches u
  expect(seen.filter(item=>new URL(item.url).searchParams.has('native')).length).toBeGreaterThan(1);
  expect(peak).toBeLessThanOrEqual(2);
  for(const width of [1280,390]){
- const smoke=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:${width},height:800}},async page=>{await page.locator('#value').waitFor();await page.reload();await page.locator('#value').filter({hasText:'3'}).waitFor();return {reload:true};});}finally{await checkPage.close();}`);
+ const smoke=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:${width},height:800}},async page=>{await page.locator('#value').waitFor();await page.reload();await page.locator('#value').filter({hasText:'3'}).waitFor();return {reload:true};});}finally{await checkPage.close();}`);
  expect(smoke.error).toBeUndefined();
  const evidence=smoke.result as {failedRequests:unknown[];consoleErrors:string[];pageErrors:string[];httpErrors:unknown[]};
  expect(evidence.failedRequests).toEqual([]);expect(evidence.consoleErrors).toEqual([]);expect(evidence.pageErrors).toEqual([]);expect(evidence.httpErrors).toEqual([]);
@@ -168,7 +168,7 @@ it('runs check steps in the framed document again after page.reload()', async ()
   return new Response('not found',{status:404});
  }});
  const steps=`await page.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Loaded'),null,{timeout:4000});await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Loaded'),null,{timeout:4000});await page.getByText('Loaded 2').waitFor();return {status:await page.locator('#status').textContent()};`;
- const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
+ const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
  expect(out.error).toBeUndefined();
  const evidence=out.result as {error?:string;task?:unknown;steps?:unknown};
  expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({status:'Loaded 2'});expect(evidence.steps).toEqual({ran:true,passed:true});
@@ -185,7 +185,7 @@ it('focuses the framed document for page.keyboard and runs an export-default ste
   return new Response('not found',{status:404});
  }});
  const steps=stepsBody(`export default async ({page}) => {await page.locator('#key').waitFor();await page.keyboard.press('End');await page.waitForFunction(()=>document.querySelector('#key').textContent==='End',null,{timeout:3000});return {key:await page.locator('#key').textContent()};};`);
- const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
+ const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectSource()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
  expect(out.error).toBeUndefined();
  const evidence=out.result as {error?:string;task?:unknown};
  expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({key:'End'});
