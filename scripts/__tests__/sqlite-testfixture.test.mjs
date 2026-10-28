@@ -39,3 +39,33 @@ const result=spawnSync('cc',args,{stdio:'inherit'});process.exit(result.status??
   expect(readFileSync(join(root,'a/same.c'),'utf8')).toContain('#error');
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+it('bounds inner Debian build concurrency while preserving generated prerequisites and serial installation',()=>{
+ const root=mkdtempSync(join(tmpdir(),'sqlite-build-'));
+ try{
+  mkdirSync(join(root,'debian'));mkdirSync(join(root,'started'));
+  const source=new URL('../../deploy/company/runtime-source/browser/sqlite/prepare.py',import.meta.url).pathname;
+  const apply=`import ast,pathlib,sys\nsource=pathlib.Path(sys.argv[1]).read_text()\nnode=next(n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name=='parallelize_build')\nnamespace={}\nexec(compile(ast.Module(body=[node],type_ignores=[]),sys.argv[1],'exec'),namespace)\nnamespace['parallelize_build'](pathlib.Path(sys.argv[2]),int(sys.argv[3]))\n`;
+  const rules='binary-arch: build install\nbuild: build-stamp\nbuild-stamp: configure\n\t$(MAKE)\n\t$(MAKE) showdb showjournal showstat4 showwal sqldiff sqlite3_analyzer\n\ttouch build-stamp\nconfigure:\n\tprintf "#define GENERATED 35\\n" > generated.h\ninstall: build\n\ttest -f build-stamp\n\t./program\n';
+  writeFileSync(join(root,'debian/rules'),rules);
+  writeFileSync(join(root,'a.c'),'#include "generated.h"\nint b(void); int main(void){return b()+GENERATED!=42;}\n');
+  writeFileSync(join(root,'b.c'),'#include "generated.h"\nint b(void){return REQUIRED;}\n');
+  writeFileSync(join(root,'compiler.mjs'),`import {writeFileSync,readdirSync} from 'node:fs';import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2);if(args.includes('-c')){writeFileSync('started/'+args[args.indexOf('-c')+1],'started');const deadline=Date.now()+3000;while(readdirSync('started').length<2){if(Date.now()>deadline)throw Error('main package build remained serial');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}}const result=spawnSync('cc',args,{stdio:'inherit'});process.exit(result.status??1);`);
+  writeFileSync(join(root,'Makefile'),`all: program\nprogram: a.o b.o\n\tcc a.o b.o -o program\n%.o: %.c generated.h\n\t${process.execPath} compiler.mjs -DREQUIRED=7 -c $< -o $@\nshowdb showjournal showstat4 showwal sqldiff sqlite3_analyzer: all\n`);
+  execFileSync('python3',['-c',apply,source,root,'2']);
+  const patched=readFileSync(join(root,'debian/rules'),'utf8');
+  expect(patched).toBe(rules.replaceAll('\t$(MAKE)','\t$(MAKE) -j2'));
+  writeFileSync(join(root,'debian/rules'),rules);
+  let serialFailure;
+  try{execFileSync('make',['-f','debian/rules','binary-arch'],{cwd:root,stdio:'pipe'});}catch(error){serialFailure=error;}
+  expect(serialFailure?.stderr.toString()).toContain('main package build remained serial');
+  writeFileSync(join(root,'debian/rules'),patched);
+  execFileSync('make',['-f','debian/rules','binary-arch'],{cwd:root});
+  writeFileSync(join(root,'b.c'),'#error preserve build failures\n');
+  expect(()=>execFileSync('make',['-B','-f','debian/rules','binary-arch'],{cwd:root,stdio:'pipe'})).toThrow();
+  for(const jobs of ['0','5'])expect(()=>execFileSync('python3',['-c',apply,source,root,jobs],{stdio:'pipe'})).toThrow();
+  writeFileSync(join(root,'debian/rules'),rules.replace('\t$(MAKE)\n','\t$(MAKE) changed\n'));
+  expect(()=>execFileSync('python3',['-c',apply,source,root,'2'],{stdio:'pipe'})).toThrow();
+  expect(readFileSync(join(root,'debian/rules'),'utf8')).toContain('$(MAKE) changed');
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

@@ -36,7 +36,10 @@ apt-get -y --no-install-recommends install python3 patch dpkg-dev binutils build
 nm -D --defined-only /build/sqlite/original/libsqlite3.so.0 > /build/sqlite/baseline-symbols.raw
 awk '{print $3}' /build/sqlite/baseline-symbols.raw | sort -u > /out/sqlite-baseline-symbols
 test -s /out/sqlite-baseline-symbols
-python3 "$recipe/prepare.py" /build/sqlite/cache /build/sqlite/source
+# Bound both upstream compilation and test compilation to the allocated CPUs.
+fixture_jobs=$(getconf _NPROCESSORS_ONLN)
+[ "$fixture_jobs" -le 4 ] || fixture_jobs=4
+python3 "$recipe/prepare.py" /build/sqlite/cache /build/sqlite/source "$fixture_jobs"
 source=/build/sqlite/source
 apt-get update
 apt-get -y --no-install-recommends build-dep --arch-only "$source"
@@ -55,8 +58,6 @@ sort /build/sqlite/baseline-options.raw > /out/sqlite-baseline-options
 # Avoid mixing directly compiled SQLITE_TEST core with shared non-test core.
 test -f "$source/.libs/libsqlite3.a"
 # Bound parallelism to the producer's actual CPU allocation; no flag changes.
-fixture_jobs=$(getconf _NPROCESSORS_ONLN)
-[ "$fixture_jobs" -le 4 ] || fixture_jobs=4
 (cd "$source" && make -f Makefile -f "$recipe/testfixture.mk" -j"$fixture_jobs" parallel-testfixture)
 for test in session9 sessionC session1; do
  (cd "$source" && ./testfixture "ext/session/$test.test") > "/out/sqlite-$test.log" 2>&1

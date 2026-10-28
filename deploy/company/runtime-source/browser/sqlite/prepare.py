@@ -20,6 +20,19 @@ def add_receipts(dest, recipe):
     install = dest/'debian/libsqlite3-0.install'
     install.write_text(install.read_text() + '\nusr/share/sqlite-runtime\n')
 
+def parallelize_build(dest, jobs):
+    """Parallelize only upstream build recipes, never outer install/package targets."""
+    if type(jobs) is not int or not 1 <= jobs <= 4:
+        raise SystemExit('Invalid SQLite build parallelism')
+    rules = dest/'debian/rules'
+    text = rules.read_text()
+    for command in ['$(MAKE)', '$(MAKE) showdb showjournal showstat4 showwal sqldiff sqlite3_analyzer']:
+        anchor = '\t' + command + '\n'
+        if text.count(anchor) != 1:
+            raise SystemExit('Unexpected Debian build target')
+        text = text.replace(anchor, '\t$(MAKE) -j' + str(jobs) + command[len('$(MAKE)'):] + '\n')
+    rules.write_text(text)
+
 recipe=pathlib.Path(__file__).resolve().parent
 cache=pathlib.Path(sys.argv[1]).resolve(); dest=pathlib.Path(sys.argv[2]).resolve()
 cache.mkdir(parents=True,exist_ok=True)
@@ -42,3 +55,6 @@ changelog.write_text('sqlite3 (3.46.1-7+deb13u2+runtime1) trixie; urgency=medium
 
 # Ship backport receipts outside /usr/share/doc, which slim images exclude.
 add_receipts(dest, recipe)
+
+# Debian custom rules do not consume dpkg parallel=N; bound only inner make.
+parallelize_build(dest, int(sys.argv[3]))
