@@ -196,10 +196,10 @@ it('names the running step call and the page status when a steps file hits its d
  const {chromium}=await import('playwright');const browser=await chromium.launch();const page=await browser.newPage();
  try{
   const task=new (Object.getPrototypeOf(async function(){}).constructor)('page',`await page.locator('h1').waitFor();await page.waitForFunction(()=>document.querySelector('h1').textContent==='Saved',null,{timeout:10000});`);
-  const evidence=await inspectPage(page,{target:'data:text/html,'+encodeURIComponent('<html><body><h1>Budget</h1><p role="status">Could not save: offline</p></body></html>'),viewport:{width:800,height:600}},task) as {error?:string;steps?:unknown};
+  const evidence=await inspectPage(page,{target:'data:text/html,'+encodeURIComponent('<html><body><h1>Budget</h1><p role="status">Could not save: offline</p><p id="status">money is not defined</p></body></html>'),viewport:{width:800,height:600}},task) as {error?:string;steps?:unknown};
   // A failed run says so in steps too: a bare `steps: true` once read as a pass.
   expect(evidence.steps).toEqual({ran:true,passed:false});
-  expect(evidence.error).toMatch(/^Task deadline exceeded.*\(step call #3 page\.waitForFunction\(.*; status: "Could not save: offline"; page text: "Budget Could not save: offline"/);
+  expect(evidence.error).toMatch(/^Task deadline exceeded.*\(step call #3 page\.waitForFunction\(.*; status: "Could not save: offline", "money is not defined"; page text: "Budget Could not save: offline money is not defined"/);
  }finally{await browser.close();}
 },20_000);
 

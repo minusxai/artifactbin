@@ -1,7 +1,7 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Browser smoke and task check of a saved page or a local preview.
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
-Usage: node scripts/check.mjs ID|URL [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
+Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
   --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
@@ -11,8 +11,13 @@ Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; de
   --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
+  node scripts/publish.mjs index.html && (node scripts/check.mjs index.html --steps steps.mjs --output qa-1.json &
+    node scripts/check.mjs index.html --viewer guest --steps guest.mjs --output qa-g1.json & wait)
   steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
                return {assertions:['add shows Saved']}
+  guest file:  await page.getByRole('button',{name:'Save'}).click(); await page.waitForFunction(()=>/sign in/i
+               .test(document.querySelector('#status').textContent),null,{timeout:4000}); return {assertions:['refused']}
+  Assert rendered, rounded text ("$1,240"), not raw numbers.
 Output: --output saves the full JSON and prints one summary line per viewport: errors, overflow, contrast
   (text under 2:1 fails), slides, your task result; each failing item (up to 12 of a kind) names its text and element
   or slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
@@ -354,10 +359,10 @@ export async function inspectPage(page, options, task) {
                   const tidy = value => String(value || '').replace(/\s+/g, ' ').trim();
                   const doc = html.ownerDocument;
                   return {
-                    status: [...doc.querySelectorAll('[role=status],[role=alert],[aria-live]')]
+                    status: [...doc.querySelectorAll('#status,[role=status],[role=alert],[aria-live]')]
                       .map(node => tidy(node.textContent).slice(0, 120))
                       .filter(Boolean)
-                      .slice(0, 2),
+                      .slice(0, 3),
                     text: tidy(doc.body?.innerText).slice(0, 200)
                   };
                 },
@@ -888,8 +893,18 @@ export async function checkLocal({target, viewports, steps = '', capture = false
 }
 // CLI entry: choose local preview or hosted page, run the viewports, save screenshots, then fail if smoke failed.
 export async function checkCommand({values, positionals}, options = {}) {
-  const input = positional(positionals),
-    widths = values.viewport ?? ['1280x800', '390x844'];
+  let input = positional(positionals),
+    paired = null;
+  const widths = values.viewport ?? ['1280x800', '390x844'];
+  // A published file stands for its page: index.html reads the id and server from index.html.af.json.
+  if (/\.html?$/i.test(input) && !/^https?:\/\//i.test(input)) {
+    try {
+      paired = JSON.parse(await readFile(input + '.af.json', 'utf8'));
+    } catch {}
+    if (!/^[A-Za-z0-9]{6,12}$/.test(paired?.id ?? ''))
+      throw new ToolError('unpublished_file', `No published page is paired with ${input}.`, 2, `Publish it first: node scripts/publish.mjs ${input}`);
+    input = paired.id;
+  }
   if (widths.length > 8) throw new ToolError('viewport_limit', 'At most eight viewports are supported.', 2);
   const viewports = widths.map(value => {
     const match = /^(\d+)x(\d+)$/.exec(value);
@@ -918,7 +933,7 @@ export async function checkCommand({values, positionals}, options = {}) {
   } else {
     if (values['playwright-module'])
       throw new ToolError('hosted_browser', 'Hosted checks use server browser sessions.', 2);
-    const {server, id} = resolveTarget(input, selectedServer(values, options.env)),
+    const {server, id} = resolveTarget(input, paired?.server && !values.server ? paired.server : selectedServer(values, options.env)),
       client = makeClient(server, options);
     const viewer = values.viewer ? enumValue(values.viewer, ['self', 'guest'], 'viewer') : 'self';
     result = await checkHosted({

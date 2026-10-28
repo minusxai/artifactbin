@@ -98,6 +98,7 @@ export function checkDigest(envelope,file){
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push('  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
  else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&!check.idStability?.unstable))lines.push("  clean pass: reply now with the link; don't open qa JSON or screenshots.");
+ else if((envelope.checks??[]).length)lines.push("  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';
 }
 /** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */

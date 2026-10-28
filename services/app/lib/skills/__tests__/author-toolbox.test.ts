@@ -131,6 +131,8 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(failed).toContain('check check_failed: smoke failed');
  expect(failed).toMatch(/pageErrors 1: boom; overflow 512>390; contrast 2 below AA \(1 under 2:1; 1\.01:1 "Stop the loss".*\); task error: Expected 7 labels/);
  expect(failed).toContain('  session closed');
+ // A failed or flawed run points at the summary itself, as a pass does.
+ expect(failed).toContain("fix the named slides/elements from this output; don't open qa JSON.");expect(passed).not.toContain('fix the named');
  // An overflow names the element that sticks out.
  const wide=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,overflow:{viewport:390,content:416,fits:false,culprits:[{element:'div.table-wrap',right:416}]}}]},'qa.json');
  expect(wide).toMatch(/overflow 416>390\b.*div\.table-wrap/);
@@ -148,6 +150,20 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(deck).not.toContain('clean pass');
  // A check without steps never reads as a clean pass; it asks for steps.
  expect(deck).toMatch(/--steps/);
+});
+it('checks a published file by its paired page and refuses an unpublished one',async()=>{
+ const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');
+ const dir=await mkdtemp(path.join(tmpdir(),'check-file-'));
+ try{
+  const file=path.join(dir,'index.html');await writeFile(file,'<p>Hi</p>');
+  await expect(checkCommand({values:{},positionals:[file]},{env:{}})).rejects.toMatchObject({code:'unpublished_file'});
+  await writeFile(file+'.af.json',JSON.stringify({id:'PAGE12',server:'https://pages.example'}));
+  // The pair supplies id and server, so the hosted request goes to that server for /a/PAGE12.
+  const seen:string[]=[];
+  await checkCommand({values:{},positionals:[file]},{env:{ARTIFACTBIN_URL:'https://pages.example',ARTIFACTBIN_TOKEN:'t'},fetcher:async(input:any,init:any)=>{seen.push(String(input)+' '+(init?.body??''));throw Error('stop');}}).catch(error=>seen.push('error '+error.message));
+  expect(seen.some(entry=>entry.startsWith('https://pages.example/api/browser-sessions')&&entry.includes('/a/PAGE12'))).toBe(true);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
 it('replies without --expected-revision but still requires it to resolve or edit',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
@@ -296,7 +312,7 @@ it('quotes every user-facing command in Core flows with flags and verbs its scri
  const flows=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
  expect(flows.length).toBeGreaterThan(500);
  // Every command (the autofix helper included) appears in the flows, each as a real invocation.
- const calls=[...flows.matchAll(/node scripts\/(\w+)\.mjs([^`]*)`/g)];
+ const calls=[...flows.matchAll(/node scripts\/(\w+)\.mjs([^`&]*)[`&]/g)];
  for(const name of Object.keys(COMMANDS))expect(calls.some(call=>call[1]===name),name).toBe(true);
  for(const [,name,rest] of calls){
   expect(COMMANDS[name!],name).toBeDefined();

@@ -4,19 +4,20 @@ Example: a chart computed from a linked dataset's discovered table and column ID
 Goes with examples/repairs.csv: publish that file first (node scripts/publish.mjs examples/repairs.csv --type dataset), then replace the
 placeholder after ref: in the dataset link below with the returned dataset ID. Never publish the placeholder.
 Verify chart values against the source cells, including empty or missing values.
+Copy it as index.html and replace only the [bracketed] text and the data; keep its CSS, JS and layout, and add no new controls.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="phosphor">
-<title>Repair bench capacity</title>
+<title>[Page title: Repair bench capacity]</title>
 <link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
 <style>
 *{box-sizing:border-box}body{line-height:1.6}main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}p{max-width:68ch}button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);border:1px solid currentColor;border-radius:4px}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}.layout>*{min-width:0}#chart,.chart svg{max-width:100%;height:auto}@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 <script type="application/json" data-af="state">{"metric":"completed"}</script>
 </head><body><main>
-<p class="muted">Operations notebook · sample CSV</p><h1 class="t-display-xl">Repair bench capacity</h1><p class="lead">A compact view of completed repairs and work still waiting, calculated from the linked dataset.</p>
+<p class="muted">[Kicker: Operations notebook] · sample CSV</p><h1 class="t-display-xl">[Title: Repair bench capacity]</h1><p class="lead">[One-sentence summary: completed repairs and work still waiting, calculated from the linked dataset.]</p>
 <div class="toolbar"><label for="metric">Measure</label><select id="metric"><option value="completed">Completed repairs</option><option value="waiting">Waiting repairs</option></select><button id="refresh" type="button">Refresh data</button></div><p id="status" role="status" aria-live="polite">Loading the linked sample dataset…</p>
 <div class="layout rule"><section><h2 id="chart-title" class="t-title">Completed repairs by week</h2><svg id="chart" viewBox="0 0 640 300" role="img" aria-labelledby="chart-title chart-description"><desc id="chart-description">The chart loads from the linked CSV dataset.</desc></svg></section><aside><h2 class="t-title">How to read this</h2><p>Figures below are calculated only after every row page has loaded at the same dataset revision.</p><p id="summary" class="number"></p><p class="muted">Illustrative data. Weekly snapshots of waiting work are not summed as a backlog total.</p></aside></div><table><caption>Source rows used in this chart</caption><thead><tr><th scope="col">Week</th><th scope="col">Completed</th><th scope="col">Waiting</th></tr></thead><tbody id="rows"></tbody></table>
 </main>
