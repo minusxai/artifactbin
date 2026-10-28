@@ -16,3 +16,5 @@ export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),
 });
+
+export {migrateHumanAccountSchema} from './auth/account-migration';

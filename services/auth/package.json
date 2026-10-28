@@ -23,5 +23,8 @@
     "@artifactbin/test-support": "0.1.0",
     "smtp-server": "3.21.1",
     "vitest": "4.1.12"
+  },
+  "scripts": {
+    "migrate:account": "node --import tsx scripts/migrate-account.ts"
   }
 }
