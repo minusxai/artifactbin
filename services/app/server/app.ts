@@ -1,5 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
-import {advertisedCliVersion} from '@/lib/platform/config';
+import {advertisedCliVersion,cliRetirementEnabled,PUBLIC_BASE_URL} from '@/lib/platform/config';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -33,7 +33,7 @@ import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/
 import { spaPaths } from '@/lib/http/app-pages';
 import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts';
-import { canEdit } from '@artifactbin/contracts';
+import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
 import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
@@ -339,6 +339,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (error instanceof UnservableDocument) return error.response();
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
+  });
+  // CLI__RETIREMENT=on: every request an afbin 0.5.x-or-earlier CLI makes is answered with the retirement refusal it
+  // prints as `cli_retired: …` and a fix (contracts/cli-retirement). First, so a stale saved token is never a 401 that
+  // sends the CLI to sign in again. Its sign-in paths are the auth layer's (auth routes/oauth retiredCliAnswer).
+  app.use('*', async (c, next) => {
+    if (!cliRetirementEnabled() || !isRetiredCliRequest(c.req.raw.headers)) return next();
+    return retiredCliResponse(new URL(PUBLIC_BASE_URL).origin);
   });
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
