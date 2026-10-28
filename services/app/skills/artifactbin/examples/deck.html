@@ -9,9 +9,9 @@ Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how i
   traction, business model, competition, ask); N topics means N slides. Types: cover is the problem
   slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3}, bullets
   {items≤3}, chart {mark bar|line, data [{x,y}], format d3 like ".1f"}, flow {steps≤4}, matrix
-  {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,items≤3 [{label,
-  amount} or {label,pct}]} (it shows the sum and each share). Titles ≤2 lines and state only
-  what their own items or data show: no costs, speeds or geographies that aren't on the slide.
+  {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,milestone,items≤3
+  [{label,amount} or {label,pct}]} (shows sum, shares, milestone; its title comes from these).
+  Titles ≤2 lines, stating only what their own slide shows (deck-steps.mjs fails other claims).
   Say if a chart counts cumulatively. Unique ids key data-af-id. Slides with figures show
   "Illustrative figures"; real:true removes it.
 -->
@@ -43,7 +43,7 @@ window.SLIDES = [
       {label:'[Incumbent]', x:0.3, y:0.3}, {label:'[Alternative]', x:0.7, y:0.25}]},
   {id:'ask', type:'ask', label:'The ask', title:'[The milestone this round reaches]', unit:'$#M',
     contact:'[name@company.com]', items:[{label:'[Product]',amount:1.5},{label:'[Sales]',amount:1}],
-  },
+    milestone:'[26 → 100 customers]'},
 ];
 </script>
 <style>
@@ -128,7 +128,8 @@ SLIDES.forEach((s,n)=>{
       +x.toFixed(2)),total=parts.reduce((t,p)=>t+v(p),0),raw=parts.map(p=>v(p)/total*100);
     const pct=raw.map(Math.floor);raw.map((r,i)=>[r-pct[i],i]).sort((a,b)=>b[0]-a[0])
       .slice(0,100-pct.reduce((a,b)=>a+b,0)).forEach(([,i])=>pct[i]++);
-    if(parts[0]?.amount!=null)s.stats=[{value:fmt(total),label:'Raising'}];s.text=s.contact;
+    s.stats=[...parts[0]?.amount!=null?[{value:fmt(total),label:'Raising'}]:[],...s.milestone?
+      [{value:s.milestone,label:'Milestone'}]:[]];s.text=s.contact;
     s.items=parts.map((p,i)=>`${p.label}: ${p.amount!=null?fmt(p.amount)+' · ':''}${pct[i]}%`);}
   if(s.text)section.append(el('p',id+'-text',{class:'t-body-l'},s.text));
   if(s.stats){const row=section.appendChild(el('div',id+'-stats',{class:'stats'}));
@@ -186,7 +187,7 @@ async function drawCharts(){views.forEach(view=>view.finalize());
         tooltip:[{field:'x',type:'nominal'},{field:'y',type:'quantitative',format:s.format}]},
       config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
         gridColor:token('--ds-line'),labelFont:font,titleFont:font,labelFontSize:13,
-        titleFontSize:13}}}).spec;
+        titleFontSize:13,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
       expr:vega.expressionInterpreter});await view.runAsync();return view;
   }));

@@ -27,6 +27,26 @@ if(missing.length)throw Error('no Illustrative figures badge on '+missing.join('
 const left=await page.evaluate(()=>[...document.querySelectorAll('[data-af-slide]')]
   .filter(slide=>slide.textContent.includes('[')).map(slide=>slide.dataset.afId));
 if(left.length&&!PLACEHOLDERS_OK)throw Error('placeholders left on '+left.join(', '));
+// Every number and time or speed word in a title must be on its own slide: in its copy, data or
+// a value computed from the data (total, change, ratio). "A fifth" style fractions count as %.
+const claims=await page.evaluate(()=>window.SLIDES.flatMap((s,n)=>{
+  const slide=document.querySelectorAll('[data-af-slide]')[n],title=s.title??'';
+  if(!slide||title.includes('['))return [];
+  const body=(JSON.stringify({...s,title:''})+' '+[...slide.querySelectorAll(':scope>:not(h1,h2)')]
+    .map(e=>e.textContent).join(' ')).toLowerCase(),num=t=>parseFloat(t.replace(/[$,]/g,''));
+  const ys=(s.data??[]).map(d=>d.y),values=new Set((body.match(/\d[\d,]*\.?\d*/g)??[]).map(num));
+  if(ys.length)[ys.at(-1)-ys[0],ys.at(-1)/ys[0],ys.reduce((a,b)=>a+b,0),Math.max(...ys)]
+    .forEach(v=>[Math.round(v*10)/10,Math.round(v),Math.floor(v)].forEach(x=>values.add(x)));
+  const parts={half:50,third:33,quarter:25,fifth:20,tenth:10},bad=[];
+  for(const [word,pct] of Object.entries(parts))if(new RegExp(`\\b(a|one) ${word}\\b|\\b${word} of`)
+    .test(title.toLowerCase())&&![...values].some(v=>Math.abs(v-pct)<=3))bad.push(`a ${word}`);
+  for(const t of title.match(/\$?\d[\d,]*\.?\d*[a-z%×]*/gi)??[])if(!values.has(num(t)))bad.push(t);
+  const time=/\b(seconds?|minutes?|hours?|days?|weeks?|months?|faster|cheaper|quicker)\b/g;
+  for(const w of title.toLowerCase().match(time)??[])if(!body.includes(w.replace(/s$/,'')))
+    bad.push(w);
+  return bad.map(x=>`slide ${n+1} title claims '${x}' but the slide doesn't show it: put it on the`
+    +' slide or drop it from the title');}));
+if(claims.length)throw Error(claims.join('; '));
 // The ask's shares (its items ending in N%) add up to 100.
 const shares=await page.evaluate(()=>[...document.querySelectorAll('.ink li')].map(li=>
   li.textContent.match(/(\d+)%$/)?.[1]).filter(Boolean).map(Number));
