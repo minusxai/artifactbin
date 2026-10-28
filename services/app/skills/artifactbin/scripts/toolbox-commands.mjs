@@ -49,6 +49,8 @@ auth: {sub: {login: {email: flag(), challenge: flag(), 'code-file': flag()}, sta
     flags: {
       viewport: flag('string', true),
       steps: flag(),
+      'guest-steps': flag(),
+      'cleanup-steps': flag(),
       viewer: flag(),
       'playwright-module': flag()
     }

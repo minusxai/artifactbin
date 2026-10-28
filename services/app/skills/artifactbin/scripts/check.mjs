@@ -1,50 +1,43 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Browser smoke and task check of a saved page or a local preview.
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
-Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
+Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--guest-steps FILE]
+       [--cleanup-steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 A hosted check (ID, URL or FILE.html) runs in a server browser session: never install Playwright or Chromium; only a
   local serve.mjs preview needs --playwright-module.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
-  --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
-  return assertions and throw on failure; --viewer self (default) or guest (hosted only, a fixed-identity server
-  session; the viewer is fixed when the session starts, and the page is signed in as you unless guest);
-  --playwright-module FILE (local only: your installed Playwright entrypoint). Common: --server ORIGIN, --json,
-  --output FILE (use a new name each run), --help.
+  --steps FILE an async function body receiving page and step (or a module whose export default takes page or
+  {page}); wrap each check in await step('what it shows', async()=>{...}) and throw on failure; --guest-steps FILE
+  then runs a second, signed-out session on the first viewport (it can read what --steps saved); --cleanup-steps
+  FILE then runs signed in, always, even after a failure, to undo test writes; --viewer self (default) or guest
+  (hosted only; the page is signed in as you unless guest); --playwright-module FILE (local only: your installed
+  Playwright entrypoint). Common: --server ORIGIN, --json, --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
-  node scripts/publish.mjs index.html && (node scripts/check.mjs index.html --steps steps.mjs --output qa-1.json &
-    node scripts/check.mjs index.html --viewer guest --steps guest.mjs --output qa-g1.json & wait)
-  steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
-               return {assertions:['add shows Saved']}
-  guest file:  await page.getByRole('button',{name:'Save'}).click(); await page.waitForFunction(()=>/sign in/i
-               .test(document.querySelector('#status').textContent),null,{timeout:4000}); return {assertions:['refused']}
-  Assert rendered, rounded text ("$1,240"), not raw numbers.
+  node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
+    --guest-steps guest.mjs --cleanup-steps cleanup.mjs --output qa-1.json
+  steps file:  await step('Add shows Saved',async()=>{await page.getByRole('button',{name:'Add'}).click();
+               await page.getByText('Saved').waitFor();});
+  Assert rendered, rounded text ("$1,240"), not raw numbers. A passing run prints Verified: (the step labels, per
+  viewport) and Not verified:; describe testing only by quoting the Verified: line.
 Output: --output saves the full JSON and prints one summary line per viewport: errors, overflow, contrast
   (text under 2:1 fails), slides, your task result; each failing item (up to 12 of a kind) names its text and element
   or slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
   values (first ids and counts listed). A warning (not a failure) lists script-created data-af-ids that differ
   between two loads; checked on the first viewport, only when the page has any.
-Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
+Steps: each steps file gets 8 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
-  select them with [data-af-id="…"]. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
-  the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
-  reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform and keeps
-  newlines: collapse whitespace before regex asserts and match case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
-  > 800)). Past the deadline, the error names the numbered call still running and what the page shows. Use
-  disposable test data (steps can write), test persistence by changing data then reloading, and
-  test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
-  script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). Open the screenshots
-  (paths in the JSON) only if your model accepts image input; otherwise don't, and say appearance is unverified.
-  A clean pass with your behaviour covered means stop: reply with the link and what you tested; republish only to
-  fix a failed requirement, never for polish, refactors or extra verification.
+  select and click them with [data-af-id="…"] (accessible names include CSS ::before/::after text, so use a regex
+  name with getByRole). Vega bars and lines are <path>, not <rect>. Skip a no-steps smoke run. page is scoped to
+  the page's own document frame (page.mainFrame() reaches the reader chrome); page.keyboard needs no click.
+  innerText applies CSS text-transform and keeps newlines: collapse whitespace and match case-insensitively.
+  Viewports run concurrently in fresh sessions: guard writes to one (if (page.viewportSize().width > 800)) and
+  restore what you change. Past the deadline, the error names the numbered call still running and what the page
+  shows. A hosted script is limited to 20 s and 64 KB.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
-/** Browser check contracts. Smoke evidence never implies task or visual acceptance.
- * @typedef {{width:number,height:number}} CheckViewport
- * @typedef {{pageErrors:string[],consoleErrors:string[],failedRequests:object[],httpErrors:object[],telemetry:object[],text:string,overflow:{viewport:number,content:number,fits:boolean},task?:unknown,error?:string}} CheckEvidence
- * @typedef {{target:string,viewports?:CheckViewport[],steps?:string,timeoutMs?:number}} CheckOptions
- */
+/** Browser check contracts. Smoke evidence never implies task or visual acceptance. */
 import {readFile, writeFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -108,7 +101,7 @@ export function checkTarget(value) {
 export function stepsBody(source) {
   const match = /^\s*export\s+default\s+/m.exec(source);
   if (!match) return source;
-  return source.slice(0, match.index) + 'const __afSteps = ' + source.slice(match.index + match[0].length) + '\n;return await __afSteps(page);';
+  return source.slice(0, match.index) + 'const __afSteps = ' + source.slice(match.index + match[0].length) + '\n;return await __afSteps(page, typeof step === \'function\' ? step : undefined);';
 }
 /** Runs in either the server session or a fresh local browser context. No credentials. */
 // One page, one viewport: load it, optionally compare IDs across a reload, run the steps, then measure the settled page.
@@ -186,9 +179,7 @@ export async function inspectPage(page, options, task) {
     overflow: null,
     task: null
   };
-  // After any load (first, compare or a step's reload/goto): wait for the document, not the reader shell. Hosted, page is
-  // scoped to the document frame by its name, which a reloaded frame only gets once its document commits; until then
-  // page calls resolve in the reader shell and never see the page.
+  // After any load: wait until the document frame commits (it is found by name), not the reader shell.
   const ready = async () => {
     if (options.hosted) {
       const host = page.mainFrame().locator('iframe[data-mx-document-frame]');
@@ -215,13 +206,24 @@ export async function inspectPage(page, options, task) {
     if (options.compareReload) {
       // Only script-created IDs (live minus the runtime's savedNodeIds) can drift between renders; with none, skip the reload.
       try {
+        // Compare both loads once script-made elements stop appearing.
         const settle = () =>
           page
             .locator('html')
             .evaluate(
-              () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+              async html => {
+                const count = () => html.ownerDocument.querySelectorAll('[data-af-id]').length;
+                let last = -1,
+                  same = 0;
+                for (const end = Date.now() + 3000; Date.now() < end && same < 2; ) {
+                  await new Promise(resolve => setTimeout(resolve, 250));
+                  const now = count();
+                  same = now === last ? same + 1 : 0;
+                  last = now;
+                }
+              },
               undefined,
-              {timeout: 1500}
+              {timeout: 3500}
             );
         const readIds = () =>
           page.locator('html').evaluate(
@@ -256,10 +258,15 @@ export async function inspectPage(page, options, task) {
           await page.reload({waitUntil: 'domcontentloaded', timeout: 4000});
           await ready();
           await settle();
-          const again = (await readIds()).ids.filter(id => !savedIds.has(id)),
-            before = new Set(created),
-            after = new Set(again);
-          const changed = [...created.filter(id => !after.has(id)), ...again.filter(id => !before.has(id))];
+          // Wait for the reload to render as many script-made ids as the first load.
+          let again = [];
+          for (const end = Date.now() + 4000; ; await new Promise(resolve => setTimeout(resolve, 250))) {
+            again = (await readIds()).ids.filter(id => !savedIds.has(id));
+            if (again.length >= created.length || Date.now() > end) break;
+          }
+          const after = new Set(again);
+          // Count only ids the reload lost; new ones may be a later render.
+          const changed = created.filter(id => !after.has(id));
           evidence.idStability = {
             checked: true,
             created: created.length,
@@ -277,6 +284,12 @@ export async function inspectPage(page, options, task) {
     if (task) {
       // Whether the steps ran and passed; a failure's message is in error (a bare true here once read as "passed").
       evidence.steps = {ran: true, passed: false};
+      // step(label, fn) runs fn and records label as verified; the summary's Verified: line lists them.
+      const verified = (evidence.verified = []);
+      const step = async (label, fn) => {
+        await fn();
+        verified.push(String(label).slice(0, 160));
+      };
       // Keyboard focus in the page's document, so page.keyboard reaches it without a click first.
       if (options.hosted)
         await page.mainFrame().locator('iframe[data-mx-document-frame]').focus({timeout: 1000}).catch(() => {});
@@ -336,11 +349,11 @@ export async function inspectPage(page, options, task) {
       let timer;
       try {
         evidence.task = await Promise.race([
-          task(wrap(page, 'page')),
+          task(wrap(page, 'page'), step),
           new Promise((_, reject) => {
             timer = setTimeout(
               () => reject(Error('Task deadline exceeded; inspect the awaited condition')),
-              6000
+              8000
             );
           })
         ]);
@@ -379,7 +392,12 @@ export async function inspectPage(page, options, task) {
               (seen.status.length ? `; status: ${seen.status.map(value => JSON.stringify(value)).join(', ')}` : '') +
               `; page text: ${JSON.stringify(seen.text)}`;
         }
-        throw call || shows ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}`) : error;
+        // A timed-out role lookup usually missed on the name.
+        const hint =
+          /Timeout/.test(error.message) && /getByRole\(/.test(call ?? '')
+            ? '; hint: accessible names include CSS ::before/::after text, so click script-made controls by [data-af-id="…"] or a regex name'
+            : '';
+        throw call || shows ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}${hint}`) : error;
       } finally {
         clearTimeout(timer);
       }
@@ -388,8 +406,7 @@ export async function inspectPage(page, options, task) {
     evidence.error = String(error.message);
   }
   try {
-    // Measure settled layout and colours: web fonts loaded, transitions finished, then layout unchanged across two
-    // frames (charts and late fonts move text after load, which made clipping flicker between runs of the same page).
+    // Measure settled layout: fonts loaded, transitions done, then layout unchanged across two frames.
     await page
       .evaluate(async () => {
         const within = (promise, ms) => Promise.race([promise, new Promise(resolve => setTimeout(resolve, ms))]);
@@ -699,7 +716,7 @@ export function checkScript({
   compareReload = false
 }) {
   if (!viewports || viewports.length !== 1) throw Error('Each hosted execution checks one viewport.');
-  return `const page=await context.newPage();try{return await (${compactSource(inspectPage)})(page,${JSON.stringify({target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload})},${steps ? `async(page)=>{${steps}\n}` : 'null'});}finally{await page.close();}`;
+  return `const page=await context.newPage();try{return await (${compactSource(inspectPage)})(page,${JSON.stringify({target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload})},${steps ? `async(page,step)=>{${steps}\n}` : 'null'});}finally{await page.close();}`;
 }
 /** @returns {import('../../../lib/skills/author-toolbox-contract').AuthorCheckResult} */
 // Smoke passes only without errors, overflow, unreadable text or duplicate ids; task and visual acceptance stay unverified.
@@ -881,7 +898,7 @@ export async function checkLocal({target, viewports, steps = '', capture = false
           await inspectPage(
             page,
             {target, viewport, capture, compareReload: viewport === viewports[0]},
-            steps ? new (Object.getPrototypeOf(async function () {}).constructor)('page', steps) : null
+            steps ? new (Object.getPrototypeOf(async function () {}).constructor)('page', 'step', steps) : null
           )
         );
       } finally {
@@ -919,7 +936,7 @@ export async function checkCommand({values, positionals}, options = {}) {
   let result;
   const local = /^http:\/\//.test(input) && !/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
   if (local) {
-    if (values.viewer || values.server)
+    if (values.viewer || values.server || values['guest-steps'] || values['cleanup-steps'])
       throw new ToolError('local_identity', 'Loopback preview has no platform viewer/server selection.', 2);
     const chromium = await loadChromium(values['playwright-module']);
     result = await checkLocal({target: checkTarget(input).target, viewports, steps, capture: true}, chromium);
@@ -938,15 +955,44 @@ export async function checkCommand({values, positionals}, options = {}) {
     const {server, id} = resolveTarget(input, paired?.server && !values.server ? paired.server : selectedServer(values, options.env)),
       client = makeClient(server, options);
     const viewer = values.viewer ? enumValue(values.viewer, ['self', 'guest'], 'viewer') : 'self';
-    result = await checkHosted({
-      target: '/a/' + id,
-      server,
-      viewports,
-      steps,
-      capture: true,
-      viewer: viewer === 'guest' ? 'guest' : undefined,
-      requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
-    });
+    if ((values['guest-steps'] || values['cleanup-steps']) && viewer === 'guest')
+      throw new ToolError('guest_twice', 'Use --guest-steps and --cleanup-steps with the self viewer.', 2);
+    const run = async (file, who) => {
+      const found = await checkHosted({
+        target: '/a/' + id,
+        server,
+        viewports: viewports.slice(0, 1),
+        steps: stepsBody(await readFile(file, 'utf8')),
+        capture: true,
+        viewer: who === 'guest' ? 'guest' : undefined,
+        requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
+      });
+      for (const check of found.checks) check.viewer = who;
+      return found.checks;
+    };
+    // Self, then --guest-steps (a second, signed-out session that reads what self saved), then
+    // --cleanup-steps signed in, always, so test writes never stay behind.
+    const extra = [];
+    try {
+      result = await checkHosted({
+        target: '/a/' + id,
+        server,
+        viewports,
+        steps,
+        capture: true,
+        viewer: viewer === 'guest' ? 'guest' : undefined,
+        requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
+      });
+      if (values['guest-steps']) extra.push(...(await run(values['guest-steps'], 'guest')));
+    } finally {
+      if (values['cleanup-steps'])
+        extra.push(...(await run(values['cleanup-steps'], 'cleanup').catch(error => [{error: 'cleanup: ' + error.message}])));
+    }
+    if (extra.length) result = summarizeCheck([...result.checks, ...extra]);
+    // A deck's slide image links for the reply.
+    const count = result.checks.find(check => check?.slides?.count)?.slides.count;
+    if (count)
+      result.slideLinks = Array.from({length: count}, (_, n) => `${server}/a/${id}/export?format=png&slide=${n + 1}`);
   }
   const directory = path.join(credentialRoot(options.env), 'checks', randomUUID());
   let created = false;
@@ -956,7 +1002,10 @@ export async function checkCommand({values, positionals}, options = {}) {
         await mkdir(directory, {recursive: true, mode: 0o700});
         created = true;
       }
-      const file = path.join(directory, `${check.viewport.width}x${check.viewport.height}.png`);
+      const file = path.join(
+        directory,
+        `${check.viewport.width}x${check.viewport.height}${check.viewer ? '-' + check.viewer : ''}.png`
+      );
       await exclusive(file, Buffer.from(check.screenshot.base64, 'base64'));
       check.screenshot = {
         path: file,

@@ -82,14 +82,14 @@ export async function prepareSample(name, server, datasetId) {
       title: {
         report: 'A cooler walk home',
         'csv-dashboard': 'Repair bench capacity',
-        'shared-app': 'Garden shed repairs'
+        'shared-app': 'Household budget'
       }[name],
       visibility: 'unlisted'
     };
     if (name === 'shared-app') {
       const backend = snapshot.body.publicationBundle.files.find(file => file.path === 'examples/garden.ts');
       if (!backend) throw Error('Sample backend is missing from its publication snapshot.');
-      body.backendSources = {garden: Buffer.from(backend.base64, 'base64').toString('utf8')};
+      body.backendSources = {budget: Buffer.from(backend.base64, 'base64').toString('utf8')};
     }
   }
   return {server: origin, method: 'POST', idempotencyKey: randomUUID(), body};

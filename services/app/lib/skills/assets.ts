@@ -4,7 +4,7 @@ import path from 'node:path';
  * Components are flat lowercase kebab-case readable .ts sources only: pages import the compiled modules from the
  * platform as `@afbin/<component>` (D20). Component .test.ts and .fixture.ts files are development-only and never exported. */
 export type SkillPackageAssets=Readonly<Record<string,string>>;
-export const skillAssetName=(name:string):boolean=>/^(?:scripts\/[a-z0-9-]+\.mjs|examples\/[a-z0-9-]+\.(?:html|csv|ts)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts)$/.test(name);
+export const skillAssetName=(name:string):boolean=>/^(?:scripts\/[a-z0-9-]+\.mjs|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts)$/.test(name);
 export function loadSkillAssets(root=path.resolve(process.cwd(),'skills/artifactbin')):SkillPackageAssets{
  const files:Record<string,string>={};
  for(const directory of ['scripts','examples','design-systems','components']){

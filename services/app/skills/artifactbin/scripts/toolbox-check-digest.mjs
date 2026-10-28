@@ -32,7 +32,7 @@ export function checkDigest(envelope,file){
      `; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
   const task=check.error?'task error: '+clip(check.error,1000):
    check.inspectionError?'inspection error: '+clip(check.inspectionError,200):
-   check.task==null?'no task':'task '+clip(check.task,2000);
+   check.task==null?(check.steps?.passed?'steps passed':'no task'):'task '+clip(check.task,2000);
   const overflow=check.overflow?check.overflow.fits?'fits':
    `overflow ${check.overflow.content}>${check.overflow.viewport}${
     check.overflow.culprits?.length?' from '+check.overflow.culprits.map(c=>
@@ -53,8 +53,9 @@ export function checkDigest(envelope,file){
     few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.element?' '+low.element:''}${
      low.slide?' slide '+low.slide:''}${low.color?' '+low.color:''}`,12,
      check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
-  lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):
-   'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
+  const who=check.viewer?check.viewer+' ':'';
+  lines.push(`  ${who}${check.viewport.width}x${check.viewport.height}: ${errors.length?
+   errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
  }
  // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke
  // failure.
@@ -66,7 +67,14 @@ export function checkDigest(envelope,file){
    'text or random values.');
   else if(stability?.skipped)lines.push('  warning: '+clip(stability.skipped,160));
  }
- if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
+ // What the step labels proved, per viewport, so a reply can quote it instead of inventing claims.
+ const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
+ if(envelope.smokePassed&&done.length){
+  lines.push('  Verified: '+done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${
+   c.viewport.height}: ${c.verified.join('; ')}`).join(' | '));
+  lines.push('  Not verified: anything not listed in Verified:, visual appearance'+(done.some(c=>
+   c.viewer==='guest')?', and sharing between two signed-in users (the guest is signed out)':''));
+ }else if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass
  // means where they read it.
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push(
@@ -74,7 +82,9 @@ export function checkDigest(envelope,file){
  else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
-  "  clean pass: reply now with the link; don't open qa JSON or screenshots.");
+  "  clean pass: reply now with the link; don't open qa JSON or screenshots."+(
+   envelope.slideLinks?.length?"\n  slide images for the reply (don't curl these): "+
+   envelope.slideLinks.join(' '):''));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';

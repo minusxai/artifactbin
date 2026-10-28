@@ -157,7 +157,14 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'utf8'))-ids(bytes.toString('utf8'));
  const rewritten=done.updatedInPlace&&added>0?`${path.basename(file)} was rewritten with ${added} `+
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
- return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
+ // A copied example's header ("Example:" / "Next: replace") left in a published file: warn only.
+ const kept=[[entryPath,source],...(body.publicationBundle?.files??[]).map(item=>[item.path,
+  Buffer.from(item.base64,'base64').toString('utf8')])].filter(([,text])=>
+  /(^|\n)[\s*/<!-]*Example: |Next: replace/.test(text.slice(0,3000))).map(([name])=>name);
+ const headers=kept.length?`warning: ${kept.join(', ')} still ${kept.length===1?'has':'have'} the`+
+  " example's header: replace it with one line describing your file.":null;
+ return {...done,...(rewritten?{rewritten}:{}),...(headers?{headers}:{}),
+  autofix:autofixDetail({...fixed,routine},report)};
 }
 /** Platform-owned changes the server made on publish, counted rather than listed: identities and
  * asset links. */

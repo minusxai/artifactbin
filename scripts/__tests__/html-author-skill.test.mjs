@@ -30,7 +30,7 @@ describe('native author resources',()=>{
    expect(saved.body.html).toContain("from '@afbin/apollo'");
    const document=new JSDOM(saved.body.html).window.document;expect(document.doctype?.name).toBe('html');expect(document.documentElement.lang).toBe('en');
    if(name==='csv-dashboard')expect(saved.body.html).toContain('href="ref:abc123"');
-   if(name==='shared-app'){expect(saved.body.backendSources.garden).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('href="ref:abc123"');}
+   if(name==='shared-app'){expect(saved.body.backendSources.budget).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('href="ref:abc123"');}
   }
   await expect(prepareSample('csv-dashboard',BASE)).rejects.toThrow('real returned dataset ID');
  });

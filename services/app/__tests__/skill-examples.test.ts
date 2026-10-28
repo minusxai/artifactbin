@@ -133,10 +133,12 @@ describe('installed native author examples',()=>{
     const req=request(url.pathname,{method,token:owner.token,headers:{'Idempotency-Key':new Headers(init?.headers).get('Idempotency-Key')??''},...(json?{json}:{})});
     return method==='GET'?await read(req,{params:Promise.resolve({id})}):method==='PUT'?await update(req,{params:Promise.resolve({id})}):await publish(req);
    }};
-   const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:await readFile(path.join(installed,'examples/repairs.csv'),'utf8')}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
+   const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
    const html=(await readFile(path.join(installed,'examples/shared-app.html'),'utf8')).replaceAll('DATASET_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">');
    const source=path.join(project,'index.html'),backend=path.join(project,'garden.ts');await writeFile(source,html);await writeFile(backend,await readFile(path.join(installed,'examples/garden.ts'),'utf8'));
    const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.updatedInPlace).toBe(true);
+   // Copied example headers left in published files draw a warning naming each file.
+   expect(first.headers).toMatch(/^warning: index\.html, garden\.ts still have the example's header/);
    // The canonical page binds the backend by name only; the author's working copy keeps its local source path.
    expect(await readFile(source,'utf8')).toMatch(/<link href="\.\/garden\.ts"[^>]*rel="af-backend"/);
    await writeFile(backend,(await readFile(backend,'utf8'))+'\n// edited after first publish\n');
@@ -144,7 +146,7 @@ describe('installed native author examples',()=>{
    const put=sent.find(body=>body.expectedVersion===1);expect(put.publicationBundle.files.map((file:any)=>file.path)).toContain('garden.ts');
    expect(Buffer.from(put.publicationBundle.files.find((file:any)=>file.path==='garden.ts').base64,'base64').toString('utf8')).toContain('edited after first publish');
    // A reader's copy has no local backend source and keeps the published backend.
-   const copy=await readCommand({values:{server,output:path.join(project,'copy.html')},positionals:[first.id]},options);expect(await readFile(copy.source,'utf8')).not.toContain('garden.ts');
+   const copy=await readCommand({values:{server,output:path.join(project,'copy.html')},positionals:[first.id]},options);expect(await readFile(copy.source,'utf8')).not.toMatch(/href="\.\/garden\.ts"/);
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('publishes the shared app with its declared backend source atomically',async()=>{
@@ -152,9 +154,9 @@ describe('installed native author examples',()=>{
   try{
   const zip=path.join(dir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request('http://localhost/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',dir]);
   const installed=path.join(dir,'artifactbin'),{prepareBundle}=await import(pathToFileURL(path.join(installed,'scripts/publication-bundle.mjs')).href),owner=await mintAccountToken('sample-app');
-  const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:await readFile(path.join(installed,'examples/repairs.csv'),'utf8')}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
-  const source=await readFile(path.join(installed,'examples/shared-app.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/shared-app.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:{...saved.body,backendSources:{garden:await readFile(path.join(installed,'examples/garden.ts'),'utf8')}}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
-  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="garden"');
+  const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:execFileSync(process.execPath,[path.join(installed,'examples/gen-transactions.mjs')]).toString()}}));expect(dataset.status).toBe(201);const datasetId=(await dataset.json()).id;
+  const source=await readFile(path.join(installed,'examples/shared-app.html'),'utf8'),saved=await prepareBundle({root:installed,entry:'examples/shared-app.html',entryHtml:source.replaceAll('DATASET_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">'),server:'http://localhost:3000'});const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':saved.idempotencyKey},json:{...saved.body,backendSources:{budget:await readFile(path.join(installed,'examples/garden.ts'),'utf8')}}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
+  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="budget"');
   }finally{await rm(dir,{recursive:true,force:true});}
  });
  it('runs autofix on publish: writes fixes, refuses problems, --strict refuses fixes, and carries IDs forward on regeneration',async()=>{

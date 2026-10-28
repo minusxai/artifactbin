@@ -131,6 +131,12 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(failed).toContain('check check_failed: smoke failed');
  expect(failed).toMatch(/pageErrors 1: boom; overflow 512>390; contrast 2 below AA \(1 under 2:1; 1\.01:1 "Stop the loss".*\); task error: Expected 7 labels/);
  expect(failed).toContain('  session closed');
+ // A guest run is labelled; a clean deck pass lists its slide images and says not to fetch them.
+ const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
+ expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("slide images for the reply (don't curl these): https://h/a/X/export?format=png&slide=1");
+ // A passing run lists exactly the step labels it proved, per viewport, and what it did not.
+ const proved=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
+ expect(proved).toContain('Verified: 390x844: target saves | guest 390x844: guest reads it');expect(proved).toContain('Not verified: anything not listed in Verified:, visual appearance, and sharing between two signed-in users');
  // A failed or flawed run points at the summary itself, as a pass does.
  expect(failed).toContain("fix the named slides/elements from this output; don't open qa JSON.");expect(passed).not.toContain('fix the named');
  // An overflow names the element that sticks out.

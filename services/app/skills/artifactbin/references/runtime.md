@@ -79,7 +79,7 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 ## Remote namespaces
 
-An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{garden{targets{week target}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
+An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{budget{targets{category amount}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
 
 Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
 

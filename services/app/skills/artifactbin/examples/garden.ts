@@ -1,33 +1,49 @@
 /**
- * Example: backend for examples/shared-app.html: TypeScript resolvers over a shared store with
- *   a signed-in-only mutation. It demonstrates typeDefs plus resolvers; the page links it with
- *   af-backend.
- * Next: rename the stored type and fields to your data; keep the store get/set with the expected
- *   version and the @auth directive.
- * Usage: publish it together with the page (node scripts/publish.mjs examples/shared-app.html).
+ * Example: backend for examples/shared-app.html (linked as data-af-name="budget"): shared monthly
+ *   targets per category, saved by signed-in readers over the page's APP.defaultTargets.
+ * Next: replace this header with one line; rename the type and fields to your data; keep the
+ *   store calls and @auth.
+ * Usage: publish it together with the page (node scripts/publish.mjs index.html).
  * Gotchas: backend files are published as backend sources, never as public assets. Writes pass
  *   the read version as `expected`, so a concurrent edit fails instead of being overwritten.
  */
-interface Target {week:string;target:number}
-interface GardenState {targets:Target[]}
-interface StoreCaps {store:{get():Promise<{value:GardenState|null;version:number}>;set(value:
-  GardenState,options:{expected:number}):Promise<number>}}
+interface Target {category:string;amount:number}
+interface BudgetState {targets:Target[]}
+interface StoreCaps {store:{get():Promise<{value:BudgetState|null;version:number}>;set(value:
+  BudgetState,options:{expected:number}):Promise<number>}}
 export const typeDefs=`
- type Target { week:String! target:Int! }
- type Query { targets:[Target!]! }
- type Mutation { setTarget(week:String!,target:Int!):Target! @auth(signedIn:true) }
+ type Target { category:String! amount:Float! }
+ type Query { signedIn:Boolean! targets(defaults:String):[Target!]! }
+ type Mutation {
+  setTarget(category:String!,amount:Float!):Target! @auth(signedIn:true)
+  clearTarget(category:String!):Boolean! @auth(signedIn:true)
+ }
 `;
 export default {
- async targets(_args:unknown,_principal:unknown,caps:StoreCaps){
-  const {value}=await caps.store.get();return value?.targets??[];},
- async setTarget(args:{week:string;target:number},_principal:unknown,caps:StoreCaps){
-  if(!/^\d{4}-W\d{2}$/.test(args.week)||!Number.isInteger(args.target)||args.target<0||
-    args.target>999)throw Error('Use a week like 2026-W01 and a target from 0 to 999');
+ // Lets the page show guests why they can't edit; @auth still enforces it on every write.
+ signedIn:(_args:unknown,principal:{subject:string|null})=>principal?.subject!=null,
+ // The page's defaults (JSON {category:amount}), saved targets on top (an empty store adds none).
+ async targets(args:{defaults?:string},_principal:unknown,caps:StoreCaps){
+  let defaults:Record<string,unknown>={};
+  try{defaults=JSON.parse(args.defaults||'{}')??{};}catch{/* malformed: saved targets only */}
+  const {value}=await caps.store.get(),merged:Record<string,unknown>={...defaults};
+  for(const item of value?.targets??[])merged[item.category]=item.amount;
+  return Object.entries(merged).filter(([,amount])=>typeof amount==='number'&&amount>=0)
+   .map(([category,amount])=>({category,amount}));
+ },
+ async setTarget(args:Target,_principal:unknown,caps:StoreCaps){
+  if(!args.category||args.category.length>60||!Number.isFinite(args.amount)||args.amount<0||
+   args.amount>1e7)throw Error('Use a category name and a target from 0 to 10,000,000');
   const {value,version}=await caps.store.get();
-  const targets=(value?.targets??[]).filter(item=>item.week!==args.week).concat({week:args.week,
-    target:args.target});
-  // Conditional on the version read: a concurrent change fails instead of being overwritten.
+  const targets=(value?.targets??[]).filter(item=>item.category!==args.category)
+   .concat({category:args.category,amount:Math.round(args.amount*100)/100});
   await caps.store.set({targets},{expected:version});
-  return {week:args.week,target:args.target};
+  return targets.at(-1)!;
+ },
+ async clearTarget(args:{category:string},_principal:unknown,caps:StoreCaps){
+  const {value,version}=await caps.store.get();
+  await caps.store.set({targets:(value?.targets??[]).filter(item=>item.category!==args.category)},
+   {expected:version});
+  return true;
  }
 };
