@@ -2,6 +2,9 @@
 <!--
 Example: a chart computed from a linked dataset's discovered table and column IDs, all result
 pages and one consistent revision. Goes with examples/repairs.csv.
+Next: in this copy replace only the [bracketed] text and the data (no drafts elsewhere, no new
+  layouts or controls), write steps.mjs, then run: node scripts/publish.mjs index.html &&
+  node scripts/check.mjs index.html --steps steps.mjs
 Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset), then
 replace the placeholder after ref: in the dataset link below with the returned dataset ID and
 publish this page (node scripts/publish.mjs examples/csv-dashboard.html).

@@ -2,9 +2,9 @@
 <!--
 Example: an eight-slide deck starter designed for 1200x630, with prev/next buttons, dots, arrow
 keys and Home/End, one Vega-Lite chart and one inline-SVG diagram. Standalone: no other files.
-Usage: cp examples/deck.html index.html, replace only the [bracketed] text and figures, then
-  node scripts/publish.mjs index.html
-  node scripts/check.mjs ID --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+Usage: cp examples/deck.html index.html; replace only the [bracketed] text and figures in it, no
+  drafts elsewhere, no new layouts; write steps.mjs; then node scripts/publish.mjs index.html &&
+  node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
 Gotchas: keep its CSS, JS and layout. Height budget per slide at 630px: a label, a title of at
   most 2 lines, one visual of at most 300px or at most 3 short items. Label made-up figures
   "Illustrative". N requested topics means N slides: fold the cover into the first topic slide.
