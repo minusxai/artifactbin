@@ -5,12 +5,13 @@ buttons, dots, arrow keys and Home/End, Vega-Lite charts, SVG flow and 2x2 diagr
 Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only SLIDES
   (no drafts elsewhere, never the CSS or JS); then node scripts/publish.mjs index.html &&
   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
-Gotchas: the sample is the usual pitch order (8 slides: cover with the problem, solution, how it
-  works, market, traction, business model, competition, ask); N topics means N slides. Types:
-  cover {label,title,text,stats≤3}, bullets {items≤3}, chart {mark bar|line, data [{x,y}],
-  format d3 like ".1f"}, flow {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1},
-  ask {title,text,items≤3}. Titles ≤2 lines, items one short sentence.
-  Each entry needs a unique id (it keys data-af-id); set illustrative:true on made-up figures.
+Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
+  traction, business model, competition, ask); N topics means N slides. Types: cover is the problem
+  slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3}, bullets
+  {items≤3}, chart {mark bar|line, data [{x,y}], format d3 like ".1f"}, flow {steps≤4}, matrix
+  {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,text,items≤3}. Titles ≤2 lines,
+  items one short sentence; a chart title states only what its data shows. Ids are unique (they
+  key data-af-id). Every slide shows "Illustrative figures"; set real:true only on real data.
 -->
 <html lang="en">
 <head>
@@ -20,18 +21,18 @@ Gotchas: the sample is the usual pitch order (8 slides: cover with the problem, 
 <script type="module" id="slides-data">
 // The only part to edit: one entry per slide, rendered by the template below.
 window.SLIDES = [
-  {id:'cover', type:'cover', label:'[Company] · Seed round · [The problem]', illustrative:true,
-    title:'[The problem as a cost paid today]', text:'[Who pays it, and our one-line promise.]',
+  {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
+    text:'[Who pays it, in one line.]',
     stats:[{value:'[41%]', label:'[of something lost]'}, {value:'[$2.6B]', label:'[yearly cost]'}]},
   {id:'solution', type:'bullets', label:'Solution', title:'[What the product does, in one line]',
     items:['[What it replaces]', '[What changes for the buyer]', '[Why now]']},
   {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
     steps:['[Input]', '[Product]', '[Outcome]']},
   {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
-    mark:'bar', format:'.1f', yTitle:'US$ billions', illustrative:true,
+    mark:'bar', format:'.1f', yTitle:'US$ billions',
     data:[{x:'Total', y:4.2}, {x:'Serviceable', y:1.1}, {x:'Obtainable', y:0.12}]},
   {id:'traction', type:'chart', label:'Traction', title:'[The strongest proof that it works]',
-    mark:'line', format:'.0f', yTitle:'Customers', illustrative:true,
+    mark:'line', format:'.0f', yTitle:'Customers',
     data:[{x:'Q1', y:2}, {x:'Q2', y:5}, {x:'Q3', y:9}, {x:'Q4', y:14}]},
   {id:'model', type:'bullets', label:'Business model', title:'[How it makes money]',
     items:['[Price per unit, seat or month]', '[Who signs and why]', '[Cost to serve one]']},
@@ -113,7 +114,7 @@ function matrix(s){
   });
   return svg;
 }
-const surface={cover:'red cover',ask:'ink'},charts=[];
+const surface={cover:'red cover',ask:'ink'},charts=[],badge='Illustrative figures';
 SLIDES.forEach((s,n)=>{
   const id='slide-'+s.id,section=el('section',id,{'data-af-slide':'',class:surface[s.type]??'',
     'aria-label':`Slide ${n+1}: ${s.label}`});
@@ -139,8 +140,7 @@ SLIDES.forEach((s,n)=>{
     const host=el('div',id+'-chart',{class:'chart',role:'img','aria-label':s.title});
     section.append(host);charts.push({s,host});
   }
-  if(s.illustrative)section.append(el('p',id+'-illustrative',{class:'t-label illustrative'},
-    'Illustrative figures'));
+  if(!s.real)section.append(el('p',id+'-illustrative',{class:'t-label illustrative'},badge));
   deck.append(section);
   document.querySelector('#dots').append(el('button','dot-'+s.id,{class:'dot',type:'button',
     'data-dot':n,'aria-label':`Slide ${n+1}`}));

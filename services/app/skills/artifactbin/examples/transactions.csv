@@ -1,62 +1,47 @@
-date,category,amount,payer,note
-2026-07-05,Groceries,79.48,Alex,Groceries 1
-2026-07-03,Groceries,122.13,Alex,Groceries 2
-2026-07-12,Groceries,98.28,Alex,Groceries 3
-2026-07-02,Groceries,48.59,Sam,Groceries 4
-2026-07-03,Groceries,64.07,Sam,Groceries 5
-2026-07-02,Rent,1600.00,Alex,Rent 1
-2026-07-21,Dining out,63.92,Alex,Dining out 1
-2026-07-19,Dining out,60.99,Alex,Dining out 2
-2026-07-08,Dining out,23.26,Alex,Dining out 3
-2026-07-10,Dining out,49.34,Alex,Dining out 4
-2026-07-18,Transport,50.81,Alex,Transport 1
-2026-07-04,Transport,39.08,Alex,Transport 2
-2026-07-12,Transport,14.87,Alex,Transport 3
-2026-07-19,Transport,12.98,Alex,Transport 4
-2026-07-16,Transport,44.02,Sam,Transport 5
-2026-07-25,Utilities,85.13,Sam,Utilities 1
-2026-08-10,Groceries,64.84,Alex,Groceries 1
-2026-08-23,Groceries,117.98,Alex,Groceries 2
-2026-08-19,Groceries,70.02,Sam,Groceries 3
-2026-08-11,Groceries,112.94,Sam,Groceries 4
-2026-08-20,Groceries,138.02,Alex,Groceries 5
-2026-08-17,Rent,1600.00,Sam,Rent 1
-2026-08-16,Dining out,49.52,Alex,Dining out 1
-2026-08-25,Dining out,59.07,Sam,Dining out 2
-2026-08-11,Dining out,68.67,Sam,Dining out 3
-2026-08-19,Dining out,75.78,Alex,Dining out 4
-2026-08-09,Transport,33.70,Alex,Transport 1
-2026-08-02,Transport,46.56,Sam,Transport 2
-2026-08-21,Transport,38.90,Sam,Transport 3
-2026-08-10,Utilities,117.33,Sam,Utilities 1
-2026-09-15,Groceries,75.55,Alex,Groceries 1
-2026-09-16,Groceries,45.90,Sam,Groceries 2
-2026-09-05,Groceries,113.84,Sam,Groceries 3
-2026-09-13,Rent,1600.00,Sam,Rent 1
-2026-09-06,Dining out,51.44,Sam,Dining out 1
-2026-09-05,Dining out,77.35,Sam,Dining out 2
-2026-09-23,Dining out,49.07,Sam,Dining out 3
-2026-09-08,Transport,17.55,Alex,Transport 1
-2026-09-05,Transport,21.60,Alex,Transport 2
-2026-09-01,Transport,34.25,Alex,Transport 3
-2026-09-09,Transport,24.10,Alex,Transport 4
-2026-09-14,Transport,36.73,Sam,Transport 5
-2026-09-05,Transport,44.52,Alex,Transport 6
-2026-09-15,Utilities,131.96,Sam,Utilities 1
-2026-10-13,Groceries,79.41,Sam,Groceries 1
-2026-10-21,Groceries,80.04,Alex,Groceries 2
-2026-10-03,Groceries,138.47,Sam,Groceries 3
-2026-10-06,Groceries,50.99,Alex,Groceries 4
-2026-10-04,Groceries,40.02,Alex,Groceries 5
-2026-10-18,Groceries,50.15,Sam,Groceries 6
-2026-10-20,Rent,1600.00,Alex,Rent 1
-2026-10-05,Dining out,64.41,Sam,Dining out 1
-2026-10-20,Dining out,45.49,Alex,Dining out 2
-2026-10-04,Dining out,79.43,Sam,Dining out 3
-2026-10-16,Dining out,53.87,Alex,Dining out 4
-2026-10-05,Dining out,27.15,Sam,Dining out 5
-2026-10-24,Dining out,38.53,Alex,Dining out 6
-2026-10-07,Transport,57.55,Sam,Transport 1
-2026-10-05,Transport,44.50,Alex,Transport 2
-2026-10-25,Transport,36.41,Alex,Transport 3
-2026-10-23,Utilities,127.64,Sam,Utilities 1
+date,category,amount,payer,merchant
+2026-08-19,Groceries,60.67,Alex,FreshMart
+2026-08-05,Groceries,32.04,Sam,City Foods
+2026-08-22,Groceries,123.98,Alex,Green Grocer
+2026-08-01,Groceries,83.55,Sam,Bulk Barn
+2026-08-24,Dining out,43.88,Sam,Sushi Go
+2026-08-03,Dining out,33.59,Alex,Bistro 9
+2026-08-12,Dining out,42.04,Alex,Noodle Bar
+2026-08-24,Dining out,70.21,Alex,Cafe Lune
+2026-08-11,Dining out,63.48,Sam,Pizza Place
+2026-08-01,Transport,51.39,Sam,Bike Repair
+2026-08-20,Transport,34.01,Sam,Metro Card
+2026-08-01,Transport,24.95,Alex,Fuel Stop
+2026-08-21,Utilities,68.77,Alex,Power Co
+2026-08-09,Rent,1650.00,Sam,Landlord
+2026-08-24,Internet,55.00,Sam,FiberNet
+2026-09-17,Groceries,93.12,Alex,City Foods
+2026-09-03,Groceries,66.74,Sam,Farmers Market
+2026-09-23,Groceries,30.32,Alex,Bulk Barn
+2026-09-20,Groceries,90.40,Sam,Green Grocer
+2026-09-01,Groceries,59.86,Sam,Corner Market
+2026-09-22,Groceries,65.58,Alex,FreshMart
+2026-09-22,Dining out,41.68,Sam,Bistro 9
+2026-09-14,Dining out,31.78,Alex,Cafe Lune
+2026-09-13,Dining out,84.28,Alex,Pizza Place
+2026-09-11,Dining out,61.40,Alex,Noodle Bar
+2026-09-28,Transport,56.68,Alex,Fuel Stop
+2026-09-09,Transport,49.48,Alex,Bike Repair
+2026-09-16,Transport,15.25,Sam,Parking Co
+2026-09-27,Utilities,158.46,Sam,Power Co
+2026-09-13,Rent,1650.00,Sam,Landlord
+2026-09-22,Internet,55.00,Sam,FiberNet
+2026-10-10,Groceries,72.49,Alex,Corner Market
+2026-10-13,Groceries,78.97,Sam,FreshMart
+2026-10-25,Groceries,37.47,Sam,Farmers Market
+2026-10-05,Groceries,41.84,Alex,Green Grocer
+2026-10-04,Groceries,110.53,Sam,Bulk Barn
+2026-10-18,Groceries,30.03,Sam,City Foods
+2026-10-09,Dining out,58.13,Alex,Sushi Go
+2026-10-25,Dining out,52.00,Sam,Taco Stand
+2026-10-02,Dining out,41.95,Alex,Pizza Place
+2026-10-17,Transport,35.41,Alex,Rideshare
+2026-10-26,Transport,22.77,Alex,Parking Co
+2026-10-24,Transport,10.03,Sam,Bike Repair
+2026-10-15,Utilities,64.31,Alex,Power Co
+2026-10-21,Rent,1650.00,Alex,Landlord
+2026-10-13,Internet,55.00,Sam,FiberNet

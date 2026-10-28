@@ -30,24 +30,15 @@ Output: --output saves the full JSON and prints one summary line per viewport: e
 Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
   select and click them with [data-af-id="…"] (accessible names include CSS ::before/::after text, so use a regex
-  name with getByRole). Vega bars and lines are <path>, not <rect>: count path or assert rendered text. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
-  the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
-  reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform and keeps
-  newlines: collapse whitespace before regex asserts and match case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
-  > 800)). Past the deadline, the error names the numbered call still running and what the page shows. Use
-  disposable test data (steps can write), test persistence by changing data then reloading, and
-  test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
-  script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). Open the screenshots
-  (paths in the JSON) only if your model accepts image input; otherwise don't, and say appearance is unverified.
-  A clean pass with your behaviour covered means stop: reply with the link and what you tested; republish only to
-  fix a failed requirement, never for polish, refactors or extra verification.
+  name with getByRole). Vega bars and lines are <path>, not <rect>. Skip a no-steps smoke run. page is scoped to
+  the page's own document frame (page.mainFrame() reaches the reader chrome); page.keyboard needs no click.
+  innerText applies CSS text-transform and keeps newlines: collapse whitespace and match case-insensitively.
+  Viewports run concurrently in fresh sessions: guard writes to one (if (page.viewportSize().width > 800)) and
+  restore what you change. Past the deadline, the error names the numbered call still running and what the page
+  shows. A hosted script is limited to 20 s and 64 KB.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
 
-/** Browser check contracts. Smoke evidence never implies task or visual acceptance.
- * @typedef {{width:number,height:number}} CheckViewport
- * @typedef {{pageErrors:string[],consoleErrors:string[],failedRequests:object[],httpErrors:object[],telemetry:object[],text:string,overflow:{viewport:number,content:number,fits:boolean},task?:unknown,error?:string}} CheckEvidence
- * @typedef {{target:string,viewports?:CheckViewport[],steps?:string,timeoutMs?:number}} CheckOptions
- */
+/** Browser check contracts. Smoke evidence never implies task or visual acceptance. */
 import {readFile, writeFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -189,9 +180,7 @@ export async function inspectPage(page, options, task) {
     overflow: null,
     task: null
   };
-  // After any load (first, compare or a step's reload/goto): wait for the document, not the reader shell. Hosted, page is
-  // scoped to the document frame by its name, which a reloaded frame only gets once its document commits; until then
-  // page calls resolve in the reader shell and never see the page.
+  // After any load: wait until the document frame commits (it is found by name), not the reader shell.
   const ready = async () => {
     if (options.hosted) {
       const host = page.mainFrame().locator('iframe[data-mx-document-frame]');
@@ -218,13 +207,24 @@ export async function inspectPage(page, options, task) {
     if (options.compareReload) {
       // Only script-created IDs (live minus the runtime's savedNodeIds) can drift between renders; with none, skip the reload.
       try {
+        // Compare both loads once script-made elements stop appearing.
         const settle = () =>
           page
             .locator('html')
             .evaluate(
-              () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+              async html => {
+                const count = () => html.ownerDocument.querySelectorAll('[data-af-id]').length;
+                let last = -1,
+                  same = 0;
+                for (const end = Date.now() + 3000; Date.now() < end && same < 2; ) {
+                  await new Promise(resolve => setTimeout(resolve, 250));
+                  const now = count();
+                  same = now === last ? same + 1 : 0;
+                  last = now;
+                }
+              },
               undefined,
-              {timeout: 1500}
+              {timeout: 3500}
             );
         const readIds = () =>
           page.locator('html').evaluate(
@@ -382,7 +382,7 @@ export async function inspectPage(page, options, task) {
               (seen.status.length ? `; status: ${seen.status.map(value => JSON.stringify(value)).join(', ')}` : '') +
               `; page text: ${JSON.stringify(seen.text)}`;
         }
-        // A role lookup that timed out usually missed on the name: CSS ::before/::after text is part of it.
+        // A timed-out role lookup usually missed on the name.
         const hint =
           /Timeout/.test(error.message) && /getByRole\(/.test(call ?? '')
             ? '; hint: accessible names include CSS ::before/::after text, so click script-made controls by [data-af-id="…"] or a regex name'
@@ -396,8 +396,7 @@ export async function inspectPage(page, options, task) {
     evidence.error = String(error.message);
   }
   try {
-    // Measure settled layout and colours: web fonts loaded, transitions finished, then layout unchanged across two
-    // frames (charts and late fonts move text after load, which made clipping flicker between runs of the same page).
+    // Measure settled layout: fonts loaded, transitions done, then layout unchanged across two frames.
     await page
       .evaluate(async () => {
         const within = (promise, ms) => Promise.race([promise, new Promise(resolve => setTimeout(resolve, ms))]);
@@ -955,8 +954,7 @@ export async function checkCommand({values, positionals}, options = {}) {
       viewer: viewer === 'guest' ? 'guest' : undefined,
       requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
     });
-    // --guest-steps: a signed-out run on the first viewport, after the self run so its reads and
-    // refusals never race the self run's writes on the shared store; one combined summary.
+    // --guest-steps runs after the self run, so it never races its writes.
     if (values['guest-steps']) {
       if (viewer === 'guest') throw new ToolError('guest_twice', 'Use --guest-steps with the self viewer.', 2);
       const guestSteps = stepsBody(await readFile(values['guest-steps'], 'utf8'));
@@ -972,7 +970,7 @@ export async function checkCommand({values, positionals}, options = {}) {
       for (const check of guest.checks) check.viewer = 'guest';
       result = summarizeCheck([...result.checks, ...guest.checks]);
     }
-    // A deck's slide images, to put in the reply as links (the check already rendered every slide).
+    // A deck's slide image links for the reply.
     const count = result.checks.find(check => check?.slides?.count)?.slides.count;
     if (count)
       result.slideLinks = Array.from({length: count}, (_, n) => `${server}/a/${id}/export?format=png&slide=${n + 1}`);

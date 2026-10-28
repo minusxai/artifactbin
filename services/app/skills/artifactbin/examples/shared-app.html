@@ -1,17 +1,15 @@
 <!doctype html>
 <!--
 Example: a shared household-budget dashboard rendered from one APP config: KPIs, spend vs target
-per category, a monthly trend and a who-paid chart (Vega-Lite), a drill-down list, a per-viewer
-dark mode (Apollo local state) and a signed-in-only target editor (backend store).
-Usage: cp examples/shared-app.html index.html && cp examples/garden.ts .; publish the CSV first
-  (node scripts/publish.mjs examples/transactions.csv --type dataset), put its ID after ref:, edit
-  only APP and garden.ts's names (no drafts elsewhere), copy shared-app-steps.mjs and
-  shared-app-guest.mjs from examples/ as steps.mjs and guest.mjs and adjust them, then: node
-  scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
-  --guest-steps guest.mjs
-Gotchas: the dataset and backend links need different data-af-name values (here transactions and
-  budget). Never publish the ref: placeholder. Sample data ships as generated (≤400 rows); don't
-  retune it. Dark mode is written only when the viewer toggles, so a saved choice survives reloads.
+per category, spend against budget by month, who paid what, a drill-down, a per-viewer dark mode
+(Apollo local state) and a signed-in-only target editor (backend store).
+Usage: copy it as index.html with garden.ts, shared-app-steps.mjs (steps.mjs) and
+  shared-app-guest.mjs (guest.mjs); publish the CSV (--type dataset) and put its ID after ref:;
+  edit only APP and garden.ts's names; then node scripts/publish.mjs index.html &&
+  node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs
+Gotchas: replace this comment with one line describing your page. The dataset and backend links
+  need different data-af-name values. Never publish the ref: placeholder. Sample data ships as
+  generated (≤400 rows). Dark mode is saved only on a toggle. columns.note is optional.
 -->
 <html lang="en">
 <head>
@@ -24,11 +22,10 @@ Gotchas: the dataset and backend links need different data-af-name values (here 
 // The only part to edit. columns maps roles to the dataset's column labels.
 window.APP = {
   dataset: 'transactions', backend: 'budget', currency: 'USD',
-  columns: {date: 'date', category: 'category', amount: 'amount', payer: 'payer', note: 'note'},
+  columns: {date:'date', category:'category', amount:'amount', payer:'payer', merchant:'merchant'},
   title: '[Household budget]', kicker: '[Our money] · sample data',
-  summary: '[What we planned against what we spent, month by month. Targets are shared; signed-in'
-    + ' members can change them.]',
-  labels: {list: 'Spend vs target', trend: 'Monthly spend', payer: 'Who paid', drill: 'Rows'},
+  summary: '[What we planned against what we spent, month by month.]',
+  labels: {list:'Spend vs target', trend:'Spent vs budget', payer:'Who paid what', drill:'Rows'},
 };
 </script>
 <style>
@@ -46,6 +43,7 @@ button,input,select{font:inherit;padding:8px 12px;color:inherit;background:var(-
   border-top:1px solid var(--border);border-radius:0;padding:10px 4px;display:grid;gap:6px}
 #cats button[aria-pressed=true]{background:var(--accent);color:var(--accent-foreground)}
 .bar{height:8px;background:var(--muted)}.bar i{display:block;height:100%;background:var(--primary)}
+.over .bar i{background:var(--destructive)}.over b{color:var(--destructive)}
 #drill li{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);
   padding:8px 0}#drill ul{list-style:none;margin:0;padding:0}
 @media(max-width:720px){.grid,.kpis{grid-template-columns:1fr}}
@@ -61,7 +59,7 @@ button,input,select{font:inherit;padding:8px 12px;color:inherit;background:var(-
 <div class="grid"><section><h2 id="list-title" class="t-title"></h2><ul id="cats"></ul></section>
 <section id="drill"><h2 id="drill-title" class="t-title"></h2><ul id="rows"></ul>
 <form id="editor" class="toolbar" hidden><label for="amount">Shared target</label>
-<input id="amount" type="number" min="0" step="1" required style="width:8em">
+<input id="amount" type="number" min="0" step="1" style="width:8em" title="Empty clears it">
 <button type="submit">Save target</button></form></section>
 <section><h2 id="trend-title" class="t-title"></h2><div id="trend" class="chart"></div></section>
 <section><h2 id="payer-title" class="t-title"></h2><div id="payer" class="chart"></div></section>
@@ -75,64 +73,65 @@ const money=new Intl.NumberFormat(undefined,{style:'currency',currency:APP.curre
 const preference=gql`{dark month category}`;
 // Queries name the dataset and backend from APP (gql also takes a plain one-string array).
 const schema=gql([`{${APP.dataset}{schema{revision tables{id columns{id label}}}}}`]);
-const rowsQuery=gql([`query Rows($t:ID!,$after:String){${APP.dataset}{rows(tableId:$t,`
-  +'first:100,after:$after){revision rows{id cells{columnId value{string number}}} pageInfo{'
-  +'hasNextPage endCursor}}}}']);
+const rowsQuery=gql([`query Rows($t:ID!,$after:String){${APP.dataset}{rows(tableId:$t,first:100,`
+  +'after:$after){revision rows{id cells{columnId value{string number}}} pageInfo{hasNextPage '
+  +'endCursor}}}}']);
 const targetsQuery=gql([`{${APP.backend}{targets{category amount}}}`]);
-const setTarget=gql([`mutation Set($c:String!,$a:Float!){${APP.backend}{setTarget(`
-  +'category:$c,amount:$a){category amount}}}']);
+const setTarget=gql([`mutation Set($c:String!,$a:Float!){${APP.backend}{setTarget(category:$c,`
+  +'amount:$a){category amount}}}']),clear=gql([`mutation Clear($c:String!){${APP.backend}{`
+  +'clearTarget(category:$c)}}']);
 let rows=[],targets={},state={dark:null,month:'',category:''},views={};
 for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,summary:APP.summary,
   'list-title':APP.labels.list,'trend-title':APP.labels.trend,'payer-title':APP.labels.payer}))
   $('#'+id).textContent=text;
 // Every row page at one dataset revision; a change between pages is reported, never mixed.
 async function loadRows(){
-  const found=await client.query({query:schema});
+  const found=await client.query({query:schema}),need=Object.entries(C).filter(([k])=>k!=='note');
   if(found.errors?.length)throw Error(found.errors[0].message);
-  const table=found.data[APP.dataset].schema.tables.find(table=>Object.values(C).every(label=>
+  const table=found.data[APP.dataset].schema.tables.find(table=>need.every(([,label])=>
     table.columns.some(column=>column.label===label)));
-  if(!table)throw Error(`Dataset needs columns ${Object.values(C).join(', ')}.`);
+  if(!table)throw Error(`Dataset needs columns ${need.map(([,label])=>label).join(', ')}.`);
   const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id])),out=[];
   let after=null,revision=null;
   do{
     const result=await client.query({query:rowsQuery,variables:{t:table.id,after}});
     if(result.errors?.length)throw Error(result.errors[0].message);
-    const page=result.data[APP.dataset].rows;
-    if(revision!==null&&revision!==page.revision)throw Error('Data changed while loading.');
-    revision=page.revision;
+    const page=result.data[APP.dataset].rows;if((revision??page.revision)!==page.revision)
+      throw Error('Data changed while loading.');revision=page.revision;
     for(const row of page.rows){
       const cell=Object.fromEntries(row.cells.map(c=>[c.columnId,c.value])),v=k=>cell[ids[C[k]]];
-      out.push({id:row.id,date:v('date')?.string??'',category:v('category')?.string??'',
-        amount:v('amount')?.number??0,payer:v('payer')?.string??'',note:v('note')?.string??''});
+      out.push({id:row.id,amount:v('amount')?.number??0,...Object.fromEntries(['date','category',
+        'payer','merchant','note'].map(k=>[k,v(k)?.string??'']))});
     }
     after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
   }while(after);
   rows=out.filter(row=>row.date);
 }
-async function loadTargets(){
-  const result=await client.query({query:targetsQuery});
+async function loadTargets(){const result=await client.query({query:targetsQuery});
   if(result.errors?.length)throw Error(result.errors[0].message);
   targets=Object.fromEntries(result.data[APP.backend].targets.map(t=>[t.category,t.amount]));
 }
-const months=()=>[...new Set(rows.map(row=>row.date.slice(0,7)))].sort(),sum=list=>
-  list.reduce((total,row)=>total+row.amount,0);
+const unique=list=>[...new Set(list)].sort(),months=()=>unique(rows.map(row=>row.date.slice(0,7)));
+const sum=list=>list.reduce((total,r)=>total+r.amount,0),cats=()=>unique(rows.map(r=>r.category));
 const month=()=>months().includes(state.month)?state.month:months().at(-1);
-const inMonth=()=>rows.filter(row=>row.date.startsWith(month()));
+const inMonth=(m=month())=>rows.filter(row=>row.date.startsWith(m));
+const budget=()=>cats().reduce((total,cat)=>total+(targets[cat]??0),0);
 // Script-made nodes take data-af-ids from the record (category or row id), stable across renders.
 const item=(id,tag='li')=>{const n=document.createElement(tag);n.dataset.afId=id;return n;};
 function render(){
   if(!rows.length)return;
-  const list=inMonth(),cats=[...new Set(rows.map(row=>row.category))].sort(),spent=sum(list);
-  const target=cats.reduce((total,cat)=>total+(targets[cat]??0),0);
+  const list=inMonth(),spent=sum(list),target=budget();
   $('#month').replaceChildren(...months().map(m=>new Option(m,m,false,m===month())));
   for(const [id,value] of [['spent',spent],['target',target],['left',target-spent]])
     $('#'+id).textContent=money.format(value);
-  $('#cats').replaceChildren(...cats.map(cat=>{
-    const li=item('cat-'+cat),button=item('cat-'+cat+'-open','button');
-    const got=sum(list.filter(row=>row.category===cat)),goal=targets[cat];
+  $('#cats').replaceChildren(...cats().map(cat=>{
+    const li=item('cat-'+cat),button=item('cat-'+cat+'-open','button'),goal=targets[cat];
+    const got=sum(list.filter(row=>row.category===cat)),over=goal!=null&&got>goal;
     button.type='button';button.setAttribute('aria-pressed',String(cat===state.category));
-    button.textContent=`${cat}: ${money.format(got)} of `+(goal!=null?money.format(goal):'no goal');
-    const bar=item('cat-'+cat+'-bar','span');bar.className='bar';
+    button.textContent=`${cat}: ${money.format(got)} of `+(goal!=null?money.format(goal):'none');
+    if(over)button.append(Object.assign(item('cat-'+cat+'-over','b'),
+      {textContent:` over by ${money.format(got-goal)}`}));
+    const bar=item('cat-'+cat+'-bar','span');bar.className='bar';li.classList.toggle('over',over);
     bar.append(document.createElement('i'));button.append(bar);
     bar.firstChild.style.width=Math.min(100,goal?got/goal*100:0)+'%';
     button.onclick=()=>client.updateQuery({query:preference},s=>({...s,category:cat}));
@@ -142,35 +141,33 @@ function render(){
   $('#drill-title').textContent=cat?`${APP.labels.drill}: ${cat}, ${month()}`:'Pick a category';
   $('#rows').replaceChildren(...picked.map(row=>{
     const li=item('row-'+row.id),b=item(`row-${row.id}-amount`,'b');
-    li.textContent=`${row.date} ${row.note} (${row.payer})`;b.textContent=money.format(row.amount);
-    li.append(b);return li;}));
+    li.textContent=`${row.date} ${row.merchant}${row.note?' · '+row.note:''} (${row.payer} paid)`;
+    b.textContent=money.format(row.amount);li.append(b);return li;}));
   // Refill the target field only when the category changes, never over what the viewer types.
-  $('#editor').hidden=!cat;
-  if(cat&&$('#editor').dataset.for!==cat){$('#amount').value=targets[cat]??'';
-    $('#editor').dataset.for=cat;}
+  $('#editor').hidden=!cat;if(cat&&$('#editor').dataset.for!==cat){$('#editor').dataset.for=cat;
+    $('#amount').value=targets[cat]??'';}
   void drawCharts(list);
 }
 // Concrete design-system colours; charts redraw when dark mode changes.
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-async function chart(key,values,mark,x,y,xType){
-  views[key]?.finalize();const ink=token('--foreground');
+async function chart(key,values,mark,x,color,y){
+  views[key]?.finalize();const ink=token('--foreground'),sumY={aggregate:'sum',field:y,
+    type:'quantitative'};
   const spec=compile({width:'container',height:200,autosize:{type:'fit',contains:'padding'},
-    background:'transparent',data:{values},
-    mark:{type:mark,color:token('--primary'),point:mark==='line'},
-    encoding:{x:{field:x,type:xType,title:null,axis:{labelAngle:0}},y:{field:y,type:'quantitative',
-      title:null,axis:{format:',.0f'}},tooltip:[{field:x,type:xType},{field:y,type:'quantitative',
-      format:',.2f'}]},config:{view:{stroke:null},axis:{labelColor:ink,domainColor:ink,
-      tickColor:ink,gridColor:token('--border')}}}).spec;
+    background:'transparent',data:{values},mark:{type:mark,point:mark==='line'},encoding:{
+      x:{field:x,type:'ordinal',title:null,axis:{labelAngle:0}},color:{field:color,type:'nominal',
+        title:null},y:{...sumY,title:null,axis:{format:',.0f'}},tooltip:[{field:x,type:'nominal'},
+        {field:color,type:'nominal'},{...sumY,format:',.2f'}]},config:{view:{stroke:null},
+      axis:{labelColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--border')},
+      legend:{labelColor:ink,titleColor:ink,orient:'bottom'},range:{category:[token('--primary'),
+        token('--chart-2'),token('--chart-3'),token('--chart-4'),token('--chart-5'),ink]}}}).spec;
   views[key]=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:$('#'+key),
     renderer:'svg',expr:vega.expressionInterpreter});await views[key].runAsync();
 }
-function drawCharts(list){
-  const trend=months().map(m=>({month:m,total:sum(rows.filter(row=>row.date.startsWith(m)))}));
-  const payers=[...new Set(rows.map(row=>row.payer))]
-    .map(p=>({payer:p,total:sum(list.filter(row=>row.payer===p))}));
-  return Promise.all([chart('trend',trend,'line','month','total','ordinal'),
-    chart('payer',payers,'bar','payer','total','nominal')]);
-}
+// Spent against the summed targets by month; who paid what this month, stacked by category.
+const drawCharts=list=>Promise.all([chart('trend',months().flatMap(m=>[{month:m,series:'Spent',
+  value:sum(inMonth(m))},{month:m,series:'Budget',value:budget()}]),'line','month','series',
+  'value'),chart('payer',list,'bar','payer','category','amount')]);
 const applyDark=dark=>{if(typeof dark==='boolean')document.documentElement.dataset.afDark=dark;
   $('#dark').setAttribute('aria-pressed',document.documentElement.dataset.afDark==='true');};
 // Local state holds this viewer's saved choices from the first read; write only on a viewer action.
@@ -183,8 +180,9 @@ $('#month').onchange=event=>client.updateQuery({query:preference},s=>({...s,
 $('#editor').onsubmit=async event=>{
   event.preventDefault();status.textContent='Saving the shared target…';
   try{
-    const result=await client.mutate({mutation:setTarget,
-      variables:{c:state.category,a:Number($('#amount').value)}});
+    // An empty field clears the category's target; a number sets it.
+    const raw=$('#amount').value,result=await client.mutate(raw===''?{mutation:clear,variables:
+      {c:state.category}}:{mutation:setTarget,variables:{c:state.category,a:Number(raw)}});
     if(result.errors?.length)throw Error(result.errors[0].message);
     await loadTargets();render();
     status.textContent=`Saved the ${state.category} target for everyone.`;
@@ -192,6 +190,7 @@ $('#editor').onsubmit=async event=>{
 };
 new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})
   .observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
+// A shared change from another reader refreshes the numbers but leaves #status alone.
 onBackendChange(names=>{if(names.includes(APP.backend))void loadTargets().then(render);});
 try{await Promise.all([loadRows(),loadTargets()]);render();
   status.textContent=`Loaded ${rows.length} sample transactions across ${months().length} months.`;
