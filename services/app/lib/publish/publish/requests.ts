@@ -31,7 +31,8 @@ import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../ass
 import { checkDocumentData } from '../data/data-checks';
 
 async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
- if(!await getOwnedArtifactFor(actor,id))return json({error:'not_found'},404);
+ // A changed bundle file needs edit access to its own artifact, never page ownership.
+ if(!await getArtifactFor(actor,id))return json({error:'bundle_file_not_editable'},403);
  const saved=await durableMutation(actor,base,key,{id,body},async receipt=>{
   const response=await replaceArtifactWithBody(body,actor,id,base,{mutationReceipt:receipt});return {status:response.status,body:await response.json() as Record<string,unknown>};
  });return json(saved.body,saved.status);
@@ -115,12 +116,22 @@ export async function replaceArtifactWithBody(
     if(expected.expectedVersion!==undefined&&expected.expectedVersion!==current.version||expected.expectedState!==undefined&&expected.expectedState!==artifactState(current))return json({error:'version_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
     if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
     if(body.publicationBundle!==undefined&&(!actor.tokenId||options.dryRun))return json({error:'bundle_requires_authenticated_commit'},400);
+    // Edit access to the page is enough to save a bundle; each file is then
+    // authorized on its own (preparePublicationBundle). New files belong to the
+    // page owner, so an editor's save never leaves the owner's page depending on
+    // the editor's artifacts. The injected visibility/shares are the page's
+    // current values, written under the same edit access a plain save has.
+    let creator=actor as TokenHoldingActor,newFilesRefused=false;
     if(body.publicationBundle!==undefined){
-      if(!await getOwnedArtifactFor(actor,id))return json({error:'bundle_requires_page_owner'},403);
+      if(!await getOwnedArtifactFor(actor,id)){
+        // A group page's files can be created as the group only by its editors, who own the page already.
+        if(current.group_id)newFilesRefused=true;
+        else creator={...writerFor(current),tokenId:current.token_id??creator.tokenId};
+      }
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor as TokenHoldingActor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),id,((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name));
+    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,resolvedBackendNames:((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name),dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
     if(bundled instanceof Response)return bundled;
     body=bundled.body;bundleReceipts=bundled.receipts;
   }
