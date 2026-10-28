@@ -80,7 +80,7 @@ it('refuses a create over capacity with no session id, listing only the caller\'
     const refused=await create(owner,'owner-two');
     expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_CAPACITY'}});
     expect(refused.execution_id).toBeUndefined();
-    expect(refused.error!.message).toContain('afbin sessions close owner-one');
+    expect(refused.error!.message).toContain("{op:'close',session_id:'owner-one'}");
     expect(refused.error!.message).not.toContain('stranger-one');
     // Nothing was created under the proposed id.
     expect((await sessions.request({actor:owner,op:'status',session_id:'owner-two'})).error?.code).toBe('SESSION_NOT_FOUND');
@@ -120,7 +120,7 @@ describe('session capacity', () => {
       const refused=await create('a','a-2');
       expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_CAPACITY'}});
       expect(refused.error!.message).toContain('at most 3 browser sessions');
-      expect(refused.error!.message).toContain('afbin sessions close a-1');
+      expect(refused.error!.message).toContain("{op:'close',session_id:'a-1'}");
       expect(refused.error!.message).not.toMatch(/[bc]-1/);
     }finally{await sessions.close();}
   });
@@ -135,8 +135,8 @@ describe('session capacity', () => {
       expect(refused).toMatchObject({session_id:'',status:'failed',error:{code:'SESSION_ACTOR_CAPACITY'}});
       expect(refused.execution_id).toBeUndefined();
       expect(refused.error!.message).toContain('at most 2 browser sessions');
-      expect(refused.error!.message).toContain('afbin sessions close g-1');
-      expect(refused.error!.message).toContain('afbin sessions close g-2');
+      expect(refused.error!.message).toContain("{op:'close',session_id:'g-1'}");
+      expect(refused.error!.message).toContain("{op:'close',session_id:'g-2'}");
       expect(refused.error!.message).not.toMatch(/none of them are yours/i);
       expect((await sessions.request({actor:actor('greedy'),op:'status',session_id:'g-3'})).error?.code).toBe('SESSION_NOT_FOUND');
       // Another credential is not held back by the first one's cap.

@@ -2,7 +2,7 @@
 import {cp,mkdir,readFile,access} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
-export async function installedPackage(name,from){
+async function installedPackage(name,from){
  const require=createRequire(join(from,'package.json'));
  try{return dirname(require.resolve(name+'/package.json'));}
  catch{

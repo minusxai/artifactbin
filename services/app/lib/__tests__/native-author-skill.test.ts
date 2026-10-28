@@ -80,7 +80,7 @@ describe('one installable native HTML author skill',()=>{
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);
   for(const file of tree.files.filter(file=>file.ref&&isPublicSkillTopic(file.file.replace(/\.md$/,'')))){
-   expect(Buffer.byteLength(renderSkill(file,{base:BASE,transport:'http'})),file.file).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+   expect(Buffer.byteLength(renderSkill(file,{base:BASE})),file.file).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
   }
   for(const [name,text] of Object.entries(files).filter(([name])=>name.endsWith('.md'))){
    expect(text,name).not.toMatch(/@afbin\/cli|chat\/(?:install|ensure-node)|afbin push/);

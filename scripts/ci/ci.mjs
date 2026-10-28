@@ -4,32 +4,16 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { normalisedLock } from '../lib/lock-fingerprint.mjs';
-import { CI_JOBS, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, buildKey, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { CI_JOBS, buildKey, checkCiResults, planCi } from '../lib/ci-plan.mjs';
 
 const env = process.env;
 const mode = process.argv[2];
 
-/** The CLI version at a revision, or null where the file cannot be read. */
-function cliVersionAt(rev) {
-  try {
-    return JSON.parse(execFileSync('git', ['show', `${rev}:services/cli/package.json`], { encoding: 'utf8' })).version ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Did this change bump the CLI version? That is what selects universal npm packaging and native acceptance
- * (`lib/ci-plan`). The base is the PR's base, a push's `before`, or — for a dispatched run on a
- * release branch — the merge base with main. No base at all (a first push, a forced one, a shallow
- * clone) reads as a release, because building bytes nobody publishes costs minutes while skipping
- * bytes the publisher then cannot find costs a release.
- */
 /**
  * What a pull request is measured against. GitHub runs it on the MERGE commit of its head into today's base
  * branch, while the event's `base.sha` can still name the base the PR was opened on. Against that stale base a
- * main that moved since reads as the PR's own change: another PR's release looked like this PR's bump, and the
- * CLI bump refusal stood down (#666). The merge commit's first parent IS the base it was merged into.
+ * main that moved since reads as the PR's own change and widens the selection to another PR's paths.
+ * The merge commit's first parent IS the base it was merged into.
  */
 function pullRequestBase(env) {
   const head = env.CI__HEAD_SHA || 'HEAD';
@@ -38,18 +22,6 @@ function pullRequestBase(env) {
     if (parents.length === 2) return parents[0];
   } catch { /* no history to read: the event's own base stands */ }
   return env.CI__BASE_SHA;
-}
-
-function cliVersionChanged(env) {
-  let base = env.CI__EVENT === 'pull_request' ? pullRequestBase(env) : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
-  if (!base && env.CI__EVENT === 'workflow_dispatch') {
-    try { base = execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { base = ''; }
-  }
-  if (!base || /^0+$/.test(base)) return true;
-  const before = cliVersionAt(base);
-  const after = cliVersionAt(env.CI__HEAD_SHA || 'HEAD');
-  if (before === null || after === null) return true;
-  return before !== after;
 }
 
 /** The changed paths between two revisions, or null when the history is not there to read. */
@@ -61,32 +33,6 @@ function changedPaths(range) {
     console.error('Diff unavailable; selecting the full suite.');
     return null;
   }
-}
-
-/** `git diff -U0` for the given paths, as `{path, hunks: [{removed, added}]}` for the pure check. */
-function changedLines(range, paths) {
-  let text = '';
-  try { text = execFileSync('git', ['diff', '--no-renames', '-U0', range, '--', ...paths], { encoding: 'utf8' }); } catch { return []; }
-  const files = [];
-  let file = null;
-  let hunk = null;
-  for (const line of text.split('\n')) {
-    // The per-file header (`diff --git`, `index`, `--- a/x`, `+++ b/x`) comes BEFORE the file's
-    // first `@@`, and `--- a/x` would otherwise read as a removed line of the file before it.
-    if (line.startsWith('diff --git ')) {
-      file = null;
-      hunk = null;
-    } else if (line.startsWith('+++ ')) {
-      file = { path: line.slice(6), hunks: [] };
-      hunk = null;
-      files.push(file);
-    } else if (line.startsWith('@@')) {
-      hunk = { removed: [], added: [] };
-      file?.hunks.push(hunk);
-    } else if (hunk && line.startsWith('-')) hunk.removed.push(line.slice(1));
-    else if (hunk && line.startsWith('+')) hunk.added.push(line.slice(1));
-  }
-  return files;
 }
 
 /**
@@ -234,19 +180,13 @@ if (mode === 'plan') {
   const paths = usable ? changedPaths(env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`) : null;
   const range = env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`;
   const v3Push = env.CI__EVENT === 'push' && env.CI__REF === 'refs/heads/artifactbinv3';
-  const nightly = env.CI__EVENT === 'schedule';
-  const versionOnly = !v3Push && !nightly && Array.isArray(paths) && paths.length > 0
-    && paths.every((path) => VERSION_BUMP_FILES.includes(path))
-    && isVersionOnlyBump(changedLines(range, paths));
-  // Order matters: a version-only push must PACK its universal npm artifact, because the publisher uploads it
-  // from this run. Only after that does a tree we already tested get to select nothing at all.
   let testedPatch = false;
-  let testedRun = !v3Push && !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
+  let testedRun = !v3Push && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   // THE TREE MISSED: another PR moved the base before this one merged. The PATCH may still be
   // recognisable (`patchIdOf` is invariant to that), and safe to skip re-testing when nothing that
   // changed in the gap it left behind overlaps what it touches (`patchGapIsSafe`) — otherwise this
   // falls straight through to the ordinary affected-modules selection below, unchanged.
-  if (!v3Push && !testedRun && !nightly && !versionOnly && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
+  if (!v3Push && !testedRun && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
     const patchId = patchIdOf(range);
     if (patchId) {
       const candidate = await testedRunForPatch(patchId);
@@ -260,23 +200,14 @@ if (mode === 'plan') {
     // A push with diff evidence is judged like a PR: the modules it changed and their dependents
     // (planCi still widens to everything for manifests, shared packages, CI config or unclassified
     // paths). Only a push with no usable base — a first push, a forced one — runs the full suite.
-    full: v3Push || !nightly && !versionOnly && !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
-    cliRelease: cliVersionChanged(env),
-    versionOnly,
-    nightly,
+    full: v3Push || !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
     testedRun,
     testedPatch,
   });
-  // v3 retains the source/compiler suite and package producer, while the retired
-  // public installer assets have no native/bootstrap/distribution proof to run.
-  if (v3Push) for (const job of ['cli', 'cli-bootstrap', 'reference-compatibility']) plan.jobs[job] = false;
-  // The refusal belongs on the PR, where the branch can still bump. Main never reds for it: by then
-  // the only honest fix would be another commit on main, which is what the rule exists to prevent.
-  const cliBump = env.CI__EVENT === 'pull_request' && cliBumpRequired(paths ?? [], { cliRelease: plan.cliRelease });
   console.log(JSON.stringify(plan, null, 2));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT,
     `plan=${JSON.stringify(plan)}\n` + CI_JOBS.map((job) => `${job}=${plan.jobs[job]}\n`).join('')
-    + `company-container=${plan.companyContainer}\n` + `cli-pack=${plan.cliPack}\n` + `cli-bump=${cliBump}\n` + `source-run=${testedPatch ? env.GITHUB_RUN_ID : plan.testedRun ?? ''}\n`);
+    + `source-run=${testedPatch ? env.GITHUB_RUN_ID : plan.testedRun ?? ''}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
     `CI selection: ${plan.selection}\n\n`
     + (plan.testedRun ? `${testedPatch ? 'patch' : 'tree ' + treeOf(head)} tested by run ${plan.testedRun}\n\n` : '')
@@ -298,11 +229,6 @@ if (mode === 'plan') {
   const failed = checkCiResults(plan, Object.fromEntries(Object.entries(needs).map(([job, value]) => [job, value.result])));
   if (failed.length) throw new Error(`CI jobs did not succeed: ${failed.join(', ')}`);
   console.log('All selected CI jobs passed.');
-} else if (mode === 'cli-bump') {
-  // The refusal text lives with the rule (lib/ci-plan.mjs), so there is one copy to read and to test.
-  console.error(`::error::${CLI_BUMP_REFUSAL}`);
-  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${CLI_BUMP_REFUSAL}\n`);
-  process.exit(1);
 } else if (mode === 'record-tree') {
   // WHAT THIS RUN TESTED, written where a later push can find it by name.
   const tree = treeOf('HEAD');
@@ -310,8 +236,6 @@ if (mode === 'plan') {
   const source = env.CI__SOURCE_RUN || env.GITHUB_RUN_ID || '';
   mkdirSync('tested-tree', { recursive: true });
   writeFileSync('tested-tree/tested-tree.json', JSON.stringify({ run_id: Number(env.GITHUB_RUN_ID ?? 0), head_sha: env.GITHUB_SHA ?? '', tree }) + '\n');
-  mkdirSync('tested-run', { recursive: true });
-  writeFileSync('tested-run/tested-run.json', JSON.stringify({ run_id: Number(source) }) + '\n');
   // THE PATCH THIS RUN TESTED, only on a pull request (a push tests a PR's patch; it does not mint
   // a new one). `patchIdOf` here must match the `plan` job's own range for this same PR — three
   // dots, base against head — so a later push's two-dot `before..head` (see `plan`) still finds it.
@@ -338,5 +262,5 @@ if (mode === 'plan') {
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
   console.log(`build key ${key} over ${inputs} build inputs`);
 } else {
-  throw new Error('Expected plan, node, check, cli-bump, record-tree, lock-fingerprint or build-key');
+  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint or build-key');
 }

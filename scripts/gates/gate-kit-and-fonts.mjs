@@ -5,7 +5,7 @@ import { createChecker } from "./lib/assert.mjs";
 import { fixtureFetch as fetch } from "./lib/fixture-http.mjs";
 import { launchChromium, PAGES_HOST } from "./lib/browser.mjs";
 import { documentFrame } from "./lib/page-facts.mjs";
-import { connectAgent } from "./lib/cli-connection.mjs";
+import { connectAgent } from "./lib/account-connection.mjs";
 import { becomeOwner } from "../lib/start-doc.mjs";
 import { publishPageSpeedFixtures } from "../fixtures/page-speed/index.mjs";
 

@@ -225,7 +225,6 @@ describe('the retired env names', () => {
   const signedComposition = new Set([
     'scripts/__tests__/app-only-auth.test.mjs', 'scripts/__tests__/setup-plan.test.mjs',
     'scripts/agent-worktree.mjs', 'scripts/lib/setup-plan.mjs', 'scripts/setup.mjs',
-    'services/cli/test/team-config.test.ts',
   ]);
   const stillOwned = (file: string, name: string): boolean =>
     (name === 'CONTRACT__ACTOR_SECRET' && signedComposition.has(file)) ||
@@ -243,8 +242,6 @@ describe('the retired env names', () => {
   it('finds quoted JSON settings outside the app, and no allowed setting masks a retired one on the same line', () => {
     expect(forbiddenSettings('scripts/fixtures/config.json', '{"ADMIN_SECRET": "x"}')).toEqual(['ADMIN_SECRET']);
     expect(forbiddenSettings('scripts/setup.mjs', "{ CONTRACT__ACTOR_SECRET: 'fixture', AUTH_SECRET: 'obsolete' }"))
-      .toEqual(['AUTH_SECRET']);
-    expect(forbiddenSettings('services/cli/test/team-config.test.ts', "{ CONTRACT__ACTOR_SECRET: 'fixture', AUTH_SECRET: 'obsolete' }"))
       .toEqual(['AUTH_SECRET']);
     expect(forbiddenSettings('services/auth/src/config.ts', 'INVITE__CODE=obsolete')).toEqual(['INVITE__CODE']);
   });

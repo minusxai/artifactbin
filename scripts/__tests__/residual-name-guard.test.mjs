@@ -180,8 +180,8 @@ describe('README.md', () => {
     expect(readme().split('\n').filter((l) => /^## /.test(l))).toEqual(['## Author a document', '## Develop', '## Modules and documentation']);
     expect(readme().split('\n')[0]).toBe('# Artifactbin');
   });
-  it('documents skill installation, real HTTP authoring and internal compatibility boundaries',()=>{
-    for(const text of ['/llms.txt','/skills/artifactbin.zip','/llms/http-auth','/llms/http-authoring','POST /api/artifacts','npm run setup -- --yes --port 7445','services/cli','internal compatibility dependency','Apache-2.0'])expect(readme()).toContain(text);
+  it('documents skill installation and real HTTP authoring',()=>{
+    for(const text of ['/llms.txt','/skills/artifactbin.zip','/llms/http-auth','POST /api/artifacts','npm run setup -- --yes --port 7445','Apache-2.0'])expect(readme()).toContain(text);
     expect(readme()).not.toMatch(/chat\/install|@afbin\/cli|afbin auth|afbin push/);
   });
 });
@@ -189,11 +189,10 @@ describe('README.md', () => {
 describe('docs/', () => {
   it('source onboarding pulls by the published ID and preserves local edits', () => {
     const onboarding = read('docs', 'oss-onboarding.md');
-    expect(onboarding).toContain('npm run afbin -- pull <published-id> --output hello.jsx');
-    expect(onboarding).toContain('ID returned by `push --json`');
-    expect(onboarding).toContain('Preserve any unpushed local edits');
-    expect(onboarding).not.toContain('npm run afbin -- pull hello.jsx');
-    expect(onboarding).not.toContain('pull <published-id> --output hello.jsx --force');
+    expect(onboarding).toContain('node scripts/read.mjs <published-id> --output page.html');
+    expect(onboarding).toContain('returned by `publish.mjs`');
+    expect(onboarding).toContain('preserve any unpublished local edits');
+    expect(onboarding).not.toMatch(/npm run afbin|afbin (?:pull|push)/);
   });
   it('holds the essays the README used to carry', () => {
     for (const f of ['editing.md', 'document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {

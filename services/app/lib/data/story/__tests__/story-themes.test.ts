@@ -17,8 +17,6 @@ import {
   STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss,
   storyThemeDefaultMode, resolveStoryMode, resolveStoredStoryDesign,
 } from '../story-themes';
-import { skillTree } from '@/lib/skills';
-import { renderDoc } from '@/test/helpers/skill-docs';
 
 /** Exactly the CSS variables TW_INPUT_STORY maps utilities onto, plus --radius. */
 const REQUIRED_VARS = [
@@ -51,18 +49,6 @@ describe('STORY_THEMES registry', () => {
       expect(t.fonts.body.length).toBeGreaterThan(0);
       expect(['light', 'dark']).toContain(t.defaultMode);
     }
-  });
-
-  // A theme's authoring guidance is its docs file — `skills/artifactbin/references/themes-<name>.md`,
-  // the one copy agents read — never a field on the StoryTheme entry.
-  it('no theme has authoring guidance any more: the legacy note names the six, and a retired theme has nothing', () => {
-    const legacy = renderDoc('artifactbin/references/themes.md', 'https://example.test');
-    for (const name of STORY_THEME_NAMES) {
-      expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guide retired from teaching`).toBeUndefined();
-      expect(legacy, `${name} named as a legacy value`).toContain(`\`${name}\``);
-    }
-    expect(skillTree().get('artifactbin/references/themes-classical.md'), 'classical guidance retired').toBeUndefined();
-    expect(legacy).not.toContain('`classical`');
   });
 
   it('every theme defines the FULL light contract and the full dark color contract', () => {

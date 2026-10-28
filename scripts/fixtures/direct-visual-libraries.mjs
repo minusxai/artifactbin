@@ -6,7 +6,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
-import {connectAgent} from '../gates/lib/cli-connection.mjs';
+import {connectAgent} from '../gates/lib/account-connection.mjs';
 import {documentFrame} from '../gates/lib/page-facts.mjs';
 /** @param {{pele:string,deck:string}} libraries */
 export function directVisualSource({pele,deck}) {

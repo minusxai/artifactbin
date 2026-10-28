@@ -47,7 +47,7 @@ import { createChecker, createSection } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
-import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
+import { bearerApi, connectAgent } from './lib/account-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('reader-shell');

@@ -1,13 +1,6 @@
 # File uploads
 
-Upload original bytes with the CLI, which signs itself in on the connection it
-already holds:
-
-```bash
-afbin push scene.glb
-```
-
-The HTTP surface underneath is
+Upload original bytes with
 `POST /api/artifacts?format=file&filename=scene.glb` with the bytes as the
 body and a `Content-Type` matching the extension. The session equivalent is
 `/api/my/artifacts`. JSON API callers can send
@@ -46,7 +39,7 @@ Every image, PDF and file artifact records `meta.sha256`: the hash of the bytes
 the client uploaded, taken before any optimisation, so an image's hash is that
 of the file you sent and not of the stored WebP. Publication preflight uses it
 to answer whether you already own a live artifact published from those exact
-bytes, and the CLI then references that artifact instead of uploading the file
+bytes, and the client then references that artifact instead of uploading the file
 again. The lookup never crosses accounts: another owner's identical bytes and
 artifacts merely shared with you are never returned.
 

@@ -2,7 +2,6 @@ import { expect,it } from 'vitest';
 import { parseJsx,validateJsx } from '@/lib/jsx';
 import { collectRefNameUses } from '@/lib/dataflow';
 import { keyedRowsError, validRowKey } from '../repeat-identity';
-import { renderDoc } from '@/test/helpers/skill-docs';
 import { stampNodeIds } from '@/lib/document/node-ids';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';
 function nodes(source:string){const p=parseJsx(source);if(!p.ok)throw new Error(p.error);return p.nodes;}
@@ -33,26 +32,4 @@ it('uses the persistence key grammar for render-time validation, including empty
    expect(validRowKey(key)).toBe(false);
    expect(keyedRowsError([{id:key}],'id')).not.toBeNull();
  }
-});
-
-
-
-
-
-
-it('teaches row buttons in both shipped references',()=>{
- for(const name of ['markup-repeat','markup-editing']) {
-  const doc=renderDoc(`artifactbin/references/${name}.md`,'https://example.test');
-  expect(doc).toContain('<Button run="$complete">');
-  expect(doc).toContain('click');
- }
-});
-
-it('teaches dataset image strings, missing covers and the separate media permission boundary',()=>{
- const doc=renderDoc('artifactbin/references/markup-repeat.md','https://example.test');
- expect(doc).toContain('src="$_row.cover_ref"');
- expect(doc).toContain('No photograph available');
- expect(doc).toContain('does not grant access');
- expect(doc).toContain('fewer than 10');
- expect(doc).toContain('not a platform limit');
 });

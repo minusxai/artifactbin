@@ -15,19 +15,16 @@ API beside the signals.
 
 The session service owns authentication scope, leases, execution receipts, and
 script serialization. Each isolated worker owns an actual Playwright browser,
-context, and pages across calls. The CLI submits async function bodies and polls
-receipts. It prints recovery IDs before waiting. `context` is standard Playwright;
+context, and pages across calls. Clients submit async function bodies and poll
+receipts, keeping the recovery IDs before waiting. `context` is standard Playwright;
 `pages` is a frozen map of stable page IDs; `output.image(bytes)` attaches PNG/JPEG.
 Open artifacts with `await page.goto('/a/<id>')`, call `window.page` through
 `page.evaluate()`, and use normal locators and screenshots. Independent page work
 can use `Promise.all`. Source editing is not a session operation.
 
-```
-afbin sessions script new --input actions.js --json
-afbin sessions script SESSION_ID --input next.js --json
-afbin sessions status SESSION_ID --execution EXECUTION_ID --json
-afbin sessions close SESSION_ID --json
-```
+Clients use the HTTP API `POST /api/browser-sessions`, with ops `script` (a new
+session, or an existing session ID with the next function body), `status`
+(a session's execution receipt) and `close`. See `<origin>/llms.txt`.
 
 ```js
 const page = await context.newPage();

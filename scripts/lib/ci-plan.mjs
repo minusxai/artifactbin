@@ -6,78 +6,10 @@ import { createHash } from 'node:crypto';
  */
 /**
  * Every conditional job in ci.yml, each one runner set the `test` roll-up requires when selected. `integration`
- * (the Docker/Chromium Vitest project) and `cli-tests` (the CLI source suite) are jobs of their own, not steps
- * appended to a node shard: run serially there, they made that one shard the longest job of the run.
+ * (the Docker/Chromium Vitest project) is a job of its own, not steps appended to a node shard: run serially
+ * there, it made that one shard the longest job of the run.
  */
-export const CI_JOBS = ['checks', 'node', 'integration', 'cli-tests', 'ui', 'build', 'api', 'gates', 'cli', 'cli-bootstrap', 'reference-compatibility'];
-
-/**
- * The tracked release files carry only version changes. Teaching is generated
- * during the build, not committed. A version-only push needs packaging proofs:
- * the source under that version has already passed the suites.
- */
-const VERSION_LINE = {
-  'services/cli/npm-shrinkwrap.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  'services/cli/package.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  'package-lock.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  // The bootstrap old 0.3.x installs download from every release pins the version it installs.
-  'services/cli/transition/afbin': /^AFBIN_VERSION=\d+\.\d+\.\d+$/,
-};
-
-export const VERSION_BUMP_FILES = Object.keys(VERSION_LINE);
-
-/** The refusal a CLI change without a version bump earns, in `checks`. */
-export const CLI_BUMP_REFUSAL = 'This PR changes the CLI without bumping its version — run `npm run release:cli` in this branch.';
-
-/**
- * Is this diff nothing but the version bump?
- *
- * The file list alone would not do: `package-lock.json` is on it, and a dependency change writes the
- * same file. Nor would "the line contains a version" — an upgraded dependency's `"resolved"` URL
- * contains one too. So every changed LINE must BE that file's version line, and must differ from the
- * line it replaced in nothing but the number. A hunk that adds or removes a line is not a bump.
- *
- * @param {{path: string, hunks: {removed: string[], added: string[]}[]}[]} files
- */
-export function isVersionOnlyBump(files) {
-  // The package and the transition pin move together: a bump that leaves old installs on the old pin is not one.
-  for (const required of ['services/cli/package.json', 'services/cli/transition/afbin']) {
-    if (!files.some((file) => file.path === required)) return false;
-  }
-  const withoutVersions = (line) => line.replace(/\d+\.\d+\.\d+/g, '#');
-  for (const file of files) {
-    const versionLine = VERSION_LINE[file.path];
-    if (!versionLine || !file.hunks.length) return false;
-    for (const { removed, added } of file.hunks) {
-      if (!added.length || added.length !== removed.length) return false;
-      for (const [index, line] of added.entries()) {
-        if (!versionLine.test(line) || !versionLine.test(removed[index])) return false;
-        if (withoutVersions(line) !== withoutVersions(removed[index])) return false;
-      }
-    }
-  }
-  return true;
-}
-
-const isTestOrProse = (path) => path.endsWith('.md') || /(^|\/)(__tests__|test|tests)\//.test(path) || /\.test\.[cm]?[jt]sx?$/.test(path);
-/** A path of the CLI or its Node runtime layer (services/utils), other than its tests and prose. */
-export function cliRuntimePath(path) {
-  return /^services\/(cli|utils)\//.test(path) && !isTestOrProse(path);
-}
-
-/**
- * A CLI change that ships no version is a change nobody can install: the publisher only uploads when
- * the version moved, so the source would sit on main unreleased until someone noticed. Prose and the
- * CLI's own tests are exempt — they change nothing anyone downloads.
- */
-export function cliBumpRequired(paths, { cliRelease = false } = {}) {
-  if (cliRelease) return false;
-  return paths.some((path) => /^services\/cli\/(src|scripts)\//.test(path)
-    && !path.endsWith('.md')
-    && !/(^|\/)(__tests__|test|tests)\//.test(path)
-    && !/\.test\.[cm]?[jt]sx?$/.test(path));
-}
+export const CI_JOBS = ['checks', 'node', 'integration', 'ui', 'build', 'api', 'gates'];
 
 // Workspace edges plus integration-test consumers. The app's test boundary
 // composes the real services. Script contract tests read across modules, so
@@ -93,30 +25,15 @@ export const CI_MODULES = {
   runner: ['contracts', 'utils'],
   auth: ['contracts', 'utils', 'test-support'],
   app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'runner', 'test-support'],
-  cli: ['contracts', 'app', 'sql', 'test-support'],
 };
 
-/**
- * THE UNIVERSAL NPM PACKAGE IS BUILT AND PROVEN ON SUPPORTED PLATFORMS FOR A RELEASE. The five-target build, the Intel render
- * proofs and the distributions conformance job were the whole tail of every full run (the Intel
- * build alone is 4.5 minutes, the proofs behind it another 3.5), and they proved bytes nobody was
- * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So
- * `cliRelease` — the CLI version differs between base and head — is what selects them; an
- * ordinary CLI change gets the bundle build and the CLI source suite (`cli-tests`).
- * The "Release afbin" workflow pushes the branch that flips the version.
- */
-export function planCi(paths, { full = false, cliRelease = false, versionOnly = false, nightly = false, testedRun = null, testedPatch = false } = {}) {
+/** Repo-relative changed paths to the selected jobs and Node test roots. */
+export function planCi(paths, { full = false, testedRun = null, testedPatch = false } = {}) {
   const nothing = Object.fromEntries(CI_JOBS.map((job) => [job, false]));
   // A TREE THIS REPOSITORY ALREADY TESTED. PR CI recorded it under its own hash when every selected
   // job passed; the push that merges it is the same bytes, so there is nothing left to learn — not
   // even `checks`, whose whole cost would be paid to re-typecheck a tree that already typechecked.
-  if (testedRun) return { full: false, cliRelease, cliPack: testedPatch, companyContainer: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch, current-tree package' : 'tested tree' };
-  // The nightly exists so the release-only CLI matrix cannot rot unseen between releases (and so its
-  // caches stay warm on the default branch, which is what makes a release build fast).
-  if (nightly) return { full: false, cliRelease: true, cliPack: true, companyContainer: false, jobs: { ...nothing, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
-  // A VERSION BUMP AND NOTHING ELSE: the code under it is the code that just passed. Pack the
-  // npm artifact (with native acceptance), typecheck, and skip the suite the unchanged tree already answered.
-  if (versionOnly) return { full: false, cliRelease: true, cliPack: true, companyContainer: true, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
+  if (testedRun) return { full: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch' : 'tested tree' };
   const changed = new Set();
   // Scanner configuration and its contract tests never enter a product bundle.
   // Keep workflow checks; mixed source or unknown inputs retain their normal selection.
@@ -134,8 +51,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     const module = /^services\/([^/]+)\//.exec(path)?.[1];
     if (!Object.hasOwn(CI_MODULES, module ?? '')
       || module === 'contracts' || module === 'utils' || module === 'test-support'
-      || path.endsWith('/package.json')
-      || path === 'services/cli/scripts/prepare-pty.mjs') {
+      || path.endsWith('/package.json')) {
       full = true;
     } else changed.add(module);
   }
@@ -160,26 +76,16 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   }
   // The integration project runs wherever the node project does (it holds the scripts' Docker and Chromium proofs).
   jobs.integration = jobs.node;
-  // The CLI source suite guards every CLI change, release or not.
-  jobs['cli-tests'] = full || affected.has('cli');
-  // The npm artifact is proved on every supported consumer for a release, and for any change to the CLI
-  // or to services/utils, its Node runtime layer (filesystem privacy, processes, transport): code whose
-  // behaviour differs by platform never reaches Windows or macOS otherwise. Neither requires a version.
-  jobs.cli = cliRelease || paths.some(cliRuntimePath);
-  // The standard-user bootstrap and distribution conformance prove an installer, so they stay release-only.
-  jobs['cli-bootstrap'] = cliRelease;
-  jobs['reference-compatibility'] = cliRelease;
   const nodeRoots = full ? [] : [
     ...(affected.size || scannerContracts ? ['scripts/'] : []),
-    ...[...affected].filter((module) => module !== 'cli').map((module) => `services/${module}/`),
+    ...[...affected].map((module) => `services/${module}/`),
   ].sort();
-  const companyContainer = cliRelease || paths.some(path => path.startsWith('deploy/company/'));
-  return { full, cliRelease, cliPack: jobs.cli || companyContainer, companyContainer, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
+  return { full, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
 }
 
 /** A selected job must succeed; only an unselected job may be skipped. */
 export function checkCiResults(plan, results) {
-  return [...CI_JOBS, ...(plan.cliPack ? ['cli-pack'] : []), ...(plan.companyContainer ? ['company-container'] : [])].filter((job) =>
+  return CI_JOBS.filter((job) =>
     results[job] !== 'success' && !(plan.jobs[job] === false && results[job] === 'skipped'));
 }
 
