@@ -8,9 +8,9 @@ Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs;
 Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
   traction, business model, competition, ask); N topics means N slides. Types: cover is the problem
   slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3}, bullets
-  {items≤3}, chart {mark bar|line, data [{x,y}], format d3 like ".1f"}, flow {steps≤4}, matrix
-  {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,milestone,items≤3
-  [{label,amount} or {label,pct}]} (shows sum, shares, milestone; its title comes from these).
+  {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow {steps≤4},
+  matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,milestone,
+  items≤3 [{label,amount} or {label,pct}]} (shows sum, shares, milestone; titled from these).
   Titles ≤2 lines; they may only state numbers, time spans or comparisons the slide itself shows.
   Say if a chart counts cumulatively. Unique ids key data-af-id. Slides with figures show
   "Illustrative figures"; real:true removes it.
@@ -31,7 +31,7 @@ window.SLIDES = [
   {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
     steps:['[Input]', '[Product]', '[Outcome]']},
   {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
-    mark:'bar', format:'.1f', yTitle:'US$ billions',
+    mark:'bar', format:'.1f', unit:'$#B', yTitle:'US$ billions',
     data:[{x:'Total', y:4.2}, {x:'Serviceable', y:1.1}, {x:'Obtainable', y:0.12}]},
   {id:'traction', type:'chart', label:'Traction', title:'[The strongest proof that it works]',
     mark:'line', format:'.0f', yTitle:'Customers (cumulative)',
@@ -87,7 +87,6 @@ const svgEl=(tag,attrs,text)=>make(document.createElementNS('http://www.w3.org/2
   text);
 const list=(id,items)=>{const ul=el('ul',id,{class:'items t-body'});
   items.slice(0,3).forEach((item,n)=>ul.append(el('li',`${id}-${n}`,{},item)));return ul;};
-// Flow: up to four boxes left to right, the middle one red; text stays horizontal in the viewBox.
 function flow(s){
   const steps=s.steps.slice(0,4),w=900/steps.length;
   const svg=svgEl('svg',{viewBox:'0 0 900 220',role:'img','aria-label':steps.join(' to ')});
@@ -102,7 +101,6 @@ function flow(s){
   });
   return svg;
 }
-// Matrix: a 2x2 with labelled axes; the first point is ours and red.
 function matrix(s){
   const svg=svgEl('svg',{viewBox:'0 0 900 300',role:'img','aria-label':`${s.x} by ${s.y}`});
   svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}));
@@ -172,22 +170,24 @@ const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClie
   return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};
 const seen=new IntersectionObserver(sync,{threshold:.6});slides.forEach(slide=>seen.observe(slide));
 show(0);
-// Charts take concrete design-system colours and redraw when the reader switches light/dark.
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 let views=[];
 async function drawCharts(){views.forEach(view=>view.finalize());
   const ink=token('--ds-ink'),font=token('--font-body'),red=token('--ds-red');
   views=await Promise.all(charts.map(async({s,host})=>{
+    // Design-system colours (redrawn on light/dark); bars and a line's ends print their value.
+    const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,unit=
+      s.unit??'#',values=s.data.map((d,i)=>({...d,label:!line||!i||i===end?unit.replace('#',
+        d.y.toFixed(dp)):''}));
     const spec=compile({width:'container',height:240,autosize:{type:'fit',contains:'padding'},
-      background:'transparent',data:{values:s.data},
-      mark:s.mark==='line'?{type:'line',point:true,color:red,strokeWidth:3}
-        :{type:'bar',color:red,cornerRadiusEnd:2},
+      background:'transparent',data:{values},layer:[{mark:line?{type:'line',point:true,color:red,
+        strokeWidth:3}:{type:'bar',color:red,cornerRadiusEnd:2}},{mark:{type:'text',dy:-10,
+        color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
       encoding:{x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
         y:{field:'y',type:'quantitative',title:s.yTitle??null,axis:{format:s.format}},
         tooltip:[{field:'x',type:'nominal'},{field:'y',type:'quantitative',format:s.format}]},
       config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
-        gridColor:token('--ds-line'),labelFont:font,titleFont:font,labelFontSize:13,
-        titleFontSize:13,titleLimit:210}}}).spec;
+        gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
       expr:vega.expressionInterpreter});await view.runAsync();return view;
   }));

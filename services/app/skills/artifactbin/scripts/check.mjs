@@ -2,32 +2,31 @@
 export const DESCRIPTION = `Browser smoke and task check of a saved page or a local preview.
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
 Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--guest-steps FILE]
-       [--viewer self|guest] [--output FILE]
+       [--cleanup-steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 A hosted check (ID, URL or FILE.html) runs in a server browser session: never install Playwright or Chromium; only a
   local serve.mjs preview needs --playwright-module.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
-  --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
-  return assertions and throw on failure; --guest-steps FILE also runs a signed-out session on the first
-  viewport after the self run (so it never races its writes), in one summary; --viewer self (default) or
-  guest (hosted only, a fixed-identity server session; the page is signed in as you unless guest);
-  --playwright-module FILE (local only: your installed Playwright entrypoint). Common: --server ORIGIN, --json,
-  --output FILE (use a new name each run), --help.
+  --steps FILE an async function body receiving page and step (or a module whose export default takes page or
+  {page}); wrap each check in await step('what it shows', async()=>{...}) and throw on failure; --guest-steps FILE
+  then runs a second, signed-out session on the first viewport (it can read what --steps saved); --cleanup-steps
+  FILE then runs signed in, always, even after a failure, to undo test writes; --viewer self (default) or guest
+  (hosted only; the page is signed in as you unless guest); --playwright-module FILE (local only: your installed
+  Playwright entrypoint). Common: --server ORIGIN, --json, --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
   node scripts/publish.mjs index.html && node scripts/check.mjs index.html --steps steps.mjs
-    --guest-steps guest.mjs --output qa-1.json
-  steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
-               return {assertions:['add shows Saved']}
-  guest file:  await page.getByRole('button',{name:'Save'}).click(); await page.waitForFunction(()=>/sign in/i
-               .test(document.querySelector('#status').textContent),null,{timeout:4000}); return {assertions:['refused']}
-  Assert rendered, rounded text ("$1,240"), not raw numbers.
+    --guest-steps guest.mjs --cleanup-steps cleanup.mjs --output qa-1.json
+  steps file:  await step('Add shows Saved',async()=>{await page.getByRole('button',{name:'Add'}).click();
+               await page.getByText('Saved').waitFor();});
+  Assert rendered, rounded text ("$1,240"), not raw numbers. A passing run prints Verified: (the step labels, per
+  viewport) and Not verified:; describe testing only by quoting the Verified: line.
 Output: --output saves the full JSON and prints one summary line per viewport: errors, overflow, contrast
   (text under 2:1 fails), slides, your task result; each failing item (up to 12 of a kind) names its text and element
   or slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
   values (first ids and counts listed). A warning (not a failure) lists script-created data-af-ids that differ
   between two loads; checked on the first viewport, only when the page has any.
-Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
+Steps: each steps file gets 8 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
   select and click them with [data-af-id="…"] (accessible names include CSS ::before/::after text, so use a regex
   name with getByRole). Vega bars and lines are <path>, not <rect>. Skip a no-steps smoke run. page is scoped to
@@ -102,7 +101,7 @@ export function checkTarget(value) {
 export function stepsBody(source) {
   const match = /^\s*export\s+default\s+/m.exec(source);
   if (!match) return source;
-  return source.slice(0, match.index) + 'const __afSteps = ' + source.slice(match.index + match[0].length) + '\n;return await __afSteps(page);';
+  return source.slice(0, match.index) + 'const __afSteps = ' + source.slice(match.index + match[0].length) + '\n;return await __afSteps(page, typeof step === \'function\' ? step : undefined);';
 }
 /** Runs in either the server session or a fresh local browser context. No credentials. */
 // One page, one viewport: load it, optionally compare IDs across a reload, run the steps, then measure the settled page.
@@ -285,6 +284,12 @@ export async function inspectPage(page, options, task) {
     if (task) {
       // Whether the steps ran and passed; a failure's message is in error (a bare true here once read as "passed").
       evidence.steps = {ran: true, passed: false};
+      // step(label, fn) runs fn and records label as verified; the summary's Verified: line lists them.
+      const verified = (evidence.verified = []);
+      const step = async (label, fn) => {
+        await fn();
+        verified.push(String(label).slice(0, 160));
+      };
       // Keyboard focus in the page's document, so page.keyboard reaches it without a click first.
       if (options.hosted)
         await page.mainFrame().locator('iframe[data-mx-document-frame]').focus({timeout: 1000}).catch(() => {});
@@ -344,11 +349,11 @@ export async function inspectPage(page, options, task) {
       let timer;
       try {
         evidence.task = await Promise.race([
-          task(wrap(page, 'page')),
+          task(wrap(page, 'page'), step),
           new Promise((_, reject) => {
             timer = setTimeout(
               () => reject(Error('Task deadline exceeded; inspect the awaited condition')),
-              6000
+              8000
             );
           })
         ]);
@@ -711,7 +716,7 @@ export function checkScript({
   compareReload = false
 }) {
   if (!viewports || viewports.length !== 1) throw Error('Each hosted execution checks one viewport.');
-  return `const page=await context.newPage();try{return await (${compactSource(inspectPage)})(page,${JSON.stringify({target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload})},${steps ? `async(page)=>{${steps}\n}` : 'null'});}finally{await page.close();}`;
+  return `const page=await context.newPage();try{return await (${compactSource(inspectPage)})(page,${JSON.stringify({target, viewport: viewports[0], timeoutMs, hosted: true, capture, compareReload})},${steps ? `async(page,step)=>{${steps}\n}` : 'null'});}finally{await page.close();}`;
 }
 /** @returns {import('../../../lib/skills/author-toolbox-contract').AuthorCheckResult} */
 // Smoke passes only without errors, overflow, unreadable text or duplicate ids; task and visual acceptance stay unverified.
@@ -893,7 +898,7 @@ export async function checkLocal({target, viewports, steps = '', capture = false
           await inspectPage(
             page,
             {target, viewport, capture, compareReload: viewport === viewports[0]},
-            steps ? new (Object.getPrototypeOf(async function () {}).constructor)('page', steps) : null
+            steps ? new (Object.getPrototypeOf(async function () {}).constructor)('page', 'step', steps) : null
           )
         );
       } finally {
@@ -931,7 +936,7 @@ export async function checkCommand({values, positionals}, options = {}) {
   let result;
   const local = /^http:\/\//.test(input) && !/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);
   if (local) {
-    if (values.viewer || values.server || values['guest-steps'])
+    if (values.viewer || values.server || values['guest-steps'] || values['cleanup-steps'])
       throw new ToolError('local_identity', 'Loopback preview has no platform viewer/server selection.', 2);
     const chromium = await loadChromium(values['playwright-module']);
     result = await checkLocal({target: checkTarget(input).target, viewports, steps, capture: true}, chromium);
@@ -950,31 +955,40 @@ export async function checkCommand({values, positionals}, options = {}) {
     const {server, id} = resolveTarget(input, paired?.server && !values.server ? paired.server : selectedServer(values, options.env)),
       client = makeClient(server, options);
     const viewer = values.viewer ? enumValue(values.viewer, ['self', 'guest'], 'viewer') : 'self';
-    result = await checkHosted({
-      target: '/a/' + id,
-      server,
-      viewports,
-      steps,
-      capture: true,
-      viewer: viewer === 'guest' ? 'guest' : undefined,
-      requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
-    });
-    // --guest-steps runs after the self run, so it never races its writes.
-    if (values['guest-steps']) {
-      if (viewer === 'guest') throw new ToolError('guest_twice', 'Use --guest-steps with the self viewer.', 2);
-      const guestSteps = stepsBody(await readFile(values['guest-steps'], 'utf8'));
-      const guest = await checkHosted({
+    if ((values['guest-steps'] || values['cleanup-steps']) && viewer === 'guest')
+      throw new ToolError('guest_twice', 'Use --guest-steps and --cleanup-steps with the self viewer.', 2);
+    const run = async (file, who) => {
+      const found = await checkHosted({
         target: '/a/' + id,
         server,
         viewports: viewports.slice(0, 1),
-        steps: guestSteps,
+        steps: stepsBody(await readFile(file, 'utf8')),
         capture: true,
-        viewer: 'guest',
+        viewer: who === 'guest' ? 'guest' : undefined,
         requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
       });
-      for (const check of guest.checks) check.viewer = 'guest';
-      result = summarizeCheck([...result.checks, ...guest.checks]);
+      for (const check of found.checks) check.viewer = who;
+      return found.checks;
+    };
+    // Self, then --guest-steps (a second, signed-out session that reads what self saved), then
+    // --cleanup-steps signed in, always, so test writes never stay behind.
+    const extra = [];
+    try {
+      result = await checkHosted({
+        target: '/a/' + id,
+        server,
+        viewports,
+        steps,
+        capture: true,
+        viewer: viewer === 'guest' ? 'guest' : undefined,
+        requester: body => client.request('/api/browser-sessions', {method: 'POST', body})
+      });
+      if (values['guest-steps']) extra.push(...(await run(values['guest-steps'], 'guest')));
+    } finally {
+      if (values['cleanup-steps'])
+        extra.push(...(await run(values['cleanup-steps'], 'cleanup').catch(error => [{error: 'cleanup: ' + error.message}])));
     }
+    if (extra.length) result = summarizeCheck([...result.checks, ...extra]);
     // A deck's slide image links for the reply.
     const count = result.checks.find(check => check?.slides?.count)?.slides.count;
     if (count)
@@ -990,7 +1004,7 @@ export async function checkCommand({values, positionals}, options = {}) {
       }
       const file = path.join(
         directory,
-        `${check.viewport.width}x${check.viewport.height}${check.viewer === 'guest' ? '-guest' : ''}.png`
+        `${check.viewport.width}x${check.viewport.height}${check.viewer ? '-' + check.viewer : ''}.png`
       );
       await exclusive(file, Buffer.from(check.screenshot.base64, 'base64'));
       check.screenshot = {

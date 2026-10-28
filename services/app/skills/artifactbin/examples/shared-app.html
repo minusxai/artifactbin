@@ -3,13 +3,13 @@
 Example: a shared household-budget dashboard rendered from one APP config: KPIs, spend vs target
 per category, spend against budget by month, who paid what, a drill-down, a per-viewer dark mode
 (Apollo local state) and a signed-in-only target editor (backend store).
-Usage: copy it as index.html with garden.ts, shared-app-steps.mjs (steps.mjs), shared-app-guest.mjs
-  (guest.mjs) and gen-transactions.mjs; run the generator once, publish its CSV (--type dataset),
-  put the ID after ref:; edit only APP (defaultTargets: plausible monthly amounts per category)
-  and garden.ts's names; then node scripts/publish.mjs index.html && node scripts/check.mjs
-  index.html --steps steps.mjs --guest-steps guest.mjs
+Usage: copy it as index.html with garden.ts, gen-transactions.mjs and shared-app-steps, -guest
+  and -cleanup .mjs (as steps, guest, cleanup.mjs); run the generator once, publish its CSV (--type
+  dataset), put the ID after ref:; edit only APP (defaultTargets: plausible monthly amounts) and
+  garden.ts's names; then node scripts/publish.mjs index.html && node scripts/check.mjs index.html
+  --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs
 Gotchas: replace this comment with one line describing your page. The dataset and backend need
-  different data-af-name values. Never publish the ref: placeholder. columns.note is optional.
+  different data-af-name values. Never publish the ref: placeholder.
 -->
 <html lang="en">
 <head>
@@ -90,7 +90,7 @@ for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,summary
   $('#'+id).textContent=text;
 // Every row page at one dataset revision; a change between pages is reported, never mixed.
 async function loadRows(){
-  const found=await client.query({query:schema}),need=Object.entries(C).filter(([k])=>k!=='note');
+  const found=await client.query({query:schema}),need=Object.entries(C);
   if(found.errors?.length)throw Error(found.errors[0].message);
   const table=found.data[APP.dataset].schema.tables.find(table=>need.every(([,label])=>
     table.columns.some(column=>column.label===label)));
@@ -105,7 +105,7 @@ async function loadRows(){
     for(const row of page.rows){
       const cell=Object.fromEntries(row.cells.map(c=>[c.columnId,c.value])),v=k=>cell[ids[C[k]]];
       out.push({id:row.id,amount:v('amount')?.number??0,...Object.fromEntries(['date','category',
-        'payer','merchant','note'].map(k=>[k,v(k)?.string??'']))});
+        'payer','merchant'].map(k=>[k,v(k)?.string??'']))});
     }
     after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
   }while(after);
@@ -142,7 +142,7 @@ function render(){if(!rows.length)return;
   $('#drill-title').textContent=`${cat} · ${month()} · ${n} rows · ${money.format(sum(picked))}`;
   $('#rows').replaceChildren(...picked.map(row=>{
     const li=item('row-'+row.id),b=item(`row-${row.id}-amount`,'b');
-    li.textContent=`${row.date} ${row.merchant}${row.note?' · '+row.note:''} (${row.payer} paid)`;
+    li.textContent=`${row.date} ${row.merchant} (${row.payer} paid)`;
     b.textContent=money.format(row.amount);li.append(b);return li;}),...n?[]:[Object
     .assign(item('rows-empty'),{textContent:'No rows in this category this month.'})]);
   // Guests see a disabled "Sign in to edit"; the field refills only when the category changes.
