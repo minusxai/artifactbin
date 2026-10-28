@@ -4,15 +4,18 @@ Watch is the comment feed: every comment, reply, edit and reaction, from people 
 Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limit N] [--cursor C]
        node scripts/comment.mjs add ID --anchor ANCHOR.json --body-file FILE
        node scripts/comment.mjs reply ID --thread T --body-file FILE
-         [--resolve --expected-revision R]
+         [--resolve --expected-revision R] [--request-id R --phase PHASE]
        node scripts/comment.mjs edit ID --comment C --expected-revision R --body-file FILE
        node scripts/comment.mjs resolve|reopen ID --thread T --expected-revision R
        node scripts/comment.mjs react ID --comment C --active true|false [--kind thumbs_up]
        node scripts/comment.mjs watch ID [--once] [--cursor CHECKPOINT_OR_LOG]
          [--output LOG --append]
+       node scripts/comment.mjs image ID --image IMAGE --output FILE.webp [--variant original]
 Flags: write commands also take --request FILE (exclusive saved journal) and --resume FILE
   (replay it exactly; nothing else may change). list --status defaults to open; --limit 1-100
-  (default 20). Common: --server, --json, --help.
+  (default 20). Common: --server, --json, --help. reply --request-id/--phase (acknowledged,
+  completed, blocked, failed) answer a hosted agent session's request with the session's proof.
+  image saves an attached comment capture (image.id) as WebP; preview includes drawn marks.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt
@@ -45,7 +48,7 @@ How to treat reactions: a 👍 on your proposal means approval to proceed; any o
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
   Results never contain credentials.`;
 
-import {readFile} from 'node:fs/promises';
+import {readFile, writeFile} from 'node:fs/promises';
 import {
   runTool,
   resolveTarget,
@@ -79,6 +82,17 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   }
   const {server, id} = resolveTarget(positional(positionals), selectedServer(values, options.env)),
     client = makeClient(server, options);
+  if (sub === 'image') {
+    requireFlags(values, ['image', 'output']);
+    if (!/^[A-Za-z0-9_-]+$/.test(values.image))
+      throw new ToolError('invalid_image_id', 'Invalid image ID.', 2);
+    const variant = enumValue(values.variant ?? 'preview', ['preview', 'original'], 'variant');
+    const route = `/api/artifacts/${id}/comment-images/${values.image}?variant=${variant}`;
+    const bytes = Buffer.from(await (await client.request(route, {raw: true})).arrayBuffer());
+    await writeFile(values.output, bytes, {flag: 'wx', mode: 0o600});
+    const path = values.output;
+    return {artifact_id: id, image_id: values.image, variant, path, bytes: bytes.length};
+  }
   if (sub === 'list') {
     const query = new URLSearchParams({
       status: values.status
@@ -153,6 +167,12 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
       body.reply = body.body;
       delete body.body;
       if (values.resolve) body.resolve = true;
+      if (values['request-id'] !== undefined || values.phase !== undefined) {
+        requireFlags(values, ['request-id', 'phase']);
+        body.request_id = values['request-id'];
+        const phases = ['acknowledged', 'completed', 'blocked', 'failed'];
+        body.phase = enumValue(values.phase, phases, 'phase');
+      }
     } else body[sub === 'resolve' ? 'resolve' : 'reopen'] = true;
   }
   // Save the intent before sending; --request chooses where, otherwise a private journal

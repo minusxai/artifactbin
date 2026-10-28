@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,vi} from 'vitest';
 import {createServer} from 'node:http';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {pty} from '../src/pty';
@@ -8,6 +8,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {hostedHarnessArguments,prepareHostedHarness,runHostedAgent} from '../src/hosted-agent';
+import {remoteRequestInput} from '../src/remote-context';
 test('Claude reuses its explicit session only after a transcript exists, including a login-only restart',async()=>{
  const home=await mkdtemp(join(tmpdir(),'af-hosted-'));try{
  const first=await hostedHarnessArguments('claude',home,'context');
@@ -95,7 +96,7 @@ test('resumed OpenCode argument preparation never launches an EOF-only native pr
 });
 
 
-test('hosted OpenCode registration prepares one native PTY before comment exchange',{skip:process.platform==='win32'},async t=>{
+test('hosted OpenCode registration prepares one native PTY before comment exchange',{skip:process.platform==='win32'},async()=>{
  const home=await mkdtemp(join(tmpdir(),'af-opencode-launch-order-')),priorPath=process.env.PATH;
  const bin=join(home,'bin'),proof=join(home,'pty-proof'),nativeLaunch=join(home,'native-startup-ran'),events:string[]=[];
  const cwd=join(home,'agents','fixture'),stateDirectory=join(cwd,'.artifactbin','hosted-agent');
@@ -108,18 +109,57 @@ test('hosted OpenCode registration prepares one native PTY before comment exchan
   await mkdir(bin);await mkdir(stateDirectory,{recursive:true});await writeFile(join(stateDirectory,'opencode-session'),'ses_owned');
   const nativeDb=new DatabaseSync(join(stateDirectory,'opencode.db'));try{nativeDb.exec('CREATE TABLE session(id TEXT PRIMARY KEY,directory TEXT NOT NULL,project_id TEXT NOT NULL); CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT); CREATE TABLE part(id TEXT PRIMARY KEY,message_id TEXT,session_id TEXT); CREATE TABLE project(id TEXT PRIMARY KEY);');nativeDb.prepare('INSERT INTO session VALUES (?,?,?)').run('ses_owned',home,'project');}finally{nativeDb.close();}
   await writeFile(join(bin,'opencode'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(nativeLaunch)},'unexpected second process');\n`,{mode:0o700});process.env.PATH=bin;
-  t.mock.method(process,'kill',()=>true);
-  t.mock.method(pty,'spawn',(command:string,args:string[],nativeOptions:import('node-pty').IPtyForkOptions)=>{
+  vi.spyOn(process,'kill').mockImplementation(()=>true);
+  vi.spyOn(pty,'spawn').mockImplementation(((command:string,args:string[],nativeOptions:import('node-pty').IPtyForkOptions)=>{
    assert.equal(command,'opencode');assert.equal(args[0],'--mini');assert.deepEqual(args.slice(0,3),['--mini','--session','ses_owned']);
    const promptIndex=args.indexOf('--prompt');assert.ok(promptIndex>=0);assert.match(args[promptIndex+1]!,/context\.md/);assert.ok(!args.includes('run'));assert.ok(!args.includes('--format'));
    assert.equal(existsSync(nativeLaunch),false,'the pinned native binary must not be started headlessly before the PTY');
    assert.equal(nativeOptions.cwd,cwd);assert.equal(nativeOptions.env?.HOME,home);assert.equal(nativeOptions.env?.PWD,cwd);assert.equal(nativeOptions.env?.ARTIFACTBIN_HOME,join(cwd,'.artifactbin'));assert.equal(nativeOptions.env?.OPENCODE_DB,join(stateDirectory,'opencode.db'));assert.ok(existsSync(join(stateDirectory,'context.md')));assert.ok(!existsSync(join(home,'.artifactbin','hosted-agent','context.md')));
    writeFileSync(proof,JSON.stringify({args,home:nativeOptions.env?.HOME,pwd:nativeOptions.env?.PWD,state:nativeOptions.env?.ARTIFACTBIN_HOME,db:nativeOptions.env?.OPENCODE_DB,cwd:nativeOptions.cwd}));events.push('pty');
    return {pid:12345,onData:()=>({dispose(){}}),onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return {dispose(){}};},kill(){},resize(){},write(){}} as unknown as import('node-pty').IPty;
-  });
+  }) as never);
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   assert.equal(await runHostedAgent({id:'mxmx_test_reserved',generation:'mxmx_test_generation',name:'fixture',command:'opencode',home,cwd,stateDirectory,connection:{server:`http://127.0.0.1:${(server.address() as {port:number}).port}`,token:'mxmx_test_token'},executable:process.execPath,signal:AbortSignal.timeout(5000)}),0);
   assert.deepEqual(events.slice(0,3),['register','pty','exchange']);
   const saved=JSON.parse(readFileSync(proof,'utf8'));assert.deepEqual(saved.args.slice(0,3),['--mini','--session','ses_owned']);assert.equal(saved.home,home);assert.equal(saved.pwd,cwd);assert.equal(saved.cwd,cwd);assert.equal(saved.state,join(cwd,'.artifactbin'));assert.equal(saved.db,join(stateDirectory,'opencode.db'));assert.equal(existsSync(nativeLaunch),false);
- }finally{if(priorPath===undefined)delete process.env.PATH;else process.env.PATH=priorPath;await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(home,{recursive:true,force:true});}
+ }finally{vi.restoreAllMocks();if(priorPath===undefined)delete process.env.PATH;else process.env.PATH=priorPath;await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(home,{recursive:true,force:true});}
+});
+
+test('a hosted agent with the author skill runs its scripts through one session executable',{skip:process.platform==='win32'},async()=>{
+ const home=await mkdtemp(join(tmpdir(),'af-skill-agent-')),cwd=join(home,'agents','fixture'),stateDirectory=join(cwd,'.artifactbin','hosted-agent');
+ const skill=join(home,'.claude','skills','artifactbin');let onExit:((event:{exitCode:number})=>void)|undefined;let spawned:{args:string[];env:NodeJS.ProcessEnv|undefined}|undefined;
+ const server=createServer(async(req,res)=>{for await(const _ of req){};res.setHeader('Content-Type','application/json');
+  if(req.url==='/api/remote/sessions'){res.end(JSON.stringify({id:'mxmx_test_reserved',runnerKey:'mxmx_test_current_proof'}));return;}
+  onExit?.({exitCode:0});res.end(JSON.stringify({controller:'local',inputs:[]}));
+ });
+ try{
+  await mkdir(stateDirectory,{recursive:true});
+  vi.spyOn(process,'kill').mockImplementation(()=>true);
+  vi.spyOn(pty,'spawn').mockImplementation(((command:string,args:string[],nativeOptions:import('node-pty').IPtyForkOptions)=>{
+   assert.equal(command,'claude');spawned={args,env:nativeOptions.env};
+   return {pid:12345,onData:()=>({dispose(){}}),onExit:(listener:(event:{exitCode:number})=>void)=>{onExit=listener;return {dispose(){}};},kill(){},resize(){},write(){}} as unknown as import('node-pty').IPty;
+  }) as never);
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+  assert.equal(await runHostedAgent({id:'mxmx_test_reserved',generation:'mxmx_test_generation',name:'fixture',command:'claude',home,cwd,stateDirectory,connection:{server:origin,token:'mxmx_test_token'},skill,entry:'/opt/artifactbin/hosted-agent/index.mjs',signal:AbortSignal.timeout(5000)}),0);
+  const executable=join(stateDirectory,'artifactbin');
+  const wrapper=readFileSync(executable,'utf8');
+  assert.match(wrapper,/^#!\/bin\/sh\nexec '[^']*node[^']*' '\/opt\/artifactbin\/hosted-agent\/index\.mjs' '--internal-skill-command' '[^']+' 'mxmx_test_reserved' '[^']+skills\/artifactbin' "\$@"\n$/);
+  assert.equal(existsSync(join(stateDirectory,'afbin')),false);
+  const context=readFileSync(join(stateDirectory,'context.md'),'utf8');
+  assert.ok(context.includes(`${JSON.stringify(executable)} <script> [args]`));
+  assert.ok(context.includes(`'${executable}' ready`));
+  assert.ok(context.includes('--request-id <request-id> --phase acknowledged'));
+  assert.ok(context.includes(JSON.stringify(skill)));
+  assert.ok(!/afbin/.test(context),'the skill workflow names no CLI command');
+  assert.equal(spawned?.env?.ARTIFACTBIN__REMOTE_PROOF,'mxmx_test_current_proof');
+ }finally{vi.restoreAllMocks();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(home,{recursive:true,force:true});}
+});
+
+test('each comment request repeats the skill executable instead of a CLI path',()=>{
+ const payload=JSON.parse(remoteRequestInput(JSON.stringify({type:'artifactbin.comment',request_id:'r1',instruction:'Acknowledge first.'})+'\r','/state/artifactbin',true));
+ assert.equal(payload.skill_executable,'/state/artifactbin');assert.equal(payload.cli_executable,undefined);
+ assert.match(payload.instruction,/\/state\/artifactbin comment image/);assert.doesNotMatch(payload.instruction,/afbin/);
+ const cli=JSON.parse(remoteRequestInput(JSON.stringify({type:'artifactbin.comment'})+'\r','/state/afbin'));
+ assert.equal(cli.cli_executable,'/state/afbin');
 });

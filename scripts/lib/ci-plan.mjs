@@ -91,9 +91,10 @@ export const CI_MODULES = {
   browser: ['contracts', 'utils', 'test-support'],
   events: ['contracts', 'utils'],
   runner: ['contracts', 'utils'],
+  'hosted-agent': ['contracts', 'utils'],
   auth: ['contracts', 'utils', 'test-support'],
   app: ['contracts', 'utils', 'sql', 'browser', 'events', 'auth', 'runner', 'test-support'],
-  cli: ['contracts', 'app', 'sql', 'test-support'],
+  cli: ['contracts', 'app', 'sql', 'test-support', 'hosted-agent'],
 };
 
 /**

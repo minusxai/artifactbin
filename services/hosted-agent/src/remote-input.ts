@@ -9,11 +9,11 @@ const PASTE_END = "\x1b[201~";
 export async function deliverRemoteInput(
   write: (data: string) => void,
   data: string,
-  options: { source?: "keyboard" | "comment"; command: string; managed?: boolean; commentCommand?: string; canWrite?: () => boolean },
+  options: { source?: "keyboard" | "comment"; command: string; managed?: boolean; commentCommand?: string; commentSkill?: boolean; canWrite?: () => boolean },
 ): Promise<void> {
   const harness = basename(options.command).replace(/\.exe$/i, "");
   const input = options.source === "comment" && options.commentCommand
-    ? remoteRequestInput(data, options.commentCommand)
+    ? remoteRequestInput(data, options.commentCommand, options.commentSkill)
     : data;
   if (options.managed && (harness === "codex" || harness === "claude") && input.length > 1 && input.endsWith("\r")) {
     // Complete composer lines need an explicit paste boundary: large Codex input

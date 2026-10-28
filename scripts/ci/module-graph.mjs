@@ -38,7 +38,7 @@ const ts = createRequire(import.meta.url)('typescript');
 
 const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'hosted-agent', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /**
  * Rule 4's lists for lib/islands. lib/islands is browser code with one server-safe index

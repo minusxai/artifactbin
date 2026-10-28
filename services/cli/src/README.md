@@ -197,11 +197,9 @@ The processes the CLI starts and the hosts it runs.
 | `pty.ts` | The node-pty binding. |
 | `runner.ts` | Run a remote agent session in the foreground. |
 | `remote-worker.ts` | The detached remote worker. |
-| `remote-input.ts` | Deliver relay input to the agent's terminal. |
 | `remote-context.ts` | Permission options for managed sessions. |
 | `remote-context-bridge.ts` | Memory-only context transport to child commands. |
-| `hosted-agent.ts` | Run a hosted agent with its native identity. |
-| `hosted-opencode.ts` | OpenCode session identity for hosted agents. |
+| `hosted-agent.ts` | Re-exports the hosted-agent runtime (services/hosted-agent). |
 
 
 

@@ -14,7 +14,7 @@ test('teaching bootstraps without its output and repairs stale output determinis
  try{
   for(const relative of ['package.json','tsconfig.json','scripts/register-yaml.cjs',
    'services/app/lib','services/app/skills','services/app/public/chat/release.json','services/runner/src','services/contracts/src','services/utils/src',
-   'services/cli/src','services/cli/scripts','services/cli/package.json']){
+   'services/cli/src','services/cli/scripts','services/cli/package.json','services/hosted-agent/src','services/hosted-agent/package.json']){
    const target=join(fixture,relative);mkdirSync(dirname(target),{recursive:true});
    cpSync(join(repo,relative),target,{recursive:true,filter:source=>
     !source.endsWith('/generated/teaching.json')&&!source.includes('/__tests__')&&!source.includes('/dist/')});

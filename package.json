@@ -81,6 +81,7 @@
     "services/browser",
     "services/events",
     "services/auth",
+    "services/hosted-agent",
     "services/cli",
     "services/test-support",
     "services/runner",

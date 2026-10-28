@@ -65,6 +65,12 @@ export async function safeParent(file){const parent=await realpath(path.dirname(
   file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||
   relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
+/** A hosted agent session's comment writes carry its proof (comment reply --request-id). */
+function remoteSessionHeaders(url,env){
+ const id=env.ARTIFACTBIN__REMOTE_SESSION,proof=env.ARTIFACTBIN__REMOTE_PROOF;
+ return id&&proof&&/\/annotations\/[^/]+$/.test(url.pathname)?{'X-Artifactbin-Remote-Session':id,
+  'X-Artifactbin-Remote-Proof':proof}:{};
+}
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays=undefined}={}){
  server=serverOrigin(server);const root=credentialRoot(env);
  async function grant(){
@@ -95,7 +101,8 @@ const url=new URL(route,server);if(url.origin!==server||!route.startsWith('/')||
 try{response=(await (await platform()).retryFetch(()=>fetcher(url,{method,redirect:'error',signal:
      signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
      headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{
-     Authorization:'Bearer '+connection.token}:{}),...(body===undefined?{}:{'Content-Type':
+     Authorization:'Bearer '+connection.token}:{}),...remoteSessionHeaders(url,env),
+     ...(body===undefined?{}:{'Content-Type':
      'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),{
      method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{
      delaysMs:retryDelays}:undefined})).response;}
