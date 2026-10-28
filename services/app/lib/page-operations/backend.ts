@@ -24,10 +24,35 @@ export default async function(input,host){
  return await fn(input.args,principal,caps);
  }`;
 }
-async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal):Promise<RunnerJson>{
+/** Runner codes that prove the run was not admitted and may be admitted on a later try (runner queue full or restarting). */
+const BUSY=new Set(['queue_full','runner_closed','runner_unavailable']);
+/** Start errors after which the run may or may not have been admitted (timeout, network, runner 500). */
+const transientStart=(code:string)=>code==='runner_failed'||!/^[a-z][a-z_]{0,63}$/.test(code);
+/** Backoff between start attempts; jittered so concurrent page reads do not retry in lockstep. */
+const START_RETRY_DELAYS_MS=[200,500,1000];
+const pause=(ms:number,signal?:AbortSignal)=>new Promise<void>(resolve=>{const timer=setTimeout(done,ms);function done(){clearTimeout(timer);signal?.removeEventListener('abort',done);resolve();}signal?.addEventListener('abort',done,{once:true});});
+/**
+ * Starts a run, retrying transient admission failures. Every attempt reuses the same requestId, and
+ * the runner admits a requestId at most once, so a retry after a lost reply resumes the admitted run.
+ */
+async function admit(runner:RunnerService,request:RunStart,signal:AbortSignal|undefined,delays:readonly number[]):Promise<string>{
+ let code='';
+ for(let attempt=0;;attempt++){
+  if(signal?.aborted)throw new FieldNotExecuted('Cancelled','cancelled');
+  try{return (await runner.start(request)).runId;}
+  catch(error){code=error instanceof Error&&error.name!=='Error'?error.name:error instanceof Error?error.message:'';}
+  if(!(BUSY.has(code)||transientStart(code))){throw new FieldNotExecuted('Runner refused admission','backend_rejected',code);}
+  if(attempt>=delays.length)break;
+  await pause(delays[attempt]!*(0.75+Math.random()*0.5),signal);
+ }
  if(signal?.aborted)throw new FieldNotExecuted('Cancelled','cancelled');
- let runId:string;
- try{({runId}=await runner.start(request));}catch{throw new FieldNotExecuted('Runner refused admission','backend_busy');}
+ const tries=delays.length+1;
+ // A definite refusal never ran; a lost reply may have been admitted, so its outcome is unknown.
+ if(BUSY.has(code))throw new FieldNotExecuted('Runner refused admission','retryable',`${code} after ${tries} attempts`);
+ throw new FieldFailed('backend_unavailable',`runner start failed after ${tries} attempts`);
+}
+async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,delays:readonly number[]=START_RETRY_DELAYS_MS):Promise<RunnerJson>{
+ const runId=await admit(runner,request,signal,delays);
  const lookup={runId,userId:request.userId};
  const deadline=Date.now()+6000;
  while(true){
@@ -45,10 +70,10 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
  boundedBackendSchema(result.typeDefs);return {compiled,typeDefs:result.typeDefs,secretBindings:secretBindingNames(result.secretBindings)};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
-export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
+export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[]}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
  if(!backend||backend.backendId!==call.fileId||backend.version!==call.version||backend.pageId!==call.principal.tenant)throw new FieldNotExecuted('Backend link mismatch','forbidden');
- return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal);
+ return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
 export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<RunnerJson>{
