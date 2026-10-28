@@ -9,7 +9,7 @@ import { getDb } from "@/lib/platform";
 import { readHtmlPage } from "@/lib/html-publication";
 import { ANONYMOUS_ACTOR, requestOrSessionActor } from "@/lib/accounts";
 import { getArtifactById, readableArtifactIdentity } from "@/lib/artifacts";
-import { createRetainedRegisteredQueries } from "../retained";
+import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
 import { executeCatalog } from "@/lib/datasets/execute";
 import { prepareRegisteredQueryBackend, commitRegisteredQueryBackend, registeredPlan } from "../registry";
 import { getHtmlBackendVersion } from "@/lib/html-backends";

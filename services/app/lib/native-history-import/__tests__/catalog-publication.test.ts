@@ -9,7 +9,7 @@ import { ANONYMOUS_ACTOR, identityForUser } from "@/lib/accounts";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
 import { getArtifactById, canReadArtifact } from "@/lib/artifacts";
 import { executeCatalog } from "@/lib/datasets/execute";
-import { createRetainedRegisteredQueries } from "@/lib/registered-page-queries/retained";
+import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
 import { prepareRegisteredQueryBackend } from "@/lib/registered-page-queries/registry";
 import { importNativeHistory } from "../index";
 import { nativeCatalogDatasetIdentity } from "../catalog-publication";

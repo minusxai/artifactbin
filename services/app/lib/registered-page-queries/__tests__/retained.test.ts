@@ -4,7 +4,7 @@ import { services, setServices } from "@/lib/platform/services";
 import { overrideConfig, resetConfigOverrides } from "@/lib/platform/config";
 import { objectStore, objectKey } from "@/lib/object-store";
 import { catalogOf } from "@/lib/datasets/catalog";
-import { createRetainedRegisteredQueries } from "../retained";
+import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
 import { registeredPlan } from "../registry";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { it, expect } from "vitest";

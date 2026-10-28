@@ -11,7 +11,7 @@ import {
   registeredQueryDescriptor,
   registeredQueryInvoker,
 } from "../namespace";
-import { createRetainedRegisteredQueries } from "../retained";
+import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
 import type {
   HtmlPageVersion,
   RunnerService,
