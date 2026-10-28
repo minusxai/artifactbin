@@ -1,4 +1,4 @@
-/** Actual installed author-module graph. Candidate behavior/layout evidence only;
+/** Actual hosted component-module graph (the bytes the app serves at /af/components/), served here under /components/. Candidate behavior/layout evidence only;
  * this gate does not manufacture or claim an old-browser visual baseline.
  * Gates are SLOW-tier: an implementer runs them ONCE at the end of the brief,
  * NEVER per edit. The orchestrator runs this gate with the final coordinated set. */
@@ -11,10 +11,10 @@ import {launchChromium} from './lib/browser.mjs';
 import {createChecker} from './lib/assert.mjs';
 import {richFamilies,richViewports,richFixtureHtml} from '../lib/html-rich-components-fixture.mjs';
 import {candidateMarkdownCopyCases} from '../fixtures/component-baseline/candidate-markdown-copy.mjs';
-const repo=path.resolve(import.meta.dirname,'../..'),componentDir=path.join(repo,'services/app/skills/artifactbin/components');
+const repo=path.resolve(import.meta.dirname,'../..'),componentDir=path.join(repo,'services/app/lib/build-assets/components');
 const check=createChecker('html-rich-components'),artifacts=[];
 const files=new Map();for(const name of (await readdir(componentDir)).filter(name=>/^[a-z][a-z0-9-]*\.js$/.test(name)))files.set(name,await readFile(path.join(componentDir,name)));
-for(const [,file]of richFamilies)if(!files.has(file+'.js'))throw Error(`Missing shipped component ${file}.js: generate HTML component assets before this gate`);
+for(const [,file]of richFamilies)if(!files.has(file+'.js'))throw Error(`Missing hosted component ${file}.js: run scripts/build/build-html-components.mjs before this gate`);
 const graph=Object.fromEntries([...files].sort(([a],[b])=>a.localeCompare(b)).map(([name,bytes])=>[name,createHash('sha256').update(bytes).digest('hex')]));
 const server=createServer((request,response)=>{
  const url=new URL(request.url,'http://fixture.invalid');

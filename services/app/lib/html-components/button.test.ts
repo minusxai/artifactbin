@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfButton, registerButton } from './button';
+import type { AfButton } from './button';
+import { registerComponent } from './register-component';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-button type="submit" variant="ghost"><span id="kept">Save</span></af-button>';
@@ -11,7 +12,7 @@ Object.defineProperty(preUpgrade, 'type', { value: 'reset', writable: true, conf
 Object.defineProperty(preUpgrade, 'variant', { value: 'secondary', writable: true, configurable: true });
 Object.defineProperty(preUpgrade, 'size', { value: 'lg', writable: true, configurable: true });
 Object.defineProperty(preUpgrade, 'label', { value: 'Saving', writable: true, configurable: true });
-registerButton();
+const { AfButton: AfButtonClass, buttonComponent } = await import('./button');
 afterEach(() => document.body.replaceChildren());
 
 function fixture(attrs = '', content = '<span data-af-id="label">Save</span>') {
@@ -150,8 +151,8 @@ describe('native af-button', () => {
   });
 
   it('registers its tag and stylesheet idempotently', () => {
-    registerButton(); registerButton();
-    expect(customElements.get('af-button')).toBe(AfButton);
+    registerComponent(buttonComponent); registerComponent(buttonComponent);
+    expect(customElements.get('af-button')).toBe(AfButtonClass);
     expect(document.querySelectorAll('style[data-af-button-styles]')).toHaveLength(1);
   });
 });

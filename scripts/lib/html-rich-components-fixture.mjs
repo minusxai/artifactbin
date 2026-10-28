@@ -1,5 +1,5 @@
-/** Synthetic author page. These contracts deliberately use only shipped ESM entries
- * and public element properties; they carry no account identity or remote data. */
+/** Synthetic author page. These contracts deliberately use only the hosted ESM entries
+ * (each registers its tags on import) and public element properties; they carry no account identity or remote data. */
 export const richFamilies = Object.freeze([
   ['DataTable','data-table','table'],['Markdown','markdown','markdown'],['Mermaid','mermaid','diagram'],
   ['Isometric','isometric','assembly'],['DeckGL','deck-gl','map'],['User','user','person'],
@@ -12,7 +12,7 @@ export function richIdentityFacts(authored,root) {
  return {retained:authored.every(({node,id})=>root.contains(node)&&node.getAttribute('data-af-id')===id),unique:identities.every(Boolean)&&new Set(identities).size===identities.length};
 }
 export function richFixtureHtml(dark=false) {
- const imports=richFamilies.map(([family,file])=>`import {register${family}} from '/components/${file}.js';register${family}();`).join('\n');
+ const imports=richFamilies.map(([,file])=>`import '/components/${file}.js';`).join('\n');
  const markdown='# Field notes\n\nA **rich** report with ~~retired~~ text.\n\n| Region | Count |\n| --- | --- |\n| North | 12 |\n\n```js\nconst count = 12;\n```';
  return `<!doctype html><html data-af-dark="${dark}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
  html{font-family:Arial,sans-serif;--background:#fff;--foreground:#182033;--card:#fff;--primary:#2563eb;--muted:#edf1f7;--muted-foreground:#596579;--border:#b8c1cf;color:var(--foreground);background:var(--background);color-scheme:light}html[data-af-dark=true]{--background:#151b29;--foreground:#f1f5fb;--card:#202a3d;--primary:#8bb9ff;--muted:#2b3650;--muted-foreground:#bbc8dd;--border:#59677f;color-scheme:dark}body{margin:0;padding:16px;box-sizing:border-box}main,section{min-width:0;max-width:100%}section{margin-bottom:24px}h1{font-size:22px}h2{font-size:18px}input{max-width:120px;font:inherit;color:inherit;background:var(--background);border:1px solid var(--border)}af-mermaid,af-isometric,af-deck-gl{display:block;min-width:0;max-width:100%}af-mermaid img{max-height:280px}af-user{display:block}.author-note{font-size:12px;color:var(--muted-foreground)}

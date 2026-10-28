@@ -5,8 +5,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {GET} from '@/app/skills/artifactbin.zip/route';
-import {GET as font} from '@/app/af/fonts/[name]/route';
-import {withHttpServer} from '@artifactbin/test-support/net';
+import {platformOrigin} from './platform-origin';
 import {skillZip} from '../package';
 import {planPublicationBundle} from '../../html-publication-bundle/plan';
 import {STORY_SYSTEM_SHEETS} from '../../data/story/story-system-sheets';
@@ -18,8 +17,8 @@ it('packages no font members: the archive is text only',()=>{
 it('installs every theme on /af/fonts/ names and previews them through the selected server, with no fonts in the archive',async()=>{
  const response=await GET(new Request('https://skill.example/skills/artifactbin.zip'));
  const root=mkdtempSync(path.join(tmpdir(),'skill-fonts-'));
- // The selected server: its /af/fonts/ route, as the hosted app answers it.
- const origin=await withHttpServer(async(request,reply)=>{const name=(request.url??'').replace(/^\/af\/fonts\//,'');const answer=await font(new Request('https://app.example'+request.url),{params:Promise.resolve({name})});reply.writeHead(answer.status,Object.fromEntries(answer.headers));reply.end(Buffer.from(await answer.arrayBuffer()));});
+ // The selected server: its /af/fonts/ and /af/styles.css routes, as the hosted app answers them.
+ const origin=await platformOrigin();
  try{
   const zip=path.join(root,'skill.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
   execFileSync('unzip',['-t',zip],{stdio:'pipe'});execFileSync('unzip',['-q',zip,'-d',root]);
@@ -37,12 +36,13 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
   const html='<html data-af-design-system="almanac" data-af-dark="true"><head><link data-af="design-system" rel="stylesheet" href="./design-systems/almanac.css"></head><body class="t-body">Portable type</body></html>';
   writeFileSync(path.join(installed,'index.html'),html);
   const {startPreview}=await import(/* @vite-ignore */pathToFileURL(path.join(installed,'scripts/preview.mjs')).href);
-  const preview=await startPreview({root:installed,port:0,revisionIntervalMs:0,fontOrigin:origin.base});
+  const preview=await startPreview({root:installed,port:0,revisionIntervalMs:0,platformOrigin:origin.base});
   try{
    const page=await fetch(preview.url);expect(page.status).toBe(200);
-   // The served page carries the platform stylesheet for its system only; its /af/fonts/ files come from the selected server, served from the preview's own origin.
+   // The served page carries the platform stylesheet for its system only (the server's /af/styles.css?system=); its /af/fonts/ files come from the selected server, served from the preview's own origin.
    const served=await page.text(),platform=/<style data-af="platform-styles">([\s\S]*?)<\/style>/.exec(served)![1]!;
    expect(platform).toContain(':root[data-af-design-system="almanac"]');expect(platform).not.toContain('data-af-design-system="redline"');
+   expect(origin.requests).toContain('/af/styles.css?system=almanac');
    const hosted=/src: url\("(\/af\/fonts\/[^"]+)"\)/.exec(platform)![1]!,hostedFont=await fetch(new URL(hosted,preview.url));
    expect(hostedFont.status).toBe(200);expect(hostedFont.headers.get('content-type')).toContain('font/woff2');
    const face=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===hosted.replace('/af',''))!;

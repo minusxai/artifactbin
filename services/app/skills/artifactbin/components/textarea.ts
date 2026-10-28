@@ -1,11 +1,12 @@
 /**
  * <af-textarea>: multi-line text control.
- * Import:  import {registerTextarea} from './components/textarea.js'; registerTextarea();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/textarea';  (registers the tags; this .ts is the readable contract)
  * Props: value, label, placeholder, native constraints
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-textarea label="Notes" rows="4"></af-textarea>
  */
+import { registerComponent } from './register-component';
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
 
 class AfTextarea extends HTMLElement implements TextControlContract {
@@ -38,9 +39,8 @@ af-textarea>.af-text-control:disabled{cursor:not-allowed;opacity:.5}
 af-textarea>.af-text-control:read-only{cursor:default}
 `;
 
-export function registerTextarea(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-textarea-styles]')) {
-    const style = document.createElement('style'); style.dataset.afTextareaStyles = ''; style.textContent = textareaStyles; document.head.append(style);
-  }
-  if (!registry.get('af-textarea')) registry.define('af-textarea', AfTextarea);
-}
+registerComponent({
+  styleKey: 'af-textarea-styles',
+  styles: textareaStyles,
+  elements: { 'af-textarea': AfTextarea },
+});

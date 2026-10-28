@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { registerInput } from './input';
 
 const preUpgrade = document.createElement('af-input') as HTMLElement & { value: string | number | null };
 preUpgrade.value = 'from-property';
-registerInput();
+await import('./input');
 afterEach(() => document.body.replaceChildren());
 const input = (markup: string) => { const host = document.createElement('div'); host.innerHTML = markup; document.body.append(host); return host.querySelector('af-input')! as HTMLElement & {value: string | number | null}; };
 

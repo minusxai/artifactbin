@@ -1,6 +1,6 @@
 /**
  * <af-tabs>: tab list and panels.
- * Import:  import {registerTabs} from './components/tabs.js'; registerTabs();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/tabs';  (registers the tags; this .ts is the readable contract)
  * Props: value (string on the root af-tabs)
  * Parts: af-tabs-list, af-tabs-trigger value="a", af-tabs-content value="a"
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
@@ -8,6 +8,7 @@
  *   <af-tabs value="a"><af-tabs-list><af-tabs-trigger value="a">One</af-tabs-trigger></af-tabs-list>
  *   <af-tabs-content value="a">First</af-tabs-content></af-tabs>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import {tabFocusTarget} from './tab-navigation';
 /** Author-owned selection; components emit intent and never persist viewer state. */
 export interface TabsChangeDetail { value: string }
@@ -179,12 +180,15 @@ af-tabs-list[data-variant=line]>af-tabs-trigger[data-state=active]::after{opacit
 af-tabs-content{flex:1;outline:none}
 af-tabs-content[hidden]{display:none!important}
 `;
-export function registerTabs(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-tabs-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-tabs-styles', '');
-    style.textContent = tabsStyles; document.head.append(style);
-  }
-  for (const [name, ctor] of Object.entries({ 'af-tabs': AfTabs, 'af-tabs-list': AfTabsList, 'af-tabs-trigger': AfTabsTrigger, 'af-tabs-content': AfTabsContent })) {
-    if (!registry.get(name)) registry.define(name, ctor);
-  }
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const tabsComponent: ComponentDescriptor = {
+  styleKey: 'af-tabs-styles',
+  styles: tabsStyles,
+  elements: {
+    'af-tabs': AfTabs,
+    'af-tabs-list': AfTabsList,
+    'af-tabs-trigger': AfTabsTrigger,
+    'af-tabs-content': AfTabsContent,
+  },
+};
+registerComponent(tabsComponent);

@@ -2,9 +2,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/story-surface/bare-typography";
 import { STORY_TABLE_CSS } from "@/lib/page-styles/chrome-css";
-import { AfDataTable, registerDataTable } from "./data-table";
+import { AfDataTable } from "./data-table";
+import './data-table';
 import { measuredTableWindow } from "./table-model";
-registerDataTable();
 it("preserves caller column header identities through sorting and removes stale mappings", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.columnIdentities = { value: { afId: "source-column", id: "authored-column" } };

@@ -1,12 +1,13 @@
 /**
  * <af-collapsible>: one disclosure region; you own its open state, the element only emits intent.
- * Import:  import {registerCollapsible} from './components/collapsible.js'; registerCollapsible();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/collapsible';  (registers the tags; this .ts is the readable contract)
  * Props: open (boolean)
  * Parts: af-collapsible-trigger, af-collapsible-content
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-collapsible><af-collapsible-trigger>More</af-collapsible-trigger><af-collapsible-content>Details</af-collapsible-content></af-collapsible>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 /** Author-owned open state. The element emits intent and never persists viewer state. */
 export interface CollapsibleChangeDetail { value: boolean }
 export interface CollapsibleContract { open: boolean }
@@ -161,12 +162,14 @@ af-collapsible-content{display:block}
 af-collapsible-content[hidden]{display:none!important}
 `;
 
-export function registerCollapsible(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-collapsible-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-collapsible-styles','');
-    style.textContent = collapsibleStyles; document.head.append(style);
-  }
-  for (const [name, ctor] of Object.entries({'af-collapsible':AfCollapsible, 'af-collapsible-trigger':AfCollapsibleTrigger, 'af-collapsible-content':AfCollapsibleContent})) {
-    if (!registry.get(name)) registry.define(name,ctor);
-  }
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const collapsibleComponent: ComponentDescriptor = {
+  styleKey: 'af-collapsible-styles',
+  styles: collapsibleStyles,
+  elements: {
+    'af-collapsible': AfCollapsible,
+    'af-collapsible-trigger': AfCollapsibleTrigger,
+    'af-collapsible-content': AfCollapsibleContent,
+  },
+};
+registerComponent(collapsibleComponent);

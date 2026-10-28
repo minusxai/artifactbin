@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from 'vitest';
-import { AfDatePicker, registerDatePicker, type AfDatePickerChangeDetail } from './date-picker';
-registerDatePicker(); afterEach(()=>document.body.replaceChildren());
+import { AfDatePicker, type AfDatePickerChangeDetail } from './date-picker';
+import './date-picker';
+afterEach(()=>document.body.replaceChildren());
 function fixture(attrs='') { const host=document.createElement('div'); host.innerHTML=`<af-date-picker ${attrs}><span data-af-id="authored">Help</span></af-date-picker>`; document.body.append(host); return host.firstElementChild as AfDatePicker; }
 it('opens a labeled calendar, changes uncontrolled values and preserves authored nodes',()=>{
  const root=fixture('label="Start" default-value="2024-02-29"'); const authored=root.querySelector('[data-af-id]');

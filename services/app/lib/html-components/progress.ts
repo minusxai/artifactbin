@@ -1,10 +1,11 @@
 /**
  * <af-progress>: native 0-100 progress indicator with no platform state.
- * Import:  import {registerProgress} from './components/progress.js'; registerProgress();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/progress';  (registers the tags; this .ts is the readable contract)
  * Props: value (0-100, or null for indeterminate)
  * Usage:
  *   <af-progress value="60"></af-progress>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 /** A native, light DOM 0–100 progress indicator with no platform state. */
 export interface ProgressContract {
   /** Finite values from 0 through 100; null represents indeterminate progress. */
@@ -116,10 +117,10 @@ af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{width:40%;a
 @media(prefers-reduced-motion:reduce){af-progress>[data-slot=progress-indicator]{transition:none}af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{animation:none;transform:translateX(0)}}
 `;
 
-export function registerProgress(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-progress-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-progress-styles', '');
-    style.textContent = progressStyles; document.head.append(style);
-  }
-  if (!registry.get('af-progress')) registry.define('af-progress', AfProgress);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const progressComponent: ComponentDescriptor = {
+  styleKey: 'af-progress-styles',
+  styles: progressStyles,
+  elements: { 'af-progress': AfProgress },
+};
+registerComponent(progressComponent);

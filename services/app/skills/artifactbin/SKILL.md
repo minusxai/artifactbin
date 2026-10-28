@@ -6,7 +6,7 @@ description: >-
 [% if transport == "http" %]
 ## Read first
 
-A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`); that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`. No JSX, framework compilation, injected state globals or account credentials belong in a page.
+A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`, `deck-gl`, `three`, `highlight`) and the optional components below the same way; that prefix is reserved. `@afbin/highlight` exports `highlightAll(root)` for `pre > code.language-*`. No JSX, framework compilation, injected state globals or account credentials belong in a page.
 
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
 
@@ -49,7 +49,7 @@ Every script takes `--help`, `--server ORIGIN`, `--json` and an exclusive `--out
 
 ## Optional HTML components
 
-Copy the installed `components/` directory into the project (all of it: helpers and engine chunks come along) and import the compiled `.js` registrations, e.g. `import {registerInput} from './components/input.js'; registerInput();`; repeat calls are safe. To learn an element, read the comment at the top of its `.ts` (`head -30 components/NAME.ts`: import line, attributes, events, usage); the `.ts` is readable source, not a browser script. Most controls emit a bubbling `af-change` with `event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view goes away. Elements use light DOM and the page's design-system tokens, carry no credentials, and need explicit registration. New diagrams and maps use the direct libraries below, not the legacy `af-mermaid` and `af-deck-gl` wrappers.
+Components are hosted modules, like the libraries: `import '@afbin/input';` registers its elements (an import per component you use; nothing to copy or call). To learn an element, read the comment at the top of its source (`head -30 components/NAME.ts`: import line, attributes, events, usage); the `.ts` is readable reference, not a browser script. Most controls emit a bubbling `af-change` with `event.detail.value`: keep the value in Apollo state, set it back on the element (switch `checked`, overlays and collapsible `open`, slide deck `index`, the rest `value`) and unsubscribe when the view goes away. Elements use light DOM and the page's design-system tokens and carry no credentials. Diagrams and maps use the direct libraries below.
 
 | Purpose | Elements (see `components/NAME.ts`) |
 |---|---|
@@ -95,7 +95,7 @@ Every saved page version remains available; never reuse a removed ID. A 409 or a
 - [Backend files](references/backends.md): TypeScript resolvers, shared stores and permissions.
 - `examples/`: each file's top comment says what it shows and which files go with it.
 
-Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); the top of `scripts/serve.mjs` covers offline limits and isolated browser requirements. The installed archive includes local runtime assets.
+Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and `node scripts/check.mjs http://127.0.0.1:PORT/` (local checks need Playwright via `--playwright-module`, and the preview adds a 76px toolbar, so measure published pages by ID); the top of `scripts/serve.mjs` covers its limits and isolated browser requirements. The preview loads the runtime, libraries, components and fonts from the server, so it needs the network.
 
 Scripts are helpers inside this skill, not global commands; `preview.mjs` and `publication-bundle.mjs` are compatibility shims.
 [% else %]

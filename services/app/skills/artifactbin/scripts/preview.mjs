@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import {realpathSync} from 'node:fs';
-import {runtimeAssetManifest} from './preview-runtime-assets.mjs';
-import {libraryAssetManifest,libraryImportMap} from './preview-library-assets.mjs';
+import {platformModules} from './preview-platform.mjs';
 import {createServer} from 'node:http';
 import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
-import {previewHtml,packPreviewExport,autofixHtml,formatAutofixReport,withPlatformStyles} from './preview-html.mjs';
+import {previewHtml,packPreviewExport,autofixHtml,formatAutofixReport,withPlatformStyles,pageDesignSystem} from './preview-html.mjs';
 import {statSync} from 'node:fs';
 import {writeFile,rename} from 'node:fs/promises';
 import {dirname,basename} from 'node:path';
@@ -55,19 +54,16 @@ const inside=(root,path)=>{const tail=relative(root,path);return tail===''||(!ta
 function previewAutofix(base,file,html){
  return autofixHtml(html,{exists:relative=>{const full=resolve(dirname(file),relative);if(!inside(base,full))return false;try{return statSync(full).isFile();}catch{return false;}}});
 }
-export async function startPreview({root,port=0,runtimeDir,fontOrigin=configuredServer,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
+/** `platformOrigin` (default: the archive's selected server; `fontOrigin` is its older name) supplies the runtime,
+ * libraries, components and fonts (./preview-platform); a source checkout's own build outputs come first. */
+export async function startPreview({root,port=0,runtimeDir,platformOrigin,fontOrigin,libraryAssets,revisionIntervalMs=1000,sessionOptions={},operationTimeoutMs=5000,autofix={}}) {
  if(!Number.isInteger(port)||port<0||port>65535)throw Error('Port must be an integer from 0 to 65535');
  const base=await realpath(resolve(root));if(!(await stat(base)).isDirectory())throw Error('Root must be a directory');
- // Generated only in the downloadable archive; optional in a source checkout.
- const runtimeModule=new URL('./preview-runtime.mjs',import.meta.url).href;
- let bundled;try{bundled=(await import(runtimeModule)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}
- const runtimeAssets=bundled?runtimeAssetManifest(bundled):new Map();
- let libraries=libraryAssets;
- if(!libraries){try{libraries=(await import(new URL('./preview-libraries.mjs',import.meta.url).href)).default;}catch(error){if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;}}
- const publicLibraries=libraryAssetManifest(libraries??{}),libraryImports=libraryImportMap(publicLibraries);
+ const origin=platformOrigin??fontOrigin??configuredServer??null;
+ const platform=platformModules({origin,libraryAssets});
  const runtime=runtimeDir?await realpath(resolve(runtimeDir)):undefined;
- if(fontOrigin!==null&&fontOrigin!==undefined&&!/^https?:$/.test(new URL(fontOrigin).protocol))throw Error('Font origin must be http(s)');
- const platformFont=platformFonts(fontOrigin??null);
+ const platformFont=platformFonts(origin);
+ const platformCss=html=>{const name=pageDesignSystem(html);return name?platform.systemCss(name):Promise.resolve(null);};
  const revisions=createRevisionSource(base,{intervalMs:revisionIntervalMs});
  const sessions=createPreviewSessions(base,sessionOptions);
  // One report per distinct served content of each page, not one per request.
@@ -107,20 +103,20 @@ export async function startPreview({root,port=0,runtimeDir,fontOrigin=configured
   try {
    const pathname=decodeURIComponent((req.url||'/').split('?')[0]);
    if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))return end(404,'Not found');
-   if(pathname==='/__af_preview/export-runtime'){res.setHeader('Content-Type','application/json');return end(bundled?200:503,JSON.stringify(bundled??{error:'Use the downloaded HTTP author skill for bundled runtime export.'}));}
+   if(pathname==='/__af_preview/export-runtime'){res.setHeader('Content-Type','application/json');try{return end(200,JSON.stringify(await platform.runtimeAssets()));}catch(error){return end(503,JSON.stringify({error:error.message+' (the preview loads the runtime from the selected server; check the network or pass --runtime-dir)'}));}}
    if(pathname==='/__af_preview/export-source'){
     const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
     if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
     const selected=requested==='/'?'/index.html':requested;
     const load=async name=>{
-     if(publicLibraries.has(name))return {contentType:'text/javascript',bytes:Buffer.from(publicLibraries.get(name))};
+     const module=await platform.module(name);if(module)return {contentType:'text/javascript',bytes:module};
      const font=await platformFont(name);if(font)return {contentType:'font/woff2',bytes:font};
      const decoded=decodeURIComponent(name);if(!decoded.startsWith('/')||decoded.includes('\\')||decoded.includes('\0')||decoded.split('/').some(part=>part.startsWith('.')))throw Error('Invalid local export path');
      try{let target=base;for(const part of decoded.slice(1).split('/')){target=resolve(target,part);if(!inside(base,target)||(await lstat(target)).isSymbolicLink())throw Error('Symlink or escaping local export dependency refused: '+name);}
       return {contentType:types[extname(target).toLowerCase()]??'application/octet-stream',bytes:await readPreviewFile(base,target)};
      }catch(error){if(error.code==='ENOENT')throw Error('Missing local dependency: '+name);throw error;}
     };
-    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html:withPlatformStyles(html),pathname:selected,load,libraries:libraryImports});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
+    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html:withPlatformStyles(html,await platformCss(html)),pathname:selected,load,libraries:await platform.importMap()});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
     catch(error){res.setHeader('Content-Type','application/json');return end(error.code==='PREVIEW_LIMIT'?413:422,JSON.stringify({error:'Local export failed: '+(error.code==='ENOENT'?'a project dependency is missing':error.message)}));}
    }
    if(pathname==='/__af_preview/source'){
@@ -136,8 +132,8 @@ export async function startPreview({root,port=0,runtimeDir,fontOrigin=configured
    }
    if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await revisions.current()}));}
    const font=await platformFont(pathname);if(font){res.setHeader('Content-Type','font/woff2');res.setHeader('Content-Length',font.length);return end(200,font);}
-   const source=runtimeAssets.get(pathname)??publicLibraries.get(pathname);
-   if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
+   const module=!(runtime&&pathname.startsWith('/af/')&&!pathname.startsWith('/af/components/'))?await platform.module(pathname):null;
+   if(module){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',module.length);return end(200,module);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
    const isRuntime=runtime&&pathname.startsWith('/af/');const selected=isRuntime?runtime:base;
    const requested=isRuntime?pathname.slice('/af/'.length):pathname.slice(1);
@@ -146,7 +142,7 @@ export async function startPreview({root,port=0,runtimeDir,fontOrigin=configured
    const info=await stat(file);if(!info.isFile())return end(404,'Not found');if(info.size>PREVIEW_LIMITS.maxFileBytes)throw new PreviewLimitError('Preview file exceeds 32 MiB; reduce the file or select a smaller project.');
    const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':'application/octet-stream');
    res.setHeader('Content-Type',type);
-   if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config={pageId:'local:'+pathname,revision,backends:local?local.names:[],offline:true,libraries:libraryImports,...(local?{localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:{})};const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config);res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   if(type.startsWith('text/html')){const html=isRuntime?(await readPreviewFile(selected,file)).toString('utf8'):(await served(file,(await readPreviewFile(selected,file)).toString('utf8'))).html;const revision=await revisions.current({fresh:true});const local=await sessions.prepare(html,pathname,revision);const config={pageId:'local:'+pathname,revision,backends:local?local.names:[],offline:true,libraries:await platform.importMap().catch(()=>({})),...(local?{localPreview:{endpoint:'/__af_preview/datasets/'+local.id,schema:local.schema}}:{})};const body=previewHtml(html,changeNotice(revision,local?{endpoint:'/__af_preview/datasets/'+local.id,names:local.names}:undefined),config,await platformCss(html).catch(()=>null));res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
    const bytes=await readPreviewFile(selected,file);res.setHeader('Content-Length',bytes.length);
    if(req.method==='HEAD')return end(200);
    end(200,bytes);

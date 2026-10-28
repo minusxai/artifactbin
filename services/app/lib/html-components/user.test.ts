@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AfUser, registerUser } from './user';
-import type { UserPerson, UserStatus } from './user';
+import type { AfUser, UserPerson, UserStatus } from './user';
+import { registerComponent } from './register-component';
 
 const ada: UserPerson = { id: 'usr_ada', name: 'Ada Lovelace', handle: 'ada', image: '/ada.png' };
 const preUpgradeHost = document.createElement('div');
@@ -12,7 +12,7 @@ Object.defineProperty(preUpgrade, 'size', { value: 'lg', writable: true, configu
 Object.defineProperty(preUpgrade, 'mode', { value: 'avatar', writable: true, configurable: true });
 Object.defineProperty(preUpgrade, 'link', { value: false, writable: true, configurable: true });
 Object.defineProperty(preUpgrade, 'loading', { value: false, writable: true, configurable: true });
-registerUser();
+const { AfUser: AfUserClass, userComponent } = await import('./user');
 afterEach(() => document.body.replaceChildren());
 
 const status = (user: AfUser): UserStatus => user.status;
@@ -160,8 +160,8 @@ describe('native light-DOM af-user', () => {
     const user = mount(); user.className = 'author-class'; user.style.margin = '4px'; user.person = ada;
     expect(getComputedStyle(user).display).toBe('inline-flex');
     expect(user.classList.contains('author-class')).toBe(true); expect(user.style.margin).toBe('4px');
-    registerUser(); registerUser();
-    expect(customElements.get('af-user')).toBe(AfUser);
+    registerComponent(userComponent); registerComponent(userComponent);
+    expect(customElements.get('af-user')).toBe(AfUserClass);
     expect(document.querySelectorAll('style[data-af-user-styles]')).toHaveLength(1);
   });
 });

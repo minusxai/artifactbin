@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from "vitest";
-import { AfIsometric, registerIsometric } from "./isometric";
+import { AfIsometric } from "./isometric";
+import './isometric';
 import { advanceIsometric } from "./isometric-model";
-registerIsometric();
 afterEach(() => document.body.replaceChildren());
 it("retains keyed SVG parts across pose updates and preserves authored identities", () => {
   const element = document.createElement("af-isometric") as AfIsometric;

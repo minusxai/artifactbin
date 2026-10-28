@@ -9,14 +9,16 @@ import {admitRuntimeModuleImports} from '../../../lib/html-publication-bundle/ru
 // The shared autofix rules (lib/html-autofix) reach every script through this bundled module.
 export {autofixHtml,formatAutofixReport,scriptFingerprint,localReferences} from '../../../lib/html-autofix/index.ts';
 import {htmlAppearance} from '../../../lib/html-page/design-system.ts';
-import {htmlSystemsCss} from '../../../lib/html-systems/index.ts';
-/** The platform stylesheet for one local page: only its resolved system, inline first in <head> (lib/html-systems). */
-export function withPlatformStyles(source){
- const {designSystem}=htmlAppearance(source);if(!designSystem)return source;
+/** The design system a page names (its meta or <html> attribute), or null. */
+export const pageDesignSystem=source=>htmlAppearance(source).designSystem??null;
+/** The platform stylesheet for one local page — `css`, its resolved system only, which the preview fetches from the
+ * selected server's /af/styles.css?system=NAME (lib/html-systems) — inline first in <head>. */
+export function withPlatformStyles(source,css){
+ if(!css||!pageDesignSystem(source))return source;
  const document=parse(source),html=document.childNodes.find(node=>node.nodeName==='html'),head=html?.childNodes.find(node=>node.nodeName==='head');
  const present=node=>node.attrs?.some(attr=>attr.name==='data-af'&&attr.value==='platform-styles')||(node.childNodes??[]).some(present);
  if(!head||present(document))return source;
- const style=parseFragment('<style data-af="platform-styles"></style>').childNodes[0];style.childNodes=[{nodeName:'#text',value:htmlSystemsCss([designSystem]),parentNode:style}];
+ const style=parseFragment('<style data-af="platform-styles"></style>').childNodes[0];style.childNodes=[{nodeName:'#text',value:css,parentNode:style}];
  style.parentNode=head;head.childNodes.unshift(style);return serialize(document);
 }
 /** Shared server admission distinguishes literal project dependencies from closed runtime URL adapters. */
@@ -39,8 +41,8 @@ export function publicationLocalReferences(source,contentType){
  };
  walk(parse(source));return references;
 }
-export function previewHtml(source,notice,localConfig){
- const document=parse(localConfig?withPlatformStyles(source):source);
+export function previewHtml(source,notice,localConfig,platformCss){
+ const document=parse(localConfig?withPlatformStyles(source,platformCss):source);
  const html=document.childNodes.find(node=>node.nodeName==='html');
  html.attrs=html.attrs.filter(attr=>attr.name!=='data-af-private-preview');
  html.attrs.push({name:'data-af-private-preview',value:'true'});

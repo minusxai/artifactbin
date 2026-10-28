@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { readLucideIcons } from './lucide-icons.mjs';
 import { recordServerReader, repoRelative, serverReaderFresh, stampInputs } from './server-reader-cache.mjs';
 
@@ -17,9 +18,18 @@ fs.mkdirSync(output, { recursive: true });
 fs.rmSync(path.join(output, 'story-ssr.cjs'), { force: true });
 const libraryFiles = fs.readdirSync(path.join(root, 'lib/libraries'), { recursive: true }).map((file) => path.join(root, 'lib/libraries', file)).filter((file) => fs.statSync(file).isFile());
 // Stamped before building: an input edited mid-build is a miss next time, never a stale hit.
-const stamped = stampInputs(libraryFiles.map(repoRelative));
+const componentSources = fs.readdirSync(path.join(root, 'lib/html-components')).filter((file) => /^[a-z][a-z0-9-]*\.(?:ts|json)$/.test(file)).map((file) => path.join(root, 'lib/html-components', file));
+// The last component build's full input graph (its receipt), so an edit to anything a component imports is a miss.
+let componentGraph = [];
+try { componentGraph = JSON.parse(fs.readFileSync(path.join(output, 'html-components-receipt.json'), 'utf8')).inputs.map((input) => input.path); } catch { /* first build */ }
+const stamped = stampInputs([...[...libraryFiles, ...componentSources].map(repoRelative), ...componentGraph]);
 
 await import('./build-libraries.mjs');
+// The hosted component modules (lib/build-assets/components, served at /af/components/) and the skill's readable copies.
+// A separate process: the repository build scripts import from this package's scripts, never the reverse.
+execFileSync(process.execPath, [path.join(root, '../../scripts/build/build-html-components.mjs')], { stdio: 'inherit' });
+const hosted = JSON.parse(fs.readFileSync(path.join(root, 'lib/html-components/hosted.json'), 'utf8'));
+const components = [...hosted.components, ...hosted.legacy];
 
 // Older checkouts also wrote mermaid-modules.json here; nothing reads it.
 fs.rmSync(path.join(output, 'mermaid-modules.json'), { force: true });
@@ -42,4 +52,5 @@ const registry = JSON.parse(fs.readFileSync(path.join(root, 'lib/libraries/regis
 recordServerReader(stamped, [
   ...['lucide-icons.json', 'maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
   ...Object.entries(registry).map(([name, spec]) => repoRelative(path.join(root, 'public/libraries', `${name}-${spec.version}`, 'index.js'))),
+  ...components.map((name) => repoRelative(path.join(output, 'components', `${name}.js`))),
 ]);

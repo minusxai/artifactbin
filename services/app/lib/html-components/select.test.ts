@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from 'vitest';
-import { AfSelect, registerSelect } from './select';
-registerSelect();
+import { AfSelect } from './select';
+import './select';
 afterEach(() => document.body.replaceChildren());
 function fixture(multiple = false) {
   const root = document.createElement('af-select') as AfSelect;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AfAvatar, AfAvatarImage, registerAvatar } from './avatar';
-import type { AvatarStatus } from './avatar';
+import type { AfAvatar, AfAvatarImage, AvatarStatus } from './avatar';
+import { registerComponent } from './register-component';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-avatar size="sm"><af-avatar-image></af-avatar-image><af-avatar-fallback>PL</af-avatar-fallback></af-avatar>';
@@ -10,7 +10,7 @@ const preUpgradeImage = preUpgradeAvatar.querySelector('af-avatar-image') as AfA
 Object.defineProperty(preUpgradeAvatar, 'size', { value: 'lg', writable: true, configurable: true });
 Object.defineProperty(preUpgradeImage, 'src', { value: '/pre-upgrade.png', writable: true, configurable: true });
 Object.defineProperty(preUpgradeImage, 'alt', { value: 'Pre-upgrade portrait', writable: true, configurable: true });
-registerAvatar();
+const { avatarComponent } = await import('./avatar');
 afterEach(() => document.body.replaceChildren());
 
 function fixture(attrs = '', imageAttrs = 'src="/person.png" alt="Ada Lovelace"') {
@@ -175,7 +175,7 @@ describe('native light-DOM avatars', () => {
   });
 
   it('registers all avatar parts and styles idempotently', () => {
-    registerAvatar(); registerAvatar();
+    registerComponent(avatarComponent); registerComponent(avatarComponent);
     for (const name of ['af-avatar', 'af-avatar-image', 'af-avatar-fallback', 'af-avatar-badge', 'af-avatar-group', 'af-avatar-group-count']) {
       expect(customElements.get(name)).toBeDefined();
     }

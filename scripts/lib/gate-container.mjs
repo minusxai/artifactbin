@@ -22,7 +22,6 @@ export const BUILD_OUTPUTS = Object.freeze([
   'services/app/lib/build-assets',
   'services/app/public/islands',
   'services/app/public/libraries',
-  'services/app/skills/artifactbin/components',
   'services/app/server/routes.generated.ts',
   'services/cli/dist',
 ]);

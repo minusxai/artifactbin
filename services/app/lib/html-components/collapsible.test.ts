@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfCollapsible, collapsibleStyles, registerCollapsible } from './collapsible';
+import type { AfCollapsible } from './collapsible';
+import { registerComponent } from './register-component';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-collapsible><af-collapsible-trigger>Open</af-collapsible-trigger><af-collapsible-content>Body</af-collapsible-content></af-collapsible>';
 const preUpgradeRoot = preUpgradeHost.firstElementChild as AfCollapsible;
 Object.defineProperty(preUpgradeRoot, 'open', {value:true,writable:true,configurable:true});
-registerCollapsible();
+const { collapsibleStyles, collapsibleComponent } = await import('./collapsible');
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '', body = '<p data-af-id="authored">Body</p>') {
@@ -155,7 +156,7 @@ describe('native authored collapsible', () => {
     root.remove(); document.body.append(root);
     expect(root.open).toBe(true); expect(trigger.id).toBe('authored-trigger'); expect(content.id).toBe('authored-content');
     expect(trigger.getAttribute('aria-controls')).toBe('authored-content');
-    registerCollapsible(); expect(document.querySelectorAll('style[data-af-collapsible-styles]')).toHaveLength(1);
+    registerComponent(collapsibleComponent); expect(document.querySelectorAll('style[data-af-collapsible-styles]')).toHaveLength(1);
   });
   it('installs compact light DOM styles from semantic tokens', () => {
     const {trigger,content} = fixture();

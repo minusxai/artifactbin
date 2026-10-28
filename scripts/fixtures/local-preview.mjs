@@ -25,9 +25,10 @@ try {
   offset=end;
  }
  const scripts=join(skill,'scripts');
- const libraries=(await import(pathToFileURL(join(scripts,'preview-libraries.mjs')).href)).default;
- const vega=Object.keys(libraries).find(url=>/\/vega-\d/.test(url)),vegaLite=Object.keys(libraries).find(url=>/\/vega-lite-\d/.test(url));assert.ok(vega&&vegaLite,'installed registered Vega and Vega-Lite');
- const pele=Object.keys(libraries).find(url=>/\/pele-\d/.test(url)),deck=Object.keys(libraries).find(url=>/\/deck-gl-\d/.test(url));assert.ok(pele&&deck,'installed direct Mermaid and deck.gl');
+ // The archive ships no library bundles: the installed preview fetches them from the selected server (D20).
+ const libraries=Object.values((await (await fetch(new URL('/af/import-map.json',origin))).json()).imports);
+ const vega=libraries.find(url=>/\/vega-\d/.test(url)),vegaLite=libraries.find(url=>/\/vega-lite-\d/.test(url));assert.ok(vega&&vegaLite,'hosted registered Vega and Vega-Lite');
+ const pele=libraries.find(url=>/\/pele-\d/.test(url)),deck=libraries.find(url=>/\/deck-gl-\d/.test(url));assert.ok(pele&&deck,'hosted direct Mermaid and deck.gl');
  const {startPreview}=await import(pathToFileURL(join(scripts,'preview.mjs')).href);
  await writeFile(join(root,'data.json'),'[7]');
  const html=`<!doctype html><html><head><script>if(document.documentElement.getAttribute("data-af-private-preview")!=="true")throw Error("Private marker missing before source scripts");</script><script data-af="portable" type="application/json">{"version":1,"source":"<h1>Linked fixture</h1>","identity":{"platformOrigin":"https://example.invalid","artifactId":"linked-fixture","baseRevision":"1","sourceDigest":"0000000000000000000000000000000000000000000000000000000000000000"}}</script><script src="/af/core.js" data-af="core"></script><script data-af="state" type="application/json">{"count":0}</script></head><body><button id="increment">Add one</button><output id="count"></output><output id="data"></output><script type="module">import {client,gql} from '@afbin/apollo';const query=gql\`{count}\`;client.watchQuery({query}).subscribe(({data})=>{document.querySelector('#count').textContent=String(data.count);});document.querySelector('#increment').onclick=()=>{client.updateQuery({query},({count})=>({count:count+1}));};document.querySelector('#data').textContent=(await (await fetch('./data.json')).json())[0];</script></body></html>`;

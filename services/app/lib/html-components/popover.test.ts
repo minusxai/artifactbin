@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,expect,it} from 'vitest';
-import {AfPopover,popoverStyles,registerPopover} from './popover';
-import {registerTooltip} from './tooltip';
-registerPopover();
+import {AfPopover,popoverComponent,popoverStyles} from './popover';
+import './tooltip';
+import { registerComponent } from './register-component';
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '') {
@@ -79,10 +79,10 @@ it('preserves disabled native children and removes obsolete generated label link
 });
 it('restores focus when a controlled author closes and registers once', () => {
  const {root,trigger,content} = fixture('open'); content.querySelector('input')!.focus(); expect(content.contains(document.activeElement)).toBe(true);
- root.open = false; expect(document.activeElement).toBe(trigger); registerPopover(); expect(document.querySelectorAll('style[data-af-popover-styles]')).toHaveLength(1);
+ root.open = false; expect(document.activeElement).toBe(trigger); registerComponent(popoverComponent); expect(document.querySelectorAll('style[data-af-popover-styles]')).toHaveLength(1);
 });
 it('dismisses a nested tooltip before its containing popover', () => {
- registerTooltip(); const {root,content} = fixture('default-open');
+ const {root,content} = fixture('default-open');
  const tip = document.createElement('af-tooltip'); tip.innerHTML = '<af-tooltip-trigger><button>Help</button></af-tooltip-trigger><af-tooltip-content>Explanation</af-tooltip-content>'; content.append(tip);
  tip.querySelector('button')!.focus(); expect(tip.dataset.state).toBe('open');
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',cancelable:true})); expect(tip.dataset.state).toBe('closed'); expect(root.open).toBe(true);

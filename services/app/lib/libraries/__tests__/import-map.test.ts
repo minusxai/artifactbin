@@ -1,21 +1,27 @@
 import {expect,it} from 'vitest';
 import {build} from 'esbuild';
 import path from 'node:path';
-import {libraryImports,libraryPathForSpecifier,libraryUrls,libraryVersions,resolveLibraryUrl} from '../index';
+import {componentImports,libraryImports,libraryPathForSpecifier,libraryUrls,libraryVersions,resolveLibraryUrl} from '../index';
+import hosted from '../../html-components/hosted.json';
+const hostedComponents=hosted.components;
 import registry from '../registry.json';
 import {assembleHtmlPage,downloadableHtml} from '../../html-runtime';
 import {referencedLibraryResources} from '../assets.server';
 import {packOfflineDependencies} from '../../offline-dependencies';
-import {libraryAssetManifest,libraryImportMap} from '../../../skills/artifactbin/scripts/preview-library-assets.mjs';
+import {platformModules} from '../../../skills/artifactbin/scripts/preview-platform.mjs';
 import {packPreviewExport} from '../../../skills/artifactbin/scripts/preview-export.mjs';
 
 const names=Object.keys(registry);
 const runtime=(html:string)=>JSON.parse(/<script type="application\/json" data-af="runtime">([\s\S]*?)<\/script>/.exec(html)![1]!);
 const base={pageId:'P',revision:'1',backends:[]};
-it('maps every hosted library, highlight included, to @afbin/<name> at its current URL',()=>{
+it('maps every hosted library, highlight included, and every hosted component to @afbin/<name> at its current URL',()=>{
  expect(names).toContain('highlight');
  const imports=libraryImports(undefined);
- expect(Object.keys(imports).sort()).toEqual(names.map(n=>'@afbin/'+n).sort());
+ expect(Object.keys(imports).sort()).toEqual([...names,...hostedComponents].map(n=>'@afbin/'+n).sort());
+ for(const name of hostedComponents)expect(imports['@afbin/'+name]).toBe(`/af/components/${name}.js`);
+ expect(componentImports()['@afbin/tabs']).toBe('/af/components/tabs.js');expect(libraryPathForSpecifier('@afbin/tabs')).toBe('/af/components/tabs.js');
+ // A library name wins: the legacy deck.gl and Mermaid wrapper elements are not hosted components.
+ expect(libraryPathForSpecifier('@afbin/deck-gl')).toBe(libraryUrls()['deck-gl']);expect(libraryPathForSpecifier('@afbin/mermaid')).toBeUndefined();expect(libraryPathForSpecifier('@afbin/register-component')).toBeUndefined();
  for(const name of names)expect(imports['@afbin/'+name]).toBe(libraryUrls()[name]);
  expect(imports['@afbin/highlight']).toBe('/libraries/highlight-11.12.0/index.js');
  expect(libraryVersions().vega).toBe('6.3.1');
@@ -40,6 +46,8 @@ it('has the core add validated library entries to the import map, skipped for po
  const core=await buildHtmlCore();
  expect(core).toMatch(/\b\w+\.libraries\?\?\{\}/);
  expect(core).toContain('@afbin\\/[a-z][a-z0-9-]*$');
+ // Hosted component entries (/af/components/<name>.js) pass the same value check as the versioned libraries.
+ expect(core).toContain('af\\/components\\/[a-z][a-z0-9-]*');
  expect(core).toMatch(/if\(!\w+\)for\(let\[\w+,\w+\]of Object\.entries\(\w+\.libraries/);
  expect(core.indexOf('.libraries')).toBeLessThan(core.indexOf('"@afbin/apollo"'));
 });
@@ -52,11 +60,11 @@ it('packs a bare @afbin/vega import into the offline copy',async()=>{
  expect(packed.embeddedUrls).toHaveLength(1);expect(packed.html).not.toContain('@afbin/vega');
 });
 it('local preview resolves and exports a bare @afbin/vega import',async()=>{
- const manifest=libraryAssetManifest({'/libraries/vega-6.3.1/index.js':'export const marker=1;','/libraries/pele-flowchart-1.12.0/index.js':'export {};'});
- const map=libraryImportMap(manifest);
+ const platform=platformModules({libraryAssets:{'/libraries/vega-6.3.1/index.js':'export const marker=1;','/libraries/pele-flowchart-1.12.0/index.js':'export {};'}});
+ const map=await platform.importMap();
  expect(map).toEqual({'@afbin/vega':'/libraries/vega-6.3.1/index.js','@afbin/pele-flowchart':'/libraries/pele-flowchart-1.12.0/index.js'});
  const html='<!doctype html><html><head></head><body><script type="module">import {marker} from "@afbin/vega";console.log(marker);</script></body></html>';
- const out=await packPreviewExport({html,pathname:'/index.html',libraries:map,load:async(name:string)=>{if(manifest.has(name))return {contentType:'text/javascript',bytes:Buffer.from(manifest.get(name))};throw Error('missing '+name);}});
+ const out=await packPreviewExport({html,pathname:'/index.html',libraries:map,load:async(name:string)=>{const bytes=await platform.module(name);if(bytes)return {contentType:'text/javascript',bytes};throw Error('missing '+name);}});
  expect(out).not.toContain('"@afbin/vega"');expect(out).toContain('importmap');
 });
 it('builds the highlight library with the web language set and tok- classes',async()=>{

@@ -1,6 +1,6 @@
 /**
  * <af-data-table>: sortable, virtualized table; the app owns edits, drafts and transport.
- * Import:  import {registerDataTable} from './components/data-table.js'; registerDataTable();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/data-table';  (registers the tags; this .ts is the readable contract)
  * Props: data={rows,columns} (columns are schema {name,type}); display columns=[{col,title,fmt}], rowKey (stable, unique), sort, height, sticky, transpose; cellRenderers, templates
  * Server source: source.read({offset,limit,sort,signal}) returns {rows,columns,totalRows?,truncated?}
  * Events: af-sort-change (sort) and af-edit-intent ({row,key,column,value})
@@ -9,6 +9,7 @@
  *   table.data={rows:[{id:1,name:"Ada"}],columns:[{name:"id",type:"number"},{name:"name",type:"string"}]};
  *   table.rowKey="id";
  */
+import { registerComponent } from './register-component';
 import {
   barFraction,
   cellTint,
@@ -958,16 +959,8 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   }
 }
 const dataTableStyles = `af-data-table{display:flex;flex-direction:column;width:100%;min-width:0;box-sizing:border-box;overflow:hidden;border:1px solid var(--border,#ddd);border-radius:var(--radius,.375rem);background:var(--card,var(--background,#fff));color:var(--foreground,#222);font:inherit;font-size:.875rem;line-height:1.4285714285714286}af-data-table[data-af-fill]{height:100%}af-data-table [data-slot=table-scroll]{flex:1 1 auto;width:100%;overflow:auto;position:relative;min-height:0}af-data-table table.af-data-table__table{display:table;width:100%;max-width:none;border-collapse:collapse;font-size:inherit;line-height:inherit}af-data-table thead{background:var(--card,var(--background,#fff));color:var(--muted-foreground,#666);z-index:1}af-data-table th.af-data-table__header-cell{min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;padding:.5rem .75rem;font-weight:700;white-space:nowrap;border-bottom:1px solid var(--border,#ddd);cursor:pointer}af-data-table th.af-data-table__header-cell:focus-visible{outline:2px solid var(--ring,#777);outline-offset:-2px}af-data-table td.af-data-table__cell{position:relative;min-width:0;overflow:hidden;padding:.375rem .75rem;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--border,#ddd) 50%,transparent);box-sizing:border-box;vertical-align:middle}af-data-table tbody tr:hover{background:color-mix(in srgb,var(--muted,#eee) 30%,transparent)}af-data-table [data-bar]{position:absolute;top:.25rem;bottom:.25rem;left:.25rem;opacity:.25;pointer-events:none;border-radius:.125rem}af-data-table table[data-layout=comparison] th:first-child{position:sticky;left:0;z-index:1;background:var(--card,var(--background,#fff))}af-data-table [data-slot=cell-content]{position:relative}af-data-table small{display:block;color:var(--muted-foreground,#666)}af-data-table [data-slot=table-footer]:not(:empty){display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid var(--border,#ddd);padding:.375rem .75rem;font-size:.75rem;color:var(--muted-foreground,#666)}`;
-export function registerDataTable(
-  registry: CustomElementRegistry = customElements,
-  document: Document = globalThis.document,
-): void {
-  if (!document.querySelector("style[data-af-data-table-styles]")) {
-    const style = document.createElement("style");
-    style.setAttribute("data-af-data-table-styles", "");
-    style.textContent = dataTableStyles;
-    document.head.append(style);
-  }
-  if (!registry.get("af-data-table"))
-    registry.define("af-data-table", AfDataTable);
-}
+registerComponent({
+  styleKey: 'af-data-table-styles',
+  styles: dataTableStyles,
+  elements: { 'af-data-table': AfDataTable },
+});

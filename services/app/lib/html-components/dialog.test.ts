@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, expect, it } from 'vitest';
-import { AfDialog, registerDialog } from './dialog';
+import type { AfDialog } from './dialog';
+import { registerComponent } from './register-component';
+let dialogComponent: typeof import('./dialog').dialogComponent;
 const preUpgrade = document.createElement('af-dialog') as AfDialog;
 preUpgrade.innerHTML = '<af-dialog-content><input value="kept"></af-dialog-content>';
 Object.defineProperty(preUpgrade,'open',{value:true,writable:true,configurable:true});
 // jsdom does not implement native top-layer methods. Focus trapping is browser-tested.
-beforeAll(() => {
+beforeAll(async () => {
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new Event('close')); };
-  registerDialog();
+  ({ dialogComponent } = await import('./dialog'));
 });
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
@@ -56,7 +58,7 @@ it('respects disabled controls, reconnects once, restores focus, and tolerates r
 it('keeps nested instances independent and registers styles only once', () => {
   const outer = fixture('default-open'); const inner = fixture(); outer.content.append(inner.root);
   inner.trigger.click(); inner.close.click(); expect(outer.root.open).toBe(true); expect(inner.root.open).toBe(false);
-  registerDialog(); expect(document.querySelectorAll('style[data-af-dialog-styles]')).toHaveLength(1);
+  registerComponent(dialogComponent); expect(document.querySelectorAll('style[data-af-dialog-styles]')).toHaveLength(1);
 });
 it('honors properties supplied before upgrade and only reads default-open initially', () => {
   document.body.append(preUpgrade); expect(preUpgrade.open).toBe(true); expect(preUpgrade.querySelector('dialog')!.open).toBe(true);

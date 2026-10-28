@@ -1,11 +1,12 @@
 /**
  * <af-input>: single-line text control.
- * Import:  import {registerInput} from './components/input.js'; registerInput();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/input';  (registers the tags; this .ts is the readable contract)
  * Props: value, label, placeholder, native constraints (required, maxlength, pattern, ...)
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-input id="search" label="Search"></af-input>
  */
+import { registerComponent } from './register-component';
 import { connectTextControl, getTextControlValue, textControlAttributes, type TextControlContract, type TextControlController } from './text-control';
 
 class AfInput extends HTMLElement implements TextControlContract {
@@ -39,9 +40,8 @@ af-input>.af-text-control:read-only{cursor:default}
 af-input>.af-text-control[type=number]{font-variant-numeric:tabular-nums}
 `;
 
-export function registerInput(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-input-styles]')) {
-    const style = document.createElement('style'); style.dataset.afInputStyles = ''; style.textContent = inputStyles; document.head.append(style);
-  }
-  if (!registry.get('af-input')) registry.define('af-input', AfInput);
-}
+registerComponent({
+  styleKey: 'af-input-styles',
+  styles: inputStyles,
+  elements: { 'af-input': AfInput },
+});

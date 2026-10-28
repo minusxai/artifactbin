@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfProgress, registerProgress } from './progress';
+import { AfProgress, progressComponent } from './progress';
+import { registerComponent } from './register-component';
 
-registerProgress();
 afterEach(() => document.body.replaceChildren());
 function fixture(markup: string) {
   const host = document.createElement('div'); host.innerHTML = markup; document.body.append(host);
@@ -61,7 +61,7 @@ describe('native authored progress', () => {
     expect(getComputedStyle(one).width).toBe('100%');
     expect(getComputedStyle(one).height).toBe('8px');
     expect(getComputedStyle(one.querySelector('[data-slot="progress-indicator"]')!).backgroundColor).not.toBe('');
-    registerProgress(); expect(document.querySelectorAll('style[data-af-progress-styles]')).toHaveLength(1);
+    registerComponent(progressComponent); expect(document.querySelectorAll('style[data-af-progress-styles]')).toHaveLength(1);
     expect(two.dataset.state).toBe('indeterminate');
   });
 });

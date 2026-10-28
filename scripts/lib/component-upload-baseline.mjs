@@ -3,8 +3,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {baselineLocalOrigin,createBaselineSession,validateBaselineAccount} from './component-baseline-session.mjs';
-import {publishBaselineFixtures,installedFiles} from '../fixtures/component-baseline/publication.mjs';
-import {verifyComponentAssetArchive} from './component-asset-proof.mjs';
+import {publishBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
+import {hostedComponentFiles,verifyComponentAssetArchive} from './component-asset-proof.mjs';
 import {uploadBrowserParityFixtures} from '../fixtures/component-baseline/upload.mjs';
 import {captureBrowserBaseline} from './component-browser-baseline.mjs';
 import {observeUploadRequests,requireUploadResponse} from './component-upload-route.mjs';
@@ -19,7 +19,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  // Omitting legacy access selects the documented V2 owner-artifact insert grants.
  const allowed=await publish({title:'Disposable upload backing data',dataset:[{fixture:'upload'}]});
  const denied=await publish({title:'Disposable read-only backing data',dataset:[{fixture:'upload-denied'}],access:'read'});
- let skillArchive,componentAssets;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());componentAssets=await verifyComponentAssetArchive({root:path.resolve(import.meta.dirname,'../..'),files:installedFiles(skillArchive)});}
+ let skillArchive,componentAssets;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());const root=path.resolve(import.meta.dirname,'../..');componentAssets=await verifyComponentAssetArchive({root,files:await hostedComponentFiles({root,origin})});}
  const entries=[];
  for(const fixture of uploadBrowserParityFixtures)entries.push(...await publishBaselineFixtures({implementation,publish,serverOrigin:origin,skillArchive,fixtures:[fixture],substitutions:{uploadDataset:fixture.uploadScenario==='permission'?denied.id:allowed.id,platformOrigin:origin}}));
  const membershipReceipts=await uploadFixtureParticipation({origin,entries,token,mode:participation});

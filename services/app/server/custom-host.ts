@@ -22,6 +22,7 @@
  *   GET/HEAD /assets/<name>.css|.woff2              the app's built stylesheet and fonts, never its script
  *   /story, /fonts, /libraries, /geojson, /favicon.ico   the static runtime
  *   /af/styles.css, /af/fonts/<name>.woff2             the platform stylesheet and its fonts
+ *   /af/components/<name>.js                           the hosted HTML components and their chunks
  *
  * Every `/a/<id>` route and every post is scoped to the OWNER's PUBLIC markup
  * documents — the app's own doors also admit unlisted ones to anyone, so that
@@ -65,7 +66,7 @@ type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => P
  * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
  * per-document modules and speculation rules the module store serves — all content-addressed, all public.
  */
-const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
+const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;

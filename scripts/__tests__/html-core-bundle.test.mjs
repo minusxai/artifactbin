@@ -43,8 +43,12 @@ it('serves every actual immutable runtime asset after relocating the server bund
  for(const [key,assetPath] of Object.entries(relocated))if(key.endsWith('Path'))expect(assetPath).toMatch(/^\/af\/[a-z]+\.js$/);
  const installed=path.join(root,'installed'),project=path.join(root,'project'),skillSource=new URL('../../services/app/skills/artifactbin/scripts/',import.meta.url);await mkdir(installed);await mkdir(project);await writeFile(path.join(project,'index.html'),'<h1>Relocated runtime</h1>');
  for(const name of await readdir(skillSource))if(name.endsWith('.mjs'))await copyFile(new URL(name,skillSource),path.join(installed,name));
- await writeFile(path.join(installed,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('preview-html.mjs',skillSource),'utf8')));await writeFile(path.join(installed,'preview-runtime.mjs'),'export default '+JSON.stringify(relocated)+';');
- const {startPreview}=await import(pathToFileURL(path.join(installed,'preview.mjs')).href);const preview=await startPreview({root:project});cleanup.push(()=>preview.close());
+ await writeFile(path.join(installed,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('preview-html.mjs',skillSource),'utf8')));
+ // The selected server answers the relocated runtime at its flat /af/ addresses; the preview fetches it from there.
+ const served=new Map([['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]);
+ const {withHttpServer}=await import('../../services/test-support/src/net.ts');
+ const platform=await withHttpServer((request,reply)=>{const body=served.get(request.url);reply.writeHead(body===undefined?404:200,{'content-type':'text/javascript'});reply.end(body??'');});cleanup.push(()=>platform.close());
+ const {startPreview}=await import(pathToFileURL(path.join(installed,'preview.mjs')).href);const preview=await startPreview({root:project,platformOrigin:platform.base});cleanup.push(()=>preview.close());
  for(const [resource,source] of [['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]){const response=await fetch(new URL(resource,preview.url));expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);}
 
 });

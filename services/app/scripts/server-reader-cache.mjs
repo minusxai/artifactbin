@@ -13,12 +13,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const VERSION = 1;
+const VERSION = 2;
 const APP = path.resolve(import.meta.dirname, '..');
 const REPO = path.resolve(APP, '../..');
 const MARKER = path.join(APP, 'lib/build-assets/.server-reader-cache.json');
 const TOOLS = ['services/app/scripts/build-server-reader.mjs', 'services/app/scripts/server-reader-cache.mjs',
-  'services/app/scripts/build-libraries.mjs',
+  'services/app/scripts/build-libraries.mjs', 'scripts/build/build-html-components.mjs', 'scripts/lib/html-components-build.mjs',
   'services/app/scripts/lucide-icons.mjs', 'services/app/scripts/precompress.mjs',
   'package-lock.json', 'services/app/package.json', 'services/app/lib/libraries/registry.json'];
 // Mirrors app/globals.css: @source ../web ../solid ../lib, minus their __tests__ (solid's stay).

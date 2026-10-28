@@ -1,1 +1,0 @@
-var t=class{constructor(e){this.view=e}view;moved=!1;fit(e){this.moved||(this.view=e)}move(e,o){this.moved||=o,this.view=e}reset(e){this.moved=!1,this.view=e}},i=class{generation=0;next(){let e=++this.generation;return()=>e===this.generation}invalidate(){this.generation++}};export{t as a,i as b};

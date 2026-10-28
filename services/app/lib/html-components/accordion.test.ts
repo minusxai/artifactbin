@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { AfAccordion, accordionStyles, registerAccordion } from './accordion';
+import type { AfAccordion } from './accordion';
+import { registerComponent } from './register-component';
 
 const preUpgradeHost = document.createElement('div');
 preUpgradeHost.innerHTML = '<af-accordion><af-accordion-item value="a"><af-accordion-trigger>A</af-accordion-trigger><af-accordion-content>A</af-accordion-content></af-accordion-item><af-accordion-item value="b"><af-accordion-trigger>B</af-accordion-trigger><af-accordion-content>B</af-accordion-content></af-accordion-item></af-accordion>';
 const preUpgradeRoot = preUpgradeHost.firstElementChild as AfAccordion;
 Object.defineProperty(preUpgradeRoot,'value',{value:'b',writable:true,configurable:true});
-registerAccordion();
+const { accordionStyles, accordionComponent } = await import('./accordion');
 afterEach(() => document.body.replaceChildren());
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); };
 function fixture(attrs = '', triggerMarkup = '<af-accordion-trigger>Toggle</af-accordion-trigger>', values = ['a','b','c']) {
@@ -191,7 +192,7 @@ describe('native authored accordion', () => {
     expect(accordionStyles).not.toContain('af-accordion-trigger[aria-expanded="true"] .af-accordion-icon');
   });
   it('registers elements and styles idempotently', () => {
-    registerAccordion(); expect(document.querySelectorAll('style[data-af-accordion-styles]')).toHaveLength(1);
+    registerComponent(accordionComponent); expect(document.querySelectorAll('style[data-af-accordion-styles]')).toHaveLength(1);
   });
 });
 

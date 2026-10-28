@@ -1,11 +1,12 @@
 /**
  * <af-button>: native light-DOM button; authored label or children.
- * Import:  import {registerButton} from './components/button.js'; registerButton();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/button';  (registers the tags; this .ts is the readable contract)
  * Props: variant (default|destructive|outline|secondary|ghost|link), size (default|xs|sm|lg|icon|icon-xs|icon-sm|icon-lg), type, disabled, busy
  * Events: the native click
  * Usage:
  *   <af-button variant="outline" size="sm">Save</af-button>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 /** Public attributes and forwarded properties supported by the native light-DOM button. */
 export type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
 export type ButtonSize = 'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg';
@@ -127,9 +128,10 @@ html[data-af-dark="true"] af-button>button[data-variant=destructive]{background:
 html[data-af-dark="true"] af-button>button:focus-visible{box-shadow:0 0 0 3px color-mix(in oklab,var(--ring,#737373) 50%,transparent)}
  `;
 
-export function registerButton(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-button-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-button-styles', ''); style.textContent = buttonStyles; document.head.append(style);
-  }
-  if (!registry.get('af-button')) registry.define('af-button', AfButton);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const buttonComponent: ComponentDescriptor = {
+  styleKey: 'af-button-styles',
+  styles: buttonStyles,
+  elements: { 'af-button': AfButton },
+};
+registerComponent(buttonComponent);

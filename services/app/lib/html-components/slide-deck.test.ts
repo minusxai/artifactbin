@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AfSlideDeck, registerSlideDeck } from './slide-deck';
-registerSlideDeck();
+import { AfSlideDeck } from './slide-deck';
+import './slide-deck';
 const fullscreenDescriptor=Object.getOwnPropertyDescriptor(document,'fullscreenElement');
 const exitDescriptor=Object.getOwnPropertyDescriptor(document,'exitFullscreen');
 afterEach(()=>{document.body.replaceChildren();vi.restoreAllMocks();if(fullscreenDescriptor)Object.defineProperty(document,'fullscreenElement',fullscreenDescriptor);else delete (document as {fullscreenElement?:Element|null}).fullscreenElement;if(exitDescriptor)Object.defineProperty(document,'exitFullscreen',exitDescriptor);else delete (document as {exitFullscreen?:unknown}).exitFullscreen;});

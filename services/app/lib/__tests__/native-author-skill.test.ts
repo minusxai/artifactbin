@@ -61,8 +61,20 @@ describe('one installable native HTML author skill',()=>{
   for(const value of ['page.getByRole','page.mainFrame()','overflow','--viewer'])expect(check).toContain(value);
   expect(check.slice(0,check.indexOf('import'))).not.toContain('frameLocator(');
   expect(comment).toContain('watch');expect(comment).toContain('react');
-  expect(files['components/slide-deck.ts']).toContain('registerSlideDeck');
+  expect(files['components/slide-deck.ts']).toContain(`import '@afbin/slide-deck';`);
+  for(const [name,text] of Object.entries(files).filter(([name])=>name.startsWith('components/')))expect(text.slice(0,text.indexOf('*/')),name).not.toMatch(/\bregister(?!Component\b)[A-Z]|\.\/components\//);
   for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
+ });
+ it('ships only what agents read and run: no compiled components or platform bundles, within the size budget',async()=>{
+  const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
+  const members:string[]=[];let offset=0;
+  while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
+  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
+  // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
+  expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
+  for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
+  expect(members.some(name=>/^components\/(?:deck-gl|mermaid)/.test(name))).toBe(false);
+  expect(archive.byteLength).toBeLessThan(1.5*1024*1024);
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
   const tree=skillTree(),files=skillPackageFiles(tree,BASE);

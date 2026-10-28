@@ -1,6 +1,6 @@
 /**
  * <af-slide-deck>: keyboard-navigable deck of af-slide children with presentation and print behaviour. Its slides are not export-marked: for slide images use your own data-af-slide sections.
- * Import:  import {registerSlideDeck} from './components/slide-deck.js'; registerSlideDeck();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/slide-deck';  (registers the tags; this .ts is the readable contract)
  * Props: index (zero-based; you own it)
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Slide IDs stay stable when reordered or edited. Check keyboard navigation and print layout in the actual page.
@@ -8,12 +8,13 @@
  *   <script type="application/json" data-af="state">{"index":0}</script>
  *   <af-slide-deck data-af-id="quarterly-deck" index="0"><af-slide data-af-id="quarterly-intro"><h1>Review</h1></af-slide>
  *   <af-slide data-af-id="quarterly-next"><h2>Next</h2></af-slide></af-slide-deck>
- *   import {client,gql} from "@afbin/apollo"; import {registerSlideDeck} from "./components/slide-deck.js"; registerSlideDeck();
+ *   import {client,gql} from "@afbin/apollo"; import "@afbin/slide-deck";
  *   const deck=document.querySelector("af-slide-deck"), q=gql`{index}`;
  *   const sub=client.watchQuery({query:q}).subscribe(({data})=>{if(deck.index!==data.index)deck.index=data.index;});
  *   deck.addEventListener("af-change",e=>client.updateQuery({query:q},s=>({...s,index:e.detail.value})));
  *   window.addEventListener("pagehide",()=>sub.unsubscribe(),{once:true});
  */
+import { registerComponent } from './register-component';
 import { slideIndex, slideKeyIndex, visibleSlideIndex, type SlideDeckChangeDetail, type SlideDeckContract } from './slide-navigation';
 
 let sequence=0;
@@ -261,7 +262,8 @@ af-slide-deck:fullscreen>af-slide{min-height:100svh}
 @media(max-width:720px){af-slide-deck{grid-template-columns:minmax(0,1fr)}af-slide-deck>[data-af-deck-chrome=rail]{display:none}af-slide-deck>af-slide{grid-column:1}}
 @media print{af-slide-deck{display:block;background:transparent}af-slide-deck>[data-af-deck-chrome]{display:none!important}af-slide{display:flex;break-after:page;break-inside:avoid;min-height:0}af-slide:last-of-type{break-after:auto}}
 `;
-export function registerSlideDeck(registry:CustomElementRegistry=customElements,doc:Document=globalThis.document):void {
-  if(!doc.querySelector('style[data-af-slide-deck-styles]')){const style=doc.createElement('style');style.dataset.afSlideDeckStyles='';style.textContent=slideDeckStyles;doc.head.append(style);}
-  for(const [name,ctor] of Object.entries({'af-slide-deck':AfSlideDeck,'af-slide':AfSlide}))if(!registry.get(name))registry.define(name,ctor);
-}
+registerComponent({
+  styleKey: 'af-slide-deck-styles',
+  styles: slideDeckStyles,
+  elements: { 'af-slide-deck': AfSlideDeck, 'af-slide': AfSlide },
+});

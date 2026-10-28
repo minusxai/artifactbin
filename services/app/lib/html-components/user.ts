@@ -1,6 +1,6 @@
 /**
  * <af-user>: person card; the app supplies identity (no account lookup happens in the element).
- * Import:  import {registerUser} from './components/user.js'; registerUser();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/user';  (registers the tags; this .ts is the readable contract)
  * Props: person={id,name,handle,image,profileHref}, loading, error, identityState (unknown|missing|deleted), mode (user|avatar|handle), size (sm|md|lg)
  * To resolve a User ID from a linked dataset's typed user column, query that authorized namespace:
  *   const {data}=await client.query({query:gql`query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}`,variables:{ids:[userId]}});
@@ -10,6 +10,7 @@
  * Usage:
  *   element.person={id:"u1",name:"Ada",handle:"ada",image:null,profileHref:"/u/ada"};
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 import { personFaceBackground, personInitial } from '../islands';
 
 export type UserSize = 'sm' | 'md' | 'lg';
@@ -250,9 +251,10 @@ af-user [data-slot=user-label] a:hover{text-decoration-color:currentColor}
 af-user[data-state=error] [data-slot=user-label],af-user[data-state=unknown] [data-slot=user-label],af-user[data-state=missing] [data-slot=user-label],af-user[data-state=deleted] [data-slot=user-label]{color:var(--muted-foreground,#737373)}
 `;
 
-export function registerUser(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-user-styles]')) {
-    const style = document.createElement('style'); style.setAttribute('data-af-user-styles', ''); style.textContent = userStyles; document.head.append(style);
-  }
-  if (!registry.get('af-user')) registry.define('af-user', AfUser);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const userComponent: ComponentDescriptor = {
+  styleKey: 'af-user-styles',
+  styles: userStyles,
+  elements: { 'af-user': AfUser },
+};
+registerComponent(userComponent);

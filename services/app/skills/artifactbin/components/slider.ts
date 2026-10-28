@@ -1,11 +1,12 @@
 /**
  * <af-slider>: numeric range control.
- * Import:  import {registerSlider} from './components/slider.js'; registerSlider();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/slider';  (registers the tags; this .ts is the readable contract)
  * Props: value (number), min, max, step, disabled, label
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-slider label="Volume" min="0" max="100" value="40"></af-slider>
  */
+import { registerComponent } from './register-component';
 import { format as d3format } from 'd3-format';
 
 /** Numeric value exposed by the author-facing range control. */
@@ -138,12 +139,8 @@ af-slider>input[type=range]:disabled{opacity:.5}
 af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:11px}
 `;
 
-export function registerSlider(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-slider-styles]')) {
-    const style = document.createElement('style');
-    style.setAttribute('data-af-slider-styles', '');
-    style.textContent = sliderStyles;
-    document.head.append(style);
-  }
-  if (!registry.get('af-slider')) registry.define('af-slider', AfSlider);
-}
+registerComponent({
+  styleKey: 'af-slider-styles',
+  styles: sliderStyles,
+  elements: { 'af-slider': AfSlider },
+});

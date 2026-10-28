@@ -339,7 +339,8 @@ it('keeps component sources out of Markdown teaching while including them in the
   const skill=path.join(root,'artifactbin');mkdirSync(path.join(skill,'components'),{recursive:true});mkdirSync(path.join(skill,'references'));
   const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/runtime.md':ok('runtime')};
   for(const [name,text] of Object.entries(docs))writeFileSync(path.join(root,name),text);
-  const components={'components/button.ts':'export interface ButtonProps {}','components/button.js':'export const register=()=>{};'};
+  // Readable sources only: compiled modules are hosted (`@afbin/<component>`), never packaged.
+  const components={'components/button.ts':'export interface ButtonProps {}'};
   for(const [name,text] of Object.entries(components))writeFileSync(path.join(skill,name),text);
   writeFileSync(path.join(skill,'components/button.test.ts'),'test-only');
   writeFileSync(path.join(skill,'components/button.fixture.ts'),'fixture-only');
@@ -347,7 +348,8 @@ it('keeps component sources out of Markdown teaching while including them in the
   const assets=loadSkillAssets(skill);expect(assets).toEqual(components);
   const installed=skillPackageFiles(buildSkillTree(sources),BASE,assets);
   expect(installed).toMatchObject(components);expect(installed['SKILL.md']).toContain('name: artifactbin');
-  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.js','components/button.ts','references/runtime.md']);
+  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.ts','references/runtime.md']);
   expect(skillZip(installed).byteLength).toBeGreaterThan(0);
+  expect(()=>skillZip({...installed,'components/button.js':'export {};'})).toThrow('Unsupported skill member: components/button.js');
  }finally{rmSync(root,{recursive:true,force:true});}
 });

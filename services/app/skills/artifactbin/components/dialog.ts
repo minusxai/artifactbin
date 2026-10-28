@@ -1,12 +1,13 @@
 /**
  * <af-dialog>: modal dialog; af-change announces a cancelable request and never persists state.
- * Import:  import {registerDialog} from './components/dialog.js'; registerDialog();  (load the .js in the browser; this .ts is the readable contract)
+ * Import:  import '@afbin/dialog';  (registers the tags; this .ts is the readable contract)
  * Props: open (boolean)
  * Parts: af-dialog-trigger (use a native button inside), af-dialog-content
  * Events: af-change (bubbles) with event.detail.value; reflect your Apollo value back for controlled use
  * Usage:
  *   <af-dialog><af-dialog-trigger><button>Open</button></af-dialog-trigger><af-dialog-content>Hello</af-dialog-content></af-dialog>
  */
+import { registerComponent, type ComponentDescriptor } from './register-component';
 /** Author-owned visibility: af-change announces a cancelable request, never persists state. */
 export interface DialogChangeDetail { value: boolean }
 /** Content aria-label/labelledby/describedby are forwarded; authored names outrank derived parts. */
@@ -183,7 +184,19 @@ af-dialog-trigger[disabled],af-dialog-close[disabled]{opacity:.5;cursor:default}
 af-dialog-trigger[disabled]>button,af-dialog-trigger>button:disabled,af-dialog-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}
 af-dialog-close[disabled]>button,af-dialog-close>button:disabled,af-dialog-close>button[aria-disabled="true"]{opacity:.5;cursor:default}
 `;
-export function registerDialog(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
-  if (!document.querySelector('style[data-af-dialog-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-dialog-styles',''); style.textContent = dialogStyles; document.head.append(style); }
-  for (const [name,ctor] of Object.entries({'af-dialog':AfDialog,'af-dialog-trigger':AfDialogTrigger,'af-dialog-content':AfDialogContent,'af-dialog-header':AfDialogHeader,'af-dialog-footer':AfDialogFooter,'af-dialog-title':AfDialogTitle,'af-dialog-description':AfDialogDescription,'af-dialog-close':AfDialogClose})) if (!registry.get(name)) registry.define(name,ctor);
-}
+/** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
+export const dialogComponent: ComponentDescriptor = {
+  styleKey: 'af-dialog-styles',
+  styles: dialogStyles,
+  elements: {
+    'af-dialog': AfDialog,
+    'af-dialog-trigger': AfDialogTrigger,
+    'af-dialog-content': AfDialogContent,
+    'af-dialog-header': AfDialogHeader,
+    'af-dialog-footer': AfDialogFooter,
+    'af-dialog-title': AfDialogTitle,
+    'af-dialog-description': AfDialogDescription,
+    'af-dialog-close': AfDialogClose,
+  },
+};
+registerComponent(dialogComponent);

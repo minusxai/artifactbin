@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { registerTextarea } from './textarea';
+import './textarea';
 
-registerTextarea();
 afterEach(() => document.body.replaceChildren());
 const textarea = (markup: string) => { const host = document.createElement('div'); host.innerHTML = markup; document.body.append(host); return host.querySelector('af-textarea')!; };
 

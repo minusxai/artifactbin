@@ -2,8 +2,9 @@
 import {afterEach,expect,it,vi} from 'vitest';
 vi.mock('../mermaid-images/reader-draw',()=>({drawForReader:vi.fn()}));
 import {drawForReader} from '../mermaid-images/reader-draw';
-import {AfMermaid,registerMermaid,type MermaidContract} from './mermaid';
-registerMermaid(); afterEach(()=>{document.body.replaceChildren();vi.resetAllMocks();});
+import {AfMermaid,type MermaidContract} from './mermaid';
+import './mermaid';
+afterEach(()=>{document.body.replaceChildren();vi.resetAllMocks();});
 const tick=async()=>{for(let i=0;i<12;i++) await Promise.resolve();};
 it('ignores stale results and disconnected drawings; retries errors',async()=>{
  let finish!:(value:unknown)=>void; vi.mocked(drawForReader).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve as typeof finish;}));

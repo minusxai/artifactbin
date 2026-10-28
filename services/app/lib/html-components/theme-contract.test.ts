@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 import {expect,it} from 'vitest';
-import {registerTabs} from './tabs';
-import {registerInput} from './input';
-import {registerTextarea} from './textarea';
-import {registerSegmented} from './segmented';
-import {registerSelect} from './select';
-import {registerDialog} from './dialog';
-import {registerPopover} from './popover';
-import {registerTooltip} from './tooltip';
-import {registerDatePicker} from './date-picker';
-import {registerFileUpload} from './file-upload';
-import {registerSwitch} from './switch';
-import {registerSlider} from './slider';
-import {registerAccordion} from './accordion';
-for(const register of [registerTabs,registerInput,registerTextarea,registerSegmented,registerSelect,registerDialog,registerPopover,registerTooltip,registerDatePicker,registerFileUpload,registerSwitch,registerSlider,registerAccordion])register();
+import './tabs';
+import './input';
+import './textarea';
+import './segmented';
+import './select';
+import './dialog';
+import './popover';
+import './tooltip';
+import './date-picker';
+import './file-upload';
+import './switch';
+import './slider';
+import './accordion';
 function declaration(selector:string,property:string):string {
  let result='';
  for(const sheet of [...document.styleSheets])for(const rule of [...sheet.cssRules])if('selectorText'in rule&&(rule as CSSStyleRule).selectorText.split(',').map(value=>value.trim()).includes(selector))result=(rule as CSSStyleRule).style.getPropertyValue(property)||result;
