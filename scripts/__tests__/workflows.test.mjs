@@ -132,10 +132,10 @@ describe('ci.yml: the gates build what they run, off the build job', () => {
 const workflow = (file) => yaml.parse(readFileSync(path.join(root, '.github/workflows', file), 'utf8'));
 
 describe('code scanning runs after merge, not on every pull request', () => {
-  it('analyses JavaScript/TypeScript and Actions on pushes to main and weekly, never on a pull request', () => {
+  it('analyses JavaScript/TypeScript and Actions weekly here (v3-codeql.yml scans each push to main), never on a pull request', () => {
     const codeql = workflow('codeql.yml');
     expect(codeql.on).not.toHaveProperty('pull_request');
-    expect(codeql.on.push.branches).toEqual(['main']);
+    expect(codeql.on).not.toHaveProperty('push');
     expect(codeql.on.schedule).toHaveLength(1);
     const analyze = codeql.jobs.analyze;
     expect(analyze.strategy.matrix.language).toEqual(['actions', 'javascript-typescript']);
@@ -147,9 +147,8 @@ describe('code scanning runs after merge, not on every pull request', () => {
 });
 
 describe('CodeQL avoids redundant post-merge work without narrowing analysis',()=>{
- it('skips prose-only pushes and cancels superseded push scans while retaining scheduled/manual scans',()=>{
+ it('cancels superseded push scans while retaining scheduled/manual scans',()=>{
   const scan=workflow('codeql.yml');
-  expect(scan.on.push['paths-ignore']).toEqual(['**/*.md','**/*.txt']);
   expect(scan.on.schedule).toHaveLength(1);
   expect(scan.on).toHaveProperty('workflow_dispatch');
   expect(scan.concurrency.group).toContain('github.event_name');
