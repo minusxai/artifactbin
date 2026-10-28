@@ -1,6 +1,6 @@
 import { renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, RETIRED_CLI_MESSAGE, isRetiredCliRequest, retiredCliResponse, retiredCliSkillUrl} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -70,6 +70,49 @@ interface OAuthRoutesOptions {
   trustedHops: number;
   publicBaseUrl?: string;
   aliasOrigins?: readonly string[];
+  /** CLI__RETIREMENT=on: the retired sign-in paths answer an old CLI with the retirement message (retiredCliAnswer). */
+  cliRetired?: boolean;
+}
+
+/**
+ * THE RETIRED SIGN-IN PATHS UNDER CLI__RETIREMENT (contracts/cli-retirement says how an old CLI is recognised).
+ *
+ * A 0.5.x CLI with no saved credential signs in before its first API call, through the device flow, and that flow
+ * prints only fixed text for a refusal ("Could not start browser authentication (HTTP 410)"). So the device flow is
+ * answered as a pairing that is already approved: the terminal prints `Approve code CLI-RETIRED-RUN-AFBIN-UPDATE at
+ * <origin>/oauth/device?…`, the browser it opens shows the retirement page, and the first poll returns placeholder
+ * credentials the CLI saves. Its next request is an API call, which the app answers with the retirement refusal and
+ * its fix (server/app). The placeholder is no bearer of anything (no `tokens` row matches it) and lasts years, so the
+ * browser opens once and every later command goes straight to the refusal.
+ *
+ * Requests that carry the old CLI's protocol header (its authenticated `/api/agent-approvals` call) get that refusal
+ * directly. The email sign-in path approves through `/oauth/device/approve`, answered OK so it reaches the same end.
+ * Never forwarded upstream, as before.
+ */
+const RETIRED_CLI_USER_CODE = 'CLI-RETIRED-RUN-AFBIN-UPDATE';
+/** Exactly 43 characters of [A-Za-z0-9_-]: the device-code shape a 0.5.x CLI accepts. */
+const RETIRED_CLI_DEVICE_CODE = 'cli-retired-run-afbin-update-00000000000000';
+const RETIRED_CLI_PLACEHOLDER = 'cli-retired';
+const RETIRED_CLI_PLACEHOLDER_SECONDS = 10 * 365 * 24 * 3600;
+
+function retiredCliAnswer(request: Request, path: string, origin: string): Response {
+  if (isRetiredCliRequest(request.headers)) return retiredCliResponse(origin);
+  const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', ...NO_STORE } });
+  if (request.method === 'POST' && (path === '/oauth/device' || path === '/api/agent-approvals')) {
+    const verification = `${origin}/oauth/device`;
+    return json({ device_code: RETIRED_CLI_DEVICE_CODE, user_code: RETIRED_CLI_USER_CODE, verification_uri: verification,
+      verification_uri_complete: `${verification}?user_code=${RETIRED_CLI_USER_CODE}`, expires_in: 900, interval: 5 });
+  }
+  if (request.method === 'POST' && (path === '/oauth/device/token' || path === '/api/agent-approvals/token')) {
+    return json({ access_token: RETIRED_CLI_PLACEHOLDER, refresh_token: RETIRED_CLI_PLACEHOLDER, client_id: RETIRED_CLI_PLACEHOLDER,
+      token_type: 'Bearer', expires_in: RETIRED_CLI_PLACEHOLDER_SECONDS });
+  }
+  if (request.method === 'POST' && path === '/oauth/device/approve') return json({ approved: true });
+  if ((request.headers.get('accept') ?? '').includes('text/html')) {
+    const skill = escapeHtml(retiredCliSkillUrl(origin));
+    return page(RETIRED_CLI_MESSAGE, `<h1>${escapeHtml(RETIRED_CLI_MESSAGE)}</h1><p>Run <code>afbin update</code> (or <code>npx @afbin/cli@latest</code>), then use the author skill: <a href="${skill}">${skill}</a></p><p>You can close this tab.</p>`, 410);
+  }
+  return retiredCliResponse(origin);
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -95,9 +138,10 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
 }
 
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
-  // These first-party connection grants are retired; never forward them to an upstream SPA.
-  for(const path of ['/oauth/device','/oauth/device/approve','/oauth/device/token','/api/agent-approvals','/api/agent-approvals/token','/oauth/loopback','/oauth/loopback/token'])app.all(path,c=>c.notFound());
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
+  // These first-party connection grants are retired; never forward them to an upstream SPA.
+  for(const path of ['/oauth/device','/oauth/device/approve','/oauth/device/token','/api/agent-approvals','/api/agent-approvals/token','/oauth/loopback','/oauth/loopback/token'])
+    app.all(path,c=>o.cliRetired?retiredCliAnswer(c.req.raw,path,base(c.req.raw)):c.notFound());
   const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
   const origins = (request: Request) => acceptedOriginsOf(request, o.trustedHops, o.publicBaseUrl, o.aliasOrigins);
   const sameOrigin = (request: Request) => origins(request).includes(request.headers.get('origin') ?? '');

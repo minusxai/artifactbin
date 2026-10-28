@@ -176,6 +176,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
         aliasOrigins: aliasOriginsOf(o),
+        cliRetired: readEnv(o.env, 'CLI__RETIREMENT') === 'on',
       });
     },
   };

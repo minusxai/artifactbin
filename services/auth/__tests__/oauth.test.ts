@@ -391,3 +391,61 @@ describe('a canonical origin switch keeps the former origin as an alias', () => 
   expect(await(await refresh(unrelated,before,`${BASE}/api`)).json()).toMatchObject({error:'invalid_target'});
  });
 });
+
+/*
+ * CLI__RETIREMENT=on: the sign-in requests afbin 0.5.55 makes with no saved credential (services/cli/src/browser-auth.ts
+ * and email-auth.ts on v2-final), replayed byte for byte. Its device flow can print only fixed text for a refusal, so it
+ * is answered as a pairing that passes the CLI's own checks (validPending, saveConnection) and is approved at once.
+ */
+describe('retired CLI sign-in',()=>{
+ const retiredApp=async()=>assemble(authParts({...await optionsOf(),env:{APP__PUBLIC_BASE_URL:BASE,CLI__RETIREMENT:'on'}}));
+ const post=(server:Awaited<ReturnType<typeof retiredApp>>,path:string,body?:unknown,headers:Record<string,string>={})=>
+  server.request(path,{method:'POST',headers:{'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})});
+
+ it('pairs, shows the retirement page and hands back a placeholder the CLI saves, so its next API call prints the refusal',async()=>{
+  const server=await retiredApp();
+  for(const [path,body] of [['/oauth/device',undefined],['/api/agent-approvals',{artifactId:'abc123'}]] as const){
+   const started=await post(server,path,body);
+   expect(started.status,path).toBe(200);
+   const pairing=await started.json() as Record<string,unknown>;
+   // The CLI's validPending: a 43-character device code, a short user code, an interval of at least 5 s, and approval
+   // at the selected origin with the path /oauth/device exactly.
+   expect(pairing.device_code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+   expect(pairing.user_code).toBe('CLI-RETIRED-RUN-AFBIN-UPDATE');
+   expect(pairing.user_code).toMatch(/^[A-Za-z0-9-]{1,40}$/);
+   expect(Number(pairing.interval)).toBeGreaterThanOrEqual(5);
+   expect(Number(pairing.expires_in)).toBeGreaterThan(0);
+   const url=new URL(String(pairing.verification_uri_complete));
+   expect(url.origin).toBe(BASE);expect(url.pathname).toBe('/oauth/device');
+   const token=await post(server,`${path}/token`,{device_code:pairing.device_code});
+   expect(token.status).toBe(200);
+   const credentials=await token.json() as Record<string,unknown>;
+   // saveConnection's formats, and an expiry long enough that the CLI never asks for a browser again.
+   for(const key of ['access_token','refresh_token','client_id'])expect(credentials[key],key).toMatch(/^[A-Za-z0-9_-]+$/);
+   expect(Number(credentials.expires_in)).toBeGreaterThan(365*24*3600);
+   // The placeholder is no bearer: it reaches the app as nobody.
+   const api=await server.request('/api/artifacts',{headers:{Authorization:`Bearer ${credentials.access_token}`}});
+   expect(await api.json()).toEqual({credential:'none'});
+  }
+  const page=await server.request('/oauth/device?user_code=CLI-RETIRED-RUN-AFBIN-UPDATE',{headers:{Accept:'text/html'}});
+  expect(page.status).toBe(410);
+  const html=await page.text();
+  expect(html).toContain('The artifactbin CLI is retired.');
+  expect(html).toContain(`${BASE}/skills/artifactbin.zip`);
+  expect(html).toContain('afbin update');
+ });
+
+ it('approves the email path and refuses the CLI protocol header with the API refusal',async()=>{
+  const server=await retiredApp();
+  const approve=await server.request('/oauth/device/approve',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:BASE},body:new URLSearchParams({user_code:'CLI-RETIRED-RUN-AFBIN-UPDATE',decision:'approve'})});
+  expect(approve.status).toBe(200);
+  const authenticated=await post(server,'/api/agent-approvals',{artifactId:'abc123'},{Authorization:'Bearer stale','X-Artifactbin-Protocol':'3','User-Agent':'afbin/0.5.55'});
+  expect(authenticated.status).toBe(410);
+  expect(await authenticated.json()).toMatchObject({error:'cli_retired',message:'The artifactbin CLI is retired.',hint:expect.stringContaining('afbin update')});
+  expect((await server.request('/oauth/loopback/token',{method:'POST'})).status).toBe(410);
+ });
+
+ it('stays retired as a 404 while the switch is off',async()=>{
+  expect((await app.request('/oauth/device',{method:'POST',headers:{'X-Artifactbin-Protocol':'3'}})).status).toBe(404);
+ });
+});
