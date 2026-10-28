@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
-import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -249,7 +249,9 @@ export let ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_U
  * tells a client that a URL at one of these names is the same server, so a
  * pasted link is accepted and a folder tracked against the old name keeps
  * working — and clients still send every request and credential to the
- * canonical origin, never to a name on this list.
+ * canonical origin, never to a name on this list. The auth boundary treats
+ * these names as the canonical one: an OAuth grant or bearer bound to an alias
+ * (issued before a rename) keeps refreshing and authenticating.
  *
  * Comma-separated origins, validated with the one origin rule the CLI's
  * `normalizeServer` uses (HTTPS, or HTTP on a local development host; no path,
@@ -257,16 +259,7 @@ export let ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_U
  * like DATASET__DNS_SERVERS: half a list is worse than a refused boot, because
  * the missing half is a name that silently stops being the same server.
  */
-export function parseAliasOrigins(value: string | undefined): readonly string[] {
-  if (value === undefined || value.trim() === '') return Object.freeze([]);
-  const origins: string[] = [];
-  for (const entry of value.split(',')) {
-    const origin = normalizeOrigin(entry.trim());
-    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on a local development host such as localhost or *.lvh.me), without a path, query, fragment or credentials.');
-    if (!origins.includes(origin)) origins.push(origin);
-  }
-  return Object.freeze(origins);
-}
+export { parseAliasOrigins };
 export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**

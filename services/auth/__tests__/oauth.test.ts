@@ -6,6 +6,10 @@ import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { authParts, type AuthOptions } from '../src/parts';
 import { ensureAuthSchema } from '../src/schema';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readCredentials, refreshCredentials, saveCredentials } from '@artifactbin/utils/node/credentials';
 import { resetTestDb, testDb, testAuthOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';
@@ -210,7 +214,7 @@ describe('oauth code and redirect binding', () => {
     const oauth = createOAuthStore({ query }, 'auth');
     const refreshToken = await oauth.issueRefresh({ clientId: 'afbin_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
     await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
-    expect(await oauth.rotateRefresh(refreshToken, 'afbin_client', RESOURCE)).toBeNull();
+    expect(await oauth.rotateRefresh(refreshToken, 'afbin_client', [RESOURCE])).toBeNull();
   });
 });
 
@@ -326,4 +330,64 @@ it('retires first-party device and loopback sign-in while preserving standard OA
  expect(metadata).toMatchObject({authorization_endpoint:`${BASE}/oauth/authorize`,token_endpoint:`${BASE}/oauth/token`});
  expect(metadata).not.toHaveProperty('cli_loopback_authorization_endpoint');
  expect(metadata).not.toHaveProperty('cli_loopback_token_endpoint');
+});
+
+describe('a canonical origin switch keeps the former origin as an alias', () => {
+ const CANONICAL='http://app.renamed.test';
+ const switched=async()=>{const options=await optionsOf();return assemble(authParts({...options,env:{...options.env,APP__PUBLIC_BASE_URL:CANONICAL,APP__ALIAS_ORIGINS:`${BASE},http://other-alias.test`}}));};
+ const issueBeforeSwitch=async()=>{
+  const response=await app.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+  expect(response.status).toBe(201);
+  return await response.json() as {access_token:string;refresh_token:string;client_id:string};
+ };
+ const refresh=(host:ReturnType<typeof assemble<any>>,grant:{client_id:string;refresh_token:string},resource:string)=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token,resource})});
+
+ it('refreshes a grant issued under the old origin through the canonical origin and moves it to the canonical resource',async()=>{
+  const before=await issueBeforeSwitch();const after=await switched();
+  const response=await refresh(after,before,`${CANONICAL}/api`);
+  expect(response.status,await response.clone().text()).toBe(200);
+  const next=await response.json() as {access_token:string;refresh_token:string};
+  expect(await createTokenReader({db:{query:testDb().query}}).byToken(next.access_token)).toMatchObject({audience:`${CANONICAL}/api`});
+  const again=await refresh(after,{client_id:before.client_id,refresh_token:next.refresh_token},`${CANONICAL}/api`);
+  expect(again.status,await again.clone().text()).toBe(200);
+ });
+
+ it('refreshes a saved alias-origin grant through the alias, and its old bearer still authenticates',async()=>{
+  const before=await issueBeforeSwitch();const after=await switched();
+  expect(await(await after.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${before.access_token}`}})).json()).toMatchObject({credential:'bearer'});
+  const response=await refresh(after,before,`${BASE}/api`);
+  expect(response.status,await response.clone().text()).toBe(200);
+  const next=await response.json() as {access_token:string};
+  expect(await(await after.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${next.access_token}`}})).json()).toMatchObject({credential:'bearer'});
+  expect(await(await after.request(`${CANONICAL}/api/artifacts`,{headers:{authorization:`Bearer ${next.access_token}`}})).json()).toMatchObject({credential:'bearer'});
+ });
+
+ it('signs in through an alias Origin onto the canonical resource and still refuses foreign origins and resources',async()=>{
+  const after=await switched();
+  const viaAlias=await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:BASE,'content-type':'application/json'},body:'{}'});
+  expect(viaAlias.status).toBe(201);const grant=await viaAlias.json() as {id:string;client_id:string;refresh_token:string};
+  expect((await testDb().query('SELECT audience FROM tokens WHERE id=$1',[grant.id])).rows[0]).toMatchObject({audience:`${CANONICAL}/api`});
+  expect((await after.request('/api/authentication/token',{method:'POST',headers:{...asUser(),origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
+  expect(await(await refresh(after,grant,'https://foreign.example/api')).json()).toMatchObject({error:'invalid_target'});
+  const md=await(await after.request('/.well-known/oauth-authorization-server')).json() as Record<string,unknown>;
+  expect(md.issuer).toBe(CANONICAL);
+ });
+
+ it('the skill client refreshes a credential saved for the former origin, posting to that origin',async()=>{
+  const before=await issueBeforeSwitch();const after=await switched();const root=await mkdtemp(join(tmpdir(),'afbin-alias-'));
+  try{
+   await saveCredentials({server:BASE,token:before.access_token,refreshToken:before.refresh_token,clientId:before.client_id,expiresAt:Date.now()-1000},root);
+   const posted:string[]=[];
+   const refreshed=await refreshCredentials((await readCredentials(BASE,root))!,root,{fetch:(async(url:string|URL|Request,init?:RequestInit)=>{posted.push(new URL(String(url)).origin);return after.request(String(url),init);}) as typeof fetch});
+   expect(posted).toEqual([BASE]);
+   expect(refreshed.server).toBe(BASE);expect(refreshed.token).not.toBe(before.access_token);
+   expect(await(await after.request(`${BASE}/api/artifacts`,{headers:{authorization:`Bearer ${refreshed.token}`}})).json()).toMatchObject({credential:'bearer'});
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+
+ it('without the alias, a grant bound to another origin does not refresh',async()=>{
+  const before=await issueBeforeSwitch();const options=await optionsOf();
+  const unrelated=assemble(authParts({...options,env:{...options.env,APP__PUBLIC_BASE_URL:CANONICAL}}));
+  expect(await(await refresh(unrelated,before,`${BASE}/api`)).json()).toMatchObject({error:'invalid_target'});
+ });
 });

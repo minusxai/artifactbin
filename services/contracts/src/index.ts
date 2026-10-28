@@ -14,7 +14,7 @@ export * from './agent';
 export * from './routes';
 export { DEFAULT_SERVER } from './default-server';
 export { isLoopbackName } from './loopback-names';
-export { SERVER_IDENTITY_PATH, isLocalDevelopmentHost, normalizeOrigin, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';
+export { SERVER_IDENTITY_PATH, isLocalDevelopmentHost, normalizeOrigin, parseAliasOrigins, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';

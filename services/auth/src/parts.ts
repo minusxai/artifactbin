@@ -1,8 +1,8 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
-import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
+import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
 import {assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
-import {baseUrlOf,mountOAuthRoutes} from './routes/oauth';
+import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes} from './routes/oauth';
 import {say} from './events';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
@@ -32,6 +32,13 @@ export interface AuthOptions {
 export type AuthEnv={Variables:{actor:Actor}};
 export type AuthApp=Hono<AuthEnv>;
 const agentBrowsers = new WeakMap<AuthOptions, ReturnType<typeof createAgentBrowserSessions>>();
+const aliasOrigins = new WeakMap<AuthOptions, readonly string[]>();
+/** APP__ALIAS_ORIGINS, parsed once per options; a malformed value throws when the part mounts. */
+const aliasOriginsOf = (o:AuthOptions):readonly string[] => {
+  let origins=aliasOrigins.get(o);
+  if(!origins){origins=parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS'));aliasOrigins.set(o,origins);}
+  return origins;
+};
 const agentBrowserOf = (o:AuthOptions) => {
   if(!o.identityDb)return null;
   let browser=agentBrowsers.get(o);
@@ -42,7 +49,7 @@ const agentBrowserOf = (o:AuthOptions) => {
 export function session(o: AuthOptions): Part<AuthEnv> {
   return {
     name: 'session',
-    mount: (app) => app.use('*', async (c, next) => {
+    mount: (app) => { aliasOriginsOf(o); app.use('*', async (c, next) => {
       const refresh:string[]=[];
       let admitted:Actor;
       try {admitted=await resolveActor(c.req.raw, o, refresh);}
@@ -101,7 +108,7 @@ export function session(o: AuthOptions): Part<AuthEnv> {
       o.tokens.invalidate(primary);
       if(!await o.tokens.byId(primary)){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
       await browser.issue(nextSession.sessionId,primary);
-    }),
+    }); },
   };
 }
 
@@ -168,6 +175,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
+        aliasOrigins: aliasOriginsOf(o),
       });
     },
   };
@@ -230,12 +238,12 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
   return ANONYMOUS;
 }
 
-/** OAuth access tokens are capabilities for one API origin and scope. */
+/** OAuth access tokens are capabilities for one deployment's API (its canonical origin or an alias) and scope. */
 function tokenFitsRequest(token: { audience?: string; scope?: string }, request: Request, o: AuthOptions): boolean {
   if (!token.audience) return true;
-  const origin = baseUrlOf(request, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+  const origins = acceptedOriginsOf(request, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'), aliasOriginsOf(o));
   const path = new URL(request.url).pathname;
-  return (path === '/api' || path.startsWith('/api/')) && token.audience === `${origin}/api` && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
+  return (path === '/api' || path.startsWith('/api/')) && origins.some((origin) => token.audience === `${origin}/api`) && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
 }
 
 

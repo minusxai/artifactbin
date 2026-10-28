@@ -40,6 +40,16 @@ export function baseUrlOf(request: Request, trustedHops: number, publicBaseUrl?:
   return `${proto}://${host}`;
 }
 
+/**
+ * The origins one deployment answers at: the canonical `baseUrlOf` first, then APP__ALIAS_ORIGINS. A rename keeps
+ * the former name as an alias, so a grant, bearer audience or form Origin bound to any of them is this deployment's.
+ * Issuing and discovery still name only the canonical origin.
+ */
+export function acceptedOriginsOf(request: Request, trustedHops: number, publicBaseUrl: string | undefined, aliasOrigins: readonly string[] = []): string[] {
+  const base = baseUrlOf(request, trustedHops, publicBaseUrl);
+  return [base, ...aliasOrigins.filter((origin) => origin !== base)];
+}
+
 function formActionOrigin(redirectUri: string): string {
   try { return new URL(redirectUri).origin; } catch { return ''; }
 }
@@ -59,6 +69,7 @@ interface OAuthRoutesOptions {
   upstream: Upstream;
   trustedHops: number;
   publicBaseUrl?: string;
+  aliasOrigins?: readonly string[];
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
@@ -88,12 +99,16 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   for(const path of ['/oauth/device','/oauth/device/approve','/oauth/device/token','/api/agent-approvals','/api/agent-approvals/token','/oauth/loopback','/oauth/loopback/token'])app.all(path,c=>c.notFound());
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
+  const origins = (request: Request) => acceptedOriginsOf(request, o.trustedHops, o.publicBaseUrl, o.aliasOrigins);
+  const sameOrigin = (request: Request) => origins(request).includes(request.headers.get('origin') ?? '');
+  const resources = (request: Request) => origins(request).map((origin) => `${origin}${API_RESOURCE_PATH}`);
+  const acceptsResource = (request: Request, requested: string) => resources(request).includes(requested);
   // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
   app.post('/api/authentication/token', async (c) => {
     const actor=c.get('actor') ?? ANONYMOUS;
     if(actor.credential!=='session'||!actor.userId||!actor.email||actor.emailVerified!==true)
       return new Response(JSON.stringify({error:'email_auth_required',hint:'Sign in using the email OTP endpoints first.'}),{status:401,headers:{'Content-Type':'application/json',...NO_STORE}});
-    if(c.req.header('origin')!==base(c.req.raw))
+    if(!sameOrigin(c.req.raw))
       return new Response(JSON.stringify({error:'forbidden'}),{status:403,headers:{'Content-Type':'application/json',...NO_STORE}});
     try{
       const client=await o.oauth.register({client_name:'artifactbin HTTP',redirect_uris:['http://127.0.0.1/callback']});
@@ -136,7 +151,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
       : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
-      : requestedResource !== expectedResource ? 'Invalid API resource.'
+      : !acceptsResource(c.req.raw, requestedResource) ? 'Invalid API resource.'
       : scope !== ARTIFACT_SCOPE ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${escapeHtml(problem)}</p>`, 400);
@@ -155,7 +170,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   });
 
   app.post('/oauth/authorize/approve', async (c) => {
-    if (c.req.header('origin') !== base(c.req.raw)) return c.json({error:'invalid_origin'},403);
+    if (!sameOrigin(c.req.raw)) return c.json({error:'invalid_origin'},403);
     const form = await c.req.formData();
     const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');
@@ -164,7 +179,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || requestedResource !== resource(c.req.raw) || scope !== ARTIFACT_SCOPE) {
+    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || !acceptsResource(c.req.raw, requestedResource) || scope !== ARTIFACT_SCOPE) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
@@ -200,12 +215,13 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!isValidCodeVerifier(body.code_verifier)) return oauthError('invalid_request', 'Invalid code_verifier');
       if (!body.redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
       const requestedResource = body.resource || expectedResource;
-      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid API resource');
+      if (!acceptsResource(c.req.raw, requestedResource)) return oauthError('invalid_target', 'Invalid API resource');
       const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
       if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
       try {
-        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
-        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: grant.resource, scope: grant.scope, accessTokenId: minted.id });
+        // New grants always bind the canonical resource, also when the code was spent through an alias.
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: expectedResource, scope: grant.scope });
+        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: expectedResource, scope: grant.scope, accessTokenId: minted.id });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
@@ -215,8 +231,9 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) return oauthError('invalid_request', 'Missing refresh_token');
       const requestedResource = body.resource || expectedResource;
-      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid API resource');
-      const grant = await o.oauth.rotateRefresh(body.refresh_token, body.client_id, requestedResource);
+      if (!acceptsResource(c.req.raw, requestedResource)) return oauthError('invalid_target', 'Invalid API resource');
+      // A grant issued under a former canonical name (now an alias) refreshes, and moves to the canonical resource.
+      const grant = await o.oauth.rotateRefresh(body.refresh_token, body.client_id, resources(c.req.raw));
       if (!grant) return oauthError('invalid_grant', 'Invalid, expired, revoked, or already-used refresh token');
       try {
         const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
