@@ -7,7 +7,7 @@ import { storedRowStats } from "@/lib/datasets/dataset-store";
 import { QUERY_LIMITS as limits } from "./contracts";
 import { createHash } from "node:crypto";
 import type { AccessActor } from "@/lib/accounts";
-import { getArtifactById, type ArtifactRow } from "@/lib/artifacts";
+import { getArtifactById, readableArtifactHeader, type ArtifactRow } from "@/lib/artifacts";
 import { readHtmlPage } from "@/lib/html-publication";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { registeredQueryImportForRow } from "@/lib/document-data";
@@ -25,6 +25,8 @@ interface RetainedPorts {
   readPage: typeof readHtmlPage;
   readMembers:(pageId:string)=>Promise<import("@artifactbin/contracts").Row[]>;
   readDocument: typeof getArtifactById;
+  /** The reader's admission to the page's head row, without its source: what every fence after the first rereads. */
+  readHeader: (actor: AccessActor, pageId: string) => Promise<{ row: Omit<ArtifactRow, "source" | "document"> } | null>;
   readBackend: typeof getHtmlBackendVersion;
   resolveImport: typeof registeredQueryImportForRow;
   readWindow: typeof executeCatalog;
@@ -44,7 +46,7 @@ const linkStamp = (links: HtmlPageVersion["links"]) =>
       ),
     ),
   );
-const stamp = (row: ArtifactRow) =>
+const stamp = (row: Omit<ArtifactRow, "source" | "document">) =>
   createHash("sha256")
     .update(
       JSON.stringify([
@@ -71,6 +73,7 @@ export function createRetainedRegisteredQueries(
     readPage: readHtmlPage,
     readMembers:async pageId=>readRegisteredQueryMembers(await getDb(),pageId,limits.rows+1),
     readDocument: getArtifactById,
+    readHeader: readableArtifactHeader,
     readBackend: getHtmlBackendVersion,
     resolveImport: registeredQueryImportForRow,
     readWindow: executeCatalog,
@@ -119,6 +122,17 @@ export function createRetainedRegisteredQueries(
     documentStamp: string | null = null;
   const document = async (signal: AbortSignal) => {
     signal.throwIfAborted();
+    // After admission compared the served HTML itself, a fence rereads only the head's identity and the reader's
+    // access: the stamp (edit, version, owner, visibility, policy, sharing, meta and its links) changes with any
+    // republish, so rereading the whole page source on each of an evaluation's many fences would only repeat that.
+    if (admittedDocument && documentStamp !== null) {
+      const head = await ports.readHeader(actor, page.pageId);
+      signal.throwIfAborted();
+      if (!head || head.row.format !== "html") throw Error("query_registration_changed");
+      if (stamp(head.row) !== documentStamp || head.row.updated_at !== admittedDocument.updated_at)
+        throw Error("query_document_changed");
+      return admittedDocument;
+    }
     const readable = await ports.readPage(actor, page.pageId, page.revision);
     const row = await ports.readDocument(page.pageId);
     signal.throwIfAborted();

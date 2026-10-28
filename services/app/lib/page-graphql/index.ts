@@ -75,7 +75,8 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   if(!operationKind||(body.operation!==undefined&&body.operation!==operationKind))return json({error:'invalid_graphql_operation'},400);
   const head=await readHtmlPage(actor,pageId);
   if(operationKind==='mutation'&&head.revision!==body.revision)return json({error:'archived_page_readonly'},403);
-  const page=await readHtmlPage(actor,pageId,body.revision);
+  // The head just read is this revision when the request names it: one read of the page's source, not two.
+  const page=body.revision===head.revision?head:await readHtmlPage(actor,pageId,body.revision);
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
   // Mutations conserve their durable receipts; this final fence only withholds read results.
   const readFences:Array<()=>Promise<void>>=[];
