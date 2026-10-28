@@ -156,3 +156,47 @@ test('independent async contexts serialize while a nested owner reenters',fixtur
  await new Promise(resolve=>setTimeout(resolve,30));const prematurelyEntered=competing;release();await Promise.all([first,second]);
  assert.equal(prematurelyEntered,false,'an independent call must wait for the owner');assert.equal(competing,true);
 }));
+
+test('an active interprocess lock survives garbage collection until its holder is killed', fixture(async home => {
+  const module = new URL('../src/state.ts', import.meta.url).href;
+  const script = `import {withLock} from ${JSON.stringify(module)};
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', async command => {
+      if(command.trim()!=='collect')throw new Error('Unexpected holder command');
+      for(let n=0;n<8;n++){global.gc();await new Promise(resolve=>setImmediate(resolve));}
+      process.stdout.write('collected');
+    });
+    await withLock(${JSON.stringify(home)}, '/work', async()=>{
+      process.stdout.write('locked');
+      await new Promise(()=>{});
+    });`;
+  const child = spawn(process.execPath, ['--expose-gc','--import','tsx','--input-type=module','-e',script], {stdio:['pipe','pipe','pipe']});
+  let stderr='';child.stderr.on('data',data=>{stderr+=String(data);});
+  try {
+    assert.equal(String((await once(child.stdout,'data'))[0]),'locked',stderr);
+    const collected=once(child.stdout,'data');child.stdin.write('collect');
+    assert.equal(String((await collected)[0]),'collected',stderr);
+    assert.equal(child.exitCode,null,'the holder remains alive during the competing attempt');
+    assert.equal(child.signalCode,null);
+    await assert.rejects(withLock(home,'/work',async()=>{assert.fail('competing writer entered after holder garbage collection');},{waitMs:0}),/workspace_busy/);
+    const controller=new AbortController(),reason=new Error('fixture cancelled lock wait');
+    const timer=setTimeout(()=>controller.abort(reason),30);
+    try {await assert.rejects(withLock(home,'/work',async()=>{assert.fail('cancelled waiter entered');},{signal:controller.signal}),error=>error===reason||((error as Error).name==='AbortError'&&(error as Error&{cause?:unknown}).cause===reason));}
+    finally {clearTimeout(timer);}
+    await assert.rejects(withLock(home,'/work',async()=>{assert.fail('cancelled waiter released the holder lock');},{waitMs:0}),/workspace_busy/);
+    const exited=once(child,'exit');child.kill('SIGKILL');await exited;
+    assert.equal(await withLock(home,'/work',async()=> 'released'),'released');
+  } finally {child.kill('SIGKILL');}
+}));
+
+test('a throwing owner releases the connection and inherited ownership before a different process enters', fixture(async home => {
+  const failure=new Error('fixture owner failed');
+  await assert.rejects(withLock(home,'/work',async()=>{throw failure;}),error=>error===failure);
+  const module=new URL('../src/state.ts',import.meta.url).href;
+  const script=`import {withLock} from ${JSON.stringify(module)}; await withLock(${JSON.stringify(home)},'/work',async()=>{process.stdout.write('entered');},{waitMs:0});`;
+  const child=spawn(process.execPath,['--import','tsx','--input-type=module','-e',script],{stdio:['ignore','pipe','pipe']});
+  let out='',err='';child.stdout.on('data',data=>{out+=String(data);});child.stderr.on('data',data=>{err+=String(data);});
+  const [code]=await once(child,'exit');
+  assert.equal(code,0,err);assert.equal(out,'entered');
+  assert.equal(await withLock(home,'/work',()=>withLock(home,'/work',async()=> 'new nested owner')),'new nested owner');
+}));
