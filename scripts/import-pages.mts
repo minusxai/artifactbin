@@ -6,6 +6,7 @@
  * Dataset-only: tsx scripts/import-pages.mts CONFIG.json --datasets [--apply] ID...
  *  imports just these datasets from the config's shared catalog (same ids, owners, visibility and shares),
  *  after checking each one against old prod as it is now (read-only); existing ids are skipped.
+ *  Image artifacts (single version, e.g. a page's og:image) are copied from old prod the same way, bytes checked against their sha256.
  */
 import fs from 'node:fs/promises';import path from 'node:path';import net from 'node:net';import {spawn} from 'node:child_process';import {createHash,randomBytes} from 'node:crypto';import {pathToFileURL} from 'node:url';
 import pg from 'pg';
@@ -89,6 +90,15 @@ async function prepareDatasets(catalog:any,batch:Batch,only?:ReadonlySet<string>
  for(const key of keys)if(!batch.objects.has(key))fail('dataset_object_missing:'+key);
 }
 
+/** Rows for one single-version stored-object artifact (a page asset file, or an image), owned and acted on by one user. */
+function fileArtifactRows(batch:Batch,x:{id:string;userId:string;tokenId:string;title:unknown;format:'file'|'image';meta:unknown;visibility:string;shares:{email:string;role:string}[];editId:string;createdAt:unknown;updatedAt:unknown}){
+ batch.rows.artifact_id_registry.push({id:x.id,owner:x.userId,consumed:true});
+ batch.rows.artifacts.push({id:x.id,token_id:x.tokenId,user_id:x.userId,creator_user_id:x.userId,title:x.title,format:x.format,meta:x.meta,
+  visibility:x.visibility,ancestor_ids:[],edit_id:x.editId,access:'read',actor_user_id:x.userId,actor_token_id:x.tokenId,version:1,sharing_revision:x.shares.length?1:0,policy_revision:0,created_at:iso(x.createdAt),updated_at:iso(x.updatedAt)});
+ batch.rows.artifact_edits.push({artifact_id:x.id,edit_id:x.editId,splice_start:0,removed:'',inserted:'',span_start:0,span_end:0,actor_user_id:x.userId,actor_token_id:x.tokenId,document_state:{epoch:null,version:1}});
+ for(const s of x.shares)batch.rows.artifact_shares.push({artifact_id:x.id,email:s.email.trim().toLowerCase(),role:s.role});
+}
+
 /** Build one page's rows from its converted package. No database or network access. */
 async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publication:any,publicationConfig:any){
  const input=cfg.converted?.[id]?await convertedInput(cfg,id,publicationConfig):await packagedInput(cfg,id,codec),context=input.context;
@@ -149,13 +159,8 @@ async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publicatio
  for(const s of shares)batch.rows.artifact_shares.push({artifact_id:history.pageId,...s});
 
  // Assets: one file artifact each, owned like the page.
- for(const a of assets){const assetEdit=newEditId();
-  batch.rows.artifact_id_registry.push({id:a.id,owner:owner.userId,consumed:true});
-  batch.rows.artifacts.push({id:a.id,token_id:owner.tokenId,user_id:owner.userId,creator_user_id:owner.userId,title:a.filename,format:'file',meta:{bytes:a.bytes,sha256:a.sha256,filename:a.filename,objectKey:a.objectKey,contentType:a.contentType},
-   visibility:a.visibility,ancestor_ids:[],edit_id:assetEdit,access:'read',actor_user_id:owner.userId,actor_token_id:owner.tokenId,version:1,sharing_revision:(a.shares as unknown[]).length?1:0,policy_revision:0,created_at:iso(r.createdAt),updated_at:iso(r.createdAt)});
-  batch.rows.artifact_edits.push({artifact_id:a.id,edit_id:assetEdit,splice_start:0,removed:'',inserted:'',span_start:0,span_end:0,actor_user_id:owner.userId,actor_token_id:owner.tokenId,document_state:{epoch:null,version:1}});
-  for(const s of a.shares as {email:string;role:string}[])batch.rows.artifact_shares.push({artifact_id:a.id,email:s.email.trim().toLowerCase(),role:s.role});
- }
+ for(const a of assets)fileArtifactRows(batch,{id:a.id as string,userId:owner.userId,tokenId:owner.tokenId,title:a.filename,format:'file',meta:{bytes:a.bytes,sha256:a.sha256,filename:a.filename,objectKey:a.objectKey,contentType:a.contentType},
+  visibility:a.visibility as string,shares:a.shares as {email:string;role:string}[],editId:newEditId(),createdAt:r.createdAt,updatedAt:r.createdAt});
 
  await prepareDatasets(catalog,batch);
  for(const a of identity.avatarObjects??[])batch.objects.set(a.key,{bytes:Buffer.from(a.base64,'base64')});
@@ -190,6 +195,8 @@ const publicationConfig=JSON.parse(await fs.readFile(cfg.publicationConfiguratio
 const publication=publicationModule.createNativePipelinePublication(publicationConfig),authSchema=publicationConfig.shared.schemas.authSchema,appSchema=publicationConfig.shared.schemas.appSchema;
 const started=Date.now(),batch:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(),unverifiedDatasets:new Set()};
 
+interface ImageReport{owner:{old:string;new:string};visibility:string;shares:number;files:{key:string;bytes:number;sha256:string}[]}
+const imageReports:Record<string,ImageReport>={};
 interface DatasetReport{title:string;owner:{old:string;new:string};visibility:string;version:number;versions:{imported:number;oldProdHistory:number};shares:number;audit:number;objects:{table:string;key:string;oldKey:string;derived:boolean;rows:number;oldRows:number}[];warnings:string[]}
 const rowsOf=(bytes:Buffer)=>{const rows=JSON.parse(bytes.toString('utf8'));if(!Array.isArray(rows))fail('dataset_rows_not_array');return rows.length as number;};
 const tablesOf=(meta:any):{table:string;key:string}[]=>meta?.catalog?(meta.catalog.tables??[]).filter((t:any)=>t.objectKey).map((t:any)=>({table:t.schema+'.'+t.name,key:t.objectKey})):meta?.objectKey?[{table:'public.rows',key:meta.objectKey}]:[];
@@ -204,16 +211,38 @@ async function collectDatasets(client:pg.Client,ids:string[],skipped:Record<stri
  count();await client.query('BEGIN READ ONLY');
  let heads:any[],shares:any[],versions:any[];
  try{
-  count();heads=(await client.query(`SELECT id,format,version,user_id,token_id,edit_id,visibility,link_role,updated_at,deleted_at,title,meta FROM ${old}.artifacts WHERE id=ANY($1::text[])`,[ids])).rows;
+  count();heads=(await client.query(`SELECT id,format,version,user_id,token_id,creator_user_id,edit_id,visibility,link_role,created_at,updated_at,deleted_at,title,meta FROM ${old}.artifacts WHERE id=ANY($1::text[])`,[ids])).rows;
   count();shares=(await client.query(`SELECT artifact_id,email,role FROM ${old}.artifact_shares WHERE artifact_id=ANY($1::text[])`,[ids])).rows;
   count();versions=(await client.query(`SELECT artifact_id id,count(*)::int n FROM ${old}.artifact_versions WHERE artifact_id=ANY($1::text[]) GROUP BY 1`,[ids])).rows;
  }finally{count();await client.query('COMMIT');}
  count();const newUsers=new Set((await client.query<{id:string}>('SELECT id FROM users WHERE id=ANY($1::text[])',[heads.map(h=>users[h.user_id]).filter(Boolean)])).rows.map(r=>r.id));
  const oldObjects=createNativeS3ObjectSink({...parseS3Url(env.S3_URL),prefix:cfg.oldS3Prefix??'artifacts'});
+ const imageTokens=heads.filter(h=>h.format==='image').map(h=>tokens[h.token_id]).filter(Boolean);
+ count();const newTokens=new Set((await client.query<{id:string}>('SELECT id FROM tokens WHERE id=ANY($1::text[])',[imageTokens])).rows.map(r=>r.id));
  for(const id of ids){
   if(existing.has(id)){skipped[id]='exists';continue;}
   const h=heads.find(x=>x.id===id),d=p.datasets.find((x:any)=>x.targetId===id);
   if(!h){failed[id]='not_on_old_prod';continue;}
+  if(h.format==='image'){
+   // An image is one stored object (plus an optional small rendition); old prod's row is the source, with owner and token mapped like the catalog's.
+   const owner=users[h.user_id],token=tokens[h.token_id],m=h.meta??{};
+   if(!owner||!newUsers.has(owner)){failed[id]='owner_unmapped:'+h.user_id;continue;}
+   if(!token||!newTokens.has(token)){failed[id]='token_unmapped:'+h.token_id;continue;}
+   if(h.deleted_at||h.version!==1||(h.creator_user_id&&h.creator_user_id!==h.user_id)){failed[id]='image_shape:'+JSON.stringify({deleted:!!h.deleted_at,version:h.version,creator:h.creator_user_id});continue;}
+   try{
+    const own:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(),unverifiedDatasets:new Set()},files:ImageReport['files']=[];
+    for(const key of [m.objectKey,m.smallObjectKey].filter(Boolean) as string[]){
+     const bytes=await oldObjects.get(key);
+     // Stored image objects are content-addressed by their own bytes (meta.sha256 and meta.bytes describe the original upload).
+     if('image/'+sha(bytes).slice(0,32)!==key)fail('image_digest:'+key);
+     own.objects.set(key,{bytes,contentType:m.contentType});files.push({key,bytes:bytes.length,sha256:sha(bytes)});
+    }
+    fileArtifactRows(own,{id,userId:owner,tokenId:token,title:h.title,format:'image',meta:m,visibility:h.visibility,shares:shares.filter(s=>s.artifact_id===id),editId:h.edit_id,createdAt:h.created_at,updatedAt:h.updated_at});
+    for(const t of TABLES)batch.rows[t].push(...own.rows[t]);for(const [k,o] of own.objects)batch.objects.set(k,o);
+    imageReports[id]={owner:{old:h.user_id,new:owner},visibility:h.visibility,shares:shares.filter(s=>s.artifact_id===id).length,files};
+   }catch(error){failed[id]=(error as Error).message;}
+   continue;
+  }
   if(!d){failed[id]='not_in_catalog';continue;}
   const a=d.authority,v=d.versions.find((x:any)=>x.version===d.currentVersion),owner=users[h.user_id];
   if(!owner||!newUsers.has(owner)){failed[id]='owner_unmapped:'+h.user_id;continue;}
@@ -255,7 +284,7 @@ try{
  client=new pg.Client({connectionString:url.toString(),stream:()=>new Tunnel()});await client.connect();
 
  const allDatasets=new Set<string>(),skipped:Record<string,string>={},failed:Record<string,string>={},datasets:Record<string,DatasetReport>={};
- if(datasetMode){await collectDatasets(client,ids,skipped,failed,datasets);if(!batch.datasetIds.size)fail('nothing_to_import:'+JSON.stringify({skipped,failed}));}
+ if(datasetMode){await collectDatasets(client,ids,skipped,failed,datasets);if(!batch.rows.artifacts.length)fail('nothing_to_import:'+JSON.stringify({skipped,failed}));}
  else{
  // Query 1: which pages and datasets already exist. Existing pages are refused; existing datasets are reused.
  count();const existing=(await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[ids])).rows;
@@ -280,7 +309,7 @@ try{
  // Query 3: the columns of every table written, so a misnamed field fails before anything is written.
  count();const known=new Map<string,Set<string>>();for(const r of (await client.query<{t:string;c:string}>("SELECT CASE WHEN table_schema=$2 THEN 'auth_user' ELSE table_name END t,column_name c FROM information_schema.columns WHERE (table_schema=$1 AND table_name=ANY($3::text[])) OR (table_schema=$2 AND table_name='user')",[appSchema,authSchema,TABLES.filter(t=>t!=='auth_user')])).rows)known.set(r.t,(known.get(r.t)??new Set()).add(r.c));
  const unknownColumns=Object.fromEntries(TABLES.map(t=>[t,[...new Set(batch.rows[t].flatMap(r=>Object.keys(r)))].filter(c=>!known.get(t)?.has(c))]).filter(([,c])=>c.length));
- const summary={skipped,...(datasetMode?{failed,datasets}:{}),unknownColumns,unverifiedDatasets:[...batch.unverifiedDatasets],pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
+ const summary={skipped,...(datasetMode?{failed,datasets,images:imageReports}:{}),unknownColumns,unverifiedDatasets:[...batch.unverifiedDatasets],pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
  if(!apply){console.log(JSON.stringify({mode:'dry-run',...summary,queries,seconds:Math.round((Date.now()-started)/1000)},null,1));process.exitCode=0;}
  else{
   // Files first, in parallel; conditional puts make reruns safe.
@@ -296,6 +325,10 @@ try{
      (SELECT count(*) FROM artifact_source_ids s WHERE s.artifact_id=a.id)::int source_ids,(SELECT count(*) FROM annotations n WHERE n.artifact_id=a.id)::int comments
      FROM artifacts a WHERE a.id=ANY($1::text[]) AND a.format='html' AND a.deleted_at IS NULL`,[batch.pages.map(p=>p.id)])).rows;
    for(const p of batch.pages){const b=back.find(x=>x.id===p.id);if(!b||b.versions!==1||b.edits!==1||b.comments!==p.comments)fail('readback:'+p.id+':'+JSON.stringify(b));}
+   // Images: present with the mapped owner and visibility.
+   const images=batch.rows.artifacts.filter(r=>r.format==='image');
+   if(images.length){count();const got=(await client.query<{id:string;user_id:string;visibility:string}>(`SELECT id,user_id,visibility FROM artifacts WHERE id=ANY($1::text[]) AND format='image' AND deleted_at IS NULL`,[images.map(r=>r.id)])).rows;
+    for(const r of images){const b=got.find(x=>x.id===r.id);if(!b||b.user_id!==r.user_id||b.visibility!==r.visibility)fail('readback:'+r.id+':'+JSON.stringify(b));}}
    // Datasets: owner, visibility and every row count as built.
    const imported=batch.rows.artifacts.filter(r=>r.format==='dataset');
    if(imported.length){
@@ -312,6 +345,7 @@ try{
   // Dataset objects as stored now: each one read back from object storage with the same row count as old prod.
   const stored:Record<string,string>={};
   for(const [id,report] of Object.entries(datasets))for(const o of report.objects){const rows=rowsOf(await sink.get(o.key));stored[id+' '+o.table]=rows===o.oldRows?'ok':'row_count:'+rows+'!='+o.oldRows;}
+  for(const [id,report] of Object.entries(imageReports))for(const f of report.files){const got=await sink.get(f.key);stored[id+' '+f.key]=got.length===f.bytes&&sha(got)===f.sha256?'ok':'bytes_differ';}
   console.log(JSON.stringify({mode:'applied',...summary,written,storedObjects:stored,queries,s3Uploads:s3,seconds:Math.round((Date.now()-started)/1000)},null,1));
   if(Object.values(stored).some(v=>v!=='ok'))process.exitCode=1;
  }
