@@ -55,6 +55,18 @@ describe('backend run admission retries',()=>{
   const error=await invoker(runner)(call).catch(e=>e);
   expect(error).toBeInstanceOf(FieldFailed);expect(error.code).toBe('backend_unavailable');expect(starts).toHaveLength(4);expect(new Set(starts).size).toBe(1);
  });
+ it('makes one attempt when a start hangs until its timeout, and reports an unknown outcome without retrying',async()=>{
+  for(const name of ['AbortError','TimeoutError']){
+   let starts=0;const hung={start:async()=>{starts++;await new Promise(r=>setTimeout(r,50));throw new DOMException('The operation was aborted due to timeout',name);},getRun:async()=>({status:'completed',output:null}),cancel:async()=>{}} as unknown as RunnerService;
+   const began=Date.now();const error=await createBackendInvoker(hung,async()=>backend,{startRetryDelaysMs:[200,500,1000]})(call).catch(e=>e);
+   expect(error).toBeInstanceOf(FieldFailed);expect(error.code).toBe('backend_unavailable');expect(starts).toBe(1);expect(Date.now()-began).toBeLessThan(150);
+  }
+ });
+ it('keeps the default retry backoff for fast failures under 3 seconds',async()=>{
+  const {runner,starts}=fakeRunner(Array.from({length:9},()=>()=>Error('queue_full')));
+  const began=Date.now();const error=await createBackendInvoker(runner,async()=>backend)(call).catch(e=>e);
+  expect(error.code).toBe('retryable');expect(starts).toHaveLength(4);expect(Date.now()-began).toBeLessThan(3000);
+ },10000);
  it('stops retrying once the request is cancelled',async()=>{
   const controller=new AbortController();const {runner,starts}=fakeRunner([()=>{controller.abort();return Error('queue_full');}]);
   const error=await invoker(runner)({...call,signal:controller.signal}).catch(e=>e);

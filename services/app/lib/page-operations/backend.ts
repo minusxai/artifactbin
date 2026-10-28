@@ -28,7 +28,9 @@ export default async function(input,host){
 const BUSY=new Set(['queue_full','runner_closed','runner_unavailable','runner_failed']);
 /** Start errors with no runner reply (timeout, network, unreadable body): the run may or may not have been admitted. */
 const transientStart=(code:string)=>!/^[a-z][a-z_]{0,63}$/.test(code);
-/** Backoff between start attempts; jittered so concurrent page reads do not retry in lockstep. */
+/** How the runner client's 30 s start timeout surfaces (node:http aborts with AbortError; fetch with TimeoutError). */
+const START_TIMEOUTS=new Set(['AbortError','TimeoutError','UpstreamTimeoutError']);
+/** Backoff after fast start failures only (at most about 2.1 s in total); jittered so concurrent page reads do not retry in lockstep. */
 const START_RETRY_DELAYS_MS=[200,500,1000];
 const pause=(ms:number,signal?:AbortSignal)=>new Promise<void>(resolve=>{const timer=setTimeout(done,ms);function done(){clearTimeout(timer);signal?.removeEventListener('abort',done);resolve();}signal?.addEventListener('abort',done,{once:true});});
 /**
@@ -36,17 +38,22 @@ const pause=(ms:number,signal?:AbortSignal)=>new Promise<void>(resolve=>{const t
  * the runner admits a requestId at most once, so a retry after a lost reply resumes the admitted run.
  */
 async function admit(runner:RunnerService,request:RunStart,signal:AbortSignal|undefined,delays:readonly number[]):Promise<string>{
- let code='';
- for(let attempt=0;;attempt++){
+ let code='',attempt=0;const began=Date.now();
+ for(;;attempt++){
   if(signal?.aborted)throw new FieldNotExecuted('Cancelled','cancelled');
   try{return (await runner.start(request)).runId;}
   catch(error){code=error instanceof Error&&error.name!=='Error'?error.name:error instanceof Error?error.message:'';}
+  // A start that waited out the client timeout already spent the call's budget, and may have been admitted: final.
+  if(START_TIMEOUTS.has(code))throw new FieldFailed('backend_unavailable','runner start timed out');
   if(!(BUSY.has(code)||transientStart(code))){throw new FieldNotExecuted('Runner refused admission','backend_rejected',code);}
+  // Only fast failures retry: a retry that would start after 3 s is not made.
   if(attempt>=delays.length)break;
-  await pause(delays[attempt]!*(0.75+Math.random()*0.5),signal);
+  const delay=delays[attempt]!*(0.75+Math.random()*0.5);
+  if(Date.now()-began+delay>3000)break;
+  await pause(delay,signal);
  }
  if(signal?.aborted)throw new FieldNotExecuted('Cancelled','cancelled');
- const tries=delays.length+1;
+ const tries=attempt+1;
  // A definite refusal never ran; a lost reply may have been admitted, so its outcome is unknown.
  if(BUSY.has(code))throw new FieldNotExecuted('Runner refused admission','retryable',`${code} after ${tries} attempts`);
  throw new FieldFailed('backend_unavailable',`runner start failed after ${tries} attempts`);
