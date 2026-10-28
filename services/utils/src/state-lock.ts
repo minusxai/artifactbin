@@ -7,7 +7,10 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import type * as SQLite from 'node:sqlite';
 import {privateDirectories,privateDirectory} from './private-directory';
 const ownership=new AsyncLocalStorage<ReadonlyMap<string,symbol>>();
-const activeOwners=new Map<string,symbol>();
+// Keep the native connection rooted for the entire owned critical section. A
+// suspended async callback alone may be unreachable to GC; finalizing DatabaseSync
+// would release its OS lock while the holder process is still alive.
+const activeOwners=new Map<string,{owner:symbol;db:SQLite.DatabaseSync}>();
 /** Where `withStateLock` keeps a state directory's lock files. */
 export const lockDirectory=(root:string):string=>resolve(join(root,'locks'));
 /** A state directory and its lock directory made private together: one PowerShell launch on a fresh Windows home. */
@@ -20,7 +23,7 @@ export async function withStateLock<T>(root:string,scope:string,run:()=>Promise<
  const name=createHash('sha256').update(scope).digest('hex').slice(0,16);
  const file=join(lockDirectory(root),`${name}.sqlite`);
  const inherited=ownership.getStore()?.get(file);
- if(options.reentrant!==false&&inherited&&activeOwners.get(file)===inherited)return run();
+ if(options.reentrant!==false&&inherited&&activeOwners.get(file)?.owner===inherited)return run();
  await privateDirectory(dirname(file));
  try{if(!(await lstat(file)).isFile())throw new Error(`Expected a private file: ${file}`);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
  // Builtin resolution is intentionally lazy: read-only credential and path calls need no SQLite.
@@ -37,6 +40,6 @@ export async function withStateLock<T>(root:string,scope:string,run:()=>Promise<
    if(!noticed&&Date.now()-started>=1000){noticed=true;process.stderr.write('Waiting for another afbin operation in this directory to finish…\n');}
    await sleep(Math.min(100,deadline-Date.now()),undefined,{signal:options.signal});
   }}
-  options.signal?.throwIfAborted();activeOwners.set(file,owner);const owned=new Map(ownership.getStore());owned.set(file,owner);return await ownership.run(owned,run);
- }finally{if(activeOwners.get(file)===owner)activeOwners.delete(file);if(acquired)db.exec('ROLLBACK');db.close();}
+  options.signal?.throwIfAborted();activeOwners.set(file,{owner,db});const owned=new Map(ownership.getStore());owned.set(file,owner);return await ownership.run(owned,run);
+ }finally{if(activeOwners.get(file)?.owner===owner)activeOwners.delete(file);if(acquired)db.exec('ROLLBACK');db.close();}
 }
