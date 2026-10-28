@@ -45,6 +45,8 @@ export interface NativeImportRelations {
   sourceSha256: string;
   /** Exact head-only metadata owned and verified by the relation adapter; writer keys cannot be overridden. */
   headMetadata?: { readonly nativeRelationContext: unknown };
+  /** Prepared annotation, member and image rows for bulk writers. */
+  rows?: { annotations: Record<string, unknown>[]; members: Record<string, unknown>[]; images: Record<string, unknown>[] };
   apply(tx: Queryable, pageId: string): Promise<void>;
   verify(tx: Queryable, pageId: string): Promise<void>;
 }

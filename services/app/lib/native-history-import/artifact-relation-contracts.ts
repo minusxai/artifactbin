@@ -47,4 +47,6 @@ declare const artifactRelationAuthority: unique symbol;
 /** Source-bound transaction adapter; a plain authored object cannot delegate relation ownership. */
 export interface NativeArtifactRelations extends NativeImportRelations {
   readonly [artifactRelationAuthority]: true;
+  /** Prepared membership rows for bulk writers. */
+  readonly relationRows?: readonly NativeArtifactRelationRow[];
 }

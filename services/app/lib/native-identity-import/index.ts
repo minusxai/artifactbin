@@ -1,6 +1,6 @@
 import {nativeIdentityAvatarObject} from './avatars';
 import {writeDisabledNativeIdentityTokens} from './token-batch';
-import {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction,nativeIdentityMigrationScope} from './auth-companions';
+import {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction,nativeIdentityMigrationScope,readNativeIdentityAuthCompanions,verifyNativeIdentityAuthCompanion} from './auth-companions';
 export {provisionNativeIdentityAuthCompanion,authorizeNativeIdentityTransaction} from './auth-companions';
 import type { Queryable } from "@artifactbin/contracts";
 import type {
@@ -51,13 +51,6 @@ export async function writeNativeIdentities(
     "SELECT pg_advisory_xact_lock(hashtext('native-identity:' || $1))",
     [ns],
   );
-  const ledger = async (kind: string, id: string) =>
-    (
-      await tx.query<Ledger>(
-        "SELECT target_id,action,source_sha256,target_sha256,original_state,to_jsonb(native_identity_imports)->>'created_at' AS created_at FROM native_identity_imports WHERE source_namespace=$1 AND kind=$2 AND source_id=$3 FOR UPDATE",
-        [ns, kind, id],
-      )
-    ).rows[0];
   const save = async (
     kind: string,
     m: {
@@ -97,16 +90,20 @@ export async function writeNativeIdentities(
     )
       throw Error("native_identity_replay_mismatch");
   };
-  for (const mapping of [...input.plan.users].sort((a, b) =>
+  const mappings=[...input.plan.users].sort((a, b) =>
     a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0,
-  )) {
-    const prior = await ledger("user", mapping.sourceId);
-    let current = (
-      await tx.query<NativeIdentityUser>(
-        `SELECT ${userColumns} FROM users WHERE id=$1 FOR UPDATE`,
-        [mapping.targetId],
-      )
-    ).rows[0];
+  );
+  // One locked read per table instead of one per user: each round trip crosses the operator's network.
+  const priors=new Map((await tx.query<Ledger&{source_id:string}>(
+    "SELECT source_id,target_id,action,source_sha256,target_sha256,original_state,to_jsonb(native_identity_imports)->>'created_at' AS created_at FROM native_identity_imports WHERE source_namespace=$1 AND kind='user' AND source_id=ANY($2::text[]) ORDER BY source_id FOR UPDATE",
+    [ns,mappings.map(m=>m.sourceId)])).rows.map(({source_id,...row})=>[source_id,row as Ledger]));
+  const currents=new Map((await tx.query<NativeIdentityUser>(
+    `SELECT ${userColumns} FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE`,
+    [mappings.map(m=>m.targetId)])).rows.map(row=>[row.id,row]));
+  const companions=await readNativeIdentityAuthCompanions(tx,authority,mappings.flatMap(m=>{const e=m.action==='reuse-verified-email'?proof.targets.get(m.targetId):input.plan.createUsers.find(u=>u.sourceId===m.sourceId);return e?.kind==='account'&&e.email?[{id:m.targetId,email:e.email}]:[];}));
+  for (const mapping of mappings) {
+    const prior = priors.get(mapping.sourceId);
+    let current = currents.get(mapping.targetId);
     const expected =
       mapping.action === "reuse-verified-email"
         ? proof.targets.get(mapping.targetId)!
@@ -135,7 +132,7 @@ export async function writeNativeIdentities(
           await tx.query("UPDATE native_identity_imports SET original_state=original_state || $1::jsonb WHERE source_namespace=$2 AND kind='user' AND source_id=$3",[JSON.stringify({avatarObject:avatar}),ns,mapping.sourceId]);
         }
       }
-      if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,authority,'verify-existing');
+      if(authCompanion)verifyNativeIdentityAuthCompanion(companions,authCompanion);
       result.replayed++;
       continue;
     }

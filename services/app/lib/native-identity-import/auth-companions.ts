@@ -37,3 +37,17 @@ export async function provisionNativeIdentityAuthCompanion(tx:Queryable,input:Na
  if(!checked||checked.id!==input.id||checked.email!==email||checked.emailVerified!==false||checked.name!==(input.name??'')||checked.image!==null||checked.timestampsEqual!==true)throw Error('native_identity_auth_verification_failed');
  return 'created';
 }
+/** Locked read of every address claim the replay checks, matched in memory by verifyNativeIdentityAuthCompanion. */
+export async function readNativeIdentityAuthCompanions(tx:Queryable,authority:NativeIdentityMigrationAuthority,inputs:{id:string;email:string}[]):Promise<{id:string;email:string}[]>{
+ const schema=(await nativeIdentityMigrationScope(tx,authority)).authSchema;
+ if(!inputs.length)return [];
+ return (await tx.query<{id:string;email:string}>(`SELECT id,email FROM "${schema}"."user" WHERE id=ANY($1::text[]) OR lower(trim(email))=ANY($2::text[]) FOR UPDATE`,[inputs.map(i=>i.id),inputs.map(i=>i.email.trim().toLowerCase())])).rows;
+}
+/** Same outcome as provisionNativeIdentityAuthCompanion(...,'verify-existing') against the prefetched rows. */
+export function verifyNativeIdentityAuthCompanion(rows:{id:string;email:string}[],input:NativeIdentityAuthCompanion){
+ const email=input.email.trim().toLowerCase();
+ if(!input.id||!email||email!==input.email||!email.includes('@'))throw Error('native_identity_auth_invalid');
+ const matches=rows.filter(row=>row.id===input.id||row.email.trim().toLowerCase()===email);
+ if(!matches.length)throw Error('native_identity_auth_missing');
+ if(matches.length!==1||matches[0]!.id!==input.id||matches[0]!.email!==email)throw Error('native_identity_auth_collision');
+}

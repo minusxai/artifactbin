@@ -282,6 +282,8 @@ export function prepareNativeHistoryRelations(
   return {
     sourceSha256,
     headMetadata: {nativeRelationContext: archive},
+    // Prepared rows for bulk writers; apply/verify below remain the per-row path.
+    rows: {annotations, members, images},
     async apply(tx, pageId) {
       if (pageId !== history.pageId) fail();
       await verifyHistory(tx, pageId);

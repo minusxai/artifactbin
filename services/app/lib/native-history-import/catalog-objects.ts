@@ -82,11 +82,16 @@ export async function stageNativeCatalog(
       throw Error("native_catalog_user_target_collision");
     complete.set(r.targetKey, { sha256: r.targetSha256, bytes: r.targetBytes });
   }
+  // Keys whose stored bytes this process has read back and matched. Conditional
+  // puts make them immutable, so later verification inside the page transaction
+  // does not download them again across the network.
+  const readBack = new Set<string>();
   for (const object of projection.objects) {
     const bytes = await source.read(object);
     check(bytes, object);
     await sink.putIfAbsent(object.targetKey, bytes, object.contentType);
     check(await sink.get(object.targetKey), object);
+    readBack.add(object.targetKey);
   }
   for (const { receipt: r, bytes } of derivatives) {
     await sink.putIfAbsent(r.targetKey, bytes, "application/json");
@@ -94,9 +99,14 @@ export async function stageNativeCatalog(
       sha256: r.targetSha256,
       bytes: r.targetBytes,
     });
+    readBack.add(r.targetKey);
   }
   const verifyObjects = async () => {
-    for (const [key, object] of complete) check(await sink.get(key), object);
+    for (const [key, object] of complete)
+      if (!readBack.has(key)) {
+        check(await sink.get(key), object);
+        readBack.add(key);
+      }
   };
   return {
     projectionSha256: sha256,

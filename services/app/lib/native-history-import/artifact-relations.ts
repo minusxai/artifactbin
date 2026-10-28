@@ -334,6 +334,7 @@ export function prepareNativeArtifactRelations(
   }
   const adapter = {
     sourceSha256,
+    relationRows: structuredClone(rows),
     async apply(tx: Queryable, pageId: string) {
       await scope(tx, pageId);
       const actual = await read(tx, pageId);

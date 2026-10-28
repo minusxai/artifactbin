@@ -282,7 +282,7 @@ async function verifyDataset(
     !stored ||
     !compareNativeCatalogRows(normalize(stored),expected).equal
   )
-    throw Error("native_catalog_collision");
+    throw Error("native_catalog_collision:"+d.targetId+":"+JSON.stringify(Object.keys(expected).filter(k=>JSON.stringify(normalize(stored??{})[k])!==JSON.stringify((expected as Record<string,unknown>)[k])).map(k=>[k,normalize(stored??{})[k],(expected as Record<string,unknown>)[k]])).slice(0,1500));
   const expectedVersions = [...d.versions]
     .sort((a, b) => a.version - b.version)
     .map((v) => archive(p, d, v));

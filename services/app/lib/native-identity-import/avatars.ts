@@ -3,7 +3,14 @@ import type {NativeIdentityImport,NativeIdentityAvatarPreparation} from './contr
 import {verifyNativeIdentityInput,nativeIdentityDigest} from './model';
 const prepared=new WeakMap<NativeIdentityAvatarPreparation,{plan:string;receipts:string;objects:Map<string,{key:string;sha256:string}>}>();
 /** Reviewed source object bytes, exact source image key, immutable destination readback. */
-export async function prepareNativeIdentityAvatars(raw:NativeIdentityImport,sink:{get(key:string):Promise<Buffer>;putIfAbsent(key:string,bytes:Buffer):Promise<'created'|'exists'>}):Promise<NativeIdentityAvatarPreparation>{
+// One staging per sink and identity plan: every page in a batch reuses the same immutable avatars.
+const staged=new WeakMap<object,Map<string,Promise<NativeIdentityAvatarPreparation>>>();
+export function prepareNativeIdentityAvatars(raw:NativeIdentityImport,sink:{get(key:string):Promise<Buffer>;putIfAbsent(key:string,bytes:Buffer):Promise<'created'|'exists'>}):Promise<NativeIdentityAvatarPreparation>{
+ const key=nativeIdentityDigest([raw.plan?.sha256,raw.avatarObjects??[]]),bySink=staged.get(sink)??new Map();staged.set(sink,bySink);
+ let pending=bySink.get(key);if(!pending){pending=stageNativeIdentityAvatars(raw,sink);pending.catch(()=>bySink.delete(key));bySink.set(key,pending);}
+ return pending;
+}
+async function stageNativeIdentityAvatars(raw:NativeIdentityImport,sink:{get(key:string):Promise<Buffer>;putIfAbsent(key:string,bytes:Buffer):Promise<'created'|'exists'>}):Promise<NativeIdentityAvatarPreparation>{
  const input=structuredClone(raw),proof=input.avatarObjects?.length?verifyNativeIdentityInput(input):undefined,objects=new Map<string,{key:string;sha256:string}>(),targets=new Map<string,string>();
  for(const object of input.avatarObjects??[]){
   const mapping=input.plan.users.find(m=>m.sourceId===object.sourceId),source=proof!.users.get(object.sourceId);
