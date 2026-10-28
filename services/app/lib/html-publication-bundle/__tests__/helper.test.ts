@@ -59,9 +59,9 @@ it('preserves URL query identity in inline modules and styles while escaping HTM
  const files=[{path:'x.js',contentType:'text/javascript',base64:Buffer.from('export const x=1;').toString('base64')},{path:'x.png',contentType:'image/png',base64:Buffer.from('png').toString('base64')}];
  const plan=planPublicationBundle(html,{entryPath:'index.html',files});const address='/a/PAGE12/assets?dependency=ASSET1&revision=2';
  const rewritten=plan.rewrite(html,'index.html',new Map([['x.js',address],['x.png',address]]));
- expect(rewritten).toContain('import "'+address+'"');expect(rewritten).toContain('url('+address+')');expect(rewritten).toContain('src="'+address.replace('&','&amp;')+'"');
+ expect(rewritten).toContain('import "'+address+'"');expect(rewritten).toContain('url('+address+')');expect(rewritten).toContain('src="'+address.replaceAll('&','&amp;')+'"');
  const pinned=pinPublicationAssetUrls(rewritten,'PAGE12',3);
- expect(pinned).toContain('import "'+address+'&version=3"');expect(pinned).toContain('url('+address+'&version=3)');expect(pinned).toContain('src="'+address.replace('&','&amp;')+'&amp;version=3"');
+ expect(pinned).toContain('import "'+address+'&version=3"');expect(pinned).toContain('url('+address+'&version=3)');expect(pinned).toContain('src="'+address.replaceAll('&','&amp;')+'&amp;version=3"');
 });
 
 it('snapshots every quoted font URL and escaped CSS import without admitting comment or content strings',async()=>{

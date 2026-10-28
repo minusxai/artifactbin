@@ -8,7 +8,7 @@ import { CustomDomainCard } from '@/solid/account/CustomDomainCard';
 /** Drives the house Select: open its trigger, pick the option. */
 async function choose(name: string, option: string, trigger?: HTMLElement) {
   fireEvent.click(trigger ?? screen.getByRole('button', { name }));
-  fireEvent.click(await screen.findByRole('option', { name: new RegExp(option.replace(/[()]/g, '\\$&')) }));
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }));
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
