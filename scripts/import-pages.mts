@@ -3,6 +3,9 @@
  * Usage: tsx scripts/import-pages.mts CONFIG.json [--apply] ID...
  *  without --apply: builds every row and uploads nothing; prints counts.
  *  with --apply: uploads files to S3, then writes all pages in one transaction and reads them back.
+ * Dataset-only: tsx scripts/import-pages.mts CONFIG.json --datasets [--apply] ID...
+ *  imports just these datasets from the config's shared catalog (same ids, owners, visibility and shares),
+ *  after checking each one against old prod as it is now (read-only); existing ids are skipped.
  */
 import fs from 'node:fs/promises';import path from 'node:path';import net from 'node:net';import {spawn} from 'node:child_process';import {createHash,randomBytes} from 'node:crypto';import {pathToFileURL} from 'node:url';
 import pg from 'pg';
@@ -15,10 +18,11 @@ import {prepareNativeArtifactRelations} from '../services/app/lib/native-history
 import {prepareNativeHistoryRelations} from '../services/app/lib/native-history-import/relations';
 import {canonicalNativeObjectSource,verifyNativeCanonicalDatasets} from '../services/app/lib/native-history-import/catalog-source';
 import {createNativeS3ObjectSink} from '../services/app/lib/native-history-import/catalog-staging';
+import {deriveNativeUserObject} from '../services/app/lib/native-history-import/catalog-user-remap';
 import {storedUser,nativeIdentityDigest} from '../services/app/lib/native-identity-import/model';
 import {parseS3Url} from '../services/app/lib/object-store/url';
 
-interface Config{extraTokens?:Record<string,unknown>[];hostHeads?:Record<string,string>;converted?:Record<string,{result:string;manifest:string}>;codec:string;publicationModule:string;publicationConfiguration:string;runtimeEnvironment:string;origin:string;port?:number}
+interface Config{oldSchema?:string;oldS3Prefix?:string;extraTokens?:Record<string,unknown>[];hostHeads?:Record<string,string>;converted?:Record<string,{result:string;manifest:string}>;codec:string;publicationModule:string;publicationConfiguration:string;runtimeEnvironment:string;origin:string;port?:number}
 const sha=(b:Uint8Array|string)=>createHash('sha256').update(b).digest('hex');
 const ID_ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const newId=()=>[...randomBytes(6)].map(b=>ID_ALPHABET[b%62]).join('');
@@ -52,6 +56,39 @@ async function convertedInput(cfg:Config,id:string,config:any){
  if(config.ancillaryFolders)files.ancillaryFolders=decodeNativePublicationBytes(config.ancillaryFolders);
  return {context:{revision,assembly},recipe:{assemblySha256:assembly.sha256,authority:{...config.shared.schemas,capabilities:['live-operator-schema-check']}},files};
 }
+/** Dataset rows and data objects from a converted catalog: every dataset in it, or only the ids in `only`.
+ * Datasets are shared between pages, so each is written once and skipped if it already exists. */
+async function prepareDatasets(catalog:any,batch:Batch,only?:ReadonlySet<string>){
+ const projection=only?{...catalog.projection,datasets:catalog.projection.datasets.filter((d:any)=>only.has(d.targetId)),typedUserRemaps:(catalog.projection.typedUserRemaps??[]).filter((r:any)=>only.has(r.sourceId))}:catalog.projection;
+ const source=await canonicalNativeObjectSource(catalog.root,catalog.ledgerPath,catalog.receipts);
+ // The Oct 24 export files behind some catalogs are gone; their projection rows still import, flagged as unverified.
+ try{await verifyNativeCanonicalDatasets(projection,source.source);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;for(const d of projection.datasets)batch.unverifiedDatasets.add(d.targetId);}
+ const keys=new Set<string>();
+ for(const d of projection.datasets){
+  if(batch.datasetIds.has(d.targetId))continue;batch.datasetIds.add(d.targetId);
+  const a=d.authority,v=d.versions.find((x:any)=>x.version===d.currentVersion);
+  for(const version of d.versions)for(const t of version.meta?.catalog?.tables??[])if(t.objectKey)keys.add(t.objectKey);
+  if(v.meta?.objectKey)keys.add(v.meta.objectKey);
+  batch.rows.artifact_id_registry.push({id:d.targetId,owner:a.creatorUserId??a.userId??a.tokenId,consumed:true});
+  batch.rows.artifacts.push({id:d.targetId,token_id:a.tokenId,user_id:a.userId,group_id:a.groupId,creator_user_id:a.creatorUserId,visibility:a.visibility,link_role:a.linkRole,access:a.access,dataset_policy:a.datasetPolicy,sharing_revision:a.sharingRevision,policy_revision:a.policyRevision,
+   ancestor_ids:[...a.ancestorIds],version:v.version,format:'dataset',source:v.source,meta:v.meta,title:v.title,description:v.description,edit_id:a.editId,actor_user_id:v.actorUserId,actor_token_id:v.actorTokenId,created_at:iso(a.createdAt),updated_at:iso(a.updatedAt),deleted_at:iso(a.deletedAt)});
+  for(const x of d.versions)batch.rows.artifact_versions.push({artifact_id:d.targetId,version:x.version,title:x.title,description:x.description,format:'dataset',source:x.source,meta:x.meta,actor_user_id:x.actorUserId,actor_token_id:x.actorTokenId,created_at:iso(x.createdAt)});
+  for(const s of a.shares)batch.rows.artifact_shares.push({artifact_id:d.targetId,email:s.email.trim().toLowerCase(),role:s.role});
+  batch.rows.artifact_edits.push({artifact_id:d.targetId,edit_id:a.editId,splice_start:0,removed:'',inserted:v.source??'',span_start:0,span_end:0,actor_user_id:v.actorUserId,actor_token_id:v.actorTokenId,document_state:{version:d.currentVersion}});
+  for(const p of d.policyAudit)batch.rows.dataset_policy_audit.push({dataset_id:d.targetId,revision:p.revision,policy:p.policy,actor_user_id:p.actorUserId,actor_token_id:p.actorTokenId,created_at:iso(p.createdAt)});
+ }
+ for(const o of projection.objects)if(keys.has(o.objectKey)){const bytes=await source.source.read(o);if(bytes.length!==o.bytes||sha(bytes)!==o.sha256)fail('dataset_object_digest:'+o.objectKey);batch.objects.set(o.targetKey,{bytes,contentType:o.contentType});}
+ // Tables with user-typed cells point at a derived object (user ids remapped) that no source holds: derive it again from its source object.
+ // The derived bytes must match the receipt's digest and size (the receipt's own seal was computed elsewhere, so it is not compared).
+ for(const r of projection.typedUserRemaps??[])if(keys.has(r.targetKey)){
+  const o=projection.objects.find((x:any)=>x.objectKey===r.sourceObjectKey&&x.targetKey===x.objectKey)??fail('dataset_remap_source_missing:'+r.sourceObjectKey);
+  const {sourceId,version,schema,table,sourceMetaSha256,sourceObjectKey,userColumns}=r,derived=deriveNativeUserObject({sourceId,version,schema,table,sourceMetaSha256,sourceObjectKey,userColumns},await source.source.read(o),projection.identities.users,projection.identityPlanSha256??'');
+  if(!derived||derived.receipt.targetKey!==r.targetKey||derived.receipt.targetSha256!==r.targetSha256||derived.receipt.targetBytes!==r.targetBytes||derived.receipt.changedCells!==r.changedCells)fail('dataset_remap_derivation:'+r.targetKey);
+  batch.objects.set(r.targetKey,{bytes:derived.bytes,contentType:'application/json'});
+ }
+ for(const key of keys)if(!batch.objects.has(key))fail('dataset_object_missing:'+key);
+}
+
 /** Build one page's rows from its converted package. No database or network access. */
 async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publication:any,publicationConfig:any){
  const input=cfg.converted?.[id]?await convertedInput(cfg,id,publicationConfig):await packagedInput(cfg,id,codec),context=input.context;
@@ -120,25 +157,7 @@ async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publicatio
   for(const s of a.shares as {email:string;role:string}[])batch.rows.artifact_shares.push({artifact_id:a.id,email:s.email.trim().toLowerCase(),role:s.role});
  }
 
- // Datasets: shared between pages, so each is written once and skipped if it already exists.
- const source=await canonicalNativeObjectSource(catalog.root,catalog.ledgerPath,catalog.receipts);
- // The Oct 24 export files behind some catalogs are gone; their projection rows still import, flagged as unverified.
- try{await verifyNativeCanonicalDatasets(catalog.projection,source.source);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;for(const d of catalog.projection.datasets)batch.unverifiedDatasets.add(d.targetId);}
- const keys=new Set<string>();
- for(const d of catalog.projection.datasets){
-  if(batch.datasetIds.has(d.targetId))continue;batch.datasetIds.add(d.targetId);
-  const a=d.authority,v=d.versions.find((x:any)=>x.version===d.currentVersion);
-  for(const version of d.versions)for(const t of version.meta?.catalog?.tables??[])if(t.objectKey)keys.add(t.objectKey);
-  if(v.meta?.objectKey)keys.add(v.meta.objectKey);
-  batch.rows.artifact_id_registry.push({id:d.targetId,owner:a.creatorUserId??a.userId??a.tokenId,consumed:true});
-  batch.rows.artifacts.push({id:d.targetId,token_id:a.tokenId,user_id:a.userId,group_id:a.groupId,creator_user_id:a.creatorUserId,visibility:a.visibility,link_role:a.linkRole,access:a.access,dataset_policy:a.datasetPolicy,sharing_revision:a.sharingRevision,policy_revision:a.policyRevision,
-   ancestor_ids:[...a.ancestorIds],version:v.version,format:'dataset',source:v.source,meta:v.meta,title:v.title,description:v.description,edit_id:a.editId,actor_user_id:v.actorUserId,actor_token_id:v.actorTokenId,created_at:iso(a.createdAt),updated_at:iso(a.updatedAt),deleted_at:iso(a.deletedAt)});
-  for(const x of d.versions)batch.rows.artifact_versions.push({artifact_id:d.targetId,version:x.version,title:x.title,description:x.description,format:'dataset',source:x.source,meta:x.meta,actor_user_id:x.actorUserId,actor_token_id:x.actorTokenId,created_at:iso(x.createdAt)});
-  for(const s of a.shares)batch.rows.artifact_shares.push({artifact_id:d.targetId,email:s.email.trim().toLowerCase(),role:s.role});
-  batch.rows.artifact_edits.push({artifact_id:d.targetId,edit_id:a.editId,splice_start:0,removed:'',inserted:v.source??'',span_start:0,span_end:0,actor_user_id:v.actorUserId,actor_token_id:v.actorTokenId,document_state:{version:d.currentVersion}});
-  for(const p of d.policyAudit)batch.rows.dataset_policy_audit.push({dataset_id:d.targetId,revision:p.revision,policy:p.policy,actor_user_id:p.actorUserId,actor_token_id:p.actorTokenId,created_at:iso(p.createdAt)});
- }
- for(const o of catalog.projection.objects)if(keys.has(o.objectKey)){const bytes=await source.source.read(o);if(bytes.length!==o.bytes||sha(bytes)!==o.sha256)fail('dataset_object_digest:'+o.objectKey);batch.objects.set(o.targetKey,{bytes,contentType:o.contentType});}
+ await prepareDatasets(catalog,batch);
  for(const a of identity.avatarObjects??[])batch.objects.set(a.key,{bytes:Buffer.from(a.base64,'base64')});
 
  // Comments, comment images and members.
@@ -162,14 +181,67 @@ async function insertAll(client:pg.ClientBase,table:Table,rows:Row[],authSchema:
  return result.rowCount??0;
 }
 
-const [configPath,...rest]=process.argv.slice(2),apply=rest.includes('--apply'),ids=rest.filter(a=>a!=='--apply');
-if(!configPath||!ids.length){console.error('usage: tsx scripts/import-pages.mts CONFIG.json [--apply] ID...');process.exit(64);}
+const [configPath,...rest]=process.argv.slice(2),apply=rest.includes('--apply'),datasetMode=rest.includes('--datasets'),ids=rest.filter(a=>!a.startsWith('--'));
+if(!configPath||!ids.length){console.error('usage: tsx scripts/import-pages.mts CONFIG.json [--datasets] [--apply] ID...');process.exit(64);}
 const cfg=JSON.parse(await fs.readFile(configPath,'utf8')) as Config;
 const env=JSON.parse(await fs.readFile(cfg.runtimeEnvironment,'utf8'));
 const [codec,publicationModule]=await Promise.all([import(pathToFileURL(cfg.codec).href),import(pathToFileURL(cfg.publicationModule).href)]);
 const publicationConfig=JSON.parse(await fs.readFile(cfg.publicationConfiguration,'utf8'));
 const publication=publicationModule.createNativePipelinePublication(publicationConfig),authSchema=publicationConfig.shared.schemas.authSchema,appSchema=publicationConfig.shared.schemas.appSchema;
 const started=Date.now(),batch:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(),unverifiedDatasets:new Set()};
+
+interface DatasetReport{title:string;owner:{old:string;new:string};visibility:string;version:number;versions:{imported:number;oldProdHistory:number};shares:number;audit:number;objects:{table:string;key:string;oldKey:string;derived:boolean;rows:number;oldRows:number}[];warnings:string[]}
+const rowsOf=(bytes:Buffer)=>{const rows=JSON.parse(bytes.toString('utf8'));if(!Array.isArray(rows))fail('dataset_rows_not_array');return rows.length as number;};
+const tablesOf=(meta:any):{table:string;key:string}[]=>meta?.catalog?(meta.catalog.tables??[]).filter((t:any)=>t.objectKey).map((t:any)=>({table:t.schema+'.'+t.name,key:t.objectKey})):meta?.objectKey?[{table:'public.rows',key:meta.objectKey}]:[];
+const normalShares=(rows:{email:string;role:string}[])=>JSON.stringify(rows.map(s=>[s.email.trim().toLowerCase(),s.role]).sort());
+/** Dataset-only mode: datasets from the config's shared catalog (already mapped to new-prod ids), each checked against old prod as it is now,
+ * read-only, so a dataset that changed since the catalog was exported is refused rather than imported stale. Row building is prepareDatasets. */
+async function collectDatasets(client:pg.Client,ids:string[],skipped:Record<string,string>,failed:Record<string,string>,reports:Record<string,DatasetReport>){
+ const catalog=publicationConfig.shared.catalog,p=catalog.projection,users:Record<string,string>=p.identities.users,tokens:Record<string,string>=p.identities.tokens,old=cfg.oldSchema??'afbin_prod_app';
+ if(!/^[a-z_][a-z0-9_]*$/.test(old))fail('old_schema');
+ count();const existing=new Set((await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[ids])).rows.map(r=>r.id));
+ // Old prod, read-only: heads, shares and version counts as they are now.
+ count();await client.query('BEGIN READ ONLY');
+ let heads:any[],shares:any[],versions:any[];
+ try{
+  count();heads=(await client.query(`SELECT id,format,version,user_id,token_id,edit_id,visibility,link_role,updated_at,deleted_at,title,meta FROM ${old}.artifacts WHERE id=ANY($1::text[])`,[ids])).rows;
+  count();shares=(await client.query(`SELECT artifact_id,email,role FROM ${old}.artifact_shares WHERE artifact_id=ANY($1::text[])`,[ids])).rows;
+  count();versions=(await client.query(`SELECT artifact_id id,count(*)::int n FROM ${old}.artifact_versions WHERE artifact_id=ANY($1::text[]) GROUP BY 1`,[ids])).rows;
+ }finally{count();await client.query('COMMIT');}
+ count();const newUsers=new Set((await client.query<{id:string}>('SELECT id FROM users WHERE id=ANY($1::text[])',[heads.map(h=>users[h.user_id]).filter(Boolean)])).rows.map(r=>r.id));
+ const oldObjects=createNativeS3ObjectSink({...parseS3Url(env.S3_URL),prefix:cfg.oldS3Prefix??'artifacts'});
+ for(const id of ids){
+  if(existing.has(id)){skipped[id]='exists';continue;}
+  const h=heads.find(x=>x.id===id),d=p.datasets.find((x:any)=>x.targetId===id);
+  if(!h){failed[id]='not_on_old_prod';continue;}
+  if(!d){failed[id]='not_in_catalog';continue;}
+  const a=d.authority,v=d.versions.find((x:any)=>x.version===d.currentVersion),owner=users[h.user_id];
+  if(!owner||!newUsers.has(owner)){failed[id]='owner_unmapped:'+h.user_id;continue;}
+  const drift=Object.entries({format:h.format!=='dataset',deleted:!!h.deleted_at,version:h.version!==d.currentVersion,edit:h.edit_id!==a.editId,updated:new Date(h.updated_at).getTime()!==new Date(a.updatedAt).getTime(),
+   visibility:h.visibility!==a.visibility,linkRole:(h.link_role??'viewer')!==a.linkRole,owner:owner!==a.userId,token:(tokens[h.token_id]??null)!==a.tokenId,
+   shares:normalShares(shares.filter(s=>s.artifact_id===id))!==normalShares(a.shares)}).filter(([,bad])=>bad).map(([k])=>k);
+  if(drift.length){failed[id]='changed_since_catalog:'+drift.join(',');continue;}
+  const own:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(),unverifiedDatasets:new Set()};
+  try{await prepareDatasets(catalog,own,new Set([id]));}catch(error){failed[id]=(error as Error).message;continue;}
+  // Row counts: each table's object as imported against old prod's current object for that table.
+  const oldTables=tablesOf(h.meta),objects:DatasetReport['objects']=[];let bad='';
+  for(const t of tablesOf(v.meta)){
+   const o=oldTables.find(x=>x.table===t.table);if(!o){bad='table_missing_on_old_prod:'+t.table;break;}
+   const derived=t.key!==o.key;
+   if(derived&&!(p.typedUserRemaps??[]).some((r:any)=>r.sourceId===id&&r.sourceObjectKey===o.key&&r.targetKey===t.key)){bad='object_changed_since_catalog:'+t.table;break;}
+   const rows=rowsOf(own.objects.get(t.key)!.bytes),oldRows=rowsOf(await oldObjects.get(o.key));
+   if(rows!==oldRows){bad='row_count:'+t.table+':'+rows+'!='+oldRows;break;}
+   objects.push({table:t.table,key:t.key,oldKey:o.key,derived,rows,oldRows});
+  }
+  if(bad){failed[id]=bad;continue;}
+  for(const t of TABLES)batch.rows[t].push(...own.rows[t]);for(const [k,o] of own.objects)batch.objects.set(k,o);
+  for(const x of own.datasetIds)batch.datasetIds.add(x);for(const x of own.unverifiedDatasets)batch.unverifiedDatasets.add(x);
+  const warnings=[];
+  if((p.externalConnections??[]).some((c:any)=>c.datasetSourceId===id))warnings.push('connection_secret_not_migrated');
+  reports[id]={title:v.title,owner:{old:h.user_id,new:owner},visibility:a.visibility,version:d.currentVersion,versions:{imported:d.versions.length,oldProdHistory:versions.find(x=>x.id===id)?.n??0},
+   shares:a.shares.length,audit:d.policyAudit.length,objects,warnings};
+ }
+}
 
 // Database through an SSH tunnel, as the earlier importer did; with a fixed query count the distance no longer matters.
 let ssh:ReturnType<typeof spawn>|undefined,client:pg.Client|undefined,queries=0;
@@ -182,12 +254,13 @@ try{
  url.searchParams.set('options','-c search_path='+appSchema);
  client=new pg.Client({connectionString:url.toString(),stream:()=>new Tunnel()});await client.connect();
 
+ const allDatasets=new Set<string>(),skipped:Record<string,string>={},failed:Record<string,string>={},datasets:Record<string,DatasetReport>={};
+ if(datasetMode){await collectDatasets(client,ids,skipped,failed,datasets);if(!batch.datasetIds.size)fail('nothing_to_import:'+JSON.stringify({skipped,failed}));}
+ else{
  // Query 1: which pages and datasets already exist. Existing pages are refused; existing datasets are reused.
- const allDatasets=new Set<string>();
  count();const existing=(await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[ids])).rows;
  if(existing.length)fail('pages_exist:'+existing.map(r=>r.id).join(','));
  // Each page builds into its own rows first, so a page that cannot be prepared is skipped whole.
- const skipped:Record<string,string>={};
  for(const id of ids){
   const own:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(batch.datasetIds),unverifiedDatasets:new Set()};
   try{await preparePage(cfg,id,own,codec,publication,publicationConfig);}catch(error){skipped[id]=(error as Error).message;continue;}
@@ -195,18 +268,19 @@ try{
   for(const d of own.datasetIds)batch.datasetIds.add(d);for(const d of own.unverifiedDatasets)batch.unverifiedDatasets.add(d);
  }
  if(!batch.pages.length)fail('nothing_to_import:'+JSON.stringify(skipped));
+ }
  count();for(const r of (await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[[...batch.datasetIds]])).rows)allDatasets.add(r.id);
  // Drop datasets that already exist (another page imported them earlier).
  if(allDatasets.size){for(const t of ['artifact_id_registry','artifacts','artifact_versions','artifact_shares','artifact_edits'] as const)batch.rows[t]=batch.rows[t].filter(r=>!allDatasets.has(String(r.id??r.artifact_id)));batch.rows.dataset_policy_audit=batch.rows.dataset_policy_audit.filter(r=>!allDatasets.has(String(r.dataset_id)));}
 
  // People and tokens are shared by every page in the batch: keep one row per id.
  // Tokens created after the identity plan, supplied by the config as disabled provenance rows.
- batch.rows.tokens.push(...(cfg.extraTokens??[]));
+ if(!datasetMode)batch.rows.tokens.push(...(cfg.extraTokens??[]));
  for(const t of ['users','auth_user','tokens'] as const)batch.rows[t]=[...new Map(batch.rows[t].map(r=>[String(r.id),r])).values()];
  // Query 3: the columns of every table written, so a misnamed field fails before anything is written.
  count();const known=new Map<string,Set<string>>();for(const r of (await client.query<{t:string;c:string}>("SELECT CASE WHEN table_schema=$2 THEN 'auth_user' ELSE table_name END t,column_name c FROM information_schema.columns WHERE (table_schema=$1 AND table_name=ANY($3::text[])) OR (table_schema=$2 AND table_name='user')",[appSchema,authSchema,TABLES.filter(t=>t!=='auth_user')])).rows)known.set(r.t,(known.get(r.t)??new Set()).add(r.c));
  const unknownColumns=Object.fromEntries(TABLES.map(t=>[t,[...new Set(batch.rows[t].flatMap(r=>Object.keys(r)))].filter(c=>!known.get(t)?.has(c))]).filter(([,c])=>c.length));
- const summary={skipped,unknownColumns,unverifiedDatasets:[...batch.unverifiedDatasets],pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
+ const summary={skipped,...(datasetMode?{failed,datasets}:{}),unknownColumns,unverifiedDatasets:[...batch.unverifiedDatasets],pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
  if(!apply){console.log(JSON.stringify({mode:'dry-run',...summary,queries,seconds:Math.round((Date.now()-started)/1000)},null,1));process.exitCode=0;}
  else{
   // Files first, in parallel; conditional puts make reruns safe.
@@ -222,9 +296,24 @@ try{
      (SELECT count(*) FROM artifact_source_ids s WHERE s.artifact_id=a.id)::int source_ids,(SELECT count(*) FROM annotations n WHERE n.artifact_id=a.id)::int comments
      FROM artifacts a WHERE a.id=ANY($1::text[]) AND a.format='html' AND a.deleted_at IS NULL`,[batch.pages.map(p=>p.id)])).rows;
    for(const p of batch.pages){const b=back.find(x=>x.id===p.id);if(!b||b.versions!==1||b.edits!==1||b.comments!==p.comments)fail('readback:'+p.id+':'+JSON.stringify(b));}
+   // Datasets: owner, visibility and every row count as built.
+   const imported=batch.rows.artifacts.filter(r=>r.format==='dataset');
+   if(imported.length){
+    count();const got=(await client.query<{id:string;user_id:string;visibility:string;versions:number;shares:number;audit:number;edits:number}>(`SELECT a.id,a.user_id,a.visibility,
+      (SELECT count(*) FROM artifact_versions v WHERE v.artifact_id=a.id)::int versions,(SELECT count(*) FROM artifact_shares s WHERE s.artifact_id=a.id)::int shares,
+      (SELECT count(*) FROM dataset_policy_audit p WHERE p.dataset_id=a.id)::int audit,(SELECT count(*) FROM artifact_edits e WHERE e.artifact_id=a.id)::int edits
+      FROM artifacts a WHERE a.id=ANY($1::text[]) AND a.format='dataset' AND a.deleted_at IS NULL`,[imported.map(r=>r.id)])).rows;
+    const n=(t:Table,id:string,k='artifact_id')=>batch.rows[t].filter(r=>r[k]===id).length;
+    for(const r of imported){const id=String(r.id),b=got.find(x=>x.id===id);
+     if(!b||b.user_id!==r.user_id||b.visibility!==r.visibility||b.versions!==n('artifact_versions',id)||b.shares!==n('artifact_shares',id)||b.audit!==n('dataset_policy_audit',id,'dataset_id')||b.edits!==1)fail('readback:'+id+':'+JSON.stringify(b));}
+   }
    count();await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}
-  console.log(JSON.stringify({mode:'applied',...summary,written,queries,s3Uploads:s3,seconds:Math.round((Date.now()-started)/1000)},null,1));
+  // Dataset objects as stored now: each one read back from object storage with the same row count as old prod.
+  const stored:Record<string,string>={};
+  for(const [id,report] of Object.entries(datasets))for(const o of report.objects){const rows=rowsOf(await sink.get(o.key));stored[id+' '+o.table]=rows===o.oldRows?'ok':'row_count:'+rows+'!='+o.oldRows;}
+  console.log(JSON.stringify({mode:'applied',...summary,written,storedObjects:stored,queries,s3Uploads:s3,seconds:Math.round((Date.now()-started)/1000)},null,1));
+  if(Object.values(stored).some(v=>v!=='ok'))process.exitCode=1;
  }
 }catch(e){console.error((e as Error).message,(e as Error).stack?.split('\n').slice(1,4).join('\n'));process.exitCode=1;}
 finally{await client?.end().catch(()=>{});ssh?.kill('SIGTERM');}
