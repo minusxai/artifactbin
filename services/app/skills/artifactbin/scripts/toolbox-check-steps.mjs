@@ -105,9 +105,9 @@ export async function runSteps(page, hosted, task, ready, evidence) {
       })
     ]);
     evidence.steps.passed = true;
-    evidence.steps.ms = Date.now() - started;
+    evidence.stepsMs = Date.now() - started;
   } catch (error) {
-    evidence.steps.ms = Date.now() - started;
+    evidence.stepsMs = Date.now() - started;
     const deadline = /^Task deadline exceeded/.test(error.message);
     expired = true;
     const latest = [...pending.values()].pop(),

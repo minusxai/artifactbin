@@ -137,8 +137,8 @@ describe('installed native author examples',()=>{
    const html=(await readFile(path.join(installed,'examples/shared-app.html'),'utf8')).replaceAll('DATASET_ID',datasetId).replace(/<link[^>]*data-af="design-system"[^>]*>/,'<link data-af="design-system" rel="stylesheet" href="https://styles.example/theme.css">');
    const source=path.join(project,'index.html'),backend=path.join(project,'garden.ts');await writeFile(source,html);await writeFile(backend,await readFile(path.join(installed,'examples/garden.ts'),'utf8'));
    const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.updatedInPlace).toBe(true);
-   // Copied example headers left in published files draw a warning naming each file.
-   expect(first.headers).toMatch(/^warning: index\.html, garden\.ts still have the example's header/);
+    // Copied example headers are fine to keep: publish no longer warns about them.
+    expect(first.headers).toBeUndefined();
    // The canonical page binds the backend by name only; the author's working copy keeps its local source path.
    expect(await readFile(source,'utf8')).toMatch(/<link href="\.\/garden\.ts"[^>]*rel="af-backend"/);
    await writeFile(backend,(await readFile(backend,'utf8'))+'\n// edited after first publish\n');
