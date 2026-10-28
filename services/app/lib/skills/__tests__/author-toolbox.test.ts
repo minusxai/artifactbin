@@ -151,6 +151,11 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // A check without steps never reads as a clean pass; it asks for steps.
  expect(deck).toMatch(/--steps/);
 });
+it('names the missing module when an install is incomplete',async()=>{
+ const {toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const error=Object.assign(Error("Cannot find module '/skills/artifactbin/scripts/toolbox-platform.mjs' imported from /skills/artifactbin/scripts/check.mjs"),{code:'ERR_MODULE_NOT_FOUND'});
+ expect(toolFailure('check',error)).toMatchObject({ok:false,code:'ERR_MODULE_NOT_FOUND',message:'Missing module /skills/artifactbin/scripts/toolbox-platform.mjs: the skill install is incomplete.'});
+});
 it('checks a published file by its paired page and refuses an unpublished one',async()=>{
  const {mkdtemp,rm,writeFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {checkCommand}=await import('../../../skills/artifactbin/scripts/check.mjs');

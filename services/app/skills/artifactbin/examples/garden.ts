@@ -2,6 +2,8 @@
  * Example: backend for examples/shared-app.html: TypeScript resolvers over a shared store with
  *   a signed-in-only mutation. It demonstrates typeDefs plus resolvers; the page links it with
  *   af-backend.
+ * Next: rename the stored type and fields to your data; keep the store get/set with the expected
+ *   version and the @auth directive.
  * Usage: publish it together with the page (node scripts/publish.mjs examples/shared-app.html).
  * Gotchas: backend files are published as backend sources, never as public assets. Writes pass
  *   the read version as `expected`, so a concurrent edit fails instead of being overwritten.

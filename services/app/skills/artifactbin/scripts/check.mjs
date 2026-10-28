@@ -3,6 +3,8 @@ export const DESCRIPTION = `Browser smoke and task check of a saved page or a lo
 Reports errors, overflow, contrast, duplicate ids and your steps; appearance stays unverified.
 Usage: node scripts/check.mjs ID|URL|FILE.html [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
+A hosted check (ID, URL or FILE.html) runs in a server browser session: never install Playwright or Chromium; only a
+  local serve.mjs preview needs --playwright-module.
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
   --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
   return assertions and throw on failure; --viewer self (default) or guest (hosted only, a fixed-identity server
@@ -27,8 +29,8 @@ Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for dat
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
   select them with [data-af-id="…"]. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
   the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
-  reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform: match text
-  case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
+  reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform and keeps
+  newlines: collapse whitespace before regex asserts and match case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
   > 800)). Past the deadline, the error names the numbered call still running and what the page shows. Use
   disposable test data (steps can write), test persistence by changing data then reloading, and
   test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted

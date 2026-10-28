@@ -131,6 +131,14 @@ const transient=error=>!(error instanceof ToolError)&&
   error?.message)+' '+String(error?.cause?.code??''));
 /** Preserve legacy details while exposing a stable check result on all refusals. */
 export function toolFailure(name,error){
+// A broken install names the missing module (a path, not a secret), not a generic failure.
+if(error?.code==='ERR_MODULE_NOT_FOUND'){
+  const missing=/Cannot find (?:module|package) '([^']+)'/.exec(String(error.message))?.[1];
+  return {ok:false,code:error.code,message:missing?`Missing module ${missing}: the skill `
+    +'install is incomplete.':String(error.message).split('\n')[0].slice(0,300),
+    recovery:'Download the skill zip again and extract its whole artifactbin/ folder; '
+    +'run scripts from inside it.'};
+}
 const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance',
    'task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(
    error.code==='check_failed'?error.details:{})}:{};

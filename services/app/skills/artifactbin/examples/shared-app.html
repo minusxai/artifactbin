@@ -4,6 +4,10 @@ Example: a dashboard over a linked CSV dataset with shared targets in a backend 
 only edits), a per-viewer dark mode in Apollo local state, one Vega-Lite chart and a drill-down
 list. Goes with examples/repairs.csv and the backend file next to it in examples/ (linked by
 af-backend; publish them together).
+Next: in this copy replace only the [bracketed] text and the data (no drafts elsewhere, no new
+  layouts or controls), write steps.mjs and guest.mjs, then run: node scripts/publish.mjs index.html
+  && (node scripts/check.mjs index.html --steps steps.mjs & node scripts/check.mjs index.html
+  --viewer guest --steps guest.mjs & wait)
 Usage: publish the CSV first (node scripts/publish.mjs examples/repairs.csv --type dataset) and
 replace the placeholder after ref: below with the returned dataset ID. Copy it as index.html and
 replace only the [bracketed] text and the data; keep its CSS, JS and layout, add no new controls.
