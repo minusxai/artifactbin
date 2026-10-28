@@ -4,10 +4,11 @@ Reports errors, overflow, contrast, duplicate ids and your steps; appearance sta
 Usage: node scripts/check.mjs ID|URL [--viewport WxH]... [--steps FILE] [--viewer self|guest] [--output FILE]
        node scripts/check.mjs http://127.0.0.1:PORT/ ...   (local preview from serve.mjs; other origins are blocked)
 Flags: --viewport WIDTHxHEIGHT (repeat up to 8; default 1280x800 and 390x844; decks: 1200x630 and 1280x800 only);
-  --steps FILE an async function body receiving the page; return assertions and throw on failure; --viewer self
-  (default) or guest (hosted only, a fixed-identity server session; the viewer is fixed when the session starts, and the page is
-  signed in as you unless guest); --playwright-module FILE (local only: your installed
-  Playwright entrypoint). Common: --server ORIGIN, --json, --output FILE (use a new name each run), --help.
+  --steps FILE an async function body receiving page (or a module whose export default takes page or {page});
+  return assertions and throw on failure; --viewer self (default) or guest (hosted only, a fixed-identity server
+  session; the viewer is fixed when the session starts, and the page is signed in as you unless guest);
+  --playwright-module FILE (local only: your installed Playwright entrypoint). Common: --server ORIGIN, --json,
+  --output FILE (use a new name each run), --help.
 Examples:
   node scripts/check.mjs ID --viewport 1280x800 --viewport 390x844 --steps acceptance.mjs --output qa-1.json
   steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
@@ -21,8 +22,9 @@ Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for dat
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
   select them with [data-af-id="…"]. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
   the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
-  reader chrome. Click before
-  page.keyboard. Past the deadline, the error names the numbered call still running and what the page shows. Use
+  reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform: match text
+  case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
+  > 800)). Past the deadline, the error names the numbered call still running and what the page shows. Use
   disposable test data (steps can write), test persistence by changing data then reloading, and
   test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
   script is limited to 20 s and 64 KB (16 executions, 8 pages, 30 minutes idle per session). Open the screenshots
@@ -94,6 +96,12 @@ export function checkTarget(value) {
   )
     throw Error('Use an artifact ID or an HTTP loopback preview URL.');
   return {mode: 'local', target: url.href, origin: url.origin};
+}
+/** A steps file written as a module (export default async function(page){…} or async ({page}) => …) as a function body. */
+export function stepsBody(source) {
+  const match = /^\s*export\s+default\s+/m.exec(source);
+  if (!match) return source;
+  return source.slice(0, match.index) + 'const __afSteps = ' + source.slice(match.index + match[0].length) + '\n;return await __afSteps(page);';
 }
 /** Runs in either the server session or a fresh local browser context. No credentials. */
 // One page, one viewport: load it, optionally compare IDs across a reload, run the steps, then measure the settled page.
@@ -262,6 +270,13 @@ export async function inspectPage(page, options, task) {
     if (task) {
       // Whether the steps ran and passed; a failure's message is in error (a bare true here once read as "passed").
       evidence.steps = {ran: true, passed: false};
+      // Keyboard focus in the page's document, so page.keyboard reaches it without a click first.
+      if (options.hosted)
+        await page.mainFrame().locator('iframe[data-mx-document-frame]').focus({timeout: 1000}).catch(() => {});
+      await page
+        .locator('html')
+        .evaluate(html => html.ownerDocument.defaultView.focus(), undefined, {timeout: 1000})
+        .catch(() => {});
       // Name the steps-file call that failed or was still pending, numbered so a call repeated after a reload is told apart.
       const pending = new Map();
       let failed = null,
@@ -276,7 +291,9 @@ export async function inspectPage(page, options, task) {
       };
       const wrap = (target, label) =>
         new Proxy(target, {
-          get(object, key) {
+          get(object, key, receiver) {
+            // A module-style steps file may destructure ({page}) from its argument.
+            if (key === 'page' && label === 'page') return receiver;
             const value = Reflect.get(object, key);
             if (typeof value !== 'function' || typeof key !== 'string') return value;
             return (...args) => {
@@ -880,7 +897,7 @@ export async function checkCommand({values, positionals}, options = {}) {
       throw new ToolError('invalid_viewport', 'Use WIDTHxHEIGHT with dimensions from 240 to 3840.', 2);
     return {width: Number(match[1]), height: Number(match[2])};
   });
-  const steps = values.steps ? await readFile(values.steps, 'utf8') : '';
+  const steps = values.steps ? stepsBody(await readFile(values.steps, 'utf8')) : '';
   if (Buffer.byteLength(steps) > 48000) throw new ToolError('steps_too_large', 'Task steps exceed 48 KB.', 2);
   let result;
   const local = /^http:\/\//.test(input) && !/^\/a\/[A-Za-z0-9]{6,12}\/?$/.test(new URL(input).pathname);

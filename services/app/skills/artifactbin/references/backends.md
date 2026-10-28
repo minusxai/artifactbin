@@ -64,7 +64,7 @@ await client.mutate({mutation:gql`mutation Save($items:[budget__BudgetInput!]!){
 
 This illustrates naming only: `save`, fields and return selection must match your backend SDL. Backend reads do not promise cross-tab push; use documented runtime invalidation and test requested refresh behavior. Add polling only when needed by the task.
 
-The shared-app example keeps tasks in the backend store and a display preference in viewer-local Apollo state. Check it as an editor and a viewer; viewers must not be able to run the editor mutation.
+The shared-app example keeps weekly targets in the backend store (a signed-in-only mutation), reads a linked dataset and keeps dark mode in viewer-local Apollo state. Check it signed in and as a guest; guests must not be able to run the mutation.
 
 ## Owner secret bindings
 
