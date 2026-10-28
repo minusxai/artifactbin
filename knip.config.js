@@ -46,8 +46,6 @@ export default {
       // vitest.config.ts setup files: resolved by the services/app workspace, which owns them.
       ignoreUnresolved: [/^\.\/services\/app\/test\/setup\//],
       ignoreDependencies: [
-        // scripts/lib/type-check.mjs runs its platform binary by path.
-        '@typescript/native-preview',
         // Hoists the already-required scenegraph 5.3.0 graph once across Vega's
         // parser, labels and view transforms; Vega retains its required 5.2.1.
         'vega-scenegraph',

@@ -30,6 +30,7 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { say } from '../events';
 import { pgliteDialect } from './pglite';
+import { assertHumanAccountSchema } from './account-migration';
 
 export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; html?:string; idempotencyKey?:string; otp?: string; url?: string }
 export interface Mailer { send(mail: OutgoingMail): Promise<void> }
@@ -295,7 +296,9 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
   };
   const exists = async (): Promise<boolean> =>
     (await queryable.query('SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = \'user\'', [schema])).rows.length > 0;
-  if (!(await exists())) {
+  if (await exists()) {
+    await assertHumanAccountSchema(raw, schema);
+  } else {
     const { runMigrations } = await getMigrations(auth.options);
     await runMigrations();
   }
