@@ -98,6 +98,18 @@ export async function checkCommand({values, positionals}, options = {}) {
         2
       );
     const requester = body => client.request('/api/browser-sessions', {method: 'POST', body});
+    // Warm up: plain reads of the page and its linked datasets first, so the first hosted run
+    // does not meet a cold start. Never fails the check; capped at 5 s.
+    await Promise.race([
+      (async () => {
+        const html = await (await client.request(`/a/${id}/raw`, {raw: true})).text();
+        const refs = [...html.matchAll(/<link\b[^>]*\baf-dataset\b[^>]*>/g)].flatMap(
+          ([tag]) => tag.match(/href="ref:([A-Za-z0-9]+)"/)?.slice(1) ?? []
+        );
+        await Promise.allSettled(refs.map(ref => client.request('/api/artifacts/' + ref)));
+      })().catch(() => {}),
+      new Promise(resolve => setTimeout(resolve, 5000).unref?.())
+    ]);
     const run = async (file, who) => {
       const found = await checkHosted({
         target: '/a/' + id,

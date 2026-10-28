@@ -1,16 +1,5 @@
 <!doctype html>
-<!--
-Example: a shared household-budget dashboard rendered from one APP config: KPIs, spend vs target
-per category, spend against budget by month, who paid what, a drill-down, a per-viewer dark mode
-(Apollo local state) and a signed-in-only target editor (backend store).
-Usage: copy it as index.html with garden.ts, gen-transactions.mjs and shared-app-steps, -guest
-  and -cleanup .mjs (as steps, guest, cleanup.mjs); run the generator once, publish its CSV (--type
-  dataset), put the ID after ref:; edit only APP (defaultTargets: plausible monthly amounts) and
-  garden.ts's names; then node scripts/publish.mjs index.html && node scripts/check.mjs index.html
-  --steps steps.mjs --guest-steps guest.mjs --cleanup-steps cleanup.mjs
-Gotchas: replace this comment with one line describing your page. The dataset and backend need
-  different data-af-name values. Never publish the ref: placeholder.
--->
+<!-- Example: a shared budget dashboard. Usage: and Gotchas: are above APP; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -19,6 +8,15 @@ Gotchas: replace this comment with one line describing your page. The dataset an
 <link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID" data-af-mode="live">
 <link rel="af-backend" data-af-name="budget" href="./garden.ts">
 <script type="module" id="app-config">
+// KPIs, targets per category, a monthly trend, payers, a drill-down, per-viewer dark mode (Apollo
+//   local state) and a signed-in target editor (backend store).
+// Usage: copy it as index.html with garden.ts, gen-transactions.mjs and shared-app-steps, -guest
+//   and -cleanup .mjs (as steps, guest, cleanup.mjs); run the generator once, publish its CSV
+//   (--type dataset), put the ID after ref:; edit only APP (defaultTargets: plausible monthly
+//   amounts) and garden.ts's names; then node scripts/publish.mjs index.html && node
+//   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
+//   cleanup.mjs. Gotchas: the dataset and backend need different data-af-name values; never
+//   publish the ref: placeholder. The comment at the top may stay as it is.
 // The only part to edit. columns maps roles to the dataset's column labels.
 window.APP = {
   dataset: 'transactions', backend: 'budget', currency: 'USD',
@@ -131,13 +129,15 @@ function render(){if(!rows.length)return;
     const li=item('cat-'+cat),button=item('cat-'+cat+'-open','button'),goal=targets[cat];
     const got=sum(list.filter(row=>row.category===cat)),over=goal!=null&&got>goal;
     button.type='button';button.setAttribute('aria-pressed',String(cat===current));
-    button.textContent=`${cat}: ${money.format(got)} of `+(goal!=null?money.format(goal):'none');
+    button.textContent=`${cat}: ${money.format(got)} of `;button.append(Object.assign(item(
+      `cat-${cat}-target`,'span'),{textContent:goal!=null?money.format(goal):'none'}));
     if(over)button.append(Object.assign(item(`cat-${cat}-over`,'b'),{textContent:` ▲ over by `+
       money.format(got-goal)}));
     const bar=item('cat-'+cat+'-bar','span');bar.className='bar';li.classList.toggle('over',over);
     button.append(bar);bar.appendChild(document.createElement('i')).style.width=Math.min(100,goal?
       got/goal*100:0)+'%';
-    button.onclick=()=>setLocal({category:cat});li.append(button);return li;}));
+    button.onclick=()=>{$('#editor').dataset.for=cat;$('#amount').value=targets[cat]??'';
+      setLocal({category:cat});};li.append(button);return li;})); // the render keeps typed values
   const cat=current,picked=list.filter(row=>row.category===cat),n=picked.length;
   $('#drill-title').textContent=`${cat} · ${month()} · ${n} rows · ${money.format(sum(picked))}`;
   $('#rows').replaceChildren(...picked.map(row=>{
@@ -156,13 +156,13 @@ function render(){if(!rows.length)return;
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 async function chart(key,values,mark,x,color,y){
   views[key]?.finalize();const ink=token('--foreground'),sumY={aggregate:'sum',field:y,
-    type:'quantitative'};
+    type:'quantitative'},sort=key==='trend'?null:'ascending'; // trend: data (month) order
   const spec=compile({width:'container',height:200,autosize:{type:'fit',contains:'padding'},
     background:'transparent',data:{values},mark:{type:mark,point:mark==='line'},encoding:{
-      x:{field:x,type:'ordinal',title:null,axis:{labelAngle:0}},color:{field:color,type:'nominal',
-        title:null},y:{...sumY,title:null,axis:{format:',.0f'}},tooltip:[{field:x,type:'nominal'},
-        {field:color,type:'nominal'},{...sumY,format:',.2f'}]},config:{view:{stroke:null},
-      axis:{labelColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--border')},
+      x:{field:x,type:'ordinal',sort,title:null,axis:{labelAngle:0}},color:{field:color,
+        type:'nominal',title:null},y:{...sumY,title:null,axis:{format:',.0f'}},tooltip:[{field:x,
+        type:'nominal'},{field:color,type:'nominal'},{...sumY,format:',.2f'}]},config:{view:{
+      stroke:null},axis:{labelColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--border')},
       legend:{labelColor:ink,titleColor:ink,orient:'bottom'},range:{category:[token('--primary'),
         token('--chart-2'),token('--chart-3'),token('--chart-4'),token('--chart-5'),ink]}}}).spec;
   views[key]=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:$('#'+key),

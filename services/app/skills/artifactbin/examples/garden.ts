@@ -1,8 +1,8 @@
 /**
  * Example: backend for examples/shared-app.html (linked as data-af-name="budget"): shared monthly
  *   targets per category, saved by signed-in readers over the page's APP.defaultTargets.
- * Next: replace this header with one line; rename the type and fields to your data; keep the
- *   store calls and @auth.
+ * Next: rename the type and fields to your data; keep the store calls and @auth. This header
+ *   may stay as it is.
  * Usage: publish it together with the page (node scripts/publish.mjs index.html).
  * Gotchas: backend files are published as backend sources, never as public assets. Writes pass
  *   the read version as `expected`, so a concurrent edit fails instead of being overwritten.
@@ -37,6 +37,8 @@ export default {
   const {value,version}=await caps.store.get();
   const targets=(value?.targets??[]).filter(item=>item.category!==args.category)
    .concat({category:args.category,amount:Math.round(args.amount*100)/100});
+  // A concurrent edit is rejected, not overwritten: set throws, the page shows the error, and its
+  // onBackendChange reload already holds the newer targets for the editor to save again.
   await caps.store.set({targets},{expected:version});
   return targets.at(-1)!;
  },

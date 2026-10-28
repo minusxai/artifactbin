@@ -11,10 +11,9 @@ const source = readFileSync(new URL('../../../skills/artifactbin/examples/deck-s
 const saved = {document: globalThis.document, NodeFilter: (globalThis as {NodeFilter?: unknown}).NodeFilter};
 afterEach(() => Object.assign(globalThis, saved));
 
-/** Runs the steps over one slide; returns the claim error, or null when every step passes. */
-async function claims(title: string, body: string, badge = '<p class="illustrative">Illustrative figures</p>'): Promise<string | null> {
-  const dom = new JSDOM(`<main><section data-af-slide data-af-id="slide-a"><p class="t-label">02 · Market</p>` +
-    `<h2>${title}</h2>${body}${badge}</section></main><span id="count"></span>`);
+/** Runs the steps over one page; returns the first failure, or null when every step passes. */
+async function run(html: string): Promise<string | null> {
+  const dom = new JSDOM(html);
   Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter});
   const locator: unknown = new Proxy({}, {get: (_, key) => key === 'count' ? async () => 1 : key === 'nth' ? () => locator : async () => {}});
   const page = {waitForFunction: async () => {}, evaluate: async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg),
@@ -27,6 +26,13 @@ async function claims(title: string, body: string, badge = '<p class="illustrati
     return (error as Error).message;
   }
 }
+
+const NAV = '<nav data-af-deck-chrome><button>←</button><button>→</button><span id="count">01 / 01</span></nav>';
+const BADGE = '<p class="illustrative">Illustrative figures</p>';
+/** Runs the steps over one slide (with the deck nav and, unless replaced, the badge). */
+const claims = (title: string, body: string, badge = BADGE, before = '') => run(`${before}<main><section data-af-slide ` +
+  `data-af-id="slide-a"><p class="t-label">02 · Market</p><h2>${title}</h2>${body}${badge}</section></main>${NAV}`);
+const flow = (labels: string[]) => '<div class="figure"><svg>' + labels.map(label => `<rect></rect><text>${label}</text>`).join('') + '</svg></div>';
 
 it('reads SVG text node by node, so a visible tick or label backs a title number', async () => {
   const chart = '<div class="chart"><svg><text>0</text><text>2</text><text>4</text><text>14</text></svg></div>';
@@ -55,5 +61,19 @@ it('passes plain titles whose numbers are on the slide, and skips template place
 
 it('requires the Illustrative figures badge on every slide, even one without figures', async () => {
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>', '')).toContain('no Illustrative figures badge on slide-a');
+  expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
+});
+
+it('treats "in one shift"-style phrases as durations, but a count of shown items as a count', async () => {
+  const boxes = flow(['Hear', 'Locate', 'Dispatch', 'Repair']);
+  expect(await claims('From pipe noise to a repair crew in one shift', boxes)).toContain("claims 'in one shift'");
+  expect(await claims('From pipe noise to a repair crew in one shift', boxes + '<p>Crew dispatched within one shift</p>')).toBeNull();
+  expect(await claims('Under two weeks to install', '<ul><li>Installs in a day</li></ul>')).toContain("claims 'under two weeks'");
+  expect(await claims('From pipe noise to repair in four steps', boxes)).toBeNull();
+  expect(await claims('From pipe noise to repair in three steps', boxes)).toContain("claims 'in three steps'");
+});
+
+it('fails on stray text outside the slides and the nav, such as a leftover "-->"', async () => {
+  expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>', BADGE, '-->')).toContain('stray text outside the slides: "-->"');
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
 });

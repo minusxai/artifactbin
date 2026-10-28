@@ -6,9 +6,12 @@
  */
 const CATEGORY='Groceries',open=`[data-af-id="cat-${CATEGORY}-open"]`;
 await step(`the ${CATEGORY} test target is cleared back to its default`,async()=>{
-  await page.locator(open).waitFor({timeout:5000});await page.locator(open).click();
+  await page.waitForFunction(()=>/^Loaded/.test(document.querySelector('#status')?.textContent),
+    null,{timeout:6000});
+  await page.locator(open).click();
+  await page.locator(`#editor[data-for="${CATEGORY}"]`).waitFor({timeout:2000});
   await page.locator('#amount').fill('');
   await page.getByRole('button',{name:/save target/i}).click();
   await page.waitForFunction(()=>/saved/i.test(document.querySelector('#status').textContent),
-    null,{timeout:4000});});
+    null,{timeout:5000});});
 return {steps:'cleanup'};

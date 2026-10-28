@@ -1,26 +1,23 @@
 <!doctype html>
-<!--
-Example: an eight-slide deck designed for 1200x630, rendered from one SLIDES array: prev/next
-buttons, dots, arrow keys and Home/End, Vega-Lite charts, SVG flow and 2x2 diagrams.
-Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only SLIDES
-  (no drafts elsewhere, never the CSS or JS); then node scripts/publish.mjs index.html &&
-  node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
-Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
-  traction, business model, competition, ask); N topics means N slides. Types: cover is the problem
-  slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3}, bullets
-  {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow {steps≤4},
-  matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,milestone,
-  items≤3 [{label,amount} or {label,pct}]} (shows sum, shares, milestone; titled from these).
-  Titles ≤2 lines; they may only state numbers, time spans or comparisons the slide itself shows.
-  Say if a chart counts cumulatively. Unique ids key data-af-id. Every slide shows
-  "Illustrative figures"; real:true removes it.
--->
+<!-- Example: an eight-slide pitch deck. Usage: and Gotchas: are above SLIDES; keep this line. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="redline">
 <title>Pitch deck</title>
 <script type="module" id="slides-data">
+// Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only
+//   SLIDES (no drafts elsewhere, never the CSS or JS); then node scripts/publish.mjs index.html &&
+//   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+// Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
+//   traction, business model, competition, ask); N topics means N slides. Types: cover is the
+//   problem slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3},
+//   bullets {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow
+//   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,
+//   milestone, items≤3 [{label,amount} or {label,pct}]} (shows sum, shares, milestone; titled
+//   from these). Titles ≤2 lines; they may only state numbers, time spans or comparisons the slide
+//   itself shows. Say if a chart counts cumulatively. Unique ids key data-af-id. Every slide shows
+//   "Illustrative figures"; real:true removes it. The comment at the top may stay as it is.
 // The only part to edit: one entry per slide, rendered by the template below.
 window.SLIDES = [
   {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',

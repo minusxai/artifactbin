@@ -26,7 +26,16 @@ await step('"Illustrative figures" on every slide',async()=>{
     .filter(slide=>!real.includes(slide.dataset.afId.replace(/^slide-/,''))&&
       !slide.querySelector('.illustrative')).map(s=>s.dataset.afId),REAL);
   if(missing.length)throw Error('no Illustrative figures badge on '+missing.join(', '));});
-if(!PLACEHOLDERS_OK)await step('no [placeholders] left',async()=>{
+await step(PLACEHOLDERS_OK?'no stray text outside the slides':
+  'no [placeholders] or stray text left',async()=>{
+  // Text outside the slides and the deck nav (a "-->" left by an edited comment) shows on the page.
+  const stray=await page.evaluate(()=>{const walker=document.createTreeWalker(document.body,
+    NodeFilter.SHOW_TEXT),out=[];for(let t=walker.nextNode();t;t=walker.nextNode())if(t.textContent
+    .trim()&&!t.parentElement.closest('[data-af-slide],nav,script,style,template,noscript'))
+    out.push(t.textContent.trim().slice(0,40));return out;});
+  if(stray.length)throw Error('stray text outside the slides: '+stray.map(t=>JSON.stringify(t))
+    .join(', ')+' (an edited comment left behind?)');
+  if(PLACEHOLDERS_OK)return;
   const left=await page.evaluate(()=>[...document.querySelectorAll('[data-af-slide]')]
     .filter(slide=>slide.textContent.includes('[')).map(slide=>slide.dataset.afId).concat(
       [document.title,document.querySelector('meta[name=description]')?.content??'']
@@ -49,10 +58,23 @@ const claims=await page.evaluate(()=>[...document.querySelectorAll('[data-af-sli
   for(const t of title.match(/\$?\d[\d,]*\.?\d*[a-z%×]*/gi)??[])if(!values.has(num(t)))bad.push(t);
   // A time word needs the same form in one visible element, beside a number or a title neighbour.
   const time=new RegExp('^(seconds?|minutes?|hours?|days?|weeks?|months?|years?|mornings?|'+
-    'afternoons?|evenings?|overnight|same-day|instant(ly)?|real-time|faster|cheaper|quicker|'+
-    'today|now|currently)$'),stop=new Set(['the','and','not','for','but','with','from','than',
-    'that','this','our','its','your','are','was','has','have','into']);
-  words.forEach((w,i)=>{if(!time.test(w))return;
+    'afternoons?|evenings?|nights?|weekends?|shifts?|seasons?|cycles?|sprints?|visits?|trips?|'+
+    'overnight|same-day|instant(ly)?|real-time|faster|cheaper|quicker|today|now|currently)$'),
+    stop=new Set(['the','and','not','for','but','with','from','than','that','this','our','its',
+    'your','are','was','has','have','into']),handled=new Set();
+  // "in one shift", "within a single visit", "under two weeks": a duration whatever the unit. Its
+  // unit needs the same form beside a number or quantity word in one visible element; a non-time
+  // unit may instead count the slide's items ("in four steps" over four boxes).
+  const Q='a few|a couple of|several|an|a|one|two|three|four|five|six|seven|eight|nine|ten|\\d+';
+  const qty=new RegExp(`\\d|\\b(${Q}|single)\\b`),counts=[slide.querySelectorAll('li').length,
+    ...[...slide.querySelectorAll('.figure svg')].map(svg=>svg.querySelectorAll('rect').length)];
+  for(const m of low.matchAll(new RegExp(`\\b(?:in|within|under|inside|over) (${Q}) (?:(?:single|`+
+    'full|whole|short|working|business) )?([a-z-]+)','g'))){const unit=m[2];handled.add(unit);
+    const n=/^\d+$/.test(m[1])?+m[1]:['one','two','three','four','five','six','seven','eight',
+      'nine','ten'].indexOf(m[1])+1;
+    if(!nodes.some(node=>new RegExp(`\\b${unit}\\b`).test(node)&&qty.test(node))&&
+      (time.test(unit)||!(n>0&&counts.includes(n))))bad.push(m[0]);}
+  words.forEach((w,i)=>{if(!time.test(w)||handled.has(w))return;
     const near=[words[i-1],words[i+1]].filter(x=>x&&x.length>2&&!stop.has(x));
     if(!nodes.some(node=>new RegExp(`\\b${w}\\b`).test(node)&&(/\d/.test(node)||near.some(x=>
       new RegExp(`\\b${x}\\b`).test(node)))))bad.push(w);});
