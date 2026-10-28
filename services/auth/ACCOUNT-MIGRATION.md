@@ -7,7 +7,10 @@ need the explicit operation below. Fresh 1.7.7 and pre-issuer 1.6 schemas
 need no issuer cleanup. Generated `SCHEMA.sql` describes fresh databases only;
 never apply its issuer-column omission as a DROP COLUMN on an existing database.
 Startup checks compatibility and refuses the legacy
-schema with instructions; it never automatically runs this operation.
+schema with instructions; it never automatically runs this operation. It also
+refuses duplicate `(providerId, accountId)` identities on already-compatible
+nullable/no-issuer schemas, using a read-only audit. It never automatically
+merges identities or modifies data at startup.
 
 Upstream: [account schema change](https://github.com/better-auth/better-auth/blob/v1.7.7/docs/content/blogs/1-7-account-schema.mdx),
 [upgrade guide](https://github.com/better-auth/better-auth/blob/v1.7.7/docs/content/docs/guides/1-7-upgrade-guide.mdx).

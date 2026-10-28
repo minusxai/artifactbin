@@ -31,12 +31,18 @@ async function inspect(db: Kysely<Record<string, unknown>>, schema: string) {
   return {columns: columns.rows, indexes: indexes.rows};
 }
 
+async function assertNoIdentityCollisions(db: Kysely<Record<string, unknown>>, schema: string): Promise<void> {
+  const collision = await sql`SELECT 1 FROM ${identifier(schema)} GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`.execute(db);
+  if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; stop all auth/account writers and resolve ownership under review without merging or deleting identities automatically. See services/auth/ACCOUNT-MIGRATION.md.');
+}
+
 /** Read-only startup guard. The operator, never a mixed-version startup, owns DDL. */
 export async function assertHumanAccountSchema(db: Kysely<Record<string, unknown>>, schema = 'auth'): Promise<void> {
   const state = await inspect(db, schema);
   if (state.columns.some(c => c.column_name === 'issuer' && c.is_nullable === 'NO') || state.indexes.length) {
     throw new Error(`Authentication account schema requires the Better Auth 1.7.3 upgrade. ${guidance}`);
   }
+  if (state.columns.length) await assertNoIdentityCollisions(db, schema);
 }
 
 /** Explicit coordinated operation; preserves issuer values and refuses ambiguous identity/schema. */
@@ -65,8 +71,7 @@ export async function migrateHumanAccountSchema(db: Kysely<Record<string, unknow
     if (state.indexes.length > 1 || (index && (!issuer || !index.on_account || !index.default_ordering || !index.default_collation || !index.indisunique || !index.indisvalid || !index.indisready || !index.plain || index.method !== 'btree' || index.constraint_owned || index.keys.join(',') !== 'issuer,accountId'))) {
       throw new Error('Unexpected legacy authentication index; migration refused');
     }
-    const collision = await sql`SELECT 1 FROM ${table} GROUP BY "providerId", "accountId" HAVING count(*) > 1 LIMIT 1`.execute(tx);
-    if (collision.rows.length) throw new Error('Duplicate authentication provider/account identities; migration refused without merging or deleting identities');
+    await assertNoIdentityCollisions(tx, schema);
     if (issuer?.is_nullable === 'NO') await sql`ALTER TABLE ${table} ALTER COLUMN issuer DROP NOT NULL`.execute(tx);
     if (index) await sql`DROP INDEX ${sql.id(schema, 'account_issuer_accountId_uidx')}`.execute(tx);
     return {changed: issuer?.is_nullable === 'NO' || !!index};

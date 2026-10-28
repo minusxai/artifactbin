@@ -80,3 +80,13 @@ it('refuses a legacy-named index on another table atomically', async () => {
   await expect(migrateHumanAccountSchema(db, options)).rejects.toThrow('Unexpected legacy authentication index');
   expect(await schema()).toEqual(before);
 });
+
+it.each([false, true])('startup refuses duplicate identities with nullable issuer present=%s without mutations', async hasIssuer => {
+  if (hasIssuer) await pg.exec('ALTER TABLE auth.account ADD COLUMN issuer text');
+  await pg.exec(`INSERT INTO auth.account (id,"providerId","accountId") VALUES ('one','provider','same'),('two','provider','same')`);
+  const before = await schema();
+  const rows = await pg.query('SELECT * FROM auth.account ORDER BY id');
+  await expect(assertHumanAccountSchema(db)).rejects.toThrow('Duplicate authentication provider/account identities');
+  expect(await schema()).toEqual(before);
+  expect(await pg.query('SELECT * FROM auth.account ORDER BY id')).toEqual(rows);
+});
