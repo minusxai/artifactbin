@@ -18,7 +18,7 @@ import {createNativeS3ObjectSink} from '../services/app/lib/native-history-impor
 import {storedUser,nativeIdentityDigest} from '../services/app/lib/native-identity-import/model';
 import {parseS3Url} from '../services/app/lib/object-store/url';
 
-interface Config{hostHeads:Record<string,string>;codec:string;publicationModule:string;publicationConfiguration:string;runtimeEnvironment:string;origin:string;port?:number}
+interface Config{extraTokens?:Record<string,unknown>[];hostHeads?:Record<string,string>;converted?:Record<string,{result:string;manifest:string}>;codec:string;publicationModule:string;publicationConfiguration:string;runtimeEnvironment:string;origin:string;port?:number}
 const sha=(b:Uint8Array|string)=>createHash('sha256').update(b).digest('hex');
 const ID_ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const newId=()=>[...randomBytes(6)].map(b=>ID_ALPHABET[b%62]).join('');
@@ -30,13 +30,31 @@ type Row=Record<string,unknown>;
 /** Every table this importer writes, in dependency order. One bulk insert per table per run. */
 const TABLES=['users','auth_user','tokens','artifact_id_registry','artifacts','artifact_versions','artifact_edits','artifact_source_ids','html_backend_versions','artifact_shares','dataset_policy_audit','annotations','comment_images','relations'] as const;
 type Table=typeof TABLES[number];
-interface Batch{rows:Record<Table,Row[]>;objects:Map<string,{bytes:Buffer;contentType?:string}>;pages:{id:string;assets:number;datasets:string[];comments:number;members:number}[];datasetIds:Set<string>}
+interface Batch{rows:Record<Table,Row[]>;objects:Map<string,{bytes:Buffer;contentType?:string}>;pages:{id:string;assets:number;datasets:string[];comments:number;members:number}[];datasetIds:Set<string>;unverifiedDatasets:Set<string>}
 
-/** Build one page's rows from its converted package. No database or network access. */
-async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publication:any){
+/** A page packaged by the old host builder: sealed context plus operator input files. */
+async function packagedInput(cfg:Config,id:string,codec:any){
  // A context re-sealed for the production schemas (context.json) wins over the converter's original (host-context.json).
- const dir=cfg.hostHeads[id],wire=JSON.parse(await fs.readFile(path.join(dir,'context.json'),'utf8').catch(()=>fs.readFile(path.join(dir,'host-context.json'),'utf8'))),context=codec.decodeNativePipelineContext(wire);
- const input=await readNativeMigrationHostInputs(context);
+ const dir=cfg.hostHeads?.[id]??fail('no_input:'+id),wire=JSON.parse(await fs.readFile(path.join(dir,'context.json'),'utf8').catch(()=>fs.readFile(path.join(dir,'host-context.json'),'utf8')));
+ return readNativeMigrationHostInputs(codec.decodeNativePipelineContext(wire));
+}
+/** Converter bytes are saved as JSON objects or Buffer JSON; restore them. */
+const bytesOf=(raw:any)=>raw instanceof Uint8Array?raw:raw?.type==='Buffer'?Uint8Array.from(raw.data):Uint8Array.from(Object.keys(raw).sort((a,b)=>Number(a)-Number(b)).map(k=>raw[k]));
+/** A page straight from the converter's output: its result, its batch manifest and the shared publication config. */
+async function convertedInput(cfg:Config,id:string,config:any){
+ const {result:resultPath,manifest:manifestPath}=cfg.converted![id]!,producer=path.dirname(cfg.codec),consumer=path.dirname(cfg.publicationModule);
+ const [{selectLatestHead},{selectNativePipelineRelations},{decodeNativePublicationBytes}]=await Promise.all([import(pathToFileURL(producer+'/latest-batch-prepare.ts').href),import(pathToFileURL(consumer+'/pipeline-relations.ts').href),import(pathToFileURL(consumer+'/pipeline-publication.ts').href)]);
+ const manifest=JSON.parse(await fs.readFile(manifestPath,'utf8')),head=manifest.heads.find((h:any)=>h.key.sourceId===id)??fail('manifest_head:'+id);
+ const canonical=await fs.readFile(head.sourceFile.path),revision=selectLatestHead(head,canonical,manifest.identityPlanSha256);
+ const result=JSON.parse(await fs.readFile(resultPath,'utf8'));if(result.status!=='assembled')fail('not_converted:'+id);
+ const assembly=result.assembly;for(const files of [assembly.input.files,assembly.result.files])for(const f of files??[])f.bytes=bytesOf(f.bytes);
+ const files:Record<string,Uint8Array>={sourceHead:canonical,compiledHtml:Buffer.from(assembly.result.html),comments:await selectNativePipelineRelations(config,revision)};
+ if(config.ancillaryFolders)files.ancillaryFolders=decodeNativePublicationBytes(config.ancillaryFolders);
+ return {context:{revision,assembly},recipe:{assemblySha256:assembly.sha256,authority:{...config.shared.schemas,capabilities:['live-operator-schema-check']}},files};
+}
+/** Build one page's rows from its converted package. No database or network access. */
+async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publication:any,publicationConfig:any){
+ const input=cfg.converted?.[id]?await convertedInput(cfg,id,publicationConfig):await packagedInput(cfg,id,codec),context=input.context;
  const assets:Row[]=[];
  // Assets are created here, offline: the product's bundle publisher rewrites the HTML and asks us for each id.
  const prepareRuntime=async(assemblies:any[],options:{pageId:string;visibility:string;shares?:{email:string;role:string}[]})=>{
@@ -104,7 +122,8 @@ async function preparePage(cfg:Config,id:string,batch:Batch,codec:any,publicatio
 
  // Datasets: shared between pages, so each is written once and skipped if it already exists.
  const source=await canonicalNativeObjectSource(catalog.root,catalog.ledgerPath,catalog.receipts);
- await verifyNativeCanonicalDatasets(catalog.projection,source.source);
+ // The Oct 24 export files behind some catalogs are gone; their projection rows still import, flagged as unverified.
+ try{await verifyNativeCanonicalDatasets(catalog.projection,source.source);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;for(const d of catalog.projection.datasets)batch.unverifiedDatasets.add(d.targetId);}
  const keys=new Set<string>();
  for(const d of catalog.projection.datasets){
   if(batch.datasetIds.has(d.targetId))continue;batch.datasetIds.add(d.targetId);
@@ -150,7 +169,7 @@ const env=JSON.parse(await fs.readFile(cfg.runtimeEnvironment,'utf8'));
 const [codec,publicationModule]=await Promise.all([import(pathToFileURL(cfg.codec).href),import(pathToFileURL(cfg.publicationModule).href)]);
 const publicationConfig=JSON.parse(await fs.readFile(cfg.publicationConfiguration,'utf8'));
 const publication=publicationModule.createNativePipelinePublication(publicationConfig),authSchema=publicationConfig.shared.schemas.authSchema,appSchema=publicationConfig.shared.schemas.appSchema;
-const started=Date.now(),batch:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set()};
+const started=Date.now(),batch:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(),unverifiedDatasets:new Set()};
 
 // Database through an SSH tunnel, as the earlier importer did; with a fixed query count the distance no longer matters.
 let ssh:ReturnType<typeof spawn>|undefined,client:pg.Client|undefined,queries=0;
@@ -167,17 +186,27 @@ try{
  const allDatasets=new Set<string>();
  count();const existing=(await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[ids])).rows;
  if(existing.length)fail('pages_exist:'+existing.map(r=>r.id).join(','));
- for(const id of ids)await preparePage(cfg,id,batch,codec,publication);
+ // Each page builds into its own rows first, so a page that cannot be prepared is skipped whole.
+ const skipped:Record<string,string>={};
+ for(const id of ids){
+  const own:Batch={rows:Object.fromEntries(TABLES.map(t=>[t,[]])) as unknown as Record<Table,Row[]>,objects:new Map(),pages:[],datasetIds:new Set(batch.datasetIds),unverifiedDatasets:new Set()};
+  try{await preparePage(cfg,id,own,codec,publication,publicationConfig);}catch(error){skipped[id]=(error as Error).message;continue;}
+  for(const t of TABLES)batch.rows[t].push(...own.rows[t]);for(const [k,v] of own.objects)batch.objects.set(k,v);batch.pages.push(...own.pages);
+  for(const d of own.datasetIds)batch.datasetIds.add(d);for(const d of own.unverifiedDatasets)batch.unverifiedDatasets.add(d);
+ }
+ if(!batch.pages.length)fail('nothing_to_import:'+JSON.stringify(skipped));
  count();for(const r of (await client.query<{id:string}>('SELECT id FROM artifacts WHERE id=ANY($1::text[])',[[...batch.datasetIds]])).rows)allDatasets.add(r.id);
  // Drop datasets that already exist (another page imported them earlier).
  if(allDatasets.size){for(const t of ['artifact_id_registry','artifacts','artifact_versions','artifact_shares','artifact_edits'] as const)batch.rows[t]=batch.rows[t].filter(r=>!allDatasets.has(String(r.id??r.artifact_id)));batch.rows.dataset_policy_audit=batch.rows.dataset_policy_audit.filter(r=>!allDatasets.has(String(r.dataset_id)));}
 
  // People and tokens are shared by every page in the batch: keep one row per id.
+ // Tokens created after the identity plan, supplied by the config as disabled provenance rows.
+ batch.rows.tokens.push(...(cfg.extraTokens??[]));
  for(const t of ['users','auth_user','tokens'] as const)batch.rows[t]=[...new Map(batch.rows[t].map(r=>[String(r.id),r])).values()];
  // Query 3: the columns of every table written, so a misnamed field fails before anything is written.
  count();const known=new Map<string,Set<string>>();for(const r of (await client.query<{t:string;c:string}>("SELECT CASE WHEN table_schema=$2 THEN 'auth_user' ELSE table_name END t,column_name c FROM information_schema.columns WHERE (table_schema=$1 AND table_name=ANY($3::text[])) OR (table_schema=$2 AND table_name='user')",[appSchema,authSchema,TABLES.filter(t=>t!=='auth_user')])).rows)known.set(r.t,(known.get(r.t)??new Set()).add(r.c));
  const unknownColumns=Object.fromEntries(TABLES.map(t=>[t,[...new Set(batch.rows[t].flatMap(r=>Object.keys(r)))].filter(c=>!known.get(t)?.has(c))]).filter(([,c])=>c.length));
- const summary={unknownColumns,pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
+ const summary={skipped,unknownColumns,unverifiedDatasets:[...batch.unverifiedDatasets],pages:batch.pages,rows:Object.fromEntries(TABLES.map(t=>[t,batch.rows[t].length])),files:batch.objects.size,fileBytes:[...batch.objects.values()].reduce((n,o)=>n+o.bytes.length,0),existingDatasetsReused:[...allDatasets]};
  if(!apply){console.log(JSON.stringify({mode:'dry-run',...summary,queries,seconds:Math.round((Date.now()-started)/1000)},null,1));process.exitCode=0;}
  else{
   // Files first, in parallel; conditional puts make reruns safe.
