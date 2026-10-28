@@ -1,6 +1,7 @@
 /**
  * The shared-app example's narrow-viewport steps (skills/artifactbin/examples/shared-app-steps.mjs) over a jsdom page:
- * the trend's x labels must follow the month selector (or read as dates in time order), and text outside main fails.
+ * the trend's x labels must follow the month selector (or read as dates in time order), text outside main fails, and
+ * dark mode, turned on to check it survives a reload, is turned back off (narrow() reports 'dark mode left on').
  */
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
@@ -29,10 +30,11 @@ async function narrow(labels: string[], before = ''): Promise<string | null> {
   const page = {viewportSize: () => ({width: 390, height: 800}), reload: async () => {}, locator,
     evaluate: async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg),
     waitForFunction: async (fn: (arg: unknown) => unknown, arg: unknown) => { if (!fn(arg)) throw Error('timed out'); },
-    getByRole: () => ({click: async () => { doc.documentElement.dataset.afDark = 'true'; }})};
+    getByRole: () => ({click: async () => { doc.documentElement.dataset.afDark = String(doc.documentElement.dataset.afDark !== 'true'); }})};
   const step = async (_label: string, fn: () => Promise<void>) => fn();
   try {
     await new (Object.getPrototypeOf(async function () {}).constructor)('page', 'step', source)(page, step);
+    if (doc.documentElement.dataset.afDark === 'true') return 'dark mode left on';
     return null;
   } catch (error) {
     return (error as Error).message;

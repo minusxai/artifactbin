@@ -1,7 +1,6 @@
 <!doctype html>
 <!-- Example: a shared budget dashboard. Usage: and Gotchas: are above APP; keep this line. -->
-<html lang="en">
-<head>
+<html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
 <title>Shared dashboard</title>
@@ -16,6 +15,9 @@
 //   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
 //   cleanup.mjs. Gotchas: the dataset and backend need different data-af-name values; never
 //   publish the ref: placeholder. The comment at the top may stay as it is.
+// Built with: one HTML page; @afbin/apollo local state for this browser's dark mode; a garden.ts
+//   backend store for shared targets (concurrent edits rejected, not overwritten); a published
+//   CSV dataset read live.
 // The only part to edit. columns maps roles to column labels; payers: names, never You/Partner.
 window.APP = {
   dataset: 'transactions', backend: 'budget', currency: 'USD',
@@ -25,8 +27,7 @@ window.APP = {
   labels: {list:'Spend vs target', trend:'Spent vs budget', payer:'Who paid what'},
   // Monthly budget per category until a shared target is saved; clearing one reverts to it.
   defaultTargets: {Rent:1650, Groceries:700, 'Dining out':380, Transport:200, Utilities:120,
-    Internet:55},
-};
+    Internet:55}};
 </script>
 <style>
 *{box-sizing:border-box}body{line-height:1.5}.number{font-variant-numeric:tabular-nums}
@@ -106,8 +107,7 @@ async function loadRows(){
     }
     after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
   }while(after);
-  rows=out.filter(row=>row.date);
-}
+  rows=out.filter(row=>row.date);}
 async function loadTargets(){const result=await client.query({query:targetsQuery,variables:{d:
   JSON.stringify(APP.defaultTargets??{})}});if(result.errors?.length)throw Error(result.errors[0]
   .message);signedIn=result.data[B].signedIn;

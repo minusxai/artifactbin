@@ -1,7 +1,6 @@
 <!doctype html>
 <!-- Example: an eight-slide pitch deck. Usage: and Gotchas: are above SLIDES; keep this line. -->
-<html lang="en">
-<head>
+<html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="redline">
 <title>Pitch deck</title>
@@ -14,10 +13,13 @@
 //   problem slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3},
 //   bullets {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow
 //   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,
-//   milestone, items≤3 [{label,amount} or {label,pct}]} (shows sum, shares, milestone; titled
-//   from these). Titles ≤2 lines; they may only state numbers, time spans or comparisons the slide
-//   itself shows. Say if a chart counts cumulatively. Unique ids key data-af-id. Every slide shows
-//   "Illustrative figures"; real:true removes it. The comment at the top may stay as it is.
+//   from (traction chart id), milestone (target only; shown as "last traction value → target"),
+//   items≤3 [{label,amount} or {label,pct}]} (shows sum, shares; titled from these). Titles ≤2
+//   lines; they may only state numbers, time spans or comparisons the slide itself shows. Say if
+//   a chart counts cumulatively. Unique ids key data-af-id. Every slide shows "Illustrative
+//   figures"; real:true removes it. The comment at the top may stay as it is.
+// Built with: one HTML page from a SLIDES data block; Vega-Lite charts; keyboard and click
+//   navigation; per-slide PNG export.
 // The only part to edit: one entry per slide, rendered by the template below.
 window.SLIDES = [
   {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
@@ -41,7 +43,7 @@ window.SLIDES = [
       {label:'[Incumbent]', x:0.3, y:0.3}, {label:'[Alternative]', x:0.7, y:0.25}]},
   {id:'ask', type:'ask', label:'The ask', title:'[The milestone this round reaches]', unit:'$#M',
     contact:'[name@company.com]', items:[{label:'[Product]',amount:1.5},{label:'[Sales]',amount:1}],
-    milestone:'[26 → 100 customers]'},
+    from:'traction', milestone:'[100 customers]'},
 ];
 </script>
 <style>
@@ -65,9 +67,7 @@ nav button{font:inherit;color:inherit;background:none;border:1px solid currentCo
   height:12px;padding:0;border-radius:50%}nav .dot[aria-current=true]{background:var(--ds-red)}
 button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 @media(max-width:720px){[data-af-slide]{padding:28px 20px 84px;height:auto;min-height:100vh}}
-</style>
-</head>
-<body>
+</style></head><body>
 <main id="deck"></main>
 <nav data-af-deck-chrome aria-label="Slides">
 <button id="prev" type="button" aria-label="Previous slide">←</button><span id="dots"></span>
@@ -102,8 +102,7 @@ function flow(s){
     if(n<steps.length-1)svg.append(svgEl('path',{d:`M${x+w-56} 110h40m-10-8 10 8-10 8`,fill:'none',
       stroke:'currentColor','stroke-width':2}));
   });
-  return svg;
-}
+  return svg;}
 function matrix(s){
   const svg=svgEl('svg',{viewBox:'0 0 900 300',role:'img','aria-label':`${s.x} by ${s.y}`});
   svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}));
@@ -124,13 +123,16 @@ SLIDES.forEach((s,n)=>{
     'aria-label':`Slide ${n+1}: ${s.label}`});
   section.append(el('p',id+'-label',{class:'t-label soft'},n?`${pad(n+1)} · ${s.label}`:s.label));
   section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},s.title));
-  // The ask computes its total and shares (rounded to sum to 100), so the parts always add up.
+  // The ask computes its total and shares (rounded to sum to 100), so the parts always add up,
+  // and starts its milestone from the from chart's last value, so the two slides agree.
   if(s.type==='ask'){const parts=s.items??[],v=p=>p.amount??p.pct??0,fmt=x=>s.unit.replace('#',
       +x.toFixed(2)),total=parts.reduce((t,p)=>t+v(p),0),raw=parts.map(p=>v(p)/total*100);
+    const c=SLIDES.find(x=>x.id===s.from),y=c?.data.at(-1)?.y,from=y==null?'':(c.unit??'#')
+      .replace('#',y.toFixed(+(c.format?.match(/\.(\d)/)?.[1]??0)))+' → ';
     const pct=raw.map(Math.floor);raw.map((r,i)=>[r-pct[i],i]).sort((a,b)=>b[0]-a[0])
       .slice(0,100-pct.reduce((a,b)=>a+b,0)).forEach(([,i])=>pct[i]++);
     s.stats=[...parts[0]?.amount!=null?[{value:fmt(total),label:'Raising'}]:[],...s.milestone?
-      [{value:s.milestone,label:'Milestone'}]:[]];s.text=s.contact;
+      [{value:from+s.milestone,label:'Milestone'}]:[]];s.text=s.contact;
     s.items=parts.map((p,i)=>`${p.label}: ${p.amount!=null?fmt(p.amount)+' · ':''}${pct[i]}%`);}
   if(s.text)section.append(el('p',id+'-text',{class:'t-body-l'},s.text));
   if(s.stats){const row=section.appendChild(el('div',id+'-stats',{class:'stats'}));
@@ -190,11 +192,9 @@ async function drawCharts(){views.forEach(view=>view.finalize());
         gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
     const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
       expr:vega.expressionInterpreter});await view.runAsync();return view;
-  }));
-}
+  }));}
 await drawCharts();const theme=new MutationObserver(drawCharts);
 theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
 addEventListener('pagehide',()=>{theme.disconnect();seen.disconnect();views.map(v=>v.finalize());});
 </script>
-</body>
-</html>
+</body></html>

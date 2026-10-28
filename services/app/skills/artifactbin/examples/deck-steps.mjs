@@ -56,6 +56,14 @@ const claims=await page.evaluate(()=>[...document.querySelectorAll('[data-af-sli
   for(const [word,pct] of Object.entries(parts))if(new RegExp(`\\b(a|one) ${word}\\b|\\b${word} of`)
     .test(low)&&!seen.some(v=>Math.abs(v-pct)<=3))bad.push(`a ${word}`);
   for(const t of title.match(/\$?\d[\d,]*\.?\d*[a-z%×]*/gi)??[])if(!values.has(num(t)))bad.push(t);
+  // Number words count like digits: the value, the same word or that many labelled items (four
+  // flow boxes back "four steps"). "one" is left to the duration rules (it mostly means "a").
+  const N='two|three|four|five|six|seven|eight|nine|ten|eleven|twelve',items=new Set(['li',
+    '.stats>div','.figure svg rect','.figure svg circle'].map(s=>slide.querySelectorAll(s).length));
+  for(const m of low.matchAll(new RegExp(`\\b(?:(${N}|a|one) )?(dozen|hundred)(s?)\\b|\\b(${N})\\b`,
+    'g'))){const v=w=>N.split('|').indexOf(w)+2,n=m[4]?v(m[4]):Math.max(1,v(m[1]))*
+    (m[2]==='dozen'?12:100);if(!values.has(n)&&!(m[3]&&seen.some(x=>x>=n))&&!(m[4]&&items.has(n))&&
+    !new RegExp(`\\b${m[0]}\\b`).test(body))bad.push(m[0]);}
   // A time word needs the same form in one visible element, beside a number or a title neighbour.
   const time=new RegExp('^(seconds?|minutes?|hours?|days?|weeks?|months?|years?|mornings?|'+
     'afternoons?|evenings?|nights?|weekends?|shifts?|seasons?|cycles?|sprints?|visits?|trips?|'+
@@ -71,6 +79,12 @@ const claims=await page.evaluate(()=>[...document.querySelectorAll('[data-af-sli
     'single|full|whole|short|working|business) )?([a-z-]+)','g'))){const unit=m[1];
     if(!time.test(unit))continue;handled.add(unit);
     if(!nodes.some(node=>new RegExp(`\\b${unit}\\b`).test(node)&&qty.test(node)))bad.push(m[0]);}
+  // "five-year", "3-month", "multi-year", "year-long": a duration whose unit needs the same form
+  // beside a number or quantity word in one visible element ("5-year contracts"), or the compound.
+  const U='second|minute|hour|day|week|month|quarter|year|decade|shift|season';
+  for(const m of low.matchAll(new RegExp(`\\b(?:(?:${N}|one|dozen|hundred|multi|\\d+)-(${U})s?`+
+    `|(${U})-long)\\b`,'g'))){const unit=m[1]??m[2];if(!nodes.some(node=>node.includes(m[0])||
+    new RegExp(`\\b${unit}s?\\b`).test(node)&&qty.test(node)))bad.push(m[0]);}
   words.forEach((w,i)=>{if(!time.test(w)||handled.has(w))return;
     const near=[words[i-1],words[i+1]].filter(x=>x&&x.length>2&&!stop.has(x));
     if(!nodes.some(node=>new RegExp(`\\b${w}\\b`).test(node)&&(/\d/.test(node)||near.some(x=>
@@ -92,6 +106,20 @@ await step('the ask shares add up to 100%',async()=>{
   const shares=await page.evaluate(()=>[...document.querySelectorAll('.ink li')].map(li=>
     li.textContent.match(/(\d+)%$/)?.[1]).filter(Boolean).map(Number));
   if(shares.length&&shares.reduce((a,b)=>a+b,0)!==100)throw Error('ask shares sum to '+shares);});
+await step("the ask's milestone starts from the traction chart's last value",async()=>{
+  // The ask's from names the traction chart (else the last line chart); its Milestone stat must
+  // start from that chart's last value, so the two slides can't disagree.
+  const off=await page.evaluate(()=>{const all=window.SLIDES??[],ask=all.find(s=>s.type==='ask');
+    const chart=all.find(s=>s.id===ask?.from)??all.filter(s=>s.mark==='line').at(-1),last=chart
+      ?.data?.at(-1)?.y,dp=+(chart?.format?.match(/\.(\d)/)?.[1]??0);
+    const stat=[...document.querySelectorAll(`[data-af-id="slide-${ask?.id}"] .stats>div`)]
+      .find(div=>div.lastElementChild?.textContent==='Milestone')?.firstElementChild.textContent;
+    if(!stat||typeof last!=='number')return null;
+    const from=stat.match(/([\d.,]+)[^\d→]*→(?!.*→)/)?.[1]?.replace(/,/g,'');
+    return from!==undefined&&Math.abs(parseFloat(from)-+last.toFixed(dp))<1e-9?null:
+      `the ask milestone "${stat}" does not start from ${chart.label}'s last value `+
+      `${+last.toFixed(dp)}: set only the target in milestone`;});
+  if(off)throw Error(off);});
 await step('next button, ArrowRight, End, Home and a dot move between slides',async()=>{
   await page.getByRole('button',{name:'Next slide'}).click();await at(2);
   await page.keyboard.press('ArrowRight');await at(3);
