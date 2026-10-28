@@ -12,11 +12,13 @@ function identity(value: PortableIdentity): PortableIdentity {
  return {platformOrigin:url.origin,artifactId:value.artifactId,baseRevision:value.baseRevision,sourceDigest:value.sourceDigest,...(value.dependencyIdentity?{dependencyIdentity:{...value.dependencyIdentity}}:{})};
 }
 /** Explicit allowlist prevents transport/session fields leaking into downloaded files. */
-export function portableScript(value: PortableDocument): string {
+function portableDocument(value: PortableDocument): PortableDocument {
  if(value.version!==1 || typeof value.source!=='string') throw new Error('Invalid portable document');
  if(value.privateState) assertStorable(value.privateState);
- const safe:PortableDocument={version:1,source:value.source,...(value.renderedDigest?{renderedDigest:value.renderedDigest}:{}),...(value.identity?{identity:identity(value.identity)}:{}),...(value.privateState?{privateState:value.privateState}:{})};
- return `<script type="application/json" data-af="portable">${JSON.stringify(safe).replace(/</g,'\\u003c')}</script>`;
+ return {version:1,source:value.source,...(value.renderedDigest?{renderedDigest:value.renderedDigest}:{}),...(value.identity?{identity:identity(value.identity)}:{}),...(value.privateState?{privateState:value.privateState}:{})};
+}
+export function portableScript(value: PortableDocument): string {
+ return `<script type="application/json" data-af="portable">${JSON.stringify(portableDocument(value)).replace(/</g,'\\u003c')}</script>`;
 }
 function portableBlock(html:string):string|undefined {
  const walk=(node:DefaultTreeAdapterMap['node']):string|undefined=>{
@@ -31,7 +33,7 @@ export function readPortableDocument(html: string): PortableDocument {
  const block=portableBlock(html);
  if(block===undefined) throw new Error('Canonical portable source is unavailable');
  const parsed=JSON.parse(block) as PortableDocument;
- return JSON.parse(portableScript(parsed).replace(/^<script[^>]*>/,'').replace(/<\/script>$/,'')) as PortableDocument;
+ return JSON.parse(JSON.stringify(portableDocument(parsed))) as PortableDocument;
 }
 /** Caller must obtain an explicit writable handle. No automatic disk persistence. */
 export async function saveOriginal(port: OriginalFilePort, expected: string, source: string): Promise<void> {
