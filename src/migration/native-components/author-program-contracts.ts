@@ -7,7 +7,7 @@ export interface NativeAuthorProgramAdmission {
  key:NativeTypedAnalysis['key']; sourceSha256:string; analysisSha256:string; compilerSourceSha256:string;
  sourceNode:string; nodeSha256:string; scriptSha256:string;
  preview?:NativeObserverPreviewPlan;
- profile:'ordinary-dom-script'|'bookshelf-local-state'|'ordinary-srcdoc'|'native-query-observer'|'native-query-preview'|'source-file-viewer'|'local-state-dom';
+ profile:'ordinary-dom-script'|'bookshelf-local-state'|'ordinary-srcdoc'|'native-query-observer'|'native-query-preview'|'source-file-viewer'|'local-state-dom'|'dom-reactive';
  /** The exact source recipe: earlier versions include status/favorites filtering. */
  filter:'search'|'search-and-status';
 }
