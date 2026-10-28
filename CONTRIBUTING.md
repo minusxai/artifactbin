@@ -30,11 +30,7 @@ OSS contains no proxy or request-rate policy. Production composes its own
 proxy around the same application and shared authentication modules.
 
 For local login, request a code in the browser, then read it with
-`npm run dev:otp -- your@email.example`. To use this checkout's CLI, run
-`npm run afbin -- auth`, approve it in the same browser, then use
-`npm run afbin -- <command>`. Its credentials live in `~/.artifactbin-dev/<port>`.
-[OSS feature setup](docs/oss-onboarding.md) covers a first document and the
-additional prerequisites for exports, live sessions, lambdas and remote agents.
+`npm run dev:otp -- your@email.example`. Use the author skill and HTTP authentication guide served by this checkout. First-party device and loopback approval flows are retired on this branch.
 
 Both derive the port the same way (`APP__PORT`, else the port in
 `APP__PUBLIC_BASE_URL`, else 3030) and prebuild the shared islands before

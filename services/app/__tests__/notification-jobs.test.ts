@@ -135,7 +135,7 @@ it('materializes the 2000-recipient run bound once per user across duplicate rul
 it('delivers human self notifications only while explicitly joined',async()=>{
  const {db}=await fixture();
  await db.query("INSERT INTO tokens(id,token_hash,user_id) VALUES('self-token','self-hash','alice')");
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('doc','self-token','alice','markup','public')");
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('doc','self-token','alice','html','public')");
  const store=createNotificationJobStore({db,authority:{...authority,admitRecipients:notificationAuthority.admitRecipients}});
  const selfPlan={...plan,rules:plan.rules.map(rule=>({...rule,sources:[],rows:[{recipientIds:['alice'],message:'You changed your task'}]}))};
  await db.transaction(tx=>store.enqueue(tx,input));await store.complete((await store.claim())!,selfPlan);

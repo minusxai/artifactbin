@@ -36,7 +36,6 @@ import * as m2 from '@/app/api/artifacts/[id]/fork/route';
 import * as m3 from '@/app/api/artifacts/[id]/prepare/route';
 import * as m4 from '@/app/api/artifacts/[id]/query/route';
 import * as m5 from '@/app/api/artifacts/[id]/route';
-import * as m6 from '@/app/api/artifacts/[id]/runs/route';
 import * as m7 from '@/app/api/artifacts/preflight/route';
 import * as m8 from '@/app/api/artifacts/reservations/route';
 import * as m9 from '@/app/api/artifacts/route';
@@ -52,12 +51,6 @@ import * as m18 from '@/lib/operations/registry';
 import * as m19 from '@/lib/platform/config';
 import * as m20 from '@/lib/platform/db';
 import * as m21 from '@/lib/platform/services';
-import * as m22 from '@/lib/remote/agents';
-import * as m23 from '@/lib/remote/comment-context';
-import * as m24 from '@/lib/remote/hosted-interface';
-import * as m25 from '@/lib/remote/hosted-proof';
-import * as m26 from '@/lib/runner';
-import * as m27 from '@/lib/runner/hosted-comments';
 import * as m28 from '@/server/host';
 import * as m29 from '@artifactbin/contracts';
 import * as m30 from '@artifactbin/utils';
@@ -80,9 +73,6 @@ describe('values the deployment composes from', () => {
   });
   it('@/app/api/artifacts/[id]/route', () => {
     for (const name of ["GET"]) expect(name in m5, name).toBe(true);
-  });
-  it('@/app/api/artifacts/[id]/runs/route', () => {
-    for (const name of ["POST"]) expect(name in m6, name).toBe(true);
   });
   it('@/app/api/artifacts/preflight/route', () => {
     for (const name of ["POST"]) expect(name in m7, name).toBe(true);
@@ -129,26 +119,8 @@ describe('values the deployment composes from', () => {
   it('@/lib/platform/services', () => {
     for (const name of ["services","setServices"]) expect(name in m21, name).toBe(true);
   });
-  it('@/lib/remote/agents', () => {
-    for (const name of ["remoteAgents"]) expect(name in m22, name).toBe(true);
-  });
-  it('@/lib/remote/comment-context', () => {
-    for (const name of ["readCommentContext"]) expect(name in m23, name).toBe(true);
-  });
-  it('@/lib/remote/hosted-interface', () => {
-    for (const name of ["setHostedRemoteAgent"]) expect(name in m24, name).toBe(true);
-  });
-  it('@/lib/remote/hosted-proof', () => {
-    for (const name of ["clearExternalHostedAgent"]) expect(name in m25, name).toBe(true);
-  });
-  it('@/lib/runner', () => {
-    for (const name of ["runnerOperation"]) expect(name in m26, name).toBe(true);
-  });
-  it('@/lib/runner/hosted-comments', () => {
-    for (const name of ["externalHostedComments","hostedCommentOperation"]) expect(name in m27, name).toBe(true);
-  });
   it('@/server/host', () => {
-    for (const name of ["externalHostedAgent"]) expect(name in m28, name).toBe(true);
+    for (const name of ["createAppHost"]) expect(name in m28, name).toBe(true);
   });
   it('@artifactbin/contracts', () => {
     for (const name of ["ACTOR_HEADER","ANONYMOUS","FORWARDED_FOR","FORWARDED_HOST","FORWARDED_PROTO","SERVICE_AUTH_HEADER","denyResponse","eventName","isInternalApiPath"]) expect(name in m29, name).toBe(true);

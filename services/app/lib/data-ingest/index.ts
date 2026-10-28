@@ -28,7 +28,7 @@ export async function ingestDataset(source: DatasetSource, declared: DeclaredCol
     throw new IngestError('too_large', `Dataset is ${Math.round(bytes / 1024 / 1024)} MB; the limit is ${MAX_DATASET_BYTES / 1024 / 1024} MB.`);
   }
 
-  const { headers, rows } = parseCsv(text);
+  const { headers, rows, quotedEmptyCells } = parseCsv(text);
   if (headers.length === 0) throw new IngestError('empty', 'No data found.');
   if (rows.length === 0) throw new IngestError('empty', 'The file has a header row but no data rows.');
   // Truncate rather than reject: a big sheet is a legitimate source, and the
@@ -36,7 +36,7 @@ export async function ingestDataset(source: DatasetSource, declared: DeclaredCol
   // callers surface totalRows so nobody charts a sample believing it is the set.
   const kept = rows.length > MAX_ROWS_LIMIT ? rows.slice(0, MAX_ROWS_LIMIT) : rows;
   return {
-    rows: coerceRows(headers, kept, declared),
+    rows: coerceRows(headers, kept, declared, quotedEmptyCells?.slice(0, kept.length)),
     rowCount: kept.length,
     totalRows: rows.length,
     truncated: rows.length > MAX_ROWS_LIMIT,

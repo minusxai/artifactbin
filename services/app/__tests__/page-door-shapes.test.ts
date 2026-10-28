@@ -41,7 +41,7 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
   it('a folder is a listing with no surface', async () => {
     const w = await world();
     const folder = await w.make({ format: 'folder', title: 'Shelf' });
-    await w.make({ title: 'Filed', markup: '<p>filed</p>', parent_id: folder });
+    await w.make({ title: 'Filed', html: '<p>filed</p>', parent_id: folder });
     const body = await w.answer(folder);
     expect(shape({ ...body, workspace: undefined })).toEqual({
       canonical: 'string', kind: 'string', ownerUsername: 'string', role: 'string', workspace: 'undefined',
@@ -64,31 +64,29 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     expect(shape(body.surface.catalog)).toEqual({ defaultSchema: 'string', kind: 'string', refreshSeconds: 'number', tables: [{ columns: [{ name: 'string', type: 'string' }], name: 'string', schema: 'string' }] });
   });
 
-  it('a program answers its source and sheet, with no runtime', async () => {
-    const w = await world();
-    const body = await w.answer(await w.make({ program: { version: 1, command: ['node', '-e', '1'] } }));
-    expect(Object.keys(body).sort()).toEqual(DOC_TOP.concat('surface').sort());
-    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'compiledCss', 'source'].sort());
+  it('rejects creation of a retired program without exposing a page surface', async () => {
+    const w=await world();
+    const token=await mintAccountToken('retired-program',w.owner.id);
+    const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{program:{version:1,command:['node','-e','1']}}}));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({error:'unsupported_format'});
   });
 
-  it('the starter placeholder\'s read view keeps the whole served runtime, less the tree', async () => {
+  it('a native starter carries only the minimal framed runtime', async () => {
     const w = await world();
     const created = await createBrowserArtifact(request('/api/my/artifacts', { method: 'POST', actor: w.actor, json: artifactStarter('deck') }));
     const body = await w.answer((await created.json() as { id: string }).id);
-    expect(Object.keys(body).sort()).toEqual([...DOC_TOP, 'cspRequest', 'surface'].sort());
-    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'heading', 'runtime', 'sourceLength', 'starter'].sort());
-    expect(body.surface.starter).toBe(true);
-    expect(shape(body.surface.runtime)).toEqual({
-      authorScript: 'null', base: { chrome: 'boolean', fonts: { families: ['empty'], slots: {} }, theme: 'null' }, css: 'string',
-      data: { assetsUrl: 'string', chrome: 'boolean', colorMode: 'string', mentionStatuses: {}, queryUrl: 'string', refData: {}, template: 'string', viewer: { id: 'string' } },
-      fontPreloads: ['empty'], overrides: ['empty'], theme: 'null', title: 'string',
-    });
+    expect(Object.keys(body).sort()).toEqual([...DOC_TOP, 'surface','cspRequest'].sort());
+    expect(body.cspRequest).toMatchObject({status:'none',denied:false});
+    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'heading', 'runtime', 'starter'].sort());
+    expect(body.surface.starter).toBe(false);
+    expect(shape(body.surface.runtime)).toEqual({data:{},title:'string'});
   });
 
   it('a framed document answers the title and declared dataflow only', async () => {
     const w = await world();
-    const body = await w.answer(await w.make({ markup: '<h1 id="t">Hello</h1><p id="p">World</p>' }));
-    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'heading', 'runtime', 'sourceLength', 'starter'].sort());
+    const body = await w.answer(await w.make({ html: '<h1 id="t">Hello</h1><p id="p">World</p>' }));
+    expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'heading', 'runtime', 'starter'].sort());
     expect(body.surface.starter).toBe(false);
     expect(shape(body.surface.runtime)).toEqual({ data: {}, title: 'string' });
   });

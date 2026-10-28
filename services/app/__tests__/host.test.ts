@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {createAppHost} from '@/server/host';
@@ -17,15 +18,15 @@ it.each([false,true])('assembles identity and an optional host document policy (
   const found=offered?await resolveToken(offered):null;
   return upstream(request,found?{credential:'bearer',userId:found.userId??undefined,tokenId:found.id,email:'local@self.invalid',emailVerified:true}:ANONYMOUS);
  }})});
- const created=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Hello self</p>',visibility:'private'})}));
+ const created=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({html: nativeHtml('<p>Hello self</p>'),visibility:'private'})}));
  expect(created.status).toBe(201);const artifact=await created.json();
  const owner=await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id,{headers:{authorization:'Bearer '+token}}));
- expect(owner.status).toBe(200);expect((await owner.json()).markup).toContain('Hello self');
+ expect(owner.status).toBe(200);expect((await owner.json()).html).toContain('Hello self');
  const anonymous=await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id));
  expect([401,404]).toContain(anonymous.status);
  const otherToken=await mintToken('other','usr_other');
  const publishAsOther=async(visibility:'unlisted'|'private')=>{
-  const made=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markup:'<p>Other owner</p>',visibility})}),{credential:'bearer',tokenId:otherToken.id,userId:'usr_other',email:'other@self.invalid',emailVerified:true});
+  const made=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({html: nativeHtml('<p>Other owner</p>'),visibility})}),{credential:'bearer',tokenId:otherToken.id,userId:'usr_other',email:'other@self.invalid',emailVerified:true});
   expect(made.status).toBe(201);return (await made.json()).id as string;
  };
  // The host grant edits a foreign document a link could reach, and nothing private.

@@ -1,0 +1,455 @@
+/** Actual reader capture only: caller mounts a freshly published real reader URL.
+ * No page.setContent, hand-rendered JSX, CSS surrogate or production writes. */
+import { createHash } from 'node:crypto';
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import path from 'node:path';
+import sharp from 'sharp';
+import {pixelDifference} from './native-pixel-quantization.mjs';
+import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
+/** @param {import('../fixtures/component-baseline/contract').BrowserParityAction} action */
+export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+
+/** Failure logs contain bounded technical context, never URL credentials or queries. */
+function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>]+/g,value=>{try{const url=new URL(value);return url.origin+url.pathname;}catch{return '[URL]';}}).slice(0,1000);}
+/** Linked stylesheet absence is a failure even before any font face is declared. */
+function browserResources(){return {stylesheets:[...document.querySelectorAll('link[rel~="stylesheet"]')].filter(link=>!link.disabled).map(link=>({url:link.href,loaded:link.sheet!==null}))};}
+/** No readiness promise here: diagnose stalled fonts before closing the reader. */
+function browserFontStatus(){return {status:document.fonts.status,loading:[...document.fonts].filter(face=>face.status==='loading').slice(0,30).map(face=>({family:face.family.slice(0,200),style:face.style,weight:face.weight,status:face.status}))};}
+/** Wait for finite animations in the actual document frame, including chained
+ * animations discoverable during the bounded two-frame quiescence check. It
+ * explicitly walks open shadow roots because Document.getAnimations() omits
+ * animations scoped to those roots in Chromium. Closed roots are unavailable.
+ * This function is serialized into that frame by Playwright; keep it self-contained. */
+export async function settleFiniteFrameAnimations({timeoutMs=5000}={}) {
+  const startedAtMs=performance.now();
+  const reducedMotion=typeof globalThis.matchMedia==='function'&&globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const connected=target=>!!target&&target.ownerDocument===document&&target.isConnected===true;
+  const describe=animation=>{
+    const timing=animation.effect?.getComputedTiming?.()??{};
+    return {name:typeof animation.animationName==='string'?animation.animationName:'',playState:animation.playState,duration:Number.isFinite(timing.duration)?timing.duration:null,iterations:timing.iterations===Infinity?'infinite':Number.isFinite(timing.iterations)?timing.iterations:null};
+  };
+  const seen=new Set(),finite=[],infinite=[],detached=[],paused=[],roots=new Set([document]),observedRoots=new Set();let alreadyFinished=0,alreadyIdle=0,observed=0,rounds=0;
+  const markDetached=()=>{for(const record of finite)if(record.outcome===undefined&&!connected(record.target)){record.outcome='detached';record.resolve?.();}};
+  const MutationObserverCtor=document.defaultView?.MutationObserver??globalThis.MutationObserver;
+  const observers=[];
+  const observeRoot=root=>{
+    if(!MutationObserverCtor||observedRoots.has(root))return;
+    const target=root===document?document.documentElement:root;
+    if(!target)return;
+    const observer=new MutationObserverCtor(markDetached);observer.observe(target,{childList:true,subtree:true});observers.push(observer);observedRoots.add(root);
+  };
+  observeRoot(document);
+  let timedOut=false;
+  const remaining=()=>Math.max(0,timeoutMs-(performance.now()-startedAtMs));
+  const collect=()=>{
+    const frontier=[...roots];
+    for(let index=0;index<frontier.length;index++)for(const node of frontier[index].querySelectorAll?.('*')??[])if(node.shadowRoot&&!roots.has(node.shadowRoot)){
+      roots.add(node.shadowRoot);frontier.push(node.shadowRoot);observeRoot(node.shadowRoot);
+    }
+    const all=[];
+    for(const root of roots)if(typeof root.getAnimations==='function')all.push(...root.getAnimations({subtree:true}));
+    observed+=all.length;
+    for(const animation of all){
+      if(seen.has(animation))continue;seen.add(animation);
+      const state=animation.playState;
+      if(state==='finished'){alreadyFinished++;continue;}
+      if(state==='idle'){alreadyIdle++;continue;}
+      if(state==='paused'){paused.push(describe(animation));continue;}
+      if(state!=='running'&&state!=='pending')continue;
+      const target=animation.effect?.target;
+      if(!connected(target)){detached.push(describe(animation));continue;}
+      const timing=animation.effect?.getComputedTiming?.()??{};
+      if(timing.iterations===Infinity||timing.duration===Infinity){infinite.push(describe(animation));continue;}
+      finite.push({animation,target,description:describe(animation),outcome:undefined});
+      const root=target.getRootNode?.();
+      if(root&&root!==document&&!roots.has(root)&&root.nodeType===11&&root.host){
+        roots.add(root);observeRoot(root);
+      }
+    }
+    return finite.filter(record=>record.outcome===undefined);
+  };
+  const waitForRecords=async records=>{
+    if(!records.length)return;
+    const waits=records.map(record=>new Promise(resolve=>{
+      record.resolve=resolve;
+      if(record.outcome!==undefined){resolve();return;}
+      Promise.resolve(record.animation.finished).then(()=>{if(record.outcome===undefined)record.outcome='finished';resolve();},()=>{if(record.outcome===undefined)record.outcome='canceled';resolve();});
+    }));
+    let timer;
+    try{
+      const outcome=await Promise.race([Promise.all(waits).then(()=> 'settled'),new Promise(resolve=>{timer=setTimeout(()=>resolve('timeout'),remaining());})]);
+      if(outcome==='timeout'){timedOut=true;markDetached();}
+    }finally{clearTimeout(timer);}
+  };
+  const waitOneFrame=()=>new Promise(resolve=>{
+    let timer;const done=value=>{clearTimeout(timer);resolve(value);};
+    timer=setTimeout(()=>done(false),remaining());
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>done(true));
+    else setTimeout(()=>done(true),0);
+  });
+  const twoFrameQuiescence=async()=>{
+    for(let i=0;i<2;i++){
+      if(remaining()<=0){timedOut=true;return;}
+      if(!await waitOneFrame()){timedOut=true;return;}
+    }
+  };
+  try{
+    while(!timedOut){
+      rounds++;
+      const pending=collect();
+      if(pending.length)await waitForRecords(pending);
+      if(timedOut)break;
+      await twoFrameQuiescence();
+      if(timedOut)break;
+      const before=seen.size;
+      const newlyPending=collect();
+      if(!newlyPending.length&&seen.size===before)break;
+      if(newlyPending.length)await waitForRecords(newlyPending);
+    }
+  }finally{for(const observer of observers)observer.disconnect();}
+  const pending=finite.filter(record=>record.outcome===undefined).map(record=>record.description);
+  const counts={finished:finite.filter(record=>record.outcome==='finished').length,canceled:finite.filter(record=>record.outcome==='canceled').length,detached:detached.length+finite.filter(record=>record.outcome==='detached').length};
+  return {format:'frame-animation-settlement-v1',policy:'document-and-open-shadow-roots;finite-current-and-chained;two-frame-quiescence',shadowCoverage:'open-shadow-roots-only',shadowRoots:roots.size-1,reducedMotion,startedAtMs,completedAtMs:performance.now(),elapsedMs:performance.now()-startedAtMs,observed,uniqueAnimations:seen.size,rounds,alreadyFinished,alreadyIdle,paused,infinite,counts,timedOut:timedOut?(pending.length?pending:[{name:'<quiescence-check>',playState:'running',duration:null,iterations:null}]):[]};
+}
+/** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
+function browserState() {
+  const visible = node => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+  const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
+  const name = node => {
+    const ids=node.getAttribute('aria-labelledby');
+    if(ids){const label=clean(ids.split(/\s+/).map(id=>document.getElementById(id)?.textContent||'').join(' '));if(label)return label;}
+    if(node.hasAttribute('aria-label'))return clean(node.getAttribute('aria-label'));
+    if(node.tagName==='IMG')return clean(node.getAttribute('alt'));
+    if(node.tagName==='TH'){const button=node.querySelector('button[aria-label]');if(button)return clean(button.getAttribute('aria-label'));}
+    if(node.labels?.length)return clean([...node.labels].map(label=>label.textContent).join(' '));
+    if(node.tagName==='INPUT'&&['button','submit','reset'].includes(node.type))return clean(node.value||(node.type==='submit'?'Submit':node.type==='reset'?'Reset':''));
+    return clean(node.textContent||node.getAttribute('title'));
+  };
+  return {
+    text: document.body.innerText.replace(/\s+/g,' ').trim(),
+    controls: [...document.querySelectorAll('button,input,select,textarea,dialog,th[scope="col"],[role="tab"],[role="dialog"],[role="option"],[role="listbox"],[role="slider"],[role="switch"],[role="checkbox"],[role="radio"],[role="combobox"],[role="button"],[role="textbox"],[role="searchbox"],[role="spinbutton"],[role="progressbar"],[role="img"],[role="tooltip"],svg[aria-label],img[alt]')].filter(visible).map(node=>({role:node.getAttribute('role') || (node.tagName==='INPUT'?({file:'file-input',button:'button',submit:'button',reset:'button',checkbox:'checkbox',radio:'radio',range:'slider',number:'spinbutton',search:'searchbox'})[node.type]||'textbox':({BUTTON:'button',SELECT:'combobox',TEXTAREA:'textbox',DIALOG:'dialog',TH:'columnheader',IMG:'img',svg:'svg'})[node.tagName]),name:name(node),disabled:node.matches(':disabled') || node.getAttribute('aria-disabled')==='true',selected:node.getAttribute('aria-selected'),checked:node.getAttribute('aria-checked')??(node.tagName==='INPUT'&&['checkbox','radio'].includes(node.type)?String(node.checked):null),pressed:node.getAttribute('aria-pressed'),valueNow:node.getAttribute('aria-valuenow'),valueMin:node.getAttribute('aria-valuemin'),valueMax:node.getAttribute('aria-valuemax'),expanded:node.getAttribute('aria-expanded'),sort:node.getAttribute('aria-sort'),focused:document.activeElement===node,value:'value' in node?node.value:undefined})),
+    rows:[...document.querySelectorAll('tr')].filter(visible).map(row=>[...row.querySelectorAll('th,td')].map(cell=>cell.textContent?.trim())),
+    overflow:document.documentElement.scrollWidth-innerWidth,
+  };
+}
+
+/** Browser-side proof for actually used declared fonts. Unused styles/subsets
+ * remain legitimately unloaded; FontFaceSet.load resolves real matching ranges. */
+export function fontLoadingEvidence(externalStylesheets=[]) {
+  return (async()=>{
+    const clean=value=>String(value||'').trim().replace(/^['"]|['"]$/g,'');
+    const genericFamilies=new Set(['serif','sans-serif','cursive','fantasy','monospace','system-ui','ui-serif','ui-sans-serif','ui-monospace','ui-rounded','emoji','math','fangsong']);
+    const firstFamily=value=>{
+      const source=String(value||'').trim();let quote='',escaped=false,end=source.length;
+      for(let index=0;index<source.length;index++){
+        const character=source[index];
+        if(escaped){escaped=false;continue;}
+        if(quote){if(character==='\\'){escaped=true;continue;}if(character===quote)quote='';continue;}
+        if(character==='"'||character==="'"){quote=character;continue;}
+        if(character===','){end=index;break;}
+      }
+      const token=source.slice(0,end).trim(),quoted=(token.length>=2&&(token[0]==='"'&&token.at(-1)==='"'||token[0]==="'"&&token.at(-1)==="'")),family=clean(token);
+      return {family,generic:!quoted&&genericFamilies.has(family.toLowerCase())};
+    };
+    const ruleFaces=[],seenSheets=new Set();
+    const rules=(list,base,followImports=true)=>{for(const rule of list||[]){
+      if(rule.type===5){const style=rule.style;ruleFaces.push({family:clean(style.getPropertyValue('font-family')),style:style.getPropertyValue('font-style')||'normal',weight:style.getPropertyValue('font-weight')||'normal',unicodeRange:style.getPropertyValue('unicode-range')||'U+0-10FFFF',sources:[...style.getPropertyValue('src').matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match=>new URL(match[1],base).href)});}
+      else if(followImports&&rule.styleSheet){try{const imported=rule.styleSheet;if(!seenSheets.has(imported)){seenSheets.add(imported);rules(imported.cssRules,imported.href||(rule.href?new URL(rule.href,base).href:base));}}catch{ /* Cross-origin imports are recovered from captured stylesheet responses below. */ }}
+      else if(rule.cssRules)rules(rule.cssRules,base);
+    }};
+    const stylesheetRoots=[document],seenRoots=new Set();
+    for(let index=0;index<stylesheetRoots.length;index++){
+      const root=stylesheetRoots[index];if(!root||seenRoots.has(root))continue;seenRoots.add(root);
+      const sheets=[...(root.styleSheets||[]),...(root.adoptedStyleSheets||[])];
+      try{for(const element of root.querySelectorAll?.('style, link[rel~="stylesheet"]')||[])if(element.sheet)sheets.push(element.sheet);}catch{}
+      for(const sheet of sheets){if(seenSheets.has(sheet))continue;seenSheets.add(sheet);try{rules(sheet.cssRules,sheet.href||document.baseURI);}catch{ /* A remote stylesheet cannot provide local font-byte proof. */ }}
+      try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)stylesheetRoots.push(element.shadowRoot);}catch{}
+    }
+    // A page can use a cross-origin <link> or an external sheet whose CSSOM
+    // rules are hidden by CORS. The Playwright capture supplies the bodies of
+    // stylesheet responses it actually received. Parse those bodies in an
+    // inert constructed sheet and resolve each src against that response URL;
+    // only the resulting exact URL can later join to captured font bytes.
+    for(const response of externalStylesheets||[]){
+      if(response.status!==200||typeof response.css!=='string'||!response.url)continue;
+      try{
+        const Sheet=document.defaultView?.CSSStyleSheet;
+        if(!Sheet)continue;
+        const parsed=new Sheet();
+        if(typeof parsed.replaceSync!=='function')continue;
+        parsed.replaceSync(response.css);
+        rules(parsed.cssRules,response.url,false);
+      }catch{ /* Unparseable/external stylesheet evidence stays unproved. */ }
+    }
+    const requested=new Map();
+    const add=(element,text,textNode)=>{
+      if(!text.trim())return;
+      const css=document.defaultView.getComputedStyle(element);if(css.visibility==='hidden')return;
+      // display:contents identity spans have no element box; their text still paints.
+      let visible=!!element.getClientRects().length;
+      if(!visible&&textNode&&css.display==='contents'){const range=document.createRange();try{range.selectNodeContents(textNode);visible=!!range.getClientRects().length;}finally{range.detach();}}
+      if(!visible)return;
+      const {family,generic}=firstFamily(css.fontFamily);const key=[family,css.fontStyle,css.fontWeight,generic?'generic':'named'].join('|');
+      const existing=requested.get(key);if(existing)existing.text=(existing.text+' '+text).slice(0,512);else requested.set(key,{family,generic,style:css.fontStyle||'normal',weight:css.fontWeight||'400',text:text.slice(0,512)});
+    };
+    const textRoots=[document.body],seenTextRoots=new Set();
+    for(let index=0;index<textRoots.length;index++){
+      const root=textRoots[index];if(!root||seenTextRoots.has(root))continue;seenTextRoots.add(root);
+      const walk=document.createTreeWalker(root,document.defaultView.NodeFilter.SHOW_TEXT);
+      for(let node=walk.nextNode();node;node=walk.nextNode())if(node.parentElement&&!['SCRIPT','STYLE','NOSCRIPT'].includes(node.parentElement.tagName))add(node.parentElement,node.textContent||'',node);
+      try{for(const input of root.querySelectorAll?.('input,textarea')||[])if(input.value)add(input,input.value);}catch{}
+      try{for(const element of root.querySelectorAll?.('*')||[])if(element.shadowRoot)textRoots.push(element.shadowRoot);}catch{}
+    }
+    const themeFamilies=['--font-body','--font-display','--font-mono'].map(key=>clean(document.defaultView.getComputedStyle(document.documentElement).getPropertyValue(key).split(',')[0])).filter(Boolean);
+    const errors=[],used=[];
+    for(const request of requested.values()){
+      if(request.generic){used.push({...request,declared:false,sources:[]});continue;}
+      const declared=[...document.fonts].filter(face=>clean(face.family)===request.family);
+      if(!declared.length){if(themeFamilies.includes(request.family))errors.push(`Used theme font ${request.family} has no declared font face`);used.push({...request,declared:false,sources:[]});continue;}
+      try{
+        const loaded=await document.fonts.load(`${request.style} ${request.weight} 16px ${JSON.stringify(request.family)}`,request.text);
+        const faceSources=loaded.map(face=>{
+          const matches=ruleFaces.filter(rule=>rule.family===clean(face.family)&&rule.style===face.style&&rule.unicodeRange.replace(/\s/g,'').toUpperCase()===(face.unicodeRange||'U+0-10FFFF').replace(/\s/g,'').toUpperCase()&&(rule.weight===face.weight||rule.weight==='normal'&&face.weight==='400'));
+          const uniqueSources=new Map(matches.map(rule=>[JSON.stringify(rule.sources),rule.sources]));
+          return uniqueSources.size===1?[...uniqueSources.values()][0]:[];
+        });
+        const sources=faceSources.length&&faceSources.every(value=>value.length)?[...new Set(faceSources.flat())]:[];
+        if(!loaded.length||loaded.some(face=>face.status!=='loaded'))errors.push(`Used declared font ${request.family} ${request.style} ${request.weight} did not load`);
+        if(loaded.length&&!sources.length)errors.push(`Used declared font ${request.family} has no inspectable source URL`);
+        used.push({...request,declared:true,loaded:loaded.length>0&&loaded.every(face=>face.status==='loaded'),sources});
+      }catch(error){errors.push(`Used declared font ${request.family} ${request.style} ${request.weight} failed: ${error.message}`);used.push({...request,declared:true,loaded:false,sources:[]});}
+    }
+    await document.fonts.ready;
+    return {faces:[...document.fonts].map(face=>({family:clean(face.family),style:face.style,weight:face.weight,unicodeRange:face.unicodeRange,status:face.status})),used,errors};
+  })();
+}
+
+/** URL-independent proof: only resources used by matching authored faces count. */
+export function fontByteProof(evidence) {
+  if(!evidence)return {used:[],errors:['Missing font loading evidence']};
+  const errors=[];
+  const used=(evidence.used||[]).filter(face=>face.declared).map(face=>{
+    const hashes=[...new Set((evidence.resources||[]).filter(resource=>face.sources.includes(resource.url)&&resource.status===200&&/^[a-f0-9]{64}$/.test(resource.sha256)).map(resource=>resource.sha256))].sort();
+    if(!hashes.length)errors.push(`Used declared font ${face.family} ${face.style} ${face.weight} has no verified response bytes`);
+    return {family:face.family,style:face.style,weight:face.weight,hashes};
+  }).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return {used,errors};
+}
+
+/** mount returns a real local reader frame, optional ready/afterAction, and an
+ * optional performAction for every static fixture action. document-frame mode
+ * additionally requires a camera of the real app-mounted iframe rectangle.
+ * Source revisions are supplied independently, never inferred. */
+/** @param {import('../fixtures/component-baseline/contract').BrowserCaptureTimeouts & Record<string,any>} options */
+export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport',readyTimeoutMs=30000,captureStepTimeoutMs=30000,animationSettleTimeoutMs=5000}) {
+  if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
+  if(!['viewport','document-frame'].includes(screenshotMode))throw Error('Unknown browser baseline screenshot mode');
+  if([readyTimeoutMs,captureStepTimeoutMs,animationSettleTimeoutMs].some(value=>!Number.isSafeInteger(value)||value<=0))throw Error('Reader capture budgets must be finite positive milliseconds');
+  await mkdir(output,{recursive:true});
+  /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
+  const browserVersion=browser.version?.()||'unreported';
+  const fixtureIds=fixtures.map(fixture=>fixture.id);
+  const tasks=fixtures.flatMap(fixture=>themes.flatMap(theme=>viewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
+  const captures=new Array(tasks.length),failures=[],taintedFixtures=new Set();
+  // A failed new run must never archive a stale full verdict as current evidence.
+  await Promise.all([`${implementation}-captures.json`,`${implementation}-partial-captures.json`].map(name=>rm(path.join(output,name),{force:true})));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,fixtureIds,completed:0,failures:[]}));
+  async function capture({fixture,theme,viewport,state},workerBrowser) {
+    if(taintedFixtures.has(fixture.id)){const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase:'cleanup-blocked',message:'Prior state cleanup failed; fixture state is not proven restored',diagnostics:{phase:'cleanup-blocked'}};failures.push(failure);throw Error(failure.message);}
+    const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
+    const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction,mounted,captureFailure,animationEvidence;
+    const step=async(name,work,budget=captureStepTimeoutMs)=>{
+      phase=name;await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-progress.json`),JSON.stringify({phase,fixture:fixture.id,state:state.id,theme,viewport,sourceRevision}));
+      let timer;try{return await Promise.race([Promise.resolve().then(work),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(`Reader ${name} exceeded ${budget}ms`)),budget);})]);}finally{clearTimeout(timer);}
+    };
+    const responseFrame=response=>{try{return response.frame();}catch{return undefined;}};
+    const trackResponse=(pending,response,read)=>{const record={frame:responseFrame(response),url:response.url(),status:response.status(),state:'pending',done:undefined};record.done=Promise.resolve().then(read).finally(()=>{record.state='settled';});pending.push(record);};
+    const waitForPending=async pending=>{let settled=0;while(settled<pending.length){const batch=pending.slice(settled);settled=pending.length;await Promise.all(batch.filter(record=>record.frame===frame).map(record=>record.done));}};
+    try {
+      page=await context.newPage();
+      page.on('pageerror',error=>errors.push(error.message));
+      page.on('console',message=>{if(message.type()==='error'&&consoleErrors.length<20)consoleErrors.push(diagnosticText(message.text()));});
+      page.on('requestfailed',request=>{if(requestFailures.length<20)requestFailures.push({type:request.resourceType(),url:diagnosticText(request.url()),error:diagnosticText(request.failure()?.errorText||'unknown')});});
+      page.on('response',response=>{if(response.status()>=400&&httpFailures.length<20)httpFailures.push({type:response.request().resourceType(),url:diagnosticText(response.url()),status:response.status(),contentType:response.headers()['content-type']||''});});
+      page.on('response',response=>{if(response.request().resourceType()==='stylesheet')trackResponse(stylesheetPending,response,async()=>{try{stylesheetResponses.push({frame:responseFrame(response),url:response.url(),status:response.status(),css:await response.text()});}catch{ /* A stylesheet body unavailable to Playwright cannot prove font sources. */ }});});
+      const local=value=>{const url=new URL(value);return ['data:','blob:'].includes(url.protocol)||['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)||url.hostname.endsWith('.lvh.me');};
+      await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
+      page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
+      page.on('response',response=>{if(response.request().resourceType()==='font')trackResponse(fontPending,response,async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}});});
+      mounted=await step('mount',()=>mount({fixture,theme,viewport,state,page}));frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
+      const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
+      if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
+      await step('ready',()=>ready?.(),readyTimeoutMs);
+      await step('fonts-ready',()=>frame.evaluate(()=>document.fonts.ready));
+      for(const action of state.actions) {
+        activeAction=action;phase=`action:${action.action}`;
+        if(performAction)await step(`action:${action.action}`,()=>performAction(action));
+        else{
+        const target=actionTarget(frame,action);
+        if(action.action==='press') await step('action:press',()=>target.press(action.key));
+        else if(action.action==='scroll')await step('action:scroll',()=>target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;}));
+        else if(action.action==='upload')throw Error('Upload actions require the mounted real upload adapter');
+        else await step(`action:${action.action}`,()=>target[action.action]());
+        }
+        await step(`after-action:${action.action}`,()=>afterAction?.(action));
+      }
+      activeAction=undefined;
+      await step('paint-ready',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+      animationEvidence=await step('finite-animations',async()=>{
+        animationEvidence=await frame.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(!animationEvidence||animationEvidence.format!=='frame-animation-settlement-v1')throw Error('frame-animation-evidence-invalid');
+        if(animationEvidence.timedOut.length)throw Error(`finite-frame-animations-timeout:${animationEvidence.timedOut.length}`);
+        return animationEvidence;
+      },animationSettleTimeoutMs+1000);
+      const resourceEvidence=await step('resources',()=>frame.evaluate(browserResources));resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
+      for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
+      const localFailures=[...requestFailures,...httpFailures].filter(failure=>['stylesheet','script'].includes(failure.type)&&local(failure.url));
+      for(const failure of localFailures)resourceEvidence.errors.push(`Local ${failure.type} failed: ${failure.url} (${failure.error||failure.status})`);
+      await step('stylesheet-responses',()=>waitForPending([...fontPending,...stylesheetPending]));
+      const frameStylesheets=stylesheetResponses.filter(response=>response.frame===frame).map(({url,status,css})=>({url,status,css}));
+      const fontEvidence=await step('font-evidence',()=>frame.evaluate(fontLoadingEvidence,frameStylesheets));
+      // document.fonts.load() in the evidence probe can itself initiate the
+      // response whose bytes prove the used face, so drain again after it ends.
+      await step('font-responses',()=>waitForPending(fontPending));
+      fontEvidence.resources=fontResources.filter(resource=>resource.frame===frame).map(({url,status,sha256})=>({url,status,sha256}));
+      const usedSources=new Set(fontEvidence.used.flatMap(face=>face.sources||[]));
+      fontEvidence.errors.push(...resourceErrors.filter(failure=>usedSources.has(failure.url)).map(failure=>failure.error));
+      fontEvidence.errors.push(...fontByteProof(fontEvidence).errors);
+      // Font evidence can finish a face load and move the anchor after the
+      // first frame settlement. Parent UI (for example a comment badge) then
+      // transitions outside the iframe yet remains visible in its screenshot.
+      if(screenshotMode==='document-frame'&&page!==frame)await step('reader-animations',async()=>{
+        await page.evaluate(()=>document.fonts?.ready.then(()=>undefined));
+        animationEvidence.frameAfterFonts=await frame.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(animationEvidence.frameAfterFonts?.format!=='frame-animation-settlement-v1')throw Error('frame-animation-evidence-invalid');
+        if(animationEvidence.frameAfterFonts.timedOut.length)throw Error(`finite-frame-animations-timeout:${animationEvidence.frameAfterFonts.timedOut.length}`);
+        animationEvidence.parentDocument=await page.evaluate(settleFiniteFrameAnimations,{timeoutMs:animationSettleTimeoutMs});
+        if(animationEvidence.parentDocument?.format!=='frame-animation-settlement-v1')throw Error('parent-animation-evidence-invalid');
+        if(animationEvidence.parentDocument.timedOut.length)throw Error(`finite-parent-animations-timeout:${animationEvidence.parentDocument.timedOut.length}`);
+      },3*animationSettleTimeoutMs+1000);
+      await step('paint-settled',()=>frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+      const semantics=await step('semantics',()=>frame.evaluate(browserState));
+      const name=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}.png`;
+      // Raw fixtures retain the whole viewport/top layer. Authorized fixtures
+      // explicitly capture the real iframe, preserving its actual dimensions.
+      if(screenshotMode==='document-frame'&&typeof mounted.screenshot!=='function')throw Error('Document-frame capture requires the mounted real frame camera');
+      const screenshot=await step('screenshot',()=>screenshotMode==='document-frame'?mounted.screenshot():page.screenshot({fullPage:false,caret:'hide'}));
+      await writeFile(path.join(output,name),screenshot);
+      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,animationEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+    } catch(cause){
+      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures,fontRequests:fontPending.length,fontResponses:fontResources.length,pendingResources:[...fontPending,...stylesheetPending].filter(record=>record.state==='pending').map(record=>({url:diagnosticText(record.url),status:record.status,capturedFrame:record.frame===frame})),...(animationEvidence?{animationEvidence}:{})};
+      /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */
+      const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase,...(activeAction?{action:activeAction}:{}),message:diagnosticText(cause.message),diagnostics};
+      const stem=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-failure`;
+      // A failed animation settlement is not a valid visual sample. Preserve
+      // diagnostics, but do not capture a frame whose authored motion is still
+      // in progress.
+      try{if(phase!=='finite-animations'&&phase!=='reader-animations'&&page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
+      // Snapshot already mounted documents only; do not run readiness again.
+      try{if(frame)failure.semantics=await step('failure-snapshot',()=>frame.evaluate(browserState),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
+      try{if(frame)diagnostics.fontStatus=await step('failure-font-status',()=>frame.evaluate(browserFontStatus),Math.min(3000,captureStepTimeoutMs));}catch(error){diagnostics.fontStatusError=diagnosticText(error.message);}
+      failures.push(failure);
+      try{await writeFile(path.join(output,stem+'.json'),JSON.stringify(failure,null,2));}catch(error){diagnostics.evidenceWriteError=diagnosticText(error.message);}
+      captureFailure=new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});throw captureFailure;
+    } finally {
+      try{
+        if(mounted?.cleanup)await step('cleanup',()=>mounted.cleanup());
+      }catch(cause){
+        const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase:'cleanup',message:diagnosticText(cause.message),diagnostics:{phase:'cleanup'}};
+        failures.push(failure);taintedFixtures.add(fixture.id);
+        try{await writeFile(path.join(output,`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-cleanup-failure.json`),JSON.stringify(failure,null,2));}catch(error){failure.diagnostics.evidenceWriteError=diagnosticText(error.message);}
+        if(captureFailure)captureFailure.message+=`; cleanup failed: ${diagnosticText(cause.message)}`;
+        else throw new Error(`Reader cleanup failed: ${diagnosticText(cause.message)}`,{cause});
+      }finally{await context.close();}
+    }
+  }
+  let next=0;const taskErrors=[];
+  const workers=await Promise.allSettled(Array.from({length:Math.min(2,workerBrowsers.length,tasks.length)},async(_,workerIndex)=>{
+    while(next<tasks.length){const index=next++;try{captures[index]=await capture(tasks[index],workerBrowsers[workerIndex]);}catch(error){const task=tasks[index];taskErrors.push({index,error:new Error(`${task.fixture.id}/${task.theme}/${task.viewport.width}/${task.state.id}: ${error.message}`,{cause:error})});}}
+  }));
+  const errors=taskErrors.sort((a,b)=>a.index-b.index).map(item=>item.error);
+  errors.push(...workers.filter(worker=>worker.status==='rejected').map(worker=>worker.reason));
+  if(errors.length){
+    const failure=new AggregateError(errors,`${errors.length} reader capture(s) failed: ${errors.map(error=>error.message).join('\n')}`);
+    try{await writeFile(path.join(output,`${implementation}-partial-captures.json`),JSON.stringify(captures.filter(Boolean),null,2));await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,fixtureIds,completed:captures.filter(Boolean).length,failures},null,2));}
+    catch(error){failure.message+=`; partial evidence write failed: ${diagnosticText(error.message)}`;}
+    throw failure;
+  }
+  await writeFile(path.join(output,`${implementation}-captures.json`),JSON.stringify(captures,null,2));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,fixtureIds,completed:captures.length,failures:[]}));
+  return captures;
+}
+
+/** Produce diagnostic pixel diffs, never label unequal images parity. */
+export async function compareBrowserBaselines({baseline,candidate,baselineDirectory,candidateDirectory,output}) {
+  await mkdir(output,{recursive:true});
+  const key=item=>`${item.fixture}/${item.theme}/${item.viewport.width}x${item.viewport.height}/${item.state}`;
+  const candidates=new Map(candidate.map(item=>[key(item),item]));
+  const results=[];
+  for(const old of baseline) {
+    const current=candidates.get(key(old));candidates.delete(key(old));
+    if(!current){results.push({key:key(old),error:'Missing candidate capture'});continue;}
+    if(old.implementation!=='jsx'||current.implementation!=='html'||old.fixtureHash!==current.fixtureHash||old.screenshotMode!==current.screenshotMode||!(/^[a-f0-9]{40}$/.test(old.sourceRevision)&&/^[a-f0-9]{40}$/.test(current.sourceRevision))){results.push({key:key(old),error:'Unmatched implementation or fixture inputs'});continue;}
+    const [a,b]=await Promise.all([readFile(path.join(baselineDirectory,old.screenshot)),readFile(path.join(candidateDirectory,current.screenshot))]);
+    if(hash(a)!==old.screenshotSha256||hash(b)!==current.screenshotSha256)throw Error('Capture image hash mismatch');
+    const [left,right]=await Promise.all([sharp(a).ensureAlpha().raw().toBuffer({resolveWithObject:true}),sharp(b).ensureAlpha().raw().toBuffer({resolveWithObject:true})]);
+    const sizeEqual=left.info.width===right.info.width&&left.info.height===right.info.height;
+    let changedPixels=null,diff;
+    if(sizeEqual){changedPixels=0;diff=Buffer.alloc(left.data.length);for(let i=0;i<left.data.length;i+=4){const changed=[0,1,2,3].some(channel=>left.data[i+channel]!==right.data[i+channel]);if(changed)changedPixels++;diff[i]=changed?255:Math.round(left.data[i]*.25);diff[i+1]=changed?0:Math.round(left.data[i+1]*.25);diff[i+2]=changed?128:Math.round(left.data[i+2]*.25);diff[i+3]=255;}
+      await sharp(diff,{raw:{width:left.info.width,height:left.info.height,channels:4}}).png().toFile(path.join(output,`${key(old).replaceAll('/','-')}-diff.png`));}
+    results.push({key:key(old),sizeEqual,changedPixels,pixelDifference:sizeEqual?pixelDifference(left.data,right.data,left.info.width,left.info.height):null,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[]),...(current.resourceEvidence?.errors||[])]});
+  }
+  for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
+  await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
+  return results;
+}
+
+/** Default CI gate assertions are candidate evidence only, never old/new parity. */
+export function candidateCaptureIssues(captures) {
+  const issues=[];
+  for(const capture of captures) {
+    const state=capture.semantics;
+    issues.push(...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]),...(capture.resourceEvidence?.errors||[]));
+    if(capture.errors.length)issues.push(`${capture.fixture}: reader page errors`);
+    if(state.overflow>1)issues.push(`${capture.fixture}: horizontal overflow`);
+    const includes=text=>state.text.includes(text);
+    const required={button:['Continue','Secondary','Outline','Unavailable'],tabs:[capture.state==='second'||capture.state==='arrow-right'?'Second panel':'First panel'],select:['Ada'],'file-upload':['Screenshots'],'data-table':['Ada','Grace','Linus']}[capture.fixture]||[];
+    for(const text of required)if(!includes(text))issues.push(`${capture.fixture}/${capture.state}: missing ${text}`);
+    if(capture.fixture==='select'&&!state.controls.some(control=>control.name==='Person'&&control.role==='button'))issues.push('select: missing named Person control');
+    if(capture.fixture==='dialog'&&capture.state==='open'&&!includes('Review changes'))issues.push('dialog: did not open');
+    if(capture.fixture==='dialog'&&capture.state==='escape'&&state.controls.some(control=>control.role==='dialog'))issues.push('dialog: did not close on Escape');
+    if(capture.fixture==='data-table'&&state.rows.length!==4)issues.push('data-table: expected header and three rows');
+  }
+  return issues;
+}
+
+/** Raw snapshots stay unchanged. Only empty native button values and layout
+ * whitespace between a body composed solely of button labels are incidental. */
+export function comparableBehavior(raw) {
+  const state=structuredClone(raw);
+  if(!Array.isArray(state.controls))return state;
+  for(const control of state.controls)if(['button','tab'].includes(control.role)&&control.value==='')delete control.value;
+  const labels=state.controls.map(control=>control.name);
+  if(state.controls.length&&state.controls.every(control=>control.role==='button')&&typeof state.text==='string'&&state.text.replace(/\s/g,'')===labels.join('').replace(/\s/g,''))state.text=labels.join(' ');
+  return state;
+}
+
+/** Expectations describe the same observable outcomes for both real readers. */
+export function stateExpectationIssues(expected,actual) {
+  if(!expected)return [];
+  const issues=[];
+  const clean=text=>String(text).replace(/\s+/g,' ').trim();
+  for(const text of expected.textIncludes||[])if(!clean(actual.text).includes(clean(text)))issues.push(`Missing visible text ${JSON.stringify(text)}`);
+  for(const text of expected.hiddenText||[])if(clean(actual.text).includes(clean(text)))issues.push(`Unexpected visible text ${JSON.stringify(text)}`);
+  for(const role of expected.roles||[]) {
+    const matches=actual.controls.filter(control=>control.role===role.role&&control.name===role.name);
+    if(!matches.length){issues.push(`Missing ${role.role} ${JSON.stringify(role.name)}`);continue;}
+    if(!matches.some(control=>Object.entries(role).every(([key,value])=>key==='role'||key==='name'||(key==='disabled'?control[key]===value:String(control[key])===String(value)))))issues.push(`Unexpected state for ${role.role} ${JSON.stringify(role.name)}: expected ${JSON.stringify(role)}`);
+  }
+  if(expected.rows&&JSON.stringify(expected.rows)!==JSON.stringify(actual.rows))issues.push('Unexpected rendered table rows');
+  if(expected.bodyRows&&JSON.stringify(expected.bodyRows)!==JSON.stringify(actual.rows.slice(1)))issues.push('Unexpected rendered table body rows');
+  for(const row of expected.bodyRowsInclude||[])if(!actual.rows.slice(1).some(actualRow=>JSON.stringify(actualRow)===JSON.stringify(row)))issues.push('Missing rendered table body row '+JSON.stringify(row));
+  for(const role of expected.rolesAbsent||[])if(actual.controls.some(control=>control.role===role.role&&control.name===role.name))issues.push(`Unexpected visible ${role.role} ${JSON.stringify(role.name)}`);
+  return issues;
+}

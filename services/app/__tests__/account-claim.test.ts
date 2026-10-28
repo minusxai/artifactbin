@@ -21,7 +21,7 @@ beforeEach(() => setSession(null));
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function publish(token: string, title: string, visibility?: string) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title, markup: `<h1>${title}</h1>`, ...(visibility ? { visibility } : {}) } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title, html: `<h1>${title}</h1>`, ...(visibility ? { visibility } : {}) } }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; visibility: string };
 }
@@ -35,7 +35,7 @@ it('the account lists what its connection published, and the connection still ed
   expect(listed.status).toBe(200);
   const titles = ((await listed.json()) as { artifacts: Array<{ title: string }> }).artifacts.map((a) => a.title).sort();
   expect(titles).toEqual(expect.arrayContaining(['Quarterly Review', 'Scratch Notes']));
-  const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${kept.id}`, { method: 'PUT', token: connection.token, json: { markup: '<h1>Updated after login</h1>' } }), params(kept.id));
+  const edited = await putArtifactRoute(await observedRequest(`/api/artifacts/${kept.id}`, { method: 'PUT', token: connection.token, json: { html: '<h1>Updated after login</h1>' } }), params(kept.id));
   expect(edited.status).toBe(200);
   expect(((await edited.json()) as { id: string }).id).toBe(kept.id);
 });

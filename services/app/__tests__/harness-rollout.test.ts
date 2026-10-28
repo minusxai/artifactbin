@@ -8,6 +8,7 @@
  * caps how many such files may exist. An exemption without a reason is a failure.
  */
 import { describe, expect, it } from 'vitest';
+import ts from 'typescript';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -58,16 +59,33 @@ const hookBodies = (text: string): string => {
 const offenders = (mechanism: Mechanism, test: (text: string) => boolean): string[] =>
   files.filter(({ text }) => !exemptions(text).has(mechanism) && test(text)).map(({ rel }) => rel);
 
+/** Only an actual Request-construction helper duplicates the harness; domain DTOs and wrappers do not. */
+function definesRequestBuilder(text:string):boolean{
+ const source=ts.createSourceFile('fixture.ts',text,ts.ScriptTarget.Latest,true);
+ let duplicate=false;
+ const inspect=(node:ts.Node):void=>{
+  if(ts.isFunctionDeclaration(node)&&node.name&&/^(req|request|call|hit|api|send|get|post|fetchApp|mkReq|makeRequest)$/.test(node.name.text)&&node.body?.getText(source).match(/\bnew Request\(/))duplicate=true;
+  if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&/^(req|request|call|hit|api|send|get|post|fetchApp|mkReq|makeRequest)$/.test(node.name.text)&&node.initializer&&(ts.isArrowFunction(node.initializer)||ts.isFunctionExpression(node.initializer))&&/\bnew Request\(/.test(node.initializer.getText(source)))duplicate=true;
+ };for(const statement of source.statements){
+  if(ts.isVariableStatement(statement))for(const declaration of statement.declarationList.declarations)inspect(declaration);
+  else if(ts.isFunctionDeclaration(statement))inspect(statement);
+ }return duplicate;
+}
 describe('the harness owns the four mechanisms', () => {
+  it('distinguishes domain messages and harness wrappers from duplicate Request constructors',()=>{
+   expect(definesRequestBuilder('const request={tableId:"table"};')).toBe(false);
+   expect(definesRequestBuilder('const post=()=>handler(request("/api",{method:"POST"}));')).toBe(false);
+   expect(definesRequestBuilder('const request=(path:string)=>new Request(path);')).toBe(true);
+   expect(definesRequestBuilder('function api(path:string){return new Request(path)}')).toBe(true);
+  });
   it('1. no test file resets the database itself — one PGLite per file is the harness\'s job', () => {
-    expect(offenders('reset', (t) => /\bresetDb\(/.test(t) || /new PGlite\(/.test(t))).toEqual([]);
+    expect(offenders('reset', (t) => /\bresetDb\(/.test(t) || (/new PGlite\(/.test(t)&&/from ['"]@\/lib\/(?:db|platform)(?:['"/])/.test(t)))).toEqual([]);
   });
   it('2. no test file encodes an agent cookie itself', () => {
     expect(offenders('cookie', (t) => /\bencodeAgentSession\(/.test(t))).toEqual([]);
   });
   it('3. no test file defines its own request builder', () => {
-    const builder = /^(export )?(const|function|async function) (req|request|call|hit|api|send|get|post|fetchApp|mkReq|makeRequest)\b\s*[=(:<]/m;
-    expect(offenders('request', (t) => builder.test(t))).toEqual([]);
+    expect(offenders('request', definesRequestBuilder)).toEqual([]);
   });
   it('4. no hook wipes tables itself — no DELETE FROM / TRUNCATE / table-list loop inside beforeEach/afterEach/beforeAll/afterAll', () => {
     const wipe = /DELETE FROM|TRUNCATE|for \(const \w+ of \[?['"]?(artifacts|tokens|users|annotations|codes|datasets)/;

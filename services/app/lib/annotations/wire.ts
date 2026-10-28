@@ -6,9 +6,6 @@
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
 import { MembershipError } from '@/lib/artifacts';
-import { RemoteError } from '../remote/registry';
-import type { ReviewReceipt } from '../remote/agents';
-import { notifyRemoteComment } from '../remote/mentions';
 import type { MutationReceipt } from '@/lib/artifacts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '../accounts';
@@ -16,7 +13,7 @@ import { artifactToWire } from '@/lib/artifacts';
 import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { json } from '../http/http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
-import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, type AnnotationAction, type AnnotationEdit } from './store';
+import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, setCommentReactionFor, type AnnotationAction, type AnnotationEdit } from './store';
 
 /**
  * The artifact GET's shape: the wire row plus the OPEN annotations inlined,
@@ -24,10 +21,10 @@ import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor,
  * an agent already makes before editing carries the owner's feedback, so no
  * second call and no second concept exist on the read side.
  */
-export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
+export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string, viewerId?:string|null) {
   if (row.format !== 'markup' && row.format !== 'folder') return artifactToWire(row, base, 0);
   // The count and the threads are independent reads.
-  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row)]);
+  const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row,undefined,viewerId)]);
   return { ...await artifactToWire(row, base, open), annotations };
 }
 
@@ -44,7 +41,7 @@ const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
 export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string) {
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
-  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base);
+  const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base, actor.userId);
   return snapshotForReader(wire, head.row, head.role);
 }
 
@@ -76,23 +73,21 @@ export async function respondToAnnotationAction(
   id: string,
   annId: string,
   receipt?:MutationReceipt,
-  review?:ReviewReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   const action = parseAnnotationAction(body);
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
-  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof AnnotationAttachmentError)return error.reason==='stale'?json({error:'stale',message:error.message,edit_id:error.head},409):json({error:'invalid_attachment',message:error.message},400);if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt);}
+  catch(error){if(error instanceof AnnotationAttachmentError)return error.reason==='stale'?json({error:'stale',message:error.message,edit_id:error.head},409):json({error:'invalid_attachment',message:error.message},400);if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; a state change was not applied; a plain reply never conflicts.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
-  if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
 }
 
 /** Body → edit; null = malformed (no words, or a revision that is not a count). */
-function parseAnnotationEdit(body: Record<string, unknown>, editorKind: AnnotationEdit['editorKind']): AnnotationEdit | null {
+function parseAnnotationEdit(body: Record<string, unknown>): AnnotationEdit | null {
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return null;
-  const edit: AnnotationEdit = { body: body.body, editorKind };
+  const edit: AnnotationEdit = { body: body.body };
   if (body.expected_revision !== undefined) {
     if (!Number.isSafeInteger(body.expected_revision) || Number(body.expected_revision) < 0) return null;
     edit.expectedRevision = Number(body.expected_revision);
@@ -109,11 +104,10 @@ export async function respondToAnnotationEdit(
   actor: AccessActor,
   id: string,
   commentId: string,
-  editorKind: AnnotationEdit['editorKind'],
   receipt?: MutationReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const edit = parseAnnotationEdit(body, editorKind);
+  const edit = parseAnnotationEdit(body);
   if (!edit) return json({ error: 'invalid_annotation_edit', hint: 'Send the new text as a non-empty `body`; `expected_revision` is the thread revision you read.' }, 400);
   let result;
   try { result = await editAnnotationCommentFor(actor, id, commentId, edit, receipt); }
@@ -124,6 +118,16 @@ export async function respondToAnnotationEdit(
   }
   if (!result) return json({ error: 'not_found' }, 404);
   // Sessions the edit newly mentions hear about it once it has committed; an unchanged text tells no one.
-  if (result.previous !== null) notifyRemoteComment(actor.userId, id, result.wire.id, result.comment, undefined, result.previous);
   return json(result.wire);
+}
+
+/**
+ * Both account doors use the same desired-state protocol; unknown kinds fail closed until supported. `reactor` is
+ * the door's attribution, as for a reply: the browser door names the person, the bearer door the agent.
+ */
+export async function respondToCommentReaction(body:Record<string,unknown>|null,actor:AccessActor,id:string,commentId:string,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<Response>{
+ if(!actor.userId)return json({error:'account_required',hint:'Sign in to react to comments.'},403);
+ if(!body || body.kind!=='thumbs_up' || typeof body.active!=='boolean')return json({error:'invalid_comment_reaction'},400);
+ const wire=await setCommentReactionFor(actor,id,commentId,{kind:body.kind,active:body.active},reactor);
+ return wire?json(wire):json({error:'not_found'},404);
 }

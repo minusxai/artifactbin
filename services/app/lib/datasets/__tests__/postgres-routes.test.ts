@@ -5,8 +5,8 @@
  * solid/datasets/__tests__/dataset-catalog-view.test.tsx's).
  *
  * A SELECT-only role is discovered, saved behind a secret, exposed column by column, read by a stranger through the
- * dataset and through a document's sourced query, refused every forged query, modelled through a notebook whose
- * intermediate cell never reaches a reader, refreshed by hand, and notified through — and no answer anywhere carries
+ * dataset HTTP query, refused every forged query, modelled through a notebook whose
+ * intermediate cell never reaches a reader, refreshed by hand — and no answer anywhere carries
  * the admin or reader password or a hidden source value.
  *
  * Needs Docker (`postgres:17-alpine` already pulled): the `integration` project, skipped by name elsewhere.
@@ -26,17 +26,9 @@ import { POST as notebookPreview } from '@/app/api/my/datasets/notebook/preview/
 import { POST as createMine } from '@/app/api/my/artifacts/route';
 import { GET as readMine } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as sharing } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { POST as membership } from '@/app/api/my/artifacts/[id]/members/route';
-import { POST as createArtifact } from '@/app/api/artifacts/route';
+import { POST as queryDataset } from '@/app/api/artifacts/[id]/query/route';
 import { POST as tables } from '@/app/a/[id]/tables/route';
-import { GET as anonymousQuery } from '@/app/a/[id]/query/route';
-import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import { GET as publicPage } from '@/app/api/page/artifact/[id]/route';
-import { GET as jobs } from '@/app/api/notification-runs/[runId]/jobs/route';
-import { GET as inbox } from '@/app/api/my/people/route';
-import { createNotificationWorker } from '@/lib/notifications';
-import { evaluateNotificationQuery, notificationJobStore } from '@/lib/document-data';
-import { notificationDocumentPayload, notificationMutationPayload } from '../../../../../scripts/fixtures/postgres-notifications.mjs';
 
 vi.mock('@/lib/platform/config', async (original) => ({ ...await original<object>(), DATASET_ALLOW_PRIVATE_NETWORKS: true }));
 
@@ -141,16 +133,18 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
     expect(exposedPage).not.toContain('customer_secret');
   });
 
-  it('reruns a document\'s sourced query for a stranger\'s filter, and refuses every forged query with the database unchanged', async () => {
+  it('parameterizes dataset HTTP SQL and refuses forged queries with the database unchanged', async () => {
     const w = await connected();
-    const markup = '<Helmet><Value name="region" type="string" default="west" />'
-      + `<Query name="orders" source="ref:${w.dataset.id}">{\`select id, region from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
-      + '<div><h1>Regional orders</h1><DataTable data="$orders" /></div>';
-    const doc = await body(await createArtifact(request('/api/artifacts', { method: 'POST', token: w.ownerToken.token, json: { title: 'Postgres sourced document', markup, visibility: 'unlisted' } })), 201);
-    // The anonymous reader's door: GET with the run in `q` (what the framed document of a session-less reader asks).
-    const ran = async (region: string) => (await body(await anonymousQuery(request(`/a/${doc.id}/query?q=${encodeURIComponent(JSON.stringify({ values: { region }, only: ['orders'] }))}`), params(doc.id)))).tables.orders.rows.map((r: { id: number }) => r.id);
+    const ran = async (region: string) => {
+      const result = await body(await queryDataset(request(`/api/artifacts/${w.dataset.id}/query`, {
+        method: 'POST', token: w.ownerToken.token,
+        json: { sql: 'select id, region from orders where region=$region order by id', values: { region } },
+      }), params(w.dataset.id)));
+      return result.results[0].rows.map((row: { id: number }) => row.id);
+    };
     expect(await ran('west')).toEqual([1, 3]);
     expect(await ran('east')).toEqual([2]);
+    expect(await ran("west' OR true --")).toEqual([]);
 
     const before = (await admin.query('select count(*)::int as n, sum(amount)::int as total from sales.orders')).rows[0];
     for (const sql of ['select customer_secret from orders', "select id from orders where customer_secret='hidden-west'", 'select * from sales.internal_notes', 'select * from pg_catalog.pg_authid', 'delete from orders', 'with changed as (delete from orders returning *) select * from changed']) {
@@ -190,53 +184,6 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
     expect(finalMetadata.meta.catalog.tables.some((t: { name: string }) => t.name === 'region_totals')).toBe(true);
   });
 
-  it('notifies through the same native catalogs — arrays, concatenation and chained models — once per recipient and run', async () => {
-    const w = await connected();
-    const west = await westTotal();
-    const model = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: { title: 'Postgres model-only notebook', dataset: modelled(await w.freshConnection()) } })), 201);
-    await w.share(model.id, 'unlisted');
-    const trigger = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: {
-      access: 'readwrite',
-      dataset: '<Dataset kind="stored"><Table schema="public" name="rows" columns={[{"name":"id","type":"number"},{"name":"recipient","type":"string"}]} rows={[{"id":1,"recipient":"initial"}]} /></Dataset>',
-    } })), 201);
-    await w.share(trigger.id, 'unlisted');
-    const join = async (id: string) => {
-      await body(await membership(request(`/api/my/artifacts/${id}/members`, { method: 'POST', origin: 'same', actor: w.recipient, json: { action: 'join' } }), params(id)));
-      await body(await membership(request(`/api/my/artifacts/${id}/members`, { method: 'POST', origin: 'same', actor: w.owner, json: { action: 'approve', userId: w.recipientUser.id } }), params(id)));
-    };
-    const fixture = { triggerId: trigger.id, recipientId: w.recipientUser.id, modelDatasetId: model.id, datasetId: w.dataset.id };
-    const notice = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: notificationDocumentPayload(fixture) })), 201);
-    await join(notice.id);
-    const worker = createNotificationWorker({ store: await notificationJobStore(), evaluator: { evaluate: evaluateNotificationQuery } });
-    const run = async (id: string) => {
-      const result = await body(await mutate(request(`/a/${id}/mutate`, { method: 'POST', origin: 'same', actor: w.owner, json: notificationMutationPayload(w.recipientUser.id) }), params(id)));
-      expect(typeof result.mutationRunId).toBe('string');
-      expect(await worker.drainOnce()).toBe(true);
-      const listed = await body(await jobs(request(`/api/notification-runs/${result.mutationRunId}/jobs`, { actor: w.owner }), { params: Promise.resolve({ runId: result.mutationRunId }) }));
-      expect(listed.jobs).toHaveLength(1);
-      return { runId: result.mutationRunId as string, job: listed.jobs[0] };
-    };
-    const received = async (runId: string) => (await body(await inbox(request('/api/my/people', { actor: w.recipient })))).notifications
-      .filter((n: { kind: string; mutation_run_id?: string }) => n.kind === 'mutation' && n.mutation_run_id === runId);
-    const first = await run(notice.id);
-    expect(first.job.status).toBe('completed');
-    expect([...first.job.notification_names].sort()).toEqual(['duplicate_notice', 'model_notice', 'physical_notice']);
-    const delivered = await received(first.runId);
-    expect(delivered).toHaveLength(1);
-    expect([...delivered[0].messages].sort()).toEqual(['Order 1', `West total ${west}`]);
-    // The current native-source authority gates both delivery and disclosure.
-    await w.share(model.id, 'private');
-    expect(await received(first.runId)).toEqual([]);
-    const suppressed = await run(notice.id);
-    expect(suppressed.job.status).toBe('completed');
-    expect(await received(suppressed.runId)).toEqual([]);
-    await w.share(model.id, 'unlisted');
-    expect(await received(suppressed.runId)).toEqual([]);
-    // PostgreSQL JSON text fails the job without partial sibling-rule delivery.
-    const invalid = await body(await createMine(request('/api/my/artifacts', { method: 'POST', origin: 'same', actor: w.owner, json: notificationDocumentPayload({ ...fixture, invalid: true }) })), 201);
-    await join(invalid.id);
-    const failed = await run(invalid.id);
-    expect(failed.job.status).toBe('failed');
-    expect(await received(failed.runId)).toEqual([]);
-  });
+  // JSX Mutation/Notification admission was retired. Delivery deduplication and
+  // atomic notification jobs remain covered by __tests__/notification-jobs.test.ts.
 });

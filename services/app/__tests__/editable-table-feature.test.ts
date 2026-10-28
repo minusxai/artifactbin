@@ -1,104 +1,36 @@
-import { describe, expect, it } from 'vitest';
-import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { POST as mutateDoc } from '@/app/a/[id]/mutate/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { useAppHarness, request } from './harness';
+/** HTML row controls use stable row IDs and expected revisions, replacing JSX row snapshots. */
+import {describe,it,expect} from 'vitest';
+import {POST as create} from '@/app/api/artifacts/route';
+import {identityForUser} from '@/lib/accounts';
+import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
+import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
+import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {getArtifactById} from '@/lib/artifacts';
+import {useAppHarness,request,mintAccountToken} from './harness';
 useAppHarness();
-const create = async (token:string, body:Record<string,unknown>) => {
-  const res=await createArtifact(request('/api/artifacts',{method:'POST',token,json:body}));
-  expect(res.status,await res.clone().text()).toBe(201);
-  return await res.json() as {id:string};
-};
-const markup=(ds:string)=>`<Helmet><Import name="tasks_data" src="ref:${ds}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query><Import name="set_status_data" src="ref:${ds}" /><Mutation name="set_status" expectedAffected={1}>{\`update set_status_data.rows set status=$_value where id=$_row.id and status is $_row.status\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Select value="$_row.status" options={["backlog","active","done"]} run="$set_status"/></Column></DataTable>`;
-describe('editable DataTable feature',()=>{
-  it.each(['For','DataTable'])('persists %s row actions and rejects malformed snapshots and editor-only values',async(kind)=>{
-    const t=await mintToken('row-actions');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}],access:'readwrite'});
-    const action='<Button run="$complete">Complete</Button>';
-    const body=kind==='For' ? `<For each={$tasks} keyBy="id">${action}</For>` : `<DataTable data="$tasks" rowKey="id"><Column col="id">${action}</Column></DataTable>`;
-    const source=`<Helmet><Import name="tasks_data" src="ref:${ds.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query><Import name="complete_data" src="ref:${ds.id}" /><Mutation name="complete" expectedAffected={1}>{\`update complete_data.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>${body}`;
-    const doc=await create(t.token,{markup:source});
-    const update=(row:unknown)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'complete',args:{},row}}),{params:Promise.resolve({id:doc.id})});
-    // The row carries exactly the fields the statement reads, typed as its table has them.
-    for(const row of [undefined,{id:'2'},{id:2,admin:true}]) expect((await update(row)).status).toBe(400);
-    const saved=await update({id:2});
-    expect(saved.status,await saved.clone().text()).toBe(200);
-    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([{id:1,status:'backlog'},{id:2,status:'done'}]);
-    const bad=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:source.replace("status='done'",'status=$_value')}}));
-    expect(bad.status,await bad.clone().text()).toBe(400);
-  });
-  it('publishes, updates one cell, and rejects a stale edit without bumping dataset version',async()=>{
-    const t=await mintToken('editable');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}],access:'readwrite'});
-    const doc=await create(t.token,{markup:markup(ds.id)});
-    const update=(value:string)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',args:{},value:value,row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
-    const first=await update('active'); expect(first.status,await first.clone().text()).toBe(200);
-    const before=(await getArtifactById(ds.id))!;
-    expect(await loadDatasetRows(before)).toEqual([{id:1,status:'active'},{id:2,status:'backlog'}]);
-    const stale=await update('done'); expect(stale.status,await stale.clone().text()).toBe(409);
-    expect(await stale.json()).toMatchObject({error:'row_changed'});
-    expect((await getArtifactById(ds.id))!.version).toBe(before.version);
-  });
-  it('does not persist an update that matches duplicate target keys',async()=>{
-    const t=await mintToken('duplicate');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:1,status:'backlog'}],access:'readwrite'});
-    const doc=await create(t.token,{markup:markup(ds.id)});
-    const before=(await getArtifactById(ds.id))!;
-    const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',args:{},value:'active',row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
-    expect(res.status,await res.clone().text()).toBe(409);
-    expect(await res.json()).toMatchObject({error:'row_not_unique'});
-    expect((await getArtifactById(ds.id))!.version).toBe(before.version);
-  });
-  it('rejects hostile row fields and missing snapshots before any dataset write', async () => {
-    const t=await mintToken('hostile');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
-    const doc=await create(t.token,{markup:markup(ds.id)});
-    for (const row of [undefined, {id:1,status:'backlog',admin:true}, {id:'1',status:'backlog'}]) {
-      const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',args:{},value:'active',row}}),{params:Promise.resolve({id:doc.id})});
-      expect(res.status,await res.clone().text()).toBe(400);
-      expect(await res.json()).toMatchObject({error:'invalid_row'});
-    }
-    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([{id:1,status:'backlog'}]);
-  });
-  it('rejects row references outside a Column, unknown fields, and missing rowKey at publish', async () => {
-    const t=await mintToken('scope');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
-    for (const source of [markup(ds.id).replace('rowKey="id"',''), markup(ds.id).replace('value="$_row.status"','value="$_row.typo"'), markup(ds.id)+'<span>{$_row.id}</span>']) {
-      const res=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:source}}));
-      expect(res.status,await res.clone().text()).toBe(400);
-    }
-  });
-  it('preserves concurrent different-column edits and rejects one same-cell writer on CAS retry', async () => {
-    const t=await mintToken('concurrent');
-    const ds=await create(t.token,{dataset:[{id:1,status:'backlog',owner:'TBD'}],access:'readwrite'});
-    const source=markup(ds.id).replace('</Helmet>',`<Import name="set_owner_data" src="ref:${ds.id}" /><Mutation name="set_owner" expectedAffected={1}>{\`update set_owner_data.rows set owner=$_value where id=$_row.id and owner is $_row.owner\`}</Mutation></Helmet>`).replace('</DataTable>','<Column col="owner"><Select value="$_row.owner" options={["TBD","alice"]} run="$set_owner"/></Column></DataTable>');
-    const doc=await create(t.token,{markup:source});
-    // Each cell sends the row fields its own statement reads, as the page does.
-    const reads:Record<string,string[]>={set_status:['id','status'],set_owner:['id','owner']};
-    const update=(mutation:string,value:string,row:Record<string,unknown>)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation,args:{},value,row:Object.fromEntries(reads[mutation]!.map(f=>[f,row[f]]))}}),{params:Promise.resolve({id:doc.id})});
-    const original={id:1,status:'backlog',owner:'TBD'};
-    const first=await Promise.all([update('set_status','active',original),update('set_owner','alice',original)]);
-    expect(first.map(r=>r.status)).toEqual([200,200]);
-    const current={id:1,status:'active',owner:'alice'};
-    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([current]);
-    const same=await Promise.all([update('set_status','backlog',current),update('set_status','done',current)]);
-    expect(same.map(r=>r.status).sort()).toEqual([200,409]);
-  });
-  it('publishes a DatePicker cell editor and saves the picked date',async()=>{
-    const t=await mintToken('date-editor');const ds=await create(t.token,{dataset:[{id:1,due:'2026-09-01'}],columns:[{name:'id',type:'number'},{name:'due',type:'date'}],access:'readwrite'});
-    const doc=await create(t.token,{markup:`<Helmet><Import name="tasks_data" src="ref:${ds.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query><Import name="set_due_data" src="ref:${ds.id}" /><Mutation name="set_due" expectedAffected={1}>{\`update set_due_data.rows set due=$_value where id=$_row.id and due is $_row.due\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="due"><DatePicker label="Due {$_row.id}" value="$_row.due" run="$set_due"/></Column></DataTable>`});
-    const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_due',args:{},value:'2026-09-15',row:{id:1,due:'2026-09-01'}}}),{params:Promise.resolve({id:doc.id})});
-    expect(res.status,await res.clone().text()).toBe(200);
-    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([{id:1,due:'2026-09-15'}]);
-  });
-  it('rejects unsupported editors and a generic mutation wired as a cell editor',async()=>{
-    const t=await mintToken('editors');const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
-    const source=markup(ds.id);
-    for(const bad of [source.replace('<Select value=','<Slider value='),source.replace('<Select value=','<Button value='),source.replace('<Select value=','<input type="checkbox" value='),source.replace('status=$_value where id=$_row.id and status is $_row.status',"status='done'")]) {
-      const res=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:bad}}));
-      expect(res.status,await res.clone().text()).toBe(400);
-    }
-  });
+async function fixture(){
+ const owner=await mintAccountToken('native-row-controls'),actor=identityForUser(owner.userId,owner.id);
+ const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{id:1,status:'backlog'},{id:1,status:'backlog'}],access:'readwrite'}}));expect(response.status).toBe(201);const {id}=await response.json();
+ await setDatasetPolicy(actor,id,{version:2,allow:[{actions:['read','insert','update','delete'],from:{user:owner.userId}}]},0);
+ const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'tasks',datasetId:id,mode:'live' as const},signal=new AbortController().signal;
+ const table=(await api.schema(actor,binding,signal)).tables[0]!,status=table.columns.find(c=>c.label==='status')!;
+ const rows=await api.read(actor,binding,{tableId:table.id,first:100},signal);
+ const update=(rowId:string,expectedRevision='1')=>api.write(actor,binding,{tableId:table.id,expectedRevision,requestId:crypto.randomUUID(),changes:[{kind:'UPDATE',rowId,cells:[{columnId:status.id,value:{type:'STRING',value:'active'}}]}]},signal);
+ return {api,actor,binding,signal,id,table,status,rows,update};
+}
+describe('native editable row actions',()=>{
+ it('updates exactly one stable row even when user keys and complete row values are duplicated',async()=>{
+  const f=await fixture();expect(new Set(f.rows.rows.map(row=>row.id)).size).toBe(2);
+  expect((await f.update(f.rows.rows[0]!.id)).outcome).toBe('committed');
+  expect((await loadDatasetRows((await getArtifactById(f.id))!)).map(row=>row.status).sort()).toEqual(['active','backlog']);
+ });
+ it('refuses a stale snapshot without overwriting a committed row action',async()=>{
+  const f=await fixture();expect((await f.update(f.rows.rows[0]!.id)).outcome).toBe('committed');
+  expect((await f.update(f.rows.rows[1]!.id)).outcome).toBe('rejected');expect((await getArtifactById(f.id))?.version).toBe(2);
+ });
+ it('rejects invented row and column identities without persisting partial changes',async()=>{
+  const f=await fixture();expect((await f.update('invented-row')).outcome).toBe('rejected');
+  await expect(f.api.write(f.actor,f.binding,{tableId:f.table.id,expectedRevision:'1',requestId:crypto.randomUUID(),changes:[{kind:'UPDATE',rowId:f.rows.rows[0]!.id,cells:[{columnId:'invented-column',value:{type:'STRING',value:'bad'}}]}]},f.signal)).rejects.toThrow();
+  expect((await getArtifactById(f.id))?.version).toBe(1);
+ });
 });

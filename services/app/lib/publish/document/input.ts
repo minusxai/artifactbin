@@ -1,25 +1,12 @@
 import type {ContentObjects} from '@/lib/object-store/prepared-objects';
-/**
- * Shared request-body → stored-content translation for POST and PUT. A body
- * carries exactly ONE content field:
- *   - `markup`   — THE document: story JSX over the kit, the data embeds, the
- *     HTML vocabulary and <Helmet>. The ONLY document input there is.
- *   - `dataset` | `viz` | `image` | `pdf` — the data tiers
- *   - `format: 'folder'` — the ONE body with no content field at all. A folder
- *     has NO CONTENT: its page is a listing built from the row, so there is
- *     nothing for a caller to send and nothing here to parse. It leaves with
- *     `source: ''`, and stays that way — the replace door
- *     refuses content on a folder rather than turning it into a document.
- *
- * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
- * and markdown is not an authoring language here at all. Both are rejected by
- * name so an agent that sends the old shape is told what replaced it instead
- * of reading "one of".
- *
- * Returns the stored fields or the error Response the route should send.
+/** Shared JSON content admission for original artifact create/replace routes.
+ * Native pages use `html`: complete HTML, canonicalized under the publication
+ * transaction. Data and byte tiers retain their original inputs and authority.
  */
-import { json } from '../../http/http';
-import { publishJsx } from './jsx-tier';
+import {nativeCspDeclarations} from '@/lib/trust/native-csp';
+import { json, thrownMessage } from '../../http/http';
+import {socialPreviewImage,socialPreviewImageValue} from '@/lib/document';
+import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
@@ -27,21 +14,7 @@ import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/li
 import { publishFile } from '@/lib/datasets/file-store';
 
 
-/**
- * A DOCUMENT IS MARKUP, AND A FOLDER IS NOT ONE.
- *
- * A folder was briefly a document — created with a two-line scaffold whose
- * `<Files>` drew its own children — and this predicate is where that decision
- * was spelled. It is markup alone again: a folder has no content, no source to
- * serve, nothing to edit and nothing to render, and its listing is app chrome
- * built from the row rather than from anything stored on it. Every caller that
- * asks "is there a document here?" therefore gets `false` for a folder, which
- * is what makes `raw`, the edit protocol and the frame refuse one by rule
- * rather than by a branch each.
- */
-export const isDocumentFormat = (format: string): boolean => format === 'markup';
-
-import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, parseProgramDefinition, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
+import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
@@ -106,17 +79,7 @@ export interface ContentInputCtx {
 }
 
 export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
-  // Retired inputs, answered by name.
-  const RETIRED: Record<string, string> = {
-    markdown: 'send markup containing <Markdown> for continuous prose, or ordinary HTML tags for individually designed text; the top-level markdown field is not supported',
-    html: 'html is vocabulary inside markup now — send markup; put <style>/<script>/<title> in a top-level <Helmet>',
-    jsx: 'the jsx field is retired — send markup',
-  };
-  for (const [key, hint] of Object.entries(RETIRED)) {
-    if (typeof body[key] === 'string' && (body[key] as string).length > 0) {
-      return json({ error: 'markup_only', hint }, 400);
-    }
-  }
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Publish a complete HTML document in the html field.'},400);
 
   const textPresent = TEXT_CONTENT_FIELDS.filter(
     (k) => typeof body[k] === 'string' && (body[k] as string).length > 0,
@@ -133,14 +96,32 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if (ctx.creating && body.format === 'folder' && present.length === 0) {
     return { format: 'folder', source: '', meta: {}, derivedTitle: null };
   }
-  if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
+  if (body.program !== undefined || body.format === 'program') return json({error:'unsupported_format'},400);
+  if (present.length !== 1) return json({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
   const kind = present[0];
-  if(kind==='program'){
+  if(kind==='html'){
+    const source=String(body.html);
+    const size=tooLarge(source);if(size)return size;
     try{
-      const definition=parseProgramDefinition(typeof body.program==='string'?body.program:JSON.stringify(body.program));
-      return {format:'program',source:JSON.stringify(definition),meta:{},derivedTitle:null};
-    }catch{return json({error:'invalid_program'},400);}
+      canonicalizeHtmlPage(source);
+      const csp=nativeCspDeclarations(source);if(!csp.ok)return json({error:'invalid_csp',details:csp.errors.map(error=>error.message)},400);
+      const metadata=htmlPageMetadata(source),pwa=htmlPwaSettings(source);
+      const imageId=socialPreviewImage(source);
+      if(socialPreviewImageValue(source)!==null&&!imageId)return json({error:'invalid_social_preview_image'},400);
+      const refs:Array<{id:string;kind:string}>=[];
+      if(imageId){
+        const image=await ctx.loadRef?.(imageId);
+        if(ctx.loadRef&&image?.format!=='image')return json({error:'invalid_social_preview_image'},400);
+        refs.push({id:imageId,kind:'image'});
+      }
+      if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return json({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
+      const assets=htmlAssetLinks(source);if(assets.refs.length>128)return json({error:'invalid_refs'},400);
+      for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return json({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
+      return {format:'html',source,meta:{refs,htmlCsp:csp.extensions},derivedTitle:metadata.title,derivedDescription:metadata.description};
+    }
+    catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
   }
+
   if (kind === 'file') {
     if (!ctx.overByteQuota) return json({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
     if (await ctx.overByteQuota()) return json({ error: 'quota_exceeded' }, 403);
@@ -234,11 +215,5 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     return await publishPdf(body, body.pdf as string, ctx.objects);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  const value = body[kind] as string;
-  const sizeError = tooLarge(value);
-  if (sizeError) return sizeError;
-
-  // The document — `markup` (story JSX). publishJsx owns
-  // theme/template/colorMode validation.
-  return publishJsx(body, value, ctx);
+  return json({error:'unsupported_content'},400);
 }

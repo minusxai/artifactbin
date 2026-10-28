@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createMemo, createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts';
@@ -31,7 +32,7 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
   const [confirmReadOnly, setConfirmReadOnly] = createSignal(false);
   const canManage = () => Boolean(props.artifactId && props.editable);
   const endpoint = () => `/api/my/artifacts/${encodeURIComponent(props.artifactId!)}/sharing`;
-  onMount(() => { if (canManage()) void fetch(endpoint()).then(async response => { if (!response.ok) throw new Error('Could not load sharing.'); return response.json() as Promise<SharingState>; }).then(setState).catch(cause => setError(cause.message)); });
+  onMount(() => { if (canManage()) void retryingFetch(endpoint()).then(async response => { if (!response.ok) throw new Error('Could not load sharing.'); return response.json() as Promise<SharingState>; }).then(setState).catch(cause => setError(cause.message)); });
   const update = async (patch: SharingPatch) => {
     if (!canManage()) return false;
     setError('');

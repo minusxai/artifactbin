@@ -1,62 +1,39 @@
-/**
- * The document shapes the page-speed lab (scripts/performance-loads.mjs)
- * views: prose, a few kit components, a dashboard (CSV dataset + queries +
- * charts), a deck, a Mermaid diagram (plain and in a theme), and the kitchen sink.
- * Markup is stored without frontmatter;
- * the dashboard's `ref:{{sales}}` is replaced with the id of the dataset
- * published from sales.csv.
- *
- * The published prose document also carries a same-deployment `<a href>` to a
- * second, unrelated document — appended here rather than written into
- * prose.jsx, whose exact bytes are also the parity key into
- * lib/islands/__tests__/fixtures/react-oracle.json (a frozen recording from
- * the retired React reader, so the file can never change again). Size target
- * 3 must still measure a linked document's compiled page the way a real one
- * names its own link hints, never zero of them.
- */
+/** Native HTML page-speed workloads, published through the actual artifact API. */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { kitchenSinkMarkup } from '../../lib/kitchen-sink-doc.mjs';
-
-const here = import.meta.dirname;
-const read = (file) => readFileSync(path.join(here, file), 'utf8');
-
-/** `painted` names the DOM state that means the fixture's heaviest content is drawn. */
+import { samplePdf } from '../../lib/sample-pdf.mjs';
+import { pageHtml, workloadHtml } from './native.mjs';
+const read = file => readFileSync(path.join(import.meta.dirname,file),'utf8');
 export const PAGE_SPEED_FIXTURES = [
-  { key: 'prose', title: 'Perf A prose', template: null, file: 'prose.jsx', painted: null },
-  { key: 'kit', title: 'Perf B kit', template: null, file: 'kit.jsx', painted: null },
-  { key: 'dashboard', title: 'Perf C dashboard', template: 'dashboard', file: 'dashboard.jsx', painted: { charts: 2 } },
-  { key: 'deck', title: 'Perf D deck', template: 'deck', file: 'deck.jsx', painted: null },
-  { key: 'mermaid', title: 'Perf E mermaid', template: null, file: 'mermaid.jsx', painted: { diagrams: 1 } },
-  // The same diagram in a theme's web fonts. The plain one has no theme, so it draws in system fonts,
-  // which a stored drawing cannot carry: it always draws with the engine. This one is what a stored
-  // drawing (services/app lib/mermaid-images) is made of.
-  { key: 'mermaid-industry', title: 'Perf F mermaid, industry theme', template: null, theme: 'industry', file: 'mermaid.jsx', painted: { diagrams: 1 } },
-  { key: 'kitchen', title: 'Perf G kitchen sink', template: null, painted: { charts: 1 } },
+ {key:'prose',title:'Perf A prose',painted:null},
+ {key:'kit',title:'Perf B kit',painted:null,authorReady:true},
+ {key:'dashboard',title:'Perf C dashboard',painted:{charts:2},authorReady:true},
+ {key:'deck',title:'Perf D deck',painted:null},
+ {key:'mermaid',title:'Perf E mermaid',painted:{diagrams:1}},
+ {key:'mermaid-industry',title:'Perf F mermaid, industry theme',painted:{diagrams:1}},
+ {key:'kitchen',title:'Perf G kitchen sink',painted:{charts:1},authorReady:true},
+ // Names a design system, so the reader links the platform stylesheet (/af/styles.css) and its /af/fonts/ faces;
+ // performance-loads.mjs measures that stylesheet's ETag revalidation on a repeat view.
+ {key:'system',title:'Perf H design system',painted:null},
 ];
-
-/**
- * Publish every fixture through `publish(body) → { id }` (POST /api/artifacts
- * with a bearer token). Returns the fixtures with their new ids.
- */
-export async function publishPageSpeedFixtures(publish, visibility = 'unlisted') {
-  const sales = await publish({ title: 'Perf sales', dataset: read('sales.csv'), visibility });
-  // Published up front so the prose fixture can link to a real id: it otherwise never exercises
-  // link hints, so a regression that makes them fetch eagerly (rather than waiting for hover/press
-  // intent) has nothing to measure size target 3 against.
-  const linkTarget = await publish({ title: 'Perf link target', markup: '<p id="link-target-body">A second document the prose fixture links to.</p>', visibility });
-  const published = [];
-  for (const fixture of PAGE_SPEED_FIXTURES) {
-    const markup = fixture.key === 'kitchen'
-      // The seed checks for unresolved {{...}} placeholders; JSX object props
-      // from the source use the same bytes, so space their braces equivalently.
-      ? (await kitchenSinkMarkup(publish)).replaceAll('={{', '={ {')
-      : read(fixture.file).replaceAll('{{sales}}', sales.id);
-    // Appended after reading the file, never written into it: prose.jsx's exact bytes are the
-    // parity key into lib/islands/__tests__/fixtures/react-oracle.json.
-    const withLink = fixture.key === 'prose' ? `${markup}\n<p id="link"><a href="/a/${linkTarget.id}">A related document</a></p>` : markup;
-    const made = await publish({ title: fixture.title, markup: withLink, visibility, ...(fixture.template ? { template: fixture.template } : {}), ...(fixture.theme ? { theme: fixture.theme } : {}) });
-    published.push({ ...fixture, id: made.id });
+export async function publishPageSpeedFixtures(publish,visibility='unlisted') {
+ const csv=read('sales.csv');
+ const sales=await publish({title:'Perf sales',dataset:csv,visibility});
+ const [columns,...lines]=csv.trim().split('\n').map(line=>line.split(','));
+ const rows=lines.map(values=>Object.fromEntries(columns.map((key,i)=>[key,['revenue','units'].includes(key)?Number(values[i]):values[i]])));
+ const linkTarget=await publish({title:'Perf link target',html:pageHtml('Related document','<p id="link-target-body">A second document the prose fixture links to.</p>'),visibility});
+ const prose=read('prose.jsx').replace(/<Helmet>[\s\S]*?<\/Helmet>/,'').replaceAll('className=','class=');
+ const published=[];
+ for(const fixture of PAGE_SPEED_FIXTURES){
+  let links=fixture.key==='prose'?`<p><a href="/a/${linkTarget.id}">A related document</a></p>`:'';
+  if(fixture.key==='kitchen'){
+   const image=await publish({title:'kit image',image:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',visibility});
+   const pdf=await publish({title:'kit paper',pdf:`data:application/pdf;base64,${samplePdf(2).toString('base64')}`,visibility});
+   links=`<nav><a href="/a/${sales.id}">Sales dataset</a> <a href="/a/${image.id}">Image</a> <a href="/a/${pdf.id}">PDF</a></nav>`;
   }
-  return published;
+  const html=workloadHtml(fixture.key,{prose,rows,links});
+  const made=await publish({title:fixture.title,html,visibility});
+  published.push({...fixture,id:made.id});
+ }
+ return published;
 }

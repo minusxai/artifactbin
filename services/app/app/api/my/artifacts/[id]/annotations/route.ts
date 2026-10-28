@@ -1,6 +1,6 @@
+import { parseHtmlNodeAnchor } from '@artifactbin/contracts';
 import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
-import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread
  * (the bearer twin creates from a node id or a quote instead).
@@ -9,7 +9,8 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
  * is resolved server-side; an uncarryable base answers 409 with head so the
  * live page retries with fresh coordinates). GET lists like the bearer twin.
  *
- * Either browser credential authorizes (account session or the agent-session
+ * GET follows document read admission, including anonymous link readers.
+ * Either browser credential authorizes writes (account session or the agent-session
  * cookie); who may create is `annotationScope` — owner, editor or COMMENTER,
  * the role that may say something and change nothing. A stranger's cookie
  * sees the uniform 404, because the artifact read is actor the same way.
@@ -17,7 +18,7 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document';
-import { browserActor } from '@/lib/accounts';
+import { sessionActor, browserActor } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
@@ -33,18 +34,22 @@ type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_ann
 
 function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const invalid = { error: 'invalid_annotation_body' } as const;
+  const anchor = body.anchor === undefined ? undefined : parseHtmlNodeAnchor(body.anchor);
+  if (body.anchor !== undefined && !anchor) return invalid;
   const hasNode = typeof body.node_id === 'string' && body.node_id.length > 0;
-  if (!hasNode) return invalid;
+  if (!hasNode && !anchor) return invalid;
+  if (anchor && (body.node_id !== undefined || body.quote !== undefined)) return invalid;
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
   if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
   const input: CreateAnnotationInput = { body: body.body };
-  input.nodeId = body.node_id as string;
+  if (hasNode) input.nodeId = body.node_id as string;
+  if (anchor) input.anchor = anchor;
   if (body.edit_id !== undefined) { if (typeof body.edit_id !== 'string' || !body.edit_id) return invalid; input.baseEditId=body.edit_id; }
   if (body.attachment_id !== undefined) { if(typeof body.attachment_id!=='string'||!/^cim_[a-z0-9]+$/.test(body.attachment_id)||!input.baseEditId)return invalid; input.attachmentId=body.attachment_id; }
   if (typeof body.quote === 'string') input.quote = body.quote;
   if (body.range !== undefined && body.range !== null) {
     const range = parseAnnotationRange(body.range);
-    if (!range) return { error: 'bad_range' };
+    if (!range || anchor && (!isAreaRange(range) || anchor.quote || anchor.range)) return { error: 'bad_range' };
     // An area has no words: a quote beside one is a contradiction, refused
     // rather than silently dropped — the page never sends it, so a body that
     // does was not made by the page.
@@ -60,8 +65,7 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
 }
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const actor = await browserActor(request);
-  if (actor instanceof Response) return actor;
+  const actor = await sessionActor(request);
   const { id } = await ctx.params;
   return respondToAnnotationList(request, actor, id);
 }
@@ -93,7 +97,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (made.refused === 'stale') return json({ error: 'stale', edit_id: made.head.editId, version: made.head.version }, 409);
     return json({ error: made.refused }, 400);
   }
-  notifyRemoteComment(actor.userId, id, made.id, made.thread[0]);
   return json(made, 201);
   };
   const key=request.headers.get('Idempotency-Key');

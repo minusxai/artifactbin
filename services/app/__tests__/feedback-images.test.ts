@@ -31,9 +31,9 @@ async function world(){
   const ownerActor=identityForUser(owner.id, token.id);
   const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
-  const document=await make({visibility:'public',markup:`<Helmet><Import name="feedback" src="ref:${dataset.id}" /><Value name="message" type="string" default="" /><Value name="image_ref" type="string" default="" /><Mutation name="submit">{\`insert into feedback.rows (message,image_ref) values ($message,$image_ref)\`}</Mutation></Helmet>`});
+  const document=await make({visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="feedback" href="ref:${dataset.id}"></head><body><p>Feedback</p></body></html>`});
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},0);
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:reporter.id}}]},0);
   await changeMembership(identityForUser(reporter.id, null),document.id,{action:'join'});
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
   const pageActor:Session={credential:'session',userId:reporter.id,email:reporter.email!,emailVerified:true};
@@ -41,11 +41,11 @@ async function world(){
   const reporterToken=await mintToken('dataset-file-reporter',reporter.id);await claimToken(reporter.id,reporterToken.token);
   const post=(body:Buffer,key='upload-operation-123')=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':key},body:new Uint8Array(body)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id,datasetId=dataset.id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${datasetId}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId})});
-  return {owner,ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost};
+  return {owner,reporter,ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost};
 }
 
 it('uploads through a real pages actor, replays safely, and rechecks the current dataset read grant',async()=>{
-  const {ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost}=await world();
+  const {ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost,reporter}=await world();
   const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();
   const created=await post(bytes);expect(created.status,await created.clone().text()).toBe(201);const uploaded=await created.json() as {ref:string;url:string};
   expect(uploaded.ref).toMatch(/^dimg:/);expect(uploaded.url).toContain(`/a/${document.id}/datasets/${dataset.id}/images/`);
@@ -100,7 +100,7 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const replayedImage=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
   expect(await replayedImage.json()).toMatchObject({...imageFile,replayed:true});
   expect(await metaOf(imageFile.ref)).toMatchObject({filename:'proof.png',format:'image'});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:ownerActor.userId}},{actions:['insert'],from:{artifact:document.id}}]},1);
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:ownerActor.userId}},{actions:['insert'],from:{user:reporter.id}}]},1);
   // The read grant is checked on every request, before any bytes are loaded.
   const get=vi.spyOn(objectStore(),'get');
   try {
@@ -128,4 +128,24 @@ it('rechecks the insert grant after storing the object and before committing the
     expect(put).toHaveBeenCalledTimes(1);
   } finally { put.mockRestore(); }
   expect(await imageCount(dataset.id)).toBe(0);
+});
+
+it('requires an explicit artifact grant and rechecks accepted participation on replay, including the normal owner',async()=>{
+ const {ownerActor,reporter,ownerSession,dataset,document,filePost}=await world();
+ await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},1);
+ const put=vi.spyOn(objectStore(),'put');
+ try {
+  // A real link plus accepted participation is provenance, not an insert grant.
+  expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(0);
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},2);
+  const member=await filePost();expect(member.status,await member.clone().text()).toBe(201);const stored=await member.json();
+  expect((await (await filePost()).json()).ref).toBe(stored.ref);expect(await imageCount(dataset.id)).toBe(1);
+  const bytes=await sharp({create:{width:40,height:24,channels:3,background:'#c0392b'}}).png().toBuffer();
+  const ownerPost=()=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:ownerSession,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'owner-normal-upload'},body:new Uint8Array(bytes)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  expect((await ownerPost()).status).toBe(201);expect(await imageCount(dataset.id)).toBe(2);
+  await changeMembership(identityForUser(reporter.id,null),document.id,{action:'leave'});put.mockClear();
+  expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();
+  await changeMembership(ownerActor,document.id,{action:'leave'});
+  expect((await ownerPost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(2);
+ }finally{put.mockRestore();}
 });

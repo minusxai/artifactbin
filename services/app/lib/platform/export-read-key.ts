@@ -25,8 +25,8 @@ const sign = (id: string, expiresAt: number): string =>
   createHmac('sha256', AUTH_SECRET).update(`${id}.${expiresAt}`).digest('hex');
 
 /** `ttlMs` is a seam for tests (a negative value mints an already-dead key). */
-export function mintExportKey(id: string, ttlMs: number = TTL_MS): string {
-  const expiresAt = Date.now() + ttlMs;
+export function mintExportKey(id: string, ttlMs: number = TTL_MS, now: number = Date.now()): string {
+  const expiresAt = now + ttlMs;
   return `${expiresAt}.${sign(id, expiresAt)}`;
 }
 

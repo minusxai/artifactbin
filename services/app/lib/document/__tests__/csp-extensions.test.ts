@@ -4,7 +4,6 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '../helmet';
 import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
 import { validateMarkupStructure } from '../local-validation';
-import { prepareJsx } from '../../publish/document/jsx-tier';
 import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
 import { appendCspExtensions } from '@/lib/page-styles/markup-csp';
 
@@ -97,22 +96,9 @@ describe('cspExtensionsOf', () => {
 });
 
 describe('the publish door and afbin validate', () => {
-  it('publish refuses a bad origin as invalid_csp with the value, not as invalid_jsx', async () => {
-    const answer = await prepareJsx({}, '<Helmet><meta name="csp-connect" content="https://api.example.com/v1" /></Helmet><p>x</p>');
-    expect(answer).toBeInstanceOf(Response);
-    const response = answer as Response;
-    expect(response.status).toBe(400);
-    const body = await response.json() as { error: string; details: Array<{ value: string; message: string }> };
-    expect(body.error).toBe('invalid_csp');
-    expect(body.details[0]!.value).toBe('https://api.example.com/v1');
-  });
 
-  it('publish stores nothing beside the source: each version\'s source is its declaration', async () => {
-    const asked = await prepareJsx({}, '<Helmet><meta name="csp-connect" content="https://api.open-meteo.com" /></Helmet><p>x</p>');
-    if (asked instanceof Response) throw new Error(await asked.text());
-    expect(asked.content.meta).not.toHaveProperty('cspExtensions');
-    expect(asked.content.source).toContain('csp-connect');
-  });
+
+
 
   it('local validation (the CLI) reports the same refusal with its span', () => {
     const source = '<Helmet><meta name="csp-script" content="https://*" /></Helmet><p>x</p>';

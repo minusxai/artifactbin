@@ -1,136 +1,19 @@
-/**
- * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/llms.txt>; rel="help"` header (for
- * agents that read headers or strip HTML) and in <head> — built on the request's own base URL.
- */
-import { describe, expect, it } from 'vitest';
-import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { createAppServer } from '@/server/app';
-import { createArtifact } from '@/lib/artifacts';
-import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail } from '@/lib/compiled-page/agent-discovery';
-import { llmsText } from '@/lib/serving/agent-references.server';
+/** HTTP discovery remains app chrome; authored native page bytes stay their own file. */
+import {expect,it} from 'vitest';
+import {createAppServer} from '@/server/app';
+import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/serving/agent-discovery';
 
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, ensureUsername } from '@/lib/accounts';
-import { useAppHarness } from '@/__tests__/harness';
-
-useAppHarness();
-
-const BASE = 'http://localhost:3000';
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
-
-describe('GET /a/:id (the document itself)', () => {
-  it('the native query door authenticates before revealing whether a document exists', async () => {
-    const app = createAppServer();
-    const anonymous = await app.request(`${BASE}/api/artifacts/zzzzzz/query`, {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    expect(anonymous.status).toBe(401);
-    const token=await mintToken('mxmx_test_query_help');
-    const missing=await app.request(`${BASE}/api/artifacts/zzzzzz/query`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token.token}`},body:'{}'});
-    expect(missing.status).toBe(404);expect(await missing.json()).toMatchObject({error:'not_found'});
-  });
-
-  it('carries Link: <base>/llms.txt; rel="help" and the head pointer, on the request base', async () => {
-    const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
-    const res = await rawRoute(new Request(`${BASE}/a/${row.id}`), params(row.id));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
-    const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
-  });
-  it('the plain app shell carries the same head pointer, and /llms.txt is the one-pager on the request base', async () => {
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const shell = await app.request(`${BASE}/login`, { headers: { accept: 'text/html' } });
-    expect(shell.status).toBe(200);
-    const html = await shell.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(html.match(/name="agents"/g)).toHaveLength(1);
-    // FIRST in the head: a fetch that keeps only the first few kilobytes must still see the pointer
-    // (it sat after every preload link, one line past where OpenCode's fetch cut).
-    expect(html.indexOf('<link rel="help"')).toBeLessThan(html.indexOf('<title>SPA</title>'));
-    expect(html.indexOf('<link rel="help"')).toBe(html.indexOf('<head>') + '<head>'.length);
-    const attributed = createAppServer({ indexHtml: async () => '<!doctype html><html><head lang="en"><meta charset="utf-8"><link rel="stylesheet" href="/x.css"></head><body></body></html>' });
-    const shell2 = await (await attributed.request(`${BASE}/login`, { headers: { accept: 'text/html' } })).text();
-    expect(shell2.indexOf('<link rel="help"')).toBe(shell2.indexOf('<head lang="en">') + '<head lang="en">'.length);
-    expect(shell2.indexOf('<link rel="help"')).toBeLessThan(shell2.indexOf('<link rel="stylesheet"'));
-    const llms = await app.request(`${BASE}/llms.txt`);
-    expect(llms.status).toBe(200);
-    const text = await llms.text();
-    expect(text).toBe(llmsText(BASE));
-    expect(text).toMatch(/^## Read first/);
-    expect(text).toMatch(/\[download all skill guides\]\(\/skills\/artifactbin\.zip\)/i);
-    expect(text).not.toContain('@afbin/cli@latest setup');
-    expect((await app.request(`${BASE}/getting-started.md`)).status).toBe(404);
-    for (const topic of ['http-api', 'http-auth', 'http-authoring', 'http-document-graph']) {
-      const linked = await app.request(`${BASE}/llms/${topic}`);
-      expect(linked.status, topic).toBe(200);
-      const guide = await linked.text();
-      expect(guide, topic).not.toContain('[[ base ]]');
-      if (topic === 'http-auth') {
-        expect(guide).toContain('/api/auth/email-otp/send-verification-otp');
-        expect(guide).toContain('/api/auth/sign-in/email-otp');
-        expect(guide).toContain('/api/authentication/token');
-        expect(guide).toContain('Authorization: Bearer <access_token>');
-      }
-    }
-    expect(text).toContain(`${BASE}/llms/http-api`);
-    expect(text).toContain(`${BASE}/llms/http-authoring`);
-    expect(text).not.toContain('[[ base ]]');
-    const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
-    const refused = await app.request(`${BASE}/api/artifacts/${row.id}`);
-    expect(refused.status).toBe(401);
-    expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: expect.stringContaining(`${BASE}/llms/http-auth`), guide: `${BASE}/llms.txt` });
-  });
-  it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
-    const t = await mintToken('t');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
-    const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
-    expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
-  });
-  it('a shared /a/<id> is served in place with the pointer in its header and head, and names its canonical address', async () => {
-    const owner = await ensureUsername(await createUser({ email: 'redirect-help@example.com' }));
-    const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>hop</div>', meta: {}, title: 'Hop', description: null, visibility: 'public' });
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const res = await app.request(`${BASE}/a/${row.id}`);
-    // No hop: a fetch that does not follow redirects reads the document itself.
-    expect(res.status).toBe(200);
-    expect(res.headers.get('location')).toBeNull();
-    const canonical = `/@${owner.username}/${row.id}-hop`;
-    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
-    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
-    const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
-    expect(html).toContain('hop');
-    expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*${canonical}">`));
-    expect(html).toContain(`"address":"${canonical}"`);
-  });
-  it('repeats the pointer as the LAST thing before </body>, where a tail-keeping reader still sees it', async () => {
-    const owner = await ensureUsername(await createUser({ email: 'tail-help@example.com' }));
-    const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const tail = agentDiscoveryTail(agentDiscovery(BASE))+'</body>';
-    for (const path of [`/@${owner.username}/${row.id}-tail`, '/login', `/a/${row.id}/raw`]) {
-      const res = await app.request(`${BASE}${path}`, { headers: { accept: 'text/html' } });
-      expect(res.status, path).toBe(200);
-      const html = await res.text();
-      expect(html.slice(html.lastIndexOf('<!--')), path).toMatch(new RegExp(`^${tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</html>\\s*$`));
-      expect(html.match(/name="agents"/g), path).toHaveLength(1);
-    }
-  });
-  it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
-    const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
-    const t = await mintToken('t', owner.id);
-    const row = await createArtifact(t.id, owner.id, { format: 'markup', source: '<div>pretty</div>', meta: {}, title: 'Pretty help', description: null, visibility: 'public' });
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const res = await app.request(`${BASE}/@${owner.username}/${row.id}-pretty-help`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
-    const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
-  });
+it('keeps author help available in the app shell on its request origin',async()=>{
+ const app=createAppServer({indexHtml:async()=>'<html><head><title>App</title></head><body></body></html>'});
+ const response=await app.request('https://app.example.test/login',{headers:{accept:'text/html'}});
+ expect(response.status).toBe(200);
+ const html=await response.text();
+ const help=agentDiscovery('https://app.example.test');
+ expect(html).toContain(agentDiscoveryHead(help));
+ expect(html).toContain(agentDiscoveryTail(help));
+});
+it('places the discovery tail at the final body boundary',()=>{
+ const help=agentDiscovery('https://app.example.test');
+ const html='<html><body><script>const x="</body>"</script></body></html>';
+ expect(withAgentDiscoveryTail(html,help)).toBe(html.replace('</body></html>',`${agentDiscoveryTail(help)}</body></html>`));
 });

@@ -8,9 +8,9 @@
  * `import("x")` types, type-only included — read with the TypeScript parser. Each import records whether it is
  * type-only (`import type`, `export type`, every named specifier marked `type`, or an `import("x")` type).
  *
- * Five rules:
+ * Four rules:
  *   1. no cycle may contain an entry point or the UI (ENTRY_OR_UI below);
- *   2. a package other than `pkg/cli` imports only `pkg/contracts`, `pkg/utils` and itself;
+ *   2. a package imports only `pkg/contracts`, `pkg/utils` and itself;
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
  *   4. a deep module (DEEP_MODULES below) is entered from outside only through its listed entries,
@@ -19,9 +19,7 @@
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
  *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
  *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
- *      still be imported, so the lists only shrink;
- *   5. the CLI's source (services/cli/src) imports app code only through lib/cli-toolkit's entries
- *      (CLI_TOOLKIT_ENTRIES below), so every app name the CLI depends on is a reviewed re-export.
+ *      still be imported, so the lists only shrink.
  *
  * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
  * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
@@ -36,9 +34,9 @@ import { fileURLToPath } from 'node:url';
 
 const ts = createRequire(import.meta.url)('typescript');
 
-const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
+const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /**
  * Rule 4's lists for lib/islands. lib/islands is browser code with one server-safe index
@@ -47,15 +45,15 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  * an exact file; a leaf is a path under lib/islands without its extension.
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
+  'services/app/lib/html-runtime/browser-reader.ts',
+  // The native HTML live morph, its own lazy browser module (build.server `@afbin/morph`).
+  'services/app/lib/html-runtime/live-morph.ts',
+  'services/app/lib/html-runtime/table-scroll.ts',
   'services/app/solid/',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/compiled-boot.ts',
-  'services/app/lib/offline/compiled-sqlite.ts',
-  'services/app/lib/offline/solid-entry.tsx',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'chart', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'module', 'morph/engine', 'person-face', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
+  'frame-links', 'contract', 'file-display', 'morph/dom', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'live-update', 'person-face', 'table-scroll', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -75,8 +73,6 @@ const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/web/',
   'services/app/lib/frame-edit/',
   'services/app/lib/islands/',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/page-styles/document-root.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'frame-bridge/parent', 'reader-mode',
@@ -88,7 +84,6 @@ const STORY_RUNTIME_BROWSER_LEAVES = [
 const PAGE_STORE_BROWSER_IMPORTERS = [
   'services/app/lib/islands/',
   'services/app/lib/artifact-backend/http.ts',
-  'services/app/lib/offline/compiled-boot.ts',
 ];
 const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport', 'page-bindings', 'page-engine', 'store'];
 /**
@@ -123,9 +118,6 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/islands/morph/engine.ts',
   'services/app/lib/islands/url-sync.ts',
   'services/app/lib/islands/viewer.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/snapshot-current.ts',
-  'services/app/lib/offline/snapshot-transport.ts',
   'services/app/lib/page-store/authenticated-transport.ts',
   'services/app/lib/page-store/dataflow-core.ts',
   'services/app/lib/page-store/fetch-transport.ts',
@@ -140,17 +132,18 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/solid/lib/format.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = [
-  'builtins', 'compiled-dataflow', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
+  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
   'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
 ];
 /*
- * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
+ * lib/document: server code enters through its index, `server` (node-only), or
+ * the pure `csp-extensions` entry used by native policy parsing without compiler dependencies; browser-bundled code
  * imports values from a listed leaf instead, never the index (browserLeavesOnly), because the island and
  * app bundlers cannot drop the rest of a barrel. Its types come from the index (erased), except
  * annotation-edits: re-pointing editor-engine/annotation-map's type import renames esbuild's minified
  * identifiers in the frame-editor chunks (same raw sizes, different bytes and hashes), so it stays a leaf.
  */
-const DOCUMENT_ENTRIES = ['', 'server'];
+const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions'];
 const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/lib/editor-engine/',
@@ -158,27 +151,15 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/frame-edit/',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/project-document.ts',
-  'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch', 'document-graph-wire',
-  'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'node-ids', 'person-mentions', 'pwa-settings',
-  'query-notebook', 'script-export-location', 'social-preview', 'source-changes', 'table-catalog', 'title', 'update-parts',
+  'annotation-edits', 'annotation-range', 'asset-url', 'context', 'display-title', 'document-authoring-client', 'document-graph',
+  'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
+  'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
-/**
- * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
- * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
- * three leaves.
- */
-const COMPILED_PAGE_ENTRIES = ['', 'backfill.server', 'bundle.server', 'compiler'];
-const COMPILED_PAGE_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts'];
-const COMPILED_PAGE_BROWSER_LEAVES = ['agent-discovery', 'carriers', 'story-element'];
-/** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
-const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
-const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
+/** lib/page-styles: retained server consumers use its public index. */
+const PAGE_STYLES_BROWSER_IMPORTERS = [];
+const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
 const ACCOUNTS_ENTRIES = ['', 'tokens'];
 /**
@@ -191,27 +172,21 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  * A listed index is never stale: it is the module's door even while nothing outside uses it.
  */
 export const DEEP_MODULES = {
+  'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ['', 'table'], serverOnly: ['', 'table'] },
   'lib/document-data': { entries: [''], serverOnly: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
   // The frame's four lazy edit chunks, one door each and no index on purpose: an index would merge the chunks.
-  'lib/frame-edit': { entries: ['annotate', 'dom-mounter', 'selection-actions', 'session'] },
+  // Inert shared comment chrome is also consumed by the native HTML reader.
+  'lib/frame-edit': { entries: ['annotate', 'comment-actions-presentation', 'comment-presentation', 'dom-mounter', 'selection-actions', 'session'] },
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
 };
-/**
- * Rule 5's entries, one per CLI bundle: `index` (the afbin process), `host.server` (its packaged
- * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
- * Paths without extension.
- */
-const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
-const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
 /** The module a repository-relative path belongs to, or null (outside services/scripts/server.ts). */
@@ -261,6 +236,15 @@ function scanImports(root, files) {
   const found = [];
   for (const file of files) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
+    // The lexical preprocessor recognizes import/export, import types and literal
+    // dynamic/require forms without allocating a complete AST. Files whose only
+    // references stay inside their module or external cannot add a graph edge.
+    const references = ts.preProcessFile(text, true, true).importedFiles;
+    const from = moduleOf(file);
+    if (!references.some(ref => { const to = resolveImport(file, ref.fileName); return to && to !== from; })) {
+      for (const ref of references) found.push({ file, specifier: ref.fileName, typeOnly: false });
+      continue;
+    }
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : /\.(mjs|js)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, kind);
     const add = (specifier, typeOnly) => found.push({ file, specifier, typeOnly });
@@ -348,18 +332,6 @@ function deepModuleViolations(graph, table) {
 }
 const constantPrefix = module => module.slice('lib/'.length).toUpperCase().replace(/-/g, '_');
 
-/** Rule 5: every import of app code from the CLI's source that does not name a toolkit entry. */
-function cliToolkitViolations(graph, entries) {
-  const refused = [];
-  for (const [to, imports] of [...(graph.get('pkg/cli') ?? [])].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!to.startsWith('lib/') && !to.startsWith('app/') && to !== 'app-root') continue;
-    for (const { file, specifier } of imports) {
-      if (file.startsWith(CLI_SOURCE) && !entries.includes(importPath(file, specifier))) refused.push(`  ${file} imports ${specifier}`);
-    }
-  }
-  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: its preview and team hosts; browser.ts, browser-connect.ts: the preview's browser pages), and import it from there:`, ...refused] : [];
-}
-
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
 function buildModuleGraph(imports) {
   const graph = new Map();
@@ -433,12 +405,11 @@ export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY, deepMo
   const stale = [...allowedEdges].filter(edge => !cyclicEdges.has(edge)).sort();
   if (stale.length) violations.push('Allowed cycle edge(s) no longer in a cycle; remove them from scripts/ci/module-graph.allowed-cycles.json:', ...stale.map(edge => `  ${edge}`));
   for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!from.startsWith('pkg/') || from === 'pkg/cli') continue;
+    if (!from.startsWith('pkg/')) continue;
     const outside = [...edges.keys()].filter(to => !PACKAGE_FLOOR.includes(to)).sort();
     if (outside.length) violations.push(`Package ${from} may import only ${PACKAGE_FLOOR.join(', ')} and itself:`, ...outside.map(to => describeEdge(graph, from, to)));
   }
   violations.push(...deepModuleViolations(graph, deepModules));
-  violations.push(...cliToolkitViolations(graph, CLI_TOOLKIT_ENTRIES));
   return { violations };
 }
 

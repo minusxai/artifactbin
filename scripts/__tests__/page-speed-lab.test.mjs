@@ -1,9 +1,10 @@
 /** The page-speed lab: its workflow stays off the critical path, and its report reads what it measured. */
+import { gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode, waitForQuiet } from '../lib/document-views.mjs';
+import { scriptBudgetBytes, documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode, waitForQuiet } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { loadsSummary, reportMarkdown } from '../ci/performance-report.mjs';
 
@@ -13,10 +14,11 @@ const workflow = yaml.parse(workflowText);
 const ci = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
 
 describe('the page-speed workflow', () => {
-  it('runs beside CI on every pull request and on main pushes touching the lab, including the lab itself', () => {
-    expect(workflow.on.pull_request).toBeNull();
+  it('runs beside ordinary PR CI and on every merge for exact release evidence', () => {
+    expect(workflow.on.pull_request).toEqual({'branches-ignore':['artifactbinv3']});
     expect(workflow.on.push.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/ci/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
-    expect(workflow.on.push.branches).toEqual(['main']);
+    expect(workflow.on.push.branches).toEqual(['main','artifactbinv3']);
+    expect(workflow.on.push.paths).toContain('**');
     expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
   });
 
@@ -118,30 +120,32 @@ describe('size-only determinism', () => {
 });
 
 describe('page-speed fixtures', () => {
-  it('publishes the dataset first and points the dashboard at it', async () => {
+  it('publishes native workloads with the sales snapshot and retained asset links', async () => {
     const bodies = [];
     const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
     expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
     expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
-    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen']);
-    // The same diagram in a theme's web fonts: the drawing a stored copy is made of (the plain one draws in system fonts).
-    const themed = bodies.find(body => body.title === 'Perf F mermaid, industry theme');
-    expect(themed.theme).toBe('industry');
-    expect(themed.markup).toBe(bodies.find(body => body.title === 'Perf E mermaid').markup);
-    expect(bodies.find(body => body.title === 'Perf E mermaid').theme).toBeUndefined();
-    const dashboard = bodies.find(body => body.title === 'Perf C dashboard');
-    expect(dashboard.template).toBe('dashboard');
-    expect(dashboard.markup).toContain('src="ref:id1"');
-    expect(dashboard.markup).not.toContain('{{sales}}');
-    expect(bodies.find(body => body.title === 'Perf D deck').template).toBe('deck');
-    expect(PAGE_SPEED_FIXTURES.find(f => f.key === 'mermaid').painted).toEqual({ diagrams: 1 });
-    const kitchen = bodies.find(body => body.title === 'Perf G kitchen sink');
-    const beforeKitchen = bodies.slice(0, bodies.indexOf(kitchen));
-    for (const field of ['dataset', 'viz', 'image', 'pdf']) {
-      const index = beforeKitchen.findIndex(body => body.title.startsWith('kit ') && body[field]);
-      expect(index, `${field} is published before the kitchen sink`).toBeGreaterThanOrEqual(0);
-      expect(kitchen.markup).toContain(`ref:id${index + 1}`);
+    expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen', 'system']);
+    expect(bodies.find(body => body.title === 'Perf H design system').html).toContain('<meta name="artifactbin:design-system" content="almanac">');
+    for(const body of bodies.filter(body=>body.html)){
+      expect(body.html).toMatch(/^<!doctype html>/i);
+      expect(body).not.toHaveProperty('markup');
+      expect(body.html).toContain('/af/core.js');
+      expect(body.html).not.toContain('{{sales}}');
     }
+    const dashboard=bodies.find(body=>body.title==='Perf C dashboard');
+    expect(dashboard.html).toContain('data-af="state"');
+    expect(dashboard.html).toContain('await client.query');
+    expect(dashboard.html).toContain('Revenue by product');
+    expect(PAGE_SPEED_FIXTURES.find(f=>f.key==='mermaid').painted).toEqual({diagrams:1});
+    const kitchen=bodies.find(body=>body.title==='Perf G kitchen sink');
+    const beforeKitchen=bodies.slice(0,bodies.indexOf(kitchen));
+    for(const field of ['image','pdf']){
+      const index=beforeKitchen.findIndex(body=>body[field]);
+      expect(index, `${field} is published before the kitchen sink`).toBeGreaterThanOrEqual(0);
+      expect(kitchen.html).toContain(`/a/id${index+1}`);
+    }
+
   });
 });
 
@@ -200,11 +204,27 @@ describe('the lab report', () => {
     expect(text).toContain('| home | cold | 1000 (±0) | 50 (±0) | 2.0 (±0.0) |');
   });
 
-  it('labels a one-pass size report and omits app-load timing', () => {
-    const documents = { conditions: { mode: 'size-only', runs: 1 }, summary: summarizeDocumentViews([sample('prose', 'view')]) };
+  it('labels the measured size repetitions and omits app-load timing', () => {
+    const documents = { conditions: { mode: 'size-only', runs: 3 }, summary: summarizeDocumentViews([sample('prose', 'view')]) };
     const text = reportMarkdown({ revision: 'a'.repeat(40), documents }, { revision: 'b'.repeat(40), documents });
-    expect(text).toContain('one unthrottled pass');
+    expect(text).toContain('3 unthrottled passes');
+    expect(text).toContain('never added again to total transferred bytes');
     expect(text).toContain('JS before ready gz KB');
     expect(text).not.toContain('### App loads');
+  });
+});
+
+
+describe('inline executable byte attribution', () => {
+  it('counts inline core even when it makes no network script request', () => {
+    const source = 'globalThis.example = "native core";'.repeat(100);
+    expect(scriptBudgetBytes({decoded:0,gzip:0}, [source])).toEqual({decoded:Buffer.byteLength(source),gzip:gzipSync(source).length,inline:{decoded:Buffer.byteLength(source),gzip:gzipSync(source).length}});
+  });
+  it('adds executable attribution to external scripts, never mutating wire totals', () => {
+    const wire = {decoded:500,gzip:200};
+    const source = 'console.log("reader")';
+    expect(scriptBudgetBytes(wire,[source])).toMatchObject({decoded:500+Buffer.byteLength(source),gzip:200+gzipSync(source).length});
+    expect(wire).toEqual({decoded:500,gzip:200});
+    expect(scriptBudgetBytes(wire,[])).toEqual({...wire,inline:{decoded:0,gzip:0}});
   });
 });

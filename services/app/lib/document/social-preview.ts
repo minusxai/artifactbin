@@ -1,5 +1,4 @@
-import { parseJsx, type JsxElement } from '@/lib/jsx';
-import { splitHelmet } from './helmet';
+import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
 const SOCIAL_PREVIEW_IMAGE_CROP_META = 'artifactbin:og-image-crop';
 const SOCIAL_PREVIEW_IMAGE_META = 'artifactbin:og-image';
@@ -45,23 +44,24 @@ export function parseSocialPreviewCrop(content: string, minWidth = SOCIAL_PREVIE
   return { x, y, width };
 }
 
-const staticStringAttr = (element: JsxElement, name: string): string | null => {
-  const attr = element.attributes.find((candidate) => candidate.name.toLowerCase() === name);
-  return attr?.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
-};
-
-function cropMeta(source: string, name = SOCIAL_PREVIEW_META): { helmet: JsxElement | null; element: JsxElement | null; crop: SocialPreviewCrop | null } | null {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return null;
-  const { helmet } = splitHelmet(parsed.nodes);
-  const element = helmet?.children.find((child): child is JsxElement =>
-    child.type === 'element'
-    && !child.isComponent
-    && child.tag.toLowerCase() === 'meta'
-    && staticStringAttr(child, 'name') === name,
-  ) ?? null;
-  const content = element ? staticStringAttr(element, 'content') : null;
-  return { helmet, element, crop: content === null ? null : parseSocialPreviewCrop(content, name === SOCIAL_PREVIEW_IMAGE_CROP_META ? 1 : SOCIAL_PREVIEW_MIN_CROP_WIDTH) };
+interface PreviewMeta { start: number; end: number; content: string | null; contentStart?: number; contentEnd?: number }
+function cropMeta(source: string, name = SOCIAL_PREVIEW_META): { headEnd: number | null; element: PreviewMeta | null; crop: SocialPreviewCrop | null } {
+  const document = parse(source, { sourceCodeLocationInfo: true });
+  let headEnd: number | null = null;
+  let element: PreviewMeta | null = null;
+  const visit = (node: DefaultTreeAdapterMap['node'], inHead = false): void => {
+    const head = inHead || node.nodeName === 'head';
+    if ('tagName' in node) {
+      if (node.tagName === 'head') headEnd = node.sourceCodeLocation?.endTag?.startOffset ?? null;
+      if (head && node.tagName === 'meta' && node.attrs.some(attr => attr.name === 'name' && attr.value === name) && node.sourceCodeLocation) {
+        element = { start: node.sourceCodeLocation.startOffset, end: node.sourceCodeLocation.endOffset, content: node.attrs.find(attr => attr.name === 'content')?.value ?? null, contentStart: node.sourceCodeLocation.attrs?.content?.startOffset, contentEnd: node.sourceCodeLocation.attrs?.content?.endOffset };
+      }
+    }
+    if ('childNodes' in node) for (const child of node.childNodes) visit(child, head);
+  };
+  visit(document);
+  const content = (element as PreviewMeta | null)?.content;
+  return { headEnd, element, crop: content ? parseSocialPreviewCrop(content, name === SOCIAL_PREVIEW_IMAGE_CROP_META ? 1 : SOCIAL_PREVIEW_MIN_CROP_WIDTH) : null };
 }
 
 /** The authored directive, or null when absent/malformed. */
@@ -91,26 +91,35 @@ function writePreviewMeta(source: string, name: string, markup: string | null): 
   if (!found) return source;
 
   if (found.element) {
+    // Keep the original identity and unrelated attributes when updating a meta.
+    if (markup) {
+      const content = /content="[^"]*"/.exec(markup)?.[0];
+      if (content) {
+        if (found.element.contentStart !== undefined && found.element.contentEnd !== undefined)
+          return source.slice(0, found.element.contentStart) + content + source.slice(found.element.contentEnd);
+        const tag = source.slice(found.element.start, found.element.end).replace(/\/?>$/, close => ` ${content}${close}`);
+        return source.slice(0, found.element.start) + tag + source.slice(found.element.end);
+      }
+    }
     return source.slice(0, found.element.start)
       + (markup ?? '')
       + source.slice(found.element.end);
   }
   if (!markup) return source;
-  if (!found.helmet) return `<Helmet>${markup}</Helmet>${source ? `\n${source}` : ''}`;
-  if (found.helmet.selfClosing) {
-    return source.slice(0, found.helmet.start)
-      + `<Helmet>${markup}</Helmet>`
-      + source.slice(found.helmet.end);
-  }
-  const closing = `</${found.helmet.tag}>`;
-  const at = found.helmet.end - closing.length;
-  return source.slice(0, at) + markup + source.slice(at);
+  if (found.headEnd !== null) return source.slice(0, found.headEnd) + markup + source.slice(found.headEnd);
+  // Missing heads are valid HTML. Insert an explicit one after the authored
+  // doctype/html opener, preserving the original body and script bytes.
+  const opener = /^(?:\s*<!doctype[^>]*>)?\s*(?:<html\b[^>]*>)?/i.exec(source)?.[0] ?? '';
+  return source.slice(0, opener.length) + `<head>${markup}</head>` + source.slice(opener.length);
 }
 
 /** The uploaded image takes precedence over framing, which stays saved. */
+export function socialPreviewImageValue(source: string): string | null {
+  return cropMeta(source, SOCIAL_PREVIEW_IMAGE_META).element?.content ?? null;
+}
+
 export function socialPreviewImage(source: string): string | null {
-  const found = cropMeta(source, SOCIAL_PREVIEW_IMAGE_META);
-  const value = found?.element ? staticStringAttr(found.element, 'content') : null;
+  const value = socialPreviewImageValue(source);
   return value && /^ref:[A-Za-z0-9_-]+$/.test(value) ? value.slice(4) : null;
 }
 

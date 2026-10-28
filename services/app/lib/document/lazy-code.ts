@@ -15,7 +15,7 @@ import { mermaidDiagramKind, mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */
-export const CHART_VIZ_KINDS: ReadonlySet<string> = new Set(['vega', 'vega-lite', 'recipe']);
+const CHART_VIZ_KINDS: ReadonlySet<string> = new Set(['vega', 'vega-lite', 'recipe']);
 
 export interface LazyCode {
   /** A `<Chart>` draws a chart, so the document imports the chart module. */

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, useAppHarness, createGuestOwner } from './harness';
 import { mintToken, resolveToken, revokeToken } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { createTeamApplication } from '../server/team-host';
+import { createAuthComposedHost } from '@/test/helpers/auth-host';
 import { createOAuthStore } from '../../auth/src/identity/oauth';
 import { AUTH_SECRET, getDb } from '@/lib/platform';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -14,12 +14,12 @@ useAppHarness();
 const base = 'http://localhost:3000';
 
 describe('email adoption of legacy ownership', () => {
-  it.each([false, true])('adopts legacy browser and CLI artifacts after real email login (existing account=%s)', async existing => {
+  it.each([false, true])('adopts legacy browser and agent artifacts after real email login (existing account=%s)', async existing => {
     const directory = await mkdtemp(join(tmpdir(), 'email-adoption-'));
     try {
       const email = `mxmx_test_adoption_${existing ? 'existing' : 'new'}@example.test`;
       const outbox = join(directory, 'outbox.jsonl');
-      const host = await createTeamApplication({ APP__PUBLIC_BASE_URL: base, AUTH__SECRET: AUTH_SECRET, EMAIL__DEV_OUTBOX_PATH: outbox }, process.cwd());
+      const host = await createAuthComposedHost({ APP__PUBLIC_BASE_URL: base, AUTH__SECRET: AUTH_SECRET, EMAIL__DEV_OUTBOX_PATH: outbox });
       const post = (path: string, body: unknown, cookie = '') => host.fetch(new Request(base + path, { method: 'POST', headers: { origin: base, cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
       const login = async (held = '') => {
         expect((await post('/api/auth/email-otp/send-verification-otp', { email, type: 'sign-in' }, held)).status).toBe(200);

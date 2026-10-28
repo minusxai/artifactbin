@@ -20,14 +20,11 @@ export type {
 export { EMPTY_COMPILED_DATAFLOW, readerDataflow } from './compiled-dataflow';
 
 // Reference syntax (`$name`, bindings, controls) and the declarations.
-export {
-  carriesRef, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, REF_ATTRS, refName, scalarMatches,
-} from './dataflow';
+export { carriesRef, EMPTY_DATAFLOW, isEmptyDataflow, refName, scalarMatches } from './dataflow';
 export { collectRefNameUses } from './ref-name-uses';
-export { coerceScalarInput } from './scalar-input';
 
 // Built-ins: the platform's own inputs and tables, and the reader's zone.
-export { BUILTIN_INPUTS, BUILTIN_TABLES, CLOCK_FUNCTIONS, platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
+export { platformValues, readerZone, rowField, VIEWER, VIEWER_ID } from './builtins';
 
 // Questions asked of a compiled dataflow.
 export type { ImportTables } from './compiled-flow';
@@ -38,7 +35,7 @@ export {
 
 // Placement: what runs on the server, in the reader, or is held.
 export type { DataflowPlacement } from './placement';
-export { HOLD_MAX_BYTES, HOLD_MAX_ROWS, placeDataflow } from './placement';
+export { HOLD_MAX_BYTES, HOLD_MAX_ROWS } from './placement';
 
 // Mutation requests and the reader's local state.
 export type { MutationRequest } from './mutation-request';
@@ -50,7 +47,7 @@ export { runLocalStateMutation } from './local-state';
 export { LocalStateInputError, localTableOverrides, parseLocalTables } from './local-tables';
 
 // URL values and query values.
-export { cardSelectionQuery, readUrlValues, urlSelection } from './url-values';
+
 export { validateQueryValues } from './query-values';
 
 // The evaluator: runs a compiled dataflow's queries against a SQL service (contracts and siblings only).
@@ -59,9 +56,8 @@ export { DataflowResultError, evaluateDataflow, evaluateDataflowMany } from './e
 
 // Reference media (`ref:` images and files).
 export type { ImageAssetAnswer, ImageRefData, RefDataMap } from './ref-data';
-export { imageRefData, rawUrl, resolveRefProps } from './ref-data';
+export { imageRefData, rawUrl } from './ref-data';
 export { imageReferenceId } from './image-source';
-export { REFERENCE_POSITIONS } from './reference-positions';
 
 // Cell display.
 export type { NumberAgg } from './number-aggregation';

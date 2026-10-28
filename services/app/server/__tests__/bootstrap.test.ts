@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * THE FIRST PAINT IS THE FINAL ONE. A page whose data the SPA would fetch
  * immediately is served WITH that data inlined, so nothing settles a beat
@@ -35,7 +36,7 @@ async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
-  return { owner, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
+  return { owner, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>hi</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret</p></div>'), visibility: 'private' }) };
 }
 
 /** A bundled family's latin upright — what a first-screen preload names. */
@@ -118,16 +119,16 @@ describe('inlined page data', () => {
 it('serves shared artifact edit addresses with authorized bootstrap data and removes the dataset-specific route', async () => {
   const w=await world();
   const headers=as({credential:'session',userId:w.owner.id,email:w.owner.email});
-  // Served in place: the same authorized data, and the canonical /edit address the page heals to.
+  // Served in place: the same authorized data, and the canonical reader address the page heals to.
   const first=await app.request(`/a/${w.pub.id}/edit`,{headers});
   expect(first.status).toBe(200);
   expect(first.headers.get('location')).toBeNull();
   const shared=inlined(await first.text());
-  expect(shared.address).toMatch(new RegExp(`^/@[^/]+/${w.pub.id}[^/]*/edit$`));
+  expect(shared.address).toMatch(new RegExp(`^/@[^/]+/${w.pub.id}[^/]*$`));
   expect(shared.artifact.surface.id).toBe(w.pub.id);
   const page=await app.request(shared.address,{headers});
   expect(page.status).toBe(200);
   expect(inlined(await page.text()).artifact.surface.id).toBe(w.pub.id);
   expect((await app.request(`/datasets/${w.pub.id}/edit`,{headers})).status).toBe(404);
-  expect((await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);
+  expect((await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})})).status).toBe(200);
 });

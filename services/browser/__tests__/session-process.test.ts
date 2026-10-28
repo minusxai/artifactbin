@@ -253,3 +253,68 @@ it('keeps host-only cookies per host, expires and clears them, and keeps nothing
  jar.store(new URL('http://app.lvh.me:7001/a/x'),new Response(null,{headers:{'set-cookie':'afbin_pages=d'}}));
  expect(jar.headerFor(new URL('http://app.lvh.me:7001/'))).toBeNull();
 });
+
+it('forwards complete SSE segments verbatim and releases the live subscription',async()=>{
+ const encoder=new TextEncoder();let cancelled=0;
+ const wire=': alive\r\n\r\nid: position-7\r\nretry: 1200\r\nevent: update\r\ndata: café\r\n\r\n';
+ const options={baseURL:'http://app',async request(){return new Response(new ReadableStream({start(controller){for(const byte of encoder.encode(wire))controller.enqueue(Uint8Array.of(byte));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream','set-cookie':'secret=value'}});}};
+ for(const url of ['http://app/a/abc123/events','http://app/api/my/people/events']){
+ const result=await forwardSessionFetch({url,method:'GET',headers:{}},ANONYMOUS,options);
+ expect(Buffer.from(result.body,'base64').toString()).toBe(wire);
+ expect(result.headers['content-type']).toBe('text/event-stream');expect(result.headers['set-cookie']).toBeUndefined();}
+ expect(cancelled).toBe(2);
+});
+
+it('waits for a split SSE frame instead of flushing a partial event',async()=>{
+ let controller!:ReadableStreamDefaultController<Uint8Array>;let cancelled=0;
+ const encoder=new TextEncoder();
+ const options={baseURL:'http://app',async request(){return new Response(new ReadableStream<Uint8Array>({start(value){controller=value;controller.enqueue(encoder.encode('id: 2\nevent: update\ndata: par'));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+ const pending=forwardSessionFetch({url:'http://app/a/abc123/events',method:'GET',headers:{}},ANONYMOUS,options);
+ const timer=setTimeout(()=>controller.enqueue(encoder.encode('tial\n\n')),300);
+ try{expect(Buffer.from((await pending).body,'base64').toString()).toBe('id: 2\nevent: update\ndata: partial\n\n');expect(cancelled).toBe(1);}finally{clearTimeout(timer);}
+});
+
+it('bounds silent and incomplete SSE responses and cancels them without empty success',async()=>{
+ for(const prefix of ['',': keepalive\n\ndata: unfinished']){
+  let cancelled=0;
+  const options={baseURL:'http://app',async request(){return new Response(new ReadableStream({start(controller){if(prefix)controller.enqueue(new TextEncoder().encode(prefix));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+  await expect(forwardSessionFetch({url:'http://app/a/abc123/events',method:'GET',headers:{}},ANONYMOUS,options)).rejects.toThrow(/complete SSE frame/);
+  expect(cancelled).toBe(1);
+ }
+});
+
+it('cancels a pending session stream on close and keeps permission refusals intact',async()=>{
+ const closed=new AbortController();let cancelled=0;const actors:Actor[]=[];
+ const options={baseURL:'http://app',signal:closed.signal,async request(request:Request,actor:Actor){actors.push(actor);expect(request.headers.get('last-event-id')).toBe('cursor');expect(new URL(request.url).searchParams.get('since')).toBe('cursor');expect(request.headers.get('authorization')).toBeNull();expect(request.headers.get('cookie')).toBeNull();if(actor===ANONYMOUS)return new Response('not found',{status:404});return new Response(new ReadableStream({cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+ const message={url:'http://app/a/abc123/events?since=cursor',method:'GET',headers:{authorization:'Bearer forged',cookie:'forged','last-event-id':'cursor'}};
+ expect((await forwardSessionFetch(message,ANONYMOUS,options)).status).toBe(404);
+ const owner={credential:'bearer' as const,userId:'usr_owner'};
+ const pending=forwardSessionFetch(message,owner,options);const refusal=expect(pending).rejects.toThrow(/closed/i);
+ await Promise.resolve();closed.abort(new Error('Session closed'));await refusal;expect(cancelled).toBe(1);expect(actors).toEqual([ANONYMOUS,owner]);
+});
+
+
+it('keeps the existing byte cap for SSE and cancels overflowing producers',async()=>{
+ let cancelled=0;
+ const options={baseURL:'http://app',async request(){return new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array(8*1024*1024+1));},cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+ await expect(forwardSessionFetch({url:'http://app/a/abc123/events',method:'GET',headers:{}},ANONYMOUS,options)).rejects.toThrow(/Response limit/);expect(cancelled).toBe(1);
+});
+
+
+it('refuses non-document SSE rather than promising arbitrary lossless stream replay',async()=>{
+ let cancelled=0;
+ const options={baseURL:'http://app',async request(){return new Response(new ReadableStream({cancel(){cancelled++;}}),{headers:{'content-type':'text/event-stream'}});}};
+ await expect(forwardSessionFetch({url:'http://app/custom-events',method:'GET',headers:{}},ANONYMOUS,options)).rejects.toThrow(/platform catch-up/);expect(cancelled).toBe(1);
+});
+
+
+it('paces finite keepalive-only segments rather than spinning reconnects',async()=>{
+ const started=Date.now();
+ const result=await forwardSessionFetch({url:'http://app/api/my/people/events',method:'GET',headers:{}},ANONYMOUS,{baseURL:'http://app',async request(){return new Response(': keepalive\n\n',{headers:{'content-type':'text/event-stream'}});}});
+ expect(Buffer.from(result.body,'base64').toString()).toBe(': keepalive\n\n');expect(Date.now()-started).toBeGreaterThanOrEqual(200);
+});
+
+
+it('refuses empty and truncated finite SSE instead of returning successful evidence',async()=>{
+ for(const body of [null,'data: unfinished\n'])await expect(forwardSessionFetch({url:'http://app/a/abc123/events',method:'GET',headers:{}},ANONYMOUS,{baseURL:'http://app',async request(){return new Response(body,{headers:{'content-type':'text/event-stream'}});}})).rejects.toThrow(/complete SSE frame/);
+});

@@ -121,7 +121,7 @@ export async function restoreArtifactFor(actor: AccessActor, id: string): Promis
     const documents = await artifactQuery<{ format: string; version: number; meta: unknown; source: string | null; document: unknown }>(tx,
       `SELECT format, version, meta, source, document FROM artifacts
         WHERE (id = $1 OR (ancestor_ids @> ARRAY[$1] AND deleted_at = $3))
-          AND format = 'markup' AND deleted_at IS NOT NULL AND (${scope.where('$2')})`,
+          AND format = 'html' AND deleted_at IS NOT NULL AND (${scope.where('$2')})`,
       [id, scope.val, row.deleted_at],
     );
     documents.rows.forEach((document) => servableDocument(document));

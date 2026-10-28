@@ -1,104 +1,23 @@
-/**
- * `ref:` resolution is READABILITY-scoped, not ownership-scoped: a caller may
- * reference their own artifacts AND any link-readable (public/unlisted) one.
- *
- * Why: assets and documents routinely land under different identities — two
- * agent sessions each minting their own anonymous token, or an unclaimed
- * upload referenced from an account-owned document. Anonymous assets are born
- * public, so ownership-scoping made the obvious flow ("publish the image, then
- * reference it") fail with invalid_refs for no reason a user could see.
- *
- * The rule mirrors canReadArtifact for the anonymous viewer: public and
- * unlisted resolve for anyone; PRIVATE stays invisible cross-identity (the
- * same uniform "does not resolve" as a nonexistent id — never an existence
- * oracle). Applied at every altitude: the publish door, the document's own
- * render-time dataflow, and the editor's draft queries.
- */
-import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as draftQueryRoute } from '@/app/api/query/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { dataflowForRow, refDataForRow } from '@/lib/document-data';
-
-
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
-
+/** Native dataset links use the original dataset read ACL, independently of page ownership. */
+import {describe,it,expect} from 'vitest';
+import {POST as create} from '@/app/api/artifacts/route';
+import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
+import {mintAccountToken,request,useAppHarness} from './harness';
 useAppHarness();
-
-const PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }];
-
-const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
-
-const queryDoc = (ds: string) =>
-  `<Helmet><Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><Question data="$sales" viz={{"kind":"table"}} />`;
-
-describe('link-readable refs', () => {
-  it('a PUBLIC image published by one token is referenceable by another, and renders', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const img = (await (await create(a.token, { image: PNG })).json()) as { id: string; visibility: string };
-    expect(img.visibility).toBe('public');
-
-    const res = await create(b.token, { markup: `<div className="p-4"><img src="ref:${img.id}" alt="x" /></div>` });
-    expect(res.status).toBe(201);
-    const doc = (await res.json()) as { id: string };
-
-    // Render-time resolution must agree with the door that admitted the ref.
-    const row = await getArtifactById(doc.id);
-    const refData = await refDataForRow(row!);
-    expect(refData[img.id]).toMatchObject({ kind: 'image' });
-  });
-
-  it('a PUBLIC dataset published by one token feeds another token\'s <Query>', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const ds = (await (await create(a.token, { dataset: ROWS })).json()) as { id: string };
-
-    const res = await create(b.token, { markup: queryDoc(ds.id) });
-    expect(res.status).toBe(201);
-    const doc = (await res.json()) as { id: string };
-
-    const flow = await dataflowForRow((await getArtifactById(doc.id))!);
-    expect(flow!.state.tables.sales.rows).toEqual(ROWS);
-  });
-
-  it('an UNLISTED foreign dataset resolves too — link-readable is the rule', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const created = await create(a.token, { dataset: ROWS, visibility: 'unlisted' });
-    expect(created.status).toBe(201);
-    const ds = (await created.json()) as { id: string };
-    expect((await create(b.token, { markup: queryDoc(ds.id) })).status).toBe(201);
-  });
-
-  it('a PRIVATE foreign dataset stays invisible — the uniform "does not resolve"', async () => {
-    const owner = await createUser({ email: 'refs-owner@example.com' });
-    const t = await mintToken('owner', owner.id);
-    await claimToken(owner.id, t.token);
-    const created = await create(t.token, { dataset: ROWS, visibility: 'private' });
-    const ds = (await created.json()) as { id: string; visibility: string };
-    expect(ds.visibility).toBe('private');
-
-    const stranger = await mintToken('stranger');
-    const res = await create(stranger.token, { markup: queryDoc(ds.id) });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; details: string[] };
-    expect(body.error).toBe('invalid_refs');
-    expect(body.details.join(' ')).toMatch(/does not resolve/);
-  });
-
-  it('the editor\'s draft queries see the same widened scope', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const ds = (await (await create(a.token, { dataset: ROWS })).json()) as { id: string };
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', token: b.token, json: { markup: queryDoc(ds.id) } }));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { tables: Record<string, { rows: unknown[] }> };
-    expect(body.tables.sales.rows).toEqual(ROWS);
-  });
+const link=(id:string)=>`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}"></head><body>Rows</body></html>`;
+describe('native foreign dataset links',()=>{
+ it.each(['public','unlisted'])('publishes and reads another owner’s %s dataset',async visibility=>{
+  const a=await mintAccountToken('a'),b=await mintAccountToken('b');
+  const dataset=await(await create(request('/api/artifacts',{method:'POST',token:a.token,json:{dataset:[{value:12}],visibility}}))).json();
+  const result=await create(request('/api/artifacts',{method:'POST',token:b.token,json:{html:link(dataset.id),visibility:'public'}}));expect(result.status).toBe(201);const page=await result.json();
+  const response=await graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',json:{revision:'1',query:'{data{schema{revision tables{id}}}}'}}),{params:Promise.resolve({id:page.id})});
+  expect((await response.json()).data.data.schema.revision).toBe('1');
+ });
+ it('refuses private and missing references uniformly at publication',async()=>{
+  const owner=await mintAccountToken('owner'),stranger=await mintAccountToken('stranger');
+  const dataset=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{value:12}],visibility:'private'}}))).json();
+  const publish=(id:string)=>create(request('/api/artifacts',{method:'POST',token:stranger.token,json:{html:link(id)}}));
+  const privateResponse=await publish(dataset.id),missingResponse=await publish('missing');expect(privateResponse.status).toBe(400);expect(missingResponse.status).toBe(400);
+  expect(await privateResponse.json()).toEqual(await missingResponse.json());
+ });
 });

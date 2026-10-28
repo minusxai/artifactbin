@@ -17,9 +17,6 @@ import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
-import { services } from '@/lib/platform/services';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
-import { drainSnapshotRevalidations } from '@/lib/publish/prepared/snapshots.server';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -136,18 +133,6 @@ export function cookieValue(response: Response, name: string = AGENT_COOKIE): { 
 }
 
 /**
- * Let a write's fire-and-forget work land before a test counts its own queries: the events writer's
- * lazy schema setup and insert, and the analytics row. Waits for the writer's setup, lets every queued
- * continuation run, then passes one statement through the database's serialized queue, so anything
- * already sent has finished.
- */
-export async function settleBackgroundWrites(): Promise<void> {
-  await (services().events as { drain?: () => Promise<void> }).drain?.();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await (await getDb()).query('SELECT 1');
-}
-
-/**
  * Who `auth()` says is signed in for a direct handler call (no proxy stamps a session there): a session, a
  * function asked on every call (a file's own mutable "current user"), or null for nobody, whatever the request
  * carries. `useAppHarness` clears it before every test and after the file, so it never outlives either; a file
@@ -182,17 +167,16 @@ export function useAppHarness(): AppHarness {
 
   const wipe = async () => {
     const db = await database!;
-    // A publish prepares its page after the response (lib/publish/prepared/prepared-page.server): let the last
-    // test's finish before its rows go, so no warm-up writes into the next test's database.
-    await drainPreparedPageWarmups();
-    // Likewise a guest-snapshot revalidation a write queued (server/app enables them).
-    await drainSnapshotRevalidations();
     if (keepRows) return;
     // The schema is declared parent-first. Reverse it so a future foreign key
     // can never make the shared wipe depend on a copied cleanup list.
     for (const table of SCHEMA_TABLES.toReversed()) {
       await db.query(`DELETE FROM ${table}`);
     }
+    // Co-hosted auth creates its tables at service boot, outside SCHEMA_TABLES.
+    // Discover them rather than copying Better Auth's table list into each test.
+    const authTables=await db.query<{name:string}>("SELECT format('%I.%I',schemaname,tablename) AS name FROM pg_tables WHERE schemaname='auth' ORDER BY tablename");
+    if(authTables.rows.length)await db.query(`TRUNCATE TABLE ${authTables.rows.map(row=>row.name).join(', ')} CASCADE`);
     // The events table belongs to the events SERVICE, so it is not in the
     // app's schema and no test file may wipe it itself (harness-rollout pins
     // that). It exists only in a file that created it; guard on to_regclass so
@@ -219,8 +203,6 @@ export function useAppHarness(): AppHarness {
     overrideSession(undefined);
     overridePostgres(undefined);
     overrideCatalogExecutor(undefined);
-    await drainPreparedPageWarmups();
-    await drainSnapshotRevalidations();
     // The export cache holds the database it was opened on; the next file on this worker (the api
     // project shares one module graph per worker) must open its own, not reuse a closed one.
     await resetExportRenderer();
@@ -237,7 +219,6 @@ export function useAppHarness(): AppHarness {
         resetRateLimit();
         overrideSession(undefined);
         seeded = { value: await seed() };
-        await drainPreparedPageWarmups();
         keepRows = true;
       });
       afterAll(() => { keepRows = false; seeded = undefined; });

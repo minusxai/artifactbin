@@ -4,7 +4,6 @@ import type {Hono} from 'hono';
 import {assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
 import {baseUrlOf,mountOAuthRoutes} from './routes/oauth';
 import {say} from './events';
-import {createDevicePairing} from './identity/device-pairing';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
@@ -154,7 +153,7 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
   };
 }
 
-/** Device OAuth and discovery use the same identity database as human sessions. */
+/** Standard OAuth and discovery use the same identity database as human sessions. */
 export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
   return {
     name: 'oauthRoutes',
@@ -166,7 +165,6 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
         sessions: o.sessions,
         admitIdentity:o.admitIdentity,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
-        pairing: createDevicePairing(o.identityDb, schema),
         upstream: o.upstream,
         trustedHops: o.trustedHops ?? 0,
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),

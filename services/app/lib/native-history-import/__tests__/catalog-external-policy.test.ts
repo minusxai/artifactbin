@@ -1,0 +1,10 @@
+import {it,expect} from 'vitest';
+import {validateNativeCatalogProjection} from '../catalog-publication';
+import type {NativeCatalogProjection} from '../catalog-contracts';
+function fixture(kind='postgres'):NativeCatalogProjection {
+ const hash='a'.repeat(64),date='2020-01-01T00:00:00.000Z';
+ return {revisionScope:'latest',sourceNamespace:'fixture',selectionSha256:hash,sourceManifestSha256:hash,objectManifestSha256:hash,sha256:hash,imports:[],identities:{users:{},tokens:{},groups:{},artifacts:{}},objects:[],externalConnections:[{datasetSourceId:'source',sourceSecretSha256:hash}],datasets:[{sourceId:'source',targetId:'TargetDataset',sourceSha256:hash,relationsSha256:hash,currentVersion:1,expectedVersions:[1],policyAudit:[],versions:[{version:1,sourceSha256:hash,source:null,meta:{catalog:{kind,defaultSchema:'public',tables:[]}},title:null,description:null,createdAt:date,actorUserId:null,actorTokenId:null}],authority:{tokenId:'token',userId:null,groupId:null,creatorUserId:null,ancestorIds:[],visibility:'private',linkRole:'viewer',access:'read',datasetPolicy:null,sharingRevision:0,policyRevision:0,editId:'edit',createdAt:date,updatedAt:date,deletedAt:null,shares:[]}}]};
+}
+it('admits a credential-bound external catalog with exact null governance',()=>{expect(()=>validateNativeCatalogProjection(fixture())).not.toThrow();});
+it('rejects non-null and omitted governance for external catalogs',()=>{for(const policy of [undefined,{}, {version:2,allow:[]}]){const p=fixture();p.datasets[0]!.authority.datasetPolicy=policy;expect(()=>validateNativeCatalogProjection(p)).toThrow();}});
+it('keeps stored governance validation and external credential admission',()=>{expect(()=>validateNativeCatalogProjection(fixture('stored'))).not.toThrow();const p=fixture('stored');p.datasets[0]!.authority.datasetPolicy={version:42};expect(()=>validateNativeCatalogProjection(p)).toThrow();const external=fixture();external.externalConnections=[];expect(()=>validateNativeCatalogProjection(external)).toThrow('native_catalog_external_connection_projection_required');});

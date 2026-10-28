@@ -6,12 +6,7 @@
  * a brand-new document needs is not the placeholder but the paste for their agent, which is app UI
  * (solid/components/StarterInstructions). Its bar is the document page's own (solid/document/DocumentChrome).
  *
- * Three ways out, all back onto the framed document:
- *  - the first real version arrives on the live stream → reload, keeping the reader's place, into the
- *    compiled reader;
- *  - Edit (the rail, the controls panel, or landing on `#edit`) → `/edit`, which the server serves as the
- *    compiled placeholder with the editor in place (solid/pages/Document);
- *  - a capture never reaches here: a keyed request is compiled.
+ * The first real version on the live stream reloads into the compiled reader. Captures render the placeholder itself.
  */
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, isStartPlaceholder, type Visibility } from '@artifactbin/contracts';
@@ -68,8 +63,8 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
       if (!head) throw new Error('Could not open this artifact.');
       const result = await backend.commitEdit(prepareBlankReport(head, surface.editId));
       if (!result.ok) throw new Error(result.status === 409 ? 'This artifact has changed. Reload to see the latest version.' : 'Could not create the blank report. Please try again.');
-      reloading = true; // The committed live frame must not race the editor navigation.
-      openEditor();
+      reloading = true; // The committed live frame must not race the reader navigation.
+      replaceDocument(`/a/${id}`);
     } catch (error) { setConversionError(error instanceof Error ? error.message : 'Could not create the blank report.'); }
     finally { setConverting(false); }
   };
@@ -83,18 +78,6 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   const setChromeVisible = useChromeVisibility();
   onMount(() => setChromeVisible?.(false));
   onCleanup(() => setChromeVisible?.(true));
-
-  // ── edit mode lives on the framed placeholder, at `/edit` ──
-  const openEditor = () => {
-    if (!editable) return;
-    replaceDocument(`${window.location.pathname.replace(/\/+$/, '')}/edit${window.location.search}`);
-  };
-  const syncEditHash = () => { if (window.location.hash === '#edit') openEditor(); };
-  onMount(() => {
-    syncEditHash();
-    window.addEventListener('hashchange', syncEditHash);
-    onCleanup(() => window.removeEventListener('hashchange', syncEditHash));
-  });
 
   // ── one view per open (solid/lib/artifact-view-report: the served page reports a compiled read itself) ──
   onMount(() => {
@@ -111,7 +94,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   let reloading = false;
   createEffect(() => {
     const frame = live();
-    if (converting() || !frame || reloading || frame.format !== 'markup' || isStartPlaceholder(frame.source, frame.version)) return;
+    if (converting() || !frame || reloading || frame.format !== 'html' || frame.version <= surface.version || isStartPlaceholder(frame.source, frame.version)) return;
     reloading = true;
     reloadKeepingPlace(window);
   });
@@ -121,17 +104,16 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   return <>
     <DocumentChrome id={id} title={title} author={surface.author ?? null} follow={answer.follow ?? null}
       like={answer.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={() => surface.openAnnotations ?? 0}
-      canEdit={editable} canFork owner={owner} visibility={surface.visibility} hasInvitedUsers={surface.hasInvitedUsers}
+      canFork owner={owner} visibility={surface.visibility} hasInvitedUsers={surface.hasInvitedUsers}
       panel={panel} setPanel={setPanel} mode={mode} onMode={chooseMode}
       // Nothing is written yet to comment on; a reader who may not comment is offered a way in.
       onComment={() => { if (!annotatable) window.location.assign(loginHref(window.location, 'comment')); }}
-      onFork={() => setFork(true)} onShare={() => { if (owner) setSharingOpen(true); }} onEdit={openEditor} onMembership={() => setPanel('controls')}
+      onFork={() => setFork(true)} onShare={() => { if (owner) setSharingOpen(true); }} onMembership={() => setPanel('controls')}
       controls={(close) => <DocumentActions groupId={(surface as typeof surface & {group_id?:string|null}).group_id} id={id} title={title()} version={live()?.version ?? surface.version}
         owner={owner} canEdit={editable} canAnnotate={false} accountSession={accountSession()}
         like={answer.like ?? { liked: false, count: 0 }} onCommentsChange={() => {}}
         forkedFrom={surface.author?.forkedFrom ?? null} hideFork
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
-        onEdit={() => { close(); openEditor(); }}
         onShare={() => { close(); setSharingOpen(true); }}
         onDeleted={owner ? () => window.location.assign('/') : undefined} />} />
     <TrustedUi overlay layer="navigation">
@@ -142,7 +124,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the bar. */}
     <div aria-label="Artifact viewport" class="relative min-h-screen">
-      <StarterInstructions id={id} template={surface.template} onContinueBlank={editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
+      <StarterInstructions id={id} template={surface.template} onContinueBlank={surface.format !== 'html' && editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
     </div>
   </>;
 }

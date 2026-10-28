@@ -1,0 +1,66 @@
+import type {TokenHoldingActor} from '@/lib/accounts';
+import type {publishBundleDependencies} from '@/lib/html-publication-bundle';
+export interface NativeRuntimeSourceFileReceipt {
+ source:string;
+ sourceId:string;
+ version:number;
+ sourceRowSha256:string;
+ kind:'pdf'|'image'|'file'|'missing';
+ sha256:string;
+ target?:string;
+ name?:string;
+ bytes?:number;
+ pages?:number;
+}
+export interface NativeRuntimeSourceAssetProvenance {
+ sourceId:string;
+ sourceVersion:number;
+ sourceRowSha256:string;
+ sourceReceiptSha256:string;
+ name:string;
+ bytes:number;
+ pages?:number;
+}
+export type NativeRuntimeBundleDependency=Awaited<ReturnType<typeof publishBundleDependencies>>['receipts'][number]&{
+ sourceAssets?:readonly NativeRuntimeSourceAssetProvenance[];
+};
+/** Structurally accepts the admitted assembly receipt; admission remains the projector's responsibility. */
+export interface NativeRuntimeAssembly {
+ key:{sourceNamespace:string;sourceId:string;version:number};
+ sha256:string;
+ input?:{fileReceipts?:readonly NativeRuntimeSourceFileReceipt[]};
+ result:{status:string;html?:string;htmlSha256?:string;files?:readonly {path:string;bytes:Uint8Array;sha256:string}[]};
+}
+export interface NativeRuntimePreparation {
+ pageId:string;
+ key:NativeRuntimeAssembly['key'];
+ assemblySha256:string;
+ sourceHtmlSha256:string;
+ html:string;
+ htmlSha256:string;
+ fileDigests:readonly {path:string;sha256:string}[];
+ /** Normal serving metadata: MUST be retained on the corresponding saved page version. */
+ dependencies:readonly NativeRuntimeBundleDependency[];
+ objects:readonly {path:string;id:string;revision:string;objectKey:string;sha256:string;bytes:number;contentType:string}[];
+ assetsSha256:string;
+}
+export interface NativeRuntimePreparationOptions {
+ pageId:string;
+ actor:TokenHoldingActor;
+ /** Existing application origin, used for normal local API request envelopes; no network call. */
+ origin:string;
+ visibility:'private'|'unlisted'|'public';
+ shares?:readonly {email:string;role:'viewer'|'commenter'|'editor'}[];
+}
+/** Every dependency retains an owned saved revision and exact remotely read bytes. */
+export interface NativeRuntimeObjectVerification {
+ path:string;
+ id:string;
+ revision:string;
+ expected:Uint8Array;
+ contentType:string;
+}
+export interface NativeRuntimeObjectVerificationPorts {
+ readOwned(id:string):Promise<{format:string;version:number;meta:Record<string,unknown>}|null>;
+ readObject(objectKey:string):Promise<Uint8Array>;
+}

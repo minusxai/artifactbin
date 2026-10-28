@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE READER SEES SOMETHING WHILE THE IMAGE TRAVELS.
  *
@@ -52,13 +53,13 @@ const wideDataUrl = async (): Promise<string> => {
 async function documentWithImage(markup: (id: string) => string, image: string = PNG) {
   const t = await mintToken('t');
   const img = (await (await create(t.token, { image })).json()) as { id: string };
-  const doc = (await (await create(t.token, { markup: markup(img.id) })).json()) as { id: string };
+  const doc = (await (await create(t.token, { html: nativeHtml(markup(img.id)) })).json()) as { id: string };
   return { img: img.id, doc: doc.id };
 }
 
 describe('a stored blur reaches the reader', () => {
   it('is carried by the ref map, beside the box it reserves', async () => {
-    const { img, doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" /></div>`);
+    const { img, doc } = await documentWithImage((id) => `<div class="p-4"><img src="ref:${id}" alt="x" /></div>`);
     const stored = (await getArtifactById(img))!.meta as { placeholder?: string };
     // The pipeline stored one; if it ever stops, this test says so rather than
     // the feature silently disappearing again.
@@ -68,16 +69,16 @@ describe('a stored blur reaches the reader', () => {
     expect(refData[img]).toMatchObject({ kind: 'image', blur: stored.placeholder });
   });
 
-  it('is IN the served document, as a background under the image', async () => {
-    const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" /></div>`);
-    const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
-    expect(html).toMatch(/background-image:\s*url\(data:image\/webp;base64,/);
-    expect(html).toMatch(/background-size:\s*cover/);
+  it('preserves an authored placeholder while rewriting only the admitted image URL',async()=>{
+    const t=await mintToken('placeholder');const img=await(await create(t.token,{image:PNG})).json();const stored=(await getArtifactById(img.id))!.meta as {placeholder:string};
+    const css=`background-image:url(${stored.placeholder});background-size:cover`;
+    const doc=await(await create(t.token,{html:nativeHtml(`<img src="ref:${img.id}" alt="x" width="48" height="32" style="${css}">`)})).json();
+    const html=await(await serveArtifact(request(`/a/${doc.id}/raw`),params(doc.id))).text();expect(html).toContain(css);expect(html).toContain(`src="/a/${img.id}/raw?v=1"`);expect(html).toContain('width="48" height="32"');
   });
 
   // The author meant what they wrote; cloneElement would replace it outright.
   it("stays out of the way of an author's own style", async () => {
-    const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" style={{opacity: 0.5}} /></div>`);
+    const { doc } = await documentWithImage((id) => `<div class="p-4"><img src="ref:${id}" alt="x" style="opacity:0.5" /></div>`);
     const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
     expect(html).not.toMatch(/background-image:\s*url\(data:/);
   });
@@ -134,15 +135,10 @@ describe('an upload wide enough to be worth it is stored at two widths', () => {
     expect((await serveArtifact(request(`/a/${img}/raw?v=1&w=999`), params(img))).status).toBe(200);
   });
 
-  it('offers both widths in the served document, and only the full one to a capture', async () => {
-    const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" /></div>`, await wideDataUrl());
-    const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
-    expect(html).toContain('&amp;w=1280 1280w');
-    expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
-
-    // /export photographs the chrome-less frame: a `sizes` hint against a
-    // headless viewport is how an og card ends up showing the 640px copy.
-    const shot = await serveArtifact(request(`/a/${doc}/raw?chrome=0`), params(doc)).then((r) => r.text());
-    expect(shot).not.toContain('srcSet');
+  it('preserves authored responsive widths in both reader and capture without a JSX srcset compiler', async () => {
+    const {doc}=await documentWithImage(id=>`<img src="ref:${id}" alt="x" srcset="/a/${id}/raw?v=1&amp;w=1280 1280w, /a/${id}/raw?v=1 1600w" sizes="(max-width: 640px) 100vw, 768px">`,await wideDataUrl());
+    for(const suffix of ['', '?chrome=0']){
+      const html=await(await serveArtifact(request(`/a/${doc}/raw${suffix}`),params(doc))).text();expect(html).toContain('&amp;w=1280 1280w');expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
+    }
   });
 });

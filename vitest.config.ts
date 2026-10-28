@@ -5,8 +5,6 @@ import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
-// The CLI's generated teaching is produced by the global setup (and by `npm test` before Vitest
-// starts), behind a content-verified cache, not on every config load.
 // The island tests (Solid, lib/islands): jsdom and the Solid JSX transform. Every other project
 // matches `lib/**/__tests__` too, so they exclude this glob.
 const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
@@ -18,8 +16,8 @@ const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 // scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
 // vite-plugin-solid). The CLI has its own Node test runner.
 /**
- * Tests that spawn a real server or installer process (`tsx server.ts`, the dev runner, the shell
- * installer under a pty): 35s, 28s, 16s and 13s in CI, more than every other file in their shards.
+ * Tests that spawn a real server process (`tsx server.ts` or the dev runner) keep
+ * their service setup and process lifetime out of the module-local projects.
  * They run in `integration` — once, in CI's `integration` job — instead of in every affected
  * `npm test` and in the api/node shards. Excluded from api and node so each runs exactly once.
  */
@@ -27,7 +25,6 @@ const SERVER_BOOT_TESTS = [
   'services/app/__tests__/dev-app.test.ts',
   'services/app/__tests__/boot-env.test.ts',
   'scripts/__tests__/app-only-auth.test.mjs',
-  'scripts/__tests__/cli-install.test.mjs',
 ];
 
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];
@@ -61,7 +58,7 @@ const ISLANDS_SHARED = globSync([ISLAND_TESTS, SOLID_TESTS], { cwd: import.meta.
 // (scripts/lib/cached-solid.mjs). Tests render client-side (`hydratable` off); the build emits
 // hydratable code. Fresh plugin instances per project: each project has its own Vite server.
 const solidJsdom = () => ({
-  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', 'services/cli/src/preview/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
+  plugins: [declaredLucideIcons(import.meta.dirname), cachedSolid(import.meta.dirname, { include: ['services/app/**/*.{tsx,jsx}', '**/node_modules/@solidjs/router/**/*.jsx', '**/node_modules/lucide-solid/**/*.jsx'], hot: false })],
   server: { deps: { inline: [/@solidjs\/router/, /@solidjs\/testing-library/, /lucide-solid/] } },
 });
 
@@ -131,7 +128,7 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          include: ['services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'],
+          include: ['services/app/lib/html-components/**/*.test.ts', 'services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,auth,events,runner}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'],
           // The heavy tests below match this project's include globs but
           // boot Docker (a disposable Postgres) or real Chromium; they run in
           // the `integration` project instead, kept out of the default `npm

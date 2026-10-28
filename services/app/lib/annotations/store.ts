@@ -6,9 +6,8 @@ import {commentMentions} from './saved-mentions';
 import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
-import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
-import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
+import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
 import type { CommentTarget } from '@/lib/story-ui/comment-target';
 /**
@@ -24,7 +23,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
+import { readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
@@ -34,6 +33,8 @@ import { avatarUrl } from '@/lib/accounts';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
+import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 
@@ -51,12 +52,14 @@ interface AnnotationAnchor {
 export interface AnnotationWire {
   view_state?: CommentViewState;
   revision?: number;
+  /** Set only on an answer to reply+resolve/reopen whose revision was stale: the reply landed, the state change did not. */
+  status_conflict?: true;
   image?: CommentImageWire;
   remote_work?:RemoteWork[];
   id: string;
   status: 'open' | 'resolved';
   /** null exactly when `orphaned` — the anchor names nothing in the CURRENT version. */
-  anchor: AnnotationAnchor | null;
+  anchor: AnnotationAnchor | (HtmlNodeAnchor & { key?: never; path?: never; spanStart?: never; spanEnd?: never }) | null;
   orphaned: boolean;
   /** The document version the comment was made against. */
   anchor_version: number | null;
@@ -84,6 +87,7 @@ export interface AnnotationWire {
 }
 
 export interface CreateAnnotationInput {
+  anchor?: HtmlNodeAnchor;
   viewState?: CommentViewState;
   attachmentId?: string;
   /** Stable source identity. */
@@ -132,8 +136,6 @@ export interface AnnotationAction {
 export interface AnnotationEdit {
   body: string;
   expectedRevision?: number;
-  /** Who is rewriting (the door's attribution). Only a person's edit enters the comment feed; an agent never hears its own. */
-  editorKind: AnnotationAuthor['kind'];
 }
 
 /** What an edit answers: the thread as it now reads, the edited comment, and the text it replaced (null when unchanged). */
@@ -157,12 +159,13 @@ interface AnnotationRowDb {
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
   author_transport: AnnotationAuthor['transport'];
-  author_remote: {sessionId:string;color:RemoteColor;harness?:string}|null;
+  author_remote: {sessionId?:string;color?:RemoteColor;harness?:string;avatar_seed?:string}|null;
   /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
   author_image_key: string | null;
   status: 'open' | 'resolved';
   resolved_at: string | null;
   anchor_key: string | null;
+  html_anchor: HtmlNodeAnchor | null;
   anchor_version: number | null;
   snippet: string;
   created_at: string;
@@ -177,16 +180,6 @@ interface AnnotationRowDb {
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string, lock = false): Promise<ArtifactRow | null> => {
   const r = await artifactQuery<ArtifactRow>(q,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}${lock ? ' FOR UPDATE' : ''}`, [id, scope.val]);
-  return r.rows[0] ?? null;
-};
-
-/**
- * The access decision for a LIST, without the document: the same statement shape and scope as {@link scopedRow}, but it
- * answers with the id alone. A document is megabytes of JSONB the database would ship and the server decode just to be
- * told yes or no; `wireFor` loads it only when there are threads to anchor.
- */
-const scopedHead = async (q: Queryable, scope: Scope, id: string): Promise<AnnotatedHead | null> => {
-  const r = await q.query<AnnotatedHead>(`SELECT id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   return r.rows[0] ?? null;
 };
 
@@ -224,6 +217,22 @@ const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>
     ...(images.has(row.id) ? { image: images.get(row.id) } : {}),
     ...(row.edited_at ? { edited_at: row.edited_at } : {}),
   };
+};
+
+interface ReactionRowDb {
+  comment_id: string; kind: CommentReactionSummary['kind']; count: string; viewer_reacted: boolean;
+  reactors: Array<{ kind: string | null; label: string | null; user_id: string; image_key: string | null }> | null;
+}
+
+/**
+ * A reactor drawn exactly as `commentWire` draws an author, for the same readers: a person as their account and face,
+ * an agent as its label with no account (a token's account says nothing about whose face that is). A row from
+ * before reactors were attributed (`reactor_kind` NULL) reads as the account's person.
+ */
+const reactorWire = (row: NonNullable<ReactionRowDb['reactors']>[number]): CommentReactor => {
+  const kind = row.kind === 'agent' ? 'agent' : 'human';
+  const userId = kind === 'human' ? row.user_id : null;
+  return { kind, label: row.label, user_id: userId, image: userId ? avatarUrl({ id: userId, image_key: row.image_key }) : null };
 };
 
 // ── the anchor attribute, read and written against the parsed source ─────────
@@ -331,42 +340,57 @@ export async function createAnnotationFor(
   const made = await db.transaction(async (tx): Promise<AnnotationWire | CreateAnnotationRefusal | null> => {
     const row = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
     if (!row) return null;
-    if (row.format !== 'markup') return { refused: 'not_markup' };
+    if (row.format !== 'markup' && row.format !== 'html') return { refused: 'not_markup' };
     if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
     const source = row.source ?? '';
-    const parsed = parseJsx(source);
-    if (!parsed.ok) return { refused: 'bad_path' };
-    let node: JsxNode | undefined;
-    if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
-    else if (quote) {
-      const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
-      // Choose the smallest containing element, avoiding ambiguity from its ancestors.
-      const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
-      if (!leaves.length) return {refused: 'quote_not_found'};
-      if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return {refused: 'ambiguous_quote'};
-      node = leaves[0].node;
+    let anchorKey: string | null = null;
+    let snippet: string;
+    if (row.format === 'html') {
+      const anchor = parseHtmlNodeAnchor(input.anchor);
+      if (!anchor) return { refused: 'bad_path' };
+      if (anchor.revision !== String(row.version)) return stale({ editId: row.edit_id, version: row.version });
+      const resolved = resolveHtmlCommentAnchor(htmlCommentNodes(source), anchor);
+      if (!anchor.nodeId || !resolved.node) return { refused: 'bad_path' };
+      // Text may be rendered by the page beneath this saved parent. Capture is
+      // viewer-supplied evidence, never a claim about authoritative source text.
+      if (input.range && (!isAreaRange(input.range) || anchor.quote || anchor.range)) return { refused: 'bad_path' };
+      anchorKey = anchor.nodeId;
+      snippet = (resolved.node?.text ?? anchor.quote).replace(/\s+/g, ' ').trim().slice(0, 240);
+    } else {
+      if (input.anchor) return { refused: 'bad_path' };
+      const parsed = parseJsx(source);
+      if (!parsed.ok) return { refused: 'bad_path' };
+      let node: JsxNode | undefined;
+      if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
+      else if (quote) {
+        const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
+        const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
+        if (!leaves.length) return { refused: 'quote_not_found' };
+        if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return { refused: 'ambiguous_quote' };
+        node = leaves[0].node;
+      }
+      if (!node || node.type !== 'element') return { refused: 'bad_path' };
+      anchorKey = anchorKeyOf(node);
+      if (!anchorKey) return { refused: 'bad_path' };
+      if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
+      snippet = snippetOf(source.slice(node.start, node.end));
     }
-    if (!node || node.type !== 'element') return { refused: 'bad_path' };
-    const anchorKey = anchorKeyOf(node);
-    if (!anchorKey) return { refused: 'bad_path' };
-    if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
     if (input.attachmentId && (!input.baseEditId || !await consumeCommentImage(tx,actor,artifactId,input.attachmentId,id,row.edit_id))) return {refused:'invalid_attachment'};
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
-      anchorKey, row.version, snippetOf(source.slice(node.start, node.end)),
-      quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null],
+      anchorKey, row.version, snippet,
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
     await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'});
     await commentMentions(tx,row,actor,input.body,id);
-    await remoteAgents.enqueue(tx,actor.userId,artifactId,id,{id,body:input.body,author});
     await notify(tx, artifactId, id);
-    const [wire] = await wireFor(tx, row, inserted.rows);
+    const [wire] = await wireFor(tx, row, inserted.rows, actor.userId);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
     return wire ?? null;
   }).catch(error=>{if(error instanceof MembershipError)return new Response(JSON.stringify({error:'mention_refused',detail:error.message}),{status:error.status,headers:{'Content-Type':'application/json'}});throw error;});
@@ -396,17 +420,36 @@ async function sourceOf(db: Queryable, id: string): Promise<string> {
 }
 
 /** Assemble wire threads for a set of roots — anchors resolved against the CURRENT source. */
-async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
+async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowDb[], viewerId?: string | null): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
   const source = head.source !== undefined ? head.source ?? '' : await sourceOf(db, head.id);
   const rootIds = roots.map((root) => root.id);
-  // Three statements however many threads: the selected roots' replies, their remote work, the artifact's images.
+  // Batch replies and images across the selected roots.
   const replies = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id = ANY($2::text[]) AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [head.id, rootIds],
   );
-  const work = await remoteAgents.workFor(db, head.id, rootIds);
   const images = await commentImagesFor(db, head.id);
+  // ONE statement for every comment's reactions and their reactors: per comment and kind, the exact count, whether
+  // the viewer is among them, and the earliest COMMENT_REACTORS_MAX accounts drawn by the author rule (`reactorWire`).
+  const reactions = await db.query<ReactionRowDb>(
+    `SELECT comment_id, kind, count::text, viewer_reacted, reactors FROM (
+       SELECT comment_id, kind, count(*) AS count, bool_or(user_id = $2) AS viewer_reacted,
+         json_agg(json_build_object('kind', reactor_kind, 'label', label, 'user_id', user_id, 'image_key', image_key)
+           ORDER BY rank) FILTER (WHERE rank <= $3) AS reactors
+       FROM (SELECT r.comment_id, r.kind, r.user_id, r.reactor_kind,
+               CASE WHEN r.reactor_kind = 'agent' THEN r.reactor_label ELSE coalesce(u.username, r.reactor_label) END AS label, u.image_key,
+               row_number() OVER (PARTITION BY r.comment_id, r.kind ORDER BY r.created_at, r.user_id) AS rank
+             FROM comment_reactions r LEFT JOIN users u ON u.id = r.user_id WHERE r.comment_id = ANY($1::text[])) ranked
+       GROUP BY comment_id, kind) grouped ORDER BY kind`,
+    [[...rootIds,...replies.rows.map(reply=>reply.id)],viewerId ?? null,COMMENT_REACTORS_MAX]);
+  const reactionMap = new Map<string,CommentReactionSummary[]>();
+  for(const reaction of reactions.rows){
+    const group=reactionMap.get(reaction.comment_id)??[];
+    group.push({kind:reaction.kind,count:Number(reaction.count),viewer_reacted:reaction.viewer_reacted===true,by:(reaction.reactors??[]).map(reactorWire)});
+    reactionMap.set(reaction.comment_id,group);
+  }
+  const withReactions=(row:AnnotationRowDb):AnnotationCommentWire=>({...commentWire(row,images),reactions:reactionMap.get(row.id)??[]});
   const byRoot = new Map<string, AnnotationRowDb[]>();
   for (const r of replies.rows) {
     const list = byRoot.get(r.root_id!) ?? [];
@@ -414,12 +457,15 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
     byRoot.set(r.root_id!, list);
   }
 
-  const anchors = anchorIndex(source);
+  const anchors = roots.some(root => !root.html_anchor) ? anchorIndex(source) : new Map<string, AnchorEntry>();
+  const htmlNodes = roots.some(root => root.html_anchor) ? htmlCommentNodes(source) : null;
 
   return roots.map((root) => {
-    const found = root.anchor_key ? anchors.get(root.anchor_key) : undefined;
+    const htmlAnchor = parseHtmlNodeAnchor(root.html_anchor);
+    const htmlResolved = htmlAnchor && htmlNodes ? resolveHtmlCommentAnchor(htmlNodes, htmlAnchor) : null;
+    const found = !htmlAnchor && root.anchor_key ? anchors.get(root.anchor_key) : undefined;
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
-    const anchored = !!found && bodyPath !== null;
+    const anchored = htmlAnchor ? !!htmlResolved?.node : !!found && bodyPath !== null;
     const range = storedRange(root.range);
     const viewState = parseCommentViewState(root.view_state);
     return {
@@ -428,19 +474,18 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
       ...(viewState ? { view_state: viewState } : {}),
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
-      anchor: anchored
+      anchor: htmlAnchor ? htmlAnchor : anchored && found
         ? { key: root.anchor_key!, nodeId: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }
         : null,
       orphaned: !anchored,
       anchor_version: root.anchor_version,
-      snippet: anchored ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
+      snippet: htmlAnchor ? htmlResolved?.node?.text.replace(/\s+/g, ' ').trim().slice(0, 240) ?? root.snippet : anchored && found ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
       // Verbatim, both of them: what was selected does not change because the
       // document did — only `quote_found` moves.
       quote: root.quote,
       range,
-      quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
-      remote_work: work.get(root.id) ?? [],
-      thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
+      quote_found: htmlResolved ? htmlResolved.quoteFound : quoteFound(anchored ? found : undefined, root.quote, range),
+      thread: [withReactions(root), ...(byRoot.get(root.id) ?? []).map(withReactions)],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
     };
@@ -456,16 +501,15 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
 export async function listAnnotationPageFor(actor: AccessActor, artifactId: string,
   opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
-  const row = await scopedHead(db, annotationScope(actor), artifactId);
+  const row = (await readableArtifactHeader(actor, artifactId))?.row;
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
       AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
       AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
       ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
-  await remoteAgents.refreshWorkStatus(artifactId);
   const selected = roots.rows.slice(0, opts.limit);
-  return {annotations: await wireFor(db, row, selected),
+  return {annotations: await wireFor(db, row, selected, actor.userId),
     ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
 }
 
@@ -474,10 +518,9 @@ export async function listAnnotationsFor(
   artifactId: string,
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[] | null> {
-  const db = await getDb();
-  const row = await scopedHead(db, annotationScope(actor), artifactId);
+  const row = (await readableArtifactHeader(actor, artifactId))?.row;
   if (!row) return null;
-  return annotationsWireForRow(row, opts);
+  return annotationsWireForRow(row, opts, actor.userId);
 }
 
 /**
@@ -489,6 +532,7 @@ export async function listAnnotationsFor(
 export async function annotationsWireForRow(
   row: AnnotatedHead,
   opts?: { status?: 'open' | 'resolved' | 'all' },
+  viewerId?: string | null,
 ): Promise<AnnotationWire[]> {
   const db = await getDb();
   const status = opts?.status ?? 'open';
@@ -497,8 +541,7 @@ export async function annotationsWireForRow(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
-  await remoteAgents.refreshWorkStatus(row.id);
-  return wireFor(db, row, roots.rows);
+  return wireFor(db, row, roots.rows, viewerId);
 }
 
 /**
@@ -513,7 +556,6 @@ export async function actOnAnnotationFor(
   action: AnnotationAction,
   author: AnnotationAuthor,
   receipt?:MutationReceipt,
-  review?:ReviewReceipt,
 ): Promise<AnnotationWire | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
@@ -527,7 +569,7 @@ export async function actOnAnnotationFor(
    * transaction — so the callback hands the facts back and the log is told
    * once the transaction has resolved.
    */
-  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; wire?:AnnotationWire } | null> => {
+  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; statusConflict: boolean; wire?:AnnotationWire } | null> => {
     // Artifact → thread order matches root creation and serializes seq allocation through commit.
     const row = await scopedRow(tx, scope, artifactId, true);
     if (!row) return null;
@@ -537,9 +579,18 @@ export async function actOnAnnotationFor(
     );
     const root = found.rows[0];
     if (!root) return null;
-    if(action.expectedRevision!==undefined&&root.revision!==action.expectedRevision)throw new AnnotationRevisionError(root.revision);
+    /*
+     * A reply only APPENDS, so concurrent replies never conflict and a stale `expected_revision` on one is ignored.
+     * The optimistic check guards state changes: a bare resolve/reopen against a stale revision throws. A reply
+     * combined with a transition keeps the reply (never lose words) and skips the transition, reported as
+     * `status_conflict` so the caller re-reads and decides again.
+     */
+    const stale=action.expectedRevision!==undefined&&root.revision!==action.expectedRevision;
+    const hasReply=typeof action.reply==='string'&&action.reply.length>0;
+    const transition=Boolean(action.resolve||action.reopen);
+    if(stale&&!hasReply)throw new AnnotationRevisionError(root.revision);
+    const statusConflict=stale&&transition;
 
-    const remote=review?await remoteAgents.receipt(tx,actor.userId,artifactId,annotationId,review,!!action.resolve):undefined;
     const replyId='ann_'+generateInternalId();
     const replied = typeof action.reply === 'string' && action.reply.length > 0;
     if (replied) {
@@ -553,38 +604,40 @@ export async function actOnAnnotationFor(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
-        [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color,harness:remote.harness}):null],
+        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null],
       );
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
-    if(replied)await remoteAgents.enqueue(tx,actor.userId,artifactId,root.id,{id:replyId,body:action.reply!,author});
     let resolved = false;
-    if (action.reopen && root.status === 'resolved') {
+    if (statusConflict) {
+      // The thread moved since the caller read it: the reply stands, the state change does not.
+    } else if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
     } else if (action.resolve && root.status === 'open') {
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
       resolved = true;
     }
-    if(replied || resolved || (action.reopen && root.status==='resolved')){
+    if(replied || resolved || (!statusConflict && action.reopen && root.status==='resolved')){
       await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
-      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:!!remote||author.kind==='agent'});
+      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:author.kind==='agent'});
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would
     // make every miss truthy.
     if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]]))[0]:undefined;
+    let wire=receipt?(await wireFor(tx,row,[fresh.rows[0]],actor.userId))[0]:undefined;
+    if(wire&&statusConflict)wire={...wire,status_conflict:true};
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:200,body:wire as unknown as Record<string,unknown>});
-    return { row: fresh.rows[0], replied, resolved,...(wire?{wire}:{}) };
+    return { row: fresh.rows[0], replied, resolved,statusConflict,...(wire?{wire}:{}) };
   });
   if (!updated) return null;
 
   if(updated.wire)return updated.wire;
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
-  const [wire] = await wireFor(db, head, [updated.row]);
-  return wire ?? null;
+  const [wire] = await wireFor(db, head, [updated.row], actor.userId);
+  return wire ? (updated.statusConflict ? { ...wire, status_conflict: true } : wire) : null;
 }
 
 /**
@@ -596,7 +649,7 @@ export async function actOnAnnotationFor(
  * null as an unknown id. Anchor, quote, range and image stay as they were; `edited_at` is stamped and no history
  * is kept.
  *
- * The thread's `revision` (the root's) guards the write like a reply's. Repeating the current text changes
+ * The thread's `revision` (the root's) guards the write (a plain reply is never guarded; see actOnAnnotationFor). Repeating the current text changes
  * nothing — no revision, no stamp, no notice — so a retried edit is harmless. Mentions the edit NEWLY adds are
  * invited in this transaction (their notices leave through the event outbox once it commits); the caller tells
  * connected sessions after commit with `previous`.
@@ -637,22 +690,20 @@ export async function editAnnotationCommentFor(
 
     const changed = comment.body !== edit.body;
     if (changed) {
-      // A person's edit takes a new feed position from seq's own sequence, under the artifact lock already held,
-      // so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
-      await tx.query(edit.editorKind === 'human'
-        ? "UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')) WHERE id = $1"
-        : 'UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
+      // Every edit, a person's or an agent's, takes a new feed position from seq's own sequence, under the artifact
+      // lock already held, so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
+      // The editing credential is kept beside it: the feed marks the watcher's own rewrite `you`.
+      await tx.query("UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')), change_token_id = $3 WHERE id = $1",
+        [comment.id, edit.body, actor.tokenId]);
       await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
       await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
       });
       await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
-      await remoteAgents.enqueue(tx, actor.userId, artifactId, root.id,
-        { id: comment.id, body: edit.body, author: { kind: comment.author_kind, label: comment.author_label } }, comment.body);
       await notify(tx, artifactId, root.id);
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
-    const [wire] = await wireFor(tx, row, fresh.rows);
+    const [wire] = await wireFor(tx, row, fresh.rows, actor.userId);
     const edited = wire?.thread.find((entry) => entry.id === comment.id);
     if (!wire || !edited) return null;
     if (receipt) await completeMutationReceipt(tx, receipt, { status: 200, body: wire as unknown as Record<string, unknown> });
@@ -743,4 +794,40 @@ export async function countOpenAnnotations(artifactId: string): Promise<number> 
     [artifactId],
   );
   return Number(r.rows[0]?.n ?? 0);
+}
+
+/**
+ * Desired per-account/per-kind state. Artifact→root locks serialize against deletion and all comment mutations.
+ *
+ * An effective change (not a repeat of the current state) also appends one row to `comment_reaction_events` with a
+ * position from `annotations.seq`'s sequence, allocated under the artifact lock like every comment-feed position, so
+ * the comment feed (./changes) orders reactions with comments on one cursor. Per account, comment and kind the
+ * log strictly alternates added/removed, which is what lets the feed net out a toggle since a checkpoint.
+ * `reactor` is decided at the door, as a comment's author is: a browser session is the person, a bearer an agent.
+ */
+export async function setCommentReactionFor(actor:AccessActor,artifactId:string,commentId:string,input:CommentReactionInput,reactor:Pick<AnnotationAuthor,'kind'|'label'>):Promise<AnnotationWire|null>{
+  if(!actor.userId)return null;
+  const db=await getDb();
+  return db.transaction(async tx=>{
+    const row=await scopedRow(tx,reactionScope(actor),artifactId,true);
+    if(!row || (row.format!=='html'&&row.format!=='markup'))return null;
+    const target=(await tx.query<{id:string;root_id:string|null}>(`SELECT id,root_id FROM annotations WHERE id=$1 AND artifact_id=$2 AND ${LIVE_ANNOTATION_SQL}`,[commentId,artifactId])).rows[0];
+    if(!target)return null;
+    const rootId=target.root_id??target.id;
+    const root=(await tx.query<AnnotationRowDb>(`SELECT * FROM annotations WHERE id=$1 AND artifact_id=$2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,[rootId,artifactId])).rows[0];
+    if(!root)return null;
+    const result=input.active
+      ?await tx.query('INSERT INTO comment_reactions (comment_id,user_id,kind,reactor_kind,reactor_label) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING comment_id',[commentId,actor.userId,input.kind,reactor.kind,reactor.label])
+      :await tx.query('DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3 RETURNING comment_id',[commentId,actor.userId,input.kind]);
+    if(result.rows.length){
+      await tx.query(
+        `INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,reactor_label,count,token_id)
+         VALUES (nextval(pg_get_serial_sequence('annotations','seq')),$1,$2,$3,$4,$5,$6,$7,
+           (SELECT count(*) FROM comment_reactions WHERE comment_id=$2 AND kind=$4),$8)`,
+        [artifactId,commentId,actor.userId,input.kind,input.active,reactor.kind,reactor.label,actor.tokenId]);
+      await notify(tx,artifactId,rootId);
+    }
+    const fresh=(await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id=$1`,[rootId])).rows;
+    return (await wireFor(tx,row,fresh,actor.userId))[0]??null;
+  });
 }

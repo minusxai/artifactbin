@@ -1,59 +1,14 @@
 # Artifactbin
 
-Interactive documents for people and agents. Create local files, preview and edit them in a browser, then publish and share. Use [app.artifactbin.dev](https://app.artifactbin.dev) or run your own server.
+Publish and share interactive documents through one author skill and an authenticated HTTP API.
 
-## Install and use
+## Author a document
 
-macOS / Linux:
+Use the guide at `<server-origin>/llms.txt`, or download `<server-origin>/skills/artifactbin.zip`. Extract the `artifactbin/` folder into the directory your coding agent loads skills from and restart the agent. Reuse an existing installation rather than overwriting it.
 
-```sh
-curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
-```
+The skill teaches email authentication, private origin-scoped credentials, source publication, comments, queries and exports. Read `/llms/http-auth` for authentication and `/llms/http-authoring` for the current source format. Create with `POST /api/artifacts`; update an existing document by reading its identity/version, preparing its edited source and committing the returned update unchanged. Keep credentials out of pages and downloaded files.
 
-Windows PowerShell:
-
-```powershell
-Invoke-RestMethod https://app.artifactbin.dev/chat/install.ps1 | Invoke-Expression
-```
-
-Run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and agent skills. Open a new terminal afterward. npm is the sole CLI distribution. For Node only: `curl -fsSL https://app.artifactbin.dev/chat/install-node.sh | bash` (reopen the terminal), or `Invoke-RestMethod https://app.artifactbin.dev/chat/install-node.ps1 | Invoke-Expression`. With Node ready, `npx --yes @afbin/cli@latest setup` works directly (PowerShell: `npx.cmd --yes @afbin/cli@latest setup`). Where PowerShell scripts are disabled, use `afbin.cmd`.
-
-```sh
-afbin add report.jsx sales.csv --json
-afbin preview report.jsx
-afbin push report.jsx
-```
-
-Add assigns stable workspace-local IDs without uploading or signing in. Use `ref:ID` for datasets/media and `/a/ID` for navigation; artifact references reject local paths. Preview edits selected local source files without cloud access or credentials. Carry the project's `.artifactbin` directory with its files to preserve local identity, comments, history and recovery.
-
-Push explicitly publishes a separate copy with remote IDs, preserving the originals and their local references. Its mapping lets later pushes update that publication. Local preview continues independently after publication. The default remote host is `app.artifactbin.dev`; CLI browser approval permits guests, while direct HTTP authentication requires email.
-
-The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. `afbin update` installs the newer version.
-
-For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and comments. Start an empty server with `afbin preview --port 7474`, then choose **Connect to server**. See [portable files and server connections](docs/editing.md#edit-a-downloaded-html-file) for Save behavior, Windows commands and remote preview servers.
-
-## Run your own server
-
-```sh
-afbin serve --dir ./artifactbin-data --owner-email owner@example.com --port 7445
-# After the owner signs in and confirms a company group in the browser,
-# in another terminal:
-afbin config set host http://app.lvh.me:7445
-afbin auth
-afbin add report.jsx --json
-afbin preview report.jsx
-afbin push report.jsx
-```
-
-The first command creates a company server with private persistent settings. Replace `owner@example.com` with the operator's email. Open the printed origin, sign in as that verified owner, create or select a group where you are an editor, and confirm deployment setup. Other accounts cannot join until this confirmation. Invite colleagues to that company group before they sign in; company admission is invite-only by default. A document share alone does not admit a colleague.
-
-Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
-
-`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, Node helper links and npm setup for this host, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
-
-Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. Published IDs belong to their host/account; local IDs belong to the portable workspace.
-
-For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Docker Compose company hosting](deploy/company/README.md), [hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
+Pages are normal HTML files that load the platform core script. The installed author skill documents HTML publication, native components and Apollo state: viewer-local state stays private to each browser, while shared data uses explicitly linked backends. Page scripts run on isolated document origins; account credentials stay outside pages and downloaded files.
 
 ## Develop
 
@@ -78,12 +33,8 @@ The local test wrapper runs affected tests within its file budget; broader suite
 
 ## Modules and documentation
 
-`services/cli` owns commands and local state; `services/app` owns the reader/editor and artifact APIs; `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. `afbin serve` composes the app services; lambdas use a separate runner. Source development includes a local runner.
+`services/app` owns the reader and artifact APIs. `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. The author skill lives at [services/app/skills/artifactbin](services/app/skills/artifactbin/SKILL.md).
 
-[CLI reference](services/cli/README.md) · [Document format](docs/document-format.md) · [Editing](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md)
+The HTTP skill is the public authoring path. Standard OAuth, verified email login and account API-token access remain supported. The main branch release pipeline stays separate from this branch.
 
-[OSS feature setup and first document](docs/oss-onboarding.md) · [Lambdas and schedules](services/runner/README.md) · [Remote review](docs/remote-review.md)
-
-[Apache-2.0](LICENSE). Third-party license files remain with their runtime packages; the pinned Node runtime release includes its license.
-
-The app root is the authenticated workspace. Logged-out visits redirect to `/login`. Marketing, examples, and hosted-service legal pages belong to the separate `artifactbin-web` repository and are not included in this toolkit.
+[Source format](docs/document-format.md) · [Historical editing architecture](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md) · [Apache-2.0](LICENSE).

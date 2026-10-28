@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * Delete is a trash: gone everywhere, restorable, and
  * TERMINAL. Nothing in this product erases a row, so there is no retention and
@@ -35,7 +36,7 @@ const readBack = (token: string, id: string) => getRoute(request(`/api/artifacts
 describe('the trash', () => {
   it('a deleted document answers 404 everywhere, is listed in the trash, and restore brings it back at its version', async () => {
     const o = await owner();
-    const d = await create(o.token, { markup: '<p>x</p>', title: 'Doc' });
+    const d = await create(o.token, { html: nativeHtml('<p>x</p>'), title: 'Doc' });
     expect((await del(o.token, d.id)).status).toBe(200);
     expect((await readBack(o.token, d.id)).status).toBe(404);
     expect(await getArtifactById(d.id)).toBeNull();
@@ -51,7 +52,7 @@ describe('the trash', () => {
     const o = await owner();
     const f = await create(o.token, { format: 'folder', title: 'F' });
     const sub = await create(o.token, { format: 'folder', title: 'S', parent_id: f.id });
-    const d = await create(o.token, { markup: '<p>d</p>', parent_id: sub.id });
+    const d = await create(o.token, { html: nativeHtml('<p>d</p>'), parent_id: sub.id });
     expect((await del(o.token, f.id)).status).toBe(200);
     for (const id of [f.id, sub.id, d.id]) expect(await getArtifactById(id), id).toBeNull();
     expect(await restoreArtifactFor(o.actor, d.id)).toMatchObject({ id: d.id, ancestor_ids: [] });
@@ -62,7 +63,7 @@ describe('the trash', () => {
   it('there is no refusal any more: a folder with children deletes (into the trash) without force', async () => {
     const o = await owner();
     const f = await create(o.token, { format: 'folder', title: 'F' });
-    await create(o.token, { markup: '<p>d</p>', parent_id: f.id });
+    await create(o.token, { html: nativeHtml('<p>d</p>'), parent_id: f.id });
     const r = await j(await del(o.token, f.id));
     expect(r.status).toBe(200);
     expect(r.body.error).toBeUndefined();
@@ -76,8 +77,8 @@ describe('the trash', () => {
    */
   it('NEVER erases: a row deleted a year ago is still listed and still restorable', async () => {
     const o = await owner();
-    const ancient = await create(o.token, { markup: '<p>old</p>', title: 'Ancient' });
-    const fresh = await create(o.token, { markup: '<p>fresh</p>', title: 'Fresh' });
+    const ancient = await create(o.token, { html: nativeHtml('<p>old</p>'), title: 'Ancient' });
+    const fresh = await create(o.token, { html: nativeHtml('<p>fresh</p>'), title: 'Fresh' });
     await del(o.token, ancient.id); await del(o.token, fresh.id);
     const db = await getDb();
     await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [ancient.id]);
@@ -97,7 +98,7 @@ describe('the trash', () => {
   });
 });
 it('returns the deleted subtree identities and safely repeats an owned deletion',async()=>{
- const o=await owner();const folder=await create(o.token,{format:'folder',title:'Repeatable'});const child=await create(o.token,{markup:'<p>Child</p>',parent_id:folder.id});
+ const o=await owner();const folder=await create(o.token,{format:'folder',title:'Repeatable'});const child=await create(o.token,{html:nativeHtml('<p>Child</p>'),parent_id:folder.id});
  const first=await j(await del(o.token,folder.id));expect(first.status).toBe(200);expect(first.body.deleted_ids.sort()).toEqual([folder.id,child.id].sort());
  const repeated=await j(await del(o.token,folder.id));expect(repeated.status).toBe(200);expect(repeated.body.deleted_ids.sort()).toEqual(first.body.deleted_ids.sort());
  const other=await mintToken('foreign-delete');expect((await del(other.token,folder.id)).status).toBe(404);

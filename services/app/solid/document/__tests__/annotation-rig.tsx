@@ -15,7 +15,8 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { type StoryController } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
-import { render } from '../../__tests__/helpers';
+import { screen } from '@testing-library/dom';
+import { fireEvent, render } from '../../__tests__/helpers';
 import { TrustedUi } from '../../components/TrustedUi';
 import { AnnotationLayer, preloadScreenshotUpload, type AnnotationLayerProps } from '../AnnotationLayer';
 import { preloadThreadMenu } from '../AnnotationThread';
@@ -138,6 +139,12 @@ export const flush = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+/** Expand the rail's resolved group (collapsed by default) unless a viewed thread already did. */
+export const showResolved = async () => {
+  const toggle = await screen.findByRole('button', { name: /^resolved/i });
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+};
+
 /** A document runtime: `send` is what the layer posts, `emit` is the runtime answering. */
 export function makeRuntime(viewport = { left: 0, top: 100, width: 800, height: 600 }) {
   const listeners = new Set<(data: unknown) => void>();
@@ -177,6 +184,8 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
     const p = () => props();
     const ui = () => <AnnotationLayer
       id={p().id ?? 'doc1'}
+      canCreateComment={p().canCreateComment}
+      onSignIn={p().onSignIn}
       backend={p().backend ?? httpBackend(p().id ?? 'doc1')}
       canDeleteAny={p().canDeleteAny ?? true}
       runtimeRef={p().runtimeRef ?? runtime.ref}

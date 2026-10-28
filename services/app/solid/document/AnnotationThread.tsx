@@ -32,6 +32,8 @@ import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
+// Reaction controls load with an opened comment, keeping the reader shell small.
+const CommentReactions = lazy(() => import('./CommentReactions').then(module => ({default:module.CommentReactions})));
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -55,6 +57,7 @@ function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JS
 }
 
 interface AnnotationThreadProps {
+  canCreateComment?: boolean;
   artifactId: string;
   backend: ArtifactBackend;
   a: AnnotationWire;
@@ -79,6 +82,8 @@ interface AnnotationThreadProps {
   onReopen: () => void;
   onDelete: (commentId: string) => void;
   /** Rewrite one comment's words; rejects with the backend's refusal, and the editor keeps the draft. Absent: no editing here. */
+  onReact?: (commentId: string, active: boolean) => Promise<void>;
+  onSignIn?: () => void;
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
@@ -117,14 +122,14 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   const replyCount = () => Math.max(0, props.a.thread.length - 1);
   const canDelete = (comment: AnnotationCommentWire) => {
     const userId = session()?.user?.id;
-    return props.canDeleteAny === true
+    return props.canCreateComment !== false && (props.canDeleteAny === true
       || (userId !== undefined && userId !== null && comment.author.user_id === userId)
-      || props.backend.canDeleteLocalAnnotation?.(comment.id) === true;
+      || props.backend.canDeleteLocalAnnotation?.(comment.id) === true);
   };
 
   /** Only the words' author may rewrite them: their account online, or the backend's word for a local comment. */
   const canEdit = (comment: AnnotationCommentWire) => {
-    if (!props.onEdit) return false;
+    if (props.canCreateComment === false || !props.onEdit) return false;
     const userId = session()?.user?.id;
     return (userId !== undefined && userId !== null && comment.author.user_id === userId)
       || props.backend.canEditLocalComment?.(comment) === true;
@@ -248,7 +253,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                   <span class="inline-flex h-5 w-5 items-center justify-center text-accent"><Check size={13} strokeWidth={2} /></span>
                 </Tooltip>
               </Show>
-              <Show when={index() === 0 && !props.resolved}>
+              <Show when={index() === 0 && !props.resolved && props.canCreateComment !== false}>
                 <Tooltip content="resolve thread">
                   <Button type="button" variant="ghost" size="sm" icon aria-label="Resolve annotation" disabled={props.busy} onClick={() => props.onResolve()} class="-mx-1">
                     <Check size={13} strokeWidth={2} />
@@ -298,7 +303,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             }>
             <Show when={commentFolded()} fallback={
               <Show when={props.open} fallback={<p class="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c().body)}</p>}>
-                <CommentFoldingBody text={c().body} foldable={!(props.justOpened && newest())} />
+                <CommentFoldingBody visibleLines={props.onReact ? 6 : undefined} text={c().body} foldable={!(props.justOpened && newest())} />
               </Show>
             }>
               <p class="truncate font-sans leading-snug text-fg/90">{firstLine(c().body)}</p>
@@ -306,6 +311,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             </Show>
             {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
             <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
+            <Show when={editing() !== c().id && props.onReact}>
+              <Suspense><CommentReactions comment={c()} signedIn={!!session()?.user?.id} unavailable={props.backend.unavailable('commentReactions')}
+                onSignIn={()=>props.onSignIn?.()} onReact={(active)=>props.onReact!(c().id,active)} /></Suspense>
+            </Show>
             <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
           </li>;
@@ -322,14 +331,14 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
           </Button>
         </div>
       </Show>
-      <Show when={props.open && !props.resolved}>
+      <Show when={props.open && !props.resolved && props.canCreateComment !== false}>
         <div class="border-t border-edge bg-raised p-3">
           <AnnotationReplyBox backend={props.backend} artifactId={props.artifactId} busy={props.busy}
             value={reply()} onChange={setReply} onSend={props.onReply} image={replyImage}
             actions={<Button type="button" variant="ghost" size="sm" aria-label="Cancel reply" onClick={() => { setReply(''); replyImage?.capture.reset(); props.onOpen(); }}>cancel</Button>} />
         </div>
       </Show>
-      <Show when={props.open && props.resolved}>
+      <Show when={props.open && props.resolved && props.canCreateComment !== false}>
         <div class="flex justify-end border-t border-edge px-3 py-2">
           <Button type="button" variant="secondary" size="sm" aria-label="Reopen annotation" disabled={props.busy} onClick={() => props.onReopen()}>↺ reopen</Button>
         </div>

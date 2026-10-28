@@ -52,7 +52,7 @@ export function subscribeToArtifact(artifactId: string, handler: LiveHandler, on
   return subscribeChannel(artifactChannel(artifactId), handler, onLost);
 }
 
-/** Same machinery, the annotations channel — owner connections only (the route decides that). */
+/** Same machinery, the annotations channel — readable connections only (the route decides that). */
 export function subscribeToAnnotations(artifactId: string, handler: LiveHandler, onLost?: () => void): Promise<() => Promise<void>> {
   return subscribeChannel(annotationsChannel(artifactId), handler, onLost);
 }
@@ -116,6 +116,14 @@ export async function subscribeChannel(channel: string, handler: LiveHandler, on
     }
   };
 }
+
+/** Detached observability snapshot: one transport channel and its active subscribers. */
+export interface LiveSubscriptionSnapshot {
+  channel: string;
+  subscribers: number;
+}
+export const liveSubscriptionSnapshot = (): LiveSubscriptionSnapshot[] =>
+  [...channels].map(([channel, sub]) => ({ channel, subscribers: sub.handlers.size }));
 
 /** How many documents this process is currently watching (test/observability seam). */
 export const liveChannelCount = (): number => channels.size;

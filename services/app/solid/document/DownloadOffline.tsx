@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createSignal, Show, type JSX } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
 import { Button } from '../ui/Button';
@@ -12,7 +13,7 @@ export function DownloadOffline(props: { id: string; version?: number }): JSX.El
     event.preventDefault(); if (busy()) return;
     setBusy(true); setError('');
     try {
-      const response = await fetch(href(), { credentials: 'same-origin' });
+      const response = await retryingFetch(href(), { credentials: 'same-origin' });
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { message?: string } | null;
         setError(body?.message ?? `The offline file could not be made (HTTP ${response.status}).`); return;

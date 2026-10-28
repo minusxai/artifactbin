@@ -23,7 +23,7 @@ import { pathToFileURL } from 'node:url';
 const WORKFLOW = '.github/workflows/page-speed.yml';
 
 /**
- * The `push:` trigger's `paths`, read from the workflow text itself so the "same bytes" test and the
+ * The `push:` trigger's lab input `paths` (excluding the scheduling-only universal pattern), read from the workflow text itself so the "same bytes" test and the
  * trigger can never disagree. Line-based on purpose: the report job has no install to parse YAML with,
  * and scripts/__tests__/workflows.test.mjs holds this equal to the parsed trigger.
  */
@@ -38,7 +38,7 @@ export function triggerPaths(text) {
     if (/^ {4}paths:\s*$/.test(line)) { inPaths = true; continue; }
     if (/^ {4}\S/.test(line)) { inPaths = false; continue; }
     const item = /^ {6}- '([^']+)'\s*$/.exec(line);
-    if (inPaths && item) paths.push(item[1]);
+    if (inPaths && item && item[1] !== '**') paths.push(item[1]);
   }
   return paths;
 }

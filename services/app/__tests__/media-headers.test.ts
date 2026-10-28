@@ -69,12 +69,18 @@ async function datasetUploads() {
     return response.json();
   };
   const dataset = await make({ dataset: [{ message: 'initial', image_ref: '' }], visibility: 'private', access: 'readwrite' });
-  const document = await make({ visibility: 'public', markup: `<Helmet><Import name="feedback" src="ref:${dataset.id}" /><Value name="message" type="string" default="" /><Value name="image_ref" type="string" default="" /><Mutation name="submit">{\`insert into feedback.rows (message,image_ref) values ($message,$image_ref)\`}</Mutation></Helmet>` });
-  await updateSharingFor(ownerActor, dataset.id, { shares: [{ email: reporter.email!, role: 'viewer' }] });
-  await setDatasetPolicy(ownerActor, dataset.id, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert'], from: { artifact: document.id } }] }, 0);
-  await changeMembership(identityForUser(reporter.id, null), document.id, { action: 'join' });
-  await changeMembership(ownerActor, document.id, { action: 'approve', userId: reporter.id });
+  const document = await make({visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="feedback" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Feedback</h1></body></html>`});
+  await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
+  await changeMembership(identityForUser(reporter.id,null),document.id,{action:'join'});
+  await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},0);
   const pageActor: Actor = { credential: 'session', userId: reporter.id, email: reporter.email!, emailVerified: true };
+  // A declared link and accepted membership alone never grant dataset writes.
+  const deniedBytes=new Uint8Array(await png(40,24));
+  const denied=await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':'membership-not-authority'},body:deniedBytes}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
+  expect(denied.status).toBe(403);
+  const policy=(await getArtifactById(dataset.id))!;
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:reporter.id}}]},policy.policy_revision??0);
   const reporterToken = await mintAccountToken('media-headers-reporter', reporter.id);
   await claimToken(reporter.id, reporterToken.token);
   const params = { params: Promise.resolve({ id: document.id, datasetId: dataset.id }) };
@@ -86,9 +92,11 @@ async function datasetUploads() {
     return () => readDatasetFile(request(stored.url, { actor: pageActor }), { params: Promise.resolve({ id: document.id, datasetId: dataset.id, fileId: stored.ref.slice('dfile:'.length) }) });
   };
   return {
-    image: async () => {
+    revokeUpload:async()=>{const current=(await getArtifactById(dataset.id))!;await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},current.policy_revision??0);},
+    image: async (expectedStatus=201) => {
       const made = await uploadDatasetImage(request(`/a/${document.id}/datasets/${dataset.id}/images`, { method: 'POST', actor: pageActor, headers: { 'Content-Type': 'image/png', 'X-Edit-Id': document.edit_id, 'Idempotency-Key': 'upload-operation-123' }, body: new Uint8Array(bytes) }), params);
-      expect(made.status, await made.clone().text()).toBe(201);
+      expect(made.status, await made.clone().text()).toBe(expectedStatus);
+      if(expectedStatus!==201)return made;
       const stored = (await made.json()) as { ref: string; url: string };
       return readDatasetImage(request(stored.url, { actor: pageActor }), { params: Promise.resolve({ id: document.id, datasetId: dataset.id, imageId: stored.ref.slice('dimg:'.length) }) });
     },
@@ -125,6 +133,12 @@ describe('every media door answers with the headers it owes', () => {
       if (typeof owed === 'string') expect(value, header).toBe(owed);
       else expect(value, header).toMatch(owed);
     }
+  });
+
+  it('rechecks explicit dataset insert authority before replaying an already uploaded image',async()=>{
+    const upload=await datasetUploads();expect((await upload.image()).status).toBe(200);
+    await upload.revokeUpload();
+    const replay=await upload.image(403);expect(await replay.json()).toMatchObject({error:'dataset_image_upload_failed'});
   });
 
   // The type an uploaded image is served with is the one its row records (converted at the door,

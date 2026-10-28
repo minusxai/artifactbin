@@ -1,4 +1,4 @@
-/** Browser view admission: readable markup only, excluding capture requests.
+/** Browser view admission: readable native HTML only, excluding capture requests.
  * Analytics owns persistence and daily visitor deduplication; callers only map
  * this result to HTTP. Both anonymous and signed-in readers are admitted.
  */
@@ -15,7 +15,7 @@ export async function recordArtifactView(request: Request, id: string): Promise<
   const actor = await sessionActor(request);
   // The header decides (format and access): a view is never a reason to read the document itself.
   const artifact = await getArtifactHeaderById(id);
-  if (!artifact || artifact.format !== 'markup' || !(await canReadArtifact(artifact, actor))) return 'not_found';
+  if (!artifact || artifact.format !== 'html' || !(await canReadArtifact(artifact, actor))) return 'not_found';
   if (!new URL(request.url).searchParams.has('key')) {
     await trackEvent('view', artifact.id, { userId: actor.userId });
   }

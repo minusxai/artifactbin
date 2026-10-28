@@ -3,5 +3,55 @@
     "package": "three",
     "version": "0.185.1",
     "entry": "three.js"
+  },
+  "vega": {
+    "package": "vega",
+    "version": "6.3.1",
+    "entry": "vega.js"
+  },
+  "vega-lite": {
+    "package": "vega-lite",
+    "version": "6.4.3",
+    "entry": "vega-lite.js",
+    "aliases": {
+      "vega": {
+        "package": "vega-util",
+        "version": "2.1.3"
+      }
+    }
+  },
+  "deck-gl": {
+    "package": "@deck.gl/core",
+    "version": "9.4.0",
+    "entry": "deck-gl.js",
+    "bundledPackages": {
+      "@deck.gl/layers": "9.4.0",
+      "@deck.gl/aggregation-layers": "9.4.0"
+    }
+  },
+  "pele": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele.js"
+  },
+  "pele-flowchart": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-flowchart.js"
+  },
+  "pele-sequence": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-sequence.js"
+  },
+  "pele-er": {
+    "package": "pele",
+    "version": "1.12.0",
+    "entry": "pele-er.js"
+  },
+  "highlight": {
+    "package": "highlight.js",
+    "version": "11.12.0",
+    "entry": "highlight.js"
   }
 }

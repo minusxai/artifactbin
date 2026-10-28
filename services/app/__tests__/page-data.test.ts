@@ -36,9 +36,9 @@ async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o', owner.id); await claimToken(owner.id, t.token);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string; edit_id: string };
-  const pub = await mk({ title: 'Public one', markup: '<div><p>hello</p></div>', visibility: 'public' });
+  const pub = await mk({ title: 'Public one', html: '<!doctype html><html><body><div><p>hello</p></div></body></html>', visibility: 'public' });
   const box = await mk({ format: 'folder', title: 'August' });
-  const priv = await mk({ title: 'Secret', markup: '<div><p>secret</p></div>', visibility: 'private', parent_id: box.id });
+  const priv = await mk({ title: 'Secret', html: '<!doctype html><html><body><div><p>secret</p></div></body></html>', visibility: 'private', parent_id: box.id });
   return { owner, t, pub, priv, box };
 }
 
@@ -65,7 +65,7 @@ describe('GET /api/page/home', () => {
     const body = await (await homePage(request('/api/page/home'))).json();
     expect(body.signedIn).toBe(true);
     expect(body.artifacts.map((a: { id: string }) => a.id).sort()).toEqual([w.pub.id, w.priv.id, w.box.id].sort());
-    expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'markup' });
+    expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'html' });
     expect(body.viewsOverTime).toHaveLength(30);
     expect(body.likes).toBe(0);
     expect(body.likesOverTime).toHaveLength(30);
@@ -137,7 +137,7 @@ describe('GET /api/page/artifact/:id', () => {
     expect((await artifactPage(request('/api/page/artifact/nope00'), params({ id: 'nope00' }))).status).toBe(404);
     const anon = await (await artifactPage(request(`/api/page/artifact/${w.pub.id}`), params({ id: w.pub.id }))).json();
     expect(anon).toMatchObject({ role: 'viewer', kind: 'none', canonical: `/@${w.owner.username}/${w.pub.id}-public-one` });
-    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1, visibility: 'public' });
+    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'html', title: 'Public one', version: 1, visibility: 'public' });
     expect(anon.surface).not.toHaveProperty('hasInvitedUsers');
     // The prepared reader runtime: one isolated sheet, no raw copy and no source (__tests__/prepared-page).
     expect(anon.surface).not.toHaveProperty('compiledCss');
@@ -173,9 +173,9 @@ describe('GET /api/page/profile/@user/...', () => {
       return res.json() as Promise<{ id: string }>;
     };
     const folder = await create({ format: 'folder', title: 'Collection', visibility: 'public' });
-    const filed = await create({ title: 'Filed', markup: '<p>filed</p>', visibility: 'public', parent_id: folder.id });
+    const filed = await create({ title: 'Filed', html: '<!doctype html><html><body><p>filed</p></body></html>', visibility: 'public', parent_id: folder.id });
     const nested = await create({ format: 'folder', title: 'Nested', visibility: 'public', parent_id: folder.id });
-    const deep = await create({ title: 'Deep', markup: '<p>deep</p>', visibility: 'public', parent_id: nested.id });
+    const deep = await create({ title: 'Deep', html: '<!doctype html><html><body><p>deep</p></body></html>', visibility: 'public', parent_id: nested.id });
 
     for (const signedIn of [false, true]) {
       if (signedIn) asSession(w.owner);
@@ -215,7 +215,7 @@ describe('GET /api/page/profile/@user/...', () => {
     await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
-      body: JSON.stringify({ title: 'Filed', markup: '<div><p>filed</p></div>', visibility: 'public', parent_id: w.box.id }),
+      body: JSON.stringify({ title: 'Filed', html: '<!doctype html><html><body><div><p>filed</p></div></body></html>', visibility: 'public', parent_id: w.box.id }),
     }));
     const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
     expect(strangers.kind).toBe('public-profile');

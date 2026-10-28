@@ -4,34 +4,14 @@ import { useAppHarness, request } from './harness';
 import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
-import { POST as mutate } from '@/app/a/[id]/mutate/route';
+
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { readableArtifact, changeMembership } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
+
 import { forkArtifact } from '@/lib/publish/publish';
 useAppHarness();
-it('allows a recipient through a saved owner artifact only after approval',async()=>{
- const owner=await createUser({email:'mxmx_test_grants_owner@example.com'}),bob=await createUser({email:'mxmx_test_grants_bob@example.com'});
- const token=await mintToken('mxmx_test_grants', owner.id);await claimToken(owner.id,token.token);
- const actor=identityForUser(owner.id, token.id);
- const dsResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));
- expect(dsResponse.status).toBe(201);const ds=(await dsResponse.json()).id;
- expect(await setDatasetPolicy(actor,ds,defaultDatasetGrants(),0)).toMatchObject({revision:1});
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
- expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=(await docResponse.json()).id;
- const click=()=>mutate(request(`/a/${doc}/mutate`,{method:'POST',origin:'same',actor:{credential:'session',userId:bob.id,email:bob.email!,emailVerified:true},json:{mutation:'add',args:{}}}),{params:Promise.resolve({id:doc})});
- const refused=await click();expect(refused.status).toBe(403);expect((await refused.json()).detail).toMatch(/join/i);
- await changeMembership(identityForUser(bob.id, null),doc,{action:'join'});
- expect((await click()).status).toBe(403);
- await changeMembership(actor,doc,{action:'approve',userId:bob.id});
- const written=await click();expect(written.status,await written.clone().text()).toBe(200);
- await changeMembership(identityForUser(bob.id, null),doc,{action:'leave'});
- expect((await click()).status).toBe(403);
- expect((await getArtifactById(ds))?.version).toBe(2);
-});
-
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
  const token=await mintToken('mxmx_test_read_grants', owner.id);await claimToken(owner.id,token.token);
@@ -54,28 +34,6 @@ it('enforces read grants independently of link visibility and keeps owner admini
  await expect(setDatasetPolicy(actor,id,null,2)).rejects.toThrow('version 2');
 });
 
-it('forks even an owners written dataset independently and resets memberships',async()=>{
- const owner=await createUser({email:'mxmx_test_fork_grants@example.com'});
- const token=await mintToken('mxmx_test_fork_grants', owner.id);await claimToken(owner.id,token.token);
- const actor=identityForUser(owner.id, token.id);
- const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
- const ds=await make({dataset:[{n:1}]});
- const doc=await make({visibility:'public',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
- await setDatasetPolicy(actor,ds,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:doc}}]},0);
- const fork=await forkArtifact(actor,(await getArtifactById(doc))!);expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
- expect(fork.datasets).toHaveLength(1);expect(fork.datasets[0].id).not.toBe(ds);
- expect(fork.artifact.source).toContain(`ref:${fork.datasets[0].id}`);
- expect((await getArtifactById(fork.datasets[0].id))?.dataset_policy).toMatchObject({allow:expect.arrayContaining([{actions:['insert'],from:{artifact:fork.artifact.id}}])});
-});
-it('provides accepted membership as a read-only current-artifact table',async()=>{
- const owner=await createUser({email:'mxmx_test_members_table@example.com'});
- const token=await mintToken('mxmx_test_members_table', owner.id);await claimToken(owner.id,token.token);
- const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<Helmet><Query name="people">{`select user_id, joined_at from _members`}</Query></Helmet><Table source="$people"/>'}}));
- expect(res.status,await res.clone().text()).toBe(201);const {id}=await res.json();
- const result=await dataflowForRow((await getArtifactById(id))!);
- expect(result?.state.tables.people.rows).toEqual([expect.objectContaining({user_id:owner.id})]);
-});
-
 it('does not disclose private grant-controlled datasets through direct mutation refusals',async()=>{
  const owner=await mintToken('private grant owner'),stranger=await mintToken('private grant stranger');
  const made=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],visibility:'private'}}));const {id}=await made.json();
@@ -83,14 +41,30 @@ it('does not disclose private grant-controlled datasets through direct mutation 
  expect(denied.status).toBe(404);
 });
 
-it('preserves private dataset visibility in a public fork',async()=>{
- const owner=await createUser({email:'mxmx_test_audit_fork@example.com'});
- const token=await mintToken('mxmx_test_audit_fork', owner.id);await claimToken(owner.id,token.token);
- const actor=identityForUser(owner.id, token.id);
- const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
+// Native pages retain links; they do not clone shared datasets or turn page
+// membership into dataset authority. That boundary replaces JSX deep-copy grants.
+it('keeps a private dataset and its grants unchanged when its native owner page is forked public',async()=>{
+ const owner=await mintToken('native-grants');const actor=identityForUser(owner.userId,owner.id);
+ const make=async(json:object)=>{const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json}));expect(response.status).toBe(201);return (await response.json()).id;};
  const ds=await make({dataset:[{n:1}],visibility:'private'});
- const doc=await make({visibility:'private',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
- const fork=await forkArtifact(actor,(await getArtifactById(doc))!,{visibility:'public'});expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
- expect((await getArtifactById(fork.datasets[0].id))?.visibility).toBe('private');
- expect(await readableArtifact(identityForUser(null, ''),fork.datasets[0].id)).toBeNull();
+ const originalPolicy=(await getArtifactById(ds))!.dataset_policy;
+ const doc=await make({visibility:'private',html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
+ const fork=await forkArtifact({...actor,tokenId:owner.id},(await getArtifactById(doc))!,{visibility:'public'});if(fork instanceof Response)throw Error(await fork.text());
+ expect(fork.datasets).toEqual([]);expect(fork.artifact.source).toContain(`ref:${ds}`);
+ expect((await getArtifactById(ds))?.visibility).toBe('private');expect((await getArtifactById(ds))?.dataset_policy).toEqual(originalPolicy);
+ expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
+});
+it('does not treat page membership as dataset authority and admits an explicit user grant',async()=>{
+ const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql/retained');
+ const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
+ const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
+ const page=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds.id}"></head><body>Rows</body></html>`,visibility:'public'}}))).json();
+ const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'data',datasetId:ds.id,mode:'live' as const},signal=new AbortController().signal;
+ const table=(await api.schema(actor,binding,signal)).tables[0]!,column=table.columns[0]!;
+ const write=(requestId:string)=>api.write(reader,binding,{tableId:table.id,expectedRevision:'1',requestId,changes:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:2}}]}]},signal);
+ expect((await write('before-membership')).outcome).toBe('rejected');
+ await changeMembership(reader,page.id,{action:'join'});await changeMembership(actor,page.id,{action:'approve',userId:bob.userId!});
+ expect((await write('after-membership')).outcome).toBe('rejected');
+ await setDatasetPolicy(actor,ds.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:bob.userId}}]},0);
+ expect((await write('explicit-user-grant')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
 });

@@ -7,7 +7,7 @@ import { FolderPage } from '@/solid/pages/Folder';
 import type { FolderPage as FolderData } from '@/lib/workspace/folders';
 import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 
-const row = (id: string, format = 'markup', title = `Doc ${id}`) => ({ id, url: `/a/${id}`, title, format, version: 1, visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'], updated_at: '2026-09-01T00:00:00.000Z' });
+const row = (id: string, format = 'html', title = `Doc ${id}`) => ({ id, url: `/a/${id}`, title, format, version: 1, visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'], updated_at: '2026-09-01T00:00:00.000Z' });
 const folder = (over: Record<string, unknown> = {}) => ({ id: 'fold01', title: 'Reports', trail: [], count: { documents: 2, folders: 1 }, rows: [row('aaa111'), row('bbb222'), row('ccc333', 'folder', 'Q3')], ...over }) as FolderData;
 const open = (role: 'owner' | 'editor' | 'commenter' | 'viewer', data = folder(), ownerUsername?: string) => render(() => <FolderPage folder={data} role={role} ownerUsername={ownerUsername} />);
 beforeEach(() => {

@@ -35,7 +35,7 @@ import { composeSource, type ComposableFormatEdit } from '@/lib/document/edit-co
  * `at` is the gap a drop landed in (null: outside every block, so append).
  * Absent, the page places it at its own selection.
  */
-export interface ImageDropPlacement {
+interface ImageDropPlacement {
   replace?: string;
   at?: { path: string; side: 'before' | 'after' | 'inside' } | null;
 }

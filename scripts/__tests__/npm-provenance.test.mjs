@@ -59,7 +59,8 @@ describe('tested npm artifact provenance boundary',()=>{
   const mismatched=change=>{const result=bundle();const statement=JSON.parse(Buffer.from(result.dsseEnvelope.payload,'base64').toString());change(statement);result.dsseEnvelope.payload=Buffer.from(JSON.stringify(statement)).toString('base64');return result;};
   const cases=[[bundle({subject:[]}), 'Provenance subject'],[bundle({subject:[{...subject,digest:{sha512:'0'.repeat(128)}}]}),'Provenance subject'],
    [mismatched(statement=>{statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit='b'.repeat(40);}), 'actual afbin build source'],
-   [mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/runs/42/attempts/2';}), 'selected build run']];
+   [mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/runs/42/attempts/2';}), 'selected build run'],
+   ...['runs/170/attempts/2','runs/17/attempts/','runs/17/attempts/2x','runs/17/attempts/2/'].map(tail=>[mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/'+tail;}), 'selected build run'])];
   for(const [invalid,reason] of cases){
    let generated=0,verified=0;
    await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{if(++generated===1)throw duplicate;return invalid;},verifyProvenance:async()=>{verified++;}})).rejects.toThrow(reason);
@@ -74,34 +75,6 @@ describe('tested npm artifact provenance boundary',()=>{
   expect(result).toBe(signed);expect(calls).toEqual([[subject],subject]);
   await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>signed,verifyProvenance:async()=>{throw Error('untrusted signature');}})).rejects.toThrow('untrusted signature');
  });
-});
-
-it('accepts the actual workflow publish arguments through npm CLI without conflicting provenance flags',()=>{
- const fixture=mkdtempSync(join(tmpdir(),'afbin-publish-args-'));
- try{
-  writeFileSync(join(fixture,'package.json'),JSON.stringify({name:'@afbin/cli-publish-argument-test',version:'0.0.0'}));
-  const provenance=join(fixture,'bundle.sigstore');writeFileSync(provenance,'{}');
-  const config=join(fixture,'empty.npmrc');writeFileSync(config,'');
-  const definition=parse(readFileSync(resolve(import.meta.dirname,'../../.github/workflows/release-cli.yml'),'utf8'));
-  const command=definition.jobs.release.steps.find(step=>step.id==='publish').run.match(/^\s*npm publish "\$PACKAGE_FILE" (.+)$/m)[1];
-  const args=command.match(/"[^"]*"|\S+/g).map(value=>value.replace(/^"|"$/g,'').replace('$PACKAGE_FILE.sigstore',provenance));
-  const invoke=(extra,source=fixture)=>spawnSync(process.execPath,[npmDriver(),'publish',source,...extra,'--dry-run','--json','--offline','--registry','http://127.0.0.1:1','--userconfig',config],{cwd:fixture,encoding:'utf8',timeout:15000,env:{...process.env,npm_config_cache:join(fixture,'cache')}});
-  // npm's real CLI rejects even false when both mutually exclusive config keys are present.
-  const incompatible=invoke(['--access','public','--provenance=false','--provenance-file',provenance,'--ignore-scripts']);
-  expect(incompatible.status).not.toBe(0);expect(incompatible.stderr).toMatch(/provenance-file.*can not be provided when using --provenance/);
-  const actual=invoke(args);expect(actual.status,actual.stderr).toBe(0);expect(JSON.parse(actual.stdout).name).toBe('@afbin/cli-publish-argument-test');
-  // Exercise the workflow's actual tarball argument: an unprefixed `package/file.tgz`
-  // is parsed by npm as a GitHub shorthand instead of a local package.
-  mkdirSync(join(fixture,'package'));
-  mkdirSync(join(fixture,'contents/package'),{recursive:true});
-  writeFileSync(join(fixture,'contents/package/package.json'),readFileSync(join(fixture,'package.json')));
-  const selection=definition.jobs.release.steps.find(step=>step.id==='package').run;
-  const source=selection.match(/^\s*file="([^"]+)"$/m)[1].replace('$version','0.0.0');
-  const packed=spawnSync('tar',['-czf',join(fixture,source),'-C',join(fixture,'contents'),'package'],{encoding:'utf8'});
-  expect(packed.status,packed.stderr).toBe(0);
-  const tarball=invoke(args,source);expect(tarball.status,tarball.stderr).toBe(0);
-  expect(JSON.parse(tarball.stdout).name).toBe('@afbin/cli-publish-argument-test');
- }finally{rmSync(fixture,{recursive:true,force:true});}
 });
 
 it('recovers the original signed entry through the pinned official witness and restores its factory', async () => {

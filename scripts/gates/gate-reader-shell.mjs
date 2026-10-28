@@ -41,19 +41,20 @@
  */
 import assert from 'node:assert/strict';
 import { becomeOwner, mergeGuestIntoAccount, startDocument } from '../lib/start-doc.mjs';
-import { documentFrame, documentLocator, INLINE_STORY } from './lib/page-facts.mjs';
+import { documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
-import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
+import { bearerApi, connectAgent } from './lib/account-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('reader-shell');
 const ts = Date.now().toString(36);
 
 const section = createSection(check);
+const htmlPage = (body, title = 'Gate page', head = '') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/core.js"></script>${head}</head><body>${body}</body></html>`;
 
 const sink = await startMailSink();
 const browser = await launchChromium();
@@ -74,6 +75,30 @@ const ownerBar = async (page) => {
 const docHeading = (page) => documentLocator(page).locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 const sessionOf = async (ctx) => (await ctx.cookies(BASE)).some((c) => /better-auth/.test(c.name));
 
+// The server's loading state is useful before app JavaScript and disappears at mount.
+await section('app startup', async () => {
+  for (const [colorScheme, width] of [['light', 1280], ['dark', 390]]) {
+    const page = await browser.newPage({ colorScheme, viewport: { width, height: 844 } });
+    let release;
+    const delayed = new Promise(resolve => { release = resolve; });
+    await page.route(/\.js(?:\?|$)/, async route => { await delayed; await route.continue(); });
+    try {
+      await page.goto(`${BASE}/login`, { waitUntil: 'commit' });
+      const startup = page.locator('[data-app-startup]');
+      await startup.getByRole('status').waitFor();
+      await page.locator('link[rel="stylesheet"]').first().evaluate(link => link.sheet || new Promise(resolve => link.addEventListener('load', resolve, { once: true })));
+      check(await startup.getByRole('status').innerText() === 'Loading artifactbin…', `${colorScheme} ${width}px: loading status paints with app JavaScript delayed`);
+      check(!(await startup.innerText()).includes('Agent guide'), `${colorScheme}: no agent instructions in first paint`);
+      check(await startup.locator('img').evaluate(img => img.complete && img.naturalWidth > 0), `${colorScheme}: product logo loads`);
+      const layout = await startup.evaluate(node => ({ width: document.documentElement.scrollWidth, viewport: innerWidth, font: getComputedStyle(node).fontFamily, theme: document.documentElement.dataset.theme ?? 'light' }));
+      check(layout.width <= layout.viewport && layout.theme === colorScheme && layout.font.includes('Plex'), `${colorScheme}: theme, typography and mobile bounds`);
+      release();
+      await startup.waitFor({ state: 'detached', timeout: 20000 });
+      check(await page.locator('#root').count() === 1 && await page.locator('#root').innerText().then(text => text.trim().length > 0), `${colorScheme}: real app mounts once and removes startup`);
+    } finally { release(); await page.close(); }
+  }
+});
+
 // ── 1. what a crawler gets, and what a browser mounts (was gate-shell-seo) ──
 await section('crawler', async () => {
   const mint = await connectAgent(BASE);
@@ -90,11 +115,7 @@ await section('crawler', async () => {
   const PHRASE = 'Indexable sentence about quarterly revenue';
   const doc = await publish({
     visibility: 'public',
-    markup: [
-      '<Helmet><title>Crawlable doc</title><meta name="description" content="A document that indexes." /></Helmet>',
-      '<h1 className="text-4xl font-bold">Crawlable heading</h1>',
-      `<p className="mt-4 leading-relaxed">${PHRASE}. And a second paragraph for good measure.</p>`,
-    ].join('\n'),
+    html: htmlPage(`<h1>Crawlable heading</h1><p>${PHRASE}. And a second paragraph for good measure.</p>`, 'Crawlable doc', '<meta name="description" content="A document that indexes.">'),
   });
   check.note(`crawlable doc: ${BASE}/a/${doc.id}`);
 
@@ -103,8 +124,8 @@ await section('crawler', async () => {
   await becomeOwner(page, BASE, mint.token);
   await page.goto(`${BASE}/a/${doc.id}`);
   const frame = await documentFrame(page, { timeout: 20000 });
-  await frame.locator(INLINE_STORY).first().waitFor({ state: 'visible', timeout: 20000 });
-  check(frame !== page.mainFrame() && await frame.locator(INLINE_STORY).innerText().then(text => text.includes(PHRASE)),
+  await frame.locator('body').waitFor({ state: 'visible', timeout: 20000 });
+  check(frame !== page.mainFrame() && await frame.locator('body').innerText().then(text => text.includes(PHRASE)),
     'the document text is in the document frame');
   await frame.waitForSelector('h1', { timeout: 20000 });
   check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the framed document shows the real content');
@@ -164,19 +185,39 @@ const api = bearerApi(BASE, anon.token, fetch);
 
 // ── 3. the reader: the app page, framing the document on its own origin (was gate-secure-arch §1–2) ──
 await section('reader', async () => {
-  const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string" default="{}"/></Helmet>
-<div className="p-8"><h1 className="text-3xl font-bold">SEC-PROBE-DOC</h1><pre id="sec-probe">{$probe}</pre></div>`;
-  const doc = await api('/api/artifacts', { title: 'Sec Probe', markup: PROBE, visibility: 'public' });
+  const PROBE = htmlPage('<h1>SEC-PROBE-DOC</h1><pre id="sec-probe">loading</pre><script type="module">import {client,gql} from "@afbin/apollo";client.query({query:gql`{probe}`}).then(({data})=>document.querySelector("#sec-probe").textContent=data.probe);</script>', 'Sec Probe', '<script type="application/json" data-af="state">{"probe":"native-runtime-ready"}</script>');
+  const doc = await api('/api/artifacts', { title: 'Sec Probe', html: PROBE, visibility: 'public' });
   check(doc.visibility === 'public', 'probe doc is public');
 
   await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   const readerPath = new URL(reader.url()).pathname;
   check(readerPath.includes(doc.id) && new URL(reader.url()).origin === BASE, `reader reaches its canonical artifact address (${readerPath})`);
   check(await framedOnItsOrigin(reader, doc.id), 'reader page frames the document on its own origin (no artifact iframe)');
-  // The document's runtime runs in the frame, on its own origin: that is where its door is asked.
-  const readerDoc = await documentFrame(reader);
-  const parentQuery = await readerDoc.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id).catch((e) => String(e));
-  check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
+  await documentLocator(reader).locator('#sec-probe').filter({hasText:'native-runtime-ready'}).waitFor({timeout:20000});
+  check(await documentLocator(reader).locator('#sec-probe').innerText() === 'native-runtime-ready', 'the native core runs its Apollo client inside the isolated frame');
+  // Tooltip trigger semantics stay immediate, but the positioning engine belongs
+  // to the first actual use, never the initial document-reader payload.
+  check(await reader.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/assets\/(?:CspConsentBar|ScriptFailureNotice|InstallArtifact)-[^/]+\.js(?:\?|$)/.test(entry.name)).length) === 0, 'healthy reader does not fetch conditional notice controls');
+  const popupLoads = () => reader.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/assets\/TooltipPopper-[^/]+\.js(?:\?|$)/.test(entry.name)).length);
+  check(await popupLoads() === 0, 'reading does not fetch the unused tooltip positioning engine');
+  const tooltipTrigger = reader.getByRole('button', {name:'Open artifact controls',exact:true});
+  await tooltipTrigger.focus();
+  const paintedTooltip = reader.locator('[data-radix-popper-content-wrapper] [role="tooltip"]');
+  await paintedTooltip.waitFor({state:'visible'});
+  check(await tooltipTrigger.getAttribute('aria-describedby') === await paintedTooltip.getAttribute('id'), 'first keyboard focus loads and describes the actual positioned tooltip');
+  const loaded = await popupLoads();
+  await reader.keyboard.press('Escape');
+  await paintedTooltip.waitFor({state:'hidden'});
+  await tooltipTrigger.evaluate(element => element.blur());
+  await tooltipTrigger.hover();
+  await paintedTooltip.waitFor({state:'visible'});
+  check(await paintedTooltip.count() === 1 && await popupLoads() === loaded && loaded === 1, 'hover reuses one loaded positioning engine and one tooltip portal');
+  await reader.mouse.move(0, 0);
+  await paintedTooltip.waitFor({state:'hidden'});
+
+  // Native pages use the scoped GraphQL read surface, rather than the retired markup query door.
+  const scopedRead = await reader.request.post(`${BASE}/api/artifacts/${doc.id}/graphql`, { data: {revision:String(doc.version),query:'{__typename}'} });
+  check(scopedRead.status() === 200 && !(await scopedRead.json()).errors, `the public page exposes its scoped GraphQL read (${scopedRead.status()})`);
 
   // signed-in NON-owner: same document, same URL, no hop
   await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -188,11 +229,11 @@ await section('reader', async () => {
   const ownerText = await docHeading(owner);
   check(ownerText === 'SEC-PROBE-DOC' && await ownerBar(owner), 'owner sees the shell with the document in its frame');
 
-  // The busiest authenticated toolbar must retain every action on narrow phones.
+  // The busiest authenticated toolbar retains essentials directly and secondary actions in its menu.
   for (const width of [320, 390]) {
     await owner.setViewportSize({ width, height: 844 });
     const bar = owner.getByRole('banner', { name: 'Page bar' });
-    for (const name of ['Like', 'Comment', 'Edit', 'Share', 'Notifications', 'Open artifact controls', 'Open menu']) {
+    for (const name of ['Comment', 'More artifact actions', 'Notifications', 'Open artifact controls', 'Open menu']) {
       await bar.getByRole('button', { name, exact: true }).waitFor({ state: 'visible' });
     }
     const geometry = await bar.evaluate(element => {
@@ -206,6 +247,19 @@ await section('reader', async () => {
     check(geometry.scrollWidth <= width, `owner toolbar has no page overflow at ${width}px`);
     check(geometry.controls.every(control => control.left >= 0 && control.right <= width && control.width >= 36 && control.reachable),
       `all owner toolbar controls keep full targets inside ${width}px: ${JSON.stringify(geometry.controls)}`);
+    const more = bar.getByRole('button', { name: 'More artifact actions', exact: true });
+    await more.focus();
+    await owner.keyboard.press('ArrowDown');
+    const actions = owner.getByRole('menu', { name: 'Artifact actions', exact: true });
+    await actions.waitFor({ state: 'visible' });
+    for (const name of ['Like', 'Share', 'Star artifactbin on GitHub']) {
+      check(await actions.getByRole('menuitem', { name, exact: true }).isVisible(), `${name} remains reachable at ${width}px`);
+    }
+    check(await actions.getByRole('menuitem').first().evaluate(element => element.getRootNode().activeElement === element), `compact actions accept keyboard focus at ${width}px`);
+    await owner.keyboard.press('ArrowDown');
+    check(await actions.getByRole('menuitem').nth(1).evaluate(element => element.getRootNode().activeElement === element), `compact actions move keyboard focus at ${width}px`);
+    await owner.keyboard.press('Escape');
+    check(await more.evaluate(element => document.activeElement === element), `compact actions return focus at ${width}px`);
     await bar.getByRole('button', { name: 'Open menu', exact: true }).click();
     await owner.getByRole('navigation', { name: 'Menu', exact: true }).waitFor({ state: 'visible' });
     check(await owner.getByRole('button', { name: 'Dismiss menu', exact: true }).isVisible(), `owner menu is reachable at ${width}px`);
@@ -223,7 +277,7 @@ await section('owner', async () => {
   const stranger = reader;
   const username = (await page.evaluate(async () => (await (await fetch('/api/my/profile')).json()).username));
 
-  const doc = await api('/api/artifacts', { title: 'Cookie Proof', markup: '<h1 id="pf">IFRAME-COOKIE-OK</h1>' });
+  const doc = await api('/api/artifacts', { title: 'Cookie Proof', html: htmlPage('<h1 id="pf">IFRAME-COOKIE-OK</h1>', 'Cookie Proof') });
   check(doc.visibility === 'private', 'owned doc is born private');
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   const iframeText = await documentLocator(page).locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
@@ -272,7 +326,7 @@ await section('anonymous owner', async () => {
   const anon2 = await connectAgent(BASE);
   const anonDoc = await (await fetch(`${BASE}/api/artifacts`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon2.token}` },
-    body: JSON.stringify({ title: 'Email Owned', visibility: 'public', markup: '<h1>ANON-OWNED</h1>' }),
+    body: JSON.stringify({ title: 'Email Owned', visibility: 'public', html: htmlPage('<h1>ANON-OWNED</h1>', 'Email Owned') }),
   })).json();
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const anonPage = await anonCtx.newPage();
@@ -311,13 +365,15 @@ await section('navigation', async () => {
   const auth = { Authorization: `Bearer ${first.token}`, 'Content-Type': 'application/json' };
   const secondResponse = await fetch(`${base}/api/artifacts`, { method: 'POST', headers: auth, body: JSON.stringify({
     title: 'mxmx_test navigation B', visibility: 'public',
-    markup: '<h1 aria-label="Artifact B">Second</h1><a href="/" aria-label="Go home">Home</a>',
+    html: htmlPage('<h1 aria-label="Artifact B">Second</h1><a href="/" aria-label="Go home">Home</a>', 'mxmx_test navigation B'),
   }) });
   assert(secondResponse.ok, `create B: ${secondResponse.status}`);
   const second = await secondResponse.json();
+  const current = await (await fetch(`${base}/api/artifacts/${first.id}`, {headers:auth})).json();
   const published = await fetch(`${base}/api/artifacts/${first.id}`, { method: 'PUT', headers: auth, body: JSON.stringify({
     title: 'mxmx_test navigation A', visibility: 'public',
-    markup: `<Helmet><style>{\`body { --mx-navigation-probe: artifact-a; }\`}</style></Helmet><h1 aria-label="Artifact A">First</h1><a href="/a/${second.id}" aria-label="Next artifact">Next</a>`,
+    expectedVersion: current.version, expectedState: current.state,
+    html: htmlPage(`<h1 aria-label="Artifact A">First</h1><a href="/a/${second.id}" aria-label="Next artifact">Next</a>`, 'mxmx_test navigation A', '<style>body { --mx-navigation-probe: artifact-a; }</style>'),
   }) });
   assert(published.ok, `publish A: ${published.status}`);
 
@@ -334,9 +390,9 @@ await section('navigation', async () => {
   await page.goto(`${base}/a/${first.id}`);
   check(await seen(heading('Artifact A'), 20_000), 'the first document renders in its frame');
   const initialStatus = await initialView;
-  check(initialStatus === 204, `initial compiled reader records a view (${initialStatus ?? 'no view reported'})`);
-  check(await page.locator(INLINE_STORY).count() === 0 && await doc().locator(INLINE_STORY).count() === 1,
-    'the compiled reader runs in the document frame, not on the app page');
+  check(initialStatus === 204, `initial native reader records a view (${initialStatus ?? 'no view reported'})`);
+  check(await page.locator('h1[aria-label="Artifact A"]').count() === 0 && await doc().locator('h1[aria-label="Artifact A"]').count() === 1,
+    'the native reader runs in the document frame, not on the app page');
   const docA = await documentFrame(page);
   check(await docA.evaluate(() => document.querySelector('[aria-label="Artifact A"]')?.getRootNode() === document),
     'the document\'s heading is in its frame\'s own light DOM');

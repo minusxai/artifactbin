@@ -1,6 +1,7 @@
 name: runner design validation
 on:
   pull_request:
+    branches-ignore: [ artifactbinv3 ]
     paths:
       - 'docs/proposals/runner-validation/**'
       - 'services/runner/**'
@@ -9,9 +10,13 @@ on:
       - 'services/app/**/lambda*'
       - 'services/app/**/hosted*'
       - 'services/utils/src/runner-client.ts'
-      - 'services/app/__tests__/runner-design.test.ts'
+      - 'services/app/server/__tests__/retired-execution.test.ts'
+      - 'services/app/__tests__/page-graphql.test.ts'
+      - 'services/app/lib/page-operations/**'
       - 'services/app/__tests__/runner-page-boundary.test.ts'
       - '.github/workflows/runner-design.yml'
+  push:
+    branches: [ artifactbinv3 ]
   workflow_dispatch:
 permissions:
   contents: read
@@ -43,15 +48,15 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       - run: docker build -t runner-design-worker docs/proposals/runner-validation
-      - name: Prove the path with restricted Linux workers
+      - name: Retained page boundary and retired public execution doors
         env:
           RUNNER_VALIDATION_DOCKER: runner-design-worker
-        run: npm test -- --files services/app/__tests__/runner-design.test.ts services/app/__tests__/runner-page-boundary.test.ts
+        run: npm test -- --files services/app/__tests__/runner-page-boundary.test.ts services/app/server/__tests__/retired-execution.test.ts
       - run: docker build -f services/runner/Dockerfile -t artifactbin-worker .
-      - name: Product runner and APIs in restricted workers
+      - name: Retained product worker isolation and operation authority
         env:
           RUNNER_TEST_IMAGE: artifactbin-worker
-        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/runner-api.test.ts services/app/__tests__/lambda-artifact.test.ts services/app/__tests__/lambda-operations.test.ts
+        run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/page-graphql.test.ts services/app/lib/page-operations/__tests__/backend.test.ts services/app/lib/page-operations/__tests__/runtime.test.ts
       - name: Prove OS restrictions independently of V8
         run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
       - name: Prove real PostgreSQL concurrency

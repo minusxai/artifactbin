@@ -25,6 +25,6 @@ export async function POST(request: Request) {
   // The auth service's seam names a browser's ids, never its verified claims: no host grant applies here.
   const allowed = await effectiveRole(row, identityForUser(actor.userId ?? null, actor.tokenId ?? null));
   const browser = actor.credential === 'session';
-  const canApprove = browser && ((!!actor.userId && actor.userId === row.user_id) || (!row.user_id && (actor.heldTokenIds ?? [actor.tokenId]).includes(row.token_id)));
+  const canApprove = browser && ((!!actor.userId && actor.userId === row.user_id) || (!row.user_id && !!row.token_id && (actor.heldTokenIds ?? [actor.tokenId]).includes(row.token_id)));
   return json({ canEdit: canEdit(allowed), canApprove, ...(canApprove ? { title: row.title ?? 'Untitled' } : {}) });
 }

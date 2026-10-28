@@ -1,0 +1,187 @@
+/*
+ * Sorbet: Candy colours, plum ink, one spring.
+ * Consumer apps, launches, kids and food, celebrations, playful data. Mood: Fun. Opens light. Generated from
+ * design-systems/specs/sorbet.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="sorbet">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-title t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Sorbet is pop: five candy colours on cream, every shape die-cut with a plum outline, a white rim and a
+ * hard drop, like stickers on a lunchbox. Headlines are chunky, corners are fat, and exactly one thing springs
+ * when you touch it. The colours do the shouting, so the words never have to.
+ * Fits: Consumer apps and launches, kids and food subjects, events and celebrations, playful counters, pickers and
+ * polls, anything that should feel like a good day.
+ * Avoid when: Serious, institutional or grieving subjects, dense data, long reading, or any page where candy would
+ * read as not listening.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="sorbet"] {
+  --ds-cream: #fff9f2; /* Page ground: cream white by day; the night parlour, deep plum, after dark. */
+  --ds-cream-raised: #ffffff; /* Cards, stickers, fields. */
+  --ds-cream-sunk: #ffefe3; /* Wells, the sprinkle band ground, code. */
+  --ds-line: #f0d9d0; /* Soft rules. Never the edge of a sticker; stickers use ink. */
+  --ds-ink: #2b1b3d; /* Plum ink: text, the 3px sticker outline, the hard drop. Never black. */
+  --ds-ink-muted: #6e5a80; /* Secondary text and captions. */
+  --ds-rim: #ffffff; /* The sticker rim: a 3px halo outside the ink outline, like a die-cut sticker. */
+  --ds-strawberry: #ff5c8a; /* The brand. Primary actions, the hero blob, the first chart series. */
+  --ds-on-strawberry: #2b1b3d; /* Text on strawberry. */
+  --ds-strawberry-soft: #ffe1ea; /* Ground for selected rows and the strawberry tag. */
+  --ds-mango: #ffb01f; /* The second candy: NEW stickers, prices, the sun. */
+  --ds-lime: #8be04d; /* The third candy: done, fresh, yes. */
+  --ds-blueberry: #5b7cff; /* The fourth candy: links, focus, the second chart series. */
+  --ds-on-blueberry: #120a1f; /* Text on blueberry. */
+  --ds-grape: #b96cff; /* The fifth candy: the fifth series, a sprinkle. */
+  --ds-lilac: #eadff5; /* The quiet fill: muted shapes in drawings, the inactive track. */
+  --ds-positive: #367a10; /* Done, fresh, yes. Lime as text is darkened on cream. */
+  --ds-positive-soft: #e6f8d6; /* Ground for done rows and positive tags. */
+  --ds-caution: #9a5e00; /* Almost, low, soon. Mango as text is darkened on cream. */
+  --ds-caution-soft: #fff0cc; /* Ground for caveats. */
+  --ds-negative: #c2185b; /* Sold out, oops, no. Strawberry as text is darkened on cream. */
+  --ds-negative-soft: #ffe1ea; /* Ground for sold-out rows. */
+  --background: var(--ds-cream);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-cream-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-cream-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-strawberry);
+  --primary-foreground: var(--ds-on-strawberry);
+  --secondary: var(--ds-strawberry-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-cream-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-lilac);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-cream);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-blueberry);
+  --chart-1: var(--ds-strawberry);
+  --chart-2: var(--ds-blueberry);
+  --chart-3: var(--ds-mango);
+  --chart-4: var(--ds-lime);
+  --chart-5: var(--ds-grape);
+  --radius: 20px;
+  --font-display: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 999px;
+  --ds-drop: 6px 6px 0 0 #2b1b3d;
+  --ds-sticker: 0 0 0 3px #ffffff, 7px 7px 0 0 #2b1b3d;
+  --ds-spring: cubic-bezier(.34,1.56,.64,1);
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="sorbet"][data-af-dark="true"] {
+  --ds-cream: #221433;
+  --ds-cream-raised: #2e1c45;
+  --ds-cream-sunk: #1a0f29;
+  --ds-line: #45306a;
+  --ds-ink: #fff4f8;
+  --ds-ink-muted: #c9b6d9;
+  --ds-rim: #2e1c45;
+  --ds-strawberry: #ff6e98;
+  --ds-on-strawberry: #2b1b3d;
+  --ds-strawberry-soft: #4a2340;
+  --ds-mango: #ffbb3d;
+  --ds-lime: #9beb5e;
+  --ds-blueberry: #7a95ff;
+  --ds-on-blueberry: #120a1f;
+  --ds-grape: #c78aff;
+  --ds-lilac: #3b2a55;
+  --ds-positive: #9beb5e;
+  --ds-positive-soft: #213a14;
+  --ds-caution: #ffbb3d;
+  --ds-caution-soft: #3d2b08;
+  --ds-negative: #ff6e98;
+  --ds-negative-soft: #4a2340;
+  --background: var(--ds-cream);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-cream-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-cream-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-strawberry);
+  --primary-foreground: var(--ds-on-strawberry);
+  --secondary: var(--ds-strawberry-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-cream-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-lilac);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-cream);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-blueberry);
+  --chart-1: var(--ds-strawberry);
+  --chart-2: var(--ds-blueberry);
+  --chart-3: var(--ds-mango);
+  --chart-4: var(--ds-lime);
+  --chart-5: var(--ds-grape);
+  --ds-chip-radius: 999px;
+  --ds-drop: 6px 6px 0 0 #fff4f8;
+  --ds-sticker: 0 0 0 3px #2e1c45, 7px 7px 0 0 #fff4f8;
+  --ds-spring: cubic-bezier(.34,1.56,.64,1);
+}
+:root[data-af-design-system="sorbet"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(48px, 8vw, 104px) / .95: One per page. Fredoka bold; one word may sit on a sticker. */
+:root[data-af-design-system="sorbet"] .t-display-xl { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(48px, 8vw, 104px); line-height: .95; font-weight: 700; letter-spacing: -0.02em; }
+/* display, clamp(32px, 4.5vw, 56px) / 1.02: Section openers. */
+:root[data-af-design-system="sorbet"] .t-display-l { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1.02; font-weight: 700; letter-spacing: -0.01em; }
+/* display, 24px / 28px: Card titles, sticker words. */
+:root[data-af-design-system="sorbet"] .t-title { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 24px; line-height: 28px; font-weight: 600; }
+/* sans, 17px / 27px: Reading and UI text. Nunito, round and soft. */
+:root[data-af-design-system="sorbet"] .t-body { font-family: "Nunito", system-ui, sans-serif; font-size: 17px; line-height: 27px; font-weight: 400; }
+/* sans, 14px / 20px: Captions and helper text. */
+:root[data-af-design-system="sorbet"] .t-body-s { font-family: "Nunito", system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 400; }
+/* display, 12px / 16px: Eyebrows, tags, sticker text. Fredoka caps. */
+:root[data-af-design-system="sorbet"] .t-label { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+/* display, 52px / 52px: Counts and prices. Fredoka bold, tabular. */
+:root[data-af-design-system="sorbet"] .t-numeral { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 52px; line-height: 52px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Ticket numbers, timestamps, receipts. */
+:root[data-af-design-system="sorbet"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="sorbet"] .tok-comment, :root[data-af-design-system="sorbet"] .tok-quote, :root[data-af-design-system="sorbet"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="sorbet"] .tok-keyword, :root[data-af-design-system="sorbet"] .tok-selector-tag, :root[data-af-design-system="sorbet"] .tok-doctag, :root[data-af-design-system="sorbet"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-string, :root[data-af-design-system="sorbet"] .tok-regexp, :root[data-af-design-system="sorbet"] .tok-template-variable, :root[data-af-design-system="sorbet"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-number, :root[data-af-design-system="sorbet"] .tok-literal, :root[data-af-design-system="sorbet"] .tok-symbol, :root[data-af-design-system="sorbet"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-title, :root[data-af-design-system="sorbet"] .tok-section, :root[data-af-design-system="sorbet"] .tok-selector-id, :root[data-af-design-system="sorbet"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="sorbet"] .tok-title.class_, :root[data-af-design-system="sorbet"] .tok-type, :root[data-af-design-system="sorbet"] .tok-built_in, :root[data-af-design-system="sorbet"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-attr, :root[data-af-design-system="sorbet"] .tok-attribute, :root[data-af-design-system="sorbet"] .tok-property, :root[data-af-design-system="sorbet"] .tok-variable, :root[data-af-design-system="sorbet"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-tag, :root[data-af-design-system="sorbet"] .tok-operator, :root[data-af-design-system="sorbet"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="sorbet"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="sorbet"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 300 700; font-stretch: 75% 125%; font-display: swap; src: url("/af/fonts/fredoka-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 300 700; font-stretch: 75% 125%; font-display: swap; src: url("/af/fonts/fredoka-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 200 1000; font-display: swap; src: url("/af/fonts/nunito-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 200 1000; font-display: swap; src: url("/af/fonts/nunito-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: italic; font-weight: 200 1000; font-display: swap; src: url("/af/fonts/nunito-latin-ext-wght-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: italic; font-weight: 200 1000; font-display: swap; src: url("/af/fonts/nunito-latin-wght-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-300-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-300-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-300-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-300-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-400-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-400-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-500-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-500-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-500-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

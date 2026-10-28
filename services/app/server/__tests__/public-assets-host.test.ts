@@ -6,7 +6,7 @@ import {it,expect,beforeEach,vi} from 'vitest';
 import {overrideConfig} from '@/lib/platform/config';
 import {useAppHarness} from '@/__tests__/harness';
 import {exportAssetUrl} from '@/lib/export/assets';
-import {getDb} from '@/lib/platform';
+import {getDb,mintExportKey} from '@/lib/platform';
 import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
 import {mintToken} from '@/lib/accounts';
@@ -14,22 +14,11 @@ import {createArtifact} from '@/lib/artifacts';
 import {storeFileContent} from '@/lib/datasets/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
 import {withHttpServer} from '@artifactbin/test-support/net';
-import {loadCompilerBuild} from '@/lib/compiled-page/build.server';
 import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
 useAppHarness();
 beforeEach(()=>overrideConfig({publicBaseUrl:'https://example.test',assetsOrigin:'https://assets.example.test'}));
-it('serves the compiled page SQLite wasm to opaque-origin readers as immutable bytes',async()=>{
- const app=createAppServer({indexHtml:async()=>'<head></head>'});
- const url=loadCompilerBuild().sqliteWasm!;
- const res=await app.request('https://example.test'+url);
- expect(res.status).toBe(200);
- expect(res.headers.get('content-type')).toContain('application/wasm');
- expect(res.headers.get('cache-control')).toContain('immutable');
- expect(res.headers.get('access-control-allow-origin')).toBe('*');
- expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(1000);
-});
 it('allows the export redirect host in app image policy, including development pages',async()=>{
  const imageOrigin=new URL(exportAssetUrl('00000000-0000-0000-0000-000000000001','https://example.test')).origin;
  for(const devHmrPort of [undefined,3041]){
@@ -132,6 +121,15 @@ it('serves a scoped exported image through both app and proxy asset-origin bound
  for(const fetch of [app.fetch,proxy.fetch]){
   const response=await fetch(new Request(url));expect(response.status).toBe(200);expect(await response.text()).toBe('image bytes');
   expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  const etag=response.headers.get('etag')!;
+  const cached=await fetch(new Request(url,{headers:{'if-none-match':etag,cookie:'session=secret',authorization:'Bearer secret'}}));
+  expect(cached.status).toBe(304);expect(await cached.text()).toBe('');
+  expect(cached.headers.get('cache-control')).toMatch(/^private, max-age=\d+, must-revalidate$/);
+  const malformed=await fetch(new Request(url.replace(/key=.*/,'key=bad')));
+  expect(malformed.status).toBe(404);expect(malformed.headers.get('cache-control')).toBe('no-store');
+  const expired=new URL(url);expired.searchParams.set('key',mintExportKey(`export-asset:${id}`,-1));
+  const denied=await fetch(new Request(expired,{headers:{'if-none-match':etag}}));
+  expect(denied.status).toBe(404);expect(denied.headers.get('cache-control')).toBe('no-store');
   expect((await fetch(new Request(url+'&key=duplicate'))).status).toBe(404);
   expect((await fetch(new Request(url.split('?')[0]!))).status).toBe(404);
  }

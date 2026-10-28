@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,6 @@ import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();
@@ -27,7 +27,7 @@ it('serves the one Solid entry for every address the app answers, whatever the f
     expect(await response.text()).toContain('/solid-entry.tsx');
   }
   const chat = await app.request('http://localhost/chat', { headers: accept });
-  expect(await chat.text()).toContain('/solid-entry.tsx');
+  expect(chat.status).toBe(404); // The chat product route was retired.
   const profile = await app.request('http://localhost/@cee', { headers: accept });
   expect(await profile.text()).toContain('/solid-entry.tsx');
   const missing = await app.request('http://localhost/definitely-missing', { headers: accept });
@@ -47,9 +47,8 @@ it('serves the one Solid entry for every address the app answers, whatever the f
     dataset: await publish({ title: 'Rows', dataset: 'a,b\n1,2' }),
     viz: await publish({ title: 'Recipe', viz: { description: 'd', engine: 'vega-lite', bindings: [{ name: 'x', label: 'X', accepts: ['nominal'] }], template: { mark: 'bar', encoding: { x: { field: '{{x}}', type: 'nominal' } } } } }),
     file: await publish({ title: 'Notes', file: { filename: 'notes.txt', contentType: 'text/plain', base64: Buffer.from('hi').toString('base64') } }),
-    starter: await publish({ title: null, markup: START_PLACEHOLDER_MARKUP }),
+    starter: await publish({ title: null, html:nativeHtml(START_PLACEHOLDER_MARKUP) }),
   };
-  await drainPreparedPageWarmups();
   for (const [format, id] of Object.entries(served)) {
     const response = await app.request(`http://localhost/a/${id}`, { headers: accept });
     expect(response.status, format).toBe(200);

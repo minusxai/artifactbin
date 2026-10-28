@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { stampNodeIds, stampNodeIdsInPlace, nodeIndex } from '../node-ids';
-import { canonicalizeMarkup } from '../../publish/document/jsx-tier';
+import { canonicalizeMarkup } from '@/lib/document';
 
 const mint = (...ids: string[]) => { let index=0; return ()=>ids[index++] ?? `z${String(index).padStart(3,'0')}`; };
 describe('persisted source node identity', () => {

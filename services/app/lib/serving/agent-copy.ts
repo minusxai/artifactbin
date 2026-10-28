@@ -13,7 +13,7 @@ export function existingPaste(base: string, artifactId: string, template?: strin
   const origin = base.replace(/\/$/, '');
   const pageType = template === 'doc' ? 'document' : template === 'scrolly' ? 'scrollytelling page'
     : ARTIFACT_STARTERS.find(starter => starter.template === template)?.label.toLowerCase() ?? 'artifact';
-  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place. Use afbin CLI if installed, or HTTP: ${origin}/llms.txt. ${EMAIL_AUTHENTICATION_INSTRUCTION}
+  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place. Use the artifactbin author skill and HTTP: ${origin}/llms.txt. ${EMAIL_AUTHENTICATION_INSTRUCTION}
 
 If the user hasn't specified a task, ask what ${pageType} they'd like to build.`;
 }

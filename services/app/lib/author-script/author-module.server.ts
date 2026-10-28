@@ -25,7 +25,6 @@ import type * as esbuild from 'esbuild';
 import { transformAsync, types as t, type PluginObj, type types as BabelTypes } from '@babel/core';
 import solidPreset from 'babel-preset-solid';
 import { AUTHOR_VENDOR_EXPORTS, ESM_CDN_ORIGIN, PAGE_GLOBAL } from './contract';
-import type { HelmetContent } from '@/lib/document';
 
 const PAGE_SPECIFIER = 'page';
 /** The `page` exports that bind one declared name of their kind (`signal('$region')`). */
@@ -39,19 +38,8 @@ const SOLID_SHIM = 'page-solid';
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }
-export interface AuthorModule { code: string; exports: string[] }
+interface AuthorModule { code: string; exports: string[] }
 export type AuthorModuleResult = { ok: true; module: AuthorModule } | { ok: false; errors: string[] };
-
-/** The names a Helmet declares, as the publish checks need them. */
-export function authorModuleNames(content: Pick<HelmetContent, 'values' | 'queries' | 'mutations'>): AuthorModuleNames {
-  const scalar = (v: HelmetContent['values'][number]) => v.kind === 'scalar';
-  return {
-    values: content.values.filter(scalar).map((v) => v.name),
-    tables: content.values.filter((v) => !scalar(v)).map((v) => v.name),
-    queries: content.queries.map((q) => q.name),
-    mutations: content.mutations.map((m) => m.name),
-  };
-}
 
 const VENDOR: Readonly<Record<string, ReadonlySet<string>>> = Object.fromEntries(
   Object.entries(AUTHOR_VENDOR_EXPORTS).map(([spec, names]) => [spec, new Set<string>(names)]),

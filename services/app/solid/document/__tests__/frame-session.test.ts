@@ -102,3 +102,19 @@ it('another window\'s messages, or the right window on the wrong origin, are not
   await vi.advanceTimersByTimeAsync(10_000);
   expect(remint, 'nothing proved this document speaks').not.toHaveBeenCalled();
 });
+
+it('the served document is left alone when this watchdog started after its hello but saw its ready, then a quiet load', async () => {
+  // The watchdog is installed lazily: the door's hello is already gone, the bridge's attach is answered with `ready`,
+  // the page's queries are relayed, and the load event (images) lands while the document waits on their replies.
+  const ready = () => win.dispatchEvent(new MessageEvent('message', { data: { type: STORY_FRAME_BRIDGE_MESSAGE, key: 'k', payload: { kind: 'ready', nonce: 'n' } }, origin: PAGES, source: frame.contentWindow as Window }));
+  ready();
+  await vi.advanceTimersByTimeAsync(1_000);
+  load();
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(remint, 'a document that answered ready is alive: no second navigation').not.toHaveBeenCalled();
+  expect(frame.src).toBe(`${PAGES}/?_pt=first`);
+  load(); // a later silent reload is still recovered
+  await vi.advanceTimersByTimeAsync(3_000);
+  await flush();
+  expect(remint).toHaveBeenCalledTimes(1);
+});

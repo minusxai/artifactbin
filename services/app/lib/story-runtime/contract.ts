@@ -1,3 +1,4 @@
+import type {UploadContext} from '@artifactbin/contracts';
 /**
  * The framework-free contract between the document builder (server), the compiler, and the browser
  * islands. BOTH sides import it, so it carries ONLY types and ids: a value
@@ -200,7 +201,6 @@ export interface StoryIslandData {
 export const QUERY_REQUEST_PARAM = 'q';
 
 /** DOM contract between the builder and the entry. */
-export const STORY_ROOT_ID = 'mx-story-root';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The compiled reader page: what the assembler and compiler (lib/compiled-page) write
@@ -331,8 +331,7 @@ interface ReaderFrame {
 }
 
 /**
- * The local preview's draft (services/cli/src/preview/client): source only. Its own controller
- * (services/cli/src/preview/edit-controller) compiles the file on disk and reads nothing else.
+ * A local preview's draft: source only. Its controller compiles the file on disk and reads nothing else.
  */
 interface LocalDraft {
   type: typeof STORY_DOCUMENT_MESSAGE;
@@ -518,6 +517,7 @@ export const STORY_FRAME_BRIDGE_MESSAGE = 'mx:frame-bridge';
 /** What the page tells the frame when it attaches: the controller's inputs (createIslandController). */
 export interface FrameBridgeAttach {
   kind: 'attach';
+  uploadContext?: UploadContext;
   id: string;
   /** The version's SOURCE nodes, which comments and selections are classified against. */
   nodes: JsxNode[];
@@ -528,6 +528,7 @@ export interface FrameBridgeAttach {
 /** Page → frame. */
 export type FrameBridgeParentPayload =
   | FrameBridgeAttach
+  | {kind:'upload-context';context:UploadContext}
   /** The live inputs the controller reads (`editId()`, `initialSource()`), when the page learns newer ones. */
   | { kind: 'context'; editId: string; source: string | null }
   /**
@@ -564,6 +565,7 @@ export type FrameBridgeFramePayload =
   | { kind: 'restored'; call: number; ok: true }
   | { kind: 'restored'; call: number; ok: false; error: string }
   /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */
+  | { kind: 'upload-file'; call:number; datasetId:string; filename:string; contentType:string; requestId:string; bytes:Uint8Array }
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }
@@ -593,6 +595,8 @@ export const ACCESS_PENDING = 'Checking edit access…';
  * that read it must re-run.
  */
 export interface ArtifactDataEvent {
+  /** Native shared resource names to authoritative committed revisions; wakeups carry no values. */
+  revisions?: Record<string, string>;
   /** Dataset artifact ids (today always exactly one — the one that was written). */
   datasets: string[];
   /** The version that dataset reached, for a client that wants to drop a repeat. */

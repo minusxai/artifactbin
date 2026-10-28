@@ -8,6 +8,7 @@
  * lowercased, ids are not), and the annotations channel is granted beside them.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { htmlLiveLinks } from '@/lib/html-backends';
 import { datasetsForDocument } from '@/lib/document-data';
 import { ID_RE } from '@/lib/platform';
 import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
@@ -20,7 +21,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
   if (!(await canReadArtifact(row, actor))) return new Response('not found', { status: 404 });
-  const datasets = row.format === 'markup' ? await datasetsForDocument(row) : [];
+  const datasets = row.format === 'html' ? htmlLiveLinks(row.meta).flatMap(link=>link.kind==='dataset'?[link.datasetId]:[]) : row.format === 'markup' ? await datasetsForDocument(row) : [];
   return Response.json(
     {
       editId: row.edit_id,

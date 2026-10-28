@@ -77,21 +77,21 @@
   },
   {
    "name": "red",
-   "light": "#EC402B",
-   "dark": "#EC402B",
+   "light": "#F04E38",
+   "dark": "#F04E38",
    "usage": "The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night.",
    "group": "Brand"
   },
   {
    "name": "on-red",
-   "light": "#20201D",
-   "dark": "#20201D",
-   "usage": "Type on red: ink, never paper, so red surfaces stay printed, not glowing.",
+   "light": "#121210",
+   "dark": "#121210",
+   "usage": "Type on red: near-black in both modes (--ds-ink on red is under AA), never paper, so red surfaces stay printed, not glowing.",
    "group": "Brand"
   },
   {
    "name": "red-ink",
-   "light": "#C8321F",
+   "light": "#B42D1C",
    "dark": "#FF6A55",
    "usage": "Red as text on paper: one word in a headline, a link, a delta.",
    "group": "Brand"
@@ -133,8 +133,8 @@
   },
   {
    "name": "negative",
-   "light": "#EC402B",
-   "dark": "#EC402B",
+   "light": "#F04E38",
+   "dark": "#F04E38",
    "usage": "Down, failed, refused. The same red: errors are loud, there is one red.",
    "group": "Status"
   },

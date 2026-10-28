@@ -118,7 +118,7 @@ export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'U
  * The element also decides which inline marks the text may carry: phrasing marks everywhere, links only where
  * the element is not a link itself.
  */
-export const KIT_TEXT_ELEMENTS: Readonly<Record<string, 'td' | 'th' | 'caption' | 'div' | 'span' | 'a'>> = {
+const KIT_TEXT_ELEMENTS: Readonly<Record<string, 'td' | 'th' | 'caption' | 'div' | 'span' | 'a'>> = {
   TableHead: 'th', TableCell: 'td', TableCaption: 'caption',
   CardTitle: 'div', CardDescription: 'div', CardContent: 'div', CardFooter: 'div',
   AlertTitle: 'div', AlertDescription: 'div',

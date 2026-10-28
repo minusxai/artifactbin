@@ -62,31 +62,17 @@ CI browser downloads use separate immutable Chromium, Firefox and WebKit caches.
 certifies only that engine's files; each fresh runner still provisions its required OS libraries.
 The main warmer writes the same engine keys as readers.
 
-CLI consumers receive verified public platform seeds as artifacts from their current attempt.
-Archive keys include the pinned dependency graph and seed generator, excluding only the candidate
-version. Seeds include tarballs and full public npm manifests: isolated installs use
-`--offline --full-metadata` with native lifecycle scripts enabled. Installed trees, HOME and npx
-state remain fresh; the separate cold bootstrap proof keeps its online installation. Streamed npm
-phase timings and heartbeats distinguish registry work from native reification and extraction.
-
 ## Local loop
 
 Work up the tiers, and stop at the cheapest one that can still be wrong:
 
 1. Unit tests — `npm test -- --files <paths>`.
 2. The local stack — `npm run dev` on this checkout's `APP__PORT`; verify the change in the app.
-3. The branch's CLI — `npm run afbin -- <args>` fast-bundles the client entry with the CLI's shared
-   compiler options when it is stale, then runs it against that same server, with its state in
-   `~/.artifactbin-dev/<port>` and `ARTIFACTBIN_SKILLS=off`, so the released `afbin`, `~/.artifactbin`
-   and `~/.claude/skills` are untouched. Preview, serve and local rendered exports also need a complete
-   host runtime built from the current sources; when it is absent or stale, use a CI-built checkout or
-   artifact. Published rendered exports can use a full artifact URL or `--refresh`. A dev server that
-   is not answering `/api/health` is refused in one line.
-4. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container, up to N at once.
-5. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
-6. Docker and Postgres — pre-release only, not a routine loop.
+3. Browser gates — `node scripts/gate-container.mjs <gate ...>`, in a Linux container, up to N at once.
+4. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
+5. Docker and Postgres — pre-release only, not a routine loop.
 
-Live sessions (tiers 3–5) need Linux bubblewrap. `BROWSER__SANDBOX=none` runs the session worker as
+Live sessions (tiers 3–4) need Linux bubblewrap. `BROWSER__SANDBOX=none` runs the session worker as
 a plain child process instead — no containment at all, refused under `NODE_ENV=production`, and
 defaulted by `npm run dev` on a non-Linux development host so the loop works on macOS. A gate whose
 assertions are Linux containment facts skips those by name when a session reports `sandbox: none`.
@@ -96,18 +82,18 @@ The gate container needs no port at all: it has its own network namespace.
 
 ## Eval target and candidate contract
 
-Treat the server origin and CLI package as independent harness inputs. A local dev server is a normal
+Treat the server origin and author skill as independent harness inputs. A local dev server is a normal
 product target; the evaluated agent does not receive a special local-mode task or easier scorer. Use
 this worktree's dev server with its exact public origin (including scheme and port) and a candidate
-package/skill projection from the intended source revision. Installation scenarios must serve that
+skill projection from the intended source revision. Installation scenarios must serve that
 candidate through the same installer/npm paths a deployed target uses. Never silently fetch a public
 release or require a production deploy to make the local evaluation runnable.
 
-A complete candidate may need runtime asset compilation before npm packing. The local-eval exception
+A complete candidate may need runtime asset compilation before packing. The local-eval exception
 in AGENTS.md permits that preparation using normal package assembly; cache it by all relevant inputs
 and run it once per source snapshot. It is not a production deployment or evidence that CI passed.
-Do not replace the real CLI with a limited fixture, skip its normal lifecycle or silently remove local
-capabilities to make the evaluation cheaper. Full suites and merge gates still belong to CI.
+Do not replace the real skill with a limited fixture or silently remove its capabilities to make the
+evaluation cheaper. Full suites and merge gates still belong to CI.
 
 For direct HTTP, supply the target artifact URL and serve its root/references/API on that target.
 Separate API-task fixtures with preauthenticated access from login/persistence fixtures that start
@@ -115,10 +101,10 @@ without a token, follow normal auth, save credentials, restart and refresh. The 
 local OTP from the protected outbox to play the user's approval role; that is not an agent auth bypass.
 
 Each run owns its home, credential store, fixtures and server ports. Record target and product revision,
-CLI package checksum, skill checksum, eval revision (including dirty inputs), model/provider, harness
-version and task settings. Candidate preparation must notice changes to CLI code, generated teaching,
+skill checksum, eval revision (including dirty inputs), model/provider, harness
+version and task settings. Candidate preparation must notice changes to
 skill sources, shared packages and the lockfile. Fail visibly on absent/stale candidates or unreachable
-targets; no production/published-CLI fallback. Keep baseline and candidate fixtures/settings matched,
+targets; no production fallback. Keep baseline and candidate fixtures/settings matched,
 retain raw success/failure and token/latency/cost evidence, and disclose missing metrics. The eval
 repository's README owns the exact runnable commands and provider preflight, not copied policy prose.
 
@@ -127,7 +113,7 @@ repository's README owns the exact runnable commands and provider preflight, not
 `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [--servers N] <gate ...>` runs the named
 gates the way CI's gate job does, from any worktree: the official Playwright image for the pinned
 Playwright (Linux Chromium, Firefox, WebKit and fonts) with Node 22 and bubblewrap; the worktree's
-source copied from a read-only mount; `npm run build` and `npm run build -w services/cli`; then
+source copied from a read-only mount; `npm run build`; then
 `node scripts/gates.mjs --servers=N --only=<gates>` against production servers inside the container,
 with the real bubblewrap session sandbox instead of `BROWSER__SANDBOX=none`. The output streams, the
 exit status is the gates', and the container is removed afterwards, also when the runner is killed.

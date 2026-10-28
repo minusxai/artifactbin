@@ -1,0 +1,183 @@
+/*
+ * Volta: Loud where it counts. Quiet everywhere else.
+ * Data products, dashboards, launch pages. Mood: Loud. Opens light. Generated from
+ * design-systems/specs/volta.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="volta">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-body-l t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Paper-and-ink calm everywhere, then one hit of electric vermilion exactly where the eye should land. Hard
+ * edges, hard shadows, no blur, no gradients. Volta is for data products that refuse to be beige: the restraint is
+ * what makes the one loud thing land.
+ * Fits: Analytics products, operational dashboards, pricing and launch pages, anything where one number or one
+ * action must dominate a busy screen.
+ * Avoid when: Long reading (the hard edges tire over 800 words), luxury or institutional subjects, and anything
+ * that needs more than one loud element per view.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="volta"] {
+  --ds-paper: #f3eee4; /* Page ground. The default surface for everything. */
+  --ds-paper-raised: #fbf8f2; /* Cards, fields, menus: anything that sits on paper. */
+  --ds-paper-sunk: #e7dfcf; /* Wells, code blocks, inactive tracks, table stripes. */
+  --ds-line: #d3c9b5; /* Hairline dividers and quiet borders. Never the sole edge of a control. */
+  --ds-edge: #14110f; /* The hard 2px edge on controls and cards, and the hard offset shadow. */
+  --ds-ink: #14110f; /* Primary text and icons on every paper ground. */
+  --ds-ink-muted: #5a5348; /* Secondary text, captions, placeholders. */
+  --ds-volt: #ff4d1a; /* The brand. Primary actions and the one number that must be seen. Fill only. */
+  --ds-on-volt: #14110f; /* Text and icons on volt fills. */
+  --ds-volt-ink: #b5300a; /* Volt as text: links and inline emphasis on paper. */
+  --ds-volt-soft: #ffd9cb; /* Tinted ground for volt tags and selected rows; text on it is volt-ink. */
+  --ds-acid: #d6f43a; /* The highlighter: new tags, the active tab marker, one insight card. Never body text. */
+  --ds-on-acid: #14110f; /* Text on acid fills. */
+  --ds-cobalt: #2236d1; /* Data and focus: the first chart series, the focus ring, info callouts. */
+  --ds-on-cobalt: #ffffff; /* Text on cobalt fills. */
+  --ds-cobalt-soft: #dde1ff; /* Ground for info callouts; text on it is ink. */
+  --ds-positive: #16683f; /* Positive deltas and success text, always with a ▲ or a word. */
+  --ds-positive-soft: #d5efdf; /* Ground for success callouts and positive tags. */
+  --ds-caution: #7d5900; /* Warnings, always with a word. */
+  --ds-caution-soft: #fbedc4; /* Ground for warning callouts. */
+  --ds-negative: #b5300a; /* Negative deltas and errors. Shares volt-ink: errors are loud, not a separate red. */
+  --ds-negative-soft: #ffd9cb; /* Ground for error callouts. */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-volt);
+  --primary-foreground: var(--ds-on-volt);
+  --secondary: var(--ds-volt-soft);
+  --secondary-foreground: var(--ds-volt-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-paper-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-volt);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --font-display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-hard: 4px 4px 0 0 #14110f;
+  --ds-shadow-hard-lg: 8px 8px 0 0 #14110f;
+  --ds-focus-ring: 0 0 0 2px #f3eee4, 0 0 0 4px #2236d1;
+  --ds-chip-radius: 4px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="volta"][data-af-dark="true"] {
+  --ds-paper: #121110;
+  --ds-paper-raised: #1c1a18;
+  --ds-paper-sunk: #0a0908;
+  --ds-line: #34302a;
+  --ds-edge: #f3eee4;
+  --ds-ink: #f3eee4;
+  --ds-ink-muted: #a69e90;
+  --ds-volt: #ff5f2e;
+  --ds-on-volt: #14110f;
+  --ds-volt-ink: #ff8a63;
+  --ds-volt-soft: #3d1a0f;
+  --ds-acid: #d6f43a;
+  --ds-on-acid: #14110f;
+  --ds-cobalt: #7484ff;
+  --ds-on-cobalt: #0a0908;
+  --ds-cobalt-soft: #161c45;
+  --ds-positive: #5fd394;
+  --ds-positive-soft: #0f2a1c;
+  --ds-caution: #f2c14e;
+  --ds-caution-soft: #2e2405;
+  --ds-negative: #ff8a63;
+  --ds-negative-soft: #3d1a0f;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-volt);
+  --primary-foreground: var(--ds-on-volt);
+  --secondary: var(--ds-volt-soft);
+  --secondary-foreground: var(--ds-volt-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-paper-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-volt);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-shadow-hard: 4px 4px 0 0 #ff5f2e;
+  --ds-shadow-hard-lg: 8px 8px 0 0 #ff5f2e;
+  --ds-focus-ring: 0 0 0 2px #121110, 0 0 0 4px #7484ff;
+  --ds-chip-radius: 4px;
+}
+:root[data-af-design-system="volta"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(56px, 9vw, 112px) / .9: One per page, at most. Hero headlines and covers. */
+:root[data-af-design-system="volta"] .t-display-xl { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: clamp(56px, 9vw, 112px); line-height: .9; font-weight: 800; letter-spacing: -0.035em; }
+/* display, clamp(36px, 5vw, 60px) / .95: Section openers, empty-state headlines. */
+:root[data-af-design-system="volta"] .t-display-l { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: clamp(36px, 5vw, 60px); line-height: .95; font-weight: 800; letter-spacing: -0.03em; }
+/* display, 40px / 40px: Page titles. */
+:root[data-af-design-system="volta"] .t-display-m { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: 40px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; }
+/* display, 22px / 28px: Card and dialog titles. */
+:root[data-af-design-system="volta"] .t-title { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.01em; }
+/* sans, 18px / 28px: Lead paragraphs. */
+:root[data-af-design-system="volta"] .t-body-l { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 18px; line-height: 28px; font-weight: 400; }
+/* sans, 15px / 22px: Default UI and reading text. */
+:root[data-af-design-system="volta"] .t-body { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 15px; line-height: 22px; font-weight: 400; }
+/* sans, 13px / 18px: Captions, helper text, dense table cells. */
+:root[data-af-design-system="volta"] .t-body-s { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+/* sans, 12px / 16px: Eyebrows, tab labels, tag text. Caps come from CSS, never the copy. */
+:root[data-af-design-system="volta"] .t-label { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+/* mono, 40px / 44px: Numeric KPI figures. Tabular by nature: digits never jump. For prose KPI values, use a text role such as t-title or t-body, rather than the large mono numeral. */
+:root[data-af-design-system="volta"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Code, SQL, IDs, table numbers. */
+:root[data-af-design-system="volta"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="volta"] .tok-comment, :root[data-af-design-system="volta"] .tok-quote, :root[data-af-design-system="volta"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="volta"] .tok-keyword, :root[data-af-design-system="volta"] .tok-selector-tag, :root[data-af-design-system="volta"] .tok-doctag, :root[data-af-design-system="volta"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-string, :root[data-af-design-system="volta"] .tok-regexp, :root[data-af-design-system="volta"] .tok-template-variable, :root[data-af-design-system="volta"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-number, :root[data-af-design-system="volta"] .tok-literal, :root[data-af-design-system="volta"] .tok-symbol, :root[data-af-design-system="volta"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-title, :root[data-af-design-system="volta"] .tok-section, :root[data-af-design-system="volta"] .tok-selector-id, :root[data-af-design-system="volta"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="volta"] .tok-title.class_, :root[data-af-design-system="volta"] .tok-type, :root[data-af-design-system="volta"] .tok-built_in, :root[data-af-design-system="volta"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-attr, :root[data-af-design-system="volta"] .tok-attribute, :root[data-af-design-system="volta"] .tok-property, :root[data-af-design-system="volta"] .tok-variable, :root[data-af-design-system="volta"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-tag, :root[data-af-design-system="volta"] .tok-operator, :root[data-af-design-system="volta"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="volta"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="volta"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 200 800; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/bricolage-grotesque-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 200 800; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/bricolage-grotesque-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-ext-standard-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap; src: url("/af/fonts/instrument-sans-latin-standard-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

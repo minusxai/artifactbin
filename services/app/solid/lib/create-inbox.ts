@@ -1,0 +1,58 @@
+/** Account-only live inbox implementation; anonymous readers do not load it. */
+import { retryingFetch } from '@/lib/http/retry-lazily';
+import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
+import type { InboxState } from '@/lib/notifications/inbox';
+import { openLiveStream } from '@/lib/http/live-stream';
+import type { InboxContext } from './notifications';
+const LOAD_TIMEOUT_MS = 30_000;
+export function createInboxController(ownerId: Accessor<string | null>): InboxContext {
+  const [state, setState] = createSignal<InboxState | null>(null);
+  const [error, setError] = createSignal('');
+  const [failedAt, setFailedAt] = createSignal<number | null>(null);
+  const [loading, setLoading] = createSignal(false);
+  const [reconnecting, setReconnecting] = createSignal(false);
+  let generation = 0;
+  let limit = 50;
+  let lastRead = 0;
+  const load = async (input?: object) => {
+    const own = ownerId();
+    if (!own) return;
+    const seq = ++generation;
+    lastRead = Date.now();
+    setLoading(true);
+    // A request that never answers must end as a failure the reader can retry, not a spinner forever.
+    const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), LOAD_TIMEOUT_MS);
+    try {
+      const response = await retryingFetch('/api/my/people', input ? { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: abort.signal } : { signal: abort.signal });
+      if (!response.ok) throw new Error('Could not load notifications');
+      const result = await response.json() as InboxState;
+      if (!Array.isArray(result.notifications) || !Array.isArray(result.blocks)) throw new Error('Could not load notifications');
+      while (result.next != null && result.notifications.length < limit) {
+        const next = await retryingFetch(`/api/my/people?offset=${result.next}`, { signal: abort.signal });
+        if (!next.ok) throw new Error('Could not load notifications');
+        const page = await next.json() as InboxState;
+        result.notifications.push(...page.notifications); result.next = page.next;
+      }
+      lastRead = Date.now();
+      if (seq === generation && ownerId() === own) { setState(result); setError(''); setFailedAt(null); }
+    } catch { if (seq === generation) { setError('Could not load notifications. Try again.'); setFailedAt(Date.now()); } }
+    finally { clearTimeout(timeout); if (seq === generation) setLoading(false); }
+  };
+  // Wakeups (the stream's first frame, focus, visibility) arrive in bursts right after a load: one fresh read covers them.
+  const refreshSoon = () => { if (Date.now() - lastRead > 1500) void load(); };
+  const loadMore = async () => { limit += 50; await load(); };
+  createEffect(() => {
+    const user = ownerId();
+    generation++; limit = 50; setState(null); setError(''); setFailedAt(null); setLoading(false); setReconnecting(false);
+    if (!user) return;
+    void load();
+    if (typeof EventSource === 'undefined') return;
+    // Reconnecting with backoff and a heartbeat watchdog (lib/live-stream); its first frame after a reopen re-reads.
+    const source = openLiveStream({ url: '/api/my/people/events', onMessage: () => { setReconnecting(false); refreshSoon(); }, onError: () => setReconnecting(true) });
+    const refresh = () => { if (document.visibilityState === 'visible') refreshSoon(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    onCleanup(() => { source.close(); generation++; window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); });
+  });
+  return {state,error,failedAt,loading,reconnecting,load,loadMore};
+}

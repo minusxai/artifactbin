@@ -1,162 +1,221 @@
-import { identityForUser, createUser,claimToken} from '@/lib/accounts';
-import { changeMembership } from '@/lib/artifacts';
-import {observedRequest} from '@/__tests__/conditional-request';
-/**
- * A document's live stream hears its DATASETS, not only itself. Every write to
- * a dataset already ends in a NOTIFY on that dataset's channel; the stream of
- * a document that reads it now LISTENs there too and sends a small `data`
- * frame naming the dataset — the runtime store re-runs the queries reading
- * it. A separate SSE event name, so the document frame and its editId guard
- * are untouched. The document's ACL is re-checked on the wakeup like any other.
- */
-import { beforeEach, describe, expect, it } from 'vitest';
+/** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
+import { beforeEach, expect, it, vi } from 'vitest';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
+import { changeMembership, getArtifactById } from '@/lib/artifacts';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { observedRequest } from './conditional-request';
+import { nativeHtml } from './native-html-fixture';
+import { request, useAppHarness, mintAccountToken } from './harness';
+import { sseStream } from './sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
-import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-
-
-import { liveChannelCount, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { useAppHarness, request } from '@/__tests__/harness';
-import { readEvents } from '@/__tests__/sse';
-
+import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
+import { PUT } from '@/app/api/artifacts/[id]/route';
+import { POST } from '@/app/api/artifacts/route';
+import {
+  resetLiveSubscriptions,
+  liveSubscriptionSnapshot,
+} from '@/lib/publish/realtime/live';
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { presenceChannel } from '@/lib/html-presence/channel.server';
+const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
 useAppHarness();
-
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }));
-  expect(res.status, await res.clone().text()).toBe(201);
-  return (await res.json()) as { id: string };
+beforeEach(resetLiveSubscriptions);
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const linked = (id: string) =>
+  `<!doctype html><html><head><link rel="af-dataset" data-af-name="choices" href="ref:${id}"></head><body><p>Choices</p></body></html>`;
+async function fixture() {
+  const token = await mintAccountToken('live-data');
+  const create = async (json: object) => {
+    const r = await POST(
+      request('/api/artifacts', {
+        method: 'POST',
+        token: token.token,
+        json: { visibility: 'public', ...json },
+      }),
+    );
+    expect(r.status, await r.clone().text()).toBe(201);
+    return await r.json();
+  };
+  const ds = await create({
+    dataset: [{ choice: 'ramen' }],
+    access: 'readwrite',
+  });
+  return { token, create, ds };
+}
+const connect = async (id: string) => {
+  const r = await eventsRoute(request(`/a/${id}/events`), params(id));
+  expect(r.status).toBe(200);
+  return sseStream(r.body!);
 };
-const ROWS = [{ choice: 'ramen' }];
-
-/** Read SSE events (named or default) until `count` arrive or the budget runs out. */
-
-beforeEach(async () => {
-  await resetLiveSubscriptions();
+it('refreshes membership and action permissions without publishing a version', async () => {
+  const owner = await createUser({
+      email: 'mxmx_test_member_stream@example.com',
+    }),
+    token = await mintAccountToken('members', owner.id);
+  await claimToken(owner.id, token.token);
+  const made = await POST(
+    request('/api/artifacts', {
+      method: 'POST',
+      token: token.token,
+      json: { html: nativeHtml('<p>Members</p>'), visibility: 'public' },
+    }),
+  );
+  expect(made.status).toBe(201);
+  const doc = await made.json();
+  const stream = await connect(doc.id);
+  try {
+    await stream.named('message');
+    await changeMembership(identityForUser(owner.id, token.id), doc.id, {
+      action: 'leave',
+    });
+    expect(
+      (await stream.named('data'))[0]?.data,
+    ).toMatchObject({ datasets: ['_members'], version: 1 });
+  } finally {
+    stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
+  }
 });
-
-describe('GET /a/<id>/events hears the document\'s datasets', () => {
-  it('refreshes membership and action permissions without changing the document version',async()=>{
-    const owner=await createUser({email:'mxmx_test_member_stream@example.com'});
-    const t=await mintToken('member stream', owner.id);await claimToken(owner.id,t.token);
-    const doc=(await create(t.token,{visibility:'public',markup:'<p>Membership stream</p>'})).id;
-    const res=await eventsRoute(request(`/a/${doc}/events`),params({id:doc}));
-    const leaving=changeMembership(identityForUser(owner.id, t.id),doc,{action:'leave'});
-    const events=await readEvents(res.body!,3);
-    await leaving;
-    expect(events.find(e=>e.event==='data')?.data).toMatchObject({datasets:['_members'],version:1});
-  });
-
-  it('a write to a dataset the document reads arrives as an `event: data` frame naming it', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
-    const doc = (await create(t.token, {
-      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
-    })).id;
-    const res = await eventsRoute(request(`/a/${doc}/events`), params({ id: doc }));
-    expect(res.status).toBe(200);
-    // The document and its one dataset: two channels for one stream.
-    expect(liveChannelCount()).toBe(2);
-    const write = mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('tacos')` } }), params({ id: ds }));
-    const events = await readEvents(res.body!, 2);
-    expect((await write).status).toBe(200);
-    // Both arrive; their ORDER is not a promise the stream makes (the opening
-    // document frame is queued behind an object-store read, a data wakeup is not).
-    expect(events.some((e) => e.event === 'message')).toBe(true);
-    const data = events.find((e) => e.event === 'data');
-    expect(data).toBeTruthy();
-    expect(data!.data).toMatchObject({ datasets: [ds] });
-    expect(typeof data!.data.version).toBe('number');
-  });
-
-  it('a FOLDER hears its own children, because its one dependency is itself', async () => {
-    /*
-     * The folder's scaffold reads `ref_<its own id>`, so the folder is a data
-     * dependency of ITSELF — which is the whole reason a child's publish
-     * reaches an open folder page with no route of its own. It missed for one
-     * clause: the stream followed a document's dependencies only when the
-     * format was `markup`, so a folder subscribed to nothing, the write woke
-     * only the DOCUMENT channel, and the version ping that came out carried an
-     * unchanged version. The listing sat still and nothing anywhere failed.
-     */
-    const t = await mintToken('t');
-    const folder = (await create(t.token, { format: 'folder', title: 'Live folder' })).id;
-    const res = await eventsRoute(request(`/a/${folder}/events`), params({ id: folder }));
-    expect(res.status).toBe(200);
-    // ONE channel for two subscriptions: a folder is both the document and the
-    // table it reads, so the id — and therefore the channel — is the same one
-    // twice. That coincidence is exactly why this went unnoticed: the stream
-    // was already awake on that channel, so the write DID wake it, and what
-    // came out was a version ping carrying an unchanged version.
-    expect(liveChannelCount()).toBe(1);
-    const child = create(t.token, { markup: '<p>filed</p>', parent_id: folder });
-    // THREE: the opening frame, the version ping the shared channel also wakes,
-    // and the `data` frame that is the point. Reading two would stop on the
-    // ping — which is precisely what the broken version sent and nothing else.
-    const events = await readEvents(res.body!, 3);
-    await child;
-    const data = events.find((e) => e.event === 'data');
-    expect(data, 'the folder never heard its own child').toBeTruthy();
-    expect(data!.data).toMatchObject({ datasets: [folder] });
-  });
-
-  it('names its position on every frame, and a reconnect from that position hears exactly the writes that fell in the gap', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
-    const doc = (await create(t.token, {
-      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
-    })).id;
-    const first = new AbortController();
-    const res = await eventsRoute(new Request(request(`/a/${doc}/events`), { signal: first.signal }), params({ id: doc }));
-    const [opening] = await readEvents(res.body!, 1);
-    expect(opening!.event).toBe('message');
-    const cursor = opening!.id;
-    expect(cursor, 'the opening frame names where the reader stands').toMatch(new RegExp(`^${ds}\\.[A-Za-z0-9_-]{12}$`));
-    first.abort(); // the connection is cut (an idle proxy, a deploy)
-
-    // Nothing moved: a reconnect from the cursor is the head and nothing else.
-    const quiet = await eventsRoute(request(`/a/${doc}/events?since=${encodeURIComponent(cursor!)}`), params({ id: doc }));
-    expect((await readEvents(quiet.body!, 2, 800)).filter((e) => e.event === 'data')).toEqual([]);
-
-    // A write while disconnected: the reconnect from the cursor hears it, once.
-    expect((await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('tacos')` } }), params({ id: ds }))).status).toBe(200);
-    const again = await eventsRoute(request(`/a/${doc}/events?since=${encodeURIComponent(cursor!)}`), params({ id: doc }));
-    const events = await readEvents(again.body!, 3, 1500);
-    const data = events.filter((e) => e.event === 'data');
-    expect(data.map((e) => e.data.datasets)).toEqual([[ds]]);
-    expect(data[0]!.id, 'the catch-up moves the cursor past the write').toMatch(new RegExp(`^${ds}\\.`));
-    expect(data[0]!.id).not.toBe(cursor);
-  });
-
-  it('a document that does not read the dataset hears nothing; a whole-dataset PUT wakes readers too', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS })).id;
-    const reader = (await create(t.token, {
-      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
-    })).id;
-    const bystander = (await create(t.token, { markup: '<div><p>nothing here</p></div>' })).id;
-    const a = await eventsRoute(request(`/a/${reader}/events`), params({ id: reader }));
-    const b = await eventsRoute(request(`/a/${bystander}/events`), params({ id: bystander }));
-    const refresh = putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: [...ROWS, { choice: 'salad' }] } }), params({ id: ds }));
-    const [ea, eb] = await Promise.all([readEvents(a.body!, 2), readEvents(b.body!, 2, 800)]);
-    expect((await refresh).status).toBe(200);
-    expect(ea.some((e) => e.event === 'data' && (e.data.datasets as string[]).includes(ds))).toBe(true);
-    expect(eb.filter((e) => e.event === 'data')).toEqual([]);
-  });
-
-  it('follows the document: a version that starts reading a dataset subscribes to it', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: '<div><p>prose</p></div>' })).id;
-    const res = await eventsRoute(request(`/a/${doc}/events`), params({ id: doc }));
-    expect(liveChannelCount()).toBe(1);
-    const edit = await putArtifactRoute(await observedRequest(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` } }), params({ id: doc }));
-    expect(edit.status).toBe(200);
-    // The opening frame, then the edit's frame; by then the stream follows the dataset.
-    const first = await readEvents(res.body!, 2);
-    expect(first.filter((e) => e.event === 'message')).toHaveLength(2);
-    expect(liveChannelCount()).toBe(2);
-  });
+it('names the native alias after committed dataset mutation, retaining one subscription per dependency', async () => {
+  const { token, create, ds } = await fixture(),
+    doc = await create({ html: linked(ds.id) }),
+    stream = await connect(doc.id);
+  try {
+    expect(
+      (await stream.named('data'))[0]?.data,
+    ).toMatchObject({
+      datasets: ['choices'],
+      revisions: { choices: expect.stringContaining(`dataset:${ds.id}:1:`) },
+    });
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc.id), [artifactChannel(ds.id)]: 1 });
+    const written = await mutate(
+      request(`/api/artifacts/${ds.id}/mutate`, {
+        method: 'POST',
+        token: token.token,
+        json: { sql: "insert into public.rows (choice) values ('tacos')" },
+      }),
+      params(ds.id),
+    );
+    expect(written.status).toBe(200);
+    expect((await stream.named('data'))[0]?.data).toMatchObject({
+      datasets: ['choices'],
+      revisions: { choices: expect.stringContaining(`dataset:${ds.id}:2:`) },
+    });
+  } finally {
+    stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
+  }
+});
+it('a folder hears its own child without adding a second channel', async () => {
+  const { create } = await fixture(),
+    folder = await create({ format: 'folder', title: 'Folder' }),
+    stream = await connect(folder.id);
+  try {
+    await stream.named('message');
+    // Version and child-list invalidation share one transport, with distinct subscribers.
+    expect(subscriptions()).toEqual({ [artifactChannel(folder.id)]: 2, [annotationsChannel(folder.id)]: 1 });
+    await create({ html: nativeHtml('<p>Filed</p>'), parent_id: folder.id });
+    expect(
+      (await stream.named('data'))[0]?.data.datasets,
+    ).toEqual([folder.id]);
+  } finally {
+    stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
+  }
+});
+it('reconnect refetches the current revision including missed writes without replaying mutation', async () => {
+  const { token, create, ds } = await fixture(),
+    doc = await create({ html: linked(ds.id) }),
+    first = await connect(doc.id);
+  const opening = await first.named('data');
+  first.close();
+  const before = opening.find((e) => e.event === 'data')!.data.revisions;
+  expect(
+    (
+      await mutate(
+        request(`/api/artifacts/${ds.id}/mutate`, {
+          method: 'POST',
+          token: token.token,
+          json: { sql: "insert into public.rows (choice) values ('tacos')" },
+        }),
+        params(ds.id),
+      )
+    ).status,
+  ).toBe(200);
+  const again = await connect(doc.id);
+  try {
+    const data = (await again.named('data'))[0]!.data;
+    expect(data.datasets).toEqual(['choices']);
+    expect(data.revisions).not.toEqual(before);
+    expect(data.revisions).toMatchObject({
+      choices: expect.stringContaining(`dataset:${ds.id}:2:`),
+    });
+    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([
+      { choice: 'ramen' },
+      { choice: 'tacos' },
+    ]);
+  } finally {
+    again.close();
+  }
+});
+it('whole-dataset replacement invalidates aliases while unrelated pages hear nothing', async () => {
+  const { token, create, ds } = await fixture(),
+    reader = await create({ html: linked(ds.id) }),
+    other = await create({ html: nativeHtml('<p>Unrelated</p>') }),
+    a = await connect(reader.id),
+    b = await connect(other.id);
+  try {
+    await a.named('data');
+    await b.named('message');
+    expect(
+      (
+        await PUT(
+          await observedRequest(`/api/artifacts/${ds.id}`, {
+            method: 'PUT',
+            token: token.token,
+            json: { dataset: [{ choice: 'salad' }] },
+          }),
+          params(ds.id),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await a.named('data'))[0]?.data.datasets).toEqual(['choices']);
+    expect(await b.named('data', 1, 300)).toEqual(
+      [],
+    );
+  } finally {
+    a.close();
+    b.close();
+  }
+});
+it('a newly published native link is subscribed before its version is announced', async () => {
+  const { token, create, ds } = await fixture(),
+    doc = await create({ html: nativeHtml('<p>Prose</p>') }),
+    stream = await connect(doc.id);
+  try {
+    await stream.named('message');
+    expect(subscriptions()).toEqual(documentSubscriptions(doc.id));
+    expect(
+      (
+        await PUT(
+          await observedRequest(`/api/artifacts/${doc.id}`, {
+            method: 'PUT',
+            token: token.token,
+            json: { html: linked(ds.id) },
+          }),
+          params(doc.id),
+        )
+      ).status,
+    ).toBe(200);
+    const events = [...await stream.named('data'),...await stream.named('message')];
+    expect(events.find((e) => e.event === 'data')?.data.datasets).toEqual([
+      'choices',
+    ]);
+    expect(events.find((e) => e.event === 'message')?.data.version).toBe(2);
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc.id), [artifactChannel(ds.id)]: 1 });
+  } finally {
+    stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
+  }
 });

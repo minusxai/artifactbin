@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 import {afterEach, expect, it, vi} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
@@ -16,9 +18,9 @@ const params=<T extends Record<string,string>>(p:T)=>({params:Promise.resolve(p)
 it('resumes from a checkpoint and delivers a human reply on an older thread exactly once per page',async()=>{
  const t=await mintAccountToken('agent');
  const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:'<p id="intro">Read this</p>'}}));expect(made.status).toBe(201);
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));expect(made.status).toBe(201);
  const doc=await made.json();
- const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{node_id:'intro',edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
+ const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('intro'),edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
  const read=(after:string)=>changes(request(`/api/artifacts/${doc.id}/annotations/changes?after=${encodeURIComponent(after)}&wait=0`,{token:t.token}),params({id:doc.id}));
  const baseline=await read('now');expect(baseline.status).toBe(200);const start=await baseline.json();expect(start.events).toEqual([]);expect(start.next_cursor).toEqual(expect.any(String));
  const posted=await reply(request(`/api/my/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',actor,json:{reply:'New human reply'}}),params({id:doc.id,annId:thread.id}));expect(posted.status).toBe(200);
@@ -33,12 +35,12 @@ const human: AnnotationAuthor = {kind: 'human', label: 'Reviewer', transport: 'b
 afterEach(async () => { vi.restoreAllMocks(); await live.resetLiveSubscriptions(); });
 async function fixture() {
  const token = await mintAccountToken('monitor');
- const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="intro">Read this</p>'}}));
+ const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));
  expect(made.status).toBe(201);
  const doc = await made.json();
  const actor = identityForUser(token.userId, token.id);
  const open = async (body:string, author=human) => {
-  const comment = await createAnnotationFor(actor,doc.id,{nodeId:'intro',body},author);
+  const comment = await createAnnotationFor(actor,doc.id,{anchor:nativeAnchor('intro'),body},author);
   expect(comment).toMatchObject({id:expect.any(String)});
   return comment as {id:string};
  };
@@ -50,19 +52,19 @@ async function fixture() {
  const cursor = (await baseline.json()).next_cursor as string;
  return {token,doc,actor,open,read,cursor};
 }
-it('pages raw records, advances past agents and deleted comments, and replays stable IDs', async()=>{
+it('pages raw records, delivers agent comments, advances past deleted comments, and replays stable IDs', async()=>{
  const f=await fixture();
- await f.open('Agent',{kind:'agent',label:'Agent',transport:'http'});
+ const agent=await f.open('Agent',{kind:'agent',label:'Agent',transport:'http'});
  const deleted=await f.open('Removed');expect(await deleteAnnotationFor(f.actor,f.doc.id,deleted.id)).toBe(true);
- const a=await f.open('First');const b=await f.open('Second');
- const ignored=await (await f.read(f.cursor,'limit=2')).json() as CommentChangesPage;
- expect(ignored.events).toEqual([]);expect(ignored.has_more).toBe(true);expect(ignored.next_cursor).not.toBe(f.cursor);
- const first=await (await f.read(ignored.next_cursor,'limit=1')).json() as CommentChangesPage;
- expect(first.events.map(e=>e.event_id)).toEqual([a.id]);expect(first.has_more).toBe(true);
- const replay=await (await f.read(ignored.next_cursor,'limit=1')).json();expect(replay).toEqual(first);
- const last=await (await f.read(first.next_cursor,'limit=1')).json() as CommentChangesPage;
- expect(last.events.map(e=>e.event_id)).toEqual([b.id]);expect(last.has_more).toBe(false);
- expect((await (await f.read(last.next_cursor)).json()).events).toEqual([]);
+ const a=await f.open('First');
+ const head=await (await f.read(f.cursor,'limit=2')).json() as CommentChangesPage;
+ // An agent's comment is an event like a person's; written with the watching credential, it is marked `you`.
+ expect(head.events.map(e=>e.type==='artifactbin.comment'?[e.event_id,e.author.kind,e.author.you]:[])).toEqual([[agent.id,'agent',true]]);
+ expect(head.has_more).toBe(true);expect(head.next_cursor).not.toBe(f.cursor);
+ const first=await (await f.read(head.next_cursor,'limit=1')).json() as CommentChangesPage;
+ expect(first.events.map(e=>e.event_id)).toEqual([a.id]);expect(first.has_more).toBe(false);
+ const replay=await (await f.read(head.next_cursor,'limit=1')).json();expect(replay).toEqual(first);
+ expect((await (await f.read(first.next_cursor)).json()).events).toEqual([]);
 });
 it('rejects malformed, cross-artifact and cross-account checkpoints', async()=>{
  const f=await fixture();const other=await fixture();
@@ -159,7 +161,7 @@ it('resolve and reopen changes never appear as comment events',async()=>{
 });
 it('caps four account waits across credentials/artifacts and releases aborted slots',async()=>{
  const f=await fixture();const extra=await mintAccountToken('another agent',f.token.userId);
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:extra.token,json:{markup:'<p>Other document</p>'}}));expect(made.status).toBe(201);const second=await made.json();
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:extra.token,json:{html:nativeHtml('<p>Other document</p>')}}));expect(made.status).toBe(201);const second=await made.json();
  const secondCursor=(await (await f.read('now','',undefined,second.id,extra.token)).json()).next_cursor;
  const controls=Array.from({length:4},()=>new AbortController());
  const waiting=controls.map((control,index)=>f.read(index===3?secondCursor:f.cursor,'wait=60',control.signal,index===3?second.id:f.doc.id,index%2?extra.token:f.token.token));

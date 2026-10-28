@@ -1,0 +1,126 @@
+// @vitest-environment jsdom
+import {afterEach,expect,it,vi} from 'vitest';
+import {AfTooltip,tooltipComponent,tooltipStyles} from './tooltip';
+import { registerComponent } from './register-component';
+afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); });
+function fixture(attrs = '') {
+ const host = document.createElement('af-tooltip-provider'); host.innerHTML = `<af-tooltip ${attrs}><af-tooltip-trigger><button aria-describedby="existing">Help</button></af-tooltip-trigger><af-tooltip-content data-af-id="tip">Helpful text</af-tooltip-content></af-tooltip>`; document.body.append(host);
+ return {root:host.firstElementChild as AfTooltip,trigger:host.querySelector('button')!,content:host.querySelector<HTMLElement>('af-tooltip-content')!};
+}
+it('delays hover, cancels pending work on leave and opens immediately on focus', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture('delay-duration="300"');
+ trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(299); expect(root.open).toBe(false);
+ trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(1); expect(root.open).toBe(false);
+ trigger.focus(); expect(root.open).toBe(true); expect(content.getAttribute('role')).toBe('tooltip'); expect(trigger.getAttribute('aria-describedby')).toBe(`existing ${content.id}`);
+ trigger.blur(); vi.runAllTimers(); expect(root.open).toBe(false); expect(trigger.getAttribute('aria-describedby')).toBe('existing');
+});
+it('styles only a nested native tooltip trigger like its host and preserves keyboard focus behavior', () => {
+ const {root,trigger,content}=fixture(); const wrapper=trigger.parentElement!; const wrapperStyle=getComputedStyle(wrapper); const buttonStyle=getComputedStyle(trigger);
+ for (const property of ['paddingTop','paddingRight','paddingBottom','paddingLeft','fontFamily','fontSize','fontWeight','color','backgroundColor','borderTopWidth','borderTopStyle','cursor'] as const) {
+  if (/^padding/.test(property)) expect(parseFloat(buttonStyle[property]) || 0,property).toBe(parseFloat(wrapperStyle[property]) || 0); else if (property !== 'borderTopWidth') expect(buttonStyle[property],property).toBe(wrapperStyle[property]);
+ }
+ expect(buttonStyle.borderTopStyle).toBe('none'); expect(parseFloat(buttonStyle.paddingTop)).toBe(0);
+ expect(wrapperStyle.lineHeight).toBe('1.5'); expect(buttonStyle.lineHeight).toBe('1.5'); expect(buttonStyle.display).toBe('inline-block');
+ trigger.focus(); expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger); expect(content.getAttribute('role')).toBe('tooltip');
+});
+it('leaves a nested native trigger button to its browser focus treatment', () => {
+ const {root,trigger}=fixture(); root.style.setProperty('--ring','rgb(1, 2, 3)'); trigger.focus();
+ expect(getComputedStyle(trigger).outlineColor).not.toBe('rgb(1, 2, 3)');
+ expect(tooltipStyles).not.toContain('af-tooltip-trigger>button:focus-visible');
+});
+it('includes the source tooltip arrow height in the default trigger-to-panel gap', () => {
+ const {root,trigger,content}=fixture();
+ trigger.getBoundingClientRect=()=>({x:100,y:100,left:100,top:100,right:150,bottom:120,width:50,height:20,toJSON:()=>({})});
+ content.getBoundingClientRect=()=>({x:0,y:0,left:0,top:0,right:100,bottom:30,width:100,height:30,toJSON:()=>({})});
+ root.open=true;
+ expect(content.style.top).toBe('59px');
+ expect(tooltipStyles).toContain('af-tooltip-trigger{cursor:pointer;line-height:1.5}');
+ expect(tooltipStyles).not.toContain('af-tooltip-trigger>button{box-sizing:border-box;display:inline-flex');
+});
+it('allows hovering the tooltip itself and preserves controlled/canceled visibility', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture('default-open');
+ trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true,relatedTarget:content})); vi.runAllTimers(); expect(root.open).toBe(true);
+ root.open = true; document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',cancelable:true})); expect(root.open).toBe(true);
+ root.open = undefined; root.addEventListener('af-change',e => e.preventDefault()); content.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.runAllTimers(); expect(root.open).toBe(true);
+});
+it('clears timers on disconnect, avoids disabled trigger activation and registers once', () => {
+ vi.useFakeTimers(); const {root,trigger} = fixture(); trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); root.remove(); vi.runAllTimers(); expect(root.open).toBe(false);
+ document.body.append(root); trigger.disabled = true; trigger.dispatchEvent(new FocusEvent('focusin',{bubbles:true})); expect(root.open).toBe(false);
+ registerComponent(tooltipComponent); expect(document.querySelectorAll('style[data-af-tooltip-styles]')).toHaveLength(1);
+});
+it('uses an injected clock for actual hover opening and maintains unique authored descriptions', () => {
+ const {root,trigger,content} = fixture(); const pending = new Map<number,() => void>();
+ root.clock = {setTimeout:fn => { pending.set(1,fn); return 1; },clearTimeout:id => { pending.delete(id); }};
+ trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); expect(root.open).toBe(false); pending.get(1)!(); expect(root.open).toBe(true);
+ content.id = 'authored'; root.open = false; trigger.setAttribute('aria-describedby','existing authored'); root.open = true;
+ root.open = false; expect(trigger.getAttribute('aria-describedby')).toBe('existing authored'); expect(content.dataset.afId).toBe('tip');
+});
+it('dismisses sibling tooltips through cancelable intent and keeps attribute controls closed until reflected', () => {
+ const first = fixture('default-open'); const second = fixture('open'); expect(first.root.open).toBe(false);
+ second.trigger.dispatchEvent(new FocusEvent('focusout',{bubbles:true})); expect(second.root.open).toBe(true);
+ second.root.removeAttribute('open'); expect(second.root.open).toBe(false);
+});
+it('inherits the nearest provider delay, overrides it locally, and shares only that provider warm interval', () => {
+ vi.useFakeTimers(); vi.setSystemTime(1000);
+ const provider = document.createElement('af-tooltip-provider'); provider.setAttribute('delay-duration','600'); provider.setAttribute('skip-delay-duration','200'); document.body.append(provider);
+ const first = fixture(); const second = fixture(); provider.append(first.root,second.root);
+ first.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(599); expect(first.root.open).toBe(false); vi.advanceTimersByTime(1); expect(first.root.open).toBe(true);
+ first.trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(100);
+ second.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); expect(second.root.open).toBe(true);
+ second.trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(301);
+ first.root.setAttribute('delay-duration','20'); first.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(19); expect(first.root.open).toBe(false); vi.advanceTimersByTime(1); expect(first.root.open).toBe(true);
+ const isolated = fixture(); isolated.trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); expect(isolated.root.open).toBe(false);
+});
+it('keeps focused tooltips open through hover leave and cancels a close when hovered again', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture(); trigger.focus(); trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(200); expect(root.open).toBe(true);
+ trigger.blur(); trigger.dispatchEvent(new MouseEvent('pointerover',{bubbles:true})); vi.advanceTimersByTime(300); expect(root.open).toBe(true);
+ trigger.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(50); content.dispatchEvent(new MouseEvent('pointerover',{bubbles:true,relatedTarget:trigger})); vi.advanceTimersByTime(100); expect(root.open).toBe(true);
+});
+it('keeps hovered content visible when trigger focus leaves until both hover and focus leave', () => {
+ vi.useFakeTimers(); const {root,trigger,content} = fixture(); trigger.focus();
+ content.dispatchEvent(new MouseEvent('pointerover',{bubbles:true,relatedTarget:trigger})); trigger.blur(); expect(root.open).toBe(true);
+ content.dispatchEvent(new MouseEvent('pointerout',{bubbles:true})); vi.advanceTimersByTime(100); expect(root.open).toBe(false);
+});
+
+it('provides one native button for noninteractive trigger content without replacing authored nodes', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger><span data-af-id="authored-icon">i</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';
+ const span=host.querySelector('span')!;document.body.append(host);await Promise.resolve();
+ const wrapper=host.querySelector('af-tooltip-trigger')!;
+ const button=wrapper.querySelector('button')!;
+ expect(button).not.toBeNull();expect(button.type).toBe('button');expect(button.firstElementChild).toBe(span);
+ expect(wrapper.querySelectorAll('button')).toHaveLength(1);
+ button.focus();expect((host as AfTooltip).open).toBe(true);
+ wrapper.setAttribute('disabled','');await Promise.resolve();expect(button.disabled).toBe(true);
+ wrapper.removeAttribute('disabled');await Promise.resolve();expect(button.disabled).toBe(false);
+ host.remove();document.body.append(host);await Promise.resolve();expect(wrapper.querySelector('button')).toBe(button);
+});
+it('preserves an existing interactive child without nesting a generated button', async () => {
+ for(const markup of ['<button type="button">Help</button>','<a href="#details">Help</a>','<input aria-label="Help">']){
+  const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger>'+markup+'</af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';
+  const control=host.querySelector('af-tooltip-trigger')!.firstElementChild;document.body.append(host);await Promise.resolve();
+  expect(host.querySelector('af-tooltip-trigger')!.firstElementChild).toBe(control);
+  expect(host.querySelector('button button,button a,button input')).toBeNull();
+ }
+});
+
+it('unwraps its generated button when interactive content arrives and preserves the new control', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger><span>i</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';document.body.append(host);await Promise.resolve();
+ const wrapper=host.querySelector('af-tooltip-trigger')!;
+ const generated=wrapper.querySelector('button')!;
+ const icon=generated.firstElementChild!;
+ const authored=document.createElement('button');authored.textContent='Help';generated.append(authored);await Promise.resolve();await Promise.resolve();
+ expect(wrapper.querySelectorAll('button')).toHaveLength(1);expect(wrapper.querySelector('button')).toBe(authored);
+ expect(wrapper.contains(icon)).toBe(true);expect(generated.isConnected).toBe(false);expect(wrapper.hasAttribute('tabindex')).toBe(false);
+ authored.focus();expect((host as AfTooltip).open).toBe(true);
+});
+it('retains authored focusable and button-role children without a default button or duplicate tab stop', async () => {
+ for(const content of ['<span tabindex="0">Help</span>','<span role="button" tabindex="0">Help</span>']){
+  const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger>'+content+'</af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';const control=host.querySelector('span')!;document.body.append(host);await Promise.resolve();await Promise.resolve();
+  expect(host.querySelector('button')).toBeNull();expect(host.querySelector('af-tooltip-trigger')!.hasAttribute('tabindex')).toBe(false);
+  expect(host.querySelector('span')).toBe(control);control.focus();expect((host as AfTooltip).open).toBe(true);
+ }
+});
+it('respects an explicitly focusable trigger wrapper', async () => {
+ const host=document.createElement('af-tooltip');host.innerHTML='<af-tooltip-trigger tabindex="0" role="button"><span>Help</span></af-tooltip-trigger><af-tooltip-content>Details</af-tooltip-content>';document.body.append(host);await Promise.resolve();
+ expect(host.querySelector('button')).toBeNull();const wrapper=host.querySelector<HTMLElement>('af-tooltip-trigger')!;wrapper.focus();expect((host as AfTooltip).open).toBe(true);
+});

@@ -48,11 +48,11 @@ describe('handlers through Hono', () => {
     expect(await (await app.request('/llms.txt')).text()).toContain('/llms/');
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');
-    const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>', visibility: 'public' }) });
+    const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ html: '<div><p>via hono</p></div>', visibility: 'public' }) });
     expect(created.status).toBe(201);
     const { id } = await created.json();
     const read = await app.request(`/api/artifacts/${id}`, { headers: { authorization: `Bearer ${t.token}` } });
-    expect((await read.json()).markup).toContain('via hono');
+    expect((await read.json()).html).toContain('via hono');
     const raw = await app.request(`/a/${id}/raw`);
     expect(raw.status).toBe(200);
     expect(raw.headers.get('content-security-policy')).toContain("default-src 'none'");

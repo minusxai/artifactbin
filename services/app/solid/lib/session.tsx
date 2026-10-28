@@ -6,6 +6,7 @@
  * A Solid context value is read once by each consumer, so the changing parts are ACCESSORS
  * (`session()`, `sessionError()`); `pages` never changes per provider and stays a plain value.
  */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createContext, createEffect, createSignal, on, onCleanup, useContext, type Accessor, type JSX } from 'solid-js';
 import { createPageDataStore, type PageDataStore } from '@/solid/lib/page-data-store';
 import { PAGE_DATA_CHANGED, PROFILE_CHANGED, REFRESH_EVENT } from '@/solid/lib/page-data-events';
@@ -39,7 +40,7 @@ export function SessionProvider(props: { children: JSX.Element }): JSX.Element {
   const reload = () => { pages.setScope(null); pages.clear(); setSession(null); setSessionError(null); setNonce((n) => n + 1); };
   createEffect(on(nonce, () => {
     let alive = true;
-    void fetch('/api/page/session', { credentials: 'same-origin' })
+    void retryingFetch('/api/page/session', { credentials: 'same-origin' })
       .then((r) => { if (!r.ok) throw new Error('session unavailable'); return r.json(); })
       .then((s: SessionState) => { if (alive) { pages.setScope(s.user?.id ?? s.kind); setSessionError(null); setSession(s); } })
       .catch(() => { if (alive) { pages.setScope(null); pages.clear(); setSessionError(new Error('Could not load session')); setSession(null); } });

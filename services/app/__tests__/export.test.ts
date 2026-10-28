@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * Curlable image export: `GET /a/<id>/export?format=png|jpg` renders the stored
  * HTML to image bytes on demand (headless Chromium in production),
@@ -13,7 +14,6 @@ import type { RenderRequest } from '@artifactbin/contracts';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import teaching from '../../cli/src/generated/teaching.json';
 import { createAppServer } from '@/server/app';
 import { mintAccountToken } from '@/__tests__/harness';
 import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
@@ -31,7 +31,7 @@ async function create(markup: string, title = 'shot me') {
   const mintRes = await mintAccountToken('mxmx_test_fixture');
   const { token } = mintRes;
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup, visibility: 'public' } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, html: markup.startsWith('<!doctype')?markup:nativeHtml(markup), visibility: 'public' } }),
   );
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string; version: number }>;
@@ -42,19 +42,21 @@ const shot = (id: string, format?: string) =>
   exportImage(request(`/a/${id}/export${format ? `?format=${format}` : ''}`), params({ id }));
 const serveRawFor = (id: string) => serveRaw(request(`/a/${id}/raw`), params({ id }));
 
-it('keeps verified capture endpoint and CSP origins on the actual internal request despite public HTTPS forwarding',async()=>{
+it('uses the forwarded public CSP origin for isolated native capture without embedding resolver credentials',async()=>{
  const artifact=await create('<p>inside</p>');
  const key=mintExportKey(artifact.id);
  const response=await serveRaw(request(`/a/${artifact.id}/raw?chrome=0&key=${encodeURIComponent(key)}`,{headers:{'x-forwarded-proto':'https','x-forwarded-host':'public.example'}}),params({id:artifact.id}));
  const html=await response.text();
  expect(response.status).toBe(200);
- expect(response.headers.get('content-security-policy')).toContain(`http://localhost:3000/a/${artifact.id}/resolve`);
+ expect(response.headers.get('content-security-policy')).toContain('sandbox');
+ expect(response.headers.get('content-security-policy')).toContain(`https://public.example/a/${artifact.id}/resolve`);
+ expect(html).not.toContain(key);
  expect(html).not.toContain(`https://public.example/a/${artifact.id}/resolve`);
 });
 
 // The same two documents in markup vocabulary: one that names itself in a
 // Helmet, one bare. (The exporter screenshots the served document either way.)
-const WITH_HEAD = '<Helmet><title>t</title></Helmet><h1>hello</h1>';
+const WITH_HEAD = '<!doctype html><html><head><title>t</title></head><body><h1>hello</h1></body></html>';
 const NO_HEAD = '<h1>bare</h1>';
 
 beforeEach(async () => {
@@ -153,14 +155,6 @@ describe('GET /a/:id/export', () => {
   });
 });
 
-describe('skill doc', () => {
-  it('teaches the native export command', async () => {
-    const text = teaching.files['references/publishing-versions.md'];
-    expect(text).toContain('afbin export');
-    expect(text).not.toContain('afbin api');
-  });
-});
-
 describe('markup (story-engine) rows', () => {
   it(
     'exports by rendering the live page, and serves its source at ./raw',
@@ -168,7 +162,7 @@ describe('markup (story-engine) rows', () => {
       const mintRes = await mintAccountToken('mxmx_test_fixture');
       const { token } = mintRes;
       const created = await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', markup: '<h1 className="text-3xl font-bold">shot me</h1>' } }),
+        request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', html: nativeHtml('<h1 className="text-3xl font-bold">shot me</h1>') } }),
       );
       expect(created.status).toBe(201);
       const { id } = (await created.json()) as { id: string };
@@ -198,7 +192,7 @@ describe('readable = exportable includes BEARER-readable', () => {
     const user = await createUser({ email: 'exporter@example.com' });
     const owned = await mintToken('agent', user.id);
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: owned.token, json: { title: 'p', markup: WITH_HEAD, visibility: 'private' } }),
+      request('/api/artifacts', { method: 'POST', token: owned.token, json: { title: 'p', html: WITH_HEAD, visibility: 'private' } }),
     );
     expect(res.status).toBe(201);
     const { id } = await res.json();
@@ -229,7 +223,7 @@ describe('readable = exportable includes BEARER-readable', () => {
 // gate: scripts/gates/gate-exports.mjs. What stays here is what the route
 // decides on its own: parsing, and the refusals.
 describe('GET /a/:id/export?slide=N', () => {
-  const DECK = '<SlideDeck><Slide title="one"><h1>First slide</h1></Slide><Slide title="two"><h1>Second slide</h1></Slide></SlideDeck>';
+  const DECK = '<section data-af-slide><h1>First slide</h1></section><section data-af-slide><h1>Second slide</h1></section>';
 
   it('parses a slide index, and refuses anything that is not a positive integer', () => {
     expect(parseExportSlide(null)).toBe(0);        // absent ⇒ the whole document
@@ -309,7 +303,7 @@ describe('GET /a/<folder>/export', () => {
     const childRes = await createArtifactRoute(
       request('/api/artifacts', {
         method: 'POST', token,
-        json: { title: 'Opening Note', visibility: 'public', parent_id: folder.id, markup: '<div><h1>Opening Note</h1></div>' },
+        json: { title: 'Opening Note', visibility: 'public', parent_id: folder.id, html: nativeHtml('<div><h1>Opening Note</h1></div>') },
       }),
     );
     expect(childRes.status).toBe(201);

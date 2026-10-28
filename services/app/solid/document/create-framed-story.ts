@@ -14,35 +14,14 @@
  */
 import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
 import { STORY_DOCUMENT_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/story-runtime/contract';
 
-/** The served frame a consent grant reloads (brief C's CspConsentBar) and the bridge attaches to. */
-export const DOCUMENT_FRAME_SELECTOR = 'iframe[data-mx-document-frame]';
-
-/** The framed document: the server's frame, and the origin its messages must come from. */
-interface FramedDocument { frame: HTMLIFrameElement; origin: string }
-
-/** The frame condition: the served story is one frame on the document's own origin, or the page holds the story itself. */
-export function framedDocumentFor(story: HTMLElement, framedOrigin: string | null | undefined): FramedDocument | null {
-  const frame = story.querySelector<HTMLIFrameElement>(DOCUMENT_FRAME_SELECTOR);
-  return frame && framedOrigin ? { frame, origin: framedOrigin } : null;
-}
-
-/**
- * A fresh first URL for the document's frame (app/api/page/frame/[id]): a new one-time ticket carrying what only
- * this origin knows — the reader's "Allow once" grants (lib/trust/document-trust carriedTrust) — and the page's
- * `$` values. The served `src` cannot be reused: its ticket is spent.
- */
-export async function freshFrameSrc(id: string, search = typeof window === 'undefined' ? '' : window.location.search): Promise<string | null> {
-  try {
-    const response = await fetch(`/api/page/frame/${encodeURIComponent(id)}${search}`, { credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) return null;
-    const answer = await response.json() as { src?: unknown };
-    return typeof answer.src === 'string' ? answer.src : null;
-  } catch { return null; }
-}
+// The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
+import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
+export { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR };
 
 /** Grace after a reloaded document's load event for its first message (its door normally says `hello` before it). */
 const FRAME_HELLO_MS = 3_000;
@@ -107,7 +86,11 @@ export function keepFrameSession(options: FrameSessionOptions): () => void {
     spoke = true;
     lastMessage = Date.now();
     const data = event.data as { type?: unknown; payload?: { kind?: unknown } } | null;
-    if (data && typeof data === 'object' && data.type === STORY_FRAME_BRIDGE_MESSAGE && data.payload?.kind === 'hello') lastHello = lastMessage;
+    // `ready` answers an attach to this document's door, so it proves the door opened just as `hello` does — and it
+    // still arrives when this watchdog started (lazily) after the door's hello, which would otherwise make the served
+    // document's own first load look like a silent reload and re-navigate the frame, re-sending every query.
+    const kind = data && typeof data === 'object' && data.type === STORY_FRAME_BRIDGE_MESSAGE ? data.payload?.kind : undefined;
+    if (kind === 'hello' || kind === 'ready') lastHello = lastMessage;
   };
   const onLoad = () => {
     clearTimeout(timer);
@@ -149,24 +132,18 @@ export function followFramedValues(win: Window, values: string): void {
 /**
  * The framed document's node tree (the page's NODES door, `?part=nodes`): a request of its own because the page draws nothing
  * from it — it is only relayed to the frame's edit controller — and on a large document it is most of the page's bytes.
- * `search` carries an archived version's `?version=N`, so the tree is that version's. A transient failure is asked
- * again twice; a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
+ * `search` carries an archived version's `?version=N`, so the tree is that version's. A restart is ridden out by the shared
+ * policy (lib/http/retry-lazily); a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
  */
 export async function fetchFrameNodes(id: string, search: string, signal?: AbortSignal): Promise<JsxNode[] | null> {
   const version = new URLSearchParams(search).get('version');
   const url = `/api/page/artifact/${encodeURIComponent(id)}?part=nodes${version ? `&version=${encodeURIComponent(version)}` : ''}`;
-  for (let attempt = 0; attempt < 3 && !signal?.aborted; attempt++) {
-    try {
-      const response = await fetch(url, { credentials: 'same-origin', signal });
-      if (response.ok) {
-        const part = await response.json() as { nodes?: unknown };
-        return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
-      }
-      if (response.status < 500 && response.status !== 429) return null;
-    } catch { if (signal?.aborted) return null; }
-    await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 500 : 2000));
-  }
-  return null;
+  try {
+    const response = await retryingFetch(url, { credentials: 'same-origin', signal });
+    if (!response.ok) return null;
+    const part = await response.json() as { nodes?: unknown };
+    return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
+  } catch { return null; }
 }
 
 /**
@@ -205,6 +182,8 @@ interface FramedStoryOptions {
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
+  /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
+  htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
   /**
    * The newest saved version the page's own stream delivered (createLiveArtifact's frame), and whether the page is
    * reading. The framed document draws that version itself, from its own stream; only its NODES — which comments,
@@ -245,7 +224,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     if (disposed || current()) return;
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id, nodes,
-      editId: options.editId, source: options.source,
+      editId: options.editId, source: options.source, htmlContext: options.htmlContext,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values) => followFramedValues(window, values),
@@ -253,6 +232,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     });
     setCurrent(bridge);
     if (inset) bridge.setTopInset(inset);
+    if(options.htmlContext)createEffect(()=>{options.htmlContext!();bridge.refreshUploadContext();});
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
     // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
     let forwarded: string | null = null;

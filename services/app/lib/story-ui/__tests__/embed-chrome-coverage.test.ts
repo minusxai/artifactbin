@@ -13,9 +13,6 @@ import { EXTRA_CLASS_SOURCES } from '../../../scripts/generate-story-ui-classes'
 import { STORY_UI_RECIPE_CLASSES } from '../recipe-classes';
 
 const REQUIRED_FILES = [
-  // The compiler writes the static shells (Grid geometry, native table cells) from its own literals.
-  'lib/compiled-page/compiler.ts',
-  'lib/compiled-page/rail-preview.server.ts',
   'lib/islands/rt.tsx',
   'lib/islands/chart.ts',
   'lib/story-ui/icon-contract.ts',
@@ -30,8 +27,7 @@ describe('embed wrapper chrome is covered by the story CSS compile', () => {
   });
 
   it('every listed file exists on disk — a renamed file must not silently fall out of the sheet', () => {
-    // The extractor skips missing entries with existsSync, so a stale path is
-    // not an error there; THIS is where it becomes one.
+    // Named chrome sources are required by generation as well as this inventory.
     for (const p of EXTRA_CLASS_SOURCES) {
       expect(existsSync(join(p)), `${p} listed in EXTRA_CLASS_SOURCES but not on disk`).toBe(true);
     }

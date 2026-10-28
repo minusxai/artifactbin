@@ -12,17 +12,17 @@
  * lib/accounts/{users,guest-owner,testusers} (account merges and cascades), lib/notifications/events
  * (recipient joins) and lib/datasets/user-fields.
  */
-import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
+import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
 
-export { artifactQuery, loadArtifactDocument } from './document';
+export { artifactQuery } from './document';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
   id: string;
-  token_id: string;
+  token_id: string | null;
   /** Owner account; NULL until the creating token is claimed. */
   user_id: string | null;
   group_id?: string | null;
@@ -154,11 +154,11 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
   `(artifacts.visibility <> 'private' AND COALESCE(artifacts.link_role, 'viewer') IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}))`;
 
 /**
- * The host's document-editor grant, in SQL: what a link could reach, for markup only — the mirror of
+ * The host's document-editor grant, in SQL: what a link could reach, for page documents only — the mirror of
  * lib/artifacts/access `documentEditorReaches`. It grants `editor`, which reaches every `min` it is asked
  * for, and only ever inside ACCOUNT_REACH_SQL (scopeAtLeast below).
  */
-const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'markup' AND artifacts.visibility <> 'private')";
+const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format IN ('markup','html') AND artifacts.visibility <> 'private')";
 
 /**
  * The SQL MIRROR of the lattice: the owner, an account holding any share role
@@ -186,6 +186,9 @@ export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'e
  * narrowed again (deleteAnnotationFor): the owner may remove any thread, a
  * named editor only one they wrote.
  */
+/** Account reactions follow read admission, independently of permission to write words. */
+export const reactionScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'viewer');
+
 export const annotationScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'commenter');
 
 /** Group viewers may observe comment feeds without gaining annotation writes. */
@@ -195,4 +198,4 @@ export const commentMonitorScope = (actor:AccessActor):Scope => {
 };
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */
-export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): TokenHoldingActor => ({ ...identityForUser(doc.user_id, doc.token_id), groupId: doc.group_id ?? null });
+export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): AccessActor => ({ ...identityForUser(doc.user_id, doc.token_id), groupId: doc.group_id ?? null });

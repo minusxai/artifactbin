@@ -2,10 +2,11 @@
 /** The action menu: menu/menuitem roles, keyboard, focus return and the row preset's invariants. */
 import { expect, it, vi } from 'vitest';
 import { createSignal, Show } from 'solid-js';
-import { screen } from '@testing-library/dom';
+import { screen, within } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { Menu, RowMenu } from '../Menu';
 import { Dialog } from '../Dialog';
+import { TrustedUi } from '../../components/TrustedUi';
 
 const items = (selected: (name: string) => void) => [
   { label: 'Rename Report', text: 'rename', onSelect: () => selected('rename') },
@@ -164,4 +165,27 @@ it('matches the trigger width when asked', () => {
   render(() => <Menu label="Wide" width="trigger" items={[{ label: 'One', text: 'one', onSelect: vi.fn() }]} trigger={(attrs) => <button {...attrs}>Wide</button>} />);
   fireEvent.click(screen.getByRole('button', { name: 'Wide' }));
   expect(screen.getByRole('menu', { name: 'Wide' }).getAttribute('style')).toContain('--radix-popper-anchor-width');
+});
+
+it('navigates a trusted shadow menu through arrows, Home, End and Escape', () => {
+  render(() => <><TrustedUi><span /></TrustedUi><Menu label="Shadow actions" items={items(vi.fn())} trigger={attrs => <button {...attrs}>Shadow actions</button>} /></>);
+  const trigger=screen.getByRole('button',{name:'Shadow actions'});
+  const root=document.querySelector('[data-trusted-ui]')!.shadowRoot!;
+  const query=within(root.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
+  const item=(name:string)=>query.getByRole('menuitem',{name});
+  fireEvent.keyDown(trigger,{key:'ArrowDown'});
+  expect(root.activeElement).toBe(item('Rename Report'));
+  fireEvent.keyDown(item('Rename Report'),{key:'ArrowDown'});
+  expect(root.activeElement).toBe(item('Move Report'));
+  fireEvent.keyDown(item('Move Report'),{key:'End'});
+  expect(root.activeElement).toBe(item('Delete Report'));
+  fireEvent.keyDown(item('Delete Report'),{key:'ArrowDown'});
+  expect(root.activeElement).toBe(item('Rename Report'));
+  fireEvent.keyDown(item('Rename Report'),{key:'ArrowUp'});
+  expect(root.activeElement).toBe(item('Delete Report'));
+  fireEvent.keyDown(item('Delete Report'),{key:'Home'});
+  expect(root.activeElement).toBe(item('Rename Report'));
+  fireEvent.keyDown(item('Rename Report'),{key:'Escape'});
+  expect(query.queryByRole('menu')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
 });

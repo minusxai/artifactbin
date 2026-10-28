@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE GATE. A trashed row is nonexistent to every public read path. Table-driven,
  * so a new reader is one line here; if a reader bypasses the row-loading seam this goes red.
@@ -36,7 +37,7 @@ async function trashedWorld() {
   const actor = { userId: u.id, email: u.email, emailVerified: true, credential: 'session' as const };
   const mk = async (body: Record<string, unknown>) => { const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token })); expect(r.status).toBe(201); return (await r.json()) as { id: string }; };
   const folder = await mk({ format: 'folder', title: 'F', visibility: 'public' });
-  const doc = await mk({ markup: '<h1>Doc</h1>', title: 'Doc', visibility: 'public', parent_id: folder.id });
+  const doc = await mk({ html: nativeHtml('<h1>Doc</h1>'), title: 'Doc', visibility: 'public', parent_id: folder.id });
   const db = await getDb();
   await db.query(`INSERT INTO annotations (id, artifact_id, body, author_kind, anchor_path, anchor_key, anchor_version, status, created_at, deleted_at)
                   VALUES ('ann_trashed0000000001', $1, 'gone', 'human', '0', 'k', 1, 'open', now(), now())`, [doc.id]).catch(async () => {

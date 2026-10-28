@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_ISOLATED_GATE_GROUPS, CI_SHARD_OPTIONS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_ISOLATED_GATE_GROUPS, CI_SHARD_OPTIONS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight, shouldRetryAlone } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 import { serversFor } from '../gates.servers.mjs';
 
@@ -23,11 +23,11 @@ const onDisk = readdirSync(GATE_DIR).filter((f) => f.startsWith('gate-') && f.en
   .filter((name) => !GATE_RUNNERS.includes(name)).sort();
 const source = (name) => readFileSync(path.join(GATE_DIR, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
-const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers']);
+const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', 'timeoutMs', 'browsers', 'attempts']);
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
-    expect(onDisk.length).toBeGreaterThanOrEqual(20);
+    expect(onDisk).toEqual(expect.arrayContaining(['reader-shell','comments','collab-roles','exports','offline-file','own-origin-script','media']));
     expect([...GATE_SPECS].map((s) => s.name).sort()).toEqual(onDisk);
   });
 
@@ -238,4 +238,17 @@ describe('CI isolation', () => {
     const crowded = [1, 2].map((index) => shardOf(['x', 'a', 'b'], { index, total: 2 }, weight, { serialGroup: () => 'g' }));
     expect(crowded.flat().sort()).toEqual(['a', 'b', 'x']);
   });
+});
+
+
+it('preserves one-attempt gates and retries only eligible contention failures',()=>{
+  expect(specFor('component-baseline').attempts).toBe(1);
+  expect(shouldRetryAlone(specFor('component-baseline'),2)).toBe(false);
+  expect(shouldRetryAlone({attempts:1},6)).toBe(false);
+  expect(shouldRetryAlone({},2)).toBe(true);
+  expect(shouldRetryAlone({attempts:2},2)).toBe(true);
+  expect(shouldRetryAlone({},1)).toBe(false);
+  expect(()=>checkManifest(['one'],[{name:'one',attempts:3}])).toThrow('attempts');
+  const runner=readFileSync(path.join(SCRIPTS,'gates.mjs'),'utf8');
+  expect(runner).toContain('shouldRetryAlone(specFor(name), workers.length)');
 });

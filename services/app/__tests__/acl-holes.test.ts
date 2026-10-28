@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Holes an adversarial review found in the ACL. Each of these passed the
@@ -77,15 +78,15 @@ afterAll(async () => {
 describe('the exporter key is not a reader-visible value', () => {
   it('edit_id does NOT unlock a private document', async () => {
     const { token } = await fixtures();
-    const doc = await create(token, { title: 'Secret', markup: '<h1>s</h1>' });
+    const doc = await create(token, { title: 'Secret', html:nativeHtml('<h1>s</h1>') });
     // edit_id is handed to every viewer by the page; it must buy nothing.
     expect(await outcome(ArtifactPage(doc.id, { key: doc.edit_id }))).toBe('notFound');
   });
 
   it('a MINTED export key opens exactly one artifact, and only briefly', async () => {
     const { token } = await fixtures();
-    const a = await create(token, { title: 'A', markup: '<section><p>a</p></section>' });
-    const b = await create(token, { title: 'B', markup: '<section><p>b</p></section>' });
+    const a = await create(token, { title: 'A', html:nativeHtml('<section><p>a</p></section>') });
+    const b = await create(token, { title: 'B', html:nativeHtml('<section><p>b</p></section>') });
 
     expect(await outcome(ArtifactPage(a.id, { key: mintExportKey(a.id) }))).toBe('render');
     // Not transferable to another document…
@@ -99,7 +100,7 @@ describe('the exporter key is not a reader-visible value', () => {
 
   it('rejects malleable encodings of a real key', async () => {
     const { token } = await fixtures();
-    const a = await create(token, { title: 'A', markup: '<section><p>a</p></section>' });
+    const a = await create(token, { title: 'A', html:nativeHtml('<section><p>a</p></section>') });
     const good = mintExportKey(a.id);
     const [exp, sig] = good.split('.');
     // Each of these normalizes to the same signed number, so a lax parser
@@ -111,7 +112,7 @@ describe('the exporter key is not a reader-visible value', () => {
 
   it('an UNVERIFIED key buys nothing — not even the skipped canonical redirect', async () => {
     const { owner, token } = await fixtures();
-    const doc = await create(token, { title: 'Public Doc', markup: '<h1>x</h1>', visibility: 'public' });
+    const doc = await create(token, { title: 'Public Doc', html:nativeHtml('<h1>x</h1>'), visibility: 'public' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     // A garbage key must leave the page canonicalizing exactly as it would
@@ -124,7 +125,7 @@ describe('revocation reaches an open stream', () => {
   it('stops delivering once the document is locked mid-stream', async () => {
     const { token } = await fixtures();
     const doc = await create(token, {
-      title: 'Open', markup: '<section><p>alpha text</p></section>', visibility: 'public',
+      title: 'Open', html:nativeHtml('<section><p>alpha text</p></section>'), visibility: 'public',
     });
 
     // A stranger starts watching while it is public.
@@ -133,11 +134,11 @@ describe('revocation reaches an open stream', () => {
 
     // The owner locks it, then writes something new.
     await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>alpha text</p></section>', visibility: 'private' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { html:nativeHtml('<section><p>alpha text</p></section>'), visibility: 'private' } }),
       params({ id: doc.id }),
     );
     await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>TOPSECRET after revoke</p></section>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { html:nativeHtml('<section><p>TOPSECRET after revoke</p></section>') } }),
       params({ id: doc.id }),
     );
 
@@ -152,7 +153,7 @@ describe('the resolver is not an existence oracle', () => {
     const other = await createUser({ email: 'other@example.com' });
     const otherToken = await mintToken('other', other.id);
     await claimToken(other.id, otherToken.token);
-    const secret = await create(otherToken.token, { title: 'Theirs', markup: '<h1>x</h1>' });
+    const secret = await create(otherToken.token, { title: 'Theirs', html:nativeHtml('<h1>x</h1>') });
 
     const { owner } = await fixtures();
     sessionUser.id = owner.id;
@@ -167,7 +168,7 @@ describe('the resolver is not an existence oracle', () => {
 describe('the wire keeps internal ids internal', () => {
   it('never returns user_id', async () => {
     const { token } = await fixtures();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'x', html:nativeHtml('<h1>x</h1>') });
     const wire = await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: token }), params({ id: doc.id }))).json();
     expect('user_id' in wire).toBe(false);
     expect('token_id' in wire).toBe(false);

@@ -17,7 +17,7 @@ export type DatasetSource =
   | { kind: 'sheetUrl'; url: string }
   | { kind: 'csvUrl'; url: string };
 
-/** Types the caller declared for columns — they win over the sniffer. */
+/** Types the caller declared for columns — they win over the sniffer. Numeric override explicitly accepts IEEE-754 conversion; automatic inference preserves unsafe integers and decimals over 15 significant digits as strings. */
 export interface DeclaredColumn { name: string; type: string }
 
 export interface IngestResult {
@@ -62,4 +62,6 @@ export const MAX_DATASET_BYTES = 50 * 1024 * 1024;
 export interface ParsedCsv {
   headers: string[];
   rows: string[][];
+  /** True for explicitly quoted empty strings; omitted when none occur. Unquoted missing fields remain null on ingest. */
+  quotedEmptyCells?: boolean[][];
 }

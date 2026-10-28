@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE ERASE IS THE PRODUCT.
  *
@@ -59,12 +60,15 @@ it('takes everything the person owned, held and said — and nothing of the acco
   // The account's own page and dataset, forked into the sandbox: the copy and
   // its dataset belong to the test user, the originals do not.
   const dataset = await publish(owner.token, { dataset: [{ id: 1, who: 'seed' }], access: 'readwrite', visibility: 'unlisted' });
-  const page = await publish(owner.token, { visibility: 'unlisted', markup:
-    `<Helmet><Import name="join_data" src="ref:${dataset.id}" /><Mutation name="join">{\`insert into join_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
+  const page = await publish(owner.token, { visibility: 'unlisted', html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="join_data" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Join</h1></body></html>` });
   const forked = await forkOperation(request(`/api/artifacts/${page.id}/fork`, { method: 'POST', token: owner.token, json: { as: { testuser: testuser.id } } }), params(page.id));
   expect(forked.status, await forked.clone().text()).toBe(201);
   const copy = (await forked.json()) as { id: string; datasets: Array<{ id: string }> };
-  const copiedDataset = copy.datasets[0]!.id;
+  // Native page clones retain authorized dataset references. Clone a dataset explicitly for disposable data.
+  expect(copy.datasets).toEqual([]);
+  const datasetCopy=await forkOperation(request(`/api/artifacts/${dataset.id}/fork`,{method:'POST',token:owner.token,json:{as:{testuser:testuser.id}}}),params(dataset.id));
+  expect(datasetCopy.status,await datasetCopy.clone().text()).toBe(201);
+  const copiedDataset=(await datasetCopy.json()).id;
 
   // Things it DID: a like on its own copy, a comment, a follow of another test
   // user, and a live browser session.
@@ -75,6 +79,9 @@ it('takes everything the person owned, held and said — and nothing of the acco
   await db.query(
     "INSERT INTO annotations (id, artifact_id, body, author_kind, author_user_id, author_transport) VALUES ('ann_erase', $1, 'mine', 'human', $2, 'browser')",
     [copy.id, testuser.id]);
+  await db.query("INSERT INTO annotations (id, artifact_id, body, author_kind, author_user_id, author_transport) VALUES ('ann_keep', $1, 'retained', 'human', $2, 'browser')",[page.id,owner.userId]);
+  await db.query("INSERT INTO comment_reactions (comment_id,user_id,kind) VALUES ('ann_erase',$1,'thumbs_up'),('ann_keep',$2,'thumbs_up'),('ann_keep',$1,'thumbs_up')",[owner.userId,testuser.id]);
+  await db.query("INSERT INTO comment_reaction_events (seq,artifact_id,comment_id,user_id,kind,active,reactor_kind,count) VALUES (900001,$3,'ann_erase',$1,'thumbs_up',true,'human',1),(900002,$4,'ann_keep',$2,'thumbs_up',true,'human',1),(900003,$4,'ann_keep',$1,'thumbs_up',true,'human',2)",[owner.userId,testuser.id,copy.id,page.id]);
   noteTestUserSession(testuser.id, 'session-erase', { credential: 'bearer', tokenId: owner.tokenId, userId: owner.userId });
   expect(testUserSessionCount(testuser.id)).toBe(1);
 
@@ -90,6 +97,8 @@ it('takes everything the person owned, held and said — and nothing of the acco
   expect(await resolveTokenById(testuser.tokenId)).toBeNull();
   expect((await db.query('SELECT 1 FROM annotations WHERE author_user_id = $1', [testuser.id])).rows).toHaveLength(0);
   expect((await db.query('SELECT 1 FROM artifacts WHERE user_id = $1', [testuser.id])).rows).toHaveLength(0);
+  expect((await db.query('SELECT comment_id,user_id FROM comment_reactions')).rows).toEqual([{comment_id:'ann_keep',user_id:owner.userId}]);
+  expect((await db.query('SELECT comment_id,user_id FROM comment_reaction_events')).rows).toEqual([{comment_id:'ann_keep',user_id:owner.userId}]);
   expect(await has(testuser.id, 'follow', friend.id)).toBe(false);
   expect(await count('like', copy.id)).toBe(0);
   expect(testUserSessionCount(testuser.id)).toBe(0);
@@ -115,13 +124,14 @@ it('gives the parent its artifact quota back, because the rows are really gone',
     // plus its dataset copy — which fills it exactly.
     setArtifactQuotaForTests(4);
     const dataset = await publish(owner.token, { dataset: [{ id: 1, who: 'seed' }], access: 'readwrite', visibility: 'unlisted' });
-    const page = await publish(owner.token, { visibility: 'unlisted', markup:
-      `<Helmet><Import name="join_data" src="ref:${dataset.id}" /><Mutation name="join">{\`insert into join_data.rows (id, who) select 2, $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>` });
+    const page = await publish(owner.token, { visibility: 'unlisted', html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="join_data" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Join</h1></body></html>` });
     const testuser = await testUserOf(owner);
     expect(await artifactQuotaExceeded(owner.tokenId), 'two of four used').toBe(false);
 
     const forked = await forkOperation(request(`/api/artifacts/${page.id}/fork`, { method: 'POST', token: owner.token, json: { as: { testuser: testuser.id } } }), params(page.id));
     expect(forked.status, await forked.clone().text()).toBe(201);
+    const datasetCopy=await forkOperation(request(`/api/artifacts/${dataset.id}/fork`,{method:'POST',token:owner.token,json:{as:{testuser:testuser.id}}}),params(dataset.id));
+    expect(datasetCopy.status,await datasetCopy.clone().text()).toBe(201);
     // The PARENT paid for the copies: a test user has no quota of its own, so
     // the cap would otherwise be free to walk past one sandbox at a time.
     expect(await artifactQuotaExceeded(owner.tokenId), 'the sandbox copies filled the account\'s cap').toBe(true);
@@ -140,7 +150,7 @@ it('sweeps the ones nobody deleted, and leaves the live ones alone', async () =>
   const stale = await testUserOf(owner);
   const live = await testUserOf(owner);
   const db = await harness.db();
-  await publish(stale.token, { markup: '<p>left behind</p>' });
+  await publish(stale.token, { html:nativeHtml('<p>left behind</p>') });
 
   // Past its death date AND past the margin: the margin is what keeps a test
   // user that expires mid-call from being erased under its own feet.

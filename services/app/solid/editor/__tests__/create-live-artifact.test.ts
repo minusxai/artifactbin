@@ -18,6 +18,8 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
     backend, unsubscribe,
     ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }),
     wake: () => handlers!.onWake?.(),
+    data: () => handlers!.onData?.({datasets:['garden']} as never),
+    dataFrame: (frame: { datasets: string[]; version: number; revisions?: Record<string, string> }) => handlers!.onData?.(frame),
   };
 }
 
@@ -237,4 +239,47 @@ it('a page coming back online retries a frame fetch that failed while offline at
   await vi.advanceTimersByTimeAsync(0);
   expect(liveFrame).toHaveBeenCalledTimes(calls + 1);
   expect(live()?.version).toBe(5);
+});
+
+
+it('refreshes native publication once without fetching a JSX frame or replaying data changes', () => {
+ const liveFrame=vi.fn(async()=>frame(2));
+ const {backend,ping,data,wake}=liveBackend(liveFrame);
+ const reload=vi.fn(); const invalidate=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:reload,onData:invalidate}));
+ data(); wake();
+ expect(reload).not.toHaveBeenCalled();
+ expect(invalidate).toHaveBeenCalledOnce();
+ ping({version:2,editId:'saved'}); ping({version:2,editId:'saved'}); ping({version:1,editId:'initial'});
+ expect(reload).toHaveBeenCalledExactlyOnceWith(2,'saved');
+ expect(liveFrame).not.toHaveBeenCalled();
+});
+
+it('delivers each newer native publication once, in version order, for the page to follow', () => {
+ const {backend,ping}=liveBackend(vi.fn(async()=>frame(2)));
+ const follow=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:follow}));
+ ping({version:2,editId:'two'}); ping({version:4,editId:'four'}); ping({version:3,editId:'three'}); ping({version:4,editId:'four'});
+ expect(follow.mock.calls).toEqual([[2,'two'],[4,'four']]);
+});
+
+it('never refreshes the native archived view when a publication arrives', () => {
+ const {backend}=liveBackend(vi.fn(async()=>frame(2)));
+ const reload=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,enabled:false,onPublication:reload}));
+ expect(backend.live).not.toHaveBeenCalled();
+ expect(reload).not.toHaveBeenCalled();
+});
+
+it('forwards a native data name only when its revision moved, across reconnects', () => {
+ const {backend,dataFrame}=liveBackend(vi.fn(async()=>frame(1)));
+ const invalidate=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:vi.fn(),onData:invalidate}));
+ // Every (re)connection opens with every name; an unchanged revision is not news.
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:3:e3:true'}});
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:3:e3:true'}});
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:4:e4:true'}});
+ // A frame without revisions (a dataset document, membership) is forwarded as it is.
+ dataFrame({datasets:['_members'],version:1});dataFrame({datasets:['_members'],version:1});
+ expect(invalidate.mock.calls.map(([event])=>event.datasets)).toEqual([['queries','orders'],['orders'],['_members'],['_members']]);
 });

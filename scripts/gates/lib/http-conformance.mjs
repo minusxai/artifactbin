@@ -35,20 +35,22 @@ export async function checkDirectHttp({base,fetch,accountCookie,artifactId,stamp
   const head=await read();assert.equal(head.format,'dataset');assert.equal(Number((await content())[0].amount),2);
   const changed=await api(`/api/artifacts/${id}`,json('PUT',{dataset:'region,amount\nEU,20\n',expectedVersion:head.version,expectedState:head.state}));
   assert.equal(changed.status,200,'Direct bearer replaces CSV with its observed fence');
+  const receipt=await changed.json();
   const before=await read(),beforeContent=await content();assert.equal(before.version,head.version+1);assert.equal(Number(beforeContent[0].amount),20);
-  const refused=await api(`/api/artifacts/${id}`,json('PUT',{dataset:'region,amount\nEU,999\n',expectedVersion:before.version,expectedState:before.state},{'User-Agent':'afbin/0.3.21','X-Artifactbin-Protocol':'3'}));
-  assert.equal(refused.status,426,'Retired native CLI is refused before mutation');
-  assert.equal(refused.headers.get('X-Artifactbin-Protocol'),null);
-  const notice=await refused.json();assert.equal(notice.error,'cli_npm_required');assert.match(notice.message,/installs through npm/);assert.match(notice.message,/npx --yes @afbin\/cli@latest setup/);assert.match(notice.hint,/npx\.cmd/);
-  const helperUrls=notice.hint.match(/https?:\/\/[^\s,)]+\/chat\/install-node\.(?:sh|ps1)/g)??[];
-  assert.deepEqual(helperUrls,[`${base}/chat/install-node.sh`,`${base}/chat/install-node.ps1`],'Node setup helpers must use the public acceptance origin');
-  const after=await read();assert.equal(after.version,before.version);assert.equal(after.state,before.state);assert.deepEqual(await content(),beforeContent,'Native refusal cannot change stored CSV');
+  assert.equal(receipt.id,id);assert.equal(receipt.version,before.version);assert.equal(receipt.state,before.state,'Write receipt identifies the committed head');
+  const stale=await api(`/api/artifacts/${id}`,json('PUT',{dataset:'region,amount\nEU,999\n',expectedVersion:head.version,expectedState:before.state}));
+  assert.equal(stale.status,409,'A stale observed version is refused before mutation');
+  const conflict=await stale.json();assert.equal(conflict.error,'version_conflict');assert.equal(conflict.currentVersion,before.version);assert.equal(conflict.currentState,before.state);
+  const unauthorized=await fetch(`${base}/api/artifacts/${id}`,json('PUT',{dataset:'region,amount\nEU,999\n',expectedVersion:before.version,expectedState:before.state}));
+  assert.equal(unauthorized.status,401,'A write requires an authenticated bearer');
+  assert.equal((await unauthorized.json()).error,'unauthorized');
+  const after=await read();assert.equal(after.version,before.version);assert.equal(after.state,before.state);assert.deepEqual(await content(),beforeContent,'Refused HTTP writes cannot change stored CSV');
   // The direct bearer is API-scoped; the authenticated browser session owns the
   // reader download door. Do not broaden the credential to make this test pass.
   const downloaded=await fetch(`${base}/a/${artifactId}/download`,{headers:{cookie:accountCookie}});
   assert.equal(downloaded.status,200);assert.match(downloaded.headers.get('content-type')??'',/^text\/html/);
-  assert.match(downloaded.headers.get('content-disposition')??'',/^attachment; filename="[^"\r\n]+\.jsx\.html"/);
-  const html=await downloaded.text();assert.ok(html.includes('id="afbin-file"'),'Download carries the offline file payload');assert.ok(!html.includes(credential.access_token),'Download must not contain the bearer');
+  assert.match(downloaded.headers.get('content-disposition')??'',/^attachment; filename="[^"\r\n]+\.html"/);
+  const html=await downloaded.text();assert.ok(html.includes('data-af="core"'),'Download carries the inline native core');assert.ok(!html.includes(credential.access_token),'Download must not contain the bearer');
  }finally{
   for(const id of await tokenIds())if(!beforeTokens.has(id)){
    const revoked=await fetch(`${base}/api/my/tokens/${encodeURIComponent(id)}`,{method:'DELETE',headers:{cookie:accountCookie,origin:base}});

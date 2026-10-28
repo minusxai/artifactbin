@@ -1,51 +1,31 @@
+/** The retained internal compatibility helper cannot execute native pages as JSX declarations. */
 import {expect,it} from 'vitest';
-import {useAppHarness,request} from './harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {useAppHarness,request,mintAccountToken} from './harness';
+import {identityForUser,createUser,claimToken} from '@/lib/accounts';
 import {POST as publish} from '@/app/api/artifacts/route';
-import {GET as anonymousQuery} from '@/app/a/[id]/query/route';
-import {POST as readerMutate} from '@/app/a/[id]/mutate/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
+import {getArtifactById} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
 import {lambdaOperation} from '@/lib/runner/operations';
 import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {defaultDatasetGrants,signActor,verifyActor} from '@artifactbin/utils';
 const harness=useAppHarness();
-it('proves default owner grants allow Lambda replay but deny anonymous declared writes',async()=>{
- const db=await harness.db();const owner=await createUser({email:'mxmx_test_lambda_ops@example.com'});const token=await mintToken('lambda', owner.id);await claimToken(owner.id,token.token);
- const create=async(json:unknown)=>{const r=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
- const dataset=await create({dataset:[{n:1}],access:'readwrite'});
- expect(await setDatasetPolicy(identityForUser(owner.id, token.id),dataset,defaultDatasetGrants(),0)).toMatchObject({revision:1});
- expect((await getArtifactById(dataset))?.dataset_policy).toEqual(defaultDatasetGrants());
- const source=`<Helmet><Import name="data" src="ref:${dataset}" /><Query name="rows">{\`select n from data.rows\`}</Query><Mutation name="add">{\`insert into data.rows values (2)\`}</Mutation><Notify name="added" on="add">{\`select null as "to", 'Added row' as message\`}</Notify></Helmet><p>Run</p>`;
- const id=await create({markup:source});const row=(await getArtifactById(id))!;
- const readerSource=`<Helmet><Import name="data" src="ref:${dataset}" /><Query name="rows">{\`select n from data.rows\`}</Query><Mutation name="add">{\`insert into data.rows values (2)\`}</Mutation></Helmet><p>Read</p>`;
- const readerId=await create({visibility:'public',markup:readerSource});
- expect((await getArtifactById(readerId))?.visibility).toBe('public');
- const ctx={runId:'run-a',callId:1,request:{userId:owner.id,requestId:'test',artifactId:id,artifactVersion:String(row.version),document:{source,editId:row.edit_id},program:{source:'export default()=>null',language:'javascript' as const},input:null},signal:new AbortController().signal,requests:[],usage:[]};
- const identity=runnerIdentity(ctx),secret='test-actor-signing-secret-long-enough';expect(verifyActor(signActor(identity,secret),secret)).toEqual(identity);
- const req=()=>request('/api/runner/operations',{method:'POST',actor:identity});
+it('requires signed pinned authority and refuses native files without executing legacy SQL',async()=>{
+ const owner=await createUser({email:'mxmx_test_lambda_ops@example.com'}),token=await mintAccountToken('lambda',owner.id);await claimToken(owner.id,token.token);
+ const create=async(json:unknown)=>{const response=await publish(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(response.status).toBe(201);return (await response.json()).id as string;};
+ const dataset=await create({dataset:[{n:1}],access:'readwrite'});expect(await setDatasetPolicy(identityForUser(owner.id,token.id),dataset,defaultDatasetGrants(),0)).toMatchObject({revision:1});
+ const source=`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset}"></head><body>Native page</body></html>`;
+ const id=await create({html:source}),row=(await getArtifactById(id))!;
+ const identity=runnerIdentity({runId:'run-a',callId:1,request:{userId:owner.id,requestId:'test',artifactId:id,artifactVersion:String(row.version),document:{source,editId:row.edit_id},program:{source:'export default()=>null',language:'javascript'},input:null},signal:new AbortController().signal,requests:[],usage:[]});
+ const secret='test-actor-signing-secret-long-enough';expect(verifyActor(signActor(identity,secret),secret)).toEqual(identity);
  expect((await lambdaOperation(request('/api/runner/operations',{actor:{userId:owner.id,credential:'session'}}),'lambda_query',{values:{},only:['rows']},source)).status).toBe(403);
- expect((await lambdaOperation(req(),'lambda_query',{values:{},only:['rows']},source+'x')).status).toBe(403);
- // Current source changes, but this run still reads its admitted declarations.
- await db.query('UPDATE artifacts SET source=$2,version=version+1,meta=$3 WHERE id=$1',[id,'<p>No data now</p>',{}]);
- expect(await (await lambdaOperation(req(),'lambda_query',{values:{},only:['rows']},source)).json()).toMatchObject({tables:{rows:{rows:[{n:1}]}}});
- const write=()=>lambdaOperation(req(),'lambda_mutate',{mutation:'add',args:{}},source);
- const anonymousMutation=await readerMutate(request(`/a/${readerId}/mutate`,{method:'POST',origin:'same',json:{mutation:'add',args:{}}}),{params:Promise.resolve({id:readerId})});
- expect(anonymousMutation.status,await anonymousMutation.clone().text()).toBe(403);
- const anonymousRead=await anonymousQuery(request(`/a/${readerId}/query?q=${encodeURIComponent(JSON.stringify({}))}`),{params:Promise.resolve({id:readerId})});
- expect(anonymousRead.status,await anonymousRead.clone().text()).toBe(200);
- expect((await anonymousRead.json()).tables.rows.rows).toEqual([{n:1}]);
- expect((await getArtifactById(dataset))?.version).toBe(1);
- expect(await loadDatasetRows((await getArtifactById(dataset))!)).toEqual([{n:1}]);
- const committed=await write();expect(committed.status,await committed.clone().text()).toBe(200);const result=await committed.json();expect(result.mutationRunId).toEqual(expect.any(String));expect(await (await write()).json()).toEqual(result);
- expect((await db.query('SELECT id FROM notification_jobs WHERE mutation_run_id=$1',[result.mutationRunId])).rows).toHaveLength(1);
- expect((await getArtifactById(dataset))?.version).toBe(2);
- expect((await dataflowForRow(row,{viewer:identityForUser(owner.id, null)}))?.state.tables.rows?.rows).toEqual([{n:1},{n:2}]);
+ expect((await lambdaOperation(request('/internal',{actor:identity}),'lambda_query',{values:{},only:['rows']},source+'x')).status).toBe(403);
+ for(const operation of ['lambda_query','lambda_mutate']){
+  const response=await lambdaOperation(request('/internal',{actor:identity}),operation,{values:{},only:['rows']},source);
+  expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'not_executable'});
+ }
+ expect((await getArtifactById(dataset))!.version).toBe(1);expect(await loadDatasetRows((await getArtifactById(dataset))!)).toEqual([{n:1}]);
  const other=await createUser({email:'mxmx_test_lambda_other@example.com'});
  expect((await lambdaOperation(request('/internal',{actor:{...identity,userId:other.id}}),'lambda_query',{values:{},only:['rows']},source)).status).toBe(404);
- await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[id]);
- expect((await write()).status).toBe(404);
+ await (await harness.db()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[id]);expect((await lambdaOperation(request('/internal',{actor:identity}),'lambda_mutate',{mutation:'add',args:{}},source)).status).toBe(404);
 });

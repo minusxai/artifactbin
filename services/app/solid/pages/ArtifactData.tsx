@@ -12,6 +12,7 @@
  * the image, the preview and the title, and a dataset re-reads its catalog from the page door
  * (`/api/page/artifact/<id>`) — a version frame carries rows, not catalog definitions.
  */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -84,7 +85,7 @@ export function ArtifactDataPage(props: { answer: DataAnswer }): JSX.Element {
     if (format !== 'dataset' || frame?.format !== 'dataset') return;
     let alive = true;
     const minimumVersion = frame.version;
-    void fetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
+    void retryingFetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
       .then((response) => response.ok ? response.json() as Promise<{ surface?: { version: number; catalog?: DatasetCatalog } }> : null)
       .then((page) => {
         const next = page?.surface;

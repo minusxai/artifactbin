@@ -1,3 +1,4 @@
+import type {PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * Subscribe a mounted page to its
  * artifact's live document (`GET /a/<id>/events`).
@@ -24,13 +25,13 @@
  */
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ReaderArtifactBackend } from '@/lib/artifact-backend/types';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { liveBackoffDelay } from '@/lib/http/live-stream';
 
 interface LiveArtifactOptions {
   /** Where the stream comes from; a backend without `live` is simply never subscribed. */
-  backend: ArtifactBackend;
+  backend: ReaderArtifactBackend;
   id: string;
   initialEditId: string;
   initialVersion: number;
@@ -49,8 +50,11 @@ interface LiveArtifactOptions {
    */
   whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
+  onPresence?: (viewers:PresenceViewer[])=>void;
   onData?: (event: ArtifactDataEvent) => void;
-  /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
+  /** Native HTML follows each newer publication itself (in place, or by reloading its server bootstrap); it never fetches a JSX frame. */
+  onPublication?: (version: number, editId?: string) => void;
+  /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
   since?: string;
@@ -60,6 +64,23 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
   // Keep the artifact id beside the frame: this primitive can be reused across
   // navigation, and a high version from the previous id must never win.
   const [live, setLive] = createSignal<{ id: string; frame: ArtifactLiveEvent } | null>(null);
+  /**
+   * The last revision forwarded for each native shared name, kept across reconnects for this artifact. Every
+   * (re)connection of the stream opens with a `data` frame naming every name (app/a/[id]/events), so without this
+   * each reconnect re-ran every query of the page although nothing changed. A name is forwarded only when its
+   * revision moved; a frame without revisions (a dataset document, `_members`) is forwarded as it is.
+   */
+  const forwarded = { id: '', revisions: new Map<string, string>() };
+  const changedData = (id: string, frame: ArtifactDataEvent): string[] => {
+    if (forwarded.id !== id) { forwarded.id = id; forwarded.revisions.clear(); }
+    const revisions = frame.revisions ?? {};
+    return frame.datasets.filter((name) => {
+      if (!Object.hasOwn(revisions, name)) return true;
+      if (forwarded.revisions.get(name) === revisions[name]) return false;
+      forwarded.revisions.set(name, revisions[name]!);
+      return true;
+    });
+  };
 
   createEffect(
     on(
@@ -132,6 +153,12 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
             onPing: (ping) => {
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
+              if (options.onPublication) {
+                if (ping.version <= seenVersion) return;
+                seenVersion = ping.version;
+                options.onPublication(ping.version, ping.editId);
+                return;
+              }
               placeOwn(ping.editId, (own) => {
                 // Re-checked: a held ping may have been overtaken while its owner was being decided.
                 if (ping.version < seenVersion) return;
@@ -150,7 +177,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
              * (or this page's own last write) changes nothing.
              */
             onWake: () => {
-              if (!alive) return;
+              if (!alive || options.onPublication) return;
               // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
               if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
               if (fetching || wanted) return;
@@ -163,11 +190,13 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
                 });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
+            onPresence: viewers => options.onPresence?.(viewers),
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
-              options.onData?.(frame);
+              const datasets = changedData(id, frame);
+              if (datasets.length) options.onData?.(datasets.length === frame.datasets.length ? frame : { ...frame, datasets });
             },
-            // Annotations are a PING too: the owner's page refetches the list.
+            // Annotations are a PING too: the reader refetches the authorized list.
             onAnnotations: () => {
               if (!options.onAnnotations) return;
               annotationsRequest?.abort();

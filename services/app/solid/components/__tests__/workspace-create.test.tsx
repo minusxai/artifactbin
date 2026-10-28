@@ -26,12 +26,16 @@ it.each([
   fireEvent.mouseEnter(item.parentElement!);
   expect(item).toBeInTheDocument();
   fireEvent.click(item);
-  await waitFor(() => expect(openDocument).toHaveBeenCalledWith(`/a/new123${template === 'doc' ? '/edit' : ''}`));
+  await waitFor(() => expect(openDocument).toHaveBeenCalledWith('/a/new123'));
   expect(replaceDocument).not.toHaveBeenCalled();
   const [url, init] = vi.mocked(fetch).mock.calls[0];
   expect(url).toBe('/api/my/artifacts');
-  expect(JSON.parse(init!.body as string)).toMatchObject({ template, visibility: 'private', parent_id: 'folder1' });
-  if (template === 'doc') expect(JSON.parse(init!.body as string).markup).toContain('<Markdown id="body"');
+  const body=JSON.parse(init!.body as string);
+  expect(body).toMatchObject({ visibility:'private',parent_id:'folder1' });
+  expect(body.html).toContain('<!doctype html>');
+  expect(body.html).toContain(template==='doc'?'Untitled document':`Untitled ${label.toLowerCase()}`);
+  expect(body).not.toHaveProperty('markup');
+  expect(body).not.toHaveProperty('template');
   expect(screen.queryByRole('menu', { name: 'Create menu' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Create' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
@@ -100,4 +104,22 @@ it('shows a failed folder creation inside the dialog and keeps the name for anot
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not create the folder');
   expect(within(dialog).getByRole('textbox', { name: 'Folder name' })).toHaveValue('Plans');
   expect(within(dialog).getByRole('button', { name: 'create folder' })).toBeEnabled();
+});
+
+
+it('offers retained artifact, folder and asset creation without retired programs', () => {
+ render(() => <WorkspaceCreate onCreated={() => {}} />);
+ fireEvent.click(screen.getByRole('button', {name:'Create'}));
+ for (const name of ['Artifact', 'Upload HTML', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
+ expect(screen.queryByRole('menuitem', {name:'Program'})).not.toBeInTheDocument();
+});
+
+it('opens HTML intake in the selected folder and group without creating until a file is published', () => {
+ vi.stubGlobal('fetch', vi.fn());
+ render(() => <WorkspaceCreate parentId="folder1" groupId="g1" onCreated={() => {}} />);
+ fireEvent.click(screen.getByRole('button', {name:'Create'}));
+ fireEvent.click(screen.getByRole('menuitem', {name:'Upload HTML'}));
+ expect(screen.getByRole('dialog', {name:'Upload HTML'})).toBeInTheDocument();
+ expect(screen.getByRole('button', {name:'Upload HTML'})).toBeDisabled();
+ expect(fetch).not.toHaveBeenCalled();
 });

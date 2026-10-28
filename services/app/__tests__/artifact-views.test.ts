@@ -15,9 +15,9 @@ beforeEach(async () => {
   setServices({ events: createEvents({ db, schema: EVENTS_SCHEMA }) });
   owner = await createUser({ email: 'mxmx_test_views@example.com' });
   await db.query(`INSERT INTO artifacts (id, token_id, user_id, format, visibility) VALUES
-    ('viewpu', 'tok_v', $1, 'markup', 'public'),
-    ('viewpr', 'tok_v', $1, 'markup', 'private'),
-    ('viewun', 'tok_v', $1, 'markup', 'unlisted'),
+    ('viewpu', 'tok_v', $1, 'html', 'public'),
+    ('viewpr', 'tok_v', $1, 'html', 'private'),
+    ('viewun', 'tok_v', $1, 'html', 'unlisted'),
     ('viewfo', 'tok_v', $1, 'folder', 'public')`, [owner.id]);
 });
 const open = (id: string, options: Parameters<typeof request>[1] = {}, query = '') => {

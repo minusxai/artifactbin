@@ -1,79 +1,30 @@
-import cliRelease from '../public/chat/release.json';
-import {readFileSync} from 'node:fs';
-import {runInNewContext} from 'node:vm';
-import {CliError} from '../../cli/src/errors';
-import {documentPublicationBody,documentEditBody,restoreDocument} from './prepared-document';
+import { nativePublicationBody as documentPublicationBody,nativeSource } from './native-publication-fixture';
+import { restoreDocument } from './prepared-document';
 /**
  * Document lifecycle through the REAL handlers: restore from trash, preconditions on a stale edit,
  * atomic replacement beside a concurrent edit, and paged listing.
  */
 
-import { expect, it } from 'vitest';
-import { useAppHarness, request } from './harness';
-import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
-import { getArtifactById, updateSharingFor, createArtifact } from '@/lib/artifacts';
-import { ownedArtifactState } from '@/lib/workspace';
-import { POST as create, GET as list } from '@/app/api/artifacts/route';
-import { GET as read, DELETE as remove, PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { POST as restore } from '@/app/api/artifacts/[id]/restore/route';
-import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
-import { readRecord } from '../../cli/test/tracking';
-import { POST as edit } from '@/app/api/artifacts/[id]/edits/route';
+import { GET as read,DELETE as remove,PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
+import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
+import { POST as create,GET as list } from '@/app/api/artifacts/route';
+import { claimToken,createUser,identityForUser } from '@/lib/accounts';
+import { createArtifact,getArtifactById,updateSharingFor } from '@/lib/artifacts';
+import { ownedArtifactState } from '@/lib/workspace';
+import { expect,it } from 'vitest';
+import { request,useAppHarness } from './harness';
 
 useAppHarness();
 
 describe('cli-restore', () => {
   const params=(id:string)=>({params:Promise.resolve({id})});
 
-  /** The real delete, restore and refresh routes behind the real CLI. */
-  function transport(calls:string[]):typeof fetch{
-   return async(input,init)=>{
-    const message=new Request(input,init);const path=new URL(message.url).pathname;calls.push(`${message.method} ${path}`);
-    if(path==='/api/artifacts')return create(message);
-    if(path==='/api/artifacts/assets/refresh')return refresh(message);
-    const restoring=path.match(/^\/api\/artifacts\/([^/]+)\/restore$/);
-    if(restoring)return restore(message,params(restoring[1]));
-    const match=path.match(/^\/api\/artifacts\/([^/]+)$/);
-    if(!match)throw new Error(`Unexpected route ${message.method} ${path}`);
-    return message.method==='DELETE'?remove(message,params(match[1])):read(message,params(match[1]));
-   };
-  }
-
-  it('the real CLI restores a deleted row durably and reports a live row as already restored',async()=>{
-   const cli=await cliWorkspace('handler-restore');const calls:string[]=[];
-   const invoke=(args:string[])=>cli.run(args,transport(calls));
-   try{
-    const token=await mintToken('mxmx_test_cli_restore');
-    await cli.useToken(token.token);
-    const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Restore me</p>'}}))).json();
-
-    const deleted=await invoke(['delete',created.id]);
-    expect(deleted.code,JSON.stringify(deleted.result)).toBe(0);
-    expect(deleted.result).toMatchObject({id:created.id,type:'artifact',status:'deleted',local_file:'preserved'});
-    expect(await ownedArtifactState(identityForUser(token.userId, token.id),created.id)).toEqual({deleted:true});
-
-    const restored=await invoke(['push','--restore',created.id]);
-    expect(restored.code,JSON.stringify(restored.result)).toBe(0);
-    expect(restored.result.operations).toEqual([{id:created.id,url:expect.stringContaining(`/a/${created.id}`),parent_id:null,ancestor_ids:[],status:'restored',operation:expect.any(String)}]);
-    expect(await ownedArtifactState(identityForUser(token.userId, token.id),created.id)).toEqual({deleted:false});
-
-    // The live row answers the restore route with the same 404 a missing id would,
-    // so the pre-read is the only thing that can call this a success.
-    const again=await invoke(['push','--restore',created.id]);
-    expect(again.code,JSON.stringify(again.result)).toBe(0);
-    expect(again.result.operations).toEqual([{id:created.id,status:'already_restored'}]);
-    expect(calls.filter(call=>call.endsWith('/restore'))).toHaveLength(1);
-    // Every remote mutation carried a durable operation key; nothing is pending.
-    expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(1);
-   }finally{await cli.cleanup();}
-  });
-
   it('a retried restore or delete under the same operation identity commits once and replays its receipt',async()=>{
    const token=await mintToken('mxmx_test_restore_retry');const actor=identityForUser(token.userId, token.id);
-   const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Retry</p>'}}))).json();
+   const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>Retry</p>')}}))).json();
    const deleteKey='restore-retry-delete-00001',restoreKey='restore-retry-restore-0001';
    const del=(headers?:Record<string,string>)=>remove(request(`/api/artifacts/${created.id}`,{method:'DELETE',token:token.token,headers}),params(created.id));
    const put=(headers?:Record<string,string>)=>restore(request(`/api/artifacts/${created.id}/restore`,{method:'POST',token:token.token,headers}),params(created.id));
@@ -107,7 +58,7 @@ describe('cli-restore', () => {
    const ownerToken=await mintToken('mxmx_test_restore_owner', owner.id);await claimToken(owner.id,ownerToken.token);
    const editor=await createUser({email:'mxmx_test_restore_editor@example.com'});
    const editorToken=await mintToken('mxmx_test_restore_editor', editor.id);await claimToken(editor.id,editorToken.token);
-   const created=await(await create(request('/api/artifacts',{method:'POST',token:ownerToken.token,json:{markup:'<p>Shared</p>'}}))).json();
+   const created=await(await create(request('/api/artifacts',{method:'POST',token:ownerToken.token,json:{html:nativeSource('<p>Shared</p>')}}))).json();
    await updateSharingFor(identityForUser(owner.id, ownerToken.id),created.id,{shares:[{email:'mxmx_test_restore_editor@example.com',role:'editor'}]});
 
    // The UI door says the same: an editor may edit, only the owner may delete.
@@ -126,7 +77,7 @@ describe('cli-restore', () => {
 
   it('refresh reports each url on its own and a retried refresh answers the recorded receipt',async()=>{
    const token=await mintToken('mxmx_test_refresh');
-   const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>No pictures</p>'}}))).json();
+   const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>No pictures</p>')}}))).json();
    const key='refresh-retry-00000000001';
    const call=(json:Record<string,unknown>,headers?:Record<string,string>)=>refresh(request('/api/artifacts/assets/refresh',{method:'POST',token:token.token,json,headers}));
 
@@ -152,177 +103,37 @@ describe('cli-restore', () => {
    const refused=await refresh(request('/api/artifacts/assets/refresh',{method:'POST',token:stranger.token,json:{id:created.id},headers:{'Idempotency-Key':'refresh-stranger-000000001'}}));
    expect(refused.status).toBe(404);
   });
-
-  it('the real CLI refreshes each named target durably and reports their outcomes separately',async()=>{
-   const cli=await cliWorkspace('handler-refresh');const calls:string[]=[];const keys:Array<string|null>=[];
-   const recorded:typeof fetch=async(input,init)=>{
-    const message=new Request(input,init);
-    if(message.method==='POST'&&new URL(message.url).pathname==='/api/artifacts/assets/refresh')keys.push(message.headers.get('Idempotency-Key'));
-    return transport(calls)(message);
-   };
-   const invoke=(args:string[])=>cli.run(args,recorded);
-   try{
-    const token=await mintToken('mxmx_test_cli_refresh');
-    await cli.useToken(token.token);
-    const first=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();
-    const second=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Two</p>'}}))).json();
-    expect((await invoke(['pull',first.id,'--output','one.jsx'])).code).toBe(0);
-
-    const refreshed=await invoke(['push','--refresh',first.id,second.id]);
-    expect(refreshed.code,JSON.stringify(refreshed.result)).toBe(0);
-    // Each target is reported on its own, with the changed, unchanged and failed
-    // urls the server answered for that document alone.
-    expect(refreshed.result.operations).toEqual([
-     {id:first.id,refreshed:[],unchanged:[],failed:[],status:'unchanged',operation:expect.any(String)},
-     {id:second.id,refreshed:[],unchanged:[],failed:[],status:'unchanged',operation:expect.any(String)},
-    ]);
-    expect(keys).toHaveLength(2);
-    expect(keys.every(key=>!!key)).toBe(true);
-    expect(new Set(keys).size).toBe(2);
-   }finally{await cli.cleanup();}
-  });
-
-  it('a delete whose reply is lost completes on the repeated command instead of stranding its journal',async()=>{
-   const cli=await cliWorkspace('handler-delete-recovery');const root=cli.root;const calls:string[]=[];
-   let dropReply=true;
-   // The first DELETE reaches the real route and commits; only its reply is lost.
-   const lossy:typeof fetch=async(input,init)=>{
-    const message=new Request(input,init);
-    if(message.method==='DELETE'&&dropReply){dropReply=false;await transport(calls)(message);throw new Error('deleted, but the reply was lost');}
-    return transport(calls)(message);
-   };
-   const invoke=(args:string[])=>cli.run(args,lossy);
-   const journal=()=>readRecord<{path:string;body:unknown}>(root,root,'pending-operation','current');
-   try{
-    const token=await mintToken('mxmx_test_delete_recovery');const actor=identityForUser(token.userId, token.id);
-    await cli.useToken(token.token);
-    const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Lost reply</p>'}}))).json();
-
-    const interrupted=await invoke(['delete',created.id]);
-    expect(interrupted.code).not.toBe(0);
-    expect(await ownedArtifactState(actor,created.id)).toEqual({deleted:true});
-    expect(JSON.stringify(await journal())).toContain(created.id);
-
-    // The row is in the trash now, so the delete's own pre-read would 404 on the
-    // way back in. Repeating the command has to finish the journalled operation.
-    const recovered=await invoke(['delete',created.id]);
-    expect(recovered.code,JSON.stringify(recovered.result)).toBe(0);
-    expect(recovered.result).toMatchObject({id:created.id,status:'deleted',local_file:'preserved'});
-    expect(await journal()).toBeNull();
-    expect(await ownedArtifactState(actor,created.id)).toEqual({deleted:true});
-    // The retry re-sent the same operation key, and the receipt answered it.
-    expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(2);
-   }finally{await cli.cleanup();}
-  });
 });
 
-describe('cli-mixed-rebase', () => {
-  it.each([true,false])('atomic replacement retains node-scoped history (content changed: %s)',async contentChanged=>{
-   const token=await mintToken('mxmx_test_cli_mixed');
-   const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<div><p>First</p><p>Second</p></div>'}}));
-   expect(created.status).toBe(201);const {id}=await created.json();const base=(await getArtifactById(id))!;
-   const params={params:Promise.resolve({id})};
-   const changed=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:documentPublicationBody(base,{markup:contentChanged?base.source!.replace('First','Writer one'):base.source,title:'New title'})}),params);
-   expect(changed.status).toBe(200);
-   const concurrent=await edit(request(`/api/artifacts/${id}/edits`,{method:'POST',token:token.token,json:documentEditBody(base,{source:base.source!.replace('Second','Writer two')})}),params);
-   expect(concurrent.status,await concurrent.clone().text()).toBe(200);
-   const head=(await getArtifactById(id))!;
-   expect(head.source).toContain(contentChanged?'Writer one':'First');expect(head.source).toContain('Writer two');expect(head.title).toBe('New title');
-  });
-});
+
 
 describe('cli-preconditions', () => {
-  it('requires a prepared version guard on whole replacements',async()=>{
-   const token=await mintToken('conditions');
-   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();const ctx={params:Promise.resolve({id:row.id})};
-   const head=(await getArtifactById(row.id))!;
-   const body=documentPublicationBody(head,{markup:'<p>Two</p>'},true);
-   const put=(json:unknown)=>replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json}),ctx);
-   expect((await put({...body,document_update:{...body.document_update,patch:{...body.document_update.patch,baseVersion:undefined}}})).status).toBe(400);
-   expect((await put(body)).status).toBe(200);
-   expect((await put(body)).status).toBe(409);
-  });
   it('browser metadata uses the same state condition as the bearer API',async()=>{
    const {PATCH}=await import('@/app/api/my/artifacts/[id]/route');
-   const token=await mintToken('browser-condition');const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();
+   const token=await mintToken('browser-condition');const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();
    const response=await PATCH(request(`/api/my/artifacts/${row.id}`,{method:'PATCH',actor:{credential:'session',userId:token.userId!,email:token.email!,emailVerified:true},json:{title:'Changed'}}),{params:Promise.resolve({id:row.id})});
-   expect(response.status).toBe(400);expect((await response.json()).error).toBe('jsonb_operations_required');
+   expect(response.status).toBe(400);expect((await response.json()).error).toBe('state_required');
   });
   it('refuses metadata on the body-edit endpoint instead of bypassing state conditions',async()=>{
    const {POST:edit}=await import('@/app/api/artifacts/[id]/edits/route');const token=await mintToken('edit-metadata');
-   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();
-   const response=await edit(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,title:'Changed'}}),{params:Promise.resolve({id:row.id})});expect(response.status).toBe(400);expect((await response.json()).error).toBe('metadata_requires_patch');
+   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();
+   const response=await edit(request(`/api/artifacts/${row.id}/edits`,{method:'POST',token:token.token,json:{edit_id:row.edit_id,title:'Changed'}}),{params:Promise.resolve({id:row.id})});expect(response.status).toBe(404);
   });
   it('requires observed conditions when reverting a retained version',async()=>{
    const {POST:revert}=await import('@/app/api/artifacts/[id]/revert/route');const token=await mintToken('revert-conditions');
-   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();const ctx={params:Promise.resolve({id:row.id})};
+   const row=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>One</p>')}}))).json();const ctx={params:Promise.resolve({id:row.id})};
    const head=(await getArtifactById(row.id))!;
-   expect((await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:documentPublicationBody(head,{markup:'<p>Two</p>'},true)}),ctx)).status).toBe(200);
+   expect((await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:documentPublicationBody(head,{html:nativeSource('<p>Two</p>')},true)}),ctx)).status).toBe(200);
    const denied=await revert(request(`/api/artifacts/${row.id}/revert`,{method:'POST',token:token.token,json:{version:1}}),ctx);expect(denied.status).toBe(400);
    const okay=await restoreDocument(token.token,row.id,1);expect(okay.status).toBe(200);
-  });
-  it('refuses an incompatible CLI write contract before creating anything and advertises the supported protocol',async()=>{
-   const token=await mintToken('protocol');
-   // Exact response-parser fragment from native 0.3.21, commit d17d041cc998939471def49639f6e026c7fce087.
-   // Its protocol-header check precedes JSON parsing; run that immutable behavior against real handlers.
-   const legacySource=readFileSync(new URL('./fixtures/legacy-cli-0.3.21-response.js.txt',import.meta.url),'utf8');
-   // Erase the fragment's sole TypeScript annotation; its control flow stays byte-for-byte intact.
-   const legacyRead=runInNewContext(`(async function(response){const method='POST',binary=false;${legacySource.replace('(d:unknown)','(d)')}})`,{CliError,CLI_PROTOCOL_VERSION:3});
-   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
-   for(const protocol of ['0','1','2','unknown']){
-    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':protocol},json:{markup:'<p>Must not publish</p>'}}));
-    expect(response.status).toBe(426);
-    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_update_required',fix:'Run afbin update, then retry.',details:{required_protocol:3,required_version:cliRelease.version,http_status:426}});
-    expect(await response.json()).toMatchObject({error:'cli_update_required',required_protocol:3,required_version:cliRelease.version,hint:'Run afbin update, then retry.'});expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
-   }
-   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
-   const response=await create(request('/api/artifacts',{method:'POST',token:token.token,headers:{'X-Artifactbin-Protocol':'3'},json:{markup:'<p>Supported contract</p>'}}));
-   expect(response.status).toBe(201);expect(response.headers.get('X-Artifactbin-Protocol')).toBe('3');expect(response.headers.get('X-Artifactbin-CLI-Version')).toBe(cliRelease.version);
-  });
-  it('uses the public proxy origin for older CLI Node setup links without publishing',async()=>{
-   const token=await mintToken('proxied-older-cli');
-   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
-   const original=request('/api/artifacts',{method:'POST',token:token.token,headers:{'User-Agent':'afbin/0.3.21','X-Artifactbin-Protocol':'3','X-Forwarded-Proto':'https','X-Forwarded-Host':'app.artifactbin.dev'},json:{markup:'<p>Must not publish</p>'}});
-   const response=await create(new Request('http://artifactbin-app:3000/api/artifacts',original));
-   expect(response.status).toBe(426);
-   const notice=await response.json();
-   expect(notice.error).toBe('cli_npm_required');
-   expect(notice.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
-   expect(notice.hint).toContain('https://app.artifactbin.dev/chat/install-node.sh');
-   expect(notice.hint).toContain('https://app.artifactbin.dev/chat/install-node.ps1');
-   expect(notice.hint).not.toContain('artifactbin-app');
-   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
-  });
-  it('asks recognized older afbin users to launch through npm before any handler runs',async()=>{
-   const token=await mintToken('older-cli');
-   const before=await(await list(request('/api/artifacts',{token:token.token}))).json();
-   const legacySource=readFileSync(new URL('./fixtures/legacy-cli-0.3.21-response.js.txt',import.meta.url),'utf8').replace('(d:unknown)','(d)');
-   const legacyRead=runInNewContext(`(async function(response){const method='POST',binary=false;${legacySource}})`,{CliError,CLI_PROTOCOL_VERSION:3});
-   for(const agent of ['afbin/0.3.21','afbin/0.2.5'])for(const method of ['GET','POST']){
-    const response=await(method==='GET'?list:create)(request('/api/artifacts',{method,token:token.token,headers:{'User-Agent':agent,'X-Artifactbin-Protocol':'3'},...(method==='POST'?{json:{markup:'<p>Must not publish</p>'}}:{})}));
-    expect(response.status).toBe(426);
-    await expect(legacyRead.call({},response.clone())).rejects.toMatchObject({code:'cli_npm_required',message:'cli_npm_required: afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',fix:expect.stringContaining('install-node.sh')});
-    expect(response.headers.get('X-Artifactbin-Protocol')).toBeNull();
-    const body=await response.json();
-    expect(body.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
-    expect(body.hint).toContain('install-node.sh');
-    expect(body.hint).toContain('npx.cmd --yes @afbin/cli@latest setup');
-   }
-   expect((await(await list(request('/api/artifacts',{token:token.token}))).json()).artifacts).toEqual(before.artifacts);
-   for(const agent of ['afbin/0.4.0','afbin/1.0.0','afbin/broken','curl/8.0','afbin/0.3.21 extra',null]){
-    expect((await list(request('/api/artifacts',{token:token.token,headers:agent?{'User-Agent':agent}:{}}))).status).toBe(200);
-   }
-   for(const tokenValue of ['', 'unknown-bearer'])expect((await list(request('/api/artifacts',{token:tokenValue,headers:{'User-Agent':'afbin/0.3.21'}}))).status).toBe(401);
-   // Demonstrate the immutable old parser really masks JSON when a future server sends a newer header.
-   await expect(legacyRead.call({},Response.json({error:'cli_update_required',hint:'Use npm'},{status:426,headers:{'X-Artifactbin-Protocol':'4'}}))).rejects.toMatchObject({code:'protocol_mismatch'});
   });
 });
 
 describe('cli-pages', () => {
   it('paginates artifacts with an opaque cursor without duplicates or leaking another account',async()=>{
    const token=await mintToken('pages');const other=await mintToken('other');
-   for(let i=0;i<5;i++)await createArtifact(token.id, token.userId,{title:String(i),format:'markup',source:'<p />',meta:{}});
-   await createArtifact(other.id, other.userId,{title:'secret',format:'markup',source:'<p />',meta:{}});
+   for(let i=0;i<5;i++)await createArtifact(token.id, token.userId,{title:String(i),format:'html',source:nativeSource('<p />'),meta:{}});
+   await createArtifact(other.id, other.userId,{title:'secret',format:'html',source:nativeSource('<p />'),meta:{}});
    const ids:string[]=[];let cursor:string|undefined;
    do{const response=await list(request('/api/artifacts?limit=2'+(cursor?'&cursor='+encodeURIComponent(cursor):''),{token:token.token}));expect(response.status).toBe(200);const page=await response.json();expect(page.artifacts.length).toBeLessThanOrEqual(2);ids.push(...page.artifacts.map((row:{id:string})=>row.id));cursor=page.next_cursor;}while(cursor);
    expect(ids).toHaveLength(5);expect(new Set(ids).size).toBe(5);
@@ -331,7 +142,7 @@ describe('cli-pages', () => {
 
   it('lists the current head in version history and refuses foreign or malformed cursors', async()=>{
    const token=await mintToken('history');
-   const artifact=await createArtifact(token.id, token.userId,{title:'head',format:'markup',source:'<p />',meta:{}});
+   const artifact=await createArtifact(token.id, token.userId,{title:'head',format:'html',source:nativeSource('<p />'),meta:{}});
    const response=await versions(request(`/api/artifacts/${artifact.id}/versions?limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([1]);expect(page.next_cursor).toBeNull();
    const bad=await list(request('/api/artifacts?cursor=garbage',{token:token.token}));expect(bad.status).toBe(400);
@@ -339,10 +150,23 @@ describe('cli-pages', () => {
 
   it('version history can begin at a selected historical version',async()=>{
    const token=await mintToken('selected-history');
-   const artifact=await createArtifact(token.id, token.userId,{title:'one',format:'markup',source:'<p />',meta:{}});
-   for(const title of ['two','three'])expect((await replace(request(`/api/artifacts/${artifact.id}`,{method:'PUT',token:token.token,json:documentPublicationBody((await getArtifactById(artifact.id))!,{title,source:`<p>${title}</p>`},true)}),{params:Promise.resolve({id:artifact.id})})).status).toBe(200);
+   const artifact=await createArtifact(token.id, token.userId,{title:'one',format:'html',source:nativeSource('<p />'),meta:{}});
+   for(const title of ['two','three'])expect((await replace(request(`/api/artifacts/${artifact.id}`,{method:'PUT',token:token.token,json:documentPublicationBody((await getArtifactById(artifact.id))!,{title,source:nativeSource(`<p>${title}</p>`)},true)}),{params:Promise.resolve({id:artifact.id})})).status).toBe(200);
    const response=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&limit=1`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});
    expect(response.status).toBe(200);const page=await response.json();expect(page.versions.map((v:{version:number})=>v.version)).toEqual([2]);expect(page.next_cursor).toBeTruthy();
    const next=await versions(request(`/api/artifacts/${artifact.id}/versions?version=2&cursor=${encodeURIComponent(page.next_cursor)}`,{token:token.token}),{params:Promise.resolve({id:artifact.id})});expect((await next.json()).versions.map((v:{version:number})=>v.version)).toEqual([1]);
   });
+});
+
+describe('native HTTP replacement conditions',()=>{
+ it('requires observed version and state, rejects stale source, and ignores retired client-install headers',async()=>{
+  const token=await mintToken('native-conditions');const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>First</p>')},headers:{'User-Agent':'afbin/0.2.5','X-Artifactbin-Protocol':'obsolete'}}));
+  expect(created.status).toBe(201);expect(created.headers.get('X-Artifactbin-CLI-Version')).toBeNull();expect(created.headers.get('X-Artifactbin-Protocol')).toBeNull();
+  const first=await created.json(),ctx={params:Promise.resolve({id:first.id})},path=`/api/artifacts/${first.id}`;
+  expect((await replace(request(path,{method:'PUT',token:token.token,json:{html:nativeSource('<p>No conditions</p>')}}),ctx)).status).toBe(400);
+  const body={html:first.html.replace('First','Second'),expectedVersion:first.version,expectedState:first.state};
+  const written=await replace(request(path,{method:'PUT',token:token.token,json:body}),ctx);expect(written.status).toBe(200);
+  expect((await replace(request(path,{method:'PUT',token:token.token,json:{...body,html:first.html.replace('First','Third')}}),ctx)).status).toBe(409);
+  expect((await(await read(request(path,{token:token.token}),ctx)).json()).html).toContain('Second');
+ });
 });

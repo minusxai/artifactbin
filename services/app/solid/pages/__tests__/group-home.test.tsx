@@ -62,7 +62,7 @@ it('recovers Personal with ?personal=1 in one request even though the saved grou
 });
 it('retries a failed bootstrap without exposing group details',async()=>{
  let fail=true;
- vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):fail?Response.json({},{status:503}):bootstrapOf(groupDestination)));
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json(session):fail?Response.json({},{status:500}):bootstrapOf(groupDestination)));
  open();const retry=await screen.findByRole('button',{name:'Retry workspace'});
  expect(screen.queryByRole('heading',{name:'Team'})).toBeNull();
  fail=false;fireEvent.click(retry);expect(await screen.findByRole('heading',{name:'Team'})).toBeInTheDocument();
@@ -197,9 +197,13 @@ it('shows tokenless company setup to a signed-out visitor without private worksp
  const fetcher=vi.fn(async(url:string)=>url.includes('/session')?Response.json(visitor):Response.json({signedIn:false,deployment}));
  vi.stubGlobal('fetch',fetcher);open();
  expect(await screen.findByRole('heading',{name:'Set up this workspace'})).toBeInTheDocument();
- const command=screen.getByRole('button',{name:'Copy deployment setup command'}).parentElement!.textContent!;
- expect(command).toContain(`--server '${window.location.origin}'`);
- expect(command).toContain("--group 'team' --set-default");
+ const command=screen.getByRole('button',{name:'Copy agent setup instructions'}).parentElement!.textContent!;
+ expect(command).toContain(`${window.location.origin}/llms.txt`);
+ expect(command).toContain(`${window.location.origin}/skills/artifactbin.zip`);
+ expect(command).toContain('GET /api/groups/team');
+ expect(command).toContain('PUT /api/me/preferences');
+ expect(command).toContain('default_destination');
+ expect(command).not.toMatch(/afbin |--set-default/);
  expect(screen.getByRole('link',{name:'Sign in'})).toHaveAttribute('href','/login');
  expect(screen.queryByRole('region',{name:'Group artifacts'})).toBeNull();
  expect(requested(fetcher).filter(url=>!url.includes('/session'))).toEqual(['/api/page/home?part=bootstrap']);
@@ -207,7 +211,9 @@ it('shows tokenless company setup to a signed-out visitor without private worksp
 it('sets the deployment server before a company default group is confirmed',async()=>{
  vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('/session')?Response.json({kind:'none',user:null,onboarded:false}):Response.json({signedIn:false,deployment:{mode:'company',setup_complete:false,is_owner:false,default_group:null}})));
  open();expect(await screen.findByRole('heading',{name:'Set up this workspace'})).toBeInTheDocument();
- const command=screen.getByRole('button',{name:'Copy deployment setup command'}).parentElement!.textContent!;
- expect(command).toContain('--set-default');expect(command).not.toContain('--group');
+ const command=screen.getByRole('button',{name:'Copy agent setup instructions'}).parentElement!.textContent!;
+ expect(command).toContain(`${window.location.origin}/llms.txt`);
+ expect(command).toContain('GET /api/me/preferences');
+ expect(command).not.toContain('GET /api/groups/');
  expect(screen.getByText(/owner must sign in and confirm/i)).toBeInTheDocument();
 });

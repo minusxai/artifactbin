@@ -14,7 +14,7 @@
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 
 /** A deck is two or more slides; one slide is a document with a header. */
-export const MIN_SLIDES_FOR_RAIL = 2;
+const MIN_SLIDES_FOR_RAIL = 2;
 
 interface DiscoveredSlide {
   /** Zero-based position in document order. */

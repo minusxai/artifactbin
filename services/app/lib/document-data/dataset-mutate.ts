@@ -1,6 +1,7 @@
+import {verifyRegisteredHtmlMutation} from '@/lib/artifacts';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { grantsOf, assertGrantCommit, type GrantDocument } from '@/lib/artifacts';
+import { grantsOf, assertGrantCommit, getArtifactById, type GrantDocument } from '@/lib/artifacts';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import { artifactState } from '@/lib/artifacts';
@@ -120,15 +121,23 @@ export async function mutateDataset(
   actor: AccessActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput} = {},
+  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput;
+    /** Native dataset API: all statements and identity metadata commit in the existing pointer CAS. */
+    statements?:readonly {sql:string;params:Record<string,Scalar>}[];
+    rowIdentity?:{column:string;ids:readonly string[];tableId:string};
+    nativePolicy?:boolean;
+  } = {},
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
   const jobs=guard.notificationJob?await notificationJobStore():null;
   const mutationRunId=guard.notificationJob?.origin.mutationRunId;
   const scope = editorScope(actor);
-  const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{await recheckMutation(dataset,actor,guard.document);}});
-  if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
+  const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
+    if(guard.nativePolicy){const current=await getArtifactById(dataset.id);if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||await canWriteDataset(current,actor,true)||!await canUseDataPolicy(current,actor))throw new DatasetError('Dataset policy access changed',403);}
+    else await recheckMutation(dataset,actor,guard.document);
+  }});
+  if((guard.document||guard.nativePolicy) && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
   }
 
@@ -142,7 +151,7 @@ export async function mutateDataset(
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
     if(guard.expectedState&&artifactState(current)!==guard.expectedState)return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
-    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,guard.document??false)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
+    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,guard.document??guard.nativePolicy??false)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
@@ -151,18 +160,37 @@ export async function mutateDataset(
     try{
       if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
       const target=guard.target??await writtenTable(catalog,sql);
-      const table=(guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema)).find(t=>t.name===target.table);
+      // Native IDs select an exact catalog table, including non-default schemas.
+      // Legacy document imports still resolve through their default-schema aliases.
+      const candidates=guard.rowIdentity?catalog.tables.filter(t=>t.schema===target.schema):guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema);
+      const table=candidates.find(t=>t.name===target.table);
       if(!table||table.sql!==undefined||!table.objectKey)throw new Error(`${target.schema}.${target.table} is not a stored table of this dataset`);
       selected=table;schema=target.schema;
     }catch(error){return {reason:'invalid_sql',detail:`Stored mutation: ${error instanceof Error?error.message:'invalid target'}`};}
-    const columns = selected.columns;
-    const rows = await loadDatasetRows({meta:{objectKey:selected.objectKey}});
+    const storedColumns = selected.columns;
+    const identity=guard.rowIdentity;
+    const storedRows = await loadDatasetRows({meta:{objectKey:selected.objectKey}});
+    if(identity&&(storedColumns.some(c=>c.name===identity.column)||identity.ids.length!==storedRows.length||new Set(identity.ids).size!==identity.ids.length))return {reason:'invalid_sql',detail:'Invalid dataset row identity'};
+    const columns=identity?[...storedColumns,{name:identity.column,type:'string' as const}]:storedColumns;
+    const rows=identity?storedRows.map((row,i)=>({...row,[identity.column]:identity.ids[i]})):storedRows;
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
-      policy=await mutationPolicy(current,actor,selected,guard.document??false);
-      out = await invocation.run({ policy, table: { schema, name: selected.name, rows, columns }, sql, params,
-        ...(guard.paramTypes?{paramTypes:guard.paramTypes}:{}), ...(guard.reads?.length?{reads:guard.reads}:{}), ...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}), limit: datasetRowCap() },{mutate:runMutation});
+      policy=await mutationPolicy(current,actor,selected,guard.document??guard.nativePolicy??false);
+      // Identity allocation is platform-owned; users cannot select this column in their schema.
+      if(identity&&policy)policy={...policy,table:{...policy.table,insert_permissions:policy.table.insert_permissions?.map(entry=>({...entry,permission:{...entry.permission,...(Array.isArray(entry.permission.columns)?{columns:[...entry.permission.columns,identity.column]}:{})}}))}};
+      const statements=guard.statements??[{sql,params}];
+      if(!statements.length||statements.length>100)throw new Error('Invalid dataset mutation batch');
+      let currentRows=rows,affected=0;
+      const userWrites:NonNullable<Exclude<MutationOutcome,{error:string}>['userWrites']>=[];
+      out={rows,columns,affected:0};
+      for(const statement of statements){
+        const step=await invocation.run({ policy, table: { schema, name: selected.name, rows:currentRows, columns }, sql:statement.sql, params:statement.params,
+          ...(guard.paramTypes?{paramTypes:guard.paramTypes}:{}), ...(guard.reads?.length?{reads:guard.reads}:{}), ...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}), limit: datasetRowCap() },{mutate:runMutation});
+        if(isQueryFailure(step)){out=step;break;}
+        if(columns.some(c=>c.type==='user')&&!Array.isArray(step.userWrites))throw new Error('The SQL service must support user-field validation');
+        affected+=step.affected;currentRows=step.rows;userWrites.push(...(step.userWrites??[]));out={...step,affected,userWrites};
+      }
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Dataset mutation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
@@ -171,9 +199,15 @@ export async function mutateDataset(
     if(columns.some(c=>c.type==='user')&&!Array.isArray(out.userWrites))return {reason:'policy_denied',detail:'The SQL service must support user-field validation'};
     // Store BEFORE the swap: a blob nobody points at is garbage, a pointer to
     // a blob that is not there is a dataset that reads as empty.
+    const committedIds=identity?out.rows.map(row=>row[identity.column]):undefined;
+    if((identity&&committedIds?.some(id=>typeof id!=='string'||!id))||(committedIds&&new Set(committedIds).size!==committedIds.length))return {reason:'invalid_sql',detail:'Invalid resulting row identities'};
+    if(identity){
+      out={...out,columns:out.columns.filter(c=>c.name!==identity.column),rows:out.rows.map(row=>Object.fromEntries(Object.entries(row).filter(([key])=>key!==identity.column)))};
+    }
     const located = await storeDatasetRows(out.rows);
     const meta = {
       ...(current.meta as Record<string, unknown>),
+      ...(identity?{graphqlRowIds:{...((current.meta as {graphqlRowIds?:Record<string,unknown>}).graphqlRowIds??{}),[identity.tableId]:{objectKey:located.objectKey,ids:committedIds}}}:{}),
       // The engine reports the table's real shape back; a write may not change
       // it (the columns are the dataset's contract), but recording what came
       // back keeps the two from drifting if the engine widens a type.
@@ -199,6 +233,11 @@ export async function mutateDataset(
     const commit=async(tx:Queryable)=>{
      const notificationInput=guard.notificationJob;
      if(notificationInput)await lockNotificationExecution(tx,notificationInput);
+     if(guard.document?.registeredHtml){
+      // Same transaction/row lock as the dataset CAS: no page/source change can race it.
+      await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([current.id,guard.document.id])]]);
+      if(!await verifyRegisteredHtmlMutation(guard.document,tx))throw new DatasetError('Registered page action changed',403);
+     }
      if(v2)await assertGrantCommit(tx,current,actor,guard.document);
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
@@ -249,7 +288,7 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,v2,
+        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,(!!guard.document||!!guard.nativePolicy)&&!!policy,policy?.role??null,v2,
       ],
     );
 
@@ -264,7 +303,7 @@ export async function mutateDataset(
      return result;
     };
     let updated;
-    try { updated=jobs||v2||guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { updated=jobs||v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) {
      if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};

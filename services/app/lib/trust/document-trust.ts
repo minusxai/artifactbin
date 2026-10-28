@@ -29,9 +29,9 @@ import { parseCookie } from '@/lib/http/http';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { parseJsx } from '@/lib/jsx';
+import {nativeCspDeclarations} from './native-csp';
 import {
-  splitHelmet, CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, cspExtensionsOf, emptyCspExtensions, hasCspExtensions,
+  CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, coversCspExtensions, emptyCspExtensions, hasCspExtensions,
   mergeCspExtensions, storedCspExtensions, subtractCspExtensions, type CspExtensions, type CspRequest,
 } from '@/lib/document';
 
@@ -68,10 +68,7 @@ const DECLARED_CACHE_MAX = 2000;
  */
 export function declaredCspExtensions(source: string | null | undefined): CspExtensions {
   if (!source || !source.includes('csp-')) return emptyCspExtensions();
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return emptyCspExtensions();
-  const split = splitHelmet(parsed.nodes);
-  return cspExtensionsOf(split.content, split.helmet).extensions;
+  return nativeCspDeclarations(source).extensions;
 }
 
 function declaredAt(id: string, version: number, source: string | null | undefined): CspExtensions {

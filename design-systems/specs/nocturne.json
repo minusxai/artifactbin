@@ -113,7 +113,7 @@
   },
   {
    "name": "on-ember",
-   "light": "#fff6e4",
+   "light": "#ffffff",
    "dark": "#1a0e04",
    "usage": "Text on ember fills.",
    "group": "Brand"

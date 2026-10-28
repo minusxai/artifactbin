@@ -1,28 +1,18 @@
-/** Publish the actual apps-reference query and exercise its membership boundary. */
-import {readFileSync} from 'node:fs';
-import path from 'node:path';
+/** Native sharing replaces the retired JSX membership query; accepted membership stays server-authoritative. */
 import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
-import {GET as query} from '@/app/a/[id]/query/route';
-import {getArtifactById,changeMembership} from '@/lib/artifacts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken,createUser} from '@/lib/accounts';
-import {request,useAppHarness} from './harness';
+import {GET as members,POST as change} from '@/app/api/artifacts/[id]/members/route';
+import {request,useAppHarness,mintAccountToken} from './harness';
 useAppHarness();
-it('publishes the reference and exposes accepted members, never pending requests or custom join rows',async()=>{
- const owner=await createUser({email:'mxmx_test_example_owner@example.com'}),reader=await createUser({email:'mxmx_test_example_reader@example.com'});
- const token=await mintToken('apps-example', owner.id);await claimToken(owner.id,token.token);
- const reference=readFileSync(path.resolve(process.cwd(),'skills/artifactbin/references/apps.md'),'utf8');
- const source=[...reference.matchAll(/```jsx\n([\s\S]*?)```/g)].map(m=>m[1]!).find(s=>s.includes('<Helmet>'))!;
- const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:source,visibility:'public'}}));
- expect(res.status,await res.clone().text()).toBe(201);const {id}=await res.json();
- const read=async()=>{const r=await query(request(`/a/${id}/query?q=%7B%7D`),{params:Promise.resolve({id})});expect(r.status).toBe(200);return (await r.json()).tables.members.rows.map((m:{user_id:string})=>m.user_id);};
- expect(await read()).toEqual([owner.id]);
- await changeMembership(identityForUser(reader.id, null),id,{action:'join'});
- expect(await read()).toEqual([owner.id]);
- await changeMembership(identityForUser(owner.id, token.id),id,{action:'approve',userId:reader.id});
- expect(await read()).toEqual([owner.id,reader.id]);
- await changeMembership(identityForUser(reader.id, null),id,{action:'leave'});
- expect(await read()).toEqual([owner.id]);
- expect((await getArtifactById(id))?.source).not.toContain('<Mutation');
+it('exposes accepted members separately from pending requests through the retained native membership API',async()=>{
+ const owner=await mintAccountToken('example-owner'),reader=await mintAccountToken('example-reader');
+ const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><title>Shared task app</title></head><body><h1>Tasks</h1></body></html>',visibility:'public'}}));expect(created.status).toBe(201);const {id}=await created.json(),context={params:Promise.resolve({id})};
+ const read=async()=>{const r=await members(request(`/api/artifacts/${id}/members`,{token:owner.token}),context);expect(r.status).toBe(200);return r.json();};
+ const write=async(token:string,body:unknown)=>{const r=await change(request(`/api/artifacts/${id}/members`,{method:'POST',token,json:body}),context);expect(r.status).toBe(200);};
+ expect((await read()).members.map((m:{user_id:string})=>m.user_id)).toEqual([owner.userId]);
+ // Creation accepts the owner once; explicit join is idempotent, never a second membership.
+ await write(owner.token,{action:'join'});
+ await write(reader.token,{action:'join'});let state=await read();expect(state.members.map((m:{user_id:string})=>m.user_id)).toEqual([owner.userId]);expect(state.pending.map((m:{user_id:string})=>m.user_id)).toEqual([reader.userId]);
+ await write(owner.token,{action:'approve',userId:reader.userId});state=await read();expect(state.members.map((m:{user_id:string})=>m.user_id).sort()).toEqual([owner.userId,reader.userId].sort());expect(state.pending).toEqual([]);
+ await write(reader.token,{action:'leave'});expect((await read()).members.map((m:{user_id:string})=>m.user_id)).toEqual([owner.userId]);
 });

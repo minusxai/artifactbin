@@ -15,7 +15,7 @@ import type { AnnotationWire } from '@/lib/annotations/store';
 import { FOLD_STORAGE_KEY } from '@/lib/annotations/comment-folds';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentTimestamp } from '../AnnotationPreview';
-import { ANN, RESOLVED, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, httpBackend, showResolved, installAnnotationFetch, knobs, layer } from './annotation-rig';
 
 const LONG_BODY = Array.from({ length: 40 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
 const SHORT_REPLY = 'thanks — shipping it';
@@ -56,7 +56,8 @@ describe('a body longer than ten lines folds itself', () => {
     expect(control.textContent).toMatch(/show more \(40 lines\)/);
     const clamped = thread.querySelector<HTMLElement>('[data-folded-body="clamped"]')!;
     expect(clamped).toBeTruthy();
-    expect(clamped.style.maxHeight).toBe('200px');
+    // Leave space for reaction metadata while keeping the short reply visible.
+    expect(clamped.style.maxHeight).toBe('120px');
     expect(clamped.textContent).toContain('line 40 of the agent');
     fireEvent.click(control);
     expect(thread.querySelector('[data-folded-body="clamped"]')).toBeNull();
@@ -170,6 +171,7 @@ describe('a resolved thread reads as resolved', () => {
     knobs.resolved = [OLD];
     layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     return screen.getByLabelText('Resolved annotation thread');
   };
 
@@ -198,6 +200,7 @@ describe('selecting a resolved thread', () => {
     const view = layer({ railOpen: true });
     await flush(); await flush();
     expect(view.runtime.posts().at(-1).pins.map((p: { id: string }) => p.id)).toEqual(['ann_1']);
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     const last = view.runtime.posts().at(-1);
     expect(last.openId).toBe(RESOLVED.id);
@@ -210,6 +213,7 @@ describe('selecting a resolved thread', () => {
   it('paints nothing resolved at rest, and stops when the thread is collapsed', async () => {
     const view = layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     fireEvent.click(screen.getByLabelText('Hide resolved conversation'));
     expect(view.runtime.posts().at(-1)).toMatchObject({ openId: null, pins: [{ id: 'ann_1' }] });
@@ -221,6 +225,7 @@ describe('selecting a resolved thread', () => {
     const view = layer({ railOpen: true });
     await flush(); await flush();
     expect(screen.queryByText('Size: about a day.')).toBeNull();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByText('Size: about a day.')).toBeTruthy();
     expect(screen.getByText(/removed from the document/i)).toBeTruthy();
@@ -231,6 +236,7 @@ describe('selecting a resolved thread', () => {
     serveResolved({ ...RESOLVED, quote: 'an older figure of 40%', quote_found: false });
     const view = layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByText('an older figure of 40%')).toBeTruthy();
     expect(screen.getByText(/since been edited/i)).toBeTruthy();
@@ -241,6 +247,7 @@ describe('selecting a resolved thread', () => {
     serveResolved({ ...RESOLVED, quote: 'an older figure', quote_found: true });
     layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.queryByText('an older figure')).toBeNull();
   });
@@ -349,7 +356,9 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     remotelyResolved = true;
     view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
+    await showResolved();
     const history = await screen.findByLabelText('Resolved annotation thread');
+    await showResolved();
     fireEvent.click(within(history).getByLabelText('Show resolved conversation'));
     const reply = history.querySelector<HTMLElement>('[data-comment-id="ann_3"]')!;
     delayResolvedRefresh = true;
@@ -372,7 +381,9 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     expect(view.runtime.posts().at(-1).pins).toContainEqual(expect.objectContaining({ id: ANN.id }));
 
     view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
+    await showResolved();
     const remainingHistory = await screen.findByLabelText('Resolved annotation thread');
+    await showResolved();
     fireEvent.click(within(remainingHistory).getByLabelText('Show resolved conversation'));
     const thread = screen.getByLabelText('Resolved annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
@@ -412,6 +423,7 @@ describe('a thread resolved elsewhere counts down on its marker', () => {
     expect(view.runtime.posts().at(-1).pins).toEqual([]);
     view.set({ railOpen: true, pickOnOpen: false, showViewComments: true, backend, liveAnnotations: [] });
     await flush(); await flush();
+    await showResolved();
     expect(screen.getByLabelText('Show resolved conversation')).toBeTruthy();
     // A refresh starts with resolved history, without a transient marker.
     view.unmount();

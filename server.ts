@@ -121,18 +121,12 @@ async function main(): Promise<void> {
   if(!RUNNER_SERVICE_URL){
     // Native worker/compiler loaded only by the local composition, never a remote app image.
     const {createRunner}=await import('@artifactbin/runner/local');
-    const {hostCapabilities}=await import('./services/runner/src/capabilities');
     const {runnerConfig}=await import('./services/runner/src/config');
-    const {localRunnerOperation}=await import('@/lib/runner');
-    const {boundedJson}=await import('./services/runner/src/capabilities');
+    const {localPageBackendCapability}=await import('@/lib/page-operations');
     const config=runnerConfig(env);for(const name of config.names)sessionEnvNames.add(name);
-    const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,capabilities:hostCapabilities({ai:config.ai,artifactbin:async(ctx,operation,args)=>{
-      if(!operation.startsWith('artifactbin.'))throw Error('operation_not_allowed');
-      const response=await localRunnerOperation(ctx.request.userId,operation.slice(12),args as Record<string,unknown>,ctx);
-      if(ctx.observation)ctx.observation.status=response.status;
-      if(!response.ok){await response.body?.cancel();throw Error(`artifactbin_http_${response.status}`);}
-      return boundedJson(response,1024*1024);
-    }})});setServices({runner});closeRunner=()=>runner.close();
+    const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,capabilities:async(ctx,operation,args)=>{
+      return localPageBackendCapability(ctx.request,operation,args,ctx.signal);
+    }});setServices({runner});closeRunner=()=>runner.close();
   }
   /*
    * ONE `events` FOR THE WHOLE PROCESS. The authentication parts and Better Auth's
@@ -141,8 +135,6 @@ async function main(): Promise<void> {
    * keeps is one table with one connection behind it, and `source` is all
    * that says whether the app or authentication spoke.
    */
-  const {startLambdaSchedules}=await import('@/lib/runner');
-  const stopSchedules=await startLambdaSchedules(db);
   const events = services().events;
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
@@ -286,7 +278,6 @@ async function main(): Promise<void> {
   });
   const { installShutdown } = await import('@/lib/runtime/shutdown');
   installShutdown({ steps: [
-    stopSchedules,
     closeRunner,
     stopBackgroundTasks,
     stopHarvester,

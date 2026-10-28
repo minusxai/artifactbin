@@ -113,6 +113,15 @@ export function parseDatasetDnsServers(value:string|undefined):readonly string[]
 }
 /** Optional resolver list used only for remote dataset PostgreSQL hosts. */
 export const DATASET_DNS_SERVERS=parseDatasetDnsServers(env('DATASET','DNS_SERVERS'));
+/** Exact reviewed connection fingerprints; permits only RFC1918/ULA, never loopback or metadata. */
+export function parseDatasetPrivateTargetHashes(value:string|undefined):readonly string[]{
+ if(!value?.trim())return [];
+ const hashes=value.split(',').map(hash=>hash.trim());
+ if(hashes.length>32||hashes.some(hash=>!/^[a-f0-9]{64}$/.test(hash))||new Set(hashes).size!==hashes.length)throw Error('DATASET__PRIVATE_TARGET_HASHES must contain at most 32 unique SHA256 fingerprints.');
+ return Object.freeze(hashes);
+}
+export const DATASET_PRIVATE_TARGET_HASHES=parseDatasetPrivateTargetHashes(env('DATASET','PRIVATE_TARGET_HASHES'));
+
 
 /**
  * Per-token artifact cap — creation answers
@@ -376,7 +385,7 @@ export const HOSTED_AGENT_SERVICE_URL = env('HOSTED_AGENT','SERVICE_URL');
  * The afbin release this server tells clients to run: `version` in public/chat/release.json, the pointer
  * `npm run release:cli` bumps and `afbin update` fetches. Read from disk (cwd is services/app, as for the
  * public/ mount in server/app) once, on first use, so a bundle that imports this module without serving the
- * app (the CLI toolkit) never needs the file.
+ * app never needs the file.
  */
 let cliRelease: string | undefined;
 /** The places the released CLI pointer can live, in order: the app's working directory (a production

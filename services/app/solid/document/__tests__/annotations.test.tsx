@@ -8,6 +8,7 @@ import { replaceComment } from './comment-input';
  * picking a block or drawing an area is annotation-picking.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { AnnotationLayer } from '../AnnotationLayer';
@@ -16,13 +17,51 @@ import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';
 import {
-  ADA_IMAGE, ANN, FACES, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, trustedRoot,
+  ADA_IMAGE, ANN, FACES, RESOLVED, GENERIC_AGENT, MCP_AGENT, NONCE, fetchCalls, flush, httpBackend, installAnnotationFetch, knobs, layer, makeRuntime, showResolved, trustedRoot,
 } from './annotation-rig';
 
 beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('AnnotationLayer', () => {
+  it('offers creation instructions in an empty rail only when the viewer can create comments',async()=>{
+    knobs.open=[];const view=layer({railOpen:true,canCreateComment:false});
+    await screen.findByText('no open comments',{exact:true});expect(screen.queryByText(/select text in the document, or pick a block, to leave one/)).toBeNull();
+    view.set({railOpen:true,canCreateComment:true});await screen.findByText('no open comments — select text in the document, or pick a block, to leave one');
+    view.set({railOpen:true,canCreateComment:false});await screen.findByText('no open comments',{exact:true});
+  });
+  it('keeps a local read-only rail and its Close action below both platform chrome rows',async()=>{
+    const close=vi.fn();layer({railOpen:true,topOffset:76,canCreateComment:false,onRailOpenChange:close});
+    await screen.findByText('is this right?');const rail=screen.getByRole('complementary',{name:'Annotation sidebar'});expect(rail.style.top).toBe('76px');
+    await fireEvent.click(within(rail).getByRole('button',{name:'Close comments'}));expect(close).toHaveBeenCalledWith(false);expect(fetchCalls.some(call=>call.init?.method&&call.init.method!=='GET')).toBe(false);
+  });
+  it('lets a read-only viewer open existing conversations without mutation controls', async () => {
+    const view = layer({ railOpen: true, canCreateComment: false, onSignIn: vi.fn() });
+    await screen.findByText('is this right?');
+    await fireEvent.click(view.container.querySelector('[data-thread-id="ann_1"] button[aria-label="Open annotation thread"]')!);
+    await screen.findByText('one more thought');
+    expect(screen.queryByRole('button', { name: 'Resolve annotation' })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign in to comment' })).toBeTruthy();
+    expect(view.runtime.posts().some(post => post.type === 'mx:pick' && post.enabled)).toBe(false);
+    expect(view.runtime.posts().filter(post => post.type === 'mx:annotations').at(-1)).toMatchObject({canComment:false});
+  });
+
+  it('keeps downloaded comment conversations readable without sign-in or write controls',async()=>{
+    const view=layer({railOpen:true,canCreateComment:false,canDeleteAny:true});await screen.findByText('is this right?');await fireEvent.click(view.container.querySelector('[data-thread-id="ann_1"] button[aria-label="Open annotation thread"]')!);await screen.findByText('one more thought');expect(screen.queryByRole('button',{name:'Sign in to comment'})).toBeNull();expect(screen.queryByLabelText('Reply to annotation')).toBeNull();expect(screen.queryByRole('button',{name:'Resolve annotation'})).toBeNull();expect(screen.queryByRole('menuitem',{name:'Delete thread'})).toBeNull();expect(screen.queryByRole('menuitem',{name:'Edit comment'})).toBeNull();expect(fetchCalls.some(call=>call.init?.method&&call.init.method!=='GET')).toBe(false);
+  });
+
+  it('removes comment tools when an existing commenter loses mutation permission', async () => {
+    const view = layer({ railOpen: true, canCreateComment: true });
+    await screen.findByRole('button', { name: 'Select' });
+    view.set({ railOpen: true, canCreateComment: false });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Select' })).toBeNull());
+    expect(screen.queryByLabelText('Select tool active')).toBeNull();
+    expect(await screen.findByText('is this right?')).toBeTruthy();
+  });
+
   it('opens a mention notification on the thread containing its reply', async () => {
     window.history.replaceState(null, '', '/a/example?thread=ann_2');
     try {
@@ -295,9 +334,9 @@ describe('AnnotationLayer', () => {
     await flush(); await flush();
     expect(fetchCalls.some((c) => c.url.includes('status=resolved'))).toBe(true);
     expect(screen.queryByLabelText('Show resolved annotations')).toBeNull();
-    expect(await screen.findByText('resolved')).toBeTruthy();
-    const divider = screen.getByRole('separator', { name: 'resolved' });
-    expect(divider.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);
+    const divider = await screen.findByRole('separator', { name: /^resolved/ });
+    expect(divider.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThanOrEqual(2);
+    await showResolved();
     expect(screen.queryByText(/an older figure/)).toBeNull();
     expect(screen.getByText('please verify the older figure')).toBeTruthy();
     expect(screen.queryByText('verified and corrected')).toBeNull();
@@ -315,9 +354,50 @@ describe('AnnotationLayer', () => {
     expect(onRailOpenChange).toHaveBeenCalledWith(false);
   });
 
+  describe('the resolved group', () => {
+    const toggle = () => screen.findByRole('button', { name: /^resolved/i });
+
+    it('starts collapsed with the count, and the toggle shows and hides the threads', async () => {
+      layer({ railOpen: true });
+      await flush(); await flush();
+      const button = await toggle();
+      expect(button.textContent).toContain('(1)');
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
+      expect(screen.queryByText('please verify the older figure')).toBeNull();
+
+      fireEvent.click(button);
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      expect(document.getElementById(button.getAttribute('aria-controls')!)!.contains(screen.getByLabelText('Resolved annotation thread'))).toBe(true);
+      fireEvent.click(button);
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByLabelText('Resolved annotation thread')).toBeNull();
+    });
+
+    it('with nothing resolved offers no toggle and says so without expanding', async () => {
+      knobs.resolved = [];
+      layer({ railOpen: true });
+      await flush(); await flush();
+      expect(await screen.findByText(/nothing resolved/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^resolved/i })).toBeNull();
+    });
+
+    it('opens by itself when a resolved thread is the open one', async () => {
+      const view = layer({ railOpen: true });
+      await flush(); await flush();
+      const button = await toggle();
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      view.runtime.emit({ type: 'mx:annotation-pin', id: RESOLVED.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+      await flush();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByLabelText('Resolved annotation thread')).toBeTruthy();
+    });
+  });
+
   it('reopens an expanded resolved thread and moves it back to the open list', async () => {
     layer({ railOpen: true });
     await flush(); await flush();
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     fireEvent.click(screen.getByLabelText('Reopen annotation'));
     await flush();
@@ -335,6 +415,7 @@ describe('AnnotationLayer', () => {
     await screen.findByLabelText('Annotation thread');
     view.runtime.emit({ type: 'mx:annotation-hover', id: ANN.id });
     expect(screen.getByLabelText('Annotation thread').getAttribute('data-hovered')).toBe('true');
+    await showResolved();
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
     expect(screen.getByLabelText('Agent type Codex')).toBeTruthy();
@@ -417,6 +498,15 @@ describe('AnnotationLayer', () => {
     expect(screen.getByRole('alert').textContent).toContain('Could not delete this comment');
     expect(screen.getByText('one more thought')).toBeTruthy();
     expect(screen.getByLabelText('Annotation thread')).toBeTruthy();
+  });
+
+  it('uses a migrated presentation seed for the face while retaining target account identity',async()=>{
+    const author={...FACES.thread[0]!.author,avatar_seed:'synthetic_original_author'};knobs.open=[{...FACES,thread:[{...FACES.thread[0]!,author},...FACES.thread.slice(1)]}];
+    const view=layer({showViewComments:true});await flush();view.runtime.emit({type:'mx:annotation-layout',positions:[{id:FACES.id,rect:{x:10,y:220,width:300,height:40}}]});
+    const preview=await screen.findByLabelText('Open annotation conversation by ada, 4 messages'),card=preview.closest<HTMLElement>('[data-annotation-id]')!;
+    const face=card.querySelector<HTMLElement>('[data-face-initial]')!,standalone=render(()=><Avatar image={null} initial="ada" userId="synthetic_original_author" size={22}/>);
+    expect(face.style.backgroundColor).toBe(standalone.container.querySelector<HTMLElement>('[data-face-initial]')!.style.backgroundColor);
+    expect(author.user_id).toBe(FACES.thread[0]!.author.user_id);
   });
 
   it('draws each person as their own face — picture over the initial, colour from the account id — and agents as their marks', async () => {
@@ -529,6 +619,77 @@ it('starts replies empty even in a tagged thread and retains a failed reply', as
   fireEvent.click(screen.getByLabelText('Send reply'));
   await screen.findByRole('alert');
   expect(field).toHaveTextContent('my draft');
+});
+
+it('sends a plain reply without a revision and shows both replies when the thread advanced meanwhile', async () => {
+  const advanced = { ...ANN, revision: 9, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_other', body: 'someone else replied' }, { ...ANN.thread[0]!, id: 'ann_mine', body: 'my reply' }] };
+  const rig = globalThis.fetch;
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { fetchCalls.push({ url: String(url), init }); return new Response(JSON.stringify(advanced), { status: 200 }); }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  const view = layer({ railOpen: true });
+  await flush();
+  view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+  const field = await screen.findByLabelText('Reply to annotation');
+  replaceComment(field, 'my reply');
+  fireEvent.click(screen.getByLabelText('Send reply'));
+  await flush();
+  const call = fetchCalls.filter((c) => c.url.endsWith(`/annotations/${ANN.id}`) && c.init?.method === 'POST').at(-1)!;
+  expect(JSON.parse(String(call.init!.body))).toEqual({ reply: 'my reply' });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
+  expect(screen.getByText('someone else replied')).toBeTruthy();
+  expect(screen.getByText('my reply')).toBeTruthy();
+});
+
+it('a reply that meets a 502 retries under one key, posts once and clears the draft', async () => {
+  RETRY_TUNING.policy = { delaysMs: [0, 0, 0] };
+  const answered = { ...ANN, revision: 5, thread: [...ANN.thread, { ...ANN.thread[0]!, id: 'ann_mine', body: 'through the restart' }] };
+  const rig = globalThis.fetch;
+  const posts: RequestInit[] = [];
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) {
+      posts.push(init);
+      return posts.length === 1 ? new Response('<html>502</html>', { status: 502 }) : new Response(JSON.stringify(answered), { status: 200 });
+    }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  try {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+    replaceComment(await screen.findByLabelText('Reply to annotation'), 'through the restart');
+    fireEvent.click(screen.getByLabelText('Send reply'));
+    await flush(); await flush();
+    expect(posts).toHaveLength(2);
+    const keys = posts.map((post) => (post.headers as Record<string, string>)['Idempotency-Key']);
+    expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('');
+    expect(screen.getByText('through the restart')).toBeTruthy();
+  } finally { delete RETRY_TUNING.policy; }
+});
+
+it('a reply refused with 409 is not retried and keeps the draft', async () => {
+  RETRY_TUNING.policy = { delaysMs: [0, 0, 0] };
+  const rig = globalThis.fetch;
+  let posts = 0;
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST' && String(url).endsWith(`/annotations/${ANN.id}`)) { posts++; return new Response(JSON.stringify({ error: 'annotation_conflict' }), { status: 409 }); }
+    return rig(url, init);
+  }) as unknown as typeof fetch);
+  try {
+    const view = layer({ railOpen: true });
+    await flush();
+    view.runtime.emit({ type: 'mx:annotation-pin', id: ANN.id, rect: { x: 10, y: 20, width: 300, height: 50 } });
+    replaceComment(await screen.findByLabelText('Reply to annotation'), 'keep me');
+    fireEvent.click(screen.getByLabelText('Send reply'));
+    await flush(); await flush();
+    expect(posts).toBe(1);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByLabelText('Reply to annotation').textContent).toBe('keep me');
+  } finally { delete RETRY_TUNING.policy; }
 });
 
 it('shows a connected agent program instead of its transport', () => {

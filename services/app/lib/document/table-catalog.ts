@@ -5,9 +5,7 @@
  * query's result columns once it has run, a table Value's own. Pure: derived
  * from source (+ state), never fetched — the shelf is the document itself.
  */
-import { parseJsxShared } from '@/lib/jsx/parse-shared';
-import { splitHelmet } from './helmet';
-import type { DatasetColumn, DataflowState } from '@/lib/dataflow';
+import type { DatasetColumn } from '@/lib/dataflow';
 
 export interface TableChoice {
   /** The declared name (`data="$name"` binds it). */
@@ -16,19 +14,4 @@ export interface TableChoice {
   columns: DatasetColumn[];
   /** The SQL behind a query table — what the inspector shows under the picker. Absent for a table Value. */
   sql?: string;
-}
-
-export function tableChoices(source: string, state?: DataflowState | null): TableChoice[] {
-  // Read-only, shared: the editor reads these once the source rests, the same source every other reader parses.
-  const parsed = parseJsxShared(source);
-  if (!parsed.ok) return [];
-  const { content } = splitHelmet(parsed.nodes);
-  const out: TableChoice[] = [];
-  for (const v of content.values) {
-    if (v.kind === 'table') out.push({ name: v.name, kind: 'value', columns: state?.tables[v.name]?.columns ?? v.columns });
-  }
-  for (const q of content.queries) {
-    out.push({ name: q.name, kind: 'query', columns: state?.tables[q.name]?.columns ?? [], sql: q.sql });
-  }
-  return out;
 }

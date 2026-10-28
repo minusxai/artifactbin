@@ -1,0 +1,178 @@
+/*
+ * Nocturne: Read it slowly, by one lamp.
+ * Long reads, features, evening and culture subjects. Mood: Atmospheric. Opens dark. Generated from
+ * design-systems/specs/nocturne.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="nocturne">. The platform serves
+ * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link
+ * nothing. This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-italic t-caps t-title t-body-l t-body t-note t-label t-numeral
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Nocturne is the page you read at night: a midnight ground, cream type with long leading, and one pool of
+ * amber light where the attention goes. Headlines are a light serif with an italic phrase that glows; kickers are
+ * carved small caps; figures sit in a mono HUD. It is a mood, not a place: the subject brings the scene, Nocturne
+ * brings the lamp.
+ * Fits: Long features and essays, culture and evening subjects, reports that want to be read slowly, pilots and
+ * their results, any scrolly where things light up as the reader goes.
+ * Avoid when: Operational tools, dense tables, anything read in a hurry or in daylight on a phone, and subjects
+ * that need a cheerful or clinical register.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="nocturne"] {
+  --ds-night: #f3e7ca; /* Page ground: midnight by night; by day, lamplit cream. */
+  --ds-night-raised: #faf1dc; /* Panels, cards and the lit stone of a panel. */
+  --ds-night-sunk: #e9dbb9; /* Wells, code, the unlit cells. */
+  --ds-line: #d3b98b; /* Hairline rules and quiet borders. */
+  --ds-ink: #1d170f; /* Primary text: cream on night, ink on cream. */
+  --ds-ink-soft: #4a3d2c; /* Standfirsts and secondary reading text. Cool blue by night. */
+  --ds-ink-muted: #8a7a60; /* Captions, folios, placeholders. */
+  --ds-lamp: #9a5a12; /* The brand: lamplight amber. Links, the lit cell, the one figure that glows, the primary action. */
+  --ds-on-lamp: #fff6e4; /* Text on lamp fills. */
+  --ds-lamp-hot: #b8661f; /* The hot centre of the lamp: the italic phrase in a headline, the filament. */
+  --ds-lamp-soft: #f3e5c2; /* Ground for highlighted rows and the halo behind a lit thing. */
+  --ds-ember: #b8551a; /* The accent: the lamp itself, the focus ring, the comparison series. */
+  --ds-on-ember: #ffffff; /* Text on ember fills. */
+  --ds-cool: #3a5a8a; /* The cool counterweight: the second drawing fill, the second chart series, the sky wash. */
+  --ds-positive: #2b5a45; /* Open, continued, confirmed. Always with a word. */
+  --ds-positive-soft: #dcebe1; /* Ground for positive rows. */
+  --ds-caution: #8a5a00; /* Small sample, provisional, late. The lamp, slightly cooler. */
+  --ds-caution-soft: #f3e5c2; /* Ground for caveats. */
+  --ds-negative: #8a2d1c; /* Closed, declined, failed. Rust. */
+  --ds-negative-soft: #f4dcd8; /* Ground for negative rows. */
+  --background: var(--ds-night);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-night-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-night-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-lamp);
+  --primary-foreground: var(--ds-on-lamp);
+  --secondary: var(--ds-lamp-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-night-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-night-raised);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-night);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-ember);
+  --chart-1: var(--ds-lamp);
+  --chart-2: var(--ds-cool);
+  --chart-3: var(--ds-ember);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 2px;
+  --font-display: "Newsreader", Georgia, serif;
+  --font-body: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ds-halo: 0 0 0 1px #d3b98b;
+  --ds-glow-text: none;
+  --ds-chip-radius: 999px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="nocturne"][data-af-dark="true"] {
+  --ds-night: #050818;
+  --ds-night-raised: #111940;
+  --ds-night-sunk: #02040f;
+  --ds-line: #2a3568;
+  --ds-ink: #ece6d6;
+  --ds-ink-soft: #b9c8ee;
+  --ds-ink-muted: #8d98c0;
+  --ds-lamp: #ffc76e;
+  --ds-on-lamp: #1a1206;
+  --ds-lamp-hot: #ffe2a8;
+  --ds-lamp-soft: #241d30;
+  --ds-ember: #ff9440;
+  --ds-on-ember: #1a0e04;
+  --ds-cool: #b9c8ee;
+  --ds-positive: #6fcf97;
+  --ds-positive-soft: #10291e;
+  --ds-caution: #ffd27a;
+  --ds-caution-soft: #2e2306;
+  --ds-negative: #ff7a5c;
+  --ds-negative-soft: #3a1412;
+  --background: var(--ds-night);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-night-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-night-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-lamp);
+  --primary-foreground: var(--ds-on-lamp);
+  --secondary: var(--ds-lamp-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-night-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-night-raised);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-night);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-ember);
+  --chart-1: var(--ds-lamp);
+  --chart-2: var(--ds-cool);
+  --chart-3: var(--ds-ember);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --ds-halo: 0 0 28px rgba(255,199,110,.32);
+  --ds-glow-text: 0 0 30px rgba(255,170,70,.45);
+  --ds-chip-radius: 999px;
+}
+:root[data-af-design-system="nocturne"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(48px, 7.5vw, 104px) / .92: One per page. Newsreader light at display size; the emphasised phrase goes italic in lamp-hot. */
+:root[data-af-design-system="nocturne"] .t-display-xl { font-family: "Newsreader", Georgia, serif; font-size: clamp(48px, 7.5vw, 104px); line-height: .92; font-weight: 300; letter-spacing: -0.03em; }
+/* display, clamp(32px, 4.5vw, 56px) / 1: Section openers and chapter heads. */
+:root[data-af-design-system="nocturne"] .t-display-l { font-family: "Newsreader", Georgia, serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 300; letter-spacing: -0.02em; }
+/* display, clamp(32px, 4.5vw, 56px) / 1: The emphasised phrase inside a headline, in lamp-hot with the text glow. */
+:root[data-af-design-system="nocturne"] .t-display-italic { font-family: "Newsreader", Georgia, serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 400; letter-spacing: -0.02em; font-style: italic; }
+/* caps, 12px / 18px: Kickers, chapter marks, folios. Cinzel, widely tracked, with a 34px rule before it. */
+:root[data-af-design-system="nocturne"] .t-caps { font-family: "Cinzel", "Trajan Pro", Georgia, serif; font-size: 12px; line-height: 18px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; }
+/* display, 24px / 30px: Panel and figure titles. */
+:root[data-af-design-system="nocturne"] .t-title { font-family: "Newsreader", Georgia, serif; font-size: 24px; line-height: 30px; font-weight: 500; }
+/* sans, 21px / 34px: Standfirsts and lead paragraphs. Light weight, long leading. */
+:root[data-af-design-system="nocturne"] .t-body-l { font-family: "Newsreader", Georgia, serif; font-size: 21px; line-height: 34px; font-weight: 300; }
+/* sans, 18px / 30px: Reading text, oldstyle numerals. Long reading is the point. */
+:root[data-af-design-system="nocturne"] .t-body { font-family: "Newsreader", Georgia, serif; font-size: 18px; line-height: 30px; font-weight: 400; font-variant-numeric: oldstyle-nums proportional-nums; }
+/* sans, 15px / 22px: Marginalia, figure notes, asides. */
+:root[data-af-design-system="nocturne"] .t-note { font-family: "Newsreader", Georgia, serif; font-size: 15px; line-height: 22px; font-weight: 400; font-style: italic; }
+/* mono, 11px / 16px: HUD counters, captions, table heads. Mono caps, small. */
+:root[data-af-design-system="nocturne"] .t-label { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+/* mono, 40px / 44px: Figures. Tabular; lamp when it is the one that glows. */
+:root[data-af-design-system="nocturne"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="nocturne"] .tok-comment, :root[data-af-design-system="nocturne"] .tok-quote, :root[data-af-design-system="nocturne"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="nocturne"] .tok-keyword, :root[data-af-design-system="nocturne"] .tok-selector-tag, :root[data-af-design-system="nocturne"] .tok-doctag, :root[data-af-design-system="nocturne"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-string, :root[data-af-design-system="nocturne"] .tok-regexp, :root[data-af-design-system="nocturne"] .tok-template-variable, :root[data-af-design-system="nocturne"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-number, :root[data-af-design-system="nocturne"] .tok-literal, :root[data-af-design-system="nocturne"] .tok-symbol, :root[data-af-design-system="nocturne"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-title, :root[data-af-design-system="nocturne"] .tok-section, :root[data-af-design-system="nocturne"] .tok-selector-id, :root[data-af-design-system="nocturne"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="nocturne"] .tok-title.class_, :root[data-af-design-system="nocturne"] .tok-type, :root[data-af-design-system="nocturne"] .tok-built_in, :root[data-af-design-system="nocturne"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-attr, :root[data-af-design-system="nocturne"] .tok-attribute, :root[data-af-design-system="nocturne"] .tok-property, :root[data-af-design-system="nocturne"] .tok-variable, :root[data-af-design-system="nocturne"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-tag, :root[data-af-design-system="nocturne"] .tok-operator, :root[data-af-design-system="nocturne"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="nocturne"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="nocturne"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("/af/fonts/newsreader-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("/af/fonts/newsreader-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 200 800; font-display: swap; src: url("/af/fonts/newsreader-latin-ext-standard-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 200 800; font-display: swap; src: url("/af/fonts/newsreader-latin-standard-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 400 900; font-display: swap; src: url("/af/fonts/cinzel-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 400 900; font-display: swap; src: url("/af/fonts/cinzel-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-ext-wght-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: italic; font-weight: 100 800; font-display: swap; src: url("/af/fonts/jetbrains-mono-latin-wght-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

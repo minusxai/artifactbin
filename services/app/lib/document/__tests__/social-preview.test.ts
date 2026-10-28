@@ -31,32 +31,30 @@ describe('social preview crop', () => {
     expect(parseSocialPreviewCrop(content)).toBeNull();
   });
 
-  it('adds the directive to an existing, self-closing, or absent Helmet', () => {
-    expect(writeSocialPreviewCrop('<Helmet><title>T</title></Helmet><p>x</p>', { x: 1, y: 2, width: 800 }))
-      .toBe('<Helmet><title>T</title><meta name="artifactbin:og-crop" content="x=1;y=2;width=800" /></Helmet><p>x</p>');
-    expect(writeSocialPreviewCrop('<Helmet /><p>x</p>', { x: 1, y: 2, width: 800 }))
-      .toBe('<Helmet><meta name="artifactbin:og-crop" content="x=1;y=2;width=800" /></Helmet><p>x</p>');
+  it('adds the directive to an existing or absent native head', () => {
+    expect(writeSocialPreviewCrop('<head><title>T</title></head><p>x</p>', { x: 1, y: 2, width: 800 }))
+      .toBe('<head><title>T</title><meta name="artifactbin:og-crop" content="x=1;y=2;width=800" /></head><p>x</p>');
     expect(writeSocialPreviewCrop('<p>x</p>', { x: 1, y: 2, width: 800 }))
-      .toBe('<Helmet><meta name="artifactbin:og-crop" content="x=1;y=2;width=800" /></Helmet>\n<p>x</p>');
+      .toBe('<head><meta name="artifactbin:og-crop" content="x=1;y=2;width=800" /></head><p>x</p>');
   });
 
   it('replaces exactly the existing directive and removes it on reset', () => {
-    const source = '<Helmet><title>T</title><meta name="artifactbin:og-crop" content="x=0;y=0;width=1600" /><meta name="description" content="D" /></Helmet><p>x</p>';
+    const source = '<head><title>T</title><meta name="artifactbin:og-crop" content="x=0;y=0;width=1600" /><meta name="description" content="D" /></head><p>x</p>';
     const changed = writeSocialPreviewCrop(source, { x: 20, y: 30, width: 600 });
     expect(savedSocialPreviewCrop(changed)).toEqual({ x: 20, y: 30, width: 600 });
-    expect(writeSocialPreviewCrop(changed, null)).toBe('<Helmet><title>T</title><meta name="description" content="D" /></Helmet><p>x</p>');
+    expect(writeSocialPreviewCrop(changed, null)).toBe('<head><title>T</title><meta name="description" content="D" /></head><p>x</p>');
   });
 
   it('uses the top-left full-width default for absent or malformed directives', () => {
     expect(socialPreviewCrop('<p>x</p>')).toEqual(DEFAULT_SOCIAL_PREVIEW_CROP);
-    expect(socialPreviewCrop('<Helmet><meta name="artifactbin:og-crop" content="oops" /></Helmet>'))
+    expect(socialPreviewCrop('<head><meta name="artifactbin:og-crop" content="oops" /></head>'))
       .toEqual(DEFAULT_SOCIAL_PREVIEW_CROP);
   });
 });
 
 describe('uploaded social preview', () => {
   it('adds, replaces and removes the image without disturbing saved framing', () => {
-    const original = writeSocialPreviewCrop('<Helmet /><p>x</p>', { x: 20, y: 30, width: 600 });
+    const original = writeSocialPreviewCrop('<head></head><p>x</p>', { x: 20, y: 30, width: 600 });
     const image = writeSocialPreviewImage(original, 'image1');
     expect(socialPreviewImage(image)).toBe('image1');
     expect(savedSocialPreviewCrop(image)).toEqual({ x: 20, y: 30, width: 600 });
@@ -76,4 +74,14 @@ it('bounds image framing for portrait and very wide images independently of docu
   expect(savedSocialPreviewImageCrop(withImage)).toEqual(wide);
   expect(savedSocialPreviewCrop(withImage)).toEqual({ x: 0, y: 900, width: 800 });
   expect(writeSocialPreviewImageCrop(withImage, null)).toBe(source);
+});
+
+it('preserves native metadata identity and unrelated attributes while changing its value',()=>{
+ const source='<!doctype html><html><head><meta data-af-id="stable-7" name="artifactbin:og-crop" content="x=0;y=0;width=800" data-extra="keep"></head><body>Page</body></html>';
+ expect(writeSocialPreviewCrop(source,{x:10,y:20,width:600})).toBe(source.replace('x=0;y=0;width=800','x=10;y=20;width=600'));
+});
+
+it('keeps the identity of a native preview meta whose content was missing',()=>{
+ const source='<html><head><meta data-af-id="saved-meta" name="artifactbin:og-crop"></head><body>Page</body></html>';
+ expect(writeSocialPreviewCrop(source,{x:0,y:0,width:800})).toBe(source.replace('name="artifactbin:og-crop">','name="artifactbin:og-crop" content="x=0;y=0;width=800">'));
 });

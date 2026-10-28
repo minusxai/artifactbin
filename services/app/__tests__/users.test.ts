@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * Users tier: accounts, anonymous connections, claiming, and user-scoped
  * listing. Same harness as api.test.ts — real handlers / libs against
@@ -26,12 +27,12 @@ async function anonMint(_ip?: string): Promise<{ id: string; token: string }> {
 }
 
 async function legacyPublish(tokenId: string, title: string) {
-  return createArtifact(tokenId, null, { format: 'markup', source: `<h1>${title}</h1>`, meta: { visibility: 'public' }, title, description: null });
+  return createArtifact(tokenId, null, { format: 'html', source: nativeHtml(`<h1>${title}</h1>`), meta: { visibility: 'public' }, title, description: null });
 }
 
 async function publish(token: string, title: string) {
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: `<h1>${title}</h1>` } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, html:nativeHtml(`<h1>${title}</h1>`) } }),
   );
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string }>;
@@ -56,7 +57,7 @@ describe('accounts', () => {
 describe('anonymous connections + claiming', () => {
   it('legacy anonymous credentials cannot publish', async () => {
     const { token } = await anonMint();
-    const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title: 'refused', markup: '<h1>Refused</h1>' } }));
+    const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { title: 'refused', html:nativeHtml('<h1>Refused</h1>') } }));
     expect(response.status).toBe(401);
     expect((await (await harness.db()).query('SELECT 1 FROM artifacts')).rows).toHaveLength(0);
   });

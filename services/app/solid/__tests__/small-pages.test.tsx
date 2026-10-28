@@ -56,7 +56,7 @@ it('starts one artifact and leaves the Solid route for its document', async () =
   render(() => <App />);
   await waitFor(() => expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1));
   expect(calls).toContainEqual({ url: '/api/start?mode=blank', method: 'POST' });
-  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1/edit'));
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
 });
 
 it('preserves explicit external-agent handoff instead of opening the editor', async () => {
@@ -119,15 +119,11 @@ it('uploads a welcome photo through the named picture control', async () => {
   await waitFor(() => expect(view.container.querySelector('img[src="/api/users/new_1/avatar?v=1"]')).toBeInTheDocument());
 });
 
-it('leaves an old CLI login continuation behind when the reader chooses website sign-in',async()=>{
+it('does not restore retired CLI sign-in continuations',async()=>{
  window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent('/oauth/loopback?state=old'));
  render(()=> <App/>);
- fireEvent.click(await screen.findByRole('link',{name:'Use the website instead'}),{button:0});
- await waitFor(()=>expect(window.location.pathname+window.location.search).toBe('/login'));
+ expect(await screen.findByRole('main',{name:'Not found'})).toBeInTheDocument();
+ expect(screen.queryByRole('textbox',{name:'Email'})).toBeNull();
  expect(screen.queryByText(/Sign in to connect the CLI/)).toBeNull();
- fireEvent.input(await screen.findByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_website@example.com'}});
- fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
- fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
- fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
- await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
+ expect(calls.some(call=>call.url.includes('/oauth/'))).toBe(false);
 });

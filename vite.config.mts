@@ -67,6 +67,18 @@ const appFontFaces = (): Plugin => ({
  * (`includeDependenciesRecursively: false`), so solid-js and the rest stay where they were.
  */
 const UI_MODULE = /[\\/]services[\\/]app[\\/]solid[\\/]ui[\\/][^\\/]+\.tsx?$/;
+const READER_SHARED = [
+  'solid/document/DocumentChrome.tsx', 'solid/document/DocumentBarActions.tsx',
+  'solid/document/comment-access.ts', 'solid/document/reactions.ts',
+  'solid/document/create-reader-presence.ts',
+  'lib/html-presence/preferences.ts', 'lib/html-presence/reader-session.ts',
+  'lib/html-presence/model.ts', 'lib/html-presence/contract.ts',
+  'solid/components/TrustedUi.tsx', 'solid/editor/create-live-artifact.ts', 'solid/lib/document-navigation.ts',
+  'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts', 'lib/http/retry-lazily.ts',
+  'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/serving/artifact-pwa.ts',
+  'lib/http/login-href.ts', 'lib/document/display-title.ts', 'lib/edit-protocol/index.ts',
+];
+const isReaderShared = (id: string) => READER_SHARED.some(suffix => id.replaceAll('\\', '/').endsWith('/services/app/' + suffix));
 const READER_PAGE = /[\\/]services[\\/]app[\\/]solid[\\/]pages[\\/]Document\.tsx$/;
 type ModuleInfoOf = (id: string) => { isEntry: boolean; importers: readonly string[]; dynamicImporters: readonly string[] } | null;
 /** Whether `id` is statically imported, directly or not, by a module `reaches` accepts. */
@@ -79,9 +91,19 @@ const staticallyImportedBy = (id: string, getModuleInfo: ModuleInfoOf, reaches: 
   }
   return false;
 };
+/**
+ * The app entry's small HTTP leaves, which lazy pages import too: left alone, each is a chunk of its own, and the retry
+ * door's dynamic import moves the bundler's preload helper out of the entry into a third (+0.6 KB on size target 4,
+ * measured). One chunk holds them.
+ */
+const ENTRY_HTTP = /[\\/]services[\\/]app[\\/]lib[\\/]http[\\/](?:live-stream|retry-lazily)\.ts$|vite[\\/]preload-helper/;
 export const uiChunkName = (id: string, ctx: { getModuleInfo: ModuleInfoOf }): string | null => {
   const getModuleInfo: ModuleInfoOf = (module) => ctx.getModuleInfo(module);
   const info = getModuleInfo(id);
+  if (ENTRY_HTTP.test(id) && staticallyImportedBy(id, getModuleInfo, (_, isEntry) => isEntry)) return 'http';
+  // Every static reader dependency was already required before its frame. Keep those
+  // shared leaves together rather than one compressed stream per local/hosted importer.
+  if (isReaderShared(id) && !info?.dynamicImporters.length && !staticallyImportedBy(id, getModuleInfo, (_, isEntry) => isEntry) && staticallyImportedBy(id, getModuleInfo, at => READER_PAGE.test(at))) return 'reader';
   const library = UI_MODULE.test(id) || !!info?.importers.some((importer) => UI_MODULE.test(importer));
   // A module some page imports lazily (DocumentSharing's `import('../ui/Select')`) keeps its own chunk: inside
   // a group it would need a namespace object, whose bundler helper lives in the JSX-parser chunk.

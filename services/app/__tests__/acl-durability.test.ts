@@ -1,4 +1,4 @@
-import {documentEditBody,documentPublicationBody} from './prepared-document';
+import {restoreDocument} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -13,15 +13,12 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
 
-import { getArtifactById,getVersionFor } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
@@ -54,7 +51,7 @@ const stateOf = async (id: string) => {
   return { visibility: row!.visibility, ancestor_ids: row!.ancestor_ids };
 };
 
-async function preparedText(id:string,old:string,text:string){const row=(await getArtifactById(id))!;return documentEditBody(row,{source:row.source!.replace(old,text)});}
+async function preparedText(id:string,old:string,text:string){const row=(await getArtifactById(id))!;return {html:row.source!.replace(old,text)};}
 
 beforeEach(async () => {
   sessionUser.id = '';
@@ -62,16 +59,16 @@ beforeEach(async () => {
 });
 
 describe('a private document stays private through every write', () => {
-  it('survives a save-less markup EDIT — the path an agent uses constantly', async () => {
+  it('survives a conditional native HTML replacement', async () => {
     const { token } = await fixtures();
     const folderId = await folder(token, 'notes');
     const doc = await create(token, {
-      title: 'Secret', markup: '<section><p>alpha text</p></section>', parent_id: folderId,
+      title: 'Secret', html: '<section><p>alpha text</p></section>', parent_id: folderId,
     });
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [folderId] });
 
-    const edited = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
+    const edited = await putArtifact(
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
       params({ id: doc.id }),
     );
     expect(edited.status).toBe(200);
@@ -80,9 +77,9 @@ describe('a private document stays private through every write', () => {
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(404);
   });
 
-  it('survives a metadata-only edit (title/theme), which takes a different branch', async () => {
+  it('survives a metadata-only title edit', async () => {
     const { token } = await fixtures();
-    const doc = await create(token, { title: 'Secret', markup: '<section><p>alpha</p></section>' });
+    const doc = await create(token, { title: 'Secret', html: '<section><p>alpha</p></section>' });
     const res = await patchMetadata(token,doc.id,{title:'Renamed'});
     expect(res.status).toBe(200);
     expect((await stateOf(doc.id)).visibility).toBe('private');
@@ -91,9 +88,9 @@ describe('a private document stays private through every write', () => {
   it('survives a PUT that does not mention visibility or a parent', async () => {
     const { token } = await fixtures();
     const q3 = await folder(token, 'q3');
-    const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>', parent_id: q3 });
+    const doc = await create(token, { title: 'Secret', html: '<h1>a</h1>', parent_id: q3 });
     const res = await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>b</h1>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { html: '<h1>b</h1>' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
@@ -104,19 +101,14 @@ describe('a private document stays private through every write', () => {
     const { token } = await fixtures();
     const vault = await folder(token, 'vault');
     // v1 public, then flipped private — reverting CONTENT must not revert the ACL.
-    const doc = await create(token, { title: 'Secret', markup: '<h1>v1</h1>', visibility: 'public' });
+    const doc = await create(token, { title: 'Secret', html: '<h1>v1</h1>', visibility: 'public' });
     await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>', visibility: 'private', parent_id: vault } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { html: '<h1>v2</h1>', visibility: 'private', parent_id: vault } }),
       params({ id: doc.id }),
     );
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
 
-    const current=(await getArtifactById(doc.id))!;
-    const archived=await getVersionFor(identityForUser(current.user_id, current.token_id),doc.id,1);
-    const reverted = await revertRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token, json: documentEditBody((await getArtifactById(doc.id))!,{source:archived!.source!,whole:true}) }),
-      params({ id: doc.id }),
-    );
+    const reverted = await restoreDocument(token,doc.id,1);
     expect(reverted.status).toBe(200);
     // Content went back to v1; the ACL did NOT.
     const raw = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
@@ -127,13 +119,10 @@ describe('a private document stays private through every write', () => {
   it('survives a move between folders, and a move does not touch visibility', async () => {
     const { owner, token } = await fixtures();
     const moved = await folder(token, 'moved');
-    const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>' });
+    const doc = await create(token, { title: 'Secret', html: '<h1>a</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    const res = await patchMineRoute(
-      request(`/api/my/artifacts/${doc.id}/edits`, { method: 'POST', json: documentPublicationBody((await getArtifactById(doc.id))!,{parent_id:moved}) }),
-      params({ id: doc.id }),
-    );
+    const res = await patchMetadata(token,doc.id,{parent_id:moved});
     expect(res.status).toBe(200);
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [moved] });
   });
@@ -143,10 +132,10 @@ describe('a public document stays public through the same writes', () => {
   it('an edit does not silently lock a shared link', async () => {
     const { token } = await fixtures();
     const doc = await create(token, {
-      title: 'Open', markup: '<section><p>alpha text</p></section>', visibility: 'public',
+      title: 'Open', html: '<section><p>alpha text</p></section>', visibility: 'public',
     });
-    await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
+    await putArtifact(
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await preparedText(doc.id,'alpha text','beta text') }),
       params({ id: doc.id }),
     );
     expect((await stateOf(doc.id)).visibility).toBe('public');

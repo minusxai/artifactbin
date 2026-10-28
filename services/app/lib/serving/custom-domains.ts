@@ -1,3 +1,4 @@
+import {htmlAssetLinks} from '@/lib/html-page';
 import { type ArtifactRow, canReadArtifact } from '@/lib/artifacts';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 /**
@@ -26,7 +27,7 @@ import { createHmac } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { urlHash, collectExternalAssetUrls } from '@/lib/document';
+import { urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
 import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
@@ -375,13 +376,13 @@ export function startDomainRecheck(resolve: () => DomainResolver = domainResolve
 
 /** A document the host may serve: the owner's, PUBLIC, a markup document, not in the trash. */
 export function servesDocument(ownerId: string, row: Pick<ArtifactRow, 'user_id' | 'visibility' | 'format'> & { deleted_at?: unknown }): boolean {
-  return row.user_id === ownerId && row.visibility === 'public' && row.format === 'markup' && !row.deleted_at;
+  return row.user_id === ownerId && row.visibility === 'public' && row.format === 'html' && !row.deleted_at;
 }
 
 /** The ref kinds a post embeds by bytes (lib/dataflow/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
 const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
 /** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
-const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;
+const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'html' AND ${LIVE_ARTIFACT_SQL}`;
 
 /** Eligible homepage documents, including documents inside folders, scoped to this owner. */
 export async function domainHomepageOptions(ownerId: string): Promise<Array<{ id: string; title: string }>> {
@@ -465,7 +466,7 @@ export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow):
 export async function servesWebAsset(ownerId: string, hash: string): Promise<boolean> {
   const db = await getDb();
   const posts = await artifactQuery<{ source: string | null }>(db,`SELECT source,document FROM artifacts WHERE ${OWNER_POSTS_SQL} AND (source IS NOT NULL OR document IS NOT NULL)`, [ownerId]);
-  return posts.rows.some((post) => collectExternalAssetUrls(post.source!).all.some((url) => urlHash(url) === hash));
+  return posts.rows.some((post) => htmlAssetLinks(post.source??'').imageUrls.some((url) => urlHash(url) === hash));
 }
 
 /** The canonical address of a post: on the custom host, over HTTPS (the edge serves nothing else). */
@@ -480,7 +481,7 @@ function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 'title'>)
  * address, on the one canonical origin (APP__PUBLIC_BASE_URL).
  */
 export async function canonicalDocumentUrl(row: Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'visibility' | 'format'>): Promise<string> {
-  if (row.user_id && row.visibility === 'public' && row.format === 'markup') {
+  if (row.user_id && row.visibility === 'public' && row.format === 'html') {
     const domain = await rowForUser(row.user_id);
     if (domain?.status === 'verified') {
       if (domain.homepage_artifact_id === row.id) return `https://${domain.hostname}/`;

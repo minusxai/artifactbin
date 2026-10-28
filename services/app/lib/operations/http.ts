@@ -3,7 +3,6 @@ import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, gran
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace/trash';
-import {sessionOwnedBy} from '@/lib/remote/resource';
 /**
  * The HTTP half of the operations registry: a bearer route is a TRANSLATION
  * LAYER — it gathers the input (JSON body + path params + the odd query
@@ -28,6 +27,7 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * precisely the retry the receipt exists to answer.
  */
 const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unknown>) => Promise<boolean>> = {
+  update_artifact: async (actor,input) => !!await getArtifactFor(actor,String(input.id)),
   mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor)||row.token_id===actor.tokenId:grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
@@ -47,7 +47,6 @@ const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unkn
   // any bytes, and the bearer credential is the whole permission needed.
   refresh_asset: async (actor, input) =>
     typeof input.id === 'string' && input.id ? !!(await getArtifactFor(actor, input.id)) : true,
-  terminate_remote_session: async (actor, input) => sessionOwnedBy(actor, String(input.id)),
 };
 
 function operation(name: string): Operation {

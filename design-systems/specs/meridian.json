@@ -73,8 +73,8 @@
   },
   {
    "name": "ink-faint",
-   "light": "#8e8f98",
-   "dark": "#6b6f7a",
+   "light": "#696a73",
+   "dark": "#848894",
    "usage": "Tertiary text: timestamps, helper text, disabled labels, the drawing line.",
    "group": "Ink"
   },
@@ -108,7 +108,7 @@
   },
   {
    "name": "positive",
-   "light": "#15803d",
+   "light": "#147c3b",
    "dark": "#4ade80",
    "usage": "Success text and the up-delta. Always paired with a word or a dot.",
    "group": "Status"
@@ -122,7 +122,7 @@
   },
   {
    "name": "caution",
-   "light": "#a16207",
+   "light": "#9d6007",
    "dark": "#facc15",
    "usage": "Warnings and pending states.",
    "group": "Status"
@@ -136,7 +136,7 @@
   },
   {
    "name": "negative",
-   "light": "#dc2626",
+   "light": "#ce2121",
    "dark": "#f87171",
    "usage": "Errors, destructive actions, the down-delta.",
    "group": "Status"

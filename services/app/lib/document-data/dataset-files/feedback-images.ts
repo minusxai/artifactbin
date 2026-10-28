@@ -4,9 +4,10 @@ import type { ArtifactRow } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { dataflowForRow } from '../dataflow';
+import {effectiveRole,liveAccessFacts} from '@/lib/artifacts';
+import {canEdit,type HtmlPageLink} from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { grantsOf, grantContext, grantsPermitRead, readThrough, type GrantDocument } from '@/lib/artifacts';
+import { grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifacts';
 import { DatasetError } from '@/lib/datasets/errors';
 import { imageInsertAllowed } from '@/lib/datasets/image-upload-policy';
 import { storeImageContent } from '@/lib/datasets/data-tiers';
@@ -50,16 +51,24 @@ function liveRow(rows:ArtifactRow[],id:string,format?:string):ArtifactRow {
   if(!row||(format&&row.format!==format))throw new DatasetError('Dataset file is unavailable',404);
   return row;
 }
+/** Native binding establishes provenance, never dataset write authority. */
 async function declaredDataset(document:ArtifactRow,datasetId:string):Promise<boolean> {
-  if(document.format!=='markup')return false;
-  const dataflow=await dataflowForRow(document);
-  return !!dataflow?.flow.imports.some(entry=>entry.ref===datasetId||entry.ref===`ref:${datasetId}`);
+  return document.format==='html'&&Array.isArray(document.meta.htmlLinks)&&(document.meta.htmlLinks as HtmlPageLink[]).some(link=>link.kind==='dataset'&&link.datasetId===datasetId&&link.mode==='live');
 }
 async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
-  const grants=grantsOf(dataset);
-  if(!grants)throw new DatasetError('This dataset does not grant file uploads',403);
-  const context=await grantContext(dataset,actor,{id:document.id,editId:document.edit_id} satisfies GrantDocument,tx);
-  if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
+  const db=tx??await getDb(),grants=grantsOf(dataset);
+  if(grants){
+    // Preserve direct actor grants independently of artifact membership.
+    if(imageInsertAllowed(grants,await grantContext(dataset,actor,undefined,db)))return;
+    const authority={id:document.id,editId:document.edit_id,version:document.version,datasetId:dataset.id};
+    const uploadProof=attestSavedHtmlUpload(authority,async transaction=>{
+      const rows=(await artifactQuery<ArtifactRow>(transaction,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[[document.id,dataset.id]])).rows;
+      const currentDoc=liveRow(rows,document.id,'html'),currentDataset=liveRow(rows,dataset.id,'dataset');
+      if(currentDoc.edit_id!==authority.editId||currentDoc.version!==authority.version||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,dataset.id))throw new DatasetError('Dataset file is unavailable',404);
+    });
+    const context=await uploadGrantContext(dataset,actor,{...authority,uploadProof},db);
+    if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
+  }else if(dataset.access!=='readwrite'||!canEdit(await effectiveRole(dataset,actor,liveAccessFacts(actor,db))))throw new DatasetError('This dataset does not grant file uploads',403);
 }
 async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform/db').Queryable):Promise<boolean> {
   if(grantsOf(dataset))return grantsPermitRead(dataset,actor,document,tx);
@@ -92,8 +101,8 @@ async function uploadContent(input:UploadInput&{filename?:string},generic=false)
   const authorizeCurrent=async(tx:import('@/lib/platform/db').Queryable,lock:'UPDATE'|'SHARE')=>{
     await tx.query(`SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR ${lock}`,[[datasetId,documentId]]);
     const rows=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[ [datasetId,documentId] ])).rows;
-    const currentDataset=liveRow(rows,datasetId,'dataset'),currentDoc=liveRow(rows,documentId,'markup');
-    if(currentDoc.edit_id!==editId||catalogOf(currentDataset)?.kind!=='stored')throw new DatasetError('Dataset file is unavailable',404);
+    const currentDataset=liveRow(rows,datasetId,'dataset'),currentDoc=liveRow(rows,documentId,'html');
+    if(currentDoc.edit_id!==editId||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,datasetId)||!await readThrough(tx,currentDoc,actor))throw new DatasetError('Dataset file is unavailable',404);
     await authorizeInsert(currentDataset,currentDoc,actor,tx);
   };
   const cached=await db.transaction(async tx=>{
@@ -123,14 +132,14 @@ async function readContent(input:{actor:AccessActor;documentId:string;datasetId:
   const {actor,documentId,datasetId,imageId}=input;
   if(!ID_RE.test(documentId)||!ID_RE.test(datasetId)||!/^\w{10,30}$/.test(imageId))return null;
   const initialDoc=await getArtifactById(documentId);
-  if(!initialDoc||initialDoc.format!=='markup'||!(await readThrough(await getDb(),initialDoc,actor))||!await declaredDataset(initialDoc,datasetId))return null;
+  if(!initialDoc||initialDoc.format!=='html'||!(await readThrough(await getDb(),initialDoc,actor))||!await declaredDataset(initialDoc,datasetId))return null;
   const db=await getDb();
   return db.transaction(async tx=>{
     await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[[datasetId,documentId]]);
     const rows=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[ [datasetId,documentId] ])).rows;
     let dataset:ArtifactRow,doc:ArtifactRow;
-    try { dataset=liveRow(rows,datasetId,'dataset');doc=liveRow(rows,documentId,'markup'); } catch { return null; }
-    if(doc.edit_id!==initialDoc.edit_id||catalogOf(dataset)?.kind!=='stored'||!(await datasetReadable(dataset,doc,actor,tx)))return null;
+    try { dataset=liveRow(rows,datasetId,'dataset');doc=liveRow(rows,documentId,'html'); } catch { return null; }
+    if(doc.edit_id!==initialDoc.edit_id||!await declaredDataset(doc,datasetId)||catalogOf(dataset)?.kind!=='stored'||!(await datasetReadable(dataset,doc,actor,tx)))return null;
     const row=(await tx.query<DatasetImageRow>('SELECT * FROM dataset_images WHERE id=$1 AND dataset_id=$2 AND document_id=$3',[imageId,datasetId,documentId])).rows[0];
     if(!row||(imageOnly&&row.meta.format&&row.meta.format!=='image'))return null;
     const objectKey=row.meta?.objectKey;

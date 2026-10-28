@@ -60,10 +60,10 @@ describe('successful local check evidence', () => {
     await runCheck(opts); expect(runs()).toBe(2);
     await runCheck(opts); expect(runs()).toBe(2);
     // A generated (ignored) output is identified by its stat, so a rebuild invalidates.
-    put('services/cli/src/generated/teaching.json', '{}'); await runCheck(opts); expect(runs()).toBe(3);
+    put('services/app/lib/data/story/story-font-manifest.json', '{}'); await runCheck(opts); expect(runs()).toBe(3);
     await runCheck(opts); expect(runs()).toBe(3);
     const later = new Date(Date.now() + 5000);
-    utimesSync(path.join(root, 'services/cli/src/generated/teaching.json'), later, later);
+    utimesSync(path.join(root, 'services/app/lib/data/story/story-font-manifest.json'), later, later);
     await runCheck(opts); expect(runs()).toBe(4);
   }));
   it('runs several commands concurrently, prints their output in order and returns the first failure', () => fixture(async ({ opts }) => {

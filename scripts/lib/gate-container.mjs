@@ -23,7 +23,6 @@ export const BUILD_OUTPUTS = Object.freeze([
   'services/app/public/islands',
   'services/app/public/libraries',
   'services/app/server/routes.generated.ts',
-  'services/cli/dist',
 ]);
 
 /** The one volume every gate container keeps its builds in, one directory per `buildCacheKey`. */
@@ -43,7 +42,7 @@ const usage = 'usage: node scripts/gate-container.mjs [--cpus 4] [--memory 8g] [
  * @param {{buildKey: string, changes: string, deps: string}} inputs
  */
 export function buildCacheKey({ buildKey, changes, deps }) {
-  return sha(buildKey, changes, deps).slice(0, 32);
+  return sha('component-assets-v1', buildKey, changes, deps).slice(0, 32);
 }
 
 /**
@@ -125,10 +124,10 @@ export function imageTag(playwrightVersion) {
  * The dependency volume's name. It is keyed like CI's install cache — the normalised lockfile and
  * the postinstall scripts and vendored font sources that write into it — plus the image, whose Node and toolchain decide
  * the native binaries inside it.
- * @param {{lock: string, copyAssets: string, fontAssets?: string, preparePty: string, image: string}} inputs
+ * @param {{lock: string, copyAssets: string, fontAssets?: string, image: string}} inputs
  */
-export function depsVolume({ lock, copyAssets, fontAssets = '', preparePty, image }) {
-  return `afbin-gate-deps-${sha(lock, copyAssets, fontAssets, preparePty, image).slice(0, 16)}`;
+export function depsVolume({ lock, copyAssets, fontAssets = '', image }) {
+  return `afbin-gate-deps-${sha(lock, copyAssets, fontAssets, image).slice(0, 16)}`;
 }
 
 /** A container name docker accepts, unique per runner process. */
@@ -154,7 +153,25 @@ export function containerName(worktree, pid) {
  * - No AUTH__SECRET is passed: scripts/gates.mjs mints one per run when none is set, which is the
  *   shape of CI's per-run secret.
  */
+/** Private migration inputs are never copied into the source snapshot or logs. */
+function migrationPilotMounts(env={}) {
+ if(!env.NATIVE_MIGRATION_PILOT__INPUT)return [];
+ const entries=[['INPUT','/pilot/input.json','ro'],['CANONICAL','/pilot/canonical.json','ro'],['RECOVERY','/pilot/recovery.json','ro'],['BUNDLE','/pilot/bundle','ro'],['OUTPUT','/pilot/output','rw']];
+ if(entries.some(([name])=>typeof env['NATIVE_MIGRATION_PILOT__'+name]!=='string'||!env['NATIVE_MIGRATION_PILOT__'+name].startsWith('/')||/[:\\\n\r]/.test(env['NATIVE_MIGRATION_PILOT__'+name])))throw Error('Migration pilot requires complete explicit absolute private paths');
+ return entries.flatMap(([name,inside,mode])=>['-v',`${env['NATIVE_MIGRATION_PILOT__'+name]}:${inside}:${mode}`,'-e',`NATIVE_MIGRATION_PILOT__${name}=${inside}`]);
+}
+
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
+  const pilotArgs=migrationPilotMounts(env);
+  const batchRoot=env.NATIVE_MIGRATION_BATCH__ROOT,batchOutput=env.NATIVE_MIGRATION_BATCH__OUTPUT;
+  const batchRequested=batchRoot!==undefined||batchOutput!==undefined;
+  if(batchRequested&&(servers!==1||env.NATIVE_MIGRATION_PILOT__INPUT||[batchRoot,batchOutput].some(value=>typeof value!=='string'||!value.startsWith('/')||/[:\\\n\r]/.test(value))))throw Error('Migration batch requires one server and explicit isolated input/output directories');
+  const batchArgs=batchRequested?['-v',`${batchRoot}:/pilot-batch:ro`,'-v',`${batchOutput}:/pilot-batch-output:rw`,'-e','NATIVE_MIGRATION_BATCH__ROOT=/pilot-batch','-e','NATIVE_MIGRATION_BATCH__OUTPUT=/pilot-batch-output']:[];
+  const output=env.COMPONENT_BASELINE__OUTPUT;
+  const input=env.COMPONENT_BASELINE__INPUT;
+  if(input!==undefined&&(typeof input!=='string'||!input.startsWith('/')||/[:\\\n\r]/.test(input)))throw Error('Component capture input requires an explicit absolute private path');
+  if(output!==undefined&&(typeof output!=='string'||!output.startsWith('/')||/[:\\\n\r]/.test(output)))throw Error('Component evidence requires an explicit absolute private path');
+  const componentArgs=[...(output?['-v',`${output}:/component-evidence:rw`,'-e','COMPONENT_BASELINE__OUTPUT=/component-evidence']:[]),...(input?['-v',`${input}:/component-input.json:ro`,'-e','COMPONENT_BASELINE__INPUT=/component-input.json']:[])];
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
@@ -167,6 +184,8 @@ export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, m
     '-v', `${volume}:${INSIDE.deps}`,
     '-v', `${BUILD_VOLUME}:${INSIDE.builds}`,
     '-e', 'DATASET__ALLOW_PRIVATE_NETWORKS=true',
+    ...pilotArgs, ...batchArgs,
+    ...componentArgs,
     '-w', INSIDE.src,
     image,
     'node', `${INSIDE.src}/scripts/gate-container.mjs`, '--inside', '--servers', String(servers), '--build-key', buildKey, ...gates,

@@ -18,7 +18,7 @@ export function AccountPage(): JSX.Element {
   const page = usePageData<{ username: string | null; image: string | null }>('/api/page/account');
   return <Show when={!session() || !!session()?.user} fallback={<Navigate href="/login?callbackUrl=/account" />}>
     <main class="workspace-page">
-      <WorkspaceHeading title="Account" description="Manage your profile, publishing and connected agents." />
+      <WorkspaceHeading title="Account" description="Manage your profile, publishing and API access." />
       <Show when={page.error()}><Button variant="secondary" class="mb-4" type="button" aria-label="Retry account" onClick={() => void page.refresh(true)}>Could not refresh account. Retry</Button></Show>
       <div class="space-y-8">
         <section aria-labelledby="profile-heading"><SectionHeading id="profile-heading" class="mb-4">Profile</SectionHeading>
@@ -29,7 +29,7 @@ export function AccountPage(): JSX.Element {
         </section>
         <NotificationSettings />
         <div class="empty:hidden"><CustomDomainCard /></div>
-        <section aria-labelledby="connections-heading"><SectionHeading id="connections-heading">Connections</SectionHeading><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Manage each afbin CLI connection to your account. Revoking a connection stops its agent. To add one, run <code class="rounded border border-edge bg-surface px-1.5 py-0.5 font-mono text-xs">afbin auth</code> on your machine.</p><div class="mt-4"><TokensPanel /></div></section>
+        <section aria-labelledby="connections-heading"><SectionHeading id="connections-heading">API access</SectionHeading><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Manage API access to your account. Revoking a token stops clients using it. To connect an authoring agent, follow the <a href="/llms/http-auth" class="text-accent">HTTP authentication guide</a>.</p><div class="mt-4"><TokensPanel /></div></section>
       </div>
     </main>
   </Show>;

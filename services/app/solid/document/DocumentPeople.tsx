@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import Users from 'lucide-solid/icons/users';
 import type { MembershipInput, MembershipState } from '@artifactbin/contracts';
@@ -31,7 +32,7 @@ export function DocumentPeople(props: { id: string; revision?: number; onChange?
     let alive = true;
     onCleanup(() => { alive = false; });
     void sharedRequest(key(), async () => {
-      const response = await fetch(endpoint());
+      const response = await retryingFetch(endpoint());
       const body = await response.json() as MembershipState & { detail?: string };
       if (!response.ok || !Array.isArray(body.members) || !Array.isArray(body.pending)) throw new Error(body.detail ?? 'Could not load people');
       return body;
@@ -116,7 +117,7 @@ function PeopleInvitePicker(props: { endpoint: string; selected: Person[]; onSel
     if (!engaged()) return;
     const controller = new AbortController();
     setLoading(true); setError(''); setCandidates([]);
-    void fetch(`${props.endpoint}?purpose=invite&query=${encodeURIComponent(query())}`, { signal: controller.signal })
+    void retryingFetch(`${props.endpoint}?purpose=invite&query=${encodeURIComponent(query())}`, { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error('Could not find people. Try again.');
         const result = await response.json() as { people?: Person[] };

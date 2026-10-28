@@ -23,6 +23,12 @@ describe('public managed asset boundary',()=>{
  });
 });
 describe('public asset response hardening',()=>{
+ it('preserves bodyless revalidation but refuses actual redirects',()=>{
+  const cached=publicAssetResponse(new Response(null,{status:304,headers:{etag:'"fixture"','cache-control':'private, max-age=0, must-revalidate'}}));
+  expect(cached.status).toBe(304);expect(cached.body).toBeNull();expect(cached.headers.get('etag')).toBe('"fixture"');
+  const redirect=publicAssetResponse(new Response(null,{status:302,headers:{location:'https://example.test'}}));
+  expect(redirect.status).toBe(502);expect(redirect.headers.get('cache-control')).toBe('no-store');
+ });
  it('preserves an existing policy while appending a real sandbox directive',()=>{
   const response=publicAssetResponse(new Response('bytes',{headers:{'content-security-policy':"default-src 'none'",'set-cookie':'secret=yes'}}));
   expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");

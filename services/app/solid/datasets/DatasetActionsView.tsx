@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DatasetAccessPolicy, DatasetGrantSelector, DatasetOperation } from '@artifactbin/contracts';
 import { rowTitle } from '@/lib/document/display-title';
@@ -34,7 +35,7 @@ function SavedActions(props: {id: string}): JSX.Element {
   onMount(() => {
     const controller = new AbortController();
     onCleanup(() => controller.abort());
-    void fetch(`/api/my/artifacts/${encodeURIComponent(props.id)}/policy`, {signal: controller.signal})
+    void retryingFetch(`/api/my/artifacts/${encodeURIComponent(props.id)}/policy`, {signal: controller.signal})
       .then(async response => {
         if (!response.ok) throw new Error('Could not load data action rules. Dataset edit access is required.');
         return response.json() as Promise<Actions>;

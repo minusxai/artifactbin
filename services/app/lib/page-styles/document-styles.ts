@@ -16,11 +16,8 @@ import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';
 import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
-/** The page-level rule every served document starts with. `--mx-vh` feeds the recipes that size against the viewport (slides). */
-export const DOCUMENT_ROOT_CSS = ':root { --mx-vh: 100vh; } body { margin: 0; }';
-
 /** A domain post's one line of attribution (its words: @artifactbin/contracts DOMAIN_FOOTER_TEXT): theme-neutral, it inherits the document's colour and face and only quiets them. */
-export const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
+const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
   + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
 
 

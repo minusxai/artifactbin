@@ -12,10 +12,14 @@
  * hostname cannot move a byte count.
  */
 import { describe, it, expect } from 'vitest';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {loadSkillSources} from '../skills/tree';
+import {loadSkillAssets} from '../skills/assets';
+import {skillPackageFiles,skillZip} from '../skills/package';
 import { buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES } from '../skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
-import { STORY_THEMES } from '../data/story/story-themes';
-import { STORY_TEMPLATES } from '../data/story/story-templates';
 
 const BASE = 'https://example.test';
 const fm = (name: string, description = 'Third-person description of when to read this.') => `---\nname: ${name}\ndescription: ${description}\n---\n`;
@@ -169,20 +173,6 @@ describe('the rules, each seen to fire on a literal tree', () => {
     expect(problems).toContainEqual(expect.stringContaining('artifactbin/references/markup.md: 124 lines and 3 sections without a "## Contents"'));
     expect(problems).toContainEqual(expect.stringContaining(`the /docs listing is ${SKILL_LISTING_MAX_BYTES + 1} B`));
   });
-  it('the registries are globals: counts and names come from the code', () => {
-    const tree = buildSkillTree({ 'artifactbin/SKILL.md': ok('artifactbin', '## Read first\n\n[[ tags | length ]] tags, [[ components | length ]] components, [% for t in themes %][[ t.name ]] [% endfor %]\n') });
-    const text = render(tree.files[0]);
-    expect(text).toMatch(/\d{2,3} tags, \d{2} components, modernist organic industry terminal manuscript pop/);
-  });
-  it('a theme or template reference sees its own registry entry', () => {
-    const tree = buildSkillTree({
-      'artifactbin/SKILL.md': ok('artifactbin'),
-      'artifactbin/references/themes-industry.md': ok('themes-industry', '## Read first\n\n[[ theme.label ]] / [[ theme.fonts ]] / [[ theme.defaultMode ]]\n'),
-      'artifactbin/references/templates-deck.md': ok('templates-deck', '## Read first\n\n[[ template.beats | join(" → ") ]]\n'),
-    });
-    expect(render(tree.get('artifactbin/references/themes-industry.md')!)).toContain('Industry / display Inter, body Inter, mono JetBrains Mono / light');
-    expect(render(tree.get('artifactbin/references/templates-deck.md')!)).toMatch(/Cover → /);
-  });
 });
 
 /**
@@ -198,35 +188,10 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     .replace(/: \d+ lines and \d+ sections without a "## Contents"$/, ': no Contents')
     .replace(/: the Read first block is [\d,]+ B, cap [\d,]+$/, ': Read first over its cap')
     .replace(/: the first heading must be "## Read first" \(got "[^"]*"\)$/, ': does not open with Read first');
-  const R = 'artifactbin/references';
   /** Debt the tree carries today, each named by its rule; restructuring these files is its own change. */
-  const KNOWN = [
-    'artifactbin/SKILL.md: no Contents',
-    `${R}/apps.md: no Contents`,
-    `${R}/databases-users.md: does not open with Read first`,
-    `${R}/dataset-images.md: does not open with Read first`,
-    `${R}/http-document-graph.md: Read first over its cap`,
-    `${R}/lambdas.md: does not open with Read first`,
-    `${R}/lambdas.md: no Contents`,
-    `${R}/live-sessions.md: no Contents`,
-    `${R}/markup-data-example.md: no Contents`,
-    `${R}/markup-data.md: no Contents`,
-    `${R}/markup-embeds.md: does not open with Read first`,
-    `${R}/markup-maps.md: no Contents`,
-    `${R}/markup-notifications.md: does not open with Read first`,
-    `${R}/markup-scripts.md: no Contents`,
-    `${R}/markup-state.md: Read first over its cap`,
-    `${R}/markup.md: does not open with Read first`,
-    `${R}/markup.md: no Contents`,
-    `${R}/npm-local.md: does not open with Read first`,
-    `${R}/publishing-auth.md: Read first over its cap`,
-    `${R}/publishing-datasets.md: Read first over its cap`,
-    `${R}/publishing.md: Read first over its cap`,
-    `${R}/templates.md: Read first over its cap`,
-  ];
-  it.each(['cli', 'http'] as const)('obeys every tree rule in the %s flavour, less the listed debt', (transport) => {
-    const problems = validateSkillTree(tree, (file) => renderSkill(file, { base: SIZE_BASE, transport }));
-    expect(problems.map(rule).sort()).toEqual([...KNOWN].sort());
+  const KNOWN: string[] = [];
+  it('obeys every tree rule, less the listed debt', () => {
+    expect(validateSkillTree(tree, render).map(rule).sort()).toEqual([...KNOWN].sort());
   });
   /**
    * THE byte-cap sweep. It used to be asserted in seven places — the brief, the auth rule, the
@@ -235,60 +200,26 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
    * over the rendered tree covers every one of them, and covers a file added tomorrow too.
    */
   it('keeps every rendered guide — the brief and every reference — within its reading budget',()=>{
-    for(const transport of ['cli','http'] as const)for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(renderSkill(file,{base:SIZE_BASE,transport})),`${transport}: ${file.path}`).toBeLessThanOrEqual(file.ref ? SKILL_FILE_MAX_BYTES : SKILL_MAIN_MAX_BYTES);
-    expect(tree.files.length).toBeGreaterThan(10);
+    for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(file.ref ? SKILL_FILE_MAX_BYTES : SKILL_MAIN_MAX_BYTES);
+    expect(tree.files.length).toBeGreaterThan(5);
     expect(tree.files.some(file=>!file.ref),'the brief itself must be in the sweep').toBe(true);
-  });
-  /**
-   * The data references are the design systems and nothing else: a binding block, type roles,
-   * components and specimens an agent reads once at the bind step and pastes from. Their shape is
-   * the CLI's design-systems test; here only that no other file slips out of the budget by
-   * declaring itself data, and that the catalogue which lists them is itself a guide.
-   */
-  it('the data references are exactly the design systems, and the catalogue that lists them is a guide',()=>{
-    const data=tree.files.filter(file=>file.kind==='data').map(file=>file.file).sort();
-    expect(data.length).toBe(13);
-    for(const file of data)expect(file).toMatch(/^system-[a-z]+\.md$/);
-    expect(tree.get('artifactbin/references/design-systems.md')?.kind).toBe('guide');
-    // The systems carry none of the listed debt (see KNOWN above).
-    expect(validateSkillTree(tree,render).filter(problem=>/system-[a-z]+\.md/.test(problem))).toEqual([]);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
     expect(tree.files.filter((f) => !f.ref)).toHaveLength(1);
   });
-  it('carries one reference per template, named after the registry, and none per theme since themes left teaching', () => {
-    for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)).toBeUndefined();
-    for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
-  });
-  it('selects installed CLI or HTTP without prompting an unnecessary installation, and preserves the returned fence',()=>{
+  it('uses HTTP without an installation decision and preserves the returned identity',()=>{
     const brief=buildQuickSheet(BASE);
-    expect(brief).toContain('Runnable afbin CLI installed?');
-    expect(brief).toContain('No / uncertain: use HTTP');
-    expect(brief).toContain('try setup once if agreed');
-    expect(brief).not.toContain('CLI chosen and');
-    for(const text of [brief,render(tree.get('artifactbin/references/publishing.md')!)]){
-      expect(text).toContain('exactly the identity fields returned');
-      expect(text).toContain('never add `version`');
-      expect(text).toContain('optional historical selection');
-    }
+    expect(brief).toContain('Reuse this origin’s saved credentials');
+    expect(brief).not.toContain('@afbin/cli');
+    expect(brief).not.toMatch(/\bafbin (?:push|pull|help|auth|setup)\b/);
   });
-  it('shows transport-appropriate example source from the shared example',()=>{
-    const root=tree.get('artifactbin/SKILL.md')!;
-    const http=renderSkill(root,{base:BASE,transport:'http'});
-    const cli=renderSkill(root,{base:BASE,transport:'cli'});
-    const example=(text:string)=>text.split('## Example')[1]!.match(/```jsx\n([\s\S]*?)```/)![1]!;
-    expect(example(http).trimStart()).toMatch(/^<Helmet>/);
-    expect(example(cli).trimStart()).toMatch(/^---\n/);
-    expect(example(http)).toContain('<title>Q3 sales review</title>');
-    expect(example(cli)).toContain(example(http));
-    expect(http).toContain('Metadata belongs in JSON request fields.');
-    expect(http).toContain('Do not send a YAML metadata fence.');
-    expect(cli).toContain('YAML metadata fence');
+  it('teaches native HTML pages, not the JSX compiler',()=>{
+    const http=renderSkill(tree.get('artifactbin/SKILL.md')!,{base:BASE});
+    expect(http).toContain('normal HTML');expect(http).not.toContain('```jsx');
   });
-  it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('keeps both transport roots within budget at %s',base=>{
-    expect(Buffer.byteLength(renderSkill(tree.get('artifactbin/SKILL.md')!,{base,transport:'http'}))).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
-    const sheet=buildQuickSheet(base);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
+  it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('keeps the brief within budget at %s',base=>{
+    expect(Buffer.byteLength(buildQuickSheet(base))).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   });
   it('renders every file for two bases with no leftover template syntax', () => {
     for (const base of [BASE, 'http://localhost:3000']) {
@@ -300,37 +231,25 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
   });
 });
 
-/**
- * One owner per topic — the audit measured that the duplication between the
- * old pages was SEMANTIC (one rule reworded on four pages, three of them
- * wrong), so a fingerprint phrase per topic lives in exactly one file.
- */
-describe('each topic is taught by exactly its owner', () => {
-  const rendered = Object.fromEntries(renderTree(skillTree(), BASE).map(({ file, text }) => [file.path, text]));
-  const owners = (needle: string | RegExp) => Object.keys(rendered).filter((p) => (typeof needle === 'string' ? rendered[p].includes(needle) : needle.test(rendered[p])));
-  const R = 'artifactbin/references';
-  const cases: Array<[string, string | RegExp, string[]]> = [
-    ['the generic <Mutation> grammar', '<Mutation name expectedAffected={1} reset="note">{`insert', [`${R}/markup-data.md`]],
-    ['the built-in $ values table', '| `$_row.<column>` |', [`${R}/markup-data.md`]],
-    ['the SQLite library table', '| `date_series(start, end', [`${R}/markup-sql-functions.md`]],
-    ['the booking worked example', '<title>Book a time</title>', [`${R}/markup-data-example.md`]],
-    ['the Helmet cardinality rule', /at most ONE per document/i, [`${R}/markup.md`]],
-    ['editable table grammar and seven-editor example', '<Import name="roadmap" src="ref:rdm123" />', [`${R}/markup-editing.md`]],
-    ['the reader-control roster', '## Bindings: controls', [`${R}/markup-data.md`]],
-    ['the <Helmet> :root override example', /:root \{ --background/, [`${R}/markup.md`]],
-    ['the scroll-reveal observer', 'data-mx-seen', [`${R}/markup-motion.md`]],
-    ['the author iframe', '<iframe src="https://', [`${R}/markup.md`]],
-    ['the SVG subset', 'foreignObject', [`${R}/markup-svg.md`]],
-  ];
-  for (const [topic, fp, owner] of cases) {
-    it(`${topic} → ${owner.join('+')}`, () => {
-      expect(owners(fp)).toEqual(owner);
-    });
-  }
-  it('a theme one-liner is taught nowhere: the six are legacy values a note names, not a choice', () => {
-    for (const t of STORY_THEMES) expect(owners(t.description), t.name).toEqual([]);
-  });
-  it('a template one-liner lives on the templates index and its own page, nowhere else', () => {
-    for (const t of STORY_TEMPLATES) expect(owners(t.description).sort(), t.name).toEqual([`${R}/templates-${t.name}.md`, `${R}/templates.md`]);
-  });
+
+
+it('keeps component sources out of Markdown teaching while including them in the installed package',()=>{
+ const root=mkdtempSync(path.join(tmpdir(),'skill-component-package-'));
+ try{
+  const skill=path.join(root,'artifactbin');mkdirSync(path.join(skill,'components'),{recursive:true});mkdirSync(path.join(skill,'references'));
+  const docs={'artifactbin/SKILL.md':ok('artifactbin'),'artifactbin/references/runtime.md':ok('runtime')};
+  for(const [name,text] of Object.entries(docs))writeFileSync(path.join(root,name),text);
+  // Readable sources only: compiled modules are hosted (`@afbin/<component>`), never packaged.
+  const components={'components/button.ts':'export interface ButtonProps {}'};
+  for(const [name,text] of Object.entries(components))writeFileSync(path.join(skill,name),text);
+  writeFileSync(path.join(skill,'components/button.test.ts'),'test-only');
+  writeFileSync(path.join(skill,'components/button.fixture.ts'),'fixture-only');
+  const sources=loadSkillSources(root);expect(sources).toEqual(docs);
+  const assets=loadSkillAssets(skill);expect(assets).toEqual(components);
+  const installed=skillPackageFiles(buildSkillTree(sources),BASE,assets);
+  expect(installed).toMatchObject(components);expect(installed['SKILL.md']).toContain('name: artifactbin');
+  expect(Object.keys(installed).sort()).toEqual(['SKILL.md','components/button.ts','references/runtime.md']);
+  expect(skillZip(installed).byteLength).toBeGreaterThan(0);
+  expect(()=>skillZip({...installed,'components/button.js':'export {};'})).toThrow('Unsupported skill member: components/button.js');
+ }finally{rmSync(root,{recursive:true,force:true});}
 });

@@ -1,5 +1,5 @@
 /**
- * A reader's consent to what a document asks of the network (Helmet `csp-*` metas), through the real
+ * A reader's consent to what a document asks of the network (native head `csp-*` metas), through the real
  * /api/trust handler, the serving hook and the served /raw header. The PUBLISHER of a host consented by
  * publishing it; everyone else — the owner included — is asked, and answers for this document only:
  * once for the session, always for this document, or never. Revoke forgets; the door keeps its checks.
@@ -26,7 +26,7 @@ const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const PLOTLY = 'https://cdn.plot.ly';
 const OTHER = 'https://elsewhere.example.com';
 const asks = (connect: string, script?: string) =>
-  `<Helmet><meta name="csp-connect" content="${connect}" />${script ? `<meta name="csp-script" content="${script}" />` : ''}<title>weather</title></Helmet><p>forecast</p>`;
+  `<!doctype html><html><head><meta name="csp-connect" content="${connect}" />${script ? `<meta name="csp-script" content="${script}" />` : ''}<title>weather</title></head><body><p>forecast</p></body></html>`;
 const set = (connect: string[], script: string[] = []) => ({ ...EMPTY_CSP_EXTENSIONS, connect, script });
 
 async function account(name: string) {
@@ -37,13 +37,13 @@ async function account(name: string) {
 }
 
 async function publish(token: string, markup: string, visibility = 'public'): Promise<string> {
-  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup, visibility } }));
+  const response = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { html: markup.startsWith('<!doctype')?markup:`<!doctype html><html><head></head><body>${markup}</body></html>`, visibility } }));
   expect(response.status, await response.clone().text()).toBe(201);
   return ((await response.json()) as { id: string }).id;
 }
 
 async function republish(token: string, id: string, markup: string): Promise<void> {
-  const response = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token, json: { markup } }), params(id));
+  const response = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token, json: { html: markup } }), params(id));
   expect(response.status, await response.clone().text()).toBe(200);
 }
 
@@ -200,4 +200,22 @@ describe('/api/trust', () => {
     const plain = await publish(owner.token, '<p>plain</p>');
     expect(((await (await grant(plain, 'once', { actor: stranger.actor })).json()) as { error: string }).error).toBe('nothing_to_trust');
   });
+});
+
+it('persists validated native declarations per version and rejects invalid policy without changing history',async()=>{
+ const owner=await account('native-policy');
+ const id=await publish(owner.token,asks(METEO));
+ const original=(await getArtifactById(id))!;
+ expect(original.meta.htmlCsp).toEqual(set([METEO]));
+ const invalid=await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:owner.token,json:{html:asks('http://unsafe.example.com')}}),params(id));
+ expect(invalid.status).toBe(400);expect(await invalid.json()).toMatchObject({error:'invalid_csp'});
+ expect((await getArtifactById(id))?.version).toBe(1);
+ expect((await (await harness.db()).query('SELECT 1 FROM artifact_versions WHERE artifact_id=$1',[id])).rows).toHaveLength(0);
+ await republish(owner.token,id,asks(OTHER));
+ const version=(await (await harness.db()).query<{meta:Record<string,unknown>}>('SELECT meta FROM artifact_versions WHERE artifact_id=$1 AND version=1',[id])).rows[0];
+ expect(version.meta.htmlCsp).toEqual(set([METEO]));
+ const response=await serveArtifact(request(`/a/${id}/raw?version=1`,{actor:owner.actor}),params(id));
+ expect(response.status).toBe(200);
+ expect(response.headers.get('content-security-policy')).toContain(METEO);
+ expect(response.headers.get('content-security-policy')).not.toContain(OTHER);
 });

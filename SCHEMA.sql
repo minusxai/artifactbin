@@ -32,6 +32,110 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.native_identity_imports (
+  source_namespace TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  source_sha256 TEXT NOT NULL,
+  target_sha256 TEXT NOT NULL,
+  projection_sha256 TEXT NOT NULL,
+  source_inventory_sha256 TEXT NOT NULL,
+  target_inventory_sha256 TEXT NOT NULL,
+  original_state JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (source_namespace, kind, source_id)
+);
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_namespace TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_id TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS projection_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS source_inventory_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS target_inventory_sha256 TEXT NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS original_state JSONB NOT NULL;
+
+ALTER TABLE app.native_identity_imports ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_native_identity_imports_target ON app.native_identity_imports (kind, target_id);
+
+CREATE TABLE IF NOT EXISTS app.html_backend_secrets (
+  owner_id TEXT NOT NULL,
+  backend_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  PRIMARY KEY (owner_id, backend_id, name)
+);
+
+ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_secrets ADD COLUMN IF NOT EXISTS ciphertext TEXT NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.html_backend_versions (
+  backend_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  type_defs TEXT NOT NULL,
+  compiled TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
+  PRIMARY KEY (backend_id, version)
+);
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS version TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS type_defs TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS compiled TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS secret_bindings JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
+
+CREATE TABLE IF NOT EXISTS app.html_backend_stores (
+  backend_id TEXT NOT NULL,
+  value JSONB,
+  version INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (backend_id)
+);
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS value JSONB;
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS app.groups (
   id TEXT NOT NULL,
   handle TEXT NOT NULL,
@@ -236,164 +340,6 @@ ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS run_id TEXT NOT NULL;
 ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS sequence INTEGER NOT NULL;
 
 ALTER TABLE app.runner_events ADD COLUMN IF NOT EXISTS event JSONB NOT NULL;
-
-CREATE TABLE IF NOT EXISTS app.hosted_conversations (
-  owner TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  revision INTEGER NOT NULL DEFAULT 0,
-  input_buffer TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY (owner, artifact_id)
-);
-
-ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.hosted_conversations ADD COLUMN IF NOT EXISTS input_buffer TEXT NOT NULL DEFAULT '';
-
-CREATE TABLE IF NOT EXISTS app.hosted_branches (
-  id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  request_key TEXT NOT NULL,
-  input JSONB NOT NULL,
-  program_source TEXT,
-  run_id TEXT,
-  cancel_pending BOOLEAN NOT NULL DEFAULT false,
-  cursor INTEGER NOT NULL DEFAULT 0,
-  checkpoint JSONB,
-  result JSONB,
-  status TEXT NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS request_key TEXT NOT NULL;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS input JSONB NOT NULL;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS program_source TEXT;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS run_id TEXT;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS cancel_pending BOOLEAN NOT NULL DEFAULT false;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS cursor INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS checkpoint JSONB;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS result JSONB;
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-ALTER TABLE app.hosted_branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_hosted_request ON app.hosted_branches (owner, request_key);
-
-CREATE INDEX IF NOT EXISTS idx_hosted_pending ON app.hosted_branches (status, created_at);
-
-CREATE TABLE IF NOT EXISTS app.runner_schedules (
-  id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  spec JSONB NOT NULL,
-  next_due_at TIMESTAMPTZ NOT NULL,
-  active_request TEXT,
-  enabled BOOLEAN NOT NULL DEFAULT true,
-  deleted BOOLEAN NOT NULL DEFAULT false,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS spec JSONB NOT NULL;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS next_due_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS active_request TEXT;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;
-
-ALTER TABLE app.runner_schedules ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT false;
-
-CREATE INDEX IF NOT EXISTS idx_schedule_due ON app.runner_schedules (enabled, next_due_at);
-
-CREATE INDEX IF NOT EXISTS idx_schedule_owner ON app.runner_schedules (owner, id);
-
-CREATE TABLE IF NOT EXISTS app.runner_schedule_occurrences (
-  request_id TEXT NOT NULL,
-  schedule_id TEXT NOT NULL,
-  scheduled_at TIMESTAMPTZ NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  PRIMARY KEY (request_id)
-);
-
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS schedule_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE app.runner_schedule_occurrences ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at);
-
-CREATE INDEX IF NOT EXISTS idx_occurrence_status ON app.runner_schedule_occurrences (status);
-
-CREATE TABLE IF NOT EXISTS app.runner_schedule_attempts (
-  id TEXT NOT NULL,
-  occurrence_id TEXT NOT NULL,
-  attempt_number INTEGER NOT NULL,
-  request_id TEXT NOT NULL,
-  run_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
-  next_attempt_at TIMESTAMPTZ NOT NULL,
-  error TEXT,
-  result JSONB,
-  envelope JSONB,
-  lease_token TEXT,
-  lease_until TIMESTAMPTZ,
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS occurrence_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS attempt_number INTEGER NOT NULL;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS run_id TEXT;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS error TEXT;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS result JSONB;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS envelope JSONB;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS lease_token TEXT;
-
-ALTER TABLE app.runner_schedule_attempts ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_attempt_number ON app.runner_schedule_attempts (occurrence_id, attempt_number);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_attempt_request ON app.runner_schedule_attempts (request_id);
-
-CREATE INDEX IF NOT EXISTS idx_attempt_dispatch ON app.runner_schedule_attempts (status, next_attempt_at, lease_until);
 
 CREATE TABLE IF NOT EXISTS app.pages_sessions (
   id_hash TEXT NOT NULL,
@@ -689,71 +635,6 @@ ALTER TABLE app.dataset_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ N
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_images_operation ON app.dataset_images (dataset_id, actor_id, operation_key);
 
 CREATE INDEX IF NOT EXISTS idx_dataset_images_dataset ON app.dataset_images (dataset_id, created_at);
-
-CREATE TABLE IF NOT EXISTS app.remote_agents (
-  id TEXT NOT NULL,
-  owner TEXT NOT NULL,
-  name TEXT NOT NULL,
-  active BOOLEAN NOT NULL DEFAULT true,
-  proof_hash TEXT NOT NULL,
-  info JSONB NOT NULL,
-  seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS proof_hash TEXT NOT NULL;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS info JSONB NOT NULL;
-
-ALTER TABLE app.remote_agents ADD COLUMN IF NOT EXISTS seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_agent_name ON app.remote_agents (owner, name) WHERE active;
-
-CREATE TABLE IF NOT EXISTS app.remote_work (
-  id TEXT NOT NULL,
-  seq BIGSERIAL NOT NULL,
-  owner TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  artifact_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  comment_id TEXT NOT NULL,
-  phase TEXT NOT NULL,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS seq BIGSERIAL NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS thread_id TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS data JSONB NOT NULL;
-
-ALTER TABLE app.remote_work ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_work_comment ON app.remote_work (session_id, comment_id);
-
-CREATE INDEX IF NOT EXISTS idx_remote_work_thread ON app.remote_work (artifact_id, thread_id);
 
 CREATE TABLE IF NOT EXISTS app.export_images (
   id TEXT NOT NULL,
@@ -1072,7 +953,7 @@ CREATE INDEX IF NOT EXISTS idx_tokens_user ON app.tokens (user_id) WHERE deleted
 
 CREATE TABLE IF NOT EXISTS app.artifacts (
   id TEXT NOT NULL,
-  token_id TEXT NOT NULL,
+  token_id TEXT,
   user_id TEXT,
   group_id TEXT,
   creator_user_id TEXT,
@@ -1103,7 +984,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS user_id TEXT;
 
@@ -1165,6 +1046,8 @@ BEGIN
   END IF;
 EXCEPTION WHEN feature_not_supported THEN NULL;
 END $$;
+
+ALTER TABLE app.artifacts ALTER COLUMN token_id DROP NOT NULL;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
@@ -1332,11 +1215,13 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   quote TEXT,
   range TEXT,
+  html_anchor JSONB,
   view_state JSONB,
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
   change_seq BIGINT,
+  change_token_id TEXT,
   PRIMARY KEY (id)
 );
 
@@ -1378,6 +1263,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
 
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS html_anchor JSONB;
+
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS view_state JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
@@ -1388,9 +1275,72 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
 
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_token_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
+
+CREATE TABLE IF NOT EXISTS app.comment_reactions (
+  comment_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  reactor_kind TEXT,
+  reactor_label TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (comment_id, user_id, kind)
+);
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_kind TEXT;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS reactor_label TEXT;
+
+ALTER TABLE app.comment_reactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.comment_reaction_events (
+  seq BIGINT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  comment_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  active BOOLEAN NOT NULL,
+  reactor_kind TEXT NOT NULL,
+  reactor_label TEXT,
+  count INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  token_id TEXT,
+  PRIMARY KEY (seq)
+);
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS comment_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_kind TEXT NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS reactor_label TEXT;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS count INTEGER NOT NULL;
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.comment_reaction_events ADD COLUMN IF NOT EXISTS token_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_comment_reaction_events_artifact_seq ON app.comment_reaction_events (artifact_id, seq);
 
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,

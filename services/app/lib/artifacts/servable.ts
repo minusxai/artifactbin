@@ -48,23 +48,14 @@ interface StoredRow {
 const isGraph = (document: unknown): boolean =>
   !!document && typeof document === 'object' && (document as { kind?: unknown }).kind === 'graph';
 
-/** Why the current code does not serve this row, or null when it does. Only markup is judged. */
+/** Native HTML requires source bytes; legacy markup additionally requires its stored graph and syntax marker. */
 export function unservable(row: StoredRow): UnservableDocument | null {
+  if (row.format === 'html') return typeof row.source === 'string' && row.source.trim() ? null : new UnservableDocument(row.version, 'unreadable');
   if (row.format !== 'markup') return null;
   // A row read without its `document` column is judged by the source it decoded to.
   if (('document' in row && !isGraph(row.document)) || typeof row.source !== 'string') return new UnservableDocument(row.version, 'unreadable');
   if (!hasCurrentDataSyntax(row.meta)) return new UnservableDocument(row.version, 'data_syntax');
   return null;
-}
-
-/**
- * A row's HEADER (read without `document` or `source`) judged by what it carries: a markup row in the current data
- * syntax. Whether its document decodes is not in it: a validator asks this beside a current prepared page, which is
- * prepared only from a row {@link servableDocument} passed (lib/publish/prepared `preparedHeadFor`). Retiring another
- * stored shape must also retire the prepared pages of its versions.
- */
-export function servableHeader(row: Pick<StoredRow, 'format' | 'meta'>): boolean {
-  return row.format === 'markup' && hasCurrentDataSyntax(row.meta);
 }
 
 /** THE CHECK the read paths call: the row unchanged when the current code serves it, else {@link UnservableDocument} thrown. */

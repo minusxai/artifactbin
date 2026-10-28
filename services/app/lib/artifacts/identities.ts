@@ -4,6 +4,8 @@ import {getDb,type Queryable} from '../platform/db';
 import {generateFileId} from '../platform/ids';
 import {CreationReplay} from './creation-ledger';
 import { accountOf, matchesWorkspaceAccount } from '../accounts';
+import {reserveArtifactIdentityPool} from './reservation-pool';
+import type {ArtifactReservationCandidate} from './reservation-pool-contracts';
 const owner=accountOf;
 export async function reserveIds(actor:AccessActor,batch:string,workspaceAccount?:string|null):Promise<string[]>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(batch))throw new CreationReplay({status:400,body:{error:'invalid_batch'}});
@@ -15,13 +17,13 @@ export async function reserveIds(actor:AccessActor,batch:string,workspaceAccount
  return(await getDb()).transaction(async tx=>{
   const inserted=await tx.query('INSERT INTO id_reservation_batches(owner,batch) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING batch',[namespace,batch]);
   if(!inserted.rows.length)return(await tx.query<{id:string}>('SELECT id FROM artifact_id_registry WHERE owner=$1 AND batch=$2 ORDER BY ordinal',[namespace,batch])).rows.map(row=>row.id);
-  const ids:string[]=[];
-  for(let attempt=0;ids.length<100&&attempt<1000;attempt++){
-   const id=generateFileId();
-   const result=await tx.query('INSERT INTO artifact_id_registry(id,owner,batch,ordinal) SELECT $1,$2,$3,$4 WHERE NOT EXISTS(SELECT 1 FROM artifacts WHERE id=$1) ON CONFLICT(id) DO NOTHING RETURNING id',[id,namespace,batch,ids.length]);
-   if(result.rows.length)ids.push(id);
-  }
-  if(ids.length!==100)throw new Error('ID allocation exhausted');return ids;
+  return reserveArtifactIdentityPool({generate:generateFileId,insert:async candidates=>{
+   const result=await tx.query<ArtifactReservationCandidate>(`INSERT INTO artifact_id_registry(id,owner,batch,ordinal)
+    SELECT candidate.id,$3,$4,candidate.ordinal FROM unnest($1::text[],$2::int[]) AS candidate(id,ordinal)
+    WHERE NOT EXISTS(SELECT 1 FROM artifacts WHERE id=candidate.id) ORDER BY candidate.ordinal
+    ON CONFLICT(id) DO NOTHING RETURNING id,ordinal`,[candidates.map(candidate=>candidate.id),candidates.map(candidate=>candidate.ordinal),namespace,batch]);
+   return result.rows;
+  }});
  });
 }
 /**

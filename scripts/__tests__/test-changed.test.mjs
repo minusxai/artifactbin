@@ -16,7 +16,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 const script = new URL('../ci/test-changed.mjs', import.meta.url).pathname;
-function fixture({ count = 1, cli = 0, discoveryExit = 0, transformExit = 0, appDependency = false, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
+function fixture({ count = 1, discoveryExit = 0, transformExit = 0, appDependency = false, malformed = false, runExit = 0, stray = [], unrelated = 0, triggers = [], runs = 1 } = {}, args = []) {
   const cwd = mkdtempSync(path.join(tmpdir(), 'local-test-budget-'));
   try {
     const put = (file, value) => { mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true }); writeFileSync(path.join(cwd, file), value); };
@@ -29,7 +29,6 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, transformExit = 0, app
     if (appDependency) put('services/app/pure.ts', 'export const value = 1;');
     put('node_modules/tsx/package.json', JSON.stringify({ type: 'module', exports: './index.mjs' }));
     put('node_modules/tsx/index.mjs', '');
-    for (let i = 0; i < cli; i++) put(`services/cli/test/c${i}.test.ts`, `import fs from 'node:fs'; fs.appendFileSync('../../commands.jsonl', '["cli"]\\n');`);
     const files = [...Array.from({ length: count }, (_, i) => ({ file: path.join(cwd, `scripts/__tests__/t${i}.test.mjs`), body: "import '../../source.ts';" })),
       ...Array.from({ length: unrelated }, (_, i) => ({ file: path.join(cwd, `scripts/__tests__/u${i}.test.mjs`), body: '' }))];
     for (const { file, body } of files) put(path.relative(cwd, file), body);
@@ -92,11 +91,6 @@ describe('local test command budget', () => {
     expect(large.stderr).toContain('PR');
     expect(large.stderr).not.toMatch(/--all|raise the cap|test:all/);
 
-    // CLI files spend the SAME budget, and are counted before either suite runs.
-    const withCli = fixture({ count: 1, cli: 50 });
-    expect(withCli.status).toBe(2);
-    expect(withCli.commands.map(c => c[0])).toEqual(['create', 'list', 'close']);
-
     // A discovery that exits non-zero, or answers with something that is not a file list, is an error
     // — never an empty selection reported as a pass.
     for (const options of [{ discoveryExit: 1 }, { malformed: true }]) {
@@ -107,16 +101,12 @@ describe('local test command budget', () => {
     }
   });
 
-  it('runs exactly what it selected: both suites in order, a focused CLI file alone, nothing after a failure', () => {
-    const both = fixture({ count: 1, cli: 1 });
-    expect(both.status, both.stderr).toBe(0);
-    expect(both.commands.map(c => c[0])).toEqual(['create', 'list', 'run', 'close', 'cli']);
+  it('runs exactly what it selected, and reports a failure with the runner status', () => {
+    const one = fixture({ count: 1 });
+    expect(one.status, one.stderr).toBe(0);
+    expect(one.commands.map(c => c[0])).toEqual(['create', 'list', 'run', 'close']);
 
-    const focused = fixture({ count: 0, cli: 1 }, ['--files', 'services/cli/test/c0.test.ts']);
-    expect(focused.status, focused.stderr).toBe(0);
-    expect(focused.commands).toEqual([['cli']]);
-
-    const failed = fixture({ count: 1, cli: 1, runExit: 7 });
+    const failed = fixture({ count: 1, runExit: 7 });
     expect(failed.status).toBe(7);
     expect(failed.commands.map(c => c[0])).toEqual(['create', 'list', 'run', 'close']);
     expect(failed.stderr).not.toContain('tsx');

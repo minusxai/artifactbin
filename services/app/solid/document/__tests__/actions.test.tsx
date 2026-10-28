@@ -20,10 +20,10 @@ it('toggles comments without changing document mode', () => {
   expect(view.getByRole('button', { name: 'Toggle comments' })).toHaveAttribute('aria-pressed', 'true');
 });
 
-it('omits app membership controls from read-only artifacts', () => {
+it('keeps people accessible independently of app mutations', () => {
   const view = render(() => <DocumentActions id="abc123" title="Report" version={1} owner canEdit canAnnotate
     like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
-  expect(view.queryByRole('button', { name: 'People' })).toBeNull();
+  expect(view.getByRole('button', { name: 'People' })).toBeTruthy();
 });
 
 it('draws every row of the controls panel alike: a ghost row with one icon and a lower-case label', () => {
@@ -31,10 +31,8 @@ it('draws every row of the controls panel alike: a ghost row with one icon and a
   try {
     const view = render(() => <DocumentActions id="abc123" title="Report" version={1} owner canEdit canAnnotate pwaEnabled
       like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} onDeleted={() => {}} />);
-    const schedule = view.getByRole('link', { name: 'Schedule artifact' });
-    expect(schedule).toHaveAttribute('href', '/schedules?artifact=abc123');
-    const rows = ['Toggle comments', 'Edit artifact', 'Install app', 'Schedule artifact', 'Download for offline', 'Fork artifact', 'Like artifact', 'Transfer ownership of Report', 'Refresh external images', 'Share', 'Delete Report']
-      .map(name => view.getAllByRole(name === 'Install app' || name === 'Schedule artifact' || name === 'Download for offline' ? 'link' : 'button', { name })[0]!);
+    const rows = ['Toggle comments', 'Install app', 'Download for offline', 'Fork artifact', 'Like artifact', 'Transfer ownership of Report', 'Refresh external images', 'Share', 'Delete Report']
+      .map(name => view.getAllByRole(name === 'Install app' || name === 'Download for offline' ? 'link' : 'button', { name })[0]!);
     const look = (row: HTMLElement) => row.className.split(/\s+/).filter(token => /^(h-control|rounded-|px-|font-mono|text-xs|hover:bg-)/.test(token)).sort().join(' ');
     for (const row of rows) {
       expect(row.querySelectorAll(':scope svg, :scope > span > svg').length, `${row.getAttribute('aria-label')} has one icon`).toBe(1);
@@ -42,4 +40,12 @@ it('draws every row of the controls panel alike: a ghost row with one icon and a
       expect(look(row), `${row.getAttribute('aria-label')} is drawn as a ghost sm row`).toBe(look(rows[0]!));
     }
   } finally { vi.unstubAllGlobals(); }
+});
+
+it('offers discussion and sharing without an in-app document editor', () => {
+  const view = render(() => <DocumentActions id="abc" title="Report" version={3} owner canEdit canAnnotate
+    like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
+  expect(view.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
+  expect(view.getByRole('button', { name: 'Toggle comments' })).toBeTruthy();
+  expect(view.getByRole('button', { name: 'Share' })).toBeTruthy();
 });

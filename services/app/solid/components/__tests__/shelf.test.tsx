@@ -2,10 +2,10 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import Shelf from '@/solid/components/Shelf';
+import Shelf, { RowActions } from '@/solid/components/Shelf';
 import type { ShelfRow } from '@/lib/workspace/shelf';
 
-const doc = (id: string, extra: Partial<ShelfRow> = {}): ShelfRow => ({ id, url: `/a/${id}`, title: `Doc ${id}`, format: 'markup', version: 1, updated_at: '2026-09-01T00:00:00.000Z', ...extra });
+const doc = (id: string, extra: Partial<ShelfRow> = {}): ShelfRow => ({ id, url: `/a/${id}`, title: `Doc ${id}`, format: 'html', version: 1, updated_at: '2026-09-01T00:00:00.000Z', ...extra });
 const folder = doc('fold01', { title: 'Reports', format: 'folder' });
 const posts: unknown[] = [];
 beforeEach(() => {
@@ -32,7 +32,24 @@ it('lets the server draw a document link and keeps a folder link in the app, tel
   expect(folderLink).not.toHaveAttribute('rel');
   expect(folderLink).toHaveAttribute('state', JSON.stringify({ format: 'folder' }));
   expect(screen.getByLabelText('Open Doc root')).not.toHaveAttribute('state');
-  expect(screen.getByLabelText('Edit Doc root')).toHaveAttribute('rel', 'external');
+  expect(screen.queryByLabelText('Edit Doc root')).toBeNull();
+});
+
+it.each(['Grid', 'List'] as const)('opens native pages without an editor entry in the group %s shelf and keeps management actions', (view) => {
+  const { container } = render(() => <Shelf rows={[doc('page', { title: 'Group page' })]} groupId="group01" actions="full" />);
+  fireEvent.click(screen.getByRole('button', { name: `${view} view` }));
+  expect(screen.getByRole('link', { name: 'Open Group page' })).toHaveAttribute('href', '/a/page');
+  expect(screen.queryByRole('link', { name: 'Edit Group page' })).toBeNull();
+  expect(container.querySelector('a[href*="#edit"]')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Group page' }));
+  for (const name of ['Manage sharing for Group page', 'Move Group page', 'Transfer ownership of Group page', 'Delete Group page']) {
+    expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
+  }
+});
+
+it('keeps the supported dataset editor as a separate route', () => {
+  render(() => <RowActions row={doc('data', { format: 'dataset' })} level="full" folders={[]} childCount={0} onRemoved={() => {}} onChanged={() => {}} />);
+  expect(screen.getByRole('link', { name: 'Edit Doc data' })).toHaveAttribute('href', '/a/data/edit');
 });
 
 it.each(['public', 'unlisted', 'private'] as const)('shows %s as an accessible icon and keeps artifact actions separate from navigation', async (visibility) => {
@@ -42,7 +59,7 @@ it.each(['public', 'unlisted', 'private'] as const)('shows %s as an accessible i
   expect(badge.textContent).toBe('');
   fireEvent.focus(badge);
   expect(await screen.findByRole('tooltip')).toHaveTextContent(visibility);
-  expect(screen.getByRole('tooltip').querySelector('span')?.style.bottom).toBe('0px');
+  await waitFor(() => expect(screen.getByRole('tooltip').querySelector('span')?.style.bottom).toBe('0px'));
   fireEvent.blur(badge);
   expect(screen.getByRole('link', { name: 'Open Doc one' })).toHaveAttribute('href', '/a/one');
   const menu = screen.getByRole('button', { name: 'More actions for Doc one' });

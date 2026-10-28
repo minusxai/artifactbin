@@ -35,13 +35,6 @@ import { servableDocument } from '@/lib/artifacts/servable';
 /** The parameter's name, in one place: the three doors and the export URL. */
 export const VERSION_PARAM = 'version';
 
-/**
- * What a refused write says to the person who pressed it. The chrome line that
- * says WHICH version this is lives with the bar that draws it
- * (solid/document/DocumentChrome archivedBanner).
- */
-export const archivedReadOnly = (version: number): string => `Version ${version} is read-only`;
-
 /** One archived version, resolved: its stored bytes and the metadata it was saved with. */
 export interface ArchivedRender {
   /** The version being shown. */
@@ -106,7 +99,7 @@ export async function archivedVersionFor(
   if (asked === 'none') return null;
   // Only a DOCUMENT has a version to render. A dataset, an image or a PDF at
   // `?version=` is the uniform 404 — not a second, half-built history view.
-  if (asked === 'invalid' || row.format !== 'markup') return 'not_found';
+  if (asked === 'invalid' || row.format !== 'html') return 'not_found';
   const head = row.version;
   if (opts.capture) {
     if (asked === head) return archived(asked, head, headRender(row));
@@ -126,7 +119,7 @@ export async function archivedVersionForActor(
   row: ArtifactRow,
   asked: number,
 ): Promise<ArchivedRender | 'not_found'> {
-  if (row.format !== 'markup' || !Number.isInteger(asked) || asked < 1) return 'not_found';
+  if (row.format !== 'html' || !Number.isInteger(asked) || asked < 1) return 'not_found';
   const head = row.version;
   // History is an editor's: nobody (no account, no token) reads it.
   if (!actor.userId && !actor.tokenId) return 'not_found';

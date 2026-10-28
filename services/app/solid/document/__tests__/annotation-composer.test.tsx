@@ -6,6 +6,7 @@ import { replaceComment } from './comment-input';
  * both are discarded the moment the thing they describe changes: a different durable node at the
  * same path, a widened target, a removed id. A caret comment carries no quote and is still a comment.
  */
+import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
@@ -36,7 +37,6 @@ const TEXT = (over: Partial<StoryEditSelection> = {}): StoryEditSelection => ({ 
 
 describe('the annotation composer', () => {
   beforeAll(() => preloadCommentField());
-  const online = { id: '11111111-1111-1111-1111-111111111111', name: 'review', online: true, managed: true, exitCode: null, activity: 'listening' };
   const openComposer = () => layer({ initialSelection: TEXT() });
 
   it('is a non-modal floating panel: no aria-modal, fixed at its position, and Escape cancels it exactly once', async () => {
@@ -202,69 +202,16 @@ describe('the annotation composer', () => {
     expect(screen.getByRole('dialog', { name: 'Annotation composer' }).style.left).not.toBe(movedLeft);
   });
 
-  it('starts empty and inserts a chosen agent with its stable target, requiring comment text', async () => {
-    knobs.sessions = [online, { ...online, id: 'offline', online: false, managed: false }];
+  it('starts empty, keeps a plain comment draft and never offers agent controls', async () => {
     openComposer(); await flush();
     const field = screen.getByLabelText('Annotation comment');
     expect(field).toHaveTextContent('');
-    fireEvent.click(screen.getByRole('button', { name: 'Tag review' })); await flush();
-    expect(field.querySelector('[data-comment-mention]')).toHaveTextContent('@review');
-    expect(screen.getByLabelText('Save annotation')).toBeDisabled();
-    replaceComment(field, '[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
+    replaceComment(field, 'Please review this');
+    expect(field).toHaveTextContent('Please review this');
+    expect(screen.queryByRole('group', {name:'Tag agent'})).toBeNull();
+    expect(fetchCalls.some(call=>call.url==='/api/remote/sessions')).toBe(false);
     fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
-    expect(JSON.parse(String(creates()[0]?.init?.body)).body).toBe('[@review](/chat?session=11111111-1111-1111-1111-111111111111) Please update this');
-  });
-
-  it.each([[], [online, { ...online, id: 'second' }], [{ ...online, online: false }], [{ ...online, activity: 'stopped' }], [{...online,runId:'native-box'}]].map((sessions) => ({ sessions })))('leaves new comments empty without a sole eligible online agent: %j', async ({ sessions }) => {
-    knobs.sessions = sessions;
-    openComposer(); await flush();
-    expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('');
-  });
-
-  it.each(['My draft', ''])('preserves an edited draft when sessions arrive late: %j', async (value) => {
-    let resolve!: (response: Response) => void;
-    const fallback = globalThis.fetch;
-    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => url === '/api/remote/sessions' ? new Promise((done) => { resolve = done; }) : fallback(url, init));
-    openComposer(); await flush();
-    const field = screen.getByLabelText('Annotation comment');
-    replaceComment(field, 'My draft');
-    replaceComment(field, value);
-    resolve(new Response(JSON.stringify({ sessions: [online] }))); await flush();
-    expect(field).toHaveTextContent(value);
-  });
-
-  it('keeps a removed chosen agent removed for the current composer', async () => {
-    knobs.sessions = [online];
-    openComposer(); await flush();
-    const field = screen.getByLabelText('Annotation comment');
-    expect(field).toHaveTextContent('');
-    fireEvent.click(screen.getByRole('button', { name: 'Tag review' })); await flush();
-    expect(field.querySelector('[data-comment-mention]')).toHaveTextContent('@review');
-    replaceComment(field, ''); await flush();
-    expect(field).toHaveTextContent('');
-  });
-
-  it('shows two quick choices and opens the full picker for the remaining agents', async () => {
-    knobs.sessions = [online, {...online,id:'second',name:'other'}, {...online,id:'33333333-3333-3333-3333-333333333333',name:'third'}];
-    openComposer(); await flush();
-    expect(screen.getAllByRole('button', {name:/^Tag /})).toHaveLength(2);
-    const agents = screen.getByRole('group', {name:'Tag agent'});
-    expect(within(agents).queryByText(/agents available/)).toBeNull();
-    expect(within(agents).getByRole('link', {name:'Manage agents'})).toHaveAttribute('href', '/chat');
-    fireEvent.click(screen.getByRole('button',{name:'+1 other'})); await flush();
-    fireEvent.click(screen.getByLabelText(/^Mention third/)); await flush();
-    expect(screen.getByLabelText('Annotation comment').querySelector('[data-comment-mention]')).toHaveTextContent('@third');
-  });
-
-  it('offers agent setup without navigating away from the comment draft', async () => {
-    knobs.sessions = [];
-    openComposer(); await flush();
-    const agents = screen.getByRole('group', {name:'Tag agent'});
-    expect(within(agents).getByText('No agents available')).toBeTruthy();
-    const add = within(agents).getByRole('link', {name:'Add agent'});
-    expect(add).toHaveAttribute('href', '/chat');
-    expect(add).toHaveAttribute('target', '_blank');
-    expect(add).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(JSON.parse(String(creates()[0]?.init?.body)).body).toBe('Please review this');
   });
 
   it('keeps the original view context across geometry updates and sends it with the native comment', async () => {
@@ -464,18 +411,44 @@ describe('the annotation composer', () => {
       }
       return fallback(url, init);
     });
+    RETRY_TUNING.policy = { delaysMs: [0, 0] };
     layer({ initialSelection: TEXT() });
     await flush();
     replaceComment(screen.getByLabelText('Annotation comment'), 'Retry me');
     fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    expect(screen.getByRole('alert')).toBeTruthy();
+    // Automatic retries (same key, after the lazily loaded policy) ran out, only then does the error show.
+    await waitFor(() => expect(keys).toHaveLength(3));
+    expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByLabelText('Annotation comment')).toHaveTextContent('Retry me');
     fail = false;
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(4);
     expect(keys[0]).toBeTruthy();
-    expect(keys[1]).toBe(keys[0]);
+    expect(new Set(keys).size).toBe(1);
+    delete RETRY_TUNING.policy;
   });
+});
+
+it('preserves native HTML selection identity without sending fabricated compiler coordinates or ambient state', async () => {
+  const anchor = { kind: 'html-node' as const, v: 1 as const, revision: '4', nodeId: 'af-node-7', quote: 'Selected words' };
+  layer({ initialSelection: TEXT({ nodeId: 'af-node-7', path: 'af-node-7', anchor }) });
+  await flush();
+  replaceComment(screen.getByLabelText('Annotation comment'), 'Native selection');
+  fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+  const body = JSON.parse(String(creates()[0]!.init!.body));
+  expect(body).toMatchObject({ anchor, body: 'Native selection' });
+  expect(body).not.toHaveProperty('node_id');
+  expect(body).not.toHaveProperty('range');
+  expect(body).not.toHaveProperty('quote');
+  expect(body).not.toHaveProperty('view_state');
+});
+it('persists native area geometry separately from native text offsets',async()=>{
+ const anchor={kind:'html-node' as const,v:1 as const,revision:'4',nodeId:'af-node-7',quote:''};
+ const range={v:1 as const,kind:'area' as const,box:{x:0.1,y:0.2,w:0.3,h:0.4}};
+ layer({initialSelection:TEXT({nodeId:'af-node-7',path:'af-node-7',anchor,range})});
+ await flush();replaceComment(screen.getByLabelText('Annotation comment'),'Area comment');
+ fireEvent.click(screen.getByLabelText('Save annotation'));await flush();
+ const body=JSON.parse(String(creates()[0]!.init!.body));
+ expect(body).toMatchObject({anchor,range});expect(body).not.toHaveProperty('node_id');
 });

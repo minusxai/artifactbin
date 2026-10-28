@@ -1,161 +1,35 @@
-import {restoreDocument,documentEdit} from './prepared-document';
-import {observedRequest} from '@/__tests__/conditional-request';
-/**
- * Document-tier lifecycle over the story engine: format switching, versioning
- * and revert, user-scope editing, and the preview compile. (Creation-path
- * contracts live in markup-tier.test.ts; this file covers the flows AROUND
- * publish.) The retired static render tiers have no input path anymore — see
- * the pre-engine coverage in markup-tier.test.ts for how their rows serve.
- */
-import { describe, expect, it } from 'vitest';
-import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as previewRoute } from '@/app/api/preview/route';
-import { applyEditFor,getArtifactById } from '@/lib/artifacts';
-
-
-import { parseContentInput } from '@/lib/publish/document/input';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
-import { useAppHarness, request } from '@/__tests__/harness';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
-
-const harness = useAppHarness();
-
-
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-
-describe('document creation guards', () => {
-  it('rejects a retired input, no input, and an unknown theme', async () => {
-    const t = await mintToken('t');
-    const cases: Array<[Record<string, unknown>, string]> = [
-      [{ markup: '<p>x</p>', markdown: '# x' }, 'markup_only'],
-      [{ title: 'x' }, 'one_of_markup_dataset_viz_image_pdf'],
-      [{ markup: '<p>x</p>', theme: 'vaporwave' }, 'unknown_theme'],
-    ];
-    for (const [body, error] of cases) {
-      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: body }));
-      expect(res.status).toBe(400);
-      expect((await res.json()).error).toBe(error);
-    }
-  });
-
-  it('rejects a retired theme name as unknown, listing the live names', async () => {
-    const t = await mintToken('t');
-    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>x</p>', theme: 'classical' } }));
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe('unknown_theme');
-    expect(body.allowed).toContain('manuscript');
-  });
-});
-
-describe('themes on stored rows', () => {
-  it('rebuilds stale stored nocturne styling consistently on cold and prepared reads', async () => {
-    const t = await mintToken('t');
-    const created = await (
-      await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
-      )
-    ).json();
-    // Let the publish warmup finish before simulating a legacy stored row.
-    await drainPreparedPageWarmups();
-    const db = await harness.db();
-    await db.query(
-      `UPDATE artifacts SET meta = meta || '{"theme":"nocturne","colorMode":null,"cssCompileVersion":"v-legacy","compiledCss":".stale-theme-sentinel{}"}' WHERE id = $1`,
-      [created.id],
-    );
-    await db.query('DELETE FROM prepared_pages WHERE artifact_id = $1', [created.id]);
-    for (const phase of ['cold', 'prepared']) {
-      const res = await serveArtifact(request(`/a/${created.id}/raw`), params({ id: created.id }));
-      expect(res.status, phase).toBe(200);
-      const html = await res.text();
-      expect(html, phase).toMatch(/<html[^>]*data-theme="nocturne"/);
-      expect(html, phase).toMatch(/<html[^>]*class="dark"/);
-      expect(html, phase).not.toContain('stale-theme-sentinel');
-      expect(html, phase).toContain('[data-theme="nocturne"]');
-      await drainPreparedPageWarmups();
-    }
-  });
-});
-
-describe('document editing', () => {
-  it('PUT republishes; revert restores the old source and theme', async () => {
-    const t = await mintToken('t');
-    const created = await (
-      await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>First</h1>', theme: 'manuscript' } }),
-      )
-    ).json();
-    expect(created.format).toBe('markup');
-
-    const put = await putArtifact(
-      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>Second</h1>', theme: 'industry' } }),
-      params({ id: created.id }),
-    );
-    expect(put.status).toBe(200);
-    expect((await put.json()).version).toBe(2);
-
-    let read = await (
-      await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: t.token }), params({ id: created.id }))
-    ).json();
-    expect(read.markup).toContain('Second');
-    expect(read.theme).toBe('industry');
-
-    const revert = await restoreDocument(t.token,created.id,1);
-    expect(revert.status).toBe(200);
-
-    read = await (
-      await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: t.token }), params({ id: created.id }))
-    ).json();
-    expect(read.markup).toContain('First');
-    expect(read.markup).not.toContain('Second');
-    expect(read.theme).toBe('manuscript');
-    expect(read.format).toBe('markup');
-  });
-
-  it('an account-scope replace edits any of the user’s artifacts', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
-    const t = await mintToken('laptop', user.id);
-    const created = await (
-      await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Mine</h1>' } }),
-      )
-    ).json();
-
-    const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
-    if (parsed instanceof Response) throw new Error('parse failed');
-    const prepared=documentEdit((await getArtifactById(created.id))!,{source:parsed.source!,metadata:{theme:'organic'},whole:true});
-    const result=await applyEditFor(identityForUser(user.id, ''),created.id,prepared);
-    if(!result||result instanceof Response||!result.applied)throw new Error('replace failed');
-    const row=result.row;
-    expect(row?.version).toBe(2);
-    expect(row?.source).toContain('Edited');
-    expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
-
-    const other = await createUser({ email: 'other@x.com' });
-    expect(await applyEditFor(identityForUser(other.id, ''),created.id,prepared)).toBeNull();
-  });
-
-  it('preview compiles the document tier without persisting (bearer auth)', async () => {
-    const t = await mintToken('t');
-    const res = await previewRoute(
-      request('/api/preview', { method: 'POST', token: t.token, json: { markup: '<h1 className="text-2xl font-bold">Draft</h1>' } }),
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { format: string; css?: string | null };
-    expect(body.format).toBe('markup');
-    expect(typeof body.css).toBe('string'); // the compiled per-story sheet
-    expect(body.css).toContain('text-2xl');
-
-    // A document carrying markdown previews through the same engine.
-    const md = await previewRoute(
-      request('/api/preview', { method: 'POST', token: t.token, json: { markup: '<h1>Draft</h1>' } }),
-    );
-    expect(((await md.json()) as { format: string }).format).toBe('markup');
-
-    const noAuth = await previewRoute(request('/api/preview', { method: 'POST', json: { markup: '<p>x</p>' } }));
-    expect(noAuth.status).toBe(401);
-  });
+/** Native HTML lifecycle retains original account ownership, immutable versions and conditional writes. */
+import {describe,expect,it} from 'vitest';
+import {POST as create} from '@/app/api/artifacts/route';
+import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
+import {GET as raw} from '@/app/a/[id]/raw/route';
+import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
+import {POST as preview} from '@/app/api/preview/route';
+import {restoreDocument} from './prepared-document';
+import {nativeSource} from './native-publication-fixture';
+import {request,useAppHarness,mintAccountToken} from './harness';
+useAppHarness();const ctx=(id:string)=>({params:Promise.resolve({id})});
+describe('native page lifecycle',()=>{
+ it('rejects missing, retired JSX and program input without advertising the retired compiler',async()=>{
+  const owner=await mintAccountToken('guards');
+  for(const [body,error]of [[{title:'Missing'},'one_of_html_dataset_viz_image_pdf_file'],[{markup:'<p>Retired</p>'},'native_html_required'],[{program:'source'},'unsupported_format']] as const){
+   const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(response.status).toBe(400);expect((await response.json()).error).toBe(error);
+  }
+ });
+ it('keeps source and earlier versions through replacement and restoration on the same identity',async()=>{
+  const owner=await mintAccountToken('history'),created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<h1>Original</h1>'),visibility:'public'}}));expect(created.status).toBe(201);const first=await created.json();
+  const edited=await replace(request(`/api/artifacts/${first.id}`,{method:'PUT',token:owner.token,json:{html:first.html.replace('Original','Changed'),expectedVersion:first.version,expectedState:first.state}}),ctx(first.id));expect(edited.status).toBe(200);
+  const historical=await version(request(`/api/artifacts/${first.id}/versions/1`,{token:owner.token}),{params:Promise.resolve({id:first.id,version:'1'})});expect(historical.status).toBe(200);expect((await historical.json()).html).toBe(first.html);
+  const restored=await restoreDocument(owner.token,first.id,1);expect(restored.status).toBe(200);const head=await restored.json();expect(head.id).toBe(first.id);expect(head.version).toBe(3);expect(head.html).toContain('Original');
+  expect((await read(request(`/api/artifacts/${first.id}`,{token:owner.token}),ctx(first.id))).status).toBe(200);
+ });
+ it('preserves owner-only writes while public readers can see native source rendered through raw',async()=>{
+  const owner=await mintAccountToken('owner'),stranger=await mintAccountToken('stranger');const first=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Public body</p>'),visibility:'public'}}))).json();
+  expect((await raw(request(`/a/${first.id}/raw`),ctx(first.id))).status).toBe(200);
+  expect((await replace(request(`/api/artifacts/${first.id}`,{method:'PUT',token:stranger.token,json:{html:first.html,expectedVersion:first.version,expectedState:first.state}}),ctx(first.id))).status).toBe(404);
+ });
+ it('native preview validates HTML without persisting an artifact or compiling JSX',async()=>{
+  const owner=await mintAccountToken('preview');const result=await preview(request('/api/preview',{method:'POST',token:owner.token,json:{html:nativeSource('<h1>Draft</h1>')}}));expect(result.status).toBe(200);expect(await result.json()).toEqual({html:'',format:'html'});
+  expect((await preview(request('/api/preview',{method:'POST',json:{html:nativeSource('<p>Unauthorized</p>')}}))).status).toBe(401);
+ });
 });

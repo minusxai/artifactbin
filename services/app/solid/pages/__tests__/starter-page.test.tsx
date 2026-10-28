@@ -3,8 +3,7 @@
  * THE STARTER (solid/pages/Starter): a document still holding the start placeholder is not compiled
  * (lib/artifact-page), so its page is app UI — the document page's bar and the agent instructions.
  * It reloads into the compiled reader the moment the first
- * real version arrives, reports its view once, and opens the editor on the compiled placeholder at
- * `/edit` (`#edit` included), as it does for any starter.
+ * real version arrives and reports its view once. Legacy edit hashes keep the reader on the starter.
  */
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
@@ -33,7 +32,7 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
-    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'markup', title: null, source: frameSource, dataPreview: null });
+    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'html', title: null, source: frameSource, dataPreview: null });
     if (url.includes('/members')) return Response.json({ members: [], pending: [], self: null, canManage: false, canInvite: false });
     return Response.json({});
   }));
@@ -42,7 +41,7 @@ afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.rep
 
 const answer = (role: StarterAnswer['role'] = 'owner'): StarterAnswer => ({
   role, kind: role === 'viewer' ? 'none' : 'anon', like: { liked: false, count: 0 }, follow: null,
-  surface: { id: 'sta001', editId: 'e1', format: 'markup', title: null, heading: 'Untitled', visibility: 'public', version: 1, starter: true, author: { username: null }, openAnnotations: 0, theme: null, colorMode: null },
+  surface: { id: 'sta001', editId: 'e1', format: 'html', title: null, heading: 'Untitled', visibility: 'public', version: 1, starter: true, author: { username: null }, openAnnotations: 0, theme: null, colorMode: null },
 });
 const open = (data = answer(), path = '/a/sta001') => {
   window.history.replaceState(null, '', path);
@@ -87,12 +86,12 @@ const controls = (): Promise<HTMLElement> => waitFor(() => {
   return within(roots.find((root) => root.querySelector('[aria-label="Artifact controls"]')) ?? document.body).getByRole('region', { name: 'Artifact controls' });
 });
 
-it('wears the document page\'s bar and its artifact controls, with editing only for writers', async () => {
+it('wears the document page\'s bar and its artifact controls, without in-app editing', async () => {
   open();
   expect(screen.getByRole('banner', { name: 'Page bar' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = within(await controls());
-  expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
+  expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
   cleanup(); document.body.replaceChildren();
   open(answer('viewer'));
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -100,16 +99,10 @@ it('wears the document page\'s bar and its artifact controls, with editing only 
   expect(within(await controls()).queryByRole('button', { name: 'Edit artifact' })).toBeNull();
 });
 
-it('opens the editor on the compiled placeholder: #edit and Edit both cross to /edit', () => {
-  open(answer(), '/a/sta001#edit');
-  expect(replaceDocument).toHaveBeenCalledWith('/a/sta001/edit');
-  cleanup(); document.body.replaceChildren(); vi.mocked(replaceDocument).mockClear();
-  open();
-  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-  expect(replaceDocument).toHaveBeenCalledWith('/a/sta001/edit');
-  cleanup(); document.body.replaceChildren(); vi.mocked(replaceDocument).mockClear();
-  open(answer('viewer'), '/a/sta001#edit');
+it.each(['owner', 'viewer'] as const)('keeps a %s on the starter for a legacy edit hash', (role) => {
+  open(answer(role), '/a/sta001#edit');
   expect(replaceDocument).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });
 
 it('reloads into the compiled reader when the first real version arrives, not before', async () => {
@@ -127,9 +120,9 @@ it('reports the open once', async () => {
 });
 
 
-it('offers a blank report transition only to writers', () => {
+it('keeps the native agent handoff free of the retired document editor', () => {
   open();
-  expect(screen.getByRole('button', { name: 'Continue with blank report' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Continue with blank report' })).toBeNull();
   cleanup(); document.body.replaceChildren();
   open(answer('viewer'));
   expect(screen.queryByRole('button', { name: 'Continue with blank report' })).toBeNull();

@@ -9,7 +9,8 @@
  * present and unforgeable.
  */
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
-import { replaceArtifactFromRequest } from '@/lib/publish/publish';
+import {runOperation} from '@/lib/operations/http';
+import {ensureUserToken,withAccountToken} from '@/lib/accounts';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
@@ -25,7 +26,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const row = await getEditableArtifactFor(actor, id);
   if (!row) return json({ error: 'not_found' }, 404);
-  const wire = await artifactToWireWithAnnotations(row, baseUrl(request));
+  const wire = await artifactToWireWithAnnotations(row, baseUrl(request), actor.userId);
   // The EDITOR loads through here, and it names a dataset in the data view —
   // "C1kWy2" names nothing to a person. artifactToWire has no viewer to check
   // access with, so the join happens where one exists: a ref the viewer may
@@ -55,7 +56,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  return replaceArtifactFromRequest(request, actor, id, baseUrl(request));
+  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
+  // Only bundled HTML allocates dependencies. Other saves keep the initiating credential for audit.
+  const allocatesDependencies=typeof body.html==='string'&&body.publicationBundle!==undefined;
+  const writer=allocatesDependencies?(actor.userId?{...actor,tokenId:await ensureUserToken(actor.userId)}:await withAccountToken(actor)):actor;
+  return writer?runOperation('update_artifact',request,writer,{...body,id}):json({error:'unauthorized'},401);
 }
 
 /** Browser metadata shares the same state condition and validation as the CLI. */

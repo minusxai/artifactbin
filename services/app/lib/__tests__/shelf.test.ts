@@ -5,7 +5,7 @@ import { buildShelf, groupShelfByRecency, type ShelfItem } from '@/lib/workspace
 const docs = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
     id: `doc${i}`,
-    format: 'markup',
+    format: 'html',
     updated_at: `2026-08-${String(28 - i).padStart(2, '0')}T00:00:00.000Z`,
   }));
 const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
@@ -14,13 +14,23 @@ describe('buildShelf', () => {
   it('returns uniform document, folder, and asset collections', () => {
     const shelf = buildShelf([
       { id: 'd1', format: 'dataset', updated_at: '2026-08-28T00:00:00.000Z' },
-      { id: 'm1', format: 'markup', updated_at: '2026-08-27T00:00:00.000Z' },
+      { id: 'm1', format: 'html', updated_at: '2026-08-27T00:00:00.000Z' },
       { id: 'f1', format: 'folder', updated_at: '2026-08-26T12:00:00.000Z' },
       { id: 'i1', format: 'image', updated_at: '2026-08-26T00:00:00.000Z' },
     ]);
     expect(ids(shelf.documents)).toEqual(['m1']);
     expect(ids(shelf.folders)).toEqual(['f1']);
     expect(ids(shelf.assets)).toEqual(['d1', 'i1']);
+    expect(shelf.total).toBe(1);
+  });
+
+  it('treats native HTML as a page and does not treat retired markup rows as pages', () => {
+    const shelf = buildShelf([
+      { id: 'html', format: 'html', updated_at: '2026-08-28T00:00:00.000Z' },
+      { id: 'legacy', format: 'markup', updated_at: '2026-08-27T00:00:00.000Z' },
+    ]);
+    expect(ids(shelf.documents)).toEqual(['html']);
+    expect(ids(shelf.assets)).toEqual(['legacy']);
     expect(shelf.total).toBe(1);
   });
 
@@ -38,13 +48,13 @@ describe('buildShelf', () => {
   });
 
   it('keeps input order among rows sharing a timestamp', () => {
-    const same = ['a', 'b', 'c'].map((id) => ({ id, format: 'markup', updated_at: '2026-08-28T00:00:00.000Z' }));
+    const same = ['a', 'b', 'c'].map((id) => ({ id, format: 'html', updated_at: '2026-08-28T00:00:00.000Z' }));
     expect(ids(buildShelf(same).documents)).toEqual(['a', 'b', 'c']);
   });
 
   it('passes richer row types through untouched', () => {
     interface Row extends ShelfItem { id: string; views: number }
-    const row: Row = { id: 'x', format: 'markup', updated_at: '2026-08-28T00:00:00.000Z', views: 9 };
+    const row: Row = { id: 'x', format: 'html', updated_at: '2026-08-28T00:00:00.000Z', views: 9 };
     const shelf = buildShelf<Row>([row]);
     expect(shelf.documents[0]).toBe(row);
     expect(shelf.documents[0].views).toBe(9);
@@ -54,12 +64,12 @@ describe('buildShelf', () => {
 describe('groupShelfByRecency', () => {
   it('creates Finder-like calendar groups, omits empty bands, and preserves row order', () => {
     const rows = [
-      { id: 'today', format: 'markup', updated_at: '2026-09-04T09:00:00' },
-      { id: 'yesterday', format: 'markup', updated_at: '2026-09-03T09:00:00' },
-      { id: 'week-newer', format: 'markup', updated_at: '2026-09-01T09:00:00' },
-      { id: 'week-older', format: 'markup', updated_at: '2026-08-29T09:00:00' },
-      { id: 'month', format: 'markup', updated_at: '2026-08-12T09:00:00' },
-      { id: 'old', format: 'markup', updated_at: '2026-07-01T09:00:00' },
+      { id: 'today', format: 'html', updated_at: '2026-09-04T09:00:00' },
+      { id: 'yesterday', format: 'html', updated_at: '2026-09-03T09:00:00' },
+      { id: 'week-newer', format: 'html', updated_at: '2026-09-01T09:00:00' },
+      { id: 'week-older', format: 'html', updated_at: '2026-08-29T09:00:00' },
+      { id: 'month', format: 'html', updated_at: '2026-08-12T09:00:00' },
+      { id: 'old', format: 'html', updated_at: '2026-07-01T09:00:00' },
     ];
     const groups = groupShelfByRecency(rows, new Date('2026-09-04T12:00:00'));
     expect(groups.map(({ label }) => label)).toEqual(['Today', 'Yesterday', 'This Week', 'Last Month', 'Older']);
@@ -74,7 +84,7 @@ describe('groupShelfByRecency', () => {
 
   it('does not render empty date groups', () => {
     const groups = groupShelfByRecency(
-      [{ id: 'today', format: 'markup', updated_at: '2026-09-04T09:00:00' }],
+      [{ id: 'today', format: 'html', updated_at: '2026-09-04T09:00:00' }],
       new Date('2026-09-04T12:00:00'),
     );
     expect(groups.map(({ label }) => label)).toEqual(['Today']);

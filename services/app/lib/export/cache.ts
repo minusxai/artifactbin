@@ -5,7 +5,8 @@ export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';
   bytes:number; width:number; height:number;
 }
-interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean }
+/** `current`: never answer with an image of another source revision (explicit exports); social cards may serve the previous one while refreshing. */
+interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean }
 interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
@@ -52,10 +53,10 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
       const baseline=state.image?.id??null,deadline=performance.now()+waitMs;
       let attempt=0;
       for(;;){
-        const image=state.image;
+        const image=state.image,usable=!!image&&!request.refresh&&(!request.current||state.source_revision===request.revision);
         const refreshed=!request.refresh||image?.id!==baseline;
         if(image&&state.fresh&&state.source_revision===request.revision&&refreshed)return image;
-        if(state.backoff){if(image&&!request.refresh)return image;throw new ExportCacheUnavailable();}
+        if(state.backoff){if(usable)return image!;throw new ExportCacheUnavailable();}
         const token=randomUUID();
         // The conditional update is the cross-process mutex. Preserve the old image.
         const claimed=await db.query(`UPDATE export_image_cache SET claim_token=$2,
@@ -68,7 +69,7 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
         if(claimed.rows.length){
           const job=produceAndPublish(request,token,produce);jobs.add(job);
           void job.then(()=>jobs.delete(job),()=>jobs.delete(job));
-          if(image&&!request.refresh)return image;
+          if(usable)return image!;
           let timer:ReturnType<typeof setTimeout>|undefined;
           try {
             const result=await Promise.race([job,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new ExportCacheUnavailable()),Math.max(1,deadline-performance.now()));})]);
@@ -76,7 +77,7 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
           } finally {clearTimeout(timer);}
           state=await snapshot(request.cacheKey);continue;
         }
-        if(image&&!request.refresh)return image;
+        if(usable)return image!;
         const remaining=deadline-performance.now();if(remaining<=0)throw new ExportCacheUnavailable();
         const delay=polls[Math.min(attempt++,polls.length-1)]!*(0.9+Math.random()*0.2);
         await new Promise(r=>setTimeout(r,Math.min(delay,remaining)));

@@ -62,7 +62,7 @@ async function sourceReadable(tx:Queryable,source:{row:ReadableArtifact},documen
 }
 export async function notificationExecutionFence(tx:Queryable,input:MutationNotificationJobInput):Promise<MutationNotificationPlan['executionFence']>{
  const principal=await notificationPrincipal(tx,input.initiator.principal),document=await notificationArtifactAuthority(tx,input.origin.documentId);
- if(principal.actor.userId!==input.bindings.userId||document.row.format!=='markup'||!await readThrough(tx,document.row,principal.actor))throw denied();
+ if(principal.actor.userId!==input.bindings.userId||document.row.format!=='html'||!await readThrough(tx,document.row,principal.actor))throw denied();
  return {principalRevision:principal.revision,documentRevision:document.revision,contextRevision:input.contextRevision};
 }
 /** Fence the initiating credential through the mutation commit, including revocation during SQL. */
@@ -108,7 +108,7 @@ export async function notificationSourcesReadableMany(tx:Queryable,recipientId:s
  const readable=async(documentId:string,sources:NotificationSource[]):Promise<boolean>=>{
   try{
    const document=rows.get(documentId);if(!document)throw denied();
-   if(document.format!=='markup'||!await readThrough(tx,document,identity.actor,facts))return false;
+   if(document.format!=='html'||!await readThrough(tx,document,identity.actor,facts))return false;
    for(const source of sources){
     const row=rows.get(source.artifactId);if(!row)throw denied();
     if(notificationSourceSchema({row})!==source.schemaRevision||!await sourceReadable(tx,{row},{row:document},identity,facts,connection))return false;
@@ -147,7 +147,7 @@ async function validateNotificationPlan(tx:Queryable,input:MutationNotificationJ
 async function canManageNotificationDocument(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>{
  try{
   const identity=await notificationPrincipal(tx,principal),authority=await notificationArtifactAuthority(tx,documentId),{row,shares}=authority;
-  if(row.format!=='markup')return false;
+  if(row.format!=='html')return false;
   if(owner(row,identity.actor)||row.group_id&&await getGroupRole(identity.actor.userId,row.group_id,tx)==='editor')return true;
   if(identity.kind!=='account')return false;
   return documentEditorReaches(row,identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));

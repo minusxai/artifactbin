@@ -1,0 +1,63 @@
+import {afterEach,expect,it} from 'vitest';
+import {build} from 'esbuild';
+import {createServer} from 'node:http';
+import {mkdtemp,mkdir,writeFile,rm,readdir,copyFile,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {buildPreviewParser} from '../../services/app/lib/skills/preview-assets.server.ts';
+import {buildHtmlAssets as compileActualRuntime} from '../../services/app/lib/html-runtime/build.server.ts';
+import {createHash} from 'node:crypto';
+import {prebuiltHtmlCore} from '../build/html-core.mjs';
+const cleanup=[];afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();});
+it('a relocated bundled HTTP server serves the exact native core without the source TypeScript tree',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'af-core-bundle-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));const source=path.join(root,'services/app/lib/html-runtime/build.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'export async function buildHtmlCore(){throw Error("source builder must not execute after bundling")}');
+ const expected='/* immutable HTML core */ globalThis.coreReady=true;';const output=path.join(root,'relocated/server.mjs');
+ await build({stdin:{contents:`export {buildHtmlCore,buildHtmlAssets} from ${JSON.stringify(source)};`,resolveDir:root,loader:'ts'},bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltHtmlCore(root,()=>({core:expected,apollo:"export const client={}",apolloPath:"/af/v1/apollo/test"}))]});
+ await rm(path.join(root,'services'),{recursive:true,force:true});const {buildHtmlCore,buildHtmlAssets}=await import(pathToFileURL(output).href);expect(await buildHtmlAssets()).toEqual({core:expected,apollo:"export const client={}",apolloPath:"/af/v1/apollo/test"});const server=createServer(async(_request,response)=>{try{response.setHeader('content-type','application/javascript');response.end(await buildHtmlCore());}catch{response.statusCode=500;response.end('core unavailable');}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));cleanup.push(()=>new Promise(resolve=>server.close(resolve)));const address=server.address();const response=await fetch(`http://127.0.0.1:${address.port}/af/core.js`);expect(response.status).toBe(200);expect(await response.text()).toBe(expected);
+});
+it('refuses to emit an empty immutable runtime',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'af-core-empty-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));const source=path.join(root,'services/app/lib/html-runtime/build.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'export function buildHtmlCore(){}');
+ await expect(build({entryPoints:[source],bundle:true,write:false,plugins:[prebuiltHtmlCore(root,()=> '')]})).rejects.toThrow('HTML core assets are empty');
+});
+
+it('relocates installed preview helpers and rejects skill-source/build drift',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'af-preview-bundle-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));
+ const source=path.join(root,'services/app/lib/skills/preview-assets.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'throw Error("source compiler must not execute in deployed server")');
+ const output=path.join(root,'relocated/preview.mjs'),expected={parser:'export function previewHtml(){}',datasets:'export function createLocalPreviewDatasets(){}',toolbox:'export const identity="prebuilt-toolbox";',parserSource:'authored parser source'};
+ const {prebuiltPreviewAssets}=await import('../build/html-core.mjs');
+ await build({stdin:{contents:`export {buildPreviewParser,buildPreviewDatasets,buildToolboxPlatform} from ${JSON.stringify(source)};`,resolveDir:root,loader:'ts'},bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltPreviewAssets(root,()=>expected)]});
+ await expect(build({entryPoints:[source],bundle:true,write:false,platform:'node',logLevel:'silent',plugins:[prebuiltPreviewAssets(root,()=>({...expected,toolbox:''}))]})).rejects.toThrow('Preview helper assets are empty');
+ await rm(path.join(root,'services'),{recursive:true,force:true});const helpers=await import(pathToFileURL(output).href);
+ expect(await helpers.buildPreviewParser(expected.parserSource)).toBe(expected.parser);expect(await helpers.buildPreviewDatasets()).toBe(expected.datasets);
+ const toolbox=await helpers.buildToolboxPlatform();expect(toolbox).toBe(expected.toolbox);const installed=path.join(root,'relocated/toolbox.mjs');await writeFile(installed,toolbox);expect((await import(pathToFileURL(installed).href)).identity).toBe('prebuilt-toolbox');
+ await expect(helpers.buildPreviewParser('different source')).rejects.toThrow('source differs');
+});
+
+it('serves every actual immutable runtime asset after relocating the server bundle',async()=>{
+ const assets=await compileActualRuntime(),root=await mkdtemp(path.join(tmpdir(),'af-actual-runtime-'));cleanup.push(()=>rm(root,{recursive:true,force:true}));
+ const source=path.join(root,'services/app/lib/html-runtime/build.server.ts');await mkdir(path.dirname(source),{recursive:true});await writeFile(source,'throw Error("source tree must not execute")');
+ const output=path.join(root,'relocated/server.mjs');await build({entryPoints:[source],bundle:true,format:'esm',platform:'node',outfile:output,plugins:[prebuiltHtmlCore(root,()=>assets)]});
+ await rm(path.join(root,'services'),{recursive:true,force:true});const {buildHtmlAssets}=await import(pathToFileURL(output).href);const relocated=await buildHtmlAssets();
+ expect(relocated).toEqual(assets);expect(relocated.portableEnginePath).toBe('/af/portable.js');
+ for(const [key,assetPath] of Object.entries(relocated))if(key.endsWith('Path'))expect(assetPath).toMatch(/^\/af\/[a-z]+\.js$/);
+ const installed=path.join(root,'installed'),project=path.join(root,'project'),skillSource=new URL('../../services/app/skills/artifactbin/scripts/',import.meta.url);await mkdir(installed);await mkdir(project);await writeFile(path.join(project,'index.html'),'<h1>Relocated runtime</h1>');
+ for(const name of await readdir(skillSource))if(name.endsWith('.mjs'))await copyFile(new URL(name,skillSource),path.join(installed,name));
+ await writeFile(path.join(installed,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('preview-html.mjs',skillSource),'utf8')));
+ // The selected server answers the relocated runtime at its flat /af/ addresses; the preview fetches it from there.
+ const served=new Map([['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]);
+ const {withHttpServer}=await import('../../services/test-support/src/net.ts');
+ const platform=await withHttpServer((request,reply)=>{const body=served.get(request.url);reply.writeHead(body===undefined?404:200,{'content-type':'text/javascript'});reply.end(body??'');});cleanup.push(()=>platform.close());
+ const {startPreview}=await import(pathToFileURL(path.join(installed,'preview.mjs')).href);const preview=await startPreview({root:project,platformOrigin:platform.base});cleanup.push(()=>preview.close());
+ for(const [resource,source] of [['/af/core.js',relocated.core],...Object.entries(relocated).filter(([key])=>key.endsWith('Path')).map(([key,value])=>[value,relocated[key.slice(0,-4)]])]){const response=await fetch(new URL(resource,preview.url));expect(response.status,resource).toBe(200);expect(await response.text(),resource).toBe(source);}
+
+});
+
+it('compiles the installed parser from deployed package cwd after actual server bundling relocates it',async()=>{
+ const {createRequire}=await import('node:module');const directory=await mkdtemp(path.join(tmpdir(),'preview-parser-server-bundle-'));cleanup.push(()=>rm(directory,{recursive:true,force:true}));
+ const outfile=path.join(directory,'server.mjs'),engine=createRequire(import.meta.url).resolve('esbuild');
+ await build({entryPoints:[path.resolve('lib/skills/preview-assets.server.ts')],outfile,bundle:true,platform:'node',format:'esm',target:'node22',plugins:[{name:'external-installed-build-engine',setup(builder){builder.onResolve({filter:/^esbuild$/},()=>({path:engine,external:true}));}}]});
+ const relocated=await import(pathToFileURL(outfile).href),source=await readFile(path.resolve('skills/artifactbin/scripts/preview-html.mjs'),'utf8');
+ const parser=await relocated.buildPreviewParser(source);await writeFile(path.join(directory,'parser.mjs'),parser);const installed=await import(pathToFileURL(path.join(directory,'parser.mjs')).href);
+ const packed=await installed.packPreviewExport({html:'<script type="module" src="./main.js"></script>',pathname:'/index.html',load:async()=>({contentType:'text/javascript',bytes:Buffer.from('export const value=42;')})});expect(packed).toContain('data:text/javascript;base64,');
+});

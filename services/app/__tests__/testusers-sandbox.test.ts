@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE SANDBOX, from the outside in.
  *
@@ -17,7 +18,7 @@ import { POST as annotateWeb } from '@/app/api/my/artifacts/[id]/annotations/rou
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { viewerIdentityFor } from '@/lib/document-data';
+import {getUserById} from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
 import { identityForUser, createTestUser, claimToken, createUser, getUserByUsername } from '@/lib/accounts';
@@ -50,7 +51,7 @@ const publish = async (token: string, body: object) => {
 it('acts as a full person inside the sandbox and is refused by name outside it', async () => {
   const owner = await account('sandboxowner');
   const testuser = await testUserOf(owner);
-  const real = await publish(owner.token, { markup: '<p>the real thing</p>', visibility: 'unlisted' });
+  const real = await publish(owner.token, { html:nativeHtml('<p>the real thing</p>'), visibility: 'unlisted' });
 
   // The one door in: the account forks its own page as the test user.
   const forked = await forkOperation(request(`/api/artifacts/${real.id}/fork`, { method: 'POST', token: owner.token, json: { as: { testuser: testuser.id } } }), params(real.id));
@@ -80,7 +81,7 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
     expect(response.status, name).toBe(403);
     const body = (await response.json()) as { error: string; hint?: string };
     expect(body.error, name).toBe('sandbox_only');
-    expect(String(body.hint), name).toContain('--as');
+    expect(String(body.hint), name).toContain('sandbox-owned copy');
   }
   // And it cannot follow the account that made it, either.
   const follow = await followRoute(request(`/api/users/${owner.userId}/follow`, { method: 'POST', actor: asTestUser, origin: 'same' }), params(owner.userId));
@@ -91,18 +92,18 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
 it('publishes at most unlisted, and the reply says what it really got', async () => {
   const owner = await account('capper');
   const testuser = await testUserOf(owner);
-  const asked = await publish(testuser.token, { markup: '<p>look at me</p>', visibility: 'public' });
+  const asked = await publish(testuser.token, { html:nativeHtml('<p>look at me</p>'), visibility: 'public' });
   expect(asked.visibility, 'the reply carries the visibility it was given, not the one asked for').toBe('unlisted');
   expect((await getArtifactById(asked.id))!.visibility).toBe('unlisted');
   // Nothing it makes is born public even by default.
-  const plain = await publish(testuser.token, { markup: '<p>and me</p>' });
+  const plain = await publish(testuser.token, { html:nativeHtml('<p>and me</p>') });
   expect(plain.visibility).toBe('unlisted');
 });
 
 it('is invisible to everything that lists people or their public work', async () => {
   const owner = await account('listowner');
   const testuser = await testUserOf(owner);
-  await publish(testuser.token, { markup: '<p>sandbox work</p>', visibility: 'public' });
+  await publish(testuser.token, { html:nativeHtml('<p>sandbox work</p>'), visibility: 'public' });
 
   // A PROFILE is reached by handle, and a test user never has one.
   const db = await getDb();
@@ -117,17 +118,14 @@ it('is invisible to everything that lists people or their public work', async ()
 
   // The <User> option picker offers members of a named document. A stranger's
   // picker never offers a test user…
-  const shared = await publish(owner.token, { markup: '<p>team</p>', visibility: 'unlisted' });
+  const shared = await publish(owner.token, { html:nativeHtml('<p>team</p>'), visibility: 'unlisted' });
   const column = { name: 'who', type: 'user' as const, constraints: { memberOf: [`ref:${shared.id}`] } };
   const offered = await userOptions(db, column, owner.userId);
   expect(offered.map(option => option.value)).toEqual([owner.userId]);
 });
 
-it('draws a test user by its label, so two people on a page are tellable apart', async () => {
-  const owner = await account('labeller');
-  const testuser = await testUserOf(owner);
-  const page = await publish(owner.token, { markup: '<p>who is here: <User userId="$_me.id" /></p>', visibility: 'unlisted' });
-  const identity = await viewerIdentityFor((await getArtifactById(page.id))!, testuser.id);
-  expect(identity).toMatchObject({ id: testuser.id, card: { name: testuser.label } });
-  expect(String(identity!.card!.name)).toMatch(/^Test user /);
+it('keeps a distinct display label on each retained test identity',async()=>{
+ const owner=await account('labeller');const testuser=await testUserOf(owner);
+ const identity=await getUserById(testuser.id);
+ expect(identity?.name).toBe(testuser.label);expect(identity?.name).toMatch(/^Test user /);
 });

@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { Copy } from 'lucide-solid';
 import { Badge } from '../ui/ui';
@@ -37,7 +38,7 @@ export function CustomDomainCard(): JSX.Element {
   const [homepage, setHomepage] = createSignal('');
   const [status, setStatus] = createSignal<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = createSignal(false);
-  const load = async () => { const response = await fetch('/api/my/domain', { cache: 'no-store' }).catch(() => null); const body = response?.ok ? await response.json().catch(() => null) as DomainSettings | null : null; if (body) setHomepage(body.domain?.homepageArtifactId ?? ''); setSettings(body && typeof body.enabled === 'boolean' ? { ...body, targetAddresses: body.targetAddresses ?? [] } : null); };
+  const load = async () => { const response = await retryingFetch('/api/my/domain', { cache: 'no-store' }).catch(() => null); const body = response?.ok ? await response.json().catch(() => null) as DomainSettings | null : null; if (body) setHomepage(body.domain?.homepageArtifactId ?? ''); setSettings(body && typeof body.enabled === 'boolean' ? { ...body, targetAddresses: body.targetAddresses ?? [] } : null); };
   onMount(() => void load());
   const send = async (method: string, path: string, body?: object) => { setBusy(true); setStatus(null); const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }).catch(() => null); setBusy(false); return response; };
   const attach = async () => { const response = await send('POST', '/api/my/domain', { hostname: hostname() }); if (!response) { setStatus({ tone: 'error', text: 'could not reach the server' }); return; } const body = await response.json().catch(() => ({})) as { error?: string }; if (!response.ok) { setStatus({ tone: 'error', text: ATTACH_REFUSALS[body.error ?? ''] ?? 'could not add that domain' }); return; } setHostname(''); await load(); };

@@ -4,7 +4,7 @@ import { type ArtifactHeader, type ArtifactRow, writerFor } from '@/lib/artifact
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
 import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
-import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
+import { executeDocumentQueries, type DocumentQuerySourceMode } from '../datasets/document-queries';
 import { JOIN_RELATIONS } from '../accounts';
 import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
@@ -26,7 +26,7 @@ import { sqlExtensions } from '@/lib/sql/extensions';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor } from '@/lib/artifacts';
-import type { RanDataflow, StoryViewer } from '@/lib/story-runtime/contract';
+import type { RanDataflow } from '@/lib/story-runtime/contract';
 
 /**
  * Run one of a stored document's declared mutations. Everything a reader
@@ -238,28 +238,6 @@ function sharedImports(resolve: DatasetResolver, cache: ImportCache | undefined)
   };
 }
 
-/**
- * The document's queries once per entry of `runs` (each its own values and `only`), as `viewer` —
- * dataflowForRow's run, resolver and access rule, but ONE engine call over imports loaded once:
- * the offline file's precomputed filters. Only the tables and errors of each run, in `runs` order
- * (no people, options or mutation access: a variant carries none of them). Empty for a document
- * that declares nothing; a document that cannot run answers its one fixed state for every run.
- */
-export async function dataflowRunsForRow(
-  row: ArtifactRow,
-  opts: Pick<DataflowRunOptions, 'viewer' | 'tz' | 'importCache'>,
-  runs: ReadonlyArray<{ values?: Record<string, Scalar>; only?: Iterable<string> }>,
-): Promise<Array<Pick<DataflowState, 'tables' | 'errors'>>> {
-  if (!row.source || !runs.length) return runs.map(() => ({ tables: {}, errors: {} }));
-  const declared = await declarationsForRow(row);
-  if (declared?.state) return runs.map(() => ({ tables: declared.state!.tables, errors: declared.state!.errors }));
-  if (!declared?.flow) return runs.map(() => ({ tables: {}, errors: {} }));
-  const members = await acceptedMembers(row.id);
-  const resolver = sharedImports(datasetResolverForRow(row, opts.viewer ?? null), opts.importCache);
-  const { state } = await executeDocumentQueriesMany(declared.flow, resolver, { members, userId: opts.viewer?.userId ?? null, tz: readerZone(opts.tz) }, runs);
-  return state.map(({ tables, errors }) => ({ tables, errors }));
-}
-
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.
  * The preview analyzes the statement under the DECLARED argument types too, so the button the page
  * draws and the write the click attempts are judged on one plan.
@@ -329,29 +307,6 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
  * never to decide what a viewer may see.
  */
 const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
-/**
- * WHO IS READING, as the document may show them (lib/story-runtime/contract
- * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
- * that draws a person, their card.
- *
- * The card comes from the SAME `people` lookup a DataTable cell has always
- * used, so nothing new about anyone is exposed: one row, by id, for the person
- * who is already logged in and asking. A guest gets null and no query at all,
- * and a document that never names a person pays nothing beyond the id it
- * already had in hand.
- */
-export async function viewerIdentityFor(
-  row: Pick<ArtifactRow, 'source'>,
-  userId: string | null | undefined,
-): Promise<StoryViewer | null> {
-  if (!userId) return null;
-  if (!drawsPeople(row.source)) return { id: userId };
-  try {
-    const cards = await people(await getDb(), [userId]);
-    return { id: userId, card: cards[userId] ?? null };
-  } catch { return { id: userId }; }
-}
-
 interface DataflowRunOptions {
   members?:Row[];
   /**
@@ -390,7 +345,7 @@ interface DataflowRunOptions {
  * database resolves to its catalog, which its queries run inside.
  */
 type DatasetResolver = (id: string, mode?: DocumentQuerySourceMode) => Promise<RefData | null>;
-export type ImportCache = Map<string, Promise<RefData | null>>;
+type ImportCache = Map<string, Promise<RefData | null>>;
 
 /** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
@@ -418,6 +373,15 @@ export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | n
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
 const datasetResolverForRow = (row: ArtifactRow, viewer: AccessActor | null): DatasetResolver => async (id,mode) =>
   tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
+
+/** Host-only registered query imports retain the original document reach / viewer grants split.
+ * Returns metadata only; the caller windows stored sources through executeCatalog. */
+export async function registeredQueryImportForRow(row:ArtifactRow,id:string,viewer:AccessActor){
+ const artifact=await importedArtifactFor(row,id);
+ const data=await tableForRef(artifact,viewer,row,false);
+ if(!artifact||artifact.format!=='dataset'||!data?.catalog)throw Error('query_source_unavailable');
+ return {artifact,catalog:data.catalog};
+}
 
 /** The artifact a document's import names, by the document's own reach. */
 const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<ArtifactRow | null> =>
@@ -455,44 +419,10 @@ async function holdableDataset(row: ArtifactHeader, ref: string, viewer: AccessA
   return catalog;
 }
 
-/**
- * WHAT THE DOCUMENT'S DATA IS, as one string that changes when it does: each imported dataset's
- * catalog (stored tables are content-addressed objects), version and access revisions. Null when
- * any import is not a stored dataset (a connected database can change under a constant key), so a
- * caller that caches results by this key never caches those.
- */
-export async function importsFingerprint(row: ArtifactRow, flow: CompiledDataflow): Promise<string | null> {
-  const refs = [...new Set(flow.imports.map((i) => i.ref))].sort();
-  if (flow.queries.some((q) => q.source)) return null;
-  const parts: unknown[] = [];
-  for (const ref of refs) {
-    const dataset = await importedArtifactFor(row, ref);
-    const catalog = dataset && dataset.format === 'dataset' ? catalogOf(dataset) : null;
-    if (!dataset || catalog?.kind !== 'stored') return null;
-    parts.push([ref, dataset.version, dataset.policy_revision ?? 0, dataset.sharing_revision ?? 0, catalog]);
-  }
-  return JSON.stringify(parts);
-}
-
 async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: AccessActor | null): Promise<ImportTables[string] | null> {
   const ref = importRef(flow, name);
   const catalog = ref ? await holdableDataset(row, ref, viewer) : null;
   return catalog ? importedRows(catalog) : null;
-}
-
-/**
- * The imports this reader may hold, by name, in declaration order — the
- * island's `dataflow.hold`. Asked on every page render, so it never reads a
- * dataset's rows: sizes come from storedRowStats, and a dataset imported
- * under several names is decided once.
- */
-export async function holdableImports(row: ArtifactHeader, flow: CompiledDataflow, viewer: AccessActor | null): Promise<string[]> {
-  const byRef = new Map<string, Promise<unknown>>();
-  const held = await Promise.all(flow.imports.map(async (i) => {
-    if (!byRef.has(i.ref)) byRef.set(i.ref, holdableDataset(row, i.ref, viewer));
-    return (await byRef.get(i.ref)) ? i.name : null;
-  }));
-  return held.filter((name): name is string => name !== null);
 }
 
 /** One import's rows for this reader, or null when they may not hold it (the query route's `hold`). */

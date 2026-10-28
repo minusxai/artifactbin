@@ -1,3 +1,4 @@
+import type {PresencePublication,PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * THE ARTIFACT BACKEND — every server call the document surface makes while
  * reading, editing and commenting, behind one interface.
@@ -18,12 +19,11 @@
  * Every type here is the shape the call site already read before the move.
  * The module is types only: importing it adds nothing to a bundle.
  */
-import type { AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
+import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/page-store';
-import type { RemoteSessionInfo } from '../../../contracts/src/remote';
 
 /** Features a backend may not offer. Online, every one is available. */
 export type BackendFeature =
@@ -32,7 +32,7 @@ export type BackendFeature =
   | 'versions'        // version history and restore
   | 'mentions'        // @mention lookup of members
   | 'commentImages'   // screenshots attached to comments
-  | 'remoteSessions'  // agent sessions offered in the comment composer
+  | 'commentReactions' // account reactions; unavailable in downloaded files
   | 'live';           // the live event stream
 
 /** Aborts a read whose answer nobody wants any more. */
@@ -48,6 +48,8 @@ export interface ArtifactHead {
   title: string | null;
   description?: string | null;
   markup: string | null;
+  /** Complete native HTML returned by the original authoring head endpoint. */
+  html?: string;
   theme: string | null;
   version: number;
   /** Head pointer of the edit protocol — every edit this session sends carries it. */
@@ -57,18 +59,6 @@ export interface ArtifactHead {
   sharing_revision?: number;
   ancestor_ids?: string[];
   refs?: Array<{ id: string; kind: string; title?: string | null }>;
-}
-
-/** The editor's view of the head (ArtifactEditor), seeded or loaded. */
-export interface LoadedArtifact extends ArtifactHead {
-  /**
-   * Present when the editor was SEEDED from the page (which holds it); the read
-   * API does not return it, so on the background-load path this is undefined and
-   * the draft compile supplies the sheet instead.
-   */
-  compiledCss?: string | null;
-  /** Present when SEEDED from the page: the document's server-run dataflow (InPlaceEditor's EditorArtifact). */
-  dataflow?: StoryIslandDataflow | null;
 }
 
 /** The body of an /edits (or /revert) answer, as use-live-edits reads it. */
@@ -154,14 +144,13 @@ export interface MembersAnswer {
   mentions?: Record<string, MembershipStatus>;
 }
 
-/** GET /api/remote/sessions. */
-export interface RemoteSessionsAnswer { sessions?: RemoteSessionInfo[] }
 
 /**
  * What the live stream delivers. The stream carries PINGS; the frame itself is
  * read with `liveFrame()`, and annotations with `listAnnotations('open')`.
  */
 interface LiveHandlers {
+  onPresence?: (viewers: PresenceViewer[]) => void;
   /** A head ping (`{editId, version, by}`), parsed; the subscriber validates it. */
   onPing: (ping: ArtifactVersionPing) => void;
   /** A dataset under this document changed (a named `data` frame), parsed. */
@@ -173,7 +162,7 @@ interface LiveHandlers {
 }
 
 /** A reply and/or a state transition; a reply may carry the comment image staged for it. */
-export interface AnnotationActionBody { reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
+export interface AnnotationActionBody { expected_revision?: number; reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
 
 /** One comment's new text; `expected_revision` is the THREAD revision the editor read (AnnotationWire.revision). */
 interface AnnotationEditBody { body: string; expected_revision?: number }
@@ -212,6 +201,8 @@ export interface ArtifactBackend {
    * `since` is the served results' mark (ServedResults.since): the stream first
    * reports every dataset that changed after the page's rows were computed.
    */
+  /** Ephemeral platform-owned reader session; null when refused or unavailable. */
+  publishPresence(input: PresencePublication): Promise<string | null>;
   live(handlers: LiveHandlers, options?: { since?: string }): () => void;
   /** The complete document a ping announced (GET /a/<id>/events/frame). Null when refused. */
   liveFrame(): Promise<ArtifactLiveEvent | null>;
@@ -222,6 +213,8 @@ export interface ArtifactBackend {
   /** Every page of annotations with this status; OPEN when `status` is omitted (the server's default). */
   listAnnotations(status?: 'open' | 'resolved', options?: RequestOptions): Promise<AnnotationWire[]>;
   /** Rejects with a BackendRequestError (`signInRequired` for a guest). */
+  /** Online only: tells a surface while a comment write waits between automatic retries. */
+  watchRetrying?(listener: (retrying: boolean) => void): () => void;
   createAnnotation(body: Record<string, unknown>, idempotencyKey: string): Promise<AnnotationWire>;
   /** A reply may carry one staged comment image (`attachment_id`, with the `edit_id` it was staged against). */
   actOnAnnotation(annotationId: string, body: AnnotationActionBody): Promise<AnnotationWire>;
@@ -232,6 +225,7 @@ export interface ArtifactBackend {
    * thread. Rejects with a BackendRequestError: `annotation_conflict` (409) when the thread moved past
    * `expected_revision`, 404 when the comment is gone or not this viewer's.
    */
+  setCommentReaction(commentId: string, body: CommentReactionInput): Promise<AnnotationWire>;
   editAnnotation(commentId: string, body: AnnotationEditBody): Promise<AnnotationWire>;
   /**
    * Optional exact authorship hint for comments held outside a server account (an offline file's own, a local
@@ -242,7 +236,7 @@ export interface ArtifactBackend {
   uploadCommentImage(form: FormData): Promise<{ id: string }>;
   /** `query` omitted reads the saved mentions' statuses; a string (even '') searches people. Null when refused. */
   members(query?: string, options?: RequestOptions): Promise<MembersAnswer | null>;
-  /** The agent sessions a comment can @mention; `{sessions: []}` when refused. */
-  remoteSessions(options?: RequestOptions): Promise<RemoteSessionsAnswer>;
-  deleteRemoteSession(sessionId: string): Promise<void>;
 }
+
+/** Initial reader transport; authoring and comment operations load with their own surfaces. */
+export type ReaderArtifactBackend = Pick<ArtifactBackend,'load'|'unavailable'|'live'|'liveFrame'|'publishPresence'|'listAnnotations'>;

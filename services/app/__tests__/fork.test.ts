@@ -15,6 +15,7 @@
  * applied after the copy; the reply is create-shaped plus `forked_from`.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import {nativeResponseIdentity} from './native-response-identity';
 import { agentCookie, useAppHarness, setSession } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
@@ -71,7 +72,7 @@ async function world(markup = PROSE, visibility: 'public' | 'private' = 'public'
   // `anon` is a legacy anonymous token (no account); `independent` is a token with an account of its own.
   const anon = await mintToken('anon',null);
   const independent = await mintToken('independent-account');
-  const doc = await create(ta.token, { markup, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry', template: 'dashboard' });
+  const doc = await create(ta.token, { html:markup, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry', template: 'dashboard' });
   return { ta, tb, anon, independent, owner, bob, doc };
 }
 /** A folder of this token's own — placement on the wire is an id. */
@@ -79,11 +80,6 @@ const createFolder = async (token: string, title: string) => (await create(token
 /** The bearer door: POST /api/artifacts/:id/fork, the registry's `fork_artifact`. */
 const bearerFork = (id: string, token?: string, body: Record<string, unknown> = {}) =>
   forkOpRoute(jreq(`/api/artifacts/${id}/fork`, 'POST', body, token), params(id));
-const MUTATING = (ds: string) =>
-  '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
-  + '<div><Button run="$vote">Vote</Button></div>';
-
 describe('POST /api/my/artifacts/:id/fork', () => {
   it('a signed-in reader forks a public document: same content, new id and owner, version 1, provenance kept', async () => {
     const w = await world();
@@ -127,26 +123,18 @@ describe('POST /api/my/artifacts/:id/fork', () => {
   it('refuses to copy a document stored in a retired shape, by name', async () => {
     const w = await world();
     const db = await getDb();
-    await db.query("UPDATE artifacts SET document=NULL,source=$2 WHERE id=$1", [w.doc.id, '<p id="old">Legacy</p>']);
+    await db.query("UPDATE artifacts SET format='markup',document=NULL,source=$2 WHERE id=$1", [w.doc.id, '<p id="old">Legacy</p>']);
     asSession(w.bob);
     const response = await fork(w.doc.id);
     expect(response.status, await response.clone().text()).toBe(410);
     expect(((await response.json()) as { error: string }).error).toBe('unservable_document');
   });
 
-  it('the retired anchor attribute does not travel, while source identity and prose do', async () => {
-    const w = await world();
-    const source = await head(w.doc.id);
-    // Inert on the original: publish keeps it as written, and the node has its own id.
-    expect(source.source).toMatch(/<p data-annotation-anchor="a1b2c3d4e" id="([A-Za-z0-9]+)">hello<\/p>/);
-    const id = /data-annotation-anchor="a1b2c3d4e" id="([A-Za-z0-9]+)"/.exec(source.source!)![1];
-    asSession({ id: w.bob.id, email: w.bob.email });
-    const res = await fork(w.doc.id);
-    expect(res.status, await res.clone().text()).toBe(201);
-    const copy = await head(((await res.json()) as { id: string }).id);
-    expect(copy.source).not.toContain('data-annotation-anchor');
-    expect(copy.source).toContain(`<p id="${id}">hello</p>`);
-    expect(copy.source).toContain('Payroll');
+  it('native node identities and author prose travel while comments remain scoped to the new page', async () => {
+    const w=await world();const source=await head(w.doc.id);asSession(w.bob);
+    const res=await fork(w.doc.id);expect(res.status).toBe(201);
+    const copy=await head((await res.json()).id);
+    expect(copy.source).toBe(source.source);expect(copy.source).toContain('data-af-id=');expect(copy.source).toContain('Payroll');
   });
 
   it('history does not travel: the copy has one version, its own', async () => {
@@ -211,7 +199,7 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
   it('placement does not travel: the copy is at the forker\'s root', async () => {
     const w = await world();
     const box = await create(w.ta.token, { format: 'folder', title: 'August' });
-    const filed = await create(w.ta.token, { markup: '<div><p>filed</p></div>', visibility: 'public', parent_id: box.id });
+    const filed = await create(w.ta.token, { html: '<div><p>filed</p></div>', visibility: 'public', parent_id: box.id });
     expect((await head(filed.id)).ancestor_ids).toEqual([box.id]);
     asSession({ id: w.bob.id, email: w.bob.email });
     const res = await fork(filed.id);
@@ -277,7 +265,7 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
  * carries no chrome and never names the source at all.
  *
  * The provenance is a fact about the copy, so it is resolved at render from
- * `forked_from` rather than written into the markup: an agent that rewrites
+ * `forked_from` rather than written into the html: an agent that rewrites
  * the document cannot delete the attribution, and nothing about the source is
  * baked into bytes that outlive its ACL.
  *
@@ -361,7 +349,9 @@ describe('the fork credit line', () => {
     // nothing here for a reader to tell the two apart with.
     await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
     expect(await credit(copy.id)).toEqual(said);
-    expect(await served(copy.id)).toBe(html);
+    const deleted=nativeResponseIdentity(await served(copy.id)),privateSource=nativeResponseIdentity(html);
+    expect(deleted.nonce).not.toBe(privateSource.nonce);
+    expect(deleted.html).toBe(privateSource.html);
   });
 
   it('a document nobody forked keeps the credits it always had', async () => {
@@ -404,8 +394,8 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     expect(typeof body.edit_id).toBe('string');
     expect(body.version).toBe(1);
     expect(String(body.url)).toContain(String(body.id));
-    expect(String(body.markup)).toContain('Payroll');
-    expect(String(body.markup)).not.toContain('data-annotation-anchor');
+    expect(String(body.html)).toContain('Payroll');
+    expect(String(body.html)).toContain('data-af-id=');
     const copy = await head(String(body.id));
     expect(copy.token_id).toBe(w.independent.id);
     expect(copy.user_id).toBe(w.independent.userId);
@@ -479,35 +469,17 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
    * anybody but its author. It is copied instead: the dataset comes along under
    * the forker, and the answer says which copies it made.
    */
-  it('a document that writes another owner\'s dataset is copied WITH that dataset, and the answer names the copies', async () => {
-    const w = await world();
-    const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public' });
-    const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
-    const res = await bearerFork(doc.id, w.tb.token);
-    expect(res.status, await res.clone().text()).toBe(201);
-    const body = (await res.json()) as { id: string; forked_from: string; datasets: Array<{ id: string; forked_from: string }> };
-    expect(body.forked_from).toBe(doc.id);
-    expect(body.datasets).toHaveLength(1);
-    expect(body.datasets[0]!.forked_from).toBe(ds.id);
-    const copiedDataset = await head(body.datasets[0]!.id);
-    expect(copiedDataset.user_id).toBe(w.bob.id);
-    expect(copiedDataset.access).toBe('readwrite');
-    // The page is repointed at the copy, and nothing still names the original.
-    const copy = await head(body.id);
-    expect(copy.source).toContain(`ref:${body.datasets[0]!.id}`);
-    expect(copy.source).not.toContain(`ref:${ds.id}`);
-    expect((copy.meta.refs as Array<{ id: string }>).map((r) => r.id)).toEqual([body.datasets[0]!.id]);
+  it('native dataset links retain their original live identity and grant no copied write authority', async () => {
+    const w=await world();const ds=await create(w.ta.token,{dataset:[{choice:'ramen'}],visibility:'public'});
+    const doc=await create(w.ta.token,{html:`<html><head><link rel="af-dataset" data-af-name="votes" href="ref:${ds.id}"></head><body>Votes</body></html>`,visibility:'public'});
+    const res=await bearerFork(doc.id,w.tb.token);expect(res.status).toBe(201);const body=await res.json();expect(body.datasets).toEqual([]);
+    const copy=await head(body.id);expect(copy.source).toContain(`ref:${ds.id}`);expect(copy.meta.htmlLinks).toEqual([{kind:'dataset',name:'votes',datasetId:ds.id,mode:'live'}]);
   });
 
-  it('dry_run answers what the fork would copy and creates nothing', async () => {
-    const w = await world();
-    const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public', title: 'votes' });
-    const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
-    const before = (await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).length;
-    const res = await bearerFork(doc.id, w.tb.token, { dry_run: true });
-    expect(res.status, await res.clone().text()).toBe(200);
-    expect(await res.json()).toEqual({ datasets: [{ id: ds.id, title: 'votes' }] });
-    expect((await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).length).toBe(before);
+  it('native dry_run creates neither a page nor dataset copies',async()=>{
+    const w=await world();const before=(await listArtifactsFor(identityForUser(w.bob.id,w.tb.id))).length;
+    const res=await bearerFork(w.doc.id,w.tb.token,{dry_run:true});expect(res.status).toBe(200);expect(await res.json()).toEqual({datasets:[]});
+    expect((await listArtifactsFor(identityForUser(w.bob.id,w.tb.id))).length).toBe(before);
   });
 
   it('an ordinary document copies no datasets: the answer says so with an empty list', async () => {

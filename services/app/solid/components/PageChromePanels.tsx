@@ -5,7 +5,6 @@
  * page (the reader, whose prose budget is 250 KB) the Drawer, ToggleGroup and the inbox stay out of the bytes
  * a reader loads.
  */
-import CalendarClock from 'lucide-solid/icons/calendar-clock';
 import { Show, type JSX } from 'solid-js';
 import { BookOpen, FileText, LogIn, LogOut, Moon, Sun, User, X } from 'lucide-solid';
 import { useLocation } from '@solidjs/router';
@@ -37,15 +36,13 @@ export function MenuPanel(props: { close: () => void; phone?: boolean; top?: num
   /** Every row is a ghost Button: md (a finger's row) in the phone sheet, sm chrome in the side panel. */
   const size = () => (props.phone ? 'md' : 'sm');
   const link = (href: string, label: string, icon: JSX.Element) => <Button variant="ghost" size={size()} href={href} current={location.pathname === href}
-    rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human', '/chat', '/schedules', '/programs/new'].includes(href) ? undefined : 'external'} aria-label={label}
+    rel={['/', '/assets', '/trash', '/login', '/start', '/welcome', '/notifications', '/account', '/docs-human'].includes(href) ? undefined : 'external'} aria-label={label}
     class="w-full justify-start" onClick={close}>{icon}{label}</Button>;
   return (
     <Drawer label="Menu" role="navigation" side={props.phone ? 'bottom' : 'right'} top={props.top ?? BAR_HEIGHT} onClose={close}>
       <Button variant="secondary" size="sm" icon aria-label="Dismiss menu" onClick={close} style={{ top: 'max(12px, env(safe-area-inset-top))' }} class="absolute right-3 top-3 sm:hidden"><X size={17} stroke-width={1.5} /></Button>
       <a href="/" aria-label="Hosted at artifactbin" class="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"><img src="/logo-128.png" alt="" class="h-7 w-7" />artifactbin</a>
       {link('/', 'Artifacts', <FileText size={15} stroke-width={1.5} />)}
-      {link('/schedules', 'Schedules', <CalendarClock size={15} />)}
-      {link('/chat', 'Connected Agents', <User size={15} stroke-width={1.5} />)}
       {link('/notifications', 'Notifications', <User size={15} stroke-width={1.5} />)}
       {link('/account', 'Account', <User size={15} stroke-width={1.5} />)}
       {link('/docs-human', 'Human Docs', <BookOpen size={15} stroke-width={1.5} />)}

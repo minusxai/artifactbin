@@ -1,0 +1,68 @@
+name: v3 fast
+
+on:
+  pull_request:
+    branches: [ artifactbinv3 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: v3 fast checks
+    runs-on: ubuntu-latest
+    # Hard execution deadline includes checkout/install/tests, but excludes runner queue time.
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.23.4
+      # Key covers OS, Node, the lockfile, .npmrc and every workspace manifest, so any
+      # dependency change misses and runs a full `npm ci`. Only the exact key restores.
+      - id: deps
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            docs/proposals/runner-validation/node_modules
+          key: v3-fast-nm-${{ runner.os }}-${{ runner.arch }}-node22.23.4-${{ hashFiles('package-lock.json', '.npmrc', '.nvmrc', 'package.json', 'services/*/package.json', 'docs/proposals/runner-validation/package.json') }}
+      # Full pinned install includes workspace native dependencies and every postinstall.
+      # No browser download, server build, or service is a prerequisite for the fast lane.
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      # Postinstall outputs live in the source tree (teaching.json, app public/fonts and
+      # story-font-manifest.json), not node_modules, so a cache hit reruns the root and
+      # every workspace postinstall exactly as `npm ci` would.
+      - if: steps.deps.outputs.cache-hit == 'true'
+        run: |
+          npm run postinstall --workspaces --if-present &
+          npm run postinstall --if-present
+          wait
+      # validate and the behavioral tests are independent; run them concurrently, keep each
+      # log grouped, and fail the step if either failed.
+      - name: Validate and JavaScript syntax and module-local behavioral tests (parallel)
+        run: |
+          npm run validate > "$RUNNER_TEMP/validate.log" 2>&1 & vpid=$!
+          node scripts/ci/fast-check.mjs > "$RUNNER_TEMP/fast-check.log" 2>&1 & fpid=$!
+          rc=0
+          wait $vpid || { rc=1; vrc=failed; }
+          wait $fpid || { rc=1; frc=failed; }
+          echo "::group::npm run validate (${vrc:-passed})"; cat "$RUNNER_TEMP/validate.log"; echo "::endgroup::"
+          echo "::group::JavaScript syntax and module-local behavioral tests (${frc:-passed})"; cat "$RUNNER_TEMP/fast-check.log"; echo "::endgroup::"
+          exit $rc
+      - name: Enforce the two-minute workflow clock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$RUNNER_TEMP/v3-fast-attempt.json"
+          node scripts/ci/fast-budget.mjs "$RUNNER_TEMP/v3-fast-attempt.json"

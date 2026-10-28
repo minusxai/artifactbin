@@ -1,7 +1,7 @@
 /**
  * A stored drawing is valid only for the engine that drew it
  * (lib/mermaid-images/engine). These pins make the engine string move when
- * what the engine draws can: the installed Mermaid, and the kit's render
+ * what the engine draws can: the installed Pele runtime, and the kit's render
  * module. Changing lib/mermaid-images/mermaid-render? Bump
  * MERMAID_KIT_RENDER_VERSION and record the new hash below — every stored
  * drawing is then ignored until the harvest redraws it.
@@ -13,12 +13,12 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MERMAID_KIT_RENDER_VERSION, MERMAID_RENDER_ENGINE, mermaidPrerenderable } from '../engine';
 
-const RENDER_MODULE_SHA256 = '917b7cd6ebad0ef3cbceab4d486cae35d6769e5a7e6cd688c68bed0977f9f363';
+const RENDER_MODULE_SHA256 = '3f57825be203725bf1bf3db9bfc21c5e5910ba0c97ac061a30a90b314c9cd8c3';
 
-describe('the Mermaid render engine identity', () => {
-  it('names the installed Mermaid', () => {
-    const installed = (createRequire(import.meta.url)('mermaid/package.json') as { version: string }).version;
-    expect(MERMAID_RENDER_ENGINE).toBe(`mermaid@${installed}+kit${MERMAID_KIT_RENDER_VERSION}`);
+describe('the retained Mermaid-syntax render engine identity', () => {
+  it('names the installed Pele runtime', () => {
+    const installed = (createRequire(import.meta.url)('pele/package.json') as { version: string }).version;
+    expect(MERMAID_RENDER_ENGINE).toBe(`pele@${installed}+kit${MERMAID_KIT_RENDER_VERSION}`);
   });
   it('is bumped with the kit render module (hash pinned here)', () => {
     const source = readFileSync(path.resolve(import.meta.dirname, '../mermaid-render.ts'));

@@ -17,71 +17,48 @@ export function mermaidSourceError(code: unknown): string | null {
   return null;
 }
 
-/** A layout engine Mermaid loads on demand (its `registerDefaultLayoutLoaders`). */
-type MermaidLayout = 'elk' | 'cose-bilkent' | 'swimlane' | 'dagre';
+/** Retained source-language names used by saved documents and manifests.
+ * These are syntax identifiers, not external layout engines or runtime imports. */
+interface MermaidDiagram {kind: string; test: RegExp}
 
-interface MermaidDiagram {
-  /** The kit's name for the kind: what a manifest keys a kind's code by. */
-  kind: string;
-  /** Mermaid's own detector id, whose loader names the diagram's module. */
-  mermaid: string;
-  /** Mermaid's detector, verbatim. */
-  test: RegExp;
-  /**
-   * The layout engines this kind loads under lib/mermaid-images/mermaid-render's
-   * configuration. Mermaid 12 makes `elk` its DEFAULT layout, so every kind
-   * that asks the layout registry for "the configured layout" (flowcharts,
-   * class, state, ER, requirement, agentflow, usecase) draws with elk, not only
-   * `flowchart-elk`; switching them to dagre would change every such drawing.
-   */
-  layouts: readonly MermaidLayout[];
-}
-
-/**
- * Every diagram kind Mermaid 12.0.0 draws, in ITS detection order: the first
- * match wins, so `flowchart-elk` precedes `flowchart`, and C4 (whose regex is
- * anchored only on its first alternative) precedes nearly everything.
- * Pinned against the installed Mermaid by lib/jsx/__tests__/mermaid-source
- * (detection) and scripts/__tests__ via the runtime build (modules, layouts).
- */
 export const MERMAID_DIAGRAMS: readonly MermaidDiagram[] = [
-  { kind: 'flowchart-elk', mermaid: 'flowchart-elk', test: /^\s*flowchart-elk/, layouts: ['elk'] },
-  { kind: 'mindmap', mermaid: 'mindmap', test: /^\s*mindmap/, layouts: ['cose-bilkent'] },
-  { kind: 'architecture', mermaid: 'architecture', test: /^\s*architecture/, layouts: [] },
-  { kind: 'agentflow', mermaid: 'agentflow', test: /^\s*agentflow-beta\b/, layouts: ['elk'] },
-  { kind: 'c4', mermaid: 'c4', test: /^\s*C4Context|C4Container|C4Component|C4Dynamic|C4Deployment/, layouts: [] },
-  { kind: 'kanban', mermaid: 'kanban', test: /^\s*kanban/, layouts: [] },
-  { kind: 'class', mermaid: 'classDiagram', test: /^\s*classDiagram/, layouts: ['elk'] },
-  { kind: 'er', mermaid: 'er', test: /^\s*erDiagram/, layouts: ['elk'] },
-  { kind: 'gantt', mermaid: 'gantt', test: /^\s*gantt/, layouts: [] },
-  { kind: 'info', mermaid: 'info', test: /^\s*info/, layouts: [] },
-  { kind: 'pie', mermaid: 'pie', test: /^\s*pie/, layouts: [] },
-  { kind: 'requirement', mermaid: 'requirement', test: /^\s*requirement(Diagram)?/, layouts: ['elk'] },
-  { kind: 'sequence', mermaid: 'sequence', test: /^\s*sequenceDiagram/, layouts: [] },
-  { kind: 'swimlane', mermaid: 'swimlane', test: /^\s*swimlane-beta\b/, layouts: ['swimlane'] },
-  { kind: 'flowchart', mermaid: 'flowchart-v2', test: /^\s*(graph|flowchart)/, layouts: ['elk'] },
-  { kind: 'timeline', mermaid: 'timeline', test: /^\s*timeline/, layouts: [] },
-  { kind: 'gitGraph', mermaid: 'gitGraph', test: /^\s*gitGraph/, layouts: [] },
-  { kind: 'state', mermaid: 'stateDiagram', test: /^\s*stateDiagram/, layouts: ['elk'] },
-  { kind: 'journey', mermaid: 'journey', test: /^\s*journey/, layouts: [] },
-  { kind: 'quadrant', mermaid: 'quadrantChart', test: /^\s*quadrantChart/, layouts: [] },
-  { kind: 'sankey', mermaid: 'sankey', test: /^\s*sankey(-beta)?/, layouts: [] },
-  { kind: 'packet', mermaid: 'packet', test: /^\s*packet(-beta)?/, layouts: [] },
-  { kind: 'xychart', mermaid: 'xychart', test: /^\s*xychart(-beta)?/, layouts: [] },
-  { kind: 'block', mermaid: 'block', test: /^\s*block(-beta)?/, layouts: [] },
-  { kind: 'eventmodeling', mermaid: 'eventmodeling', test: /^\s*eventmodeling/, layouts: [] },
-  { kind: 'treeView', mermaid: 'treeView', test: /^\s*treeView-beta/, layouts: [] },
-  { kind: 'radar', mermaid: 'radar', test: /^\s*radar-beta/, layouts: [] },
-  { kind: 'ishikawa', mermaid: 'ishikawa', test: /^\s*ishikawa(-beta)?\b/i, layouts: [] },
-  { kind: 'treemap', mermaid: 'treemap', test: /^\s*treemap/, layouts: [] },
-  { kind: 'railroad', mermaid: 'railroad', test: /^\s*railroad-beta/i, layouts: [] },
-  { kind: 'railroad-ebnf', mermaid: 'railroadEbnf', test: /^\s*railroad-ebnf-beta/i, layouts: [] },
-  { kind: 'railroad-abnf', mermaid: 'railroadAbnf', test: /^\s*railroad-abnf-beta/i, layouts: [] },
-  { kind: 'railroad-peg', mermaid: 'railroadPeg', test: /^\s*railroad-peg-beta/i, layouts: [] },
-  { kind: 'venn', mermaid: 'venn', test: /^\s*venn-beta/, layouts: [] },
-  { kind: 'wardley', mermaid: 'wardley', test: /^\s*wardley-beta/i, layouts: [] },
-  { kind: 'cynefin', mermaid: 'cynefin', test: /^\s*cynefin-beta(?:[\s:]|$)/, layouts: [] },
-  { kind: 'usecase', mermaid: 'usecase', test: /^\s*usecase-beta(?:\s|$)/, layouts: ['elk'] },
+  { kind: 'flowchart-elk', test: /^\s*flowchart-elk/ },
+  { kind: 'mindmap', test: /^\s*mindmap/ },
+  { kind: 'architecture', test: /^\s*architecture/ },
+  { kind: 'agentflow', test: /^\s*agentflow-beta\b/ },
+  { kind: 'c4', test: /^\s*(?:C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)/ },
+  { kind: 'kanban', test: /^\s*kanban/ },
+  { kind: 'class', test: /^\s*classDiagram/ },
+  { kind: 'er', test: /^\s*erDiagram/ },
+  { kind: 'gantt', test: /^\s*gantt/ },
+  { kind: 'info', test: /^\s*info/ },
+  { kind: 'pie', test: /^\s*pie/ },
+  { kind: 'requirement', test: /^\s*requirement(Diagram)?/ },
+  { kind: 'sequence', test: /^\s*sequenceDiagram/ },
+  { kind: 'swimlane', test: /^\s*swimlane-beta\b/ },
+  { kind: 'flowchart', test: /^\s*(graph|flowchart)/ },
+  { kind: 'timeline', test: /^\s*timeline/ },
+  { kind: 'gitGraph', test: /^\s*gitGraph/ },
+  { kind: 'state', test: /^\s*stateDiagram/ },
+  { kind: 'journey', test: /^\s*journey/ },
+  { kind: 'quadrant', test: /^\s*quadrantChart/ },
+  { kind: 'sankey', test: /^\s*sankey(-beta)?/ },
+  { kind: 'packet', test: /^\s*packet(-beta)?/ },
+  { kind: 'xychart', test: /^\s*xychart(-beta)?/ },
+  { kind: 'block', test: /^\s*block(-beta)?/ },
+  { kind: 'eventmodeling', test: /^\s*eventmodeling/ },
+  { kind: 'treeView', test: /^\s*treeView-beta/ },
+  { kind: 'radar', test: /^\s*radar-beta/ },
+  { kind: 'ishikawa', test: /^\s*ishikawa(-beta)?\b/i },
+  { kind: 'treemap', test: /^\s*treemap/ },
+  { kind: 'railroad', test: /^\s*railroad-beta/i },
+  { kind: 'railroad-ebnf', test: /^\s*railroad-ebnf-beta/i },
+  { kind: 'railroad-abnf', test: /^\s*railroad-abnf-beta/i },
+  { kind: 'railroad-peg', test: /^\s*railroad-peg-beta/i },
+  { kind: 'venn', test: /^\s*venn-beta/ },
+  { kind: 'wardley', test: /^\s*wardley-beta/i },
+  { kind: 'cynefin', test: /^\s*cynefin-beta(?:[\s:]|$)/ },
+  { kind: 'usecase', test: /^\s*usecase-beta(?:\s|$)/ },
 ];
 
 /**

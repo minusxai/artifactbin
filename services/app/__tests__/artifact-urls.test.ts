@@ -35,7 +35,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const MARKUP = '<div data-design="tw" className="p-8"><h1 className="text-3xl">Raw tier</h1></div>';
-const HTML_DOC = '<Helmet><script>{`window.x=1;`}</script></Helmet><h1>Stored html</h1>';
+const HTML_DOC = '<html><head><script>window.x=1;</script></head><body><h1>Stored html</h1></body></html>';
 
 let token: string;
 async function publish(body: Record<string, unknown>): Promise<{ id: string; url: string }> {
@@ -58,7 +58,7 @@ afterAll(async () => {
 
 describe('/a/<id>/raw', () => {
   it('serves the document under the sandboxing CSP (the headers ARE the sandbox)', async () => {
-    const { id } = await publish({ title: 'h', markup: HTML_DOC });
+    const { id } = await publish({ title: 'h', html: HTML_DOC });
     const res = await raw(request(`/a/${id}/raw`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toContain('text/html');
@@ -106,7 +106,7 @@ describe('/a/<id>/raw', () => {
   });
 
   it('serves the markup document as SSR html (source read-back is the API)', async () => {
-    const { id } = await publish({ title: 'm', markup: MARKUP });
+    const { id } = await publish({ title: 'm', html: MARKUP });
     const res = await raw(request(`/a/${id}/raw`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toContain('text/html');

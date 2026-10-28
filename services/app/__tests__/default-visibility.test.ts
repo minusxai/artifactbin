@@ -61,7 +61,7 @@ describe('born visibility per format', () => {
   it('legacy guest credentials cannot create documents or assets', async () => {
     const guest = await createGuestOwner();
     const credential = await mintToken('guest-cli', guest.userId);
-    for (const body of [{ markup: '<h1>Guest</h1>' }, { dataset: ROWS }, { viz: RECIPE }, { markup: '<h1>Private</h1>', visibility: 'private' }]) {
+    for (const body of [{ html: '<h1>Guest</h1>' }, { dataset: ROWS }, { viz: RECIPE }, { html: '<h1>Private</h1>', visibility: 'private' }]) {
       expect((await create(credential.token, body)).status).toBe(401);
     }
     expect((await createImage(credential.token)).status).toBe(401);
@@ -83,7 +83,7 @@ describe('born visibility per format', () => {
 
   it('a user-owned document stays born private', async () => {
     const token = await userToken('dv-doc@example.com');
-    const { body } = await create(token, { title: 'doc', markup: '<h1>hi</h1>' });
+    const { body } = await create(token, { title: 'doc', html: '<h1>hi</h1>' });
     expect(body.visibility).toBe('private');
   });
 
@@ -101,7 +101,7 @@ describe('born visibility per format', () => {
 
   it('unowned legacy credentials cannot create documents or assets', async () => {
     const t = await mintToken('legacy', null);
-    expect((await create(t.token, { markup: '<h1>a</h1>' })).status).toBe(401);
+    expect((await create(t.token, { html: '<h1>a</h1>' })).status).toBe(401);
     expect((await create(t.token, { dataset: ROWS })).status).toBe(401);
     expect((await createImage(t.token)).status).toBe(401);
   });

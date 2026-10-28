@@ -226,13 +226,13 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         // Bare readers retain hidden rail miniatures for hydration. Number only
         // rendered slides; Playwright's visibility includes offscreen content.
-        const slides = surface.locator('[data-mx-slide]:visible');
+        const slides = surface.locator('[data-af-slide]:visible');
         const count = await slides.count();
         if (req.capture.slide > count) throw new NoSlideError(count);
         const one = slides.nth(req.capture.slide - 1);
         await one.scrollIntoViewIfNeeded({ timeout });
         await waitForCharts();
-        return { mime, bytes: new Uint8Array(await one.screenshot(shotOpts)) };
+        return { mime, bytes: new Uint8Array(await one.screenshot({ ...shotOpts, style: '[data-af-deck-chrome],[data-af-deck-chrome] *,[data-af-deck-chrome]::before,[data-af-deck-chrome]::after,[data-af-deck-chrome] *::before,[data-af-deck-chrome] *::after{visibility:hidden!important;transition:none!important;animation:none!important}' })) };
       }
       if (req.capture === 'full') return { mime, bytes: new Uint8Array(await surface.screenshot(shotOpts)) };
       if (req.capture === 'preview' || typeof req.capture === 'object') {

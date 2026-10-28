@@ -10,7 +10,7 @@ import { screen, waitFor, within } from '@testing-library/dom';
 import { fireEvent } from '../../__tests__/helpers';
 import { SessionProvider } from '../../lib/session';
 import { preloadCommentField } from '../LazyCommentField';
-import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
+import { ANN, RESOLVED, fetchCalls, flush, installAnnotationFetch, knobs, layer, showResolved } from './annotation-rig';
 import { replaceComment } from './comment-input';
 
 const THREAD = { ...ANN, revision: 3 };
@@ -61,6 +61,7 @@ describe('editing your own comment', () => {
     // Not the owner of the document here: delete is offered only for one's own words, edit likewise.
     expect(screen.getByRole('menuitem', { name: 'Delete thread' })).toBeTruthy();
     // The resolved thread's comments are someone else's (a person with no account, an agent): no menu at all.
+    await showResolved();
     const resolved = screen.getByLabelText('Resolved annotation thread');
     expect(within(resolved).queryByLabelText('Annotation actions')).toBeNull();
   });
@@ -116,7 +117,8 @@ describe('editing your own comment', () => {
     expect(still.textContent).toBe('my careful rewrite');
     patchAnswer = (body) => new Response(JSON.stringify({ ...THREAD, revision: 6, thread: [{ ...THREAD.thread[0]!, body: body.body, edited_at: '2026-10-14T10:00:00Z' }, THREAD.thread[1]!] }), { status: 200 });
     fireEvent.click(screen.getByLabelText('Save edit'));
+    // The save goes out after the lazily loaded retry policy; wait for it rather than for the draft's own text.
+    await waitFor(() => expect(patches()).toHaveLength(2));
     await waitFor(() => expect(within(thread).getByText('my careful rewrite')).toBeTruthy());
-    expect(patches()).toHaveLength(2);
   });
 });

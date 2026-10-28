@@ -26,6 +26,7 @@
  *   trust byte and request counts, which are deterministic.
  */
 import assert from 'node:assert/strict';
+import { installPerformanceUsefulObserver } from '../lib/performance-useful.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,8 +37,10 @@ import { createServer, request as httpRequest } from 'node:http';
 import { chromium } from 'playwright';
 import { startMailSink } from '../lib/mail-login.mjs';
 import { becomeAccountOwner, publishAs } from '../lib/start-doc.mjs';
+import { pageHtml } from '../fixtures/page-speed/native.mjs';
 import { publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
-import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from '../lib/document-views.mjs';
+import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews } from '../lib/document-views.mjs';
+import { shellScriptsOf } from '../lib/shell-graph.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const sizeOnly = process.argv.includes('--size-only');
@@ -94,16 +97,16 @@ try {
   await becomeAccountOwner(page, base, { sink: await startMailSink(), email });
   const result = { revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', mode: sizeOnly ? 'size-only' : 'timing' }, loads: [] };
   if (!sizeOnly) {
-  const markup = '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join('');
-  const doc = await publishAs(page, { title: 'Performance fixture', markup, visibility: 'public' });
-  for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, markup, visibility: 'public' });
+  const html = pageHtml('Performance fixture', '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join(''));
+  const doc = await publishAs(page, { title: 'Performance fixture', html, visibility: 'public' });
+  for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, html, visibility: 'public' });
   // A second synthetic account owns shared documents. This exercises metadata
   // trimming with real generated metadata, not arbitrary inflated JSON.
   const ownerContext = await browser.newContext();
   const other = await ownerContext.newPage();
   await becomeAccountOwner(other, base, { sink: await startMailSink(), email: 'mxmx_test_performance_sharer@example.com' });
   for (let i = 0; i < 20; i++) {
-    const shared = await publishAs(other, { title: `Shared sample ${i}`, markup, visibility: 'private' });
+    const shared = await publishAs(other, { title: `Shared sample ${i}`, html, visibility: 'private' });
     assert.equal(await other.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, { id: shared.id, email }), 200);
   }
   await ownerContext.close();
@@ -145,17 +148,7 @@ try {
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   // Use a browser-side observer: runner round trips are not part of useful DOM
   // timing. Two animation frames represent a paint opportunity after the commit.
-  await page.addInitScript(() => {
-    window.__performanceUseful = null;
-    const observer = new MutationObserver(() => {
-      const home = location.pathname === '/' && [...document.querySelectorAll('a')].some(a => a.textContent?.includes('Workspace sample'));
-      const prose = location.pathname !== '/' && [...document.querySelectorAll('h1')].some(h => h.textContent === 'Performance fixture');
-      if (!home && !prose) return;
-      observer.disconnect();
-      requestAnimationFrame(() => requestAnimationFrame(() => { window.__performanceUseful = performance.now(); }));
-    });
-    observer.observe(document, { subtree: true, childList: true });
-  });
+  await page.addInitScript(installPerformanceUsefulObserver);
   const sessionCookies = await context.cookies(base);
   for (const route of ['home', 'reader']) {
     if (route === 'reader') await context.clearCookies();
@@ -196,10 +189,13 @@ try {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   // The steady state a reader meets: a build that prerenders diagrams has stored them by now (bounded; a no-op wait otherwise).
-  const storedDiagrams = sizeOnly ? [] : await waitForStoredDiagrams(base, documentFixtures);
+  const storedDiagrams = []; // Native diagrams are author-supplied SVG, not a server compiler cache.
   console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
-  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, log: line => console.log(line) });
+  // The build's own manifest names the app shell's eager scripts (size target 4); each build is measured with its own.
+  const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, shell: shellScriptsOf(root), log: line => console.log(line) });
   if (sizeOnly) assert(samples.every(sample => sample.ready && sample.jsBeforeReady !== null), 'size pass needs a ready marker and JS byte count for every view');
+  result.stylesheetRevalidation = await measureStylesheetRevalidation(browser, base, documentFixtures.find(f => f.key === 'system').id);
+  console.log(`Platform stylesheet revalidation: ${JSON.stringify(result.stylesheetRevalidation)}`);
   result.documents = { conditions: { ...(mode.throttle ?? {}), mode: sizeOnly ? 'size-only' : 'timing', runs: mode.runs, cache: 'cold', viewer: 'anonymous', viewport: '1440x1000', storedDiagrams }, fixtures: documentFixtures.map(({ key, id, template }) => ({ key, id, template })), summary: summarizeDocumentViews(samples), samples };
   mkdirSync(path.dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(result, null, 2));
@@ -216,6 +212,36 @@ try {
   gateway.closeAllConnections();
   await new Promise(resolve => gateway.close(resolve));
   rmSync(scratch, { recursive: true, force: true });
+}
+
+/**
+ * The platform stylesheet (/af/styles.css: strong ETag, no-cache) on a repeat view of a page that names a design
+ * system: the first view fills the browser cache, every later one revalidates and should get a 304. Recorded per
+ * repeat from the DevTools protocol (status, header-only transfer, request→response ms), plus a direct conditional
+ * GET against the server for the bare 304 cost.
+ */
+async function measureStylesheetRevalidation(browser, base, id) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  const seen = [];
+  cdp.on('Network.responseReceived', ({ response }) => { if (new URL(response.url).pathname === '/af/styles.css') seen.push({ status: response.status, fromCache: response.fromDiskCache || response.fromMemoryCache, ms: response.timing ? response.timing.receiveHeadersEnd - response.timing.sendStart : null, encodedBytes: response.encodedDataLength }); });
+  const views = [];
+  try {
+    for (let i = 0; i < 6; i++) {
+      seen.length = 0;
+      await page.goto(`${base}/a/${id}/raw`, { waitUntil: 'load' });
+      await page.waitForTimeout(200);
+      views.push(seen[0] ?? null);
+    }
+  } finally { await context.close(); }
+  const first = await fetch(`${base}/af/styles.css`);
+  const etag = first.headers.get('etag'); await first.arrayBuffer();
+  const direct = [];
+  for (let i = 0; i < 15; i++) { const start = performance.now(); const response = await fetch(`${base}/af/styles.css`, { headers: { 'if-none-match': etag } }); await response.arrayBuffer(); direct.push({ status: response.status, ms: performance.now() - start }); }
+  const repeats = views.slice(1).filter(Boolean), median = values => { const sorted = values.filter(v => typeof v === 'number').sort((a, b) => a - b); return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null; };
+  return { cacheControl: first.headers.get('cache-control'), firstView: views[0], repeatStatuses: repeats.map(r => r.status), repeatMedianMs: median(repeats.map(r => r.ms)), directStatuses: [...new Set(direct.map(d => d.status))], directMedianMs: median(direct.map(d => d.ms)) };
 }
 
 // All samples are saved and child resources closed; imported SDK timers must

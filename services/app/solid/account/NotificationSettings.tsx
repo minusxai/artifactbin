@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { useInbox } from '../lib/notifications';
 import { InboxAlert } from '../components/PeopleInbox';
@@ -17,7 +18,7 @@ export function NotificationSettings(): JSX.Element {
   const [email, setEmail] = createSignal<EmailPreferences | null>(null);
   const [saving, setSaving] = createSignal(false);
   const [notice, setNotice] = createSignal('');
-  onMount(() => { void fetch('/api/my/people/email').then(response => response.ok ? response.json() : null).then((data: { enabled?: boolean; preferences?: EmailPreferences } | null) => { if (data?.enabled && data.preferences) setEmail(data.preferences); }).catch(() => {}); });
+  onMount(() => { void retryingFetch('/api/my/people/email').then(response => response.ok ? response.json() : null).then((data: { enabled?: boolean; preferences?: EmailPreferences } | null) => { if (data?.enabled && data.preferences) setEmail(data.preferences); }).catch(() => {}); });
   const saveEmail = async (preferences: EmailPreferences) => {
     setSaving(true); setNotice('');
     try { const response = await apiFetch('/api/my/people/email', 'PATCH', preferences); if (!response.ok) throw new Error(); const data = await response.json() as { preferences: EmailPreferences }; setEmail(data.preferences); setNotice('Saved'); }

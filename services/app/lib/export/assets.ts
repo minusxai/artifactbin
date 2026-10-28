@@ -5,9 +5,16 @@ import {mintExportKey,verifyExportKey} from '@/lib/platform/export-read-key';
 import {objectStore} from '@/lib/object-store';
 import type {ExportImage} from './cache';
 
+interface ExportAssetGrant { expiresAt:number; cacheControl:string }
+/** Stable minute windows preserve browser cache keys without extending a grant. */
+function assetGrant(now:number,expiresAt=Math.floor(now/60_000)*60_000+300_000):ExportAssetGrant {
+ return {expiresAt,cacheControl:`private, max-age=${Math.max(0,Math.floor((expiresAt-now)/1000)-1)}, must-revalidate`};
+}
+
 export function exportAssetUrl(id:string,base:string):string {
  const url=new URL(`/assets/export/${id}`,ASSETS_ORIGIN??base);
- url.searchParams.set('key',mintExportKey(`export-asset:${id}`,300_000));
+ const now=Date.now(),grant=assetGrant(now);
+ url.searchParams.set('key',mintExportKey(`export-asset:${id}`,grant.expiresAt-now,now));
  return url.toString();
 }
 /** The grant admits only a published DB object, never a caller-selected S3 key. */
@@ -18,10 +25,16 @@ export async function exportAssetResponse(request:Request,id:string):Promise<Res
   return new Response('not found',{status:404,headers:{'cache-control':'no-store'}});
  const image=(await (await getDb()).query<ExportImage>('SELECT * FROM export_images WHERE id=$1',[id])).rows[0];
  if(!image)return new Response('not found',{status:404,headers:{'cache-control':'no-store'}});
+ const grant=assetGrant(Date.now(),Number(url.searchParams.get('key')!.split('.')[0]));
+ const etag=`"export-${image.id}"`;
+ const headers={'content-type':image.mime,'content-length':String(image.bytes),'cache-control':grant.cacheControl,'etag':etag,'x-content-type-options':'nosniff'};
+ const matches=request.headers.get('if-none-match')?.split(',').some(value=>value.trim()==='*'||value.trim().replace(/^W\//,'')===etag);
+ // Authorization and publication checks precede conditional responses. IDs
+ // identify immutable objects; a refresh publishes a new ID and URL.
+ if(matches)return new Response(null,{status:304,headers});
+ if(request.method==='HEAD')return new Response(null,{headers});
  try {
   const stream=await objectStore().getStream(image.object_key);
-  const headers={'content-type':image.mime,'content-length':String(image.bytes),'cache-control':'private, no-store','x-content-type-options':'nosniff'};
-  if(request.method==='HEAD'){stream.destroy();return new Response(null,{headers});}
   return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{headers});
  } catch {return new Response('image unavailable',{status:503,headers:{'cache-control':'no-store'}});}
 }

@@ -1,4 +1,5 @@
-import {observedTextBody,documentEditBody} from './prepared-document';
+import {nativeHtml} from '@/__tests__/native-html-fixture';
+import {artifactState} from '@/lib/artifacts';
 import {getArtifactById} from '@/lib/artifacts';
 /**
  * SCHEMA REPLAY SAFETY — the boot path, not the fresh-install path.
@@ -19,7 +20,7 @@ import {getArtifactById} from '@/lib/artifacts';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { artifactPage } from '@/test/helpers/pages';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
+import { PUT as editRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken } from '@/__tests__/harness';
@@ -34,7 +35,7 @@ import { request } from '@/__tests__/harness';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-interface Wire { id: string; edit_id: string; markup: string | null; version: number }
+interface Wire { id: string; edit_id: string; html: string | null; version: number }
 
 const mint = async (): Promise<string> => {
   return (await mintAccountToken('mxmx_test_fixture')).token;
@@ -103,7 +104,7 @@ describe('the additive DDL is replay-safe', () => {
       'status', 'resolved_at', 'anchor_key', 'anchor_version', 'snippet', 'created_at',
       // The exact selection, appended after created_at: an older database grows
       // these two by ALTER TABLE on boot, so their ordinal position follows it.
-      'quote', 'range',
+      'quote', 'range','html_anchor',
       // Saved UI context is optional; ordinary comments keep this column NULL.
       'view_state',
       // The soft-delete stamp every adopted table carries, appended LAST for
@@ -112,8 +113,8 @@ describe('the additive DDL is replay-safe', () => {
       'deleted_at', 'author_remote',
       // When the author last rewrote the body; appended on upgrade like the rest.
       'edited_at',
-      // A person's latest edit's position in the comment feed (lib/annotations/changes).
-      'change_seq',
+      // The latest edit's position in the comment feed (lib/annotations/changes), and the credential that made it.
+      'change_seq', 'change_token_id',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is
@@ -169,7 +170,7 @@ describe('the additive DDL is replay-safe', () => {
 
     const token = await mint();
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'after replay', markup: '<section><p>alpha text</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'after replay', html:nativeHtml('<section><p>alpha text</p></section>') } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;
@@ -177,7 +178,7 @@ describe('the additive DDL is replay-safe', () => {
 
     const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token: token }), params({ id: doc.id }));
     expect(read.status).toBe(200);
-    expect((await read.json()).markup).toContain('alpha text');
+    expect((await read.json()).html).toContain('alpha text');
   });
 });
 
@@ -185,7 +186,7 @@ describe('an artifact whose edit log has been pruned', () => {
   /** Trim the log the way pruning does, leaving a row with no entries at all. */
   async function withPrunedLog(token: string): Promise<Wire> {
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'pruned', markup: '<section><p>alpha text</p><p>beta text</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', title: 'pruned', html:nativeHtml('<section><p>alpha text</p><p>beta text</p></section>') } }),
     );
     expect(res.status).toBe(201);
     const doc = (await res.json()) as Wire;
@@ -202,43 +203,45 @@ describe('an artifact whose edit log has been pruned', () => {
     expect((await artifactPage(doc.id)).kind).toBe('render');
     const read = await readRoute(request(`/api/artifacts/${doc.id}`, { token: token }), params({ id: doc.id }));
     expect(read.status).toBe(200);
-    expect((await read.json()).markup).toContain('alpha text');
+    expect((await read.json()).html).toContain('alpha text');
   });
 
   it('accepts an edit on its head with no log rows (the head fast path needs no log)', async () => {
     const token = await mint();
     const doc = await withPrunedLog(token);
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'alpha text','ALPHA') }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await replacement(doc.id,'alpha text','ALPHA') }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Wire).markup).toContain('ALPHA');
+    expect(((await res.json()) as Wire).html).toContain('ALPHA');
   });
 
-  it('a stale independent operation needs no pruned history; an overlapping operation still conflicts',async()=>{
+  it('rejects stale whole-file saves even when history has been pruned',async()=>{
     const token=await mint(),doc=await withPrunedLog(token),base=(await getArtifactById(doc.id))!;
-    const submit=(source:string)=>editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token,json:documentEditBody(base,{source})}),params({id:doc.id}));
+    const submit=(html:string)=>editRoute(request(`/api/artifacts/${doc.id}`,{method:'PUT',token,json:{html,expectedVersion:base.version,expectedState:artifactState(base)}}),params({id:doc.id}));
     expect((await submit(base.source!.replace('beta text','BETA'))).status).toBe(200);
-    const independent=await submit(base.source!.replace('alpha text','ALPHA'));expect(independent.status).toBe(200);
-    const final=await independent.json();expect(final.markup).toContain('ALPHA');expect(final.markup).toContain('BETA');
-    const clash=await submit(base.source!.replace('alpha text','OTHER'));expect(clash.status).toBe(409);expect((await clash.json()).error).toBe('doc_changed');
+    const independent=await submit(base.source!.replace('alpha text','ALPHA'));expect(independent.status).toBe(409);
+    const read=await readRoute(request(`/api/artifacts/${doc.id}`,{token}),params({id:doc.id}));
+    const head=await read.json();expect(head.html).toContain('BETA');expect(head.html).not.toContain('ALPHA');expect(head.version).toBe(2);
   });
 
   it('a second document with a pruned log edits too', async () => {
     const token = await mint();
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'h', markup: '<h1>hello</h1>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'h', html:nativeHtml('<h1>hello</h1>') } }),
     );
     const doc = (await res.json()) as Wire;
     const db = await getDb();
     await db.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
 
     const edit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(doc.id,'hello','goodbye') }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: await replacement(doc.id,'hello','goodbye') }),
       params({ id: doc.id }),
     );
     expect(edit.status).toBe(200);
-    expect((await edit.json()).markup).toContain('goodbye');
+    expect((await edit.json()).html).toContain('goodbye');
   });
 });
+
+async function replacement(id:string,old:string,value:string){const row=(await getArtifactById(id))!;return {html:row.source!.replace(old,value),expectedVersion:row.version,expectedState:artifactState(row)};}

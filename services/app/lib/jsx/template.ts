@@ -122,31 +122,12 @@ export function attributeSignals(tag: string, attr: string, isComponent: boolean
   return isTemplatedObjectProp(tag, attr, isComponent) ? deepTemplateSignals(json) : [];
 }
 
-/** Does this authored attribute value read the page where it is substituted? (The compiler's "templated".) */
-export const readsPage = (tag: string, attr: string, isComponent: boolean, json: unknown, script = false): boolean =>
-  attributeSignals(tag, attr, isComponent, json, script).length > 0;
-
 /** The key a resolved `style` is spread under: set as an attribute, never through the CSSOM, so hydration keeps the served bytes. */
 export const STYLE_ATTR_KEY = 'attr:style';
 
 /** True where a template is filled for the reader (`templatePosition` is `substitute`). */
-export const substitutes = (tag: string, attr: string, isComponent: boolean, script = false): boolean =>
+const substitutes = (tag: string, attr: string, isComponent: boolean, script = false): boolean =>
   templatePosition(tag, attr, isComponent, script) === 'substitute';
-
-/**
- * The island runtime calls a compiled template becomes (lib/islands/rt `tpl`, `valueAttrs`, `viz`). Named here, not
- * as literals in the compiler: its string literals are a story class source (scripts/generate-story-ui-classes
- * EXTRA_CLASS_SOURCES), and a new one would join the recipe class union and recompile every story's CSS.
- */
-export const TEMPLATE_CALLS = { text: 'tplText', cls: 'tplClass', attrs: 'tplAttrs', viz: 'tplViz' } as const;
-/**
- * The import a compiled page adds for the template calls it makes (lib/islands/kit/templates, `@mx/kit/templates`): a page
- * without a template downloads none of this module, as one without a row class never loads `@mx/row-class`.
- */
-export function templateImports(source: string): string {
-  const used = Object.values(TEMPLATE_CALLS).filter((call) => source.includes(`${call}(`)).sort();
-  return used.length ? `import { ${used.join(', ')} } from '@mx/kit/templates';\n` : '';
-}
 
 /** Why a position refuses a template, for the publish error. */
 export function templateRefusal(tag: string, attr: string, isComponent: boolean): string {

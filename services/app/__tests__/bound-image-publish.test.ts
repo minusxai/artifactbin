@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE PUBLISH DOOR AND A BOUND IMAGE SOURCE.
  *
@@ -45,142 +46,24 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 const publish = async (markup: string) => {
   const t = await mintToken('t');
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility: 'public' } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml(markup), visibility: 'public' } }));
   return { res, body: await res.json() as Record<string, unknown> };
 };
 
-const HELMET = '<Helmet><Value name="pick" type="string" default="a" /></Helmet>';
-
-describe('a bound src is a binding, not an external URL', () => {
-  it('publishes `<img src="$pick">` — the fall-through that called it an "External URL" is gone', async () => {
-    const { res, body } = await publish(`${HELMET}<div id="root"><img src="$pick" alt="the pick" id="image" /></div>`);
-    expect(res.status).toBe(201);
-    expect(body.markup_changed).toBe(false);
-    expect((await getArtifactById(body.id as string))!.source).toContain('src="$pick"');
-  });
-
-  it('publishes the braced form and imports NOTHING — publish cannot complete the URL', async () => {
-    hits.length = 0;
-    const { res, body } = await publish(`${HELMET}<div><img src="${web}/{$pick}.png" alt="a" /></div>`);
-    expect(res.status).toBe(201);
-    expect(hits).toEqual([]);
-    // Key-agnostic: asset warnings may move to their own key; either way, a
-    // template must produce none, because nothing was fetched.
-    expect([...(body.warnings as unknown[] ?? []), ...(body.asset_warnings as unknown[] ?? [])]).toEqual([]);
-    expect((await getArtifactById(body.id as string))!.source).toContain('{$pick}');
-    const db = await getDb();
-    expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('0');
-  });
-
-  it('an UNDECLARED name in src is a named refusal, not an "External URL" one', async () => {
-    const { res, body } = await publish(`${HELMET}<div><img src="$nope" alt="a" /></div>`);
-    expect(res.status).toBe(400);
-    const details = JSON.stringify(body.details ?? body);
-    expect(details).toContain('$nope');
-    expect(details).not.toContain('External URL');
-  });
-
-  it('…and so is an undeclared name inside the braced form', async () => {
-    const { res, body } = await publish(`${HELMET}<div><img src="${web}/{$nope}.png" alt="a" /></div>`);
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(body.details ?? body)).toContain('$nope');
-  });
-
-  it('a LITERAL URL is not imported at publish either: it is served as written beside the bound one', async () => {
-    hits.length = 0;
-    const { res, body } = await publish(`${HELMET}<div><img src="${web}/logo.png" /><img src="$pick" /></div>`);
-    expect(res.status).toBe(201);
-    expect(hits).toEqual([]);
-    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    const html = await page.text();
-    expect(html).toContain(`src="${web}/logo.png"`);
-    expect(html).not.toContain(assetUrlFor(`${web}/logo.png`));
-  });
-
-  it('a web URL in a NON-image position publishes as written: external subresources are allowed', async () => {
-    hits.length = 0;
-    const url = `${web}/clip.mp4`;
-    const { res, body } = await publish(`${HELMET}<div><img src="$pick" /><input value="$pick" /><video src="${url}" controls /></div>`);
-    expect(res.status, JSON.stringify(body)).toBe(201);
-    // `src` on <video> is not an imported position: the URL stays verbatim in the source and publish fetches nothing for it.
-    expect((await getArtifactById(body.id as string))!.source).toContain(`src="${url}"`);
-    expect(hits).toEqual([]);
-  });
-});
-
-describe('the served document', () => {
-  it('carries its own asset endpoint and renders the bound image through it', async () => {
-    const { body } = await publish(`${HELMET}<div><img src="$pick" alt="the pick" /></div>`);
-    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    const html = await page.text();
-    expect(html).toContain(`"assetsUrl":"/a/${body.id}/assets"`);
-    // The reference itself never reaches the served markup.
-    expect(html).not.toContain('src="$pick"');
-  });
-
-  /*
-   * The SSR STRING, not only the island. The two are rendered from separate
-   * prop lists, and a prop that reaches one but not the other is a hydration
-   * mismatch — which React 19 answers by discarding the whole server tree.
-   * `assetsUrl` is the first island field that CHANGES WHAT IS DRAWN
-   * (queryUrl/mutateUrl only name a transport), and it was missing from the SSR
-   * call: the served document painted no image at all until hydration.
-   */
-  it('resolves the bound image IN THE SSR BODY, not only after hydration', async () => {
-    const url = `${web}/default.png`;
-    const helmet = `<Helmet><Value name="pick" type="string" default="${url}" /></Helmet>`;
-    const { body } = await publish(`${helmet}<div><img src="$pick" alt="the pick" /></div>`);
-    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    const html = await page.text();
-    const tag = /<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0] ?? '';
-    expect(tag).toContain(`src="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
-    expect(tag).not.toContain('data-mx-bound');
-    // …and the renderer's own preload hint follows the same mapped address, so
-    // the first thing the reader's browser asks for is ours and not the source.
-    expect(html).toContain(`src="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
-    expect(html).not.toContain(`href="${url}"`);
-  });
-
-  it('keeps image loads on self under the compiled page CSP', async () => {
-    const { body } = await publish(`${HELMET}<div><img src="$pick" alt="a" /></div>`);
-    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
-    expect(page.headers.get('content-security-policy')).toContain("img-src 'self' data: blob:");
-    expect(page.headers.get('content-security-policy')).not.toContain("'unsafe-inline' 'self'");
-    expect(page.headers.get('content-security-policy')).not.toContain('/assets');
-  });
-});
-
-/**
- * THE CAPTURE. A markup document is photographed from its OWN page
- * (`/a/<id>/raw?chrome=0&key=…`, lib/export) — TOP-LEVEL, with no parent to
- * relay through, and in a headless browser with no session. So the only thing
- * that can carry the exporter's credential to the import endpoint is the
- * address the document is given: without it a private document's og image
- * photographs alt text where its picture should be.
- */
-describe('the capture carries the exporter\'s key into its asset endpoint', () => {
-  it('puts a VERIFIED key on assetsUrl, and never anything else', async () => {
-    const url = `${web}/cap.png`;
-    const helmet = `<Helmet><Value name="pick" type="string" default="${url}" /></Helmet>`;
-    const { body } = await publish(`${helmet}<div><img src="$pick" alt="the pick" /></div>`);
-    const id = body.id as string;
-    const key = mintExportKey(id);
-
-    const shot = await rawRoute(request(`/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}`), params({ id }));
-    const html = await shot.text();
-    expect(html).toContain(`"assetsUrl":"/a/${id}/assets?key=${key}"`);
-    // …and the <img> the exporter loads therefore carries it too.
-    expect(/<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0]).toContain(`/a/${id}/assets?key=${key}&amp;u=`);
-
-    // A reader's ordinary view keeps the bare address — the key is the
-    // exporter's, and it must not ride in a document anyone else is served.
-    const plain = await rawRoute(request(`/a/${id}/raw`), params({ id }));
-    const plainHtml = await plain.text();
-    expect(plainHtml).toContain(`"assetsUrl":"/a/${id}/assets"`);
-    expect(plainHtml).not.toContain('key=');
-
-    // An INVALID key is admitted nowhere and echoed nowhere.
-    const forged = await rawRoute(request(`/a/${id}/raw?chrome=0&key=9999999999.${'a'.repeat(64)}`), params({ id }));
-    expect(await forged.text()).toContain(`"assetsUrl":"/a/${id}/assets"`);
-  });
+/** Native scripts own bindings; the platform never evaluates dollar syntax or
+ * imports values it cannot see. No retired Value/SSR binding compiler remains. */
+describe('native authored image sources',()=>{
+ it.each(['$pick','$nope','{$pick}','{$nope}'])('preserves literal %s without fetching or declaring a platform value',async(value)=>{
+  hits.length=0;const {res,body}=await publish(`<img src="${value}" alt="the pick">`);expect(res.status).toBe(201);expect(hits).toEqual([]);expect((await getArtifactById(body.id as string))!.source).toContain(`src="${value}"`);
+ });
+ it('preserves authored dynamic image code and fetches no external bytes during publication',async()=>{
+  hits.length=0;const source=`<img id="pick" alt="the pick"><script type="module">document.querySelector('#pick').src=${JSON.stringify(web+'/dynamic.png')}</script><video src="${web}/clip.mp4" controls></video>`;
+  const {res,body}=await publish(source);expect(res.status).toBe(201);expect(hits).toEqual([]);expect((await getArtifactById(body.id as string))!.source).toContain('/dynamic.png');expect((await(await getDb()).query('select 1 from web_assets')).rows).toEqual([]);
+ });
+ it('renders native image source under the sandbox without exposing capture credentials',async()=>{
+  const {res,body}=await publish(`<img src="${web}/logo.png" alt="the pick">`);expect(res.status).toBe(201);const id=body.id as string,key=mintExportKey(id);
+  for(const suffix of ['',`?chrome=0&key=${key}`,'?chrome=0&key=9999999999.'+'a'.repeat(64)]){
+   const page=await rawRoute(request(`/a/${id}/raw${suffix}`),params({id}));expect(page.status).toBe(200);expect(page.headers.get('content-security-policy')).toContain('sandbox');const html=await page.text();expect(html).toContain(`src="${web}/logo.png"`);expect(html).not.toContain(key);expect(html).not.toContain('"assetsUrl"');expect(html).not.toContain(assetUrlFor(`${web}/logo.png`));
+  }
+ });
 });

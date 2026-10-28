@@ -50,11 +50,23 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
   return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
 }
 
+/** The header without its metadata body: the identity and access columns, and a digest standing for `meta`. */
+export type ArtifactIdentity = Omit<ArtifactHeader, 'meta'> & { meta_digest: string };
+const IDENTITY_SELECT = ARTIFACT_HEADER_COLUMNS.filter((column) => column !== 'meta').join(', ') + ', md5(meta::text) AS meta_digest';
+/**
+ * A cheap re-check of a row already read in full: every access column and a digest of `meta`, so a fence learns
+ * whether anything changed without shipping and decoding the page's metadata (or document) again.
+ */
+export async function getArtifactIdentityById(id: string): Promise<ArtifactIdentity | null> {
+  const db = await getDb();
+  return (await db.query<ArtifactIdentity>(`SELECT ${IDENTITY_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
+}
+
 /**
  * Did the row's ACCESS change between the header an admission decided on and the whole row read after it? Then the
  * admission is asked again of the row that is served.
  */
-export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
+export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactHeader): boolean =>
   decided.visibility !== loaded.visibility || decided.link_role !== loaded.link_role || decided.user_id !== loaded.user_id
   || (decided.group_id ?? null) !== (loaded.group_id ?? null) || decided.token_id !== loaded.token_id || (decided.sharing_revision ?? 0) !== (loaded.sharing_revision ?? 0);
 

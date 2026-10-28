@@ -3,7 +3,7 @@ export { agentContract } from './agent-contract';
 export { existingPaste } from './agent-copy';
 export { agentBlurb } from './agent-discovery';
 export { APP_SHELL_FONT_PRELOADS } from './app-fonts';
-export { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/artifacts';
+export { archivedVersionFor, servedRow } from '@/lib/artifacts';
 export { artifactPageAnswer, artifactPageResponse } from './artifact-page';
 export type { ArtifactPageAnswer, FramedRuntime } from './artifact-page';
 export { artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
@@ -17,3 +17,5 @@ export { GITHUB_EXTERNAL_URL } from './github-star';
 export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { REPO_URL } from './repo';
 export { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from './theme-bootstrap';
+
+export { nativeHtmlCoreResponse,nativeHtmlModuleResponse,nativeHtmlApolloResponse,nativeHtmlReaderResponse,nativeHtmlSystemsResponse } from './native-html.server';

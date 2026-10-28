@@ -1,0 +1,4 @@
+import type {DatasetReadResult,DatasetWriteRequest} from '../src/dataset-graphql';
+/** Representative data uses immutable identities even when author-facing labels change. */
+export const DATASET_READ_FIXTURE:DatasetReadResult={source:{truncated:false,totalRows:1,storedRows:1},revision:'dataset-revision-1',columns:[{id:'col-title',label:'Title',type:'STRING',nullable:false},{id:'col-score',label:'Score',type:'NUMBER',nullable:true}],rows:[{id:'row-1',cells:[{columnId:'col-title',value:{type:'STRING',value:'Example'}},{columnId:'col-score',value:{type:'NUMBER',value:7}}]}],pageInfo:{hasNextPage:false,endCursor:null}};
+export const DATASET_WRITE_FIXTURE:DatasetWriteRequest={tableId:'table-1',expectedRevision:'dataset-revision-1',requestId:'write-1',changes:[{kind:'UPDATE',rowId:'row-1',cells:[{columnId:'col-title',value:{type:'STRING',value:'Updated'}}]}]};

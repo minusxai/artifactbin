@@ -155,3 +155,16 @@ describe('the image doors ask the byte quota', () => {
     expect(res.status).toBe(201);
   });
 });
+
+it('tokenless human-owned pages keep the account byte quota and never charge another account',async()=>{
+ const owner=await mintToken('tokenless_owner'),other=await mintToken('tokenless_other'),db=await getDb();
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,meta) VALUES('noTokenBytes',NULL,$1,'image',$2::jsonb)",[owner.userId,JSON.stringify({bytes:100})]);
+ expect(await assetBytesForToken(null,owner.userId)).toBe(100);
+ expect(await assetBytesForToken(null,other.userId)).toBe(0);
+ setAssetByteQuotaForTests(100);
+ expect(await assetByteQuotaExceeded(null,owner.userId)).toBe(true);
+ const {byteQuotaFor}=await import('@/lib/artifacts');
+ expect(await byteQuotaFor(null,owner.userId)()).toBe(true);
+ expect(await byteQuotaFor(null,other.userId)()).toBe(false);
+ await expect(assetBytesForToken(null,null)).rejects.toThrow('Byte quota requires a user or token');
+});

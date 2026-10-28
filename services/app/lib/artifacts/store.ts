@@ -1,18 +1,23 @@
+import { libraryVersions } from '@/lib/libraries';
+import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
+import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries/registry';
+import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations/registry';
+import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
+import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
+import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import { compiledForRow, isEmptyCompiled } from './row-compile';
-import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
+import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import {
-  type ProseOperation, sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId, type StringEdit,
+  sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId,
   nodeIndex, stampNodeIds,
 } from '../document';
-import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/accounts';
 import { documentMentions } from './membership/document-mentions';
@@ -36,15 +41,17 @@ import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
 import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { json } from '../http/http';
+import { json, thrownMessage } from '../http/http';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
+import { finalizeArtifactMetadata } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { DatasetColumn } from '@/lib/dataflow';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
+
+const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
 
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
@@ -53,6 +60,9 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
+  /** Server-prepared only; never decoded from caller metadata. */
+  htmlBackends?:readonly PreparedHtmlBackend[];
+  htmlDatasets?:readonly HtmlDatasetLink[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
@@ -112,8 +122,9 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
 async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
- if(document.format!=='markup')return;
- const refs=(document.meta.refs as Array<{id:string}>|undefined)??[];
+ if(document.format!=='html'&&document.format!=='markup')return;
+ const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
+ const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
@@ -134,7 +145,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
 }
 
 export async function createArtifact(
-  tokenId: string,
+  tokenId: string | null,
   userId: string | null,
   input: ArtifactInput,
   /**
@@ -152,18 +163,26 @@ export async function createArtifact(
    *                governs (a fork of an app copies both). Every other route to
    *                a policy is the document data module's `setDatasetPolicy`, which
    *                needs the row to exist first; a copy has no "first".
+   *   seedOwnerParticipation — trusted migration may supply false when an exact
+   *                captured relation adapter owns membership. Ordinary creation
+   *                defaults to the normal accepted owner join.
    *   tx         — run inside the caller's OPEN transaction instead of opening
    *                one. The caller then owns the post-commit effects
    *                (`afterCreated`): reaching trackEvent/notifyParent from
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
+  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
+  if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source).source };
+  }
+  if(input.format==='html'&&input.source){
+    const page=canonicalizeHtmlPage(input.source);
+    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions()}};
   }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
@@ -171,6 +190,7 @@ export async function createArtifact(
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
   }
+  if(input.format==='html'&&input.source)sourceIds=[...canonicalizeHtmlPage(input.source).nodeIds];
   // INSIDE THE CALLER'S TRANSACTION: no retry (a PK violation has already
   // poisoned it — the ids are reserved beforehand instead) and no post-commit
   // effects, which are the caller's to run once its own transaction commits.
@@ -209,13 +229,15 @@ export async function afterCreated(row: ArtifactRow, userId: string | null): Pro
 async function insertArtifact(
   tx: Queryable,
   id: string,
-  tokenId: string,
+  tokenId: string | null,
   userId: string | null,
   input: ArtifactInput,
   sourceIds: string[],
   atCreation: Parameters<typeof createArtifact>[3] = {},
 ): Promise<ArtifactRow> {
   // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
+  const creatorId = userId ?? tokenId;
+  if (!creatorId) throw new Error("Artifact creation requires a user or token");
   const creator = identityForUser(userId, tokenId);
   await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
   await assertDestination(tx,creator,input.destination??{type:'personal'});
@@ -244,6 +266,13 @@ async function insertArtifact(
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const datasetPolicy = atCreation.datasetPolicy?.policy ??
     (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
+  if(input.format==='html'&&input.htmlBackends){
+    const names=htmlBackendNames(input.source??'');
+    if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
+    const links=await commitHtmlBackends(tx,id,creatorId,input.htmlBackends,[]);
+    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
+  }
+  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:input.htmlDatasets}};
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -299,7 +328,7 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  if(input.format==='markup'&&userId)await seedOwnerJoin(tx,id,userId);
+  if(atCreation.seedOwnerParticipation!==false&&(input.format==='markup'||input.format==='html')&&userId)await seedOwnerJoin(tx,id,userId);
   if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],creator);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
@@ -324,21 +353,29 @@ interface VersionSummary {
   created_at: string;
 }
 
-/** Retain an offline download's already read-admitted server snapshot. Never
- * accept an offered/client graph here: the assembler passes the exact row it
- * authorized and will export. Copying that captured graph (not rebuilding its
- * source) keeps node revisions intact even if an autosave advances the head
- * before this insert. Download checkpoints do not reset autosave coalescing. */
-export async function retainDownloadedVersion(row: ArtifactRow): Promise<void> {
-  if (row.format !== 'markup' || row.version < 1 || row.document?.kind !== 'graph') return;
-  await (await getDb()).query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
-     VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,
-    [row.id,row.version,row.title,row.description,row.format,JSON.stringify(row.meta),row.actor_user_id,row.actor_token_id,JSON.stringify(row.document)],
-  );
+/** Archive the head as it stands — its author rides along, so history can say who. */
+/** Registered programs carried to a new page version: what to commit once that version is written. */
+interface CarriedRebinds {queries:readonly RegisteredQueryRebind[];mutations:readonly RegisteredMutationRebind[]}
+const NO_REBINDS:CarriedRebinds={queries:[],mutations:[]};
+/** Plans the re-binding of carried registered query and mutation programs, or the explicit refusal when one cannot be re-bound. Nothing is written. */
+async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:number;html:string},carried:readonly HtmlBackendLink[],pageOwnerId:string|null):Promise<{links:HtmlBackendLink[];rebinds:CarriedRebinds}|Response>{
+  try{
+    const queries=await planRegisteredQueryRebinds(tx,next,carried,pageOwnerId);
+    // A query link re-bound above names a version not yet stored, so the mutation plan passes it through unchanged.
+    const mutations=await planRegisteredMutationRebinds(tx,next,queries.links,pageOwnerId);
+    return {links:mutations.links,rebinds:{queries:queries.rebinds,mutations:mutations.rebinds}};
+  }
+  catch(error){
+    if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
+    if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
+    throw error;
+  }
+}
+async function commitCarriedRebinds(tx:Queryable,page:{pageId:string;version:number;html:string},rebinds:CarriedRebinds):Promise<void>{
+  await commitRegisteredQueryRebinds(tx,page,rebinds.queries);
+  await commitRegisteredMutationRebinds(tx,page,rebinds.mutations);
 }
 
-/** Archive the head as it stands — its author rides along, so history can say who. */
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
     `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
@@ -386,26 +423,6 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
 
-/**
- * Commit an already-published markup source while the caller holds the
- * artifact row lock. Migration and ordinary whole-document paths share this
- * single reservation/history boundary; events are emitted by the caller only
- * after its surrounding transaction commits.
- */
-export interface PreparedMarkupWrite {
- source:string;meta:Record<string,unknown>;ids:string[];
- update:DocumentUpdate;
-}
-export async function commitNormalizedMarkup(
- tx:Queryable,actor:AccessActor|null,current:ArtifactRow,
- normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
-):Promise<ArtifactRow>{
- const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
- if(!committed?.applied)throw new Error('artifact changed after identity preparation');
- return committed.row;
-}
-
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
   const db = await getDb();
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
@@ -446,7 +463,7 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
 /** One archived version on the wire: `markup` carries the source. */
 export function versionToWire(row: VersionContent): Record<string, unknown> {
   const { source, ...rest } = row;
-  return { ...rest, markup: source };
+  return { ...rest, ...(row.format==='html'?{html:source}:{markup:source}) };
 }
 
 /**
@@ -522,6 +539,15 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
       }
     }
 
+    // A reverted page names the registered programs of the version it restores; they are re-bound to the new version like any save.
+    let rebinds: CarriedRebinds = NO_REBINDS;
+    if(target.format==='html'){
+      const restored=(target.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[];
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:target.source??''},restored.filter((link):link is HtmlBackendLink=>link.kind==='backend'),current.user_id);
+      if(carried instanceof Response)return {notArchived:true,refusal:carried};
+      rebinds=carried.rebinds;
+      target={...target,meta:{...target.meta,htmlLinks:restored.map(link=>link.kind==='backend'?carried.links.find(next=>next.name===link.name)??link:link)}};
+    }
     await archiveVersion(tx, current);
     const updated = await artifactQuery<ArtifactRow>(tx,
       `UPDATE artifacts
@@ -530,9 +556,10 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
+    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
-    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
-      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
+      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [id, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($3::text[]))', [id, updated.rows[0].version, ids]);
     }
@@ -558,6 +585,8 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Resp
 }
 
 export interface ReplaceOpts {
+  mutationReceipt?:MutationReceipt;
+  mutationReply?:(row:ArtifactRow)=>Promise<MutationReply>;
   expectedPolicyRevision?:number;
   shares?:ShareEntry[];
   annotationOps?: AnnotationOperation[];
@@ -584,6 +613,7 @@ async function replaceScoped(
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
+    let rebinds: CarriedRebinds = NO_REBINDS;
     const current = (
       await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
@@ -610,6 +640,32 @@ async function replaceScoped(
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
+    }
+    if(input.format==='html'){
+      if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
+      // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
+      const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
+      const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
+      try{
+        const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
+        // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
+        input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
+      }catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    }
+    if(input.format==='html'){
+      const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
+      const names=htmlBackendNames(input.source??'');
+      if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
+      if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
+      const backendOwner=current.user_id??current.token_id;
+      if(input.htmlBackends&&!backendOwner)return json({error:'backend_owner_missing'},403);
+      const changed=input.htmlBackends&&backendOwner?await commitHtmlBackends(tx,id,backendOwner,input.htmlBackends,previous):[];
+      const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
+      // A registered query or mutation program carried forward (declared again, no replacement source in this save) is re-bound to the new version (registered-page-queries/registry, registered-page-mutations/registry).
+      const carried=await rebindCarriedPrograms(tx,{pageId:id,version:current.version+1,html:input.source??''},links.filter(link=>!changed.some(next=>next.name===link.name)),current.user_id);
+      if(carried instanceof Response)return carried;
+      rebinds=carried.rebinds;
+      input={...input,meta:{...input.meta,htmlLinks:[...links.map(link=>carried.links.find(next=>next.name===link.name)??link),...(input.htmlDatasets??[])]}};
     }
     input=retainUserScope(input,current);
     /*
@@ -673,6 +729,7 @@ async function replaceScoped(
       const swap = ancestorsForMove(current, input.ancestor_ids);
       await tx.query(swap.sql, swap.params);
     }
+    await commitCarriedRebinds(tx,{pageId:id,version:updated.rows[0].version,html:updated.rows[0].source??''},rebinds);
     if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
     else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated.rows[0]);
@@ -684,13 +741,14 @@ async function replaceScoped(
       for(const row of applied.rows)movedAnnotations.add(row.id);
     }
     if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.rows[0].edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
-    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
-      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
+      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
       await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
         SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
       await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
     }
+    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated.rows[0]));
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
@@ -725,176 +783,6 @@ function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; 
   void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
 }
 
-// ── The concurrent-edit protocol ─────────────────────────────────────────────
-
-/**
- * One edit against a claimed base version. Agents send the Edit-tool diff;
- * the WYSIWYG sends its whole re-serialized source (the splice is derived by
- * prefix/suffix diff — sound because stored source is canonical).
- */
-export interface EditInput {
-  documentUpdate?:DocumentUpdate;
-  /**
-   * The caller answers with the patch, not the document, when the patch lands where it was prepared (the browser
-   * editor's save): the commit then never returns or decodes the new document, and the outcome says `withheld`.
-   */
-  patchEcho?: true;
-  operations?:DocumentOperation[];
-  text?: ProseOperation;
-  annotationOps?: AnnotationOperation[];
-  baseEditId: string;
-  /** The content change, if this edit has one. */
-  change?: { oldString: string; newString: string } | { newSource: string } | { edits: StringEdit[] };
-  /**
-   * Document-level attributes. Deliberately NOT node-scoped: a title or theme
-   * belongs to the whole document, has no span to conflict on, and (for theme)
-   * recompiles the stylesheet — so these apply to head and never reject, which
-   * is what lets the editor persist a theme flip while an agent is writing.
-   */
-  meta?: { title?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null };
-}
-
-/**
- * The resolution outcomes. `null` keeps the
- * uniform-404 contract: unknown and foreign ids are indistinguishable.
- * Candidate markup that fails validation returns the publish pipeline's 400
- * Response unchanged (same shape as parseContentInput).
- */
-export type EditOutcome =
-  /**
-   * `withheld`: the row carries no document or source. `remotePatches`: the patch landed on a newer head than its
-   * base; these are the logged patches of the versions between, in order (absent when the log cannot yield them all).
-   */
-  | { applied: true; row: ArtifactRow; withheld?: true; remotePatches?: RemotePatch[] }
-  | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
-  | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
-  | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
-
-/**
- * Save-less editing writes constantly, so `artifact_versions` snapshots
- * coalesce: the first edit after this much quiet archives the pre-edit state,
- * everything inside the burst rides on it. The decision is made in SQL (a NOT
- * EXISTS over the edit log) so it costs no extra round trip.
- */
-
-/** How many times a lost CAS race is retried before we give up and report the conflict. */
-export const MAX_STALE_EDITS = 200;
-
-/**
- * After a patch commit, whose final source only exists once the database has
- * applied it: compile that source under its owner's reach and store the
- * record beside it — unless the row has moved on, in which case the next read
- * recompiles. A source that no longer compiles (an import changed shape)
- * stores nothing, and its reads report it.
- */
-async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<ArtifactRow> {
-  if (row.format !== 'markup' || !row.source || storedCompiledDataflow(row.meta, row.source)) return row;
-  const compiled = await compiledForRow(row).catch(() => null);
-  if (!compiled || isEmptyCompiled(compiled)) return row;
-  const meta = finalizeArtifactMetadata('markup', row.source, { ...row.meta, [COMPILED_DATAFLOW]: compiled } as Record<string, unknown>);
-  if (!meta.parsedArtifact) return row;
-  const stored = await db.query("UPDATE artifacts SET meta = jsonb_set(meta, '{parsedArtifact}', $3::jsonb) WHERE id = $1 AND version = $2 AND deleted_at IS NULL", [row.id, row.version, JSON.stringify(meta.parsedArtifact)]);
-  return stored.rowCount ? { ...row, meta } : row;
-}
-
-/**
- * What a commit that WITHHELD its document still owes, done after the reply: the new head's source exists only in the
- * database, and decoding it (megabytes on a table-heavy document) is what the save must not wait for. So the head is
- * read once here, off the write's path, and gets exactly what an answered commit gets inline: its dataflow record
- * (storeCompiledRecord, guarded on the version), its diagram harvest, then the warm prepared page. A head that has
- * moved on is skipped: the newer commit settles its own head, and readers compile and queue on a miss anyway.
- * Serial, in commit order, and never inside a transaction (one PGLite connection).
- */
-let settling: Promise<void> = Promise.resolve();
-function settleCommittedHead(id: string, version: number): void {
-  // Chained on a microtask, not a timer: a test's fake clock must never strand it. Its first step is a query, so the
-  // reply is written while the document is read.
-  settling = settling.then(async () => {
-    try {
-      const db = await getDb();
-      const head = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id=$1 AND version=$2 AND ${LIVE_ARTIFACT_SQL}`, [id, version])).rows[0];
-      if (!head) return;
-      const row = await storeCompiledRecord(db, head);
-      await queueMermaidHarvest(row);
-      if (row.format === 'markup') emitHeadCommitted(row.id, row);
-    } catch (error) {
-      console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
-    }
-  });
-}
-
-/** Resolves once every withheld commit so far has been settled (tests, and a graceful shutdown). */
-export function committedHeadsSettled(): Promise<void> {
-  return settling;
-}
-
-const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
-
-/** One logged commit's patch, admitted at `version - 1` (lib/document/document-graph-patch advanceGraph replays it). */
-interface RemotePatch { version: number; patch: GraphPatch }
-/** Beyond this many versions between, the editor reads the head instead. */
-const MAX_REMOTE_PATCHES = 50;
-
-/**
- * The patches every commit between `baseVersion` and `headVersion` (both exclusive) applied, read from the edit log
- * (`document_state.forward`, logged by the commit that admitted it). Replayed in order on the graph at `baseVersion`
- * they give the graph the newer head was built on, without sending or decoding the document. Null when any version
- * between has no logged patch (a replacement, a conversion), or there are too many: the caller then reads the head.
- */
-async function patchesSince(db: Queryable, id: string, baseVersion: number, headVersion: number): Promise<RemotePatch[] | null> {
-  const count = headVersion - baseVersion - 1;
-  if (count <= 0) return count === 0 ? [] : null;
-  if (count > MAX_REMOTE_PATCHES) return null;
-  const rows = (await db.query<{ version: number | null; kind: string | null; forward: GraphPatch | null; replaced: boolean }>(
-    `SELECT (document_state->>'version')::int AS version,document_state->>'kind' AS kind,document_state->'forward' AS forward,
-      COALESCE(document_state->'replacement','null'::jsonb)<>'null'::jsonb AS replaced
-     FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT $2`, [id, count + 8])).rows;
-  const byVersion = new Map(rows.filter((r) => r.version !== null && r.version > baseVersion && r.version < headVersion).map((r) => [r.version!, r]));
-  const patches: RemotePatch[] = [];
-  for (let version = baseVersion + 1; version < headVersion; version++) {
-    const row = byVersion.get(version);
-    if (!row || row.kind !== 'operations' || row.replaced || !row.forward) return null;
-    patches.push({ version, patch: row.forward });
-  }
-  return patches;
-}
-
-/** Clients own semantic validation and patch preparation. This boundary owns
- * authorization and the atomic operation/dependency/history commit. */
-export async function applyEditScoped(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
-  const db = await getDb();
-  const scope = opts.scope ?? editorScope(actor);
-  if(input.documentUpdate){
-    const update=input.documentUpdate;
-    if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
-    if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    const withholdDocument=!!input.patchEcho&&!opts.dryRun;
-    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,withholdDocument});
-    if(!committed)return null;
-    if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
-    if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
-    if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
-    if(!committed.applied&&committed.invalidParent)return json({error:'invalid_parent'},400);
-    if(!committed.applied&&committed.invalidGraph)return json({error:'invalid_document_graph',hint:'The patch would store nodes whose children, parts or byte counts disagree. Prepare document_update from the current authoring graph with the shared compiler.'},400);
-    if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
-    if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id&&!committed.head.group_id)return json({error:'private_requires_account'},400);
-    if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
-    if(committed.withheld){
-      settleCommittedHead(committed.row.id,committed.row.version);
-      const remotePatches=committed.row.version===update.patch.baseVersion+1?null:await patchesSince(db,id,update.patch.baseVersion,committed.row.version);
-      return {applied:true,row:committed.row,withheld:true,...(remotePatches?{remotePatches}:{})};
-    }
-    const row=await storeCompiledRecord(db,committed.row);
-    // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
-    if(row.format==='markup')emitHeadCommitted(row.id);
-    void queueMermaidHarvest(row);
-    return {applied:true,row};
-  }
-
-  return json({error:'jsonb_operations_required',hint:'Prepare document_update from the graph returned by the last read. Use the current CLI or browser editor.'},400);
-}
-
 // ── The reference graph ──────────────────────────────────────────────────────
 
 /**
@@ -911,8 +799,8 @@ export async function applyEditScoped(actor: AccessActor, id: string, input: Edi
  * publishing an image or a PDF is, so those two refuse by name instead of
  * quietly working for free (lib/publish/document/input).
  */
-export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
-  return () => assetByteQuotaExceeded(tokenId);
+export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId, ownerUserId);
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
@@ -941,10 +829,6 @@ export function listArtifactsFor(actor: AccessActor): Promise<ArtifactSummary[]>
 
 export function replaceArtifactFor(actor: AccessActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
   return replaceScoped(actor, id, input, opts);
-}
-
-export function applyEditFor(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
-  return applyEditScoped(actor, id, input, opts);
 }
 
 export async function listVersionPageFor(actor: AccessActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {

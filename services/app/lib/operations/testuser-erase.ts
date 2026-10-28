@@ -69,6 +69,8 @@ export async function eraseTestUser(testUserId: string): Promise<TestUserErased>
     const ids = owned.rows.map((row) => row.id);
     await eraseMutationNotifications(tx,testUserId,ids);
     await expireCommentImagesFor(tx,testUserId,ids);
+    await tx.query('DELETE FROM comment_reactions WHERE user_id=$1 OR comment_id IN (SELECT id FROM annotations WHERE author_user_id=$1 OR artifact_id=ANY($2::text[]))',[testUserId,ids]);
+    await tx.query('DELETE FROM comment_reaction_events WHERE user_id=$1 OR artifact_id=ANY($2::text[]) OR comment_id IN (SELECT id FROM annotations WHERE author_user_id=$1)',[testUserId,ids]);
     if (ids.length) {
       for (const { table, key } of ERASE_BY_ARTIFACT) await tx.query(`DELETE FROM ${table} WHERE ${key} = ANY($1::text[])`, [ids]);
       await tx.query("DELETE FROM relations WHERE object_kind = 'artifact' AND object_id = ANY($1::text[])", [ids]);

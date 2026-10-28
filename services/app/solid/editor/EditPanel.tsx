@@ -29,7 +29,6 @@ const TABS = [
 ];
 
 /** Shown in the Selection tab when nothing inspectable is selected. */
-export const SELECTION_HINT = 'Select a chart, image or block to see its settings.';
 
 export default function EditPanel(props: {
   /** Where the panel starts: under the page's bar and the editor toolbar. */

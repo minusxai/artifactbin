@@ -1,0 +1,200 @@
+<!doctype html>
+<!-- Example: an eight-slide pitch deck. Usage: and Gotchas: are above SLIDES; keep this line. -->
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="artifactbin:design-system" content="redline">
+<title>Pitch deck</title>
+<script type="module" id="slides-data">
+// Usage: cp examples/deck.html index.html && cp examples/deck-steps.mjs steps.mjs; edit only
+//   SLIDES (no drafts elsewhere, never the CSS or JS); then node scripts/publish.mjs index.html &&
+//   node scripts/check.mjs index.html --viewport 1200x630 --viewport 1280x800 --steps steps.mjs
+// Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how it works, market,
+//   traction, business model, competition, ask); N topics means N slides. Types: cover is the
+//   problem slide {label "Problem · Company", title ≤40 characters, text one line, stats≤3},
+//   bullets {items≤3}, chart {mark bar|line, data [{x,y}], format ".1f", unit "$#B"}, flow
+//   {steps≤4}, matrix {x,y axis names, points [{label,x,y}] in 0..1}, ask {title,contact,unit,
+//   milestone, items≤3 [{label,amount} or {label,pct}]} (shows sum, shares, milestone; titled
+//   from these). Titles ≤2 lines; they may only state numbers, time spans or comparisons the slide
+//   itself shows. Say if a chart counts cumulatively. Unique ids key data-af-id. Every slide shows
+//   "Illustrative figures"; real:true removes it. The comment at the top may stay as it is.
+// The only part to edit: one entry per slide, rendered by the template below.
+window.SLIDES = [
+  {id:'problem', type:'cover', label:'Problem · [Company]', title:'[Problem: a cost, ≤40 chars]',
+    text:'[Who pays it, in one line.]',
+    stats:[{value:'[41%]', label:'[of something lost]'}, {value:'[$2.6B]', label:'[yearly cost]'}]},
+  {id:'solution', type:'bullets', label:'Solution', title:'[What the product does, in one line]',
+    items:['[What it replaces]', '[What changes for the buyer]', '[Why now]']},
+  // flow labels wrap onto up to 3 lines: about 13 characters a line with 4 steps, 20 with 3.
+  {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
+    steps:['[Input]', '[Product]', '[Outcome]']},
+  {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
+    mark:'bar', format:'.1f', unit:'$#B', yTitle:'US$ billions',
+    data:[{x:'Total', y:4.2}, {x:'Serviceable', y:1.1}, {x:'Obtainable', y:0.12}]},
+  {id:'traction', type:'chart', label:'Traction', title:'[The strongest proof that it works]',
+    mark:'line', format:'.0f', yTitle:'Customers (cumulative)',
+    data:[{x:'Q1', y:2}, {x:'Q2', y:5}, {x:'Q3', y:9}, {x:'Q4', y:14}]},
+  {id:'model', type:'bullets', label:'Business model', title:'[How it makes money]',
+    items:['[Price per unit, seat or month]', '[Who signs and why]', '[Cost to serve one]']},
+  {id:'competition', type:'matrix', label:'Competition', title:'[Why we win]',
+    x:'[Coverage]', y:'[Speed]', points:[{label:'[Us]', x:0.8, y:0.85},
+      {label:'[Incumbent]', x:0.3, y:0.3}, {label:'[Alternative]', x:0.7, y:0.25}]},
+  {id:'ask', type:'ask', label:'The ask', title:'[The milestone this round reaches]', unit:'$#M',
+    contact:'[name@company.com]', items:[{label:'[Product]',amount:1.5},{label:'[Sales]',amount:1}],
+    milestone:'[26 → 100 customers]'},
+];
+</script>
+<style>
+*{box-sizing:border-box}html{scroll-snap-type:y mandatory}
+body{margin:0;background:var(--ds-paper);color:var(--ds-ink)}
+[data-af-slide]{height:100vh;min-height:560px;scroll-snap-align:start;display:flex;
+  flex-direction:column;gap:18px;padding:44px 64px 84px;overflow:hidden}
+[data-af-slide] h1,[data-af-slide] h2,[data-af-slide] p{margin:0}[data-af-slide] h2{max-width:22ch}
+.red{background:var(--ds-red);color:var(--ds-on-red)}.soft{color:var(--ds-ink-soft)}
+.ink{background:var(--ds-ink);color:var(--ds-on-ink)}.red .soft,.ink .soft{color:inherit}
+.cover{justify-content:center}.cover h1{max-width:13ch}.stats{display:flex;gap:56px}
+.items{list-style:none;margin:0;padding:0;display:grid;gap:16px;max-width:52ch}
+.items li{border-top:2px solid currentColor;padding-top:10px}.chart{width:100%;height:280px}
+.figure{height:300px;max-height:300px;min-width:0;flex:none}.figure svg{width:100%;height:100%}
+.illustrative{align-self:flex-start;border:1px solid currentColor;padding:2px 8px}
+nav[data-af-deck-chrome]{position:fixed;right:24px;bottom:18px;display:flex;align-items:center;
+  gap:10px;padding:6px 10px;background:var(--ds-paper-raised);color:var(--ds-ink);
+  border:1px solid var(--ds-line);z-index:2}
+nav button{font:inherit;color:inherit;background:none;border:1px solid currentColor;
+  padding:4px 10px;cursor:pointer}nav button:disabled{opacity:.4;cursor:default}nav .dot{width:12px;
+  height:12px;padding:0;border-radius:50%}nav .dot[aria-current=true]{background:var(--ds-red)}
+button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
+@media(max-width:720px){[data-af-slide]{padding:28px 20px 84px;height:auto;min-height:100vh}}
+</style>
+</head>
+<body>
+<main id="deck"></main>
+<nav data-af-deck-chrome aria-label="Slides">
+<button id="prev" type="button" aria-label="Previous slide">←</button><span id="dots"></span>
+<button id="next" type="button" aria-label="Next slide">→</button>
+<span id="count" class="t-mono" aria-live="polite">01 / 01</span></nav>
+<script type="module">
+import * as vega from '@afbin/vega';
+import {compile} from '@afbin/vega-lite';
+const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
+// The tab title comes from the cover's company; script-made nodes take data-af-ids from slide ids.
+document.title=`${SLIDES[0].label.split('·').pop().trim()} pitch deck`;
+const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);
+  if(text!==undefined)node.textContent=text;return node;};
+const el=(tag,id,attrs={},text)=>make(document.createElement(tag),{...attrs,'data-af-id':id},text);
+const svgEl=(tag,attrs,text)=>make(document.createElementNS('http://www.w3.org/2000/svg',tag),attrs,
+  text);
+const list=(id,items)=>{const ul=el('ul',id,{class:'items t-body'});
+  items.slice(0,3).forEach((item,n)=>ul.append(el('li',`${id}-${n}`,{},item)));return ul;};
+function flow(s){
+  const steps=s.steps.slice(0,4),w=900/steps.length;
+  const svg=svgEl('svg',{viewBox:'0 0 900 220',role:'img','aria-label':steps.join(' to ')});
+  steps.forEach((step,n)=>{
+    const x=n*w+10,mid=n===Math.floor(steps.length/2),ink=mid?'var(--ds-on-red)':'currentColor';
+    svg.append(svgEl('rect',{x,y:60,width:w-70,height:100,fill:mid?'var(--ds-red)':'none',
+      stroke:'currentColor','stroke-width':2}));
+    // Labels wrap at spaces (about 11 units a character); a single word over the width overflows.
+    const lines=[],max=Math.floor((w-82)/11);for(const word of step.split(' '))lines.length&&
+      (lines.at(-1)+' '+word).length<=max?lines.push(lines.pop()+' '+word):lines.push(word);
+    const text=svgEl('text',{y:116-(lines.length-1)*11,'text-anchor':'middle','font-size':18,
+      fill:ink,'font-family':'var(--font-mono)'});svg.append(text);
+    lines.forEach((line,k)=>text.append(svgEl('tspan',{x:x+(w-70)/2,dy:k?22:0},line)));
+    if(n<steps.length-1)svg.append(svgEl('path',{d:`M${x+w-56} 110h40m-10-8 10 8-10 8`,fill:'none',
+      stroke:'currentColor','stroke-width':2}));
+  });
+  return svg;
+}
+function matrix(s){
+  const svg=svgEl('svg',{viewBox:'0 0 900 300',role:'img','aria-label':`${s.x} by ${s.y}`});
+  svg.append(svgEl('path',{d:'M450 10v260M200 140h500',stroke:'currentColor','stroke-width':2}));
+  svg.append(svgEl('text',{x:700,y:165,'text-anchor':'end','font-size':15,fill:'currentColor'},
+    `${s.x} →`));
+  svg.append(svgEl('text',{x:460,y:26,'font-size':15,fill:'currentColor'},`↑ ${s.y}`));
+  s.points.forEach((p,n)=>{
+    const cx=200+p.x*500,cy=270-p.y*260;
+    svg.append(svgEl('circle',{cx,cy,r:9,fill:n===0?'var(--ds-red)':'currentColor'}));
+    svg.append(svgEl('text',{x:cx+14,y:cy+5,'font-size':16,fill:'currentColor'},p.label));
+  });
+  svg.append(svgEl('text',{x:890,y:296,'text-anchor':'end','font-size':13,fill:'currentColor'},
+    'Positions are illustrative'));return svg;
+}
+const surface={cover:'red cover',ask:'ink'},charts=[],badge='Illustrative figures';
+SLIDES.forEach((s,n)=>{
+  const id='slide-'+s.id,section=el('section',id,{'data-af-slide':'',class:surface[s.type]??'',
+    'aria-label':`Slide ${n+1}: ${s.label}`});
+  section.append(el('p',id+'-label',{class:'t-label soft'},n?`${pad(n+1)} · ${s.label}`:s.label));
+  section.append(el(n?'h2':'h1',id+'-title',{class:n?'t-display-m':'t-display-l'},s.title));
+  // The ask computes its total and shares (rounded to sum to 100), so the parts always add up.
+  if(s.type==='ask'){const parts=s.items??[],v=p=>p.amount??p.pct??0,fmt=x=>s.unit.replace('#',
+      +x.toFixed(2)),total=parts.reduce((t,p)=>t+v(p),0),raw=parts.map(p=>v(p)/total*100);
+    const pct=raw.map(Math.floor);raw.map((r,i)=>[r-pct[i],i]).sort((a,b)=>b[0]-a[0])
+      .slice(0,100-pct.reduce((a,b)=>a+b,0)).forEach(([,i])=>pct[i]++);
+    s.stats=[...parts[0]?.amount!=null?[{value:fmt(total),label:'Raising'}]:[],...s.milestone?
+      [{value:s.milestone,label:'Milestone'}]:[]];s.text=s.contact;
+    s.items=parts.map((p,i)=>`${p.label}: ${p.amount!=null?fmt(p.amount)+' · ':''}${pct[i]}%`);}
+  if(s.text)section.append(el('p',id+'-text',{class:'t-body-l'},s.text));
+  if(s.stats){const row=section.appendChild(el('div',id+'-stats',{class:'stats'}));
+    s.stats.slice(0,3).forEach((stat,k)=>row.appendChild(el('div',`${id}-stat-${k}`)).append(
+      el('p',`${id}-stat-${k}-value`,{class:'t-numeral'},stat.value),
+      el('p',`${id}-stat-${k}-label`,{class:'t-body-s soft'},stat.label)));}
+  if(s.items)section.append(list(id+'-items',s.items));
+  if(s.type==='flow'||s.type==='matrix'){
+    const figure=el('div',id+'-figure',{class:'figure'});
+    figure.append(s.type==='flow'?flow(s):matrix(s));section.append(figure);
+  }
+  if(s.type==='chart'){
+    const host=el('div',id+'-chart',{class:'chart',role:'img','aria-label':s.title});
+    section.append(host);charts.push({s,host});
+  }
+  if(!s.real)section.append(el('p',id+'-badge',{class:'t-label illustrative'},badge));
+  deck.append(section);
+  document.querySelector('#dots').append(el('button','dot-'+s.id,{class:'dot',type:'button',
+    'data-dot':n,'aria-label':`Slide ${n+1}`}));
+});
+const slides=[...deck.children],dots=[...document.querySelectorAll('.dot')];
+let index=0,prev=document.querySelector('#prev'),next=document.querySelector('#next');
+function show(i){index=Math.max(0,Math.min(slides.length-1,i));
+  document.querySelector('#count').textContent=`${pad(index+1)} / ${pad(slides.length)}`;
+  dots.forEach((dot,n)=>dot.setAttribute('aria-current',String(n===index)));
+  prev.disabled=index===0;next.disabled=index===slides.length-1;}
+function go(i){show(i);slides[index].scrollIntoView({behavior:'auto',block:'start'});} // not smooth
+prev.onclick=()=>go(index-1);next.onclick=()=>go(index+1);dots.forEach(dot=>dot.onclick=()=>
+  go(Number(dot.dataset.dot)));
+document.addEventListener('keydown',event=>{
+  const to={ArrowRight:index+1,PageDown:index+1,ArrowLeft:index-1,PageUp:index-1,Home:0,
+    End:slides.length-1}[event.key];
+  if(to!==undefined&&!event.target.closest?.('input,select')){event.preventDefault();go(to);}
+});
+// Keep the counter on the slide under the middle of the view, not a stale observer entry.
+const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClientRect();
+  return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};
+const seen=new IntersectionObserver(sync,{threshold:.6});slides.forEach(slide=>seen.observe(slide));
+show(0);
+const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+let views=[];
+async function drawCharts(){views.forEach(view=>view.finalize());
+  const ink=token('--ds-ink'),font=token('--font-body'),red=token('--ds-red');
+  views=await Promise.all(charts.map(async({s,host})=>{
+    // Labels use the chart's decimals, or two significant digits under 1 ("$0.28B").
+    const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,num=y=>
+      Math.abs(y)<1&&y?String(+y.toPrecision(2)):y.toFixed(dp),values=s.data.map((d,i)=>({...d,
+        label:!line||!i||i===end?(s.unit??'#').replace('#',num(d.y)):''}));
+    const spec=compile({width:'container',height:240,autosize:{type:'fit',contains:'padding'},
+      background:'transparent',data:{values},layer:[{mark:line?{type:'line',point:true,color:red,
+        strokeWidth:3}:{type:'bar',color:red,cornerRadiusEnd:2}},{mark:{type:'text',dy:-10,
+        color:ink,fontSize:14},encoding:{text:{field:'label'}}}],
+      encoding:{x:{field:'x',type:'ordinal',sort:null,title:null,axis:{labelAngle:0}},
+        y:{field:'y',type:'quantitative',title:s.yTitle??null,axis:{format:s.format}},
+        tooltip:[{field:'x',type:'nominal'},{field:'y',type:'quantitative',format:s.format}]},
+      config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,
+        gridColor:token('--ds-line'),labelFont:font,titleFont:font,titleLimit:210}}}).spec;
+    const view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:host,renderer:'svg',
+      expr:vega.expressionInterpreter});await view.runAsync();return view;
+  }));
+}
+await drawCharts();const theme=new MutationObserver(drawCharts);
+theme.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
+addEventListener('pagehide',()=>{theme.disconnect();seen.disconnect();views.map(v=>v.finalize());});
+</script>
+</body>
+</html>

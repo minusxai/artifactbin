@@ -3,22 +3,20 @@ import {createHash} from 'node:crypto';
 import {parseAnnotationRange, isAreaRange, refinementRange} from '@/lib/document';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import {readableArtifact} from '@/lib/artifacts';
-import { canAnnotate } from '@artifactbin/contracts';
+import { canAnnotate, parseHtmlNodeAnchor } from '@artifactbin/contracts';
 /**
  * GET /api/artifacts/:id/annotations — the annotation list, anchors in
  * CURRENT coordinates. `?status=open` (default) | `resolved` | `all`.
  *
- * This is the history/debug view; the primary read is the artifact GET
- * itself, which inlines the open set — an agent never needs a second call to
- * see the feedback. Uniform 404 for an unreachable id, like every scoped
- * read.
+ * Comments are sidecar relations. Read the artifact and its annotations
+ * separately; page GET returns only the document source and current revision.
+ * Uniform 404 for an unreachable id, like every scoped read.
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
 import { type AccessActor, withTokenAuth } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
-import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
@@ -46,14 +44,17 @@ export const GET = withTokenAuth((request, { actor, params }) =>
 export const POST = withTokenAuth(async (request, { actor, params, clientHarness }) => {
   const body = await readJson(request);
   if (!body) return json({error: 'invalid_json'}, 400);
-  if (Object.keys(body).some(key => !['node_id', 'quote', 'range', 'body'].includes(key)) ||
+  const anchor = body.anchor === undefined ? undefined : parseHtmlNodeAnchor(body.anchor);
+  if (body.anchor !== undefined && (!anchor || body.node_id !== undefined || body.quote !== undefined)) return json({error:'invalid_annotation_body'},400);
+  if (Object.keys(body).some(key => !['node_id', 'quote', 'range', 'body', 'anchor'].includes(key)) ||
     typeof body.body !== 'string' || !body.body.trim() || body.body.length > 100000 ||
     (body.node_id !== undefined && (typeof body.node_id !== 'string' || !body.node_id.trim())) ||
     (body.quote !== undefined && (typeof body.quote !== 'string' || !body.quote.trim())) ||
-    (body.node_id === undefined && body.quote === undefined))
-    return json({error: 'invalid_annotation_body', hint: 'Supply the comment text with --body (or --input) and an anchor: --node ID or --quote TEXT. HTTP node anchors may include selected quote and range.'}, 400);
+    (body.node_id === undefined && body.quote === undefined && !anchor))
+    return json({error: 'invalid_annotation_body', hint: 'Supply body and an HTML anchor object, or a legacy node_id or quote anchor.'}, 400);
   const range=body.range==null?undefined:parseAnnotationRange(body.range);
   if(body.range!=null&&(!range||(isAreaRange(refinementRange(range))&&body.quote!==undefined)))return json({error:'bad_range'},400);
+  if(anchor && range && (!isAreaRange(range) || anchor.quote || anchor.range))return json({error:'bad_range'},400);
   const viewState=body.view_state===undefined?undefined:parseCommentViewState(body.view_state);
   if(body.view_state!==undefined&&!viewState)return json({error:'bad_view_state'},400);
   // Commenting is an act attributed to a PERSON: a guest is sent to sign in and
@@ -64,12 +65,11 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
   const made = await createAnnotationFor(actor, params.id, {
-    body: body.body as string, ...(typeof body.node_id === 'string'?{nodeId:body.node_id}:{}),...(typeof body.quote==='string'?{quote:body.quote}:{}),...(range?{range}:{}),...(viewState?{viewState}:{}),
+    body: body.body as string, ...(anchor ? { anchor } : {}), ...(typeof body.node_id === 'string'?{nodeId:body.node_id}:{}),...(typeof body.quote==='string'?{quote:body.quote}:{}),...(range?{range}:{}),...(viewState?{viewState}:{}),
   }, annotationAuthorForRequest(request, clientHarness),receipt);
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
-  if ('refused' in made) return json({error: made.refused, hint: 'Read the current document again, then anchor with a --quote that appears exactly once, or with the node id from its stored markup as --node.'}, made.refused === 'stale' ? 409 : 400);
-  notifyRemoteComment(actor.userId, params.id, made.id, made.thread[0]);
+  if ('refused' in made) return json({error: made.refused, hint: 'Read the current page again, then supply an HTML anchor with its revision, stable nodeId and quote.'}, made.refused === 'stale' ? 409 : 400);
   return json(made, 201);
   };
   if(!key)return work();

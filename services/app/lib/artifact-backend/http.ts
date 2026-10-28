@@ -1,3 +1,4 @@
+import {createReaderHttpBackend} from './reader-http';
 /**
  * THE ONLINE BACKEND — the surface's existing requests, moved here verbatim:
  * the same URLs (including where a call site did or did not encode the id),
@@ -11,15 +12,11 @@
  * `fetch` and `EventSource` are looked up at call time, never captured.
  */
 import type { AnnotationWire } from '@/lib/annotations';
-import { readAnnotationPages } from '@/lib/annotations/pages';
 import { createAuthenticatedTransport } from '@/lib/page-store/authenticated-transport';
 import { SIGN_IN_REQUIRED } from '@artifactbin/contracts';
-import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactLiveEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { openLiveStream } from '@/lib/http/live-stream';
 import { BackendRequestError } from './errors';
 import type {
   ArtifactBackend,
-  ArtifactHead,
   ArtifactVersionSnapshot,
   ArtifactVersionSummary,
   ChosenImage,
@@ -29,8 +26,9 @@ import type {
   FlushResponse,
   ImageChoice,
   MembersAnswer,
-  RemoteSessionsAnswer,
 } from './types';
+
+import { newIdempotencyKey, retried, watchRetrying } from './retrying';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -42,9 +40,10 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 export function artifactRequests(id: string) {
   const path = `/api/my/artifacts/${encodeURIComponent(id)}`;
   return {
-    head: () => fetch(path),
-    version: (n: number) => fetch(`${path}/versions/${n}`),
+    head: () => retried(() => fetch(path)),
+    version: (n: number) => retried(() => fetch(`${path}/versions/${n}`)),
     edits: (body: unknown) => fetch(`${path}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
+    htmlUpdate: (body: unknown) => fetch(path, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     patch: (body: unknown) => fetch(path, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     revert: (body: unknown) => fetch(`${path}/revert`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
   };
@@ -78,16 +77,12 @@ export function createHttpBackend(id: string): ArtifactBackend {
 
   return {
     mode: 'online',
-    unavailable: () => null,
+    ...createReaderHttpBackend(id),
 
     // ── the document ────────────────────────────────────────────────────────
-    async load() {
-      const res = await fetch(mine);
-      return res.ok ? ((await res.json()) as ArtifactHead) : null;
-    },
     async documentFrame(ref) {
       try {
-        const res = await fetch(`/api/page/frame/${encodeURIComponent(ref)}`, { credentials: 'same-origin', cache: 'no-store' });
+        const res = await retried(() => fetch(`/api/page/frame/${encodeURIComponent(ref)}`, { credentials: 'same-origin', cache: 'no-store' }));
         if (!res.ok) return null;
         const body = await res.json() as { src?: unknown };
         return typeof body.src === 'string' ? body.src : null;
@@ -159,49 +154,24 @@ export function createHttpBackend(id: string): ArtifactBackend {
       );
     },
     async versions() {
-      const res = await fetch(`${mine}/versions`);
+      const res = await retried(() => fetch(`${mine}/versions`));
       return res.ok ? ((await res.json()) as { versions: ArtifactVersionSummary[] }).versions : null;
     },
     async version(n) {
-      const res = await fetch(`${mine}/versions/${n}`);
+      const res = await retried(() => fetch(`${mine}/versions/${n}`));
       return res.ok ? ((await res.json()) as ArtifactVersionSnapshot) : null;
     },
     async revert(input) {
       return answer(await artifactRequests(id).revert(input));
     },
-    live(handlers, options) {
-      // Reconnecting, with a heartbeat watchdog and a catch-up on wake (lib/live-stream).
-      const stream = openLiveStream({
-        url: `/a/${id}/events${options?.since ? `?since=${encodeURIComponent(options.since)}` : ''}`,
-        onMessage: (data) => {
-          let ping: ArtifactVersionPing;
-          try { ping = JSON.parse(data) as ArtifactVersionPing; } catch { return; }
-          handlers.onPing(ping);
-        },
-        events: {
-          [STORY_DATA_EVENT]: (data) => {
-            try { handlers.onData(JSON.parse(data) as ArtifactDataEvent); } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
-          },
-          [STORY_ANNOTATIONS_EVENT]: () => handlers.onAnnotations(),
-        },
-        onWake: handlers.onWake,
-      });
-      return () => stream.close();
-    },
-    async liveFrame() {
-      const r = await fetch(`/a/${id}/events/frame`, { credentials: 'same-origin' });
-      return r.ok ? ((await r.json()) as ArtifactLiveEvent) : null;
-    },
     queryTransport: () => createAuthenticatedTransport(id),
 
     // ── comments ────────────────────────────────────────────────────────────
-    listAnnotations(status, options = {}) {
-      return readAnnotationPages(`${mine}/annotations${status ? `?status=${status}` : ''}`, options);
-    },
+    watchRetrying,
     async createAnnotation(body, idempotencyKey) {
-      const res = await fetch(`${mine}/annotations`, {
-        method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(body),
-      });
+      const res = await retried((key) => fetch(`${mine}/annotations`, {
+        method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body),
+      }), { method: 'POST', idempotencyKey });
       if (res.ok) return (await res.json()) as AnnotationWire;
       const refusal: unknown = await res.json().catch(() => null);
       const code = refusal && typeof refusal === 'object' ? (refusal as { error?: unknown; code?: unknown; edit_id?: unknown }) : {};
@@ -214,7 +184,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
       );
     },
     async actOnAnnotation(annotationId, body) {
-      const res = await fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const res = await retried((key) => fetch(`${mine}/annotations/${annotationId}`, { method: 'POST', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body) }), { method: 'POST', idempotencyKey: newIdempotencyKey() });
       if (!res.ok) {
         const refusal = await res.json().catch(() => null) as { error?: unknown; message?: unknown; edit_id?: unknown } | null;
         const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
@@ -224,8 +194,13 @@ export function createHttpBackend(id: string): ArtifactBackend {
       }
       return (await res.json()) as AnnotationWire;
     },
+    async setCommentReaction(commentId, body) {
+      const res=await retried(()=>fetch(`${mine}/annotations/${encodeURIComponent(commentId)}/reactions`,{method:'PUT',headers:JSON_HEADERS,body:JSON.stringify(body)}),{method:'PUT',safeToRepeat:true});
+      if(!res.ok)throw new BackendRequestError('Could not update your reaction. Try again.',res.status,res.status===401);
+      return await res.json() as AnnotationWire;
+    },
     async editAnnotation(commentId, body) {
-      const res = await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      const res = await retried((key) => fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: { ...JSON_HEADERS, 'Idempotency-Key': key! }, body: JSON.stringify(body) }), { method: 'PATCH', idempotencyKey: newIdempotencyKey() });
       if (!res.ok) {
         const refusal = await res.json().catch(() => null) as { error?: unknown; code?: unknown } | null;
         const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
@@ -250,20 +225,8 @@ export function createHttpBackend(id: string): ArtifactBackend {
       return (await response.json()) as { id: string };
     },
     async members(query, options = {}) {
-      const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal });
+      const r = await retried(() => fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal }), { signal: options.signal });
       return r.ok ? ((await r.json()) as MembersAnswer) : null;
-    },
-    async remoteSessions(options = {}) {
-      const r = await fetch('/api/remote/sessions', { credentials: 'same-origin', signal: options.signal });
-      if (!r.ok) throw new BackendRequestError(`Could not load agents (${r.status})`, r.status);
-      return (await r.json()) as RemoteSessionsAnswer;
-    },
-    async deleteRemoteSession(sessionId) {
-      const response = await fetch(`/api/remote/sessions/${sessionId}`, { method: 'DELETE', credentials: 'same-origin' });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? 'Could not remove agent. Try again.');
-      }
     },
   };
 }

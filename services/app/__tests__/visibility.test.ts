@@ -63,32 +63,32 @@ describe('defaults and validation', () => {
 
   it('an explicit visibility on create wins; private without an account is a 400', async () => {
     const { anonToken, ownedToken } = await fixtures();
-    const openDoc = await create(ownedToken, { title: 'o', markup: '<h1>o</h1>', visibility: 'public' });
+    const openDoc = await create(ownedToken, { title: 'o', html: '<h1>o</h1>', visibility: 'public' });
     expect(openDoc.visibility).toBe('public');
-    const privateDoc = await create(anonToken, { title: 'a', markup: '<h1>a</h1>', visibility: 'private' });
+    const privateDoc = await create(anonToken, { title: 'a', html: '<h1>a</h1>', visibility: 'private' });
     expect(privateDoc.visibility).toBe('private');
-    const garbage = await create(anonToken, { title: 'a', markup: '<h1>a</h1>', visibility: 'hidden' }, 400);
+    const garbage = await create(anonToken, { title: 'a', html: '<h1>a</h1>', visibility: 'hidden' }, 400);
     expect(garbage.error).toBe('invalid_visibility');
   });
 
   it("'unlisted' creates for both token kinds — it acts as public, so no account is needed", async () => {
     const { anonToken, ownedToken } = await fixtures();
-    const owned = await create(ownedToken, { title: 'u', markup: '<h1>u</h1>', visibility: 'unlisted' });
+    const owned = await create(ownedToken, { title: 'u', html: '<h1>u</h1>', visibility: 'unlisted' });
     expect(owned.visibility).toBe('unlisted');
-    const anon = await create(anonToken, { title: 'u', markup: '<h1>u</h1>', visibility: 'unlisted' });
+    const anon = await create(anonToken, { title: 'u', html: '<h1>u</h1>', visibility: 'unlisted' });
     expect(anon.visibility).toBe('unlisted');
   });
 
   it("strangers read an 'unlisted' doc exactly like a public one", async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'u', markup: '<h1>u</h1>', visibility: 'unlisted' });
+    const doc = await create(ownedToken, { title: 'u', html: '<h1>u</h1>', visibility: 'unlisted' });
     const res = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
     expect(res.status).toBe(200);
   });
 
   it("the sharing surface can flip to 'unlisted'", async () => {
     const { ownedToken, owner } = await fixtures();
-    const doc = await create(ownedToken, { title: 'u', markup: '<h1>u</h1>' });
+    const doc = await create(ownedToken, { title: 'u', html: '<h1>u</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const res = await putSharingRoute(
@@ -101,14 +101,14 @@ describe('defaults and validation', () => {
 
   it('PUT may flip visibility; omitting it preserves the current value', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'o', markup: '<h1>o</h1>' });
+    const doc = await create(ownedToken, { title: 'o', html: '<h1>o</h1>' });
     const flipped = await (await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o2</h1>', visibility: 'public' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { html: '<h1>o2</h1>', visibility: 'public' } }),
       params({ id: doc.id }),
     )).json();
     expect(flipped.visibility).toBe('public');
     const kept = await (await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o3</h1>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { html: '<h1>o3</h1>' } }),
       params({ id: doc.id }),
     )).json();
     expect(kept.visibility).toBe('public');
@@ -116,7 +116,7 @@ describe('defaults and validation', () => {
 
   it('the wire shape carries visibility', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'a', markup: '<h1>a</h1>' });
+    const doc = await create(anonToken, { title: 'a', html: '<h1>a</h1>' });
     const wire = await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: anonToken }), params({ id: doc.id }))).json();
     expect(wire.visibility).toBe('private');
   });
@@ -126,7 +126,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
   // Was gate-dataflow's and gate-local-sql-state's (proposal §2): the document's own data door is a read too.
   it('the query door answers the uniform 404 for a private doc without a session and for an unknown id', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'secret', markup: '<h1>secret</h1>', visibility: 'private' });
+    const doc = await create(ownedToken, { title: 'secret', html: '<h1>secret</h1>', visibility: 'private' });
     expect((await queryGetRoute(request(`/a/${doc.id}/query?q=%7B%7D`), params({ id: doc.id }))).status).toBe(404);
     expect((await queryPostRoute(request(`/a/${doc.id}/query`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' }), params({ id: doc.id }))).status).toBe(404);
     expect((await queryPostRoute(request('/a/zzzzzz/query', { method: 'POST', json: { values: {} } }), params({ id: 'zzzzzz' }))).status).toBe(404);
@@ -135,7 +135,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 
   it('a private doc 404s for no-session, strangers, and wrong emails; serves for the owner and invited emails', async () => {
     const { ownedToken, owner } = await fixtures();
-    const doc = await create(ownedToken, { title: 'secret', markup: '<h1>secret</h1>' });
+    const doc = await create(ownedToken, { title: 'secret', html: '<h1>secret</h1>' });
 
     // No session.
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(404);
@@ -177,7 +177,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 
   it('public docs serve with no session at all', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'open', markup: '<h1>open</h1>', visibility: 'public' });
+    const doc = await create(anonToken, { title: 'open', html: '<h1>open</h1>', visibility: 'public' });
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(200);
     expect((await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }))).status).toBe(200);
   });
@@ -186,7 +186,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 describe('the sharing surface (session-only, owner-only)', () => {
   it('GET reports visibility + shares; PUT updates either; both answer uniform 404 off-owner', async () => {
     const { ownedToken, owner } = await fixtures();
-    const doc = await create(ownedToken, { title: 'secret', markup: '<h1>s</h1>' });
+    const doc = await create(ownedToken, { title: 'secret', html: '<h1>s</h1>' });
 
     // No session → 401 (the /api/my surface).
     expect((await getSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`), params({ id: doc.id }))).status).toBe(401);

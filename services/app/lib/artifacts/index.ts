@@ -8,11 +8,11 @@
 
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
 export { canReadArtifact, documentEditorReaches, ownsArtifact, effectiveRole } from './access';
-export { commentMonitorScope, annotationScope, editorScope, writerFor } from './table';
+export { commentMonitorScope, reactionScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
-export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
+export { readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
 export { accessMoved, getArtifact, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
-export type { ArtifactHeader } from './rows';
+export type { ArtifactHeader, ArtifactIdentity } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
@@ -20,20 +20,20 @@ export { recordArtifactView } from './view-admission';
 export { artifactState } from './state';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; after-commit hooks; and the deployment's two seams. */
-export { createArtifact, afterCreated, applyEditFor, replaceArtifactFor, revertArtifactFor, commitNormalizedMarkup, retainDownloadedVersion, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
-export type { ArtifactInput, PreparedMarkupWrite } from './store';
+export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
+export type { ArtifactInput } from './store';
 export { updateMetadataFromBody } from './metadata-wire';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
-export { CreationReplay, creationOperation, lookupCreation } from './creation-ledger';
+export { CreationReplay, creationOperation, lookupCreation, recoverCreationIds } from './creation-ledger';
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
-export { emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from './after-commit';
+export { emitHeadCommitted } from './after-commit';
 export { setMutationInvocation } from './mutation-invocation';
 export type { MutationInvocationFactory } from './mutation-invocation';
 
 /** Wire (routes, publish, operations): body parsers and the response shapes. */
-export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho } from './wire';
+export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, sourceRepairsEcho } from './wire';
 
 /** A row compiled (publish, offline, runner, operations, routes), and what depends on a row. */
 export { compiledForRow, declarationsForRow, refLoaderForActor, rowToResolvedRef } from './row-compile';
@@ -41,15 +41,14 @@ export { findDependentsFor } from './dependents';
 
 /** Sharing, membership, placement and dataset grants. */
 export { getSharingFor, updateSharingFor } from './sharing';
-export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, mentionedPeople, savedMentionStates, selfMembership } from './membership/membership';
+export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
 export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/grants';
 
 /** Serving: what may be served, and archived versions. */
-export { UnservableDocument, refusingUnservable, servableDocument, servableHeader, unservable } from './servable';
-export { VERSION_PARAM, archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
-export type { ArchivedRender } from './archived-version';
+export { UnservableDocument, refusingUnservable, servableDocument, unservable } from './servable';
+export { VERSION_PARAM, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 
 /** Route adapters (one route family each). */
 export { resolveImageReference } from './image-references';
@@ -64,7 +63,7 @@ export {transferArtifact} from './transfer';
  * the capability refusal, the mutation context pin and invocation seam, the dataset commit emitter,
  * the compiled-row result and its error text, and the folder table.
  */
-export { assertGrantCommit, grantContext, readThrough } from './dataset-policy/grants';
+export { assertGrantCommit, grantContext, uploadGrantContext, readThrough } from './dataset-policy/grants';
 export type { GrantDocument, ReadRow } from './dataset-policy/grants';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
@@ -76,3 +75,7 @@ export { mutationInvocation } from './mutation-invocation';
 export { emitDatasetCommitted } from './after-commit';
 export { compileErrorText, compileResultForRow } from './row-compile';
 export { childrenTableFor } from './placement';
+/** Host-only registered HTML action attestation; never created from namespace arguments. */
+export {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from './registered-html-mutation';
+
+export {attestSavedHtmlUpload} from './saved-html-upload';

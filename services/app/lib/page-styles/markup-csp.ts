@@ -176,10 +176,10 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${self}${runtimeCssPath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
-    // The hosted library directory stays explicit for documents that import a
-    // pinned bundle by URL. This grants neither API fetches nor navigation.
+    // The hosted library and component directories stay explicit for documents that
+    // import them (`@afbin/<name>`). This grants neither API fetches nor navigation.
     const script=options.compiled&&d.startsWith('script-src ')?COMPILED_SCRIPT_SRC:d;
-    const source=script.startsWith('script-src ')?script+` ${self}/libraries/`:script;
+    const source=script.startsWith('script-src ')?script+` ${self}/libraries/ ${self}/af/components/`:script;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';

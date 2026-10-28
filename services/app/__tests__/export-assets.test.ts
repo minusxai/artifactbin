@@ -67,10 +67,47 @@ describe('persistent export delivery',()=>{
   const url=exportAssetUrl(id,'http://localhost:3030');
   const response=await exportAssetResponse(new Request(url),id);
   expect(response.status).toBe(200);expect(await response.text()).toBe('image fixture');
-  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('cache-control')).toMatch(/^private, max-age=\d+, must-revalidate$/);
   for(const token of [mintExportKey('abc123'),mintExportKey(`export-asset:${id}`,-1),'bad']){
    expect((await exportAssetResponse(new Request(`http://localhost/assets/export/${id}?key=${token}`),id)).status).toBe(404);
   }
+ });
+ it('reuses signed URLs within a mint window and bounds browser freshness by grant expiry',()=>{
+  const clock=vi.spyOn(Date,'now');
+  try {
+   clock.mockReturnValue(1_800_000_001_000);
+   const first=exportAssetUrl(id,'http://localhost:3030');
+   const expires=Number(new URL(first).searchParams.get('key')!.split('.')[0]);
+   expect(expires- Date.now()).toBeGreaterThan(240_000);
+   expect(expires- Date.now()).toBeLessThanOrEqual(300_000);
+   clock.mockReturnValue(1_800_000_010_000);
+   expect(exportAssetUrl(id,'http://localhost:3030')).toBe(first);
+   clock.mockReturnValue(1_800_000_060_000);
+   expect(exportAssetUrl(id,'http://localhost:3030')).not.toBe(first);
+  }finally{clock.mockRestore();}
+ });
+ it('revalidates only authorized published images and avoids reading object bytes for HEAD and 304',async()=>{
+  const key=`exports/objects/${id}.png`,body=Buffer.from('cached thumbnail');
+  await objectStore().put(key,body,'image/png');
+  await (await getDb()).query('INSERT INTO export_images(id,artifact_id,object_key,mime,bytes,width,height) VALUES($1,$2,$3,$4,$5,1,1)',[id,'abc123',key,'image/png',body.length]);
+  const url=exportAssetUrl(id,'http://localhost:3030');
+  const first=await exportAssetResponse(new Request(url),id);
+  expect(await first.text()).toBe('cached thumbnail');
+  const etag=first.headers.get('etag');expect(etag).toBeTruthy();
+  const read=vi.spyOn(objectStore(),'getStream');
+  try {
+   const head=await exportAssetResponse(new Request(url,{method:'HEAD'}),id);
+   expect(head.status).toBe(200);expect(head.headers.get('etag')).toBe(etag);
+   expect(await head.text()).toBe('');
+   const cached=await exportAssetResponse(new Request(url,{headers:{'If-None-Match':`"other", W/${etag}`}}),id);
+   expect(cached.status).toBe(304);expect(await cached.text()).toBe('');
+   expect(read).not.toHaveBeenCalled();
+   const expired=new URL(url);expired.searchParams.set('key',mintExportKey(`export-asset:${id}`,-1));
+   const refused=await exportAssetResponse(new Request(expired,{headers:{'If-None-Match':etag!}}),id);
+   expect(refused.status).toBe(404);expect(refused.headers.get('cache-control')).toBe('no-store');
+   await (await getDb()).query('DELETE FROM export_images WHERE id=$1',[id]);
+   expect((await exportAssetResponse(new Request(url,{headers:{'If-None-Match':'*'}}),id)).status).toBe(404);
+  }finally{read.mockRestore();}
  });
  it('signs one immutable S3 PUT without supplying permanent credentials to the browser',async()=>{
   const store=cachedReads(createS3Store({bucket:'fixture',region:'us-west-1',accessKeyId:'test-key',secretAccessKey:'test-secret',endpoint:'https://s3.us-west-1.amazonaws.com',forcePathStyle:true,prefix:'artifacts'}));

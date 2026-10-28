@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 import { identityForUser } from '@/lib/accounts';
 /**
@@ -35,10 +36,10 @@ describe('per-token artifact quota', () => {
     setArtifactQuotaForTests(1);
     const t = await mintToken('t');
     const first = await (
-      await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>1</p>' } }))
+      await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p>1</p>') } }))
     ).json() as { id: string };
     await (await import('@/lib/workspace/trash')).trashArtifactFor(identityForUser(t.userId, t.id), first.id);
-    const next = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>2</p>' } }));
+    const next = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p>2</p>') } }));
     expect(next.status).toBe(403);
     expect(((await next.json()) as { error: string }).error).toBe('quota_exceeded');
   });
@@ -47,26 +48,26 @@ describe('per-token artifact quota', () => {
     setArtifactQuotaForTests(2);
     const t = await mintToken('t');
     const first = await (
-      await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>1</p>' } }))
+      await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p>1</p>') } }))
     ).json();
-    await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>2</p>' } }));
+    await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p>2</p>') } }));
 
     const third = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>3</p>' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p>3</p>') } }),
     );
     expect(third.status).toBe(403);
     expect(((await third.json()) as { error: string }).error).toBe('quota_exceeded');
 
     // A full token can still edit what it has.
     const put = await putArtifact(
-      await observedRequest(`/api/artifacts/${first.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>1b</p>' } }),
+      await observedRequest(`/api/artifacts/${first.id}`, { method: 'PUT', token: t.token, json: { html:nativeHtml('<p>1b</p>') } }),
       params({ id: first.id }),
     );
     expect(put.status).toBe(200);
 
     // The cap is per token, not global.
     const other = await mintToken('other');
-    const ok = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: other.token, json: { markup: '<p>x</p>' } }));
+    const ok = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: other.token, json: { html:nativeHtml('<p>x</p>') } }));
     expect(ok.status).toBe(201);
   });
 
@@ -74,7 +75,7 @@ describe('per-token artifact quota', () => {
     setArtifactQuotaForTests(0);
     const t = await mintToken('t');
     for (let i = 0; i < 3; i++) {
-      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<p>${i}</p>` } }));
+      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml(`<p>${i}</p>`) } }));
       expect(res.status).toBe(201);
     }
   });

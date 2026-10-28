@@ -44,7 +44,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   if (at === 'not_found') return json({ error: 'not_found' }, 404);
   // The framing overview is editing chrome, not a public export surface.
   if (q.get('mode') === 'preview') {
-    if (artifact.format !== 'markup' || !canEdit(await effectiveRole(artifact, actor))) {
+    if (artifact.format !== 'html' || !canEdit(await effectiveRole(artifact, actor))) {
       return json({ error: 'not_found' }, 404);
     }
   }

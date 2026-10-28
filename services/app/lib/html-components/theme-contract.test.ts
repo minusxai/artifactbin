@@ -1,0 +1,106 @@
+// @vitest-environment jsdom
+import {expect,it} from 'vitest';
+import './tabs';
+import './input';
+import './textarea';
+import './segmented';
+import './select';
+import './dialog';
+import './popover';
+import './tooltip';
+import './date-picker';
+import './file-upload';
+import './switch';
+import './slider';
+import './accordion';
+function declaration(selector:string,property:string):string {
+ let result='';
+ for(const sheet of [...document.styleSheets])for(const rule of [...sheet.cssRules])if('selectorText'in rule&&(rule as CSSStyleRule).selectorText.split(',').map(value=>value.trim()).includes(selector))result=(rule as CSSStyleRule).style.getPropertyValue(property)||result;
+ return result;
+}
+/** Resolve the shipped CSS variable fallback, without claiming jsdom layout support. */
+function radius(value:string,variables:Record<string,string>):number {
+ let resolved=value;
+ while(resolved.includes('var(')){
+  const start=resolved.lastIndexOf('var(');let end=start+4,depth=1;
+  for(;end<resolved.length;end++){if(resolved[end]==='(')depth++;if(resolved[end]===')'){depth--;if(depth===0)break;}}
+  const body=resolved.slice(start+4,end),comma=body.indexOf(',');
+  resolved=resolved.slice(0,start)+(variables[body.slice(0,comma)]??body.slice(comma+1))+resolved.slice(end+1);
+ }
+ resolved=resolved.replace(/([\d.]+)rem/g,(_,number:string)=>String(Number(number)*16)+'px');
+ const fixed=/^([\d.]+)px$/.exec(resolved);if(fixed)return Number(fixed[1]);
+ const calc=/^calc\(([\d.]+)px - ([\d.]+)px\)$/.exec(resolved);if(calc)return Math.max(0,Number(calc[1])-Number(calc[2]));
+ throw Error('Unresolved radius: '+resolved);
+}
+/** story-css.server.ts @theme scale; kit recipes use rounded-sm/md/lg. */
+interface RadiusContract {selector:string;size:'sm'|'md'|'lg'}
+const contracts:RadiusContract[]=[
+ {selector:'af-tabs-list',size:'lg'},{selector:'af-tabs-trigger',size:'md'},
+ {selector:'af-input>.af-text-control',size:'md'},{selector:'af-textarea>.af-text-control',size:'md'},
+ {selector:'af-segmented .af-segmented-options',size:'md'},{selector:'af-select .af-select-trigger',size:'md'},
+ {selector:'af-select .af-select-popup',size:'md'},{selector:'af-select input',size:'sm'},
+ {selector:'af-select [role=option]',size:'sm'},{selector:'dialog[data-af-dialog-native]',size:'lg'},
+ {selector:'af-dialog-trigger',size:'md'},{selector:'af-dialog-close',size:'md'},
+ {selector:'af-popover-content',size:'md'},{selector:'af-tooltip-content',size:'md'},
+ {selector:'af-date-picker .af-date-trigger',size:'md'},{selector:'af-date-picker .af-date-popup',size:'md'},
+ {selector:'af-date-picker button',size:'sm'},{selector:'af-file-upload .af-file-upload-drop',size:'md'},
+ {selector:'af-file-upload button',size:'md'},{selector:'af-file-upload img',size:'sm'},
+ {selector:'af-accordion-trigger',size:'md'},
+];
+it('uses the retained rounded-sm/md/lg scale when a theme supplies only --radius',()=>{
+ for(const contract of contracts){const css=declaration(contract.selector,'border-radius');
+  for(const base of [4,10,16])expect(radius(css,{'--radius':`${base}px`}),contract.selector).toBe(Math.max(0,base-({sm:4,md:2,lg:0}[contract.size])));
+  expect(radius(css,{[`--radius-${contract.size}`]:'12px'}),contract.selector+' explicit override').toBe(12);
+  expect(radius(css,{}),contract.selector+' neutral fallback').toBe(10-({sm:4,md:2,lg:0}[contract.size]));
+ }
+ expect(declaration('af-segmented .af-segmented-options>button[data-segment-option]','border-radius')).toBe('5px');
+});
+it('keeps control captions and select typography consistent with retained controls in every theme',()=>{
+ for(const selector of ['af-input>label[data-af-control-label]','af-textarea>label[data-af-control-label]','af-segmented .af-segmented-caption','af-select .af-select-label','af-switch .af-switch-caption','af-slider>[part=header]>label']){
+  expect(declaration(selector,'font-size'),selector).toBe('11px');expect(declaration(selector,'font-weight'),selector).toBe('500');expect(declaration(selector,'text-transform'),selector).toBe('uppercase');expect(parseFloat(declaration(selector,'letter-spacing')),selector).toBe(.05);
+ }
+ const segmented=document.createElement('af-segmented') as HTMLElement & {options:readonly (string|number|boolean|null)[]};
+ segmented.setAttribute('label','Category');segmented.options=['All','Active'];document.body.append(segmented);
+ const renderedLabel=segmented.querySelector<HTMLElement>('[data-af-control-label]');
+ expect(renderedLabel?.textContent).toBe('Category');
+ const labelStyle=getComputedStyle(renderedLabel!);
+ expect(labelStyle.fontSize).toBe('11px');expect(labelStyle.fontWeight).toBe('500');expect(labelStyle.textTransform).toBe('uppercase');expect(labelStyle.letterSpacing).toBe('0.55px');
+ segmented.remove();
+ const switchControl=document.createElement('af-switch');switchControl.setAttribute('label','Notifications');document.body.append(switchControl);
+ const switchLabel=switchControl.querySelector<HTMLElement>('.af-switch-label');
+ expect(switchLabel?.textContent).toBe('Notifications');
+ const switchLabelStyle=getComputedStyle(switchLabel!);
+ expect(switchLabelStyle.fontSize).toBe('11px');expect(switchLabelStyle.fontWeight).toBe('500');expect(switchLabelStyle.textTransform).toBe('uppercase');expect(switchLabelStyle.letterSpacing).toBe('0.55px');
+ switchControl.remove();
+ expect(parseFloat(declaration('af-select button','font-size'))).toBe(.875);
+ expect(parseFloat(declaration('af-select input','font-size'))).toBe(.875);
+ expect(declaration('af-select .af-select-trigger','height')).toBe('2.25rem');
+});
+it('matches the retained Select popup spacing and checkmark dimensions',()=>{
+ expect(declaration('af-select .af-select-popup','padding')).toBe('0px');
+ expect(declaration('af-select .af-select-search','padding')).toBe('0.375rem');
+ expect(declaration('af-select .af-select-search','border-bottom')).toContain('1px solid');
+ expect(declaration('af-select [role=listbox]','padding')).toBe('0.25rem');
+ expect(declaration('af-select [role=option] [data-selected-indicator]','width')).toBe('14px');
+ expect(declaration('af-select [role=option] [data-selected-indicator]','height')).toBe('14px');
+});
+it('matches the retained FileUpload stacked layout and typography',()=>{
+ expect(declaration('af-file-upload .af-file-upload-shell','gap')).toBe('0.75rem');
+ expect(declaration('af-file-upload .af-file-upload-label','font-size')).toBe('0.875rem');
+ expect(declaration('af-file-upload .af-file-upload-label','font-weight')).toBe('500');
+ expect(declaration('af-file-upload .af-file-upload-drop','flex-direction')).toBe('column');
+ expect(declaration('af-file-upload .af-file-upload-drop','align-items')).toBe('flex-start');
+ expect(declaration('af-file-upload .af-file-upload-drop','gap')).toBe('0.5rem');
+ expect(declaration('af-file-upload .af-file-upload-help','font-size')).toBe('0.75rem');
+});
+it('keeps overlay elevation a black shadow in light and dark themes',()=>{
+ for(const selector of ['af-popover-content','af-tooltip-content','dialog[data-af-dialog-native]']){
+  const shadow=declaration(selector,'box-shadow');expect(shadow).not.toContain('--foreground');expect(shadow).toContain('rgb(0 0 0 / 10%)');
+ }
+});
+
+it('sizes native select and date buttons independently of a global reset and retains accordion type',()=>{
+ for(const selector of ['af-select button','af-select input','af-date-picker button'])expect(declaration(selector,'box-sizing'),selector).toBe('border-box');
+ expect(parseFloat(declaration('af-accordion-trigger','font-size'))).toBe(.875);
+ expect(declaration('af-accordion-trigger','font-weight')).toBe('500');
+});

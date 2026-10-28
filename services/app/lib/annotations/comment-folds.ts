@@ -138,14 +138,14 @@ export function isFolded(folds: Folds, kind: FoldKind, id: string): boolean {
  * never is: clamping the element you measure makes its own scrollHeight agree
  * with the clamp on the next render, and the fold un-decides itself.
  */
-export function foldFromMeasure(scrollHeight: number, lineHeight: number): {
+export function foldFromMeasure(scrollHeight: number, lineHeight: number, visibleLines = FOLD_LINES): {
   overflowing: boolean;
   lines: number;
   maxHeight: number;
 } {
   const usable = Number.isFinite(scrollHeight) && scrollHeight > 0
     && Number.isFinite(lineHeight) && lineHeight > 0;
-  const maxHeight = usable ? FOLD_LINES * lineHeight : 0;
+  const maxHeight = usable ? Math.max(1, Math.min(FOLD_LINES, visibleLines)) * lineHeight : 0;
   return {
     // A whole line past the clamp, so the browser's own sub-pixel rounding
     // never offers to unfold a body that is already whole.

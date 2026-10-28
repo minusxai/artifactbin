@@ -22,6 +22,8 @@ export interface RenderCardCrop {
   width: number;
 }
 
+/** Slide capture selects visible author-owned data-af-slide elements in document order.
+ * Generated data-af-deck-chrome is excluded only during capture; authored content and live navigation remain unchanged. */
 type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
 
 /** One page load, as every operation that loads a page asks for it: where, how big, and what may load. */

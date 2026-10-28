@@ -1,0 +1,196 @@
+/*
+ * Drafting: Every line is a measurement.
+ * Plans, specs, explainers, process stories. Mood: Technical. Opens light. Generated from
+ * design-systems/specs/drafting.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="drafting">. The platform serves
+ * this stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link
+ * nothing. This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-title t-body t-body-s t-label t-dim t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame,
+ * a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured.
+ * Cobalt carries the hierarchy and evidence; orange marks revisions; yellow flags assumptions. Colour belongs on
+ * the sheet, not just on hover.
+ * Fits: Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one
+ * object comes apart or goes together.
+ * Avoid when: Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status
+ * colours, or any page whose reader is not expected to inspect.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="drafting"] {
+  --ds-vellum: #eeede6; /* Page ground: cool drafting vellum by day, Prussian blueprint by night. */
+  --ds-vellum-raised: #f7f6f1; /* Sheets, panels, fields. */
+  --ds-vellum-sunk: #e3e1d7; /* Wells, code, title-block cells. */
+  --ds-grid: #d9d7cc; /* 24px drafting grid and hairline rules. Page grids use this at half strength; readable blocks have solid vellum backgrounds. */
+  --ds-ink: #16181c; /* Line-work and primary text. 1px for construction, 2px for the object. */
+  --ds-ink-muted: #4a4f58; /* Secondary text, dimension figures, notes. */
+  --ds-cobalt: #2a5bd7; /* Hierarchy and annotation: headline emphasis, sheet numbers, dimensions, links and the primary action. */
+  --ds-on-cobalt: #ffffff; /* Text on cobalt fills. */
+  --ds-cobalt-soft: #dfe7fb; /* Pale blue evidence panels, title blocks and selected regions of a drawing. */
+  --ds-vermilion: #ff781f; /* Fluorescent safety orange for revision fills, outlines and changed parts; use on-vermilion for text on the fill. */
+  --ds-on-vermilion: #16181c; /* Text on vermilion fills. */
+  --ds-vermilion-ink: #963b00; /* Readable orange ink for revision text on vellum and pale orange. */
+  --ds-vermilion-soft: #ffd4b5; /* Warm orange ground for revision notes and changed regions. */
+  --ds-positive: #1f7a4d; /* Verified, passed, released. Always with a word. */
+  --ds-positive-soft: #dcefe3; /* Ground for verified rows. */
+  --ds-caution: #685500; /* Assumed, pending review. */
+  --ds-caution-soft: #ffe83d; /* Warm fluorescent yellow for small assumption tags and short highlighted phrases; never a paragraph or full-width panel. */
+  --ds-negative: #c2320a; /* Failed or blocked. Always pair with a word. */
+  --ds-negative-soft: #ffe0d6; /* Ground for failures. */
+  --background: var(--ds-vellum);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-vellum-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-vellum-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-cobalt);
+  --primary-foreground: var(--ds-on-cobalt);
+  --secondary: var(--ds-cobalt-soft);
+  --secondary-foreground: var(--ds-cobalt);
+  --muted: var(--ds-vellum-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-vellum-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-vellum);
+  --border: var(--ds-grid);
+  --input: var(--ds-grid);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-vermilion);
+  --chart-3: var(--ds-ink);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 0px;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 0px;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="drafting"][data-af-dark="true"] {
+  --ds-vellum: #0f1b2d;
+  --ds-vellum-raised: #15253d;
+  --ds-vellum-sunk: #0a1322;
+  --ds-grid: #1f3350;
+  --ds-ink: #e9eef7;
+  --ds-ink-muted: #9fb0c8;
+  --ds-cobalt: #8fb4ff;
+  --ds-on-cobalt: #0a1322;
+  --ds-cobalt-soft: #1b2f55;
+  --ds-vermilion: #ff9747;
+  --ds-on-vermilion: #16181c;
+  --ds-vermilion-ink: #ffaf6b;
+  --ds-vermilion-soft: #3b2413;
+  --ds-positive: #6fd49a;
+  --ds-positive-soft: #113426;
+  --ds-caution: #ffe83d;
+  --ds-caution-soft: #343b0f;
+  --ds-negative: #ff7a4d;
+  --ds-negative-soft: #3b1a10;
+  --background: var(--ds-vellum);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-vellum-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-vellum-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-cobalt);
+  --primary-foreground: var(--ds-on-cobalt);
+  --secondary: var(--ds-cobalt-soft);
+  --secondary-foreground: var(--ds-cobalt);
+  --muted: var(--ds-vellum-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-vellum-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-vellum);
+  --border: var(--ds-grid);
+  --input: var(--ds-grid);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-vermilion);
+  --chart-3: var(--ds-ink);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --ds-chip-radius: 0px;
+}
+:root[data-af-design-system="drafting"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(48px, 8vw, 104px) / .9: One per sheet. Poster-weight Archivo in caps; the subject as a title block. */
+:root[data-af-design-system="drafting"] .t-display-xl { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(48px, 8vw, 104px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; text-transform: uppercase; }
+/* display, clamp(32px, 4.5vw, 56px) / .95: Section openers, sheet titles. */
+:root[data-af-design-system="drafting"] .t-display-l { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(32px, 4.5vw, 56px); line-height: .95; font-weight: 900; letter-spacing: -0.025em; text-transform: uppercase; }
+/* display, 22px / 26px: Panel titles, figure titles. */
+:root[data-af-design-system="drafting"] .t-title { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 22px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; }
+/* sans, 16px / 26px: Reading text. Archivo at a wide leading reads like a spec, not a brochure. */
+:root[data-af-design-system="drafting"] .t-body { font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 26px; font-weight: 400; }
+/* sans, 13px / 19px: Notes, captions, helper text. */
+:root[data-af-design-system="drafting"] .t-body-s { font-family: "Archivo", system-ui, sans-serif; font-size: 13px; line-height: 19px; font-weight: 400; }
+/* narrow, 12px / 16px: Eyebrows, figure numbers, title-block cells. Archivo Narrow in caps. */
+:root[data-af-design-system="drafting"] .t-label { font-family: "Archivo Narrow", "Arial Narrow", sans-serif; font-size: 12px; line-height: 16px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+/* mono, 13px / 18px: Dimension figures on drawings and in tables. Tabular. */
+:root[data-af-design-system="drafting"] .t-dim { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+/* mono, 40px / 44px: KPI figures and allocations. */
+:root[data-af-design-system="drafting"] .t-numeral { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+/* mono, 13px / 20px: Code, paths, API contracts. */
+:root[data-af-design-system="drafting"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="drafting"] .tok-comment, :root[data-af-design-system="drafting"] .tok-quote, :root[data-af-design-system="drafting"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="drafting"] .tok-keyword, :root[data-af-design-system="drafting"] .tok-selector-tag, :root[data-af-design-system="drafting"] .tok-doctag, :root[data-af-design-system="drafting"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-string, :root[data-af-design-system="drafting"] .tok-regexp, :root[data-af-design-system="drafting"] .tok-template-variable, :root[data-af-design-system="drafting"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-number, :root[data-af-design-system="drafting"] .tok-literal, :root[data-af-design-system="drafting"] .tok-symbol, :root[data-af-design-system="drafting"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-title, :root[data-af-design-system="drafting"] .tok-section, :root[data-af-design-system="drafting"] .tok-selector-id, :root[data-af-design-system="drafting"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="drafting"] .tok-title.class_, :root[data-af-design-system="drafting"] .tok-type, :root[data-af-design-system="drafting"] .tok-built_in, :root[data-af-design-system="drafting"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-attr, :root[data-af-design-system="drafting"] .tok-attribute, :root[data-af-design-system="drafting"] .tok-property, :root[data-af-design-system="drafting"] .tok-variable, :root[data-af-design-system="drafting"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-tag, :root[data-af-design-system="drafting"] .tok-operator, :root[data-af-design-system="drafting"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="drafting"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="drafting"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url("/af/fonts/archivo-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url("/af/fonts/archivo-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url("/af/fonts/archivo-latin-ext-standard-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: italic; font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; src: url("/af/fonts/archivo-latin-standard-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Archivo Narrow"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/af/fonts/archivo-narrow-latin-ext-wght-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Archivo Narrow"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/af/fonts/archivo-narrow-latin-wght-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Archivo Narrow"; font-style: italic; font-weight: 400 700; font-display: swap; src: url("/af/fonts/archivo-narrow-latin-ext-wght-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Archivo Narrow"; font-style: italic; font-weight: 400 700; font-display: swap; src: url("/af/fonts/archivo-narrow-latin-wght-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 100; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-100-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 100; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-100-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 100; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-100-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 100; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-100-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 200; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-200-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 200; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-200-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 200; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-200-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 200; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-200-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-300-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-300-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-300-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-300-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-400-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-400-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-500-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-500-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-500-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 600; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-600-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 600; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-600-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-600-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-700-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 700; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-700-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-ext-700-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url("/af/fonts/ibm-plex-mono-latin-700-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }

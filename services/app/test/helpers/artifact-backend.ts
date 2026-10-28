@@ -23,6 +23,7 @@ export function fakeBackend(
   overrides: Partial<ArtifactBackend> = {},
 ): ArtifactBackend {
   return {
+    publishPresence: vi.fn(async () => null),
     mode: Object.keys(missing).length ? 'offline' : 'online',
     unavailable: (feature) => missing[feature] ?? null,
     load: vi.fn(async () => null),
@@ -42,12 +43,11 @@ export function fakeBackend(
     listAnnotations: vi.fn(async () => []),
     createAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
     actOnAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
+    setCommentReaction: vi.fn(async () => { throw new Error('not stubbed'); }),
     editAnnotation: vi.fn(async () => { throw new Error('not stubbed'); }),
     deleteAnnotation: vi.fn(async () => {}),
     uploadCommentImage: vi.fn(async () => ({ id: 'img' })),
     members: vi.fn(async () => ({ people: [], mentions: {} })),
-    remoteSessions: vi.fn(async () => ({ sessions: [] })),
-    deleteRemoteSession: vi.fn(async () => {}),
     ...overrides,
   };
 }

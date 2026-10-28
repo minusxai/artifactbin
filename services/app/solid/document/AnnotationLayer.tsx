@@ -19,15 +19,18 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
+import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
+import ChevronRight from 'lucide-solid/icons/chevron-right';
 import Camera from 'lucide-solid/icons/camera';
 import LoaderCircle from 'lucide-solid/icons/loader-circle';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import SquareDashedMousePointer from 'lucide-solid/icons/square-dashed-mouse-pointer';
 import X from 'lucide-solid/icons/x';
 import type { AnnotationWire } from '@/lib/annotations/store';
+import { RetryingNote } from './RetryingNote';
 import type { AnnotationActionBody, ArtifactBackend } from '@/lib/artifact-backend/types';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
@@ -65,6 +68,9 @@ const loadScreenshotEditor = preloadScreenshotEditor;
 
 export interface AnnotationLayerProps {
   id: string;
+  /** Explicitly false for readers and archived versions; omitted by authoring surfaces. */
+  canCreateComment?: boolean;
+  onSignIn?: () => void;
   /** Every request the comments make; the page's surface backend when it has one. */
   backend?: ArtifactBackend;
   /** The document owner may delete any comment; other viewers may delete their own. */
@@ -131,7 +137,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   // A Solid prop getter notifies whenever its source does, even for an equal value. These memos
   // are the dependency list: an effect keyed on one runs on a real change.
   const railOpen = createMemo(() => props.railOpen);
-  const pickOnOpen = createMemo(() => props.pickOnOpen !== false);
+  const mayCreate = () => props.canCreateComment !== false;
+  const pickOnOpen = createMemo(() => mayCreate() && props.pickOnOpen !== false);
   const handedSelection = createMemo(() => props.initialSelection ?? null);
   const sessionNonce = createMemo(() => props.sessionNonce ?? null);
   const runtimeRef = createMemo(() => props.runtimeRef);
@@ -174,6 +181,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
    * `annotations` — never dereference the open id against that list without a fallback.
    */
   const [openId, setOpenId] = createSignal<string | null>(null);
+  /** The resolved group starts collapsed — local to this rail, never stored. Whatever is being looked at forces it open. */
+  const [resolvedOpen, setResolvedOpen] = createSignal(false);
   const [inspectedResolvedId, setInspectedResolvedId] = createSignal<string | null>(null);
   /** What this viewer folded — read from the store, so a remount or a reload cannot lose it. */
   const [folds, setFolds] = createSignal<Folds>(readFolds(props.id));
@@ -375,6 +384,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
    * rail opening together with a selection ends with the composer, not the pick.
    */
   const beginPick = (mode: 'block' | 'area') => {
+    if (!mayCreate()) return;
     if (mode === 'block') capture.reset();
     setPick(mode);
     setOpenId(null);
@@ -399,6 +409,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   createEffect(on(pickOnOpen, (mayPick) => {
     if (mayPick) return;
     resumeSelectAfterCompose = false; setPick(null); capture.reset();
+    if (!mayCreate()) { setSelection(null); setDeleting(null); }
   }));
 
   // A selection handed down by the page opens the composer on those exact words.
@@ -430,13 +441,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       .filter((row) => !row.orphaned && row.anchor)
       .map((row) => {
         const anchor = row.anchor! as typeof row.anchor & { nodeId?: string | null };
-        return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range, ...(row.view_state ? {viewState: row.view_state} : {}),
+        return { id: row.id, path: anchor.path ?? anchor.nodeId ?? '', key: anchor.key ?? null, nodeId: anchor.nodeId, ...('kind' in anchor && anchor.kind === 'html-node' ? { anchor } : {}), range: row.range, ...(row.view_state ? {viewState: row.view_state} : {}),
           ...(row.status === 'resolved' && (row.id !== inspected || row.id !== open) ? { layoutOnly: true } : {}) };
       });
     const selected = selection();
     postToFrame({
       type: 'mx:annotations', viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
-      selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
+      selectedPath: selected?.path ?? null, selected, canComment: mayCreate(), pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
   // Closing the rail drops what only the rail was showing; the pins stay.
@@ -452,7 +463,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       const data = event.data;
       if (!isEditFrameMessage(data, nonce)) return;
       if (data.type === 'mx:selection-action' && data.action === 'select') {
-        if (props.pickOnOpen === false) return;
+        if (!mayCreate() || props.pickOnOpen === false) return;
         startPick();
         return;
       }
@@ -499,9 +510,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         batch(() => {
           setSelection((previous) => {
             if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
-            const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
-            if (!sameIdentity || reported?.range) return reported;
-            const merged = { ...reported, ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
+            const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId && reported.anchor?.ancestorId === previous.anchor?.ancestorId;
+            if (!sameIdentity || reported?.range || reported?.anchor?.range || reported?.anchor?.quote) return reported;
+            const merged = { ...reported, ...(previous.anchor ? { anchor: previous.anchor } : {}), ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
             return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;
           });
           setFailure(null);
@@ -514,9 +525,20 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   /** One thread write; rejects with the backend's refusal (a reply's box shows which), `act` turns that into false. */
   const actOrThrow = async (annId: string, body: AnnotationActionBody) => {
+    if (!mayCreate()) return false;
     setBusy(true);
     try {
-      const wire = await backend.actOnAnnotation(annId, body);
+      let wire: AnnotationWire;
+      try { wire = await backend.actOnAnnotation(annId, body); }
+      catch (cause) {
+        // A resolve/reopen against a thread that moved: show the thread as it now stands instead of a generic error.
+        if (cause instanceof BackendRequestError && cause.code === 'annotation_conflict') {
+          const [open, resolved] = await Promise.all([backend.listAnnotations('open'), backend.listAnnotations('resolved')]).catch(() => [[], []]);
+          const fresh = [...open, ...resolved].find((row) => row.id === annId);
+          if (fresh) replaceThread(fresh);
+        }
+        throw cause;
+      }
       if (body.resolve && wire.status === 'resolved') {
         const revisions = locallyResolvedRevisions.get(annId) ?? new Set<number | undefined>();
         revisions.add(wire.revision);
@@ -540,6 +562,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             delete next[annId];
             return next;
           });
+          // The thread being looked at moves into resolved history: open the group so it is still there.
+          if (untrack(openId) === annId) setResolvedOpen(true);
           setOpenId((current) => (current === annId ? null : current));
         }
         else if (body.reopen) {
@@ -561,6 +585,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
   /** One comment's words, against the thread revision this viewer read. A refusal rejects (the editor keeps the draft); a conflict first re-reads the thread so saving again applies. */
   const editComment = async (rootId: string, commentId: string, body: string) => {
+    if (!mayCreate()) throw new Error('You have read-only comment access.');
     const held = [...annotations(), ...(resolvedList() ?? [])].find((row) => row.id === rootId);
     try {
       replaceThread(await backend.editAnnotation(commentId, { body, ...(held?.revision !== undefined ? { expected_revision: held.revision } : {}) }));
@@ -613,12 +638,13 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     catch (cause) { setConfirmError(cause instanceof Error ? cause.message : 'Could not complete this action. Try again.'); }
     finally { setConfirmBusy(false); }
   };
-  const askDelete = (commentId: string, thread: boolean) => { if (deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
+  const askDelete = (commentId: string, thread: boolean) => { if (!mayCreate() || deleting()) return; setConfirmError(null); setDeleting({ id: commentId, thread }); };
 
   const save = async () => {
+    if (!mayCreate()) return;
     const subject = selection();
     if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
-    if (!subject.nodeId) {
+    if (!subject.nodeId && !subject.anchor) {
       // Never claims a save is pending: the layer cannot know one is. Say what is true either way.
       // A selection whose source element has no durable id: an element an edit just added, or one never identified.
       setFailure(COMMENT_TARGET_UNSAVED);
@@ -633,10 +659,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
         // The exact words ride along when there are any; a caret comment carries neither key.
         return backend.createAnnotation({
-          node_id: subject.nodeId, body,
+          ...(subject.anchor ? { anchor: subject.anchor } : { node_id: subject.nodeId }), body,
           ...(attachment ?? {}),
-          ...(subject.quote ? { quote: subject.quote } : {}),
-          ...(subject.range ? { range: subject.range } : {}),
+          ...(!subject.anchor && subject.quote ? { quote: subject.quote } : {}),
+          ...(subject.range && (!subject.anchor || isAreaRange(subject.range)) ? { range: subject.range } : {}),
           ...(subject.viewState ? { view_state: subject.viewState, edit_id: attachment?.edit_id ?? props.editId } : {}),
         }, mutation.key);
       };
@@ -680,6 +706,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   };
 
   const submitDraft = () => {
+    if (!mayCreate()) return;
     if (busy() || !hasReplyText(draft())) return;
     void save();
   };
@@ -712,6 +739,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   });
 
   const beginScreenshot = async () => {
+    if (!mayCreate()) return;
     if (screenshotUnavailable()) return;
     beginPick('area');
     const preparation = capture.start(); // Only this explicit gesture requests sharing.
@@ -782,7 +810,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let composerElement: HTMLDivElement | undefined;
   let composerTarget: string | null = null;
   createEffect(on(selection, (current) => {
-    const next = current ? JSON.stringify([current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
+    const next = current ? JSON.stringify([current.anchor ?? null, current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
     if (next !== composerTarget) {
       stopComposerDrag?.();
       stopComposerDrag = undefined;
@@ -846,6 +874,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const openIds = createMemo(() => annotations().map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const resolvedIds = createMemo(() => (resolvedList() ?? []).map((row) => row.id), undefined, { equals: (a, b) => a.length === b.length && a.every((id, index) => id === b[index]) });
   const openRow = (id: string) => annotations().find((row) => row.id === id);
+  // A resolved thread that is open (a link, a pin, a card) or was just asked for must never sit behind the collapsed heading.
+  createEffect(() => { const open = openId(); if (open && resolvedIds().includes(open)) setResolvedOpen(true); });
+  createEffect(on(justOpenedId, (id) => { if (id && untrack(resolvedIds).includes(id)) setResolvedOpen(true); }));
   const resolvedRow = (id: string) => (resolvedList() ?? []).find((row) => row.id === id);
 
   const railHeader = () => <div class="space-y-2 border-b border-edge px-1 pb-3 font-sans">
@@ -853,6 +884,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       <h2 class="font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
       <Button type="button" variant="ghost" size="sm" icon aria-label="Close comments" onClick={() => props.onRailOpenChange(false)}><X size={14} strokeWidth={1.8} /></Button>
     </div>
+    <Show when={mayCreate()} fallback={<Show when={props.onSignIn} fallback={<p class="text-2xs text-muted">You have read-only comment access.</p>}><Button type="button" variant="secondary" size="sm" onClick={() => props.onSignIn?.()}>Sign in to comment</Button></Show>}>
     <div role="group" aria-label="Comment tools" class="grid grid-cols-2 gap-2">
       {/* A tool in use is the primary variant; min-h-16 grows the control past its fixed height without fighting it. */}
       <Button type="button" variant={pick() === 'block' ? 'primary' : 'secondary'} size="sm" aria-label="Select" aria-pressed={pick() === 'block'} onClick={toggleSelect}
@@ -869,12 +901,18 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       </FeatureGate>
     </div>
     <p class="text-2xs leading-relaxed text-muted">{capture.required() ? 'Share this tab, then drag an area.' : 'Select a block or highlight text to comment.'}</p>
+    </Show>
   </div>;
 
   const threadHandlers = (id: string, resolved: boolean) => ({
+    canCreateComment: mayCreate(),
     onHover: hoverUi,
     onReplyDraftChange: (typed: boolean) => noteThreadReply(id, typed),
     onDelete: (commentId: string) => askDelete(commentId, commentId === id),
+    onReact: async (commentId: string, active: boolean) => {
+      replaceThread(await backend.setCommentReaction(commentId,{kind:'thumbs_up',active}));
+    },
+    onSignIn: () => window.location.assign(loginHref(window.location,'comment')),
     onEdit: (commentId: string, body: string) => editComment(id, commentId, body),
     onToggleFold: () => toggle('threads', id),
     onToggleComment: (commentId: string) => toggle('comments', commentId),
@@ -907,8 +945,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
             <Show when={placement(id)}>{(item) => (
               <AnnotationPreview row={item().annotation} top={item().top} remaining={recentResolved()[id]?.remaining}
                 hovered={previewId() === id} resolving={busy()} resolveError={ambientResolveError()?.id === id ? ambientResolveError()?.message : undefined}
-                onResolve={() => void resolveFromPreview(id)} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
-                onReply={item().annotation.status === 'open' ? (body, attachment) => actOrThrow(id, { reply: body, ...attachment }) : undefined}
+                onResolve={mayCreate() ? () => void resolveFromPreview(id) : undefined} rightInset={props.panelWidth} onOpen={() => openThread(id)} onHover={hoverUi}
+                onReply={mayCreate() && item().annotation.status === 'open' ? (body, attachment) => actOrThrow(id, { reply: body, ...attachment }) : undefined}
                 backend={backend} artifactId={props.id} busy={busy()} draft={replyDrafts()[id] ?? ''} onDraftChange={(value) => setReplyDraft(id, value)}
                 pinned={pinnedId() === id} onPin={() => setPinnedId(id)} onClose={closePreview} />
             )}</Show>
@@ -932,7 +970,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       {/* Drafts belong to the thing being discussed; the saved conversation moves to the rail. The composer is a NON-modal floating
           card the reader drags beside the words (no backdrop, no focus trap, the page stays live): ui/FloatingPanel. Escape is the
           window handler above, so the panel is given no `onClose`. */}
-      <Show when={selection() && composerPosition() && !pick()}>
+      <Show when={mayCreate() && selection() && composerPosition() && !pick()}>
         <FloatingPanel label="Annotation composer" data-capture-chrome ref={composerDrop.ref} class="text-sm"
           position={{ left: composerPosition()!.left, top: composerPosition()!.top }} width={composerPosition()!.width}>
           {/* The panel is portalled out of this layer's shadow root, so it carries its own copy of the capture rule. */}
@@ -961,7 +999,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               </div>
             </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
-              label="Annotation comment" quickAgents image={composerImage} busy={busy()}
+              label="Annotation comment" image={composerImage} busy={busy()}
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
               rows={2} autoFocus={!capture.busy()}>
@@ -981,6 +1019,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               </div>
             </CommentMarkdownField>
             <Show when={selection()?.viewStateError}><p role="status" class="mb-2 text-xs text-muted">{selection()?.viewStateError}</p></Show>
+            <RetryingNote backend={backend} active={busy()} />
             <Show when={failure()}><p role="alert" class="mb-2 font-mono text-2xs text-danger">{failure()}</p></Show>
             <div class="flex items-center justify-end gap-2">
               <CommentSubmitHint action="comment" />
@@ -998,7 +1037,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           onClose={() => props.onRailOpenChange(false)} header={railHeader()}>
           <div ref={threadsRoot} class="contents">
             <Show when={annotations().length === 0 && !selection()}>
-              <p class="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
+              <p class="p-2 font-mono text-xs text-muted">{mayCreate()?'no open comments — select text in the document, or pick a block, to leave one':'no open comments'}</p>
             </Show>
             <For each={openIds()}>{(id) => (
               <Show when={openRow(id)}>{(row) => (
@@ -1007,18 +1046,31 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
                   isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, false)} />
               )}</Show>
             )}</For>
+            {/* Nothing resolved: no toggle, the heading stays plain and the note below says so. */}
             <div role="separator" aria-labelledby="resolved-annotations-heading" class="mt-1 flex items-center gap-2 px-1">
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
-              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">resolved</h2>
+              <h2 id="resolved-annotations-heading" class="shrink-0 font-mono text-micro font-semibold uppercase tracking-[0.12em] text-faint">
+                <Show when={resolvedIds().length > 0} fallback="resolved">
+                  <Button type="button" variant="ghost" size="xs" aria-expanded={resolvedOpen()} aria-controls="resolved-annotations-list" onClick={() => setResolvedOpen((open) => !open)}
+                    class="gap-1 px-1 text-micro! font-semibold! uppercase tracking-[0.12em] text-faint!">
+                    <ChevronRight aria-hidden="true" class="size-3 transition-transform" classList={{ 'rotate-90': resolvedOpen() }} />
+                    resolved ({resolvedIds().length})
+                  </Button>
+                </Show>
+              </h2>
               <span aria-hidden="true" class="h-px flex-1 bg-edge" />
             </div>
-            <For each={resolvedIds()}>{(id) => (
-              <Show when={resolvedRow(id)}>{(row) => (
-                <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
-                  viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
-                  isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
-              )}</Show>
-            )}</For>
+            <div id="resolved-annotations-list" class="contents">
+              <Show when={resolvedOpen()}>
+                <For each={resolvedIds()}>{(id) => (
+                  <Show when={resolvedRow(id)}>{(row) => (
+                    <AnnotationThread artifactId={props.id} backend={backend} a={row()} canDeleteAny={props.canDeleteAny} open={openId() === id} resolved hovered={hoverId() === id} busy={busy()}
+                      viewStateError={viewStateError()?.id === id ? viewStateError()?.message : undefined} targetMissing={missingTargets().has(id)} folded={isFolded(folds(), 'threads', id)} justOpened={justOpenedId() === id}
+                      isCommentFolded={(commentId) => isFolded(folds(), 'comments', commentId)} {...threadHandlers(id, true)} />
+                  )}</Show>
+                )}</For>
+              </Show>
+            </div>
             <Show when={(resolvedList()?.length ?? 0) === 0}>
               <p class="p-2 font-mono text-xs text-muted">nothing resolved yet</p>
             </Show>

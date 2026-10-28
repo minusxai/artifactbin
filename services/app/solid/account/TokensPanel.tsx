@@ -37,7 +37,7 @@ export function TokensPanel(): JSX.Element {
     setSelected(null);
     await page.refresh(true);
   };
-  return <Panel label="CLI connections" padding="none" class="overflow-hidden">
+  return <Panel label="API connections" padding="none" class="overflow-hidden">
     <Show when={selected()}>{token => <ConfirmDialog title={`Revoke “${token().name ?? token().id}”?`} description="Agents using this token will stop working immediately. This cannot be undone." action="Revoke token" confirmLabel="Confirm revoke" danger busy={busy()} error={error()} onCancel={() => setSelected(null)} onConfirm={() => void revoke()} />}</Show>
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
       <ToggleGroup label="Connection status" size="md" value={view()} onChange={next => switchView(next as 'active' | 'history')}
@@ -47,7 +47,7 @@ export function TokensPanel(): JSX.Element {
     <Show when={page.error()}><StatusMessage kind="error" class="m-4" action={<Button variant="secondary" onClick={() => void page.refresh(true)}>Retry connections</Button>}>Could not load connections.</StatusMessage></Show>
     <Show when={!page.data() && !page.error()}><StatusMessage kind="loading" class="p-4">Loading connections…</StatusMessage></Show>
     <Show when={page.data()}>
-      <Show when={visible().length} fallback={<StatusMessage kind="empty" class="p-5">{view() === 'active' ? 'No active connections. Run afbin auth to connect an agent.' : 'No connection history yet.'}</StatusMessage>}>
+      <Show when={visible().length} fallback={<StatusMessage kind="empty" class="p-5">{view() === 'active' ? 'No active connections. Connect through the HTTP authentication guide.' : 'No connection history yet.'}</StatusMessage>}>
         <Table label="Connections" fixed><TableHead>
           <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell class="hidden w-24 lg:table-cell">Status</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Expires</TableHeaderCell><TableHeaderCell class="hidden w-28 lg:table-cell">Last used</TableHeaderCell><TableHeaderCell align="right" class="w-32">Action</TableHeaderCell>
         </TableHead><TableBody><For each={visible()}>{token => <TableRow aria-label={`Token row ${token.name ?? token.id}`}>

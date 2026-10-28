@@ -1,3 +1,6 @@
+import type {UploadContext} from '@artifactbin/contracts';
+/** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
+const loadUploadRelay=()=>import('./upload');
 /**
  * THE PARENT HALF OF THE BRIDGE — a stand-in for the island controller, for a document framed on its own origin.
  *
@@ -28,7 +31,10 @@ import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate } from '@/lib/story-runtime/contract';
 
+interface HtmlRelayContext { revision: string; readOnly: boolean; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
 interface FrameBridgeParentOptions {
+  /** Set by the trusted HTML shell, never by a page message. */
+  htmlContext?: () => HtmlRelayContext;
   win: Window;
   frame: HTMLIFrameElement;
   /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */
@@ -55,6 +61,7 @@ interface FrameBridgeParentOptions {
 
 export interface FrameBridgeParent extends IslandStoryController {
   /** The editor's newer head pointer and source, which the frame's controller reads live. */
+  refreshUploadContext():void;
   setContext(editId: string, source: string | null): void;
   /**
    * How far the page's bars reach over the frame's top edge (contract `inset`). Kept, and sent again to every
@@ -89,21 +96,33 @@ const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Prom
   win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
 
 /** The relayed request, checked: one of this document's three paths, on the page's own origin, or null. */
-export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }): { path: string; init: RequestInit } | null {
+export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }, htmlContext?: HtmlRelayContext): { path: string; init: RequestInit } | null {
   if (typeof request.path !== 'string' || (request.method !== 'GET' && request.method !== 'POST')) return null;
   let url: URL;
   try { url = new URL(request.path, win.location.origin); } catch { return null; }
   if (url.origin !== win.location.origin) return null;
   const draft = `/a/${encodeURIComponent(id)}/draft-preview`;
-  const allowed = url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
+  const graphql = url.pathname === `/api/artifacts/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
+  const allowed = graphql || url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
   if (!allowed) return null;
+  let graphqlBody: string | undefined;
+  if (graphql) {
+    if (!htmlContext?.revision || typeof request.body !== 'string' || request.body.length > 1_000_000) return null;
+    try {
+      const input: unknown = JSON.parse(request.body);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+      const body = input as Record<string, unknown>;
+      if (typeof body.query !== 'string' || !['query', 'mutation'].includes(String(body.operation)) || htmlContext.readOnly && body.operation !== 'query') return null;
+      graphqlBody = JSON.stringify({ ...body, revision: htmlContext.revision });
+    } catch { return null; }
+  }
   const headers: Record<string, string> = {};
   if (request.headers && typeof request.headers === 'object') {
     for (const [name, value] of Object.entries(request.headers as Record<string, unknown>)) {
       if (SENT_HEADERS.includes(name.toLowerCase()) && typeof value === 'string') headers[name] = value;
     }
   }
-  const body = request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined;
+  const body = graphqlBody ?? (request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined);
   return { path: url.pathname + url.search, init: { method: request.method, headers, ...(body !== undefined ? { body } : {}) } };
 }
 
@@ -113,6 +132,17 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const target = frameOrigin === 'null' ? '*' : frameOrigin;
   let key = runtimeId();
   let nonce = '';
+  let pendingUploads=0;
+  const uploadControllers=new Set<AbortController>();
+  let uploadSignature='',uploadContext:UploadContext={state:'unavailable',scope:runtimeId()};
+  const cancelUploads=()=>{for(const controller of uploadControllers)controller.abort();uploadControllers.clear();};
+  const readUploadContext=()=>{
+    const html=options.htmlContext?.(),session=html?.uploadSession;
+    const state:UploadContext['state']=!html?'unavailable':html.readOnly?'read-only':session?.state??'unavailable';
+    const signature=JSON.stringify([key,options.editId(),options.source(),html?.revision,state,session?.subject]);
+    if(signature!==uploadSignature){uploadSignature=signature;cancelUploads();uploadContext={state,scope:runtimeId()};}
+    return uploadContext;
+  };
   /** The frame's controller answered `ready` under the current key: commands go straight out. */
   let attached = false;
   let closed = false;
@@ -141,7 +171,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   /** (Re)send this session's attach: the door starts the frame half on the first one and ignores a key it holds. */
   const attach = () => {
     if (attached || closed || !frame.contentWindow) return;
-    envelope({ kind: 'attach', id, nodes, editId: options.editId(), source: options.source() });
+    envelope({ kind: 'attach', id, nodes, editId: options.editId(), source: options.source(), ...(options.htmlContext?{uploadContext:readUploadContext()}:{}) });
   };
   const reject = (reason: string) => {
     for (const waiting of restoring.values()) waiting.reject(new Error(`the framed document closed (${reason})`));
@@ -149,6 +179,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
   /** A new document in the frame: its controller is gone, so a new session starts under a fresh key. */
   const reattach = () => {
+    cancelUploads();
     reject('the framed document loaded again');
     key = runtimeId();
     nonce = '';
@@ -161,6 +192,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const close = (reason: string) => {
     if (closed) return;
     try { frame.contentWindow?.postMessage({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'detach' } }, target); } catch { /* gone */ }
+    cancelUploads();
     closed = true;
     key = '';
     reject(reason);
@@ -168,15 +200,21 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
 
   const relay = async (payload: Extract<FrameBridgeFramePayload, { kind: 'fetch' }>) => {
-    const request = relayedRequest(win, id, payload);
-    if (!request) { post({ kind: 'fetch-result', call: payload.call, error: 'refused' }); return; }
+    const relayKey=key;
+    const reply=(answer:FrameBridgeParentPayload)=>{if(key===relayKey)post(answer);};
+    const request = relayedRequest(win, id, payload, options.htmlContext?.());
+    if (!request) {
+      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
+      else reply({ kind: 'fetch-result', call: payload.call, error: 'refused' });
+      return;
+    }
     try {
       const response = await appFetch(request.path, request.init);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, name) => { if (KEPT_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value; });
-      post({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
+      reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
     } catch (error) {
-      post({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
+      reply({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
     }
   };
 
@@ -213,6 +251,16 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         if (!waiting) return;
         if (payload.ok) waiting.resolve(); else waiting.reject(new Error(payload.error));
         return;
+      }
+      case 'upload-file': {
+        const current=readUploadContext();
+        const context=options.htmlContext?.();
+        if(current.state!=='signed-in'||!context||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
+        pendingUploads++;
+        const controller=new AbortController();uploadControllers.add(controller);
+        const uploadKey=key,uploadScope=current.scope;const reply=(answer:FrameBridgeParentPayload)=>{if(!closed&&key===uploadKey&&readUploadContext().scope===uploadScope)post(answer);};
+        const editId=options.editId();
+        void (async()=>{try{const {relayFileUpload}=await loadUploadRelay();if(controller.signal.aborted||closed||key!==uploadKey||readUploadContext().scope!==uploadScope)return;await relayFileUpload({documentId:id,editId,readOnly:context.readOnly,input:payload,signal:controller.signal,appFetch,reply});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;uploadControllers.delete(controller);}})();return;
       }
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;
@@ -257,7 +305,8 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       const box = frame.getBoundingClientRect();
       return new DOMRect(box.left + frame.clientLeft, box.top + frame.clientTop, frame.clientWidth, frame.clientHeight);
     },
-    setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source }); },
+    refreshUploadContext(){if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()});},
+    setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source });if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()}); },
     setNodes(next: JsxNode[]) {
       if (nodes.length || !next.length) return;
       nodes = next;

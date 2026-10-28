@@ -1,4 +1,4 @@
-import {isTimestamp} from '@artifactbin/utils/shape';
+import {isIsoDate,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * CSV cells are all strings. Deciding their types is ingest's job, because
  * `inferColumns` reads the types the caller already chose — correct for JSON,
@@ -22,25 +22,47 @@ export interface DeclaredColumn { name: string; type: string }
  * *looks* numeric and must not be.
  */
 const SAFE_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
-/** ISO only. `03/04/2026` is March 4th or April 3rd depending on the reader. */
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isBlank = (v: string) => v.trim() === '';
+
+/** Canonical decimal value without converting its digits to binary floating point. */
+function decimalIdentity(text:string):{key:string;digits:number} {
+ const [mantissa,exponent='0']=text.toLowerCase().split('e');
+ const negative=mantissa!.startsWith('-'),unsigned=negative?mantissa!.slice(1):mantissa!;
+ const fraction=unsigned.includes('.')?unsigned.length-unsigned.indexOf('.')-1:0;
+ let digits=unsigned.replace('.','').replace(/^0+/,'');
+ if(!digits)return {key:'0',digits:1};
+ const significant=digits.replace(/0+$/,'');
+ const power=Number(exponent)-fraction+(digits.length-significant.length);
+ digits=significant;
+ return {key:`${negative?'-':''}${digits}e${power}`,digits:digits.length};
+}
+
+/** Preserve unsafe integers, underflow and more than 15 significant fractional digits as text.
+ * A declared number remains the caller's explicit opt-in to IEEE-754 conversion.
+ */
+function inferredNumber(text:string):boolean {
+ if(!SAFE_NUMBER.test(text))return false;
+ const value=Number(text);if(!Number.isFinite(value))return false;
+ const decimal=decimalIdentity(text);
+ if(decimal.key!==decimalIdentity(value.toString()).key)return false;
+ return Number.isInteger(value)?Number.isSafeInteger(value):decimal.digits<=15;
+}
 
 function columnType(values: string[]): ColumnType {
   const present = values.filter((v) => !isBlank(v)).map((v) => v.trim());
   if (present.length === 0) return 'string';
-  if (present.every((v) => SAFE_NUMBER.test(v) && Number.isFinite(Number(v)))) return 'number';
+  if (present.every(inferredNumber)) return 'number';
   if (present.every((v) => /^(true|false)$/i.test(v))) return 'boolean';
-  if (present.every((v) => ISO_DATE.test(v))) return 'date';
+  // ISO calendar dates only: `03/04/2026` is ambiguous, and `2025-11-32` would be stored as a date that breaks every row query.
+  if (present.every(isIsoDate)) return 'date';
   if (present.every((v) => /^[0-9]{4}-/.test(v) && isTimestamp(v))) return 'timestamp';
   return 'string';
 }
 
-function convert(value: string, type: ColumnType): unknown {
-  // A blank cell is MISSING, not the empty string — otherwise every chart and
-  // aggregate has to special-case `""`.
-  if (isBlank(value)) return null;
+function convert(value: string, type: ColumnType, quotedEmpty: boolean): unknown {
+  // An explicit quoted empty text cell is data, while an unquoted blank is missing.
+  if (isBlank(value)) return quotedEmpty && type === 'string' ? '' : null;
   const v = value.trim();
   switch (type) {
     // A declared type can be wrong for a given cell. Null is honest and keeps
@@ -51,8 +73,8 @@ function convert(value: string, type: ColumnType): unknown {
     // Dates stay ISO strings: that is what the dataset tier stores and what
     // Vega's temporal encoding parses. Converting to Date would only be
     // re-serialised on the way to the database.
-    case 'timestamp':
-    case 'date': return v;
+    case 'timestamp': return v;
+    case 'date': return isIsoDate(v) ? v : null;
     default: return value;
   }
 }
@@ -70,17 +92,19 @@ export function coerceRows(
   headers: string[],
   rows: string[][],
   declared: DeclaredColumn[] = [],
+  quotedEmptyCells: readonly (readonly boolean[])[] = [],
 ): Record<string, unknown>[] {
   const byName = new Map(declared.map((c) => [c.name, c.type]));
   const types = headers.map((header, col) => {
     const chosen = byName.get(header);
     if (chosen === 'number' || chosen === 'boolean' || chosen === 'date' || chosen === 'timestamp' || chosen === 'string') return chosen;
+    if (quotedEmptyCells.some(row => row[col])) return 'string';
     return columnType(rows.map((r) => r[col] ?? ''));
   });
-  return rows.map((row) => {
+  return rows.map((row, rowIndex) => {
     const out: Record<string, unknown> = {};
     // Header order, so the column order in the file survives into the artifact.
-    headers.forEach((header, col) => { out[header] = convert(row[col] ?? '', types[col]); });
+    headers.forEach((header, col) => { out[header] = convert(row[col] ?? '', types[col], quotedEmptyCells[rowIndex]?.[col] === true); });
     return out;
   });
 }

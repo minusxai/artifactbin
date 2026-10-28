@@ -1,4 +1,4 @@
-import {RUN_TABLES,AGENT_TABLES,SCHEDULE_TABLES} from '@artifactbin/runner/schema';
+import {RUN_TABLES} from '@artifactbin/runner/schema';
 /**
  * Schema as data → idempotent DDL. (Distilled from minusx
  * lib/database/schema/tables.ts + render.ts.)
@@ -151,7 +151,7 @@ const ARTIFACTS: Table = {
     // API handle, ref:<id> target, and URL address all at once — an address,
     // not a secret. The PK is what makes collisions retryable (23505).
     { name: 'id', type: 'TEXT', notNull: true },
-    { name: 'token_id', type: 'TEXT', notNull: true }, // creating token (provenance + anon scope)
+    { name: 'token_id', type: 'TEXT', relaxNotNull: true }, // creating token when present; account-owned imports may have no credential
     { name: 'user_id', type: 'TEXT' }, // personal owner; NULL for token/group ownership
     { name: 'group_id', type: 'TEXT' }, // independent group owner; never a user identity
     { name: 'creator_user_id', type: 'TEXT' }, // immutable human creator attribution
@@ -390,6 +390,7 @@ const ANNOTATIONS: Table = {
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/document/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
+    { name: 'html_anchor', type: 'JSONB' }, // Explicit HtmlNodeAnchor; never a compiler AST path
     { name: 'view_state', type: 'JSONB' }, // Optional bounded UI snapshot, independent of the comment target
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
     // with it set is nonexistent to every reader in lib/annotations.
@@ -399,12 +400,53 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
-    // The comment feed's position for a HUMAN edit: a fresh value from `seq`'s own sequence, so one cursor orders
-    // new comments and edits alike (lib/annotations/changes). NULL = never edited by a person.
+    // The comment feed's position for an edit: a fresh value from `seq`'s own sequence, so one cursor orders
+    // new comments and edits alike (lib/annotations/changes). NULL = never edited (or edited by an agent before edits all moved).
     { name: 'change_seq', type: 'BIGINT' },
+    // The credential behind the latest edit, beside its position: the feed marks a watcher's own rewrite `you`.
+    { name: 'change_token_id', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
+};
+
+/** One account can independently react once per kind; no identities leave the aggregate read. */
+const COMMENT_REACTIONS: Table = {
+  name: 'comment_reactions',
+  columns: [
+    {name:'comment_id',type:'TEXT',notNull:true},
+    {name:'user_id',type:'TEXT',notNull:true},
+    {name:'kind',type:'TEXT',notNull:true},
+    // Who reacted, decided at the door like a comment's author (appended; NULL on rows from before = the account's person).
+    {name:'reactor_kind',type:'TEXT'}, // 'human' | 'agent'
+    {name:'reactor_label',type:'TEXT'}, // display snapshot: the handle then, or the agent's label
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'}, // reactor order in the summary
+  ],
+  primaryKey: ['comment_id','user_id','kind'],
+};
+
+/**
+ * Every effective reaction change, appended and never rewritten: the comment feed's reaction half
+ * (lib/annotations/changes). `seq` comes from `annotations.seq`'s sequence, so one cursor orders comments, edits and
+ * reactions. Per (comment, user, kind) rows strictly alternate `active`; `count` is that kind's count right after.
+ */
+const COMMENT_REACTION_EVENTS: Table = {
+  name: 'comment_reaction_events',
+  columns: [
+    {name:'seq',type:'BIGINT',notNull:true},
+    {name:'artifact_id',type:'TEXT',notNull:true},
+    {name:'comment_id',type:'TEXT',notNull:true},
+    {name:'user_id',type:'TEXT',notNull:true},
+    {name:'kind',type:'TEXT',notNull:true},
+    {name:'active',type:'BOOLEAN',notNull:true},
+    {name:'reactor_kind',type:'TEXT',notNull:true},
+    {name:'reactor_label',type:'TEXT'},
+    {name:'count',type:'INTEGER',notNull:true},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+    {name:'token_id',type:'TEXT'}, // the credential that reacted: the feed marks a watcher's own reaction `you`
+  ],
+  primaryKey: ['seq'],
+  indexes: [{name:'idx_comment_reaction_events_artifact_seq',columns:['artifact_id','seq']}],
 };
 
 // RETIRED TABLES — `login_codes` and `oauth_codes` merged into `codes` below.
@@ -767,25 +809,8 @@ const MERMAID_HARVESTS: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
-/** Managed identity and request receipts outlive the ephemeral terminal relay. */
-const REMOTE_AGENTS: Table = {
- name:'remote_agents',columns:[
-  {name:'id',type:'TEXT',notNull:true},{name:'owner',type:'TEXT',notNull:true},
-  {name:'name',type:'TEXT',notNull:true},{name:'active',type:'BOOLEAN',notNull:true,default:'true'},
-  {name:'proof_hash',type:'TEXT',notNull:true},{name:'info',type:'JSONB',notNull:true},
-  {name:'seen_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],primaryKey:['id'],indexes:[{name:'idx_remote_agent_name',columns:['owner','name'],unique:true,where:'active'}],
-};
-const REMOTE_WORK: Table = {
- name:'remote_work',columns:[
-  {name:'id',type:'TEXT',notNull:true},{name:'seq',type:'BIGSERIAL',notNull:true},
-  {name:'owner',type:'TEXT',notNull:true},{name:'session_id',type:'TEXT',notNull:true},
-  {name:'artifact_id',type:'TEXT',notNull:true},{name:'thread_id',type:'TEXT',notNull:true},
-  {name:'comment_id',type:'TEXT',notNull:true},{name:'phase',type:'TEXT',notNull:true},
-  {name:'data',type:'JSONB',notNull:true},{name:'updated_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],primaryKey:['id'],indexes:[{name:'idx_remote_work_comment',columns:['session_id','comment_id'],unique:true},{name:'idx_remote_work_thread',columns:['artifact_id','thread_id']}],
-};
-
+// Retired hosted-agent, schedule and terminal-relay tables are not created for a fresh app.
+// RUN_TABLES remain internal: the native backend controller performs boot recovery against them.
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
  columns:[
@@ -1054,7 +1079,36 @@ const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
 
-export const TABLES: Table[] = [GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+/** Immutable backend modules referenced by exact versions from HTML artifact snapshots. */
+const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
+ {name:'backend_id',type:'TEXT',notNull:true},{name:'version',type:'TEXT',notNull:true},
+ {name:'page_id',type:'TEXT',notNull:true},{name:'name',type:'TEXT',notNull:true},
+ {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
+ {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
+ {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
+],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}]};
+/** Mutable platform-kept state belongs to the backend identity, never to a module version. */
+const HTML_BACKEND_STORES:Table={name:'html_backend_stores',columns:[
+ {name:'backend_id',type:'TEXT',notNull:true},{name:'value',type:'JSONB'},
+ {name:'version',type:'INTEGER',notNull:true,default:'0'},
+],primaryKey:['backend_id']};
+
+const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
+ {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
+ {name:'name',type:'TEXT',notNull:true},{name:'ciphertext',type:'TEXT',notNull:true},
+],primaryKey:['owner_id','backend_id','name']};
+
+/** Host-only migration attribution/provenance. Multiple verified source aliases may share one account. */
+const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
+ {name:'source_namespace',type:'TEXT',notNull:true},{name:'kind',type:'TEXT',notNull:true},
+ {name:'source_id',type:'TEXT',notNull:true},{name:'target_id',type:'TEXT',notNull:true},
+ {name:'action',type:'TEXT',notNull:true},{name:'source_sha256',type:'TEXT',notNull:true},
+ {name:'target_sha256',type:'TEXT',notNull:true},{name:'projection_sha256',type:'TEXT',notNull:true},
+ {name:'source_inventory_sha256',type:'TEXT',notNull:true},{name:'target_inventory_sha256',type:'TEXT',notNull:true},
+ {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
+],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
+
+export const TABLES: Table[] = [NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

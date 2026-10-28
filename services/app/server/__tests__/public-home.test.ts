@@ -47,7 +47,6 @@ describe('application home',()=>{
     ['/login', '/'],
     ['/login?callbackUrl=%2Foauth%2Floopback%3Fstate%3Dstale', '/'],
     ['/login?callbackUrl=%2Flogin%2Fcli%3FcallbackUrl%3Dstale', '/'],
-    ['/login/cli?callbackUrl=%2Foauth%2Floopback%3Fstate%3Dcurrent', '/oauth/loopback?state=current'],
     ['/login?callbackUrl=%2Fa%2Fabc%3Fx%3D1%23edit', '/a/abc?x=1#edit'],
     ['/login?callbackUrl=https://evil.example', '/'],
     ['/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Faccount', '/'],
@@ -57,6 +56,12 @@ describe('application home',()=>{
       expect(response.status).toBe(302);
       expect(response.headers.get('location')).toBe(target);
       expect(response.headers.get('cache-control')).toBe('no-store');
+    }
+  });
+  it('retires the CLI login address for guests and signed-in viewers',async()=>{
+    for(const method of ['GET','HEAD']) {
+      expect((await app.request('/login/cli',{method})).status).toBe(404);
+      expect((await app.request(request('/login/cli',{method,actor:{credential:'session',userId:'login-user',email:'mxmx_test_login@example.test'}}))).status).toBe(404);
     }
   });
   it('keeps the login form available to guests', async () => {

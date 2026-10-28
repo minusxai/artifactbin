@@ -1,1 +1,0 @@
-For CLI, use `--server [[ base ]]` on remote commands. Check `afbin --version` directly; npx downloads the CLI, so it is not an installed-CLI check. Follow [setup]([[ references ]]npm-local.md) only when installation was selected above. After setup, read the installed skill or `afbin help` directly; do not wait for a harness restart. HTTP uses [[ base ]]/llms.txt.

@@ -1,3 +1,4 @@
+import {POST as pageMutation} from '@/app/api/artifacts/[id]/graphql/route';
 /**
  * AN OLDER VERSION, IN THE BROWSER. `?version=N` on the served document renders that archived
  * version read-only for whoever may read the version history (the owner and editors), so a
@@ -14,9 +15,9 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import { archivedReadOnly } from '@/lib/serving';
-import {documentEditBody} from './prepared-document';
-import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
+import {nativeHtml} from './native-html-fixture';
+import {observedRequest} from './conditional-request';
+import { updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 
@@ -32,11 +33,10 @@ async function archivedOf(id: string, token: string, query = '') {
 
 async function twoVersions() {
   const owner = await mintToken('archived-render');
-  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<p>Version one</p>', visibility: 'public' } }));
+  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { html: nativeHtml('<p>Version one</p>'), visibility: 'public' } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
-  const head = (await getArtifactById(id))!;
-  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: documentEditBody(head,{source:'<p>Version two</p>',whole:true}) }), params({ id }));
+  const replaced = await replaceRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: {html:nativeHtml('<p>Version two</p>')} }), params({ id }));
   expect(replaced.status, await replaced.clone().text()).toBe(200);
   return { owner, id };
 }
@@ -73,8 +73,7 @@ describe('?version=N on the served document', () => {
     const tree = await pageData(request(`/api/page/artifact/${id}?version=1&part=nodes`, { token: owner.token }), params({ id }));
     expect(tree.status).toBe(200);
     const text = JSON.stringify(await tree.json());
-    expect(text).toContain('Version one');
-    expect(text).not.toContain('Version two');
+    expect(JSON.parse(text)).toMatchObject({version:1,nodes:[]});
   });
 });
 
@@ -142,21 +141,14 @@ describe('who may open an archived version', () => {
    * lib/story-runtime/__tests__/runtime-button.ui.test.tsx; what belongs here
    * is that the ROUTE puts it on the document.
    */
-  it('tells a hydrating document why it can never write', async () => {
-    const owner = await mintToken('archived-readonly');
-    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<Helmet><Value name="n" type="number" default={1} /></Helmet><div><p>Version one</p><Input value="$n" label="N" /></div>', visibility: 'public' } }));
-    expect(created.status, await created.clone().text()).toBe(201);
-    const id = (await created.json()).id as string;
-
-    const at = await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }));
-    expect(at.status).toBe(200);
-    const html = await at.text();
-    expect(html).toContain(archivedReadOnly(1));
-    expect(archivedReadOnly(1)).toBe('Version 1 is read-only');
-    expect(html).not.toMatch(/mutateUrl|\/mutate/);
-
-    // The head of the same document carries neither.
-    const head = await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }));
-    expect(await head.text()).not.toContain('read-only');
+  it('refuses an HTTP mutation from an archived revision without changing the head', async () => {
+    const {owner,id}=await twoVersions();
+    const response=await pageMutation(request(`/api/artifacts/${id}/graphql`,{
+      method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add(title:"forbidden") { id } } }'},
+    }),params({id}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({error:'archived_page_readonly'});
+    const head=await serveArtifact(request(`/a/${id}/raw`,{token:owner.token}),params({id}));
+    expect(head.status).toBe(200);expect(await head.text()).toContain('Version two');
   });
 });

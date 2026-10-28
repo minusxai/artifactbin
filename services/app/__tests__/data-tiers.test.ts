@@ -1,4 +1,3 @@
-import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The data file tiers: datasets (one flat table), viz
  * recipes (inert spec templates), images — plus the markup tier's `ref:`
@@ -8,12 +7,10 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { refDataForRow } from '@/lib/document-data';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 
@@ -231,111 +228,14 @@ describe('image tier', () => {
   });
 });
 
-describe('markup tier references', () => {
-  /** A dataset read through a <Query> (the only way a document reaches one), bound as `$rows`. */
-  const declared = (dsId: string) => `<Helmet><Import name="rows_data" src="ref:${dsId}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>`;
-  const chart = (dsId: string, extra = '') => declared(dsId) + `<div data-design="tw" className="@container w-full">
-  <Question data="$rows" viz={{ kind: "vega-lite", spec: { mark: "bar",
-    encoding: { x: {field: "month"}, y: {field: "mrr", type: "quantitative"} } } }} height="400px" />${extra}
-</div>`;
 
-  it('publishes with a valid dataset ref and records it in meta.refs', async () => {
-    const t = await mintToken('t');
-    const ds = await create(t.token, { title: 'sales', dataset: ROWS });
-    const { status, body } = await create(t.token, { title: 'story', markup: chart(ds.body.id) });
-    expect(status).toBe(201);
-    const got = await (await getArtifactRoute(request(`/api/artifacts/${body.id}`, { token: t.token }), params({ id: body.id }))).json();
-    expect(got.refs).toEqual([{ id: ds.body.id, kind: 'dataset' }]);
-  });
-
-  it('rejects a missing ref, naming the id', async () => {
-    const t = await mintToken('t');
-    const { status, body } = await create(t.token, { title: 'story', markup: chart('zzzzzz') });
-    expect(status).toBe(400);
-    expect(body.error).toBe('invalid_refs');
-    expect(JSON.stringify(body.details)).toContain('zzzzzz');
-  });
-
-  it("rejects another owner's PRIVATE ref (uniform not-found semantics)", async () => {
-    // Public/unlisted foreign refs RESOLVE now (refs-readable.test.ts); the
-    // uniform refusal holds where it must — private, same answer as missing.
-    const owner = await createUser({ email: 'tiers-owner@example.com' });
-    const a = await mintToken('a', owner.id);
-    await claimToken(owner.id, a.token);
-    const b = await mintToken('b');
-    const ds = await create(a.token, { title: 'sales', dataset: ROWS, visibility: 'private' });
-    const { status, body } = await create(b.token, { title: 'story', markup: chart(ds.body.id) });
-    expect(status).toBe(400);
-    expect(body.error).toBe('invalid_refs');
-  });
-
-  it('validates encoding field bindings against the QUERY result columns', async () => {
-    const t = await mintToken('t');
-    const ds = await create(t.token, { title: 'sales', dataset: ROWS });
-    const bad = declared(ds.body.id) + `<div data-design="tw"><Question data="$rows" viz={{ kind: "vega-lite", spec: { mark: "bar", encoding: { y: { field: "revenue", type: "quantitative" } } } }} height="300px" /></div>`;
-    const { status, body } = await create(t.token, { title: 'story', markup: bad });
-    expect(status).toBe(400);
-    expect(body.error).toBe('invalid_refs');
-    const detail = JSON.stringify(body.details);
-    expect(detail).toContain('revenue');
-    expect(detail).toMatch(/month.*mrr.*region/);
-  });
-
-  it('validates recipe slot bindings (all slots bound, columns exist)', async () => {
-    const t = await mintToken('t');
-    const ds = await create(t.token, { title: 'sales', dataset: ROWS });
-    const rc = await create(t.token, { title: 'bar', viz: RECIPE });
-    const use = (bindings: string) => declared(ds.body.id) + `<div data-design="tw"><Question data="$rows" viz={{ kind: "recipe", recipe: "ref:${rc.body.id}", bindings: ${bindings} }} height="300px" /></div>`;
-
-    const ok = await create(t.token, { title: 'ok', markup: use('{ x: "month", y: "mrr" }') });
-    expect(ok.status).toBe(201);
-
-    const missing = await create(t.token, { title: 'missing-slot', markup: use('{ x: "month" }') });
-    expect(missing.status).toBe(400);
-    expect(JSON.stringify(missing.body.details)).toContain('y');
-
-    const badCol = await create(t.token, { title: 'bad-col', markup: use('{ x: "month", y: "nope" }') });
-    expect(badCol.status).toBe(400);
-    expect(JSON.stringify(badCol.body.details)).toContain('nope');
-  });
-
-  it('image refs pass through URL attrs', async () => {
-    const t = await mintToken('t');
-    const img = await create(t.token, { title: 'px', image: PIXEL });
-    const { status } = await create(t.token, {
-      title: 'story',
-      markup: `<div data-design="tw"><img src="ref:${img.body.id}" className="rounded" /></div>`,
-    });
-    expect(status).toBe(201);
-  });
-
-  it('resolves an image ref to the /raw bytes URL, not the HTML page', async () => {
-    // The interpreter renders <img src={refData[id].url}>. `/a/<id>` is the HTML
-    // page — an <img> pointed there loads to 0×0. Only `/a/<id>/raw` is bytes.
-    const t = await mintToken('t');
-    const img = await create(t.token, { title: 'px', image: PIXEL });
-    const story = await create(t.token, {
-      title: 'story',
-      markup: `<div data-design="tw"><img src="ref:${img.body.id}" className="rounded" /></div>`,
-    });
-    const row = await getArtifactById(story.body.id);
-    const refData = await refDataForRow(row!);
-    expect(refData[img.body.id].kind).toBe('image');
-    // /raw = bytes (a version query may follow for cache-busting); NOT /a/<id>.
-    expect((refData[img.body.id] as { url: string }).url).toMatch(new RegExp(`^/a/${img.body.id}/raw`));
-  });
-
-  it('dataset refresh returns warnings naming dependents whose bindings broke', async () => {
-    const t = await mintToken('t');
-    const ds = await create(t.token, { title: 'sales', dataset: ROWS });
-    const story = await create(t.token, { title: 'story', markup: chart(ds.body.id) });
-
-    const res = await putArtifact(
-      await observedRequest(`/api/artifacts/${ds.body.id}`, { method: 'PUT', token: t.token, json: { title: 'sales', dataset: [{ month: 'Jan', revenue: 5 }] } }),
-      params({ id: ds.body.id }),
-    );
-    expect(res.status).toBe(200); // warnings, never blocks
-    const body = await res.json();
-    expect(JSON.stringify(body.warnings)).toContain(story.body.id);
-  });
+// Native pages keep dataset declarations in immutable htmlLinks; chart bindings
+// are ordinary page code, no server JSX recipe/encoding compilation occurs.
+describe('native dataset declarations',()=>{
+ it('commits a live link with its owning HTML page',async()=>{
+  const token=await mintToken('native-refs');const ds=await create(token.token,{dataset:ROWS});
+  const html=`<html><head><link rel="af-dataset" data-af-name="sales" href="ref:${ds.body.id}"></head><body>Sales</body></html>`;
+  const page=await create(token.token,{html});expect(page.status).toBe(201);
+  expect((await getArtifactById(page.body.id))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'sales',datasetId:ds.body.id,mode:'live'}]);
+ });
 });

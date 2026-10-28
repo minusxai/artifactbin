@@ -1,3 +1,12 @@
+import {preparePublicationBundle} from './bundle';
+import {getSharingFor,durableMutation} from '@/lib/artifacts';
+import {htmlAssetLinks} from '@/lib/html-page';
+import {trackEvent} from '@/lib/platform/analytics';
+import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
+import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
+import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
+import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
  * auth modes and the operations registry run over one pipeline. Story owns the
@@ -7,19 +16,57 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { parseArtifactDestination, newArtifactDestination, ownsArtifact, applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
+import { type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, ownsArtifact, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls } from '@/lib/document';
 import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { json, readJson } from '@/lib/http/http';
+import { json, thrownMessage } from '@/lib/http/http';
 import { ID_RE } from '@/lib/platform/ids-shape';
 import { getDb } from '@/lib/platform/db';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 import { checkDocumentData } from '../data/data-checks';
+
+async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:string,body:Record<string,unknown>,key:string):Promise<Response>{
+ // A changed bundle file needs edit access to its own artifact, never page ownership.
+ if(!await getArtifactFor(actor,id))return json({error:'bundle_file_not_editable'},403);
+ const saved=await durableMutation(actor,base,key,{id,body},async receipt=>{
+  const response=await replaceArtifactWithBody(body,actor,id,base,{mutationReceipt:receipt});return {status:response.status,body:await response.json() as Record<string,unknown>};
+ });return json(saved.body,saved.status);
+}
+
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
+ if(typeof body.html!=='string')return undefined;
+ try{
+  const {datasets}=htmlPageDeclarations(body.html);
+  await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
+  return datasets;
+ }catch(error){
+  if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
+  return json({error:'invalid_dataset_binding'},400);
+ }
+}
+
+async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
+ if(body.backendSources===undefined){
+  if(creating&&typeof body.html==='string'&&htmlBackendNames(body.html).length)return json({error:'unresolved_backend_link'},400);
+  return undefined;
+ }
+ if(typeof body.html!=='string'||!body.backendSources||typeof body.backendSources!=='object'||Array.isArray(body.backendSources))return json({error:'invalid_backend_sources'},400);
+ const entries=Object.entries(body.backendSources as Record<string,unknown>);
+ if(entries.length>20||entries.some(([name,source])=>!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||typeof source!=='string'||Buffer.byteLength(source)>4_000_000))return json({error:'invalid_backend_sources'},400);
+ try{
+  const names=htmlBackendNames(body.html);
+  if(entries.some(([name])=>!names.includes(name))||creating&&names.some(name=>!entries.some(([key])=>key===name)))throw Error('Backend sources must match HTML links');
+  const prepared=await Promise.all(entries.map(async([name,source])=>({name,source:source as string,...await compilePageBackend(source as string)})));
+  if(prepared.length)composePageSchema(prepared.map(backend=>({name:backend.name,fileId:backend.name,version:'prepared',typeDefs:backend.typeDefs})));
+  return prepared;
+ }
+ catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
+}
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
   return parseAccessValue(body.access, format);
@@ -37,27 +84,16 @@ function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Vi
  * claimed by an account stamps its artifacts with that account, so the actor's
  * userId IS the row's owner and no extra read is needed.
  */
-export async function replaceArtifactFromRequest(
-  request: Request,
-  actor: AccessActor,
-  id: string,
-  base: string,
-): Promise<Response> {
-  const body = await readJson(request);
-  return replaceArtifactWithBody(body, actor, id, base);
-}
-
 /** The same pipeline with the body already in hand — what the operations registry calls. */
 export async function replaceArtifactWithBody(
   body: Record<string, unknown> | null,
   actor: AccessActor,
   id: string,
   base: string,
-  options: {dryRun?:boolean} = {},
+  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,options));
-  if(typeof body.markup==='string')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -74,6 +110,31 @@ export async function replaceArtifactWithBody(
   if(!annotationOps||annotationOps.length&&typeof sentMarkup!=='string')return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
+  let bundleReceipts:unknown[]=[];
+  const bundleSupplied=body.publicationBundle!==undefined;
+  if(typeof body.html==='string'){
+    if(expected.expectedVersion!==undefined&&expected.expectedVersion!==current.version||expected.expectedState!==undefined&&expected.expectedState!==artifactState(current))return json({error:'version_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
+    if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
+    if(body.publicationBundle!==undefined&&(!actor.tokenId||options.dryRun))return json({error:'bundle_requires_authenticated_commit'},400);
+    // Edit access to the page is enough to save a bundle; each file is then
+    // authorized on its own (preparePublicationBundle). New files belong to the
+    // page owner, so an editor's save never leaves the owner's page depending on
+    // the editor's artifacts. The injected visibility/shares are the page's
+    // current values, written under the same edit access a plain save has.
+    let creator=actor as TokenHoldingActor,newFilesRefused=false;
+    if(body.publicationBundle!==undefined){
+      if(!await getOwnedArtifactFor(actor,id)){
+        // A group page's files can be created as the group only by its editors, who own the page already.
+        if(current.group_id)newFilesRefused=true;
+        else creator={...writerFor(current),tokenId:current.token_id??creator.tokenId};
+      }
+      const sharing=await getSharingFor(actor,id);
+      body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
+    }
+    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,creator,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),{id,resolvedBackendNames:((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name),dependencies:Array.isArray(current.meta.htmlPublicationDependencies)?current.meta.htmlPublicationDependencies:[],creator,newFilesRefused});
+    if(bundled instanceof Response)return bundled;
+    body=bundled.body;bundleReceipts=bundled.receipts;
+  }
   let normalizeMarkup: ((source: string) => ReturnType<typeof normalizeNodeIds>) | undefined;
   if(typeof body.markup==='string') {
     const db=await getDb();
@@ -112,7 +173,8 @@ export async function replaceArtifactWithBody(
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
       loadRef: refLoaderForActor(owner),
-      overByteQuota: byteQuotaFor(owner.tokenId),
+      // Account-owned imports may have no historical creator credential.
+      overByteQuota: byteQuotaFor(owner.tokenId, owner.userId),
     }, {allowRemoteInputs:!options.dryRun});
   if (prepared instanceof Response) return prepared;
   let parsed = prepared.content;
@@ -154,14 +216,18 @@ export async function replaceArtifactWithBody(
   if (expected.expectedVersion !== undefined && expected.expectedVersion !== current.version || expected.expectedState !== undefined && expected.expectedState !== artifactState(current)) {
     return json({error:expected.expectedVersion !== undefined && expected.expectedVersion !== current.version?'version_conflict':'state_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
   }
+  const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-
+  const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
-    ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : {}),
+    meta:{...parsed.meta,...(bundleSupplied?{htmlPublicationDependencies:bundleReceipts}:current.meta.htmlPublicationDependencies?{htmlPublicationDependencies:current.meta.htmlPublicationDependencies}:{})},
+    ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
+    ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
+    ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : parsed.format==='html'?{description:parsed.derivedDescription??null}:{}),
     ...(visibility ? { visibility } : {}),
     ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     ...(access ? { access } : {}),
@@ -185,6 +251,12 @@ export async function replaceArtifactWithBody(
   if (current.format === 'folder' && expected.expectedVersion !== undefined && current.version !== expected.expectedVersion) {
     return json({ error: 'version_conflict', currentVersion: current.version }, 409);
   }
+  // Resolve advisory effects before the storage transaction so the exact wire reply
+  // can be committed atomically without querying outside PGLite's transaction connection.
+  const receiptEffects=options.mutationReceipt?{
+    warnings:await refreshWarningsFor(actor,{...current,...input,version:current.version+1}),
+    affected:['dataset','image','pdf','file'].includes(input.format)?await findDependentsFor(actor,id):null,
+  }:undefined;
   let row;
   try { row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
@@ -193,7 +265,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],repairs:parsed.repairs,openAnnotations:committedOpenAnnotations(saved)}),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -203,11 +275,13 @@ export async function replaceArtifactWithBody(
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
+  if(row.format==='html')void trackEvent('edit',row.id,{userId:actor.userId??null});
+
   // Dataset/viz refresh: warn about dependents whose bindings no longer
   // resolve (warnings, never blocks).
-  const warnings = await refreshWarningsFor(actor, row);
-  const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
-  return json(await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }));
+  const warnings = receiptEffects?receiptEffects.warnings:await refreshWarningsFor(actor, row);
+  const affected = receiptEffects?receiptEffects.affected:['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
+  return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
 }
 
 /**
@@ -216,12 +290,21 @@ export async function replaceArtifactWithBody(
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
-export async function createArtifactFromBody(
+export async function createArtifactFromBody(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Response>{
+ if(options.dryRun&&body.publicationBundle!==undefined)return json({error:'bundle_preflight_requires_dependency_plan'},400);
+ const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor,base,dependencyId,input,key));
+ if(bundled instanceof Response)return bundled;
+ const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts});
+ if(!bundled.receipts.length)return response;
+ return json({...await response.json(),dependencyReceipts:bundled.receipts},response.status);
+}
+
+async function createArtifactFromBodyPrepared(
   body: Record<string, unknown>,
   actor: TokenHoldingActor,
   base: string,
   request?: Request,
-  options: {dryRun?:boolean} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[]} = {},
 ): Promise<Response> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -275,16 +358,20 @@ export async function createArtifactFromBody(
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
 
 
+  const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-
+  const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...sourceRepairsEcho(parsed.repairs)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
+    meta:{...parsed.meta,...(options.bundleReceipts?.length?{htmlPublicationDependencies:options.bundleReceipts}:{})},
+    ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
-    description: body.description===null || typeof body.description === 'string' ? body.description : null,
+    description: body.description===null || typeof body.description === 'string' ? body.description : parsed.derivedDescription??null,
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
@@ -330,7 +417,7 @@ export async function refreshAssetsFor(
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
-    const named = collectExternalAssetUrls(row.source ?? '').all;
+    const named = row.format==='html' ? htmlAssetLinks(row.source ?? '').imageUrls : collectExternalAssetUrls(row.source ?? '').all;
     const held = await lookupWebAssets(named);
     urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did

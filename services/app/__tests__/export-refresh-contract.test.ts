@@ -3,13 +3,12 @@ import { identityForUser } from '@/lib/accounts';
 import {z} from 'zod';
 import {OPERATIONS,type OpContext} from '@/lib/operations/registry';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
-import {createArtifact,applyEditFor,getArtifactById} from '@/lib/artifacts';
+import {createArtifact,replaceArtifactFor,artifactState,getArtifactById} from '@/lib/artifacts';
 import {fakeBrowser} from '@artifactbin/utils';
 import type {RenderRequest} from '@artifactbin/contracts';
 import {setServices} from '@/lib/platform';
 import {resetExportRenderer} from '@/lib/export';
 import {GET as raw} from '@/app/a/[id]/raw/route';
-import {prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
 import {EXPORT_PNG} from './export-helpers';
 
 useAppHarness();
@@ -30,16 +29,15 @@ it('forced export rerenders the current published head and leaves ordinary cache
  browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_PNG});setServices({browser});
  const token=await mintAccountToken('mxmx_test_export_freshness');
  const actor=identityForUser(token.userId, token.id);
- const original=await createArtifact(token.id,token.userId,{format:'markup',source:SOURCE('$10'),meta:{},title:'Budget',description:null,visibility:'public'});
+ const original=await createArtifact(token.id,token.userId,{format:'html',source:'<html><body>'+SOURCE('$10')+'</body></html>',meta:{},title:'Budget',description:null,visibility:'public'});
  const operation=OPERATIONS.find(operation=>operation.name==='export_artifact')!;
  const ctx={actor,base:BASE,request:request('/api/artifacts/export')} as unknown as OpContext;
  await operation.run(ctx,{id:original.id});
  expect(browser.calls).toHaveLength(1);
 
- const currentSource=SOURCE('$12');
+ const currentSource='<html><body>'+SOURCE('$12')+'</body></html>';
  const head=(await getArtifactById(original.id))!;
- expect(head.document?.kind).toBe('graph');
- expect(await applyEditFor(actor,original.id,{baseEditId:head.edit_id,documentUpdate:prepareClientDocumentUpdate({...head,document:head.document!},{source:currentSource})})).toMatchObject({applied:true});
+ expect(await replaceArtifactFor(actor,original.id,{...head,link_role:head.link_role??undefined,source:currentSource},{expectedVersion:head.version,expectedState:artifactState(head)})).toMatchObject({format:'html',version:head.version+1});
  const publishedHead=await getArtifactById(original.id);
  expect(publishedHead).toMatchObject({version:original.version+1});
  expect(publishedHead?.source).toContain('id="budget-table"');

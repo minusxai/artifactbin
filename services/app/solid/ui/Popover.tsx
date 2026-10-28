@@ -18,7 +18,7 @@ import { placePopper, type Align, type Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
 import { LAYER } from './layers';
-import { appearanceOf } from './theme';
+import { createAnchoredAppearance } from './theme';
 
 export interface PopoverTriggerAttrs {
   ref: (el: HTMLElement) => void;
@@ -96,6 +96,7 @@ function PopoverPanel(p: {
   children: JSX.Element;
 }): JSX.Element {
   let wrapper!: HTMLDivElement;
+  const appearance = createAnchoredAppearance(p.anchor);
   createEffect(() => {
     const anchor = p.anchor();
     if (!anchor) return;
@@ -106,7 +107,7 @@ function PopoverPanel(p: {
     onCleanup(stop);
   });
   return (
-    <div data-mx-theme-host="" data-app-appearance={appearanceOf(p.anchor())}>
+    <div data-mx-theme-host="" data-app-appearance={appearance()}>
       <div
         ref={(el) => { wrapper = el; p.ref(el); }}
         data-story-popper-wrapper=""

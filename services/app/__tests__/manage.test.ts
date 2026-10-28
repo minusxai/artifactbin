@@ -1,4 +1,4 @@
-import {restoreDocument,documentEdit} from './prepared-document';
+import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Management surface: token listing/revocation (dashboard), artifact deletion,
@@ -15,7 +15,7 @@ import {
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { getArtifactById,getVersionFor,applyEditFor,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
+import { getArtifactById,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, revokeUserToken } from '@/lib/accounts';
 import { listAccountTokenRows } from '@/lib/workspace';
@@ -25,14 +25,14 @@ const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 async function create(token: string, html: string, title = 'x') {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: html } }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title, html: nativeHtml(html) } }));
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string }>;
 }
 
 async function put(token: string, id: string, html: string) {
   const res = await putArtifact(
-    await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { markup: html } }),
+    await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { html: nativeHtml(html) } }),
     params({ id }),
   );
   expect(res.status).toBe(200);
@@ -41,7 +41,7 @@ async function put(token: string, id: string, html: string) {
 
 describe('token management', () => {
   it('lists a user’s tokens with artifact counts and revoked state', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_versions@example.test' });
     const a = await mintToken('laptop', user.id);
     const b = await mintToken('desktop', user.id);
     await mintToken('someone-elses', null);
@@ -65,7 +65,7 @@ describe('token management', () => {
     expect(await revokeUserToken(alice.id, t.id)).toBe(false); // already revoked
 
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>x</p>' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml('<p>x</p>') } }),
     );
     expect(res.status).toBe(401);
 
@@ -135,7 +135,7 @@ describe('versions + revert', () => {
     const art = await create(t.token, '<h1 id="head">v1</h1>');
     await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
-    const res=await restoreDocument(t.token,art.id,1);
+    const res = await revertRoute(await observedRequest(`/api/artifacts/${art.id}/revert`, {method:'POST',token:t.token,json:{version:1}}), params({id:art.id}));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.version).toBe(3);
@@ -145,7 +145,7 @@ describe('versions + revert', () => {
     expect(body.url).toBe(art.url);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${art.id}`, { token: t.token }), params({ id: art.id }));
-    expect((await read.json()).markup).toBe('<h1 id="head">v1</h1>');
+    expect((await read.json()).html).toContain('>v1</h1>');
 
     // v2 was archived by the revert, so both prior states remain recoverable.
     const versions = await (
@@ -180,7 +180,7 @@ describe('versions + revert', () => {
 
 describe('user-scoped versions + revert (dashboard)', () => {
   it('lists and reverts across any of the user’s tokens', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_versions@example.test' });
     const t = await mintToken('laptop', user.id);
     const art = await create(t.token, '<h1 id="head">v1</h1>');
     await put(t.token, art.id, '<h1 id="head">v2</h1>');
@@ -188,13 +188,11 @@ describe('user-scoped versions + revert (dashboard)', () => {
     const versions = await listVersionsFor(identityForUser(user.id, ''), art.id);
     expect(versions?.map((v) => v.version)).toEqual([1]);
 
-    const actor=identityForUser(user.id, ''),target=(await getVersionFor(actor,art.id,1))!;
-    const outcome=await applyEditFor(actor,art.id,documentEdit((await getArtifactById(art.id))!,{source:target.source!,whole:true}));
-    expect(outcome).toMatchObject({applied:true});if(!outcome||outcome instanceof Response||!outcome.applied)throw new Error('Restore failed');
-    const reverted=outcome.row;
-    expect(reverted?.version).toBe(3);
-    // A document's truth is `source`; markup rows keep `content` empty.
-    expect(reverted?.source).toBe('<h1 id="head">v1</h1>');
+    const actor=identityForUser(user.id, '');
+    const reverted=await revertArtifactFor(actor,art.id,1);
+    expect(reverted).not.toBeInstanceOf(Response);
+    expect(reverted).toMatchObject({version:3});
+    expect((await getArtifactById(art.id))?.source).toContain('>v1</h1>');
   });
 
   it("returns null for another user's artifact", async () => {

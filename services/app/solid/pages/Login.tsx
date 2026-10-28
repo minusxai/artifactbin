@@ -27,11 +27,11 @@ function writeProgress(progressKey: string, email: string, sent: boolean, delive
   } catch { /* storage unavailable */ }
 }
 
-export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|null;cliLogin?:boolean}={}): JSX.Element {
+export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|null;}={}): JSX.Element {
   const { session, sessionError } = useSession();
   const callbackUrl = props.callbackUrl === undefined ? new URLSearchParams(window.location.search).get('callbackUrl') : props.callbackUrl;
-  const destination = loginRedirectTarget(callbackUrl, window.location.origin, props.cliLogin);
-  const progressKey = `afbin:login:${props.cliLogin ? 'cli:' : ''}${callbackUrl ?? ''}`;
+  const destination = loginRedirectTarget(callbackUrl, window.location.origin);
+  const progressKey = `afbin:login:${callbackUrl ?? ''}`;
   const saved = readProgress(progressKey);
   const [email, setEmail] = createSignal(saved.email);
   const [code, setCode] = createSignal('');
@@ -79,7 +79,6 @@ export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|n
   };
   return <Show when={!session()?.user && (session() || sessionError())}>
     <FormPage narrow>
-      <Show when={props.cliLogin}><StatusMessage kind="notice">Sign in to connect the CLI running on this computer. Keep your setup command running while you enter the code. <a href="/login" class="text-accent">Use the website instead</a>.</StatusMessage></Show>
       <Show when={!sent()} fallback={<>
         <PageHeader title="Log in to artifactbin" description={<>{delivery() === 'email' ? 'We emailed a code to ' : 'A login code was generated for '}<span class="text-fg">{email()}</span>. It expires in 10 minutes.<Show when={delivery() === 'operator_outbox'}> Ask the server operator for the code from the protected local outbox or server output.</Show></>} />
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>

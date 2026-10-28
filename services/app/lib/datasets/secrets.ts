@@ -1,4 +1,5 @@
-import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypto';
+import {randomBytes} from 'node:crypto';
+import {datasetSecretTargetHash as targetHash,sealDatasetSecret,openDatasetSecret} from './secret-crypto';
 import {AUTH_SECRET} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import type {Queryable} from '@artifactbin/contracts';
@@ -8,11 +9,8 @@ import {DatasetError} from './errors';
 
 type Target=Omit<DatasetConnection,'passwordSecretId'>;
 interface SecretRow{id:string;token_id:string;user_id:string|null;dataset_id:string|null;target_hash:string;ciphertext:string}
-const targetJson=(target:Target)=>JSON.stringify({host:target.host,port:target.port,database:target.database,username:target.username,ssl:target.ssl});
-const targetHash=(target:Target)=>createHash('sha256').update(targetJson(target)).digest('hex');
-const key=()=>createHash('sha256').update('artifactbin/dataset-secret/v1\0'+AUTH_SECRET).digest();
-const seal=(value:string,id:string,hash:string)=>{const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key(),iv);cipher.setAAD(Buffer.from(`${id}\0${hash}`));return Buffer.concat([iv,cipher.update(value,'utf8'),cipher.final(),cipher.getAuthTag()]).toString('base64');};
-const open=(row:SecretRow)=>{const bytes=Buffer.from(row.ciphertext,'base64'),decipher=createDecipheriv('aes-256-gcm',key(),bytes.subarray(0,12));decipher.setAAD(Buffer.from(`${row.id}\0${row.target_hash}`));decipher.setAuthTag(bytes.subarray(-16));return Buffer.concat([decipher.update(bytes.subarray(12,-16)),decipher.final()]).toString('utf8');};
+const seal=(value:string,id:string,hash:string)=>sealDatasetSecret(value,id,hash,AUTH_SECRET);
+const open=(row:SecretRow)=>openDatasetSecret(row,AUTH_SECRET);
 const owned=(actor:AccessActor)=>actor.userId?{sql:'(user_id=$3 OR token_id IN (SELECT id FROM tokens WHERE user_id=$3))',value:actor.userId}:{sql:'token_id=$3 AND user_id IS NULL',value:actor.tokenId};
 
 /** Stamps `dataset_secrets.token_id` (NOT NULL): the creator must hold a token — a session's is its account token (`withAccountToken`). */

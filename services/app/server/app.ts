@@ -1,5 +1,4 @@
 import {getDeploymentState} from '@/lib/deployment';
-import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -19,18 +18,12 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {
-  agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
-  createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
-  retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
-  STYLESHEET_PATH, stylesheetStore, TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
-} from '@/lib/compiled-page';
+import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/serving/agent-discovery';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
-import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { measureQueries, runWithRequest } from '@/lib/platform';
@@ -51,11 +44,8 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
-import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { appBuildId, mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
-import zlib from 'node:zlib';
-import { promisify } from 'node:util';
+import { compressDynamic, dynamicEncoding, precompressedStatic } from './content-encoding';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
 import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
@@ -64,7 +54,6 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/page-styles';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -75,8 +64,8 @@ import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract
 function withAgentDiscovery(html: string, origin: string): string {
   const help = agentDiscovery(origin);
   const tags = agentDiscoveryHead(help);
-  // Real body text survives readers that discard metadata and comments. The app
-  // replaces this startup fallback when it mounts; it contains no document data.
+  // Paint a product loading state before app JavaScript arrives. The app replaces
+  // it on mount; agent discovery remains in the head, tail and noscript help.
   html = html.replace(/<div id="root">/i, (open) => `${open}${agentDiscoveryBody(help)}`);
   const open = /<head(?:\s[^>]*)?>/i.exec(html);
   if (open) return `${html.slice(0, open.index + open[0].length)}${tags}${html.slice(open.index + open[0].length)}`;
@@ -245,8 +234,6 @@ const APP_SECURITY_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-const brotliCompress = promisify(zlib.brotliCompress);
-const gzipCompress = promisify(zlib.gzip);
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -282,7 +269,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
  * A guessed machine address is answered in the machine's language. A path
  * under `/api/` nobody serves, `/openapi.json` and `/.well-known/ai-plugin.json`
  * answer the same shape `unauthorized()` does: the error, and the one way on —
- * `afbin help`. A page of HTML tells a fetch tool nothing.
+ * `/llms.txt`. A page of HTML tells a fetch tool nothing.
  *
  * Mounted AFTER the real routes (an earlier match wins) and BEFORE the SPA
  * fallback, by EXACT path under `/.well-known/` — a prefix mount there would
@@ -295,25 +282,15 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
   return json({
     error: 'not_found',
-    help: guessedQuery ? 'afbin help publishing-query' : 'afbin help',
-    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. Use afbin help publishing-query for methods and access rules.'] } : {}),
+    help: guessedQuery ? '/llms/datasets' : '/llms.txt',
+    ...(guessedQuery ? { details: ['Read linked dataset schema and rows through the page GraphQL endpoint /api/artifacts/<pageId>/graphql. Use /llms/datasets for namespaces, discovery and permissions.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
 interface Admitted { row: ArtifactRow; canonicalPath?: string }
 /** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
-const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { [READER_MODE_HEADER]: reader.mode } : {});
-
-let liveBuildArchived = false;
-function archiveLiveBuild(): void {
-  if (liveBuildArchived) return;
-  liveBuildArchived = true;
-  try {
-    const build = loadCompilerBuild();
-    void archiveSharedBuild(build).catch((error: unknown) => { liveBuildArchived = false; console.warn('[islands] archiving the live build failed', error); });
-  } catch { liveBuildArchived = false; /* no island build yet (a test or a fresh checkout) */ }
-}
+const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
 /**
  * `Server-Timing` on every response: the whole chain's wall time (`total`) and what it waited on the database
@@ -362,14 +339,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A serving process answers committed writes (lib/artifacts/after-commit): each new head is prepared for its readers,
-  // and a dataset write invalidates the guest snapshots it feeds (lib/publish/prepared/commit-hooks.server).
-  installStoryCommitHooks();
-  // …and revalidates the guest snapshots a write made stale (lib/publish/prepared/snapshots.server).
-  enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
-  archiveLiveBuild();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -397,8 +368,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
-    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method });
-    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404 });
+    // Only the byte validator crosses this anonymous boundary; never credentials.
+    const headers = new Headers();
+    const validator = c.req.header('if-none-match');
+    if (validator !== undefined) headers.set('if-none-match', validator);
+    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method, headers });
+    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404, headers: { 'cache-control': 'no-store' } });
     const response = incoming.pathname.startsWith('/assets/export/')
       ? await exportAssetResponse(request, incoming.pathname.slice('/assets/export/'.length))
       : incoming.pathname.startsWith('/assets/ref/')
@@ -463,7 +438,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': pageCsp(c.req.url),
+      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.url).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.url),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
@@ -542,123 +517,17 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const key = url.searchParams.get('key');
     if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
-    if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
+    const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
+    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
     if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
     const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
-    const canonical = canonicalPath + (url.pathname.endsWith('/edit') ? '/edit' : '');
+    const canonical = canonicalPath + (editingDataset ? '/edit' : '');
     return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
-  /*
-   * The compiled reader's code (docs/phase2-architecture.md §9), all content-addressed: the shared
-   * island chunks under public/islands/ (served by the public mount below), and the per-document
-   * modules and speculation-rule files the module store wrote (lib/compiled-page/modules.server).
-   * Immutable only when found — a miss must stay a plain, uncached 404. ACAO because a /raw copy has
-   * an opaque origin, so its module fetches are cross-origin.
-   */
-  app.use(`${ISLANDS_PATH}/*`, async (c, next) => {
-    await next();
-    if (c.res.status !== 200) return;
-    c.header('cache-control', IMMUTABLE);
-    c.header('access-control-allow-origin', '*');
-  });
-  const islandModules = createModuleStore();
-  const islandTemplates = createTemplateResourceStore();
-  const islandStylesheets = stylesheetStore();
-  const speculationRules = createSpeculationRulesStore();
-  /*
-   * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
-   * are content-addressed and never change, so each is encoded ONCE, at the highest quality, and the
-   * encodings kept (bounded) — target 2 is measured in brotli bytes. Encoding runs on zlib's pool.
-   */
-  const ISLAND_ENCODINGS_KEPT = 512;
-  const islandEncodings = new Map<string, Promise<EncodedVariants>>();
-  const boundModules = new Map<string, Buffer>();
-  const encodedIsland = (key: string, bytes: Buffer): Promise<EncodedVariants> => {
-    let encoded = islandEncodings.get(key);
-    if (!encoded) {
-      encoded = Promise.all([
-        brotliCompress(bytes, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY, [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: bytes.byteLength } }),
-        gzipCompress(bytes, { level: zlib.constants.Z_BEST_COMPRESSION }),
-      ]).then(([br, gzip]) => ({ br, gzip }));
-      encoded.catch(() => islandEncodings.delete(key));
-      islandEncodings.set(key, encoded);
-      while (islandEncodings.size > ISLAND_ENCODINGS_KEPT) islandEncodings.delete(islandEncodings.keys().next().value!);
-    }
-    return encoded;
-  };
-  const islandFile = async (c: Context, key: string, bytes: Uint8Array, contentType: string): Promise<Response> => {
-    const body = Buffer.from(bytes);
-    return variantResponse(c, body, await encodedIsland(key, body), { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
-  };
-  // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
-  app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
-    const stored = sha ? await islandModules.get(sha) : null;
-    if (!stored) return c.notFound();
-    // The stored bytes name the shared runtime by specifier; `?b=` is the build the page was assembled
-    // for, and the bytes are bound to exactly that build's chunks (runtime-binding): the live build, or an
-    // older one's retained manifest (a tab open across a deploy, a prefetched page, a pinned page).
-    const live = loadCompilerBuild();
-    const asked = c.req.query('b');
-    const build = asked === undefined || asked === live.id ? live : await retainedBuild(asked);
-    if (!build) return c.notFound();
-    const key = `d/${sha}/${build.id}`;
-    let bound = boundModules.get(key);
-    if (!bound) {
-      const text = Buffer.from(stored).toString('utf8');
-      const binding = bindModule(text, build);
-      // A module naming a chunk this build lacks never runs against it.
-      if (binding.missing.length) return c.notFound();
-      bound = binding.code === text ? Buffer.from(stored) : Buffer.from(binding.code);
-      boundModules.set(key, bound);
-      while (boundModules.size > ISLAND_ENCODINGS_KEPT) boundModules.delete(boundModules.keys().next().value!);
-    }
-    // Unversioned, a module that names the runtime by specifier would be cached immutable against one
-    // build; every page names it with `?b=` (assembler bindModuleRef). A module whose bytes name chunk
-    // URLs themselves (compiled before specifiers were kept) is immutable as it is.
-    if (asked === undefined && !bound.equals(stored)) return c.notFound();
-    return islandFile(c, key, bound, 'text/javascript; charset=utf-8');
-  });
-  app.on(['GET', 'HEAD'], `${TEMPLATE_RESOURCE_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandTemplates.get(sha) : null;
-    return bytes ? islandFile(c, `t/${sha}`, bytes, 'application/json; charset=utf-8') : c.notFound();
-  });
-  // The shared document stylesheets: one URL per text for every document (lib/page-styles/linked-sheets.server).
-  app.on(['GET', 'HEAD'], `${STYLESHEET_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.css$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandStylesheets.get(sha) : null;
-    return bytes ? islandFile(c, `c/${sha}`, bytes, 'text/css; charset=utf-8') : c.notFound();
-  });
-  app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await speculationRules.get(sha) : null;
-    return bytes ? islandFile(c, `s/${sha}`, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
-  });
-  app.on(['GET', 'HEAD'], '/islands/:file', async (c, next) => {
-    const name = c.req.param('file');
-    const local = path.join(publicDir, 'islands', name);
-    if (existsSync(local)) return next();
-    const bytes = await retainedIslandFile(name);
-    if (!bytes) return c.notFound();
-    return islandFile(c, `shared/${name}`, bytes, name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8');
-  });
-  /*
-   * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
-   * content-addressed like /story/*, and loaded from a file:// page (a `null`
-   * origin) by an SRI-pinned script — which is a CORS request, hence the open ACAO.
-   */
-  app.on(['GET', 'HEAD'], '/offline/:name', async (c) => {
-    const code = await offlineExtrasAsset(c.req.param('name'));
-    if (!code) return c.notFound();
-    return variantResponse(c, code, await offlineExtrasEncoded(c.req.param('name')), {
-      'content-type': 'text/javascript; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff',
-    });
-  });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
   // Every file is content-addressed; both requests need CORS and immutable caching.
@@ -669,37 +538,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
-  // The CLI installer and its uninstaller are fetched with `curl … | sh`; serve both the same way.
-  for (const script of ['/install.sh', '/chat/install.sh', '/chat/uninstall.sh']) app.use(script, async (c, next) => {
-    await next();
-    c.header('content-type', 'text/x-shellscript; charset=utf-8');
-    c.header('cache-control', 'public, max-age=300');
-    c.header('x-content-type-options', 'nosniff');
-  });
-  // Node-only entries reuse the audited helpers. A Unix child cannot change its caller's PATH.
-  for (const extension of ['sh', 'ps1']) app.get(`/chat/install-node.${extension}`, c => {
-    const helper = readFileSync(path.join(publicDir, 'chat', `ensure-node.${extension}`), 'utf8');
-    const body = extension === 'sh' ? `#!/bin/bash\nset -e\n${helper}\nprintf '%s\\n' 'Open a new terminal to use Node, npm and npx.'\n` : helper;
-    c.header('content-type', extension === 'sh' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
-    c.header('cache-control', 'public, max-age=300'); c.header('x-content-type-options', 'nosniff');
-    return c.body(body);
-  });
-  // Compatibility URLs prepare Node and invoke npm; every deployment selects its own origin.
-  for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, async (c) => {
-    const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
-    const deployment=await getDeploymentState(null);
-    c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');
-    return c.text(renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'sh'));
-  });
-  app.get('/chat/install.ps1', async c => {
-    const script=readFileSync(path.join(publicDir,'chat','install.ps1'),'utf8');
-    const deployment=await getDeploymentState(null);
-    const body=renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'powershell');
-    c.header('content-type','text/plain; charset=utf-8');c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');c.header('x-content-type-options','nosniff');
-    return c.body(body);
-  });
-  // Retired executable assets must not fall through to static storage.
-  app.use('/chat/releases/*', async c => c.notFound());
+  app.all('/chat/*', async c => c.notFound());
+  app.all('/install.sh', async c => c.notFound());
+  app.all('/login/cli', async c => c.notFound());
   // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
@@ -715,12 +556,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const wasGuest = (c.req.header('cookie') ?? '').split(/;\s*/).some(part => part.startsWith(`${AGENT_COOKIE}=`));
     return c.redirect(wasGuest ? '/login?signedOut=1' : '/login', 302);
   });
-  app.on(['GET', 'HEAD'], ['/login', '/login/cli'], async c => {
+  app.on(['GET', 'HEAD'], ['/login'], async c => {
     c.header('Cache-Control', 'no-store');
     const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
     if (actor.credential === 'session' && actor.userId) {
       const url = new URL(c.req.url);
-      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), url.pathname === '/login/cli'), 302);
+      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
     }
     return page(c);
   });
@@ -730,7 +571,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('Cache-Control', 'no-store');
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
+  app.on(['GET','HEAD'],'/local/publish',(c)=>page(c));
   app.get('/docs-human', (c) => page(c));
+  // The broker is platform-owned chrome, framed by file:// or loopback documents.
+  app.get('/local/connect', (c) => page(c));
   app.get('/getting-started', (c) => page(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());

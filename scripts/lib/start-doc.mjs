@@ -1,18 +1,6 @@
-/**
- * Starting a document, and becoming its owner in a browser — for gates.
- *
- * `POST /api/start` hands out NOTHING but the document and the one-line
- * tokenless paste: the product's only door to a credential is the afbin CLI's
- * device approval. So a gate that needs to WRITE the document it started gets
- * a connection first (lib/cli-connection) and starts the document AS that
- * connection — which is exactly what an agent does.
- *
- * `/a/<id>` serves the app document with its story runtime inline to every
- * viewer. Owner authority still controls the surrounding editing chrome, so
- * the owner-focused gates make their browser the owner, which is what
- * `becomeOwner` does.
- */
-import { connectAgent, connectionBrowserCookie } from '../gates/lib/cli-connection.mjs';
+/** Native HTML gate fixtures use the original start route, verified account
+ * credentials and browser sessions. Account bearers never enter page HTML. */
+import { connectAgent, connectionBrowserCookie } from '../gates/lib/account-connection.mjs';
 import { loginViaEmail } from './mail-login.mjs';
 
 /**
@@ -49,7 +37,8 @@ export async function startDocument(base, options) {
     body: JSON.stringify({ visibility: 'public' }),
   });
   if (!shared.ok) throw new Error(`cannot make gate fixture public (${shared.status})`);
-  return { id: body.id, token, editId: body.edit_id, prompt: body.prompt };
+  const head = await readDocumentHead(base, body.id, token);
+  return { id: body.id, token, editId: body.edit_id, prompt: body.prompt, version: head.version, state: head.state, expectedVersion: head.version, expectedState: head.state };
 }
 
 /**
@@ -132,4 +121,18 @@ export async function publishAs(page, body) {
     throw new Error(`could not publish as this browser (${created.status} ${JSON.stringify(created.body)})`);
   }
   return created.body;
+}
+
+/** Read the exact native page head before a fixture's conditional replacement.
+ * @param {string} base @param {string} id @param {string} token
+ * @param {typeof fetch} read injected HTTP port for focused helper tests
+ */
+export async function readDocumentHead(base, id, token, read = fetch) {
+  const response = await read(`${base}/api/artifacts/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` }, redirect: 'error',
+  });
+  if (!response.ok) throw new Error(`cannot read gate fixture (${response.status})`);
+  const head = await response.json();
+  if (head.format !== 'html' || !Number.isInteger(head.version) || typeof head.state !== 'string') throw new Error('gate fixture must have a native HTML head with publication guards');
+  return head;
 }

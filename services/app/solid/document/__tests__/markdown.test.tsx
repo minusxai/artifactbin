@@ -168,7 +168,7 @@ describe('the composer writes markdown, and sends TEXT', () => {
     layer({ railOpen: true, initialSelection: SELECTION });
     await flush();
     for (const label of ['Bold', 'Italic', 'Code', 'Link', 'List']) expect(within(composer()).getByLabelText(label)).toBeTruthy();
-    expect(within(composer()).getByRole('textbox', {name:'Annotation comment'})).toHaveAttribute('aria-placeholder', 'Protip: Use @ to tag friends or agents');
+    expect(within(composer()).getByRole('textbox', {name:'Annotation comment'})).toHaveAttribute('aria-placeholder', 'Protip: Use @ to mention people');
     expect(composer().querySelector('.comment-mention-tip')).toBeNull();
   });
 

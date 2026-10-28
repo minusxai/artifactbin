@@ -38,7 +38,7 @@ export function annotationAuthorForRequest(request: Request, rememberedHarness?:
 }
 
 /** Explicit display identity; custom agent names are valid and never grant access. */
-export function annotationAuthorForAgent(name: string): AnnotationAuthor {
+function annotationAuthorForAgent(name: string): AnnotationAuthor {
   const harness = identifyClient({agentHeader: name}).harness;
   return {kind: 'agent', label: agentLabelForHarness(harness) ?? (name.trim() || null), transport: 'http'};
 }

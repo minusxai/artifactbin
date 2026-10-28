@@ -18,9 +18,10 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { liveChannelCount, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
+import { liveSubscriptionSnapshot, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
+import {sseStream} from '@/__tests__/sse';
 
 const harness = useAppHarness();
 
@@ -31,11 +32,13 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { presenceChannel } from '@/lib/html-presence/channel.server';
+const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
+
 const ROWS = [{ choice: 'ramen' }];
-const DOC = (ds: string) =>
-  `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query>`
-  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ('x')\`}</Mutation></Helmet>`
-  + '<div><Button run="$vote">Vote</Button><Question data="$q" viz={{"kind":"table"}} /></div>';
+const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
 
 beforeEach(async () => {
   await resetLiveSubscriptions();
@@ -61,18 +64,12 @@ async function alwaysContended(datasetId: string) {
 }
 
 describe('contention', () => {
-  it('answers 503 dataset_busy with Retry-After on the document door — never a 400 about SQL', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds) })).id;
-    await alwaysContended(ds);
-    const res = await mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token:t.token, json: { mutation: 'vote' } }), params({ id: doc }));
-    expect(res.status).toBe(503);
-    expect(res.headers.get('Retry-After')).toBe('1');
-    const body = (await res.json()) as { error: string; detail: string };
-    expect(body.error).toBe('dataset_busy');
-    expect(body.detail).toMatch(/try again/i);
-    vi.restoreAllMocks();
+  it('does not execute retired declared mutations from a native page', async () => {
+    const t=await mintToken('t'),ds=(await create(t.token,{dataset:ROWS,access:'readwrite'})).id;
+    const doc=(await create(t.token,{html:DOC(ds)})).id;
+    const before=await getArtifactById(ds);
+    const res=await mutateDocRoute(request(`/a/${doc}/mutate`,{method:'POST',token:t.token,json:{mutation:'vote'}}),params({id:doc}));
+    expect(res.status).toBe(400);expect(await res.json()).toMatchObject({error:'unknown_mutation'});expect(await getArtifactById(ds)).toEqual(before);
   });
 
   it('answers the same on the owner door', async () => {
@@ -93,35 +90,38 @@ describe('the stream releases what it watched', () => {
   it('drops the document AND dataset channels when the client goes away', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    const doc = (await create(t.token, { html: DOC(ds) })).id;
     const controller = new AbortController();
     const request = new Request(`${BASE}/a/${doc}/events`, { signal: controller.signal });
     const res = await eventsRoute(request, params({ id: doc }));
     expect(res.status).toBe(200);
-    expect(liveChannelCount()).toBe(2);
-    void res.body?.cancel().catch(() => {});
+    const stream=sseStream(res.body!);await stream.named('message');
+    // Presence also holds an ACL subscriber on the document's shared channel.
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc), [artifactChannel(ds)]: 1 });
+    stream.close();
     controller.abort();
-    // The close path awaits each unsubscribe; give it a turn to finish.
-    await new Promise((r) => setTimeout(r, 100));
-    expect(liveChannelCount()).toBe(0);
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({}));
   });
 
   it('two streams over the same dataset SHARE its channel, and one leaving keeps the other watching', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const a = (await create(t.token, { markup: DOC(ds) })).id;
-    const b = (await create(t.token, { markup: DOC(ds) })).id;
+    const a = (await create(t.token, { html: DOC(ds) })).id;
+    const b = (await create(t.token, { html: DOC(ds) })).id;
     const first = new AbortController();
     const resA = await eventsRoute(new Request(`${BASE}/a/${a}/events`, { signal: first.signal }), params({ id: a }));
-    const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`), params({ id: b }));
-    // doc a, doc b, and ONE shared dataset channel.
-    expect(liveChannelCount()).toBe(3);
-    void resA.body?.cancel().catch(() => {});
+    const second=new AbortController();
+    const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`,{signal:second.signal}), params({ id: b }));
+    const streamA=sseStream(resA.body!),streamB=sseStream(resB.body!);
+    await Promise.all([streamA.named('message'),streamB.named('message')]);
+    // One dataset transport has two subscribers; each page keeps its own comment and presence channels.
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(a), ...documentSubscriptions(b), [artifactChannel(ds)]: 2 });
+    streamA.close();
     first.abort();
-    await new Promise((r) => setTimeout(r, 100));
-    // b's document channel and the still-shared dataset channel.
-    expect(liveChannelCount()).toBe(2);
-    void resB.body?.cancel().catch(() => {});
+    // Only page b remains, with one subscriber left on the shared dataset transport.
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({ ...documentSubscriptions(b), [artifactChannel(ds)]: 1 }));
+    streamB.close();second.abort();
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({}));
     expect((await getArtifactById(ds))!.access).toBe('readwrite');
   });
 });

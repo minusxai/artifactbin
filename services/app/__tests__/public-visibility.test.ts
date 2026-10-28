@@ -44,12 +44,6 @@ async function withPublic(enabled: boolean) {
   };
 }
 afterEach(async () => {
-  const [{ drainPreparedPageWarmups }, { drainSnapshotRevalidations }] = await Promise.all([
-    import('@/lib/publish/prepared/prepared-page.server'),
-    import('@/lib/publish/prepared/snapshots.server'),
-  ]);
-  await drainPreparedPageWarmups();
-  await drainSnapshotRevalidations();
   vi.unstubAllEnvs();
   vi.resetModules();
 });
@@ -57,7 +51,7 @@ afterEach(async () => {
 describe('a deployment that has not opened public visibility', () => {
   it('refuses an EXPLICIT public by name, and says which setting opens it', async () => {
     const w = await withPublic(false);
-    const res = await w.create({ title: 'p', markup: '<div><p>x</p></div>', visibility: 'public' });
+    const res = await w.create({ title: 'p', html: '<div><p>x</p></div>', visibility: 'public' });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; hint?: string };
     expect(body.error).toBe('public_not_enabled');
@@ -66,14 +60,14 @@ describe('a deployment that has not opened public visibility', () => {
 
   it('still takes unlisted — "anyone with the link" was never the part behind the setting', async () => {
     const w = await withPublic(false);
-    const res = await w.create({ title: 'u', markup: '<div><p>x</p></div>', visibility: 'unlisted' });
+    const res = await w.create({ title: 'u', html: '<div><p>x</p></div>', visibility: 'unlisted' });
     expect(res.status).toBe(201);
     expect((await res.json()).visibility).toBe('unlisted');
   });
 
   it('keeps an account document private when no visibility was requested', async () => {
     const w = await withPublic(false);
-    const res = await w.create({ title: 'a', markup: '<div><p>x</p></div>' });
+    const res = await w.create({ title: 'a', html: '<div><p>x</p></div>' });
     expect(res.status).toBe(201);
     expect((await res.json()).visibility).toBe('private');
   });
@@ -82,10 +76,10 @@ describe('a deployment that has not opened public visibility', () => {
 describe('a deployment that HAS opened it (this suite, and the public one)', () => {
   it('takes explicit public and keeps the account default private', async () => {
     const w = await withPublic(true);
-    const publicDocument = await w.create({ title: 'p', markup: '<div><p>x</p></div>', visibility: 'public' });
+    const publicDocument = await w.create({ title: 'p', html: '<div><p>x</p></div>', visibility: 'public' });
     expect(publicDocument.status).toBe(201);
     expect((await publicDocument.json()).visibility).toBe('public');
-    const defaultDocument = await w.create({ title: 'a', markup: '<div><p>x</p></div>' });
+    const defaultDocument = await w.create({ title: 'a', html: '<div><p>x</p></div>' });
     expect(defaultDocument.status).toBe(201);
     expect((await defaultDocument.json()).visibility).toBe('private');
   });
@@ -93,7 +87,7 @@ describe('a deployment that HAS opened it (this suite, and the public one)', () 
 
 it.each([false, true])('public enabled=%s never enables anonymous creation', async (enabled) => {
   const w = await withPublic(enabled);
-  const response = await w.anonymousCreate({ markup: '<p>Anonymous</p>', visibility: 'unlisted' });
+  const response = await w.anonymousCreate({ html: '<p>Anonymous</p>', visibility: 'unlisted' });
   expect(response.status).toBe(401);
   expect((await response.json()).error).toBe('unauthorized');
 });
@@ -101,7 +95,7 @@ it.each([false, true])('public enabled=%s never enables anonymous creation', asy
 
 it.each([false, true])('sharing reads and updates expose public enabled=%s', async (enabled) => {
   const w = await withPublic(enabled);
-  const created = await w.create({ markup: '<p>Team review</p>', visibility: 'private' });
+  const created = await w.create({ html: '<p>Team review</p>', visibility: 'private' });
   expect(created.status).toBe(201);
   const { id } = await created.json();
   expect(await (await w.sharing(id)).json()).toMatchObject({ canPublic: enabled });
@@ -119,7 +113,7 @@ it.each([false, true])('sharing reads and updates expose public enabled=%s', asy
 it('can restore group-owned link sharing to private', async () => {
   const w = await withPublic(false);
   await w.group();
-  const created = await w.create({ markup: '<p>Team review</p>', visibility: 'unlisted', destination: { type: 'group', id: 'grp_visibility' } });
+  const created = await w.create({ html: '<p>Team review</p>', visibility: 'unlisted', destination: { type: 'group', id: 'grp_visibility' } });
   expect(created.status).toBe(201);
   const { id } = await created.json();
   const updated = await w.sharing(id, { visibility: 'private' });

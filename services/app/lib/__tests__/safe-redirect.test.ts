@@ -56,17 +56,17 @@ describe('internalRedirectTarget — what it refuses', () => {
 });
 
 const loopback = '/oauth/loopback?redirect_uri=http%3A%2F%2F127.0.0.1%3A9987%2Fcallback&state=test';
-describe('website and CLI login destinations', () => {
+describe('login destinations', () => {
  it('keeps CLI callbacks out of ordinary website login', () => {
   expect(loginRedirectTarget(loopback, ORIGIN)).toBe('/');
   expect(loginRedirectTarget('/login/cli?callbackUrl='+encodeURIComponent(loopback), ORIGIN)).toBe('/');
  });
- it('continues an explicit CLI login without accepting an external destination', () => {
-  expect(loginRedirectTarget(loopback, ORIGIN, true)).toBe(loopback);
-  expect(loginRedirectTarget('http://127.0.0.1:9987/callback', ORIGIN, true)).toBe('/');
+ it('refuses retired and external login destinations', () => {
+  expect(loginRedirectTarget(loopback, ORIGIN)).toBe('/');
+  expect(loginRedirectTarget('http://127.0.0.1:9987/callback', ORIGIN)).toBe('/');
  });
  it('keeps website document and consent continuations', () => {
   expect(loginRedirectTarget('/a/abc123?x=1#edit', ORIGIN)).toBe('/a/abc123?x=1#edit');
-  expect(loginRedirectTarget('/oauth/device?user_code=ABCD', ORIGIN)).toBe('/oauth/device?user_code=ABCD');
+  expect(loginRedirectTarget('/oauth/authorize?client_id=test', ORIGIN)).toBe('/oauth/authorize?client_id=test');
  });
 });

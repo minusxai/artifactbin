@@ -1,12 +1,13 @@
+import {nativeHtml} from './native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { createGroup, setAccountPreferences, setGroupMember } from '@/lib/groups';
-import { updateSharingFor } from '@/lib/artifacts';
+import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { POST as publish } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { GET as membersRoute } from '@/app/api/my/artifacts/[id]/members/route';
-import { GET as annotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
+import { GET as annotationsRoute, POST as createCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { artifactPageAnswer } from '@/lib/serving/artifact-page';
 import { pagesSite } from '@/lib/http/pages-origin';
 
@@ -39,7 +40,7 @@ async function world() {
   await setGroupMember(owner.id, group.id, member.id, 'viewer');
   const make = async (visibility: 'private' | 'unlisted', grouped: boolean) => {
     await setAccountPreferences(owner.id, grouped ? { type: 'group', id: group.id } : { type: 'personal' });
-    const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, markup: '<h1 id="t">Hello</h1><p id="p">Body</p>', ...(grouped ? {} : { destination: { type: 'personal' } }) } }));
+    const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, html: nativeHtml('<h1 id="t">Hello</h1><p data-af-id="p">Body</p>'), ...(grouped ? {} : { destination: { type: 'personal' } }) } }));
     expect(response.status).toBe(201);
     return (await response.json() as { id: string }).id;
   };
@@ -58,6 +59,11 @@ const page = (id: string) => pageRoute(request(`/api/page/artifact/${id}`), { pa
 const nodesPart = (id: string) => pageRoute(request(`/api/page/artifact/${id}?part=nodes`), { params: Promise.resolve({ id }) });
 const pageInFrame = (id: string) => artifactPageAnswer(request(`/api/page/artifact/${id}`), id, { pages: pagesSite() });
 const members = (id: string) => membersRoute(request(`/api/my/artifacts/${id}/members`), { params: Promise.resolve({ id }) });
+const comment = async (id: string) => {
+  const row = (await getArtifactById(id))!;
+  return createCommentRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', json: { anchor: { kind: 'html-node', v: 1, revision: String(row.version), nodeId: 'p', quote: '' }, edit_id: row.edit_id, body: 'A reader may not post' } }), { params: Promise.resolve({ id }) });
+};
+const READABLE_COMMENTS = { status: 200, body: { annotations: [], next_cursor: null } };
 const annotations = (id: string) => annotationsRoute(request(`/api/my/artifacts/${id}/annotations`), { params: Promise.resolve({ id }) });
 
 /** The three doors, as the status and (for a refusal) body each answers. */
@@ -81,7 +87,7 @@ describe('a private document refuses everyone who is not named', () => {
     expect(refusedEverywhere(await doors(w.docs[kind]))).toEqual({ page: NOT_FOUND, nodes: NOT_FOUND, framed: NOT_FOUND, members: MEMBERSHIP_REFUSED, annotations: NOT_FOUND });
   });
 
-  it.each(['privatePersonal', 'privateGroup'] as const)('nobody at all gets the same page and members refusals on %s, and is asked to sign in for annotations', async (kind) => {
+  it.each(['privatePersonal', 'privateGroup'] as const)('nobody gets uniform read refusals on private %s, including annotations', async (kind) => {
     const w = await world();
     as(null, null);
     const r = await doors(w.docs[kind]);
@@ -89,20 +95,19 @@ describe('a private document refuses everyone who is not named', () => {
     expect(r.nodes).toEqual(NOT_FOUND);
     expect(r.framed).toEqual(NOT_FOUND);
     expect(r.members).toEqual(MEMBERSHIP_REFUSED);
-    expect(r.annotations.status).toBe(401);
-    expect(r.annotations.body.error).toBe('unauthorized');
+    expect(r.annotations).toEqual(NOT_FOUND);
   });
 
   it('a document that does not exist is refused exactly like a private one', async () => {
     await world();
     as(null, null);
     const r = await doors('doesnotexist');
-    expect(refusedEverywhere(r)).toMatchObject({ page: NOT_FOUND, nodes: NOT_FOUND, framed: NOT_FOUND, members: MEMBERSHIP_REFUSED });
+    expect(refusedEverywhere(r)).toMatchObject({ page: NOT_FOUND, nodes: NOT_FOUND, framed: NOT_FOUND, members: MEMBERSHIP_REFUSED, annotations: NOT_FOUND });
   });
 });
 
-describe('an unlisted document is read by its link and commented on by no one without a role', () => {
-  it.each(['unlistedPersonal', 'unlistedGroup'] as const)('a signed-in non-member reads %s as a viewer and is refused annotations', async (kind) => {
+describe('unlisted links admit conversation reads while keeping writes role-gated', () => {
+  it.each(['unlistedPersonal', 'unlistedGroup'] as const)('a signed-in non-member reads %s and its comments as a viewer', async (kind) => {
     const w = await world();
     as(w.stranger, STRANGER_EMAIL);
     const r = await doors(w.docs[kind]);
@@ -112,10 +117,11 @@ describe('an unlisted document is read by its link and commented on by no one wi
     expect(r.framed.status).toBe(200);
     expect(r.members.status).toBe(200);
     expect(r.members.body).toMatchObject({ self: null, canManage: false, canInvite: false });
-    expect(r.annotations).toEqual(NOT_FOUND);
+    expect(r.annotations).toEqual(READABLE_COMMENTS);
+    expect((await comment(w.docs[kind])).status).toBe(404);
   });
 
-  it.each(['unlistedPersonal', 'unlistedGroup'] as const)('nobody reads %s as a viewer and is asked to sign in for annotations', async (kind) => {
+  it.each(['unlistedPersonal', 'unlistedGroup'] as const)('nobody reads %s and its comments, while posting requires sign-in', async (kind) => {
     const w = await world();
     as(null, null);
     const r = await doors(w.docs[kind]);
@@ -123,7 +129,8 @@ describe('an unlisted document is read by its link and commented on by no one wi
     expect(r.page.body.role).toBe('viewer');
     expect(r.members.status).toBe(200);
     expect(r.members.body).toMatchObject({ self: null, canManage: false, canInvite: false });
-    expect(r.annotations.status).toBe(401);
+    expect(r.annotations).toEqual(READABLE_COMMENTS);
+    expect((await comment(w.docs[kind])).status).toBe(401);
   });
 });
 
@@ -135,7 +142,8 @@ describe('membership of the owner and the owning group is what lets a reader in'
     expect(r.page.status).toBe(200);
     expect(r.page.body.role).toBe('viewer');
     expect(r.members.status).toBe(200);
-    expect(r.annotations).toEqual(NOT_FOUND);
+    expect(r.annotations).toEqual(READABLE_COMMENTS);
+    expect((await comment(w.docs.privateGroup)).status).toBe(404);
   });
 
   it('the owner sees the owner page of their private document', async () => {
@@ -170,16 +178,18 @@ describe('a named share is honoured while it exists and refused on the very next
     expect(refusedEverywhere(await doors(w.docs.privatePersonal))).toEqual({ page: NOT_FOUND, nodes: NOT_FOUND, framed: NOT_FOUND, members: MEMBERSHIP_REFUSED, annotations: NOT_FOUND });
   });
 
-  it('a viewer share reads but may not list comments, and is refused when revoked', async () => {
+  it('a viewer share reads comments, cannot post, and loses read access when revoked', async () => {
     const w = await world();
     as(w.stranger, STRANGER_EMAIL);
     await share(w, 'viewer');
     const granted = await doors(w.docs.privatePersonal);
     expect(granted.page.body.role).toBe('viewer');
     expect(granted.members.status).toBe(200);
-    expect(granted.annotations).toEqual(NOT_FOUND);
+    expect(granted.annotations).toEqual(READABLE_COMMENTS);
+    expect((await comment(w.docs.privatePersonal)).status).toBe(404);
     await share(w, null);
-    expect((await doors(w.docs.privatePersonal)).page).toEqual(NOT_FOUND);
+    expect(refusedEverywhere(await doors(w.docs.privatePersonal))).toEqual({ page: NOT_FOUND, nodes: NOT_FOUND, framed: NOT_FOUND, members: MEMBERSHIP_REFUSED, annotations: NOT_FOUND });
+    expect((await comment(w.docs.privatePersonal)).status).toBe(404);
   });
 
   it('the owner page reports invited users only while a share exists', async () => {

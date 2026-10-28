@@ -167,7 +167,6 @@ describe('retired surfaces', () => {
 /** THE README IS A FRONT DOOR: four sections in order, the two one-liners, no retired env name. */
 const readme = () => read('README.md');
 /** The one place the default host is spelled (services/contracts); prose that names it is checked against this. */
-const defaultServer = () => /DEFAULT_SERVER = '([^']+)'/.exec(read('services/contracts/src/default-server.ts'))[1];
 // The flat settings this product retired; the boot-time alias map is gone (no backward compatibility), so the
 // list lives in the guards that keep the names from coming back (see services/app/lib/__tests__/retired-names.test.ts).
 const retiredEnvNames = () => [
@@ -178,46 +177,22 @@ const retiredEnvNames = () => [
 describe('README.md', () => {
   it('is short and keeps the main sections in order', () => {
     expect(readme().split('\n').length).toBeLessThanOrEqual(90);
-    expect(readme().split('\n').filter((l) => /^## /.test(l))).toEqual(['## Install and use', '## Run your own server', '## Develop', '## Modules and documentation']);
+    expect(readme().split('\n').filter((l) => /^## /.test(l))).toEqual(['## Author a document', '## Develop', '## Modules and documentation']);
     expect(readme().split('\n')[0]).toBe('# Artifactbin');
   });
-  it('documents Node prerequisites, npm cloud and self-host workflows and development setup', () => {
-    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install-node.sh`);
-    expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/install-node.ps1 | Invoke-Expression`);
-    expect(readme()).toContain('npx --yes @afbin/cli@latest setup');
-    expect(readme()).toContain('npx.cmd --yes @afbin/cli@latest setup');
-    expect(readme()).toContain('reuses supported Node/npm or installs official Node LTS for your user');
-    expect(readme()).toContain('npm is the sole CLI distribution');
-    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install.sh | sh`);
-    expect(readme()).toContain(`Invoke-RestMethod ${defaultServer()}/chat/install.ps1 | Invoke-Expression`);
-    for (const command of ['preview report.jsx', 'push report.jsx', 'serve --dir ./artifactbin-data --owner-email owner@example.com --port 7445', 'add report.jsx sales.csv --json']) {
-      expect(readme()).toContain(`afbin ${command}`);
-    }
-    // npm appears only as the two setup lines (Unix and Windows); every other command is `afbin <command>`.
-    expect([...readme().matchAll(/npx(?:\.cmd)? --yes @afbin\/cli@\S+ ([a-z-]+)/g)].map((m) => m[1])).toEqual(['setup', 'setup']);
-    expect(readme()).toContain('sign in as that verified owner');
-    expect(readme()).toContain('confirm deployment setup');
-    expect(readme()).toContain('company admission is invite-only by default');
-    expect(readme()).toContain('A document share alone does not admit a colleague');
-    expect(readme()).toContain('stable workspace-local IDs without uploading or signing in');
-    expect(readme()).toContain('separate copy with remote IDs, preserving the originals and their local references');
-    expect(readme()).toContain('Local preview continues independently after publication');
-    expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm ci[\s\S]*npm run setup[\s\S]*npm run dev/);
-    expect(readme()).toContain('npm run setup -- --yes --port 7445');
-    expect(readme()).toContain(`afbin config set host ${defaultServer()}`);
-    expect(readme()).not.toMatch(/https:\/\/artifactbin\.dev/);
-    expect(readme()).toContain('Apache-2.0');
+  it('documents skill installation and real HTTP authoring',()=>{
+    for(const text of ['/llms.txt','/skills/artifactbin.zip','/llms/http-auth','POST /api/artifacts','npm run setup -- --yes --port 7445','Apache-2.0'])expect(readme()).toContain(text);
+    expect(readme()).not.toMatch(/chat\/install|@afbin\/cli|afbin auth|afbin push/);
   });
 });
 
 describe('docs/', () => {
   it('source onboarding pulls by the published ID and preserves local edits', () => {
     const onboarding = read('docs', 'oss-onboarding.md');
-    expect(onboarding).toContain('npm run afbin -- pull <published-id> --output hello.jsx');
-    expect(onboarding).toContain('ID returned by `push --json`');
-    expect(onboarding).toContain('Preserve any unpushed local edits');
-    expect(onboarding).not.toContain('npm run afbin -- pull hello.jsx');
-    expect(onboarding).not.toContain('pull <published-id> --output hello.jsx --force');
+    expect(onboarding).toContain('node scripts/read.mjs <published-id> --output page.html');
+    expect(onboarding).toContain('returned by `publish.mjs`');
+    expect(onboarding).toContain('preserve any unpublished local edits');
+    expect(onboarding).not.toMatch(/npm run afbin|afbin (?:pull|push)/);
   });
   it('holds the essays the README used to carry', () => {
     for (const f of ['editing.md', 'document-format.md', 'serving-and-security.md', 'ownership.md', 'operations.md']) {

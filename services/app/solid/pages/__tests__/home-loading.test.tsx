@@ -10,7 +10,7 @@ import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { withPersonalBootstrap } from './home-bootstrap-fetch';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' }, onboarded: true };
-const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
+const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'html', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const response = (value: unknown, status = 200) => Response.json(value, { status });
 const deferred = () => { let resolve!: (value: Response) => void; const promise = new Promise<Response>(done => { resolve = done; }); return { promise, resolve }; };
 function Controls() { const { reload } = useSession(); const location = useLocation(); return <><button aria-label="Reload identity" onClick={reload}>Reload</button><output aria-label="Current path">{location.pathname}</output></>; }
@@ -84,7 +84,7 @@ it('drops retained private rows when the core reports an expired session', async
 });
 
 it('retains the shelf and offers retry when only insights fail', async () => {
-  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('part=insights') ? response({}, 503) : response(url.includes('/session') ? session : core))));
+  vi.stubGlobal('fetch', homeFetch((url: string) => Promise.resolve(url.includes('part=insights') ? response({}, 500) : response(url.includes('/session') ? session : core))));
   open(); await screen.findByLabelText('Retry workspace insights'); expect(screen.getByLabelText('Open Private document')).toBeInTheDocument(); expect(screen.queryByLabelText('Dashboard metrics')).toBeNull();
 });
 

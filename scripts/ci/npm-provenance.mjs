@@ -21,7 +21,8 @@ export function inspectBundle(bundle,version,bytes,expected){
  const definition=statement.predicate?.buildDefinition,workflow=definition?.externalParameters?.workflow;
  if(workflow?.repository!==`https://github.com/${repository}`||workflow.path!=='.github/workflows/ci.yml'||!/^refs\/(?:heads\/[\w./-]+|pull\/\d+\/merge)$/.test(workflow.ref??'')||definition.resolvedDependencies?.length!==1||definition.resolvedDependencies[0]?.digest?.gitCommit!==expected.sha||!definition.resolvedDependencies[0]?.uri?.startsWith(`git+https://github.com/${repository}@`))throw Error('Provenance does not identify the actual afbin build source');
  const invocation=statement.predicate?.runDetails?.metadata?.invocationId;
- if(!new RegExp(`^https://github\\.com/${repository}/actions/runs/${expected.run}/attempts/[0-9]+$`).test(invocation??''))throw Error('Provenance does not identify the selected build run');
+ const runPrefix=`https://github.com/${repository}/actions/runs/${expected.run}/attempts/`;
+ if(typeof invocation!=='string'||!invocation.startsWith(runPrefix)||!/^[0-9]+$/.test(invocation.slice(runPrefix.length)))throw Error('Provenance does not identify the selected build run');
  return subject;
 }
 /** Pinned npm10/sigstore3 builder adaptation: keep the ORIGINAL signed envelope
@@ -47,10 +48,10 @@ export async function withRekorConflictRecovery(config,generate){
  try{return await generate();}finally{config.createBundleBuilder=original;}
 }
 function officialSigner(signing=true){
- // setup-node 22.22.3 bundles npm 10.9.8. This deliberate npm-internal boundary is pinned;
+ // setup-node 22.23.4 bundles npm 10.9.9. This deliberate npm-internal boundary is pinned;
  // fail visibly if that toolchain changes instead of silently generating a different format.
  const npmRequire=createRequire(npmDriver());
- if(!(signing?['10.9.8']:['10.9.8','11.19.0']).includes(npmRequire('../package.json').version))throw Error('Provenance requires the pinned npm10.9.8 build or npm11.19.0 release toolchain');
+ if(!(signing?['10.9.9']:['10.9.9','11.19.0']).includes(npmRequire('../package.json').version))throw Error('Provenance requires the pinned npm10.9.9 build or npm11.19.0 release toolchain');
  const official=npmRequire('../node_modules/libnpmpublish/lib/provenance.js');
  const sigstore=npmRequire('../node_modules/sigstore');
  return {generateProvenance:async(subjects,options)=>{

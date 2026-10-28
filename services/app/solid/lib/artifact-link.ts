@@ -16,7 +16,7 @@ import { ARTIFACT_FORMATS, type ArtifactFormat } from '@artifactbin/contracts';
 
 export interface ArtifactLinkAttributes { href: string; rel?: 'external'; state?: string }
 
-export const isDocumentFormat = (format: string | null | undefined): boolean => format === 'markup';
+export const isDocumentFormat = (format: string | null | undefined): boolean => format === 'html';
 
 const isFormat = (value: unknown): value is ArtifactFormat => typeof value === 'string' && (ARTIFACT_FORMATS as readonly string[]).includes(value);
 

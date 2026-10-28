@@ -27,6 +27,13 @@ export async function publicOrigin(): Promise<string> {
   return PUBLIC_BASE_URL;
 }
 
+/** The message of a thrown Error; any other thrown value is logged here and answered with `fallback`. */
+export function thrownMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  console.error('[http] non-Error thrown:', error);
+  return fallback;
+}
+
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -40,7 +47,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: `Use saved credentials for ${base}; refresh an expired access token before signing in again. HTTP authentication: ${base}/llms/http-auth (no CLI installation required). Already using afbin? Run afbin auth --server ${base}.`,
+      help: `Use saved credentials for ${base}; refresh an expired access token before signing in again. HTTP authentication: ${base}/llms/http-auth Read ${base}/llms.txt for the author skill and HTTP API.`,
       guide: `${base}/llms.txt`,
     },
     401,

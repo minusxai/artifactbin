@@ -24,7 +24,7 @@ import { EXPORT_PNG } from '@/__tests__/export-helpers';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import {documentEditBody} from '@/__tests__/prepared-document';
+import {artifactState} from '@/lib/artifacts/state';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
@@ -43,11 +43,11 @@ afterEach(async () => { await resetExportRenderer(); setServices({ browser: unde
 
 async function twoVersions() {
   const owner = await mintToken('archived-export');
-  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<p>Version one</p>', visibility: 'public' } }));
+  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { html: '<!doctype html><html><head></head><body><p>Version one</p></body></html>', visibility: 'public' } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
   const head = (await getArtifactById(id))!;
-  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: documentEditBody(head,{source:'<p>Version two</p>',whole:true}) }), params({ id }));
+  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: {html:'<!doctype html><html><head></head><body><p>Version two</p></body></html>',expectedVersion:head.version,expectedState:artifactState(head)} }), params({ id }));
   expect(replaced.status, await replaced.clone().text()).toBe(200);
   return { owner, id };
 }

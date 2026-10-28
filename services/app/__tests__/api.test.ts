@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {SKILL_MAIN_MAX_BYTES} from '@/lib/skills';
 import { createUser } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
@@ -34,7 +35,7 @@ async function mint(name?: string): Promise<{ id: string; token: string }> {
 
 async function create(token: string, html = '<h1>hi</h1>', title = 'hello') {
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: html, visibility: 'public' } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, html:nativeHtml(html), visibility: 'public' } }),
   );
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string; url: string; version: number }>;
@@ -90,22 +91,22 @@ describe('artifact CRUD', () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.markup).toBe('<h1 id="head">report</h1>');
+    expect(body.html).toContain('>report</h1>');
     expect(body.title).toBe('Q3');
     expect(body.token_id).toBeUndefined();
   });
 
-  it('rejects a missing html/markup field with 400', async () => {
+  it('rejects missing publication content with 400', async () => {
     const { token } = await mint();
     const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'x' } }));
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'one_of_markup_dataset_viz_image_pdf' });
+    expect(await res.json()).toMatchObject({ error: 'one_of_html_dataset_viz_image_pdf_file' });
   });
 
   it('rejects oversized html with 413', async () => {
     const { token } = await mint();
     const res = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { markup: 'x'.repeat(2_000_001) } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { html:nativeHtml('x'.repeat(2_000_001)) } }),
     );
     expect(res.status).toBe(413);
   });
@@ -114,7 +115,7 @@ describe('artifact CRUD', () => {
     const { token } = await mint();
     const created = await create(token, '<h1 id="head">v1</h1>');
     const res = await putArtifact(
-      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { markup: '<h1 id="head">v2</h1>' } }),
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { html:nativeHtml('<h1 id="head">v2</h1>') } }),
       params({ id: created.id }),
     );
     expect(res.status).toBe(200);
@@ -131,10 +132,10 @@ describe('artifact CRUD', () => {
       'SELECT document,version, source FROM artifact_versions WHERE artifact_id = $1',
       [created.id],
     );
-    expect(versions.rows).toEqual([{ version:1,source:'<h1 id="head">v1</h1>',document:expect.objectContaining({kind:'graph'}) }]);
+    expect(versions.rows).toEqual([{ version:1,source:expect.stringContaining('>v1</h1>') }]);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }));
-    expect((await read.json()).markup).toBe('<h1 id="head">v2</h1>');
+    expect((await read.json()).html).toContain('>v2</h1>');
   });
 
   it("allows public reads while refusing another token's writes", async () => {
@@ -146,7 +147,7 @@ describe('artifact CRUD', () => {
     for (const handler of [
       async () =>
         putArtifact(
-          await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { markup: '<p>x</p>' } }),
+          await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { html:nativeHtml('<p>x</p>') } }),
           params({ id: created.id }),
         ),
     ]) {
@@ -207,12 +208,12 @@ describe('CLI and HTTP discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text).toMatch(/^## Read first/);
-  expect(text).toMatch(/\[download all skill guides\]\(\/skills\/artifactbin\.zip\)/i);
-  expect(text).toContain('POST /api/artifacts/<id>/edits');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
+  expect(text).toContain('normal HTML file');
+  expect(text).toContain('PUT /api/artifacts/');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
-  for(const topic of ['http-api','http-auth','http-authoring','live-sessions'])
+  for(const topic of ['http-auth','runtime','datasets'])
     expect(text).toContain(`http://localhost:3000/llms/${topic}`);
-  expect(text).toContain('## Example');expect(text).toContain('## Reference tree');
+  expect(text).toContain('## Core flows');expect(text).toContain('## Installed resources');
   expect(text).not.toContain('## Direct HTTP API');
  });
 });

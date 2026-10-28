@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {getDb} from '../platform/db';
 import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';
@@ -21,11 +22,22 @@ const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(orde
 export async function creationOperation(actor: AccessActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
   if (!key) return null;
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new CreationReplay({status:400,body:{error:'invalid_idempotency_key'}});
+  return {scope:await creationScope(actor,origin,workspaceAccount),key,fingerprint:hash(payload),reply};
+}
+
+async function creationScope(actor:AccessActor,origin:string,workspaceAccount?:string|null):Promise<string>{
   const current = accountOf(actor);
   // A retry retains its original ledger scope after verified adoption. Never
   // trust a caller-supplied account pin without checking its relationship.
   const account = workspaceAccount && await matchesWorkspaceAccount(workspaceAccount,current) ? workspaceAccount : current;
-  return {scope:hash([new URL(origin).origin,account]),key,fingerprint:hash(payload),reply};
+  return hash([new URL(origin).origin,account]);
+}
+/** Recover only server-recorded IDs; callers must still execute normal fingerprint/access validation. */
+export async function recoverCreationIds(actor:AccessActor,origin:string,keys:readonly string[],workspaceAccount?:string|null):Promise<ReadonlyMap<string,string>>{
+ if(!keys.length)return new Map();
+ const scope=await creationScope(actor,origin,workspaceAccount);
+ const rows=await (await getDb()).query<{operation_key:string;artifact_id:string}>('SELECT operation_key,artifact_id FROM artifact_creation_operations WHERE scope=$1 AND operation_key=ANY($2::text[]) AND artifact_id IS NOT NULL',[scope,keys]);
+ return new Map(rows.rows.map(row=>[row.operation_key,row.artifact_id]));
 }
 
 export async function lookupCreation(db: Queryable, operation: CreationOperation): Promise<CreationReply | null> {

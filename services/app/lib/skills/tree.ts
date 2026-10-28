@@ -101,8 +101,6 @@ export interface SkillTree {
 }
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-/** Reuse the skill source envelope for transport projections of shared authoring examples. */
-export function stripFrontmatter(text: string): string { return text.replace(FRONTMATTER, ''); }
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const FILE_RE = /^[a-z0-9-]+\.md$/;
 
@@ -122,7 +120,33 @@ function parseSkillFile(filePath: string, text: string): SkillFile {
   const audience: SkillAudience = fm.audience === 'human' ? 'human' : 'agent';
   const kind: SkillKind = fm.kind === 'data' ? 'data' : 'guide';
   const readFirstMax = typeof fm.read_first_max === 'number' ? fm.read_first_max : SKILL_READ_FIRST_MAX_BYTES;
-  return { path: filePath, dir, file, ref, name, description, order, audience, kind, readFirstMax, body: text.slice(m[0].length) };
+  return { path: filePath, dir, file, ref, name, description, order, audience, kind, readFirstMax, body: skillFile ? joinSoftBreaks(text.slice(m[0].length)) : text.slice(m[0].length) };
+}
+
+/** A line that begins its own Markdown block, so it never continues the line above. */
+const BLOCK_START = /^\s*(?:[-*+](?: |$)|\d+[.)](?: |$)|[|#>]|```|<|(?:-{3,}|={3,})\s*$)/;
+
+/**
+ * A SKILL.md body is served with one paragraph, list item or table row per line (agents read the
+ * raw text, and every line costs tokens), while its source wraps at 100 columns: a source line joins the line
+ * above, with its indentation dropped and one space between, when both are text and it does not
+ * begin a block. A table row that does not yet end in `|` continues on the next line. Fenced code,
+ * headings and hard breaks (two trailing spaces or a backslash) are never joined.
+ */
+export function joinSoftBreaks(markdown: string): string {
+  const out: string[] = [];
+  let fenced = false;
+  for (const line of markdown.split('\n')) {
+    const previous = out.at(-1);
+    const row = previous !== undefined && /^\s*\|/.test(previous);
+    const joins = !fenced && previous !== undefined && previous.trim() !== '' && line.trim() !== ''
+      && !/^\s*(?:#|```|(?:-{3,}|={3,})\s*$)/.test(previous) && !/( {2}|\\)$/.test(previous)
+      && (row ? !previous.trimEnd().endsWith('|') : !BLOCK_START.test(line));
+    if (joins) out[out.length - 1] = previous!.trimEnd() + ' ' + line.trim();
+    else out.push(line);
+    if (/^\s*```/.test(line)) fenced = !fenced;
+  }
+  return out.join('\n');
 }
 
 export function buildSkillTree(sources: Record<string, string>): SkillTree {
@@ -296,6 +320,7 @@ export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): 
     for (const entry of readdirSync(full)) {
       const entryPath = path.join(full, entry);
       if (statSync(entryPath).isDirectory()) {
+        if(['scripts','examples','design-systems','components'].includes(entry))continue;
         if(entry==='fragments'){
           if(readdirSync(entryPath).some(file=>!FILE_RE.test(file)||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/fragments: only flat Markdown source fragments are supported`);
           continue;

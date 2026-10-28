@@ -29,6 +29,8 @@ interface JsonServerOptions {
   serviceSecret?: string;
   /** The operator log's prefix for a failed route (`[label] <url> failed:`). */
   label?: string;
+  /** SQL/credential-bearing services must not log parser or engine exception text. */
+  redactErrors?: boolean;
 }
 
 /**
@@ -53,7 +55,7 @@ export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonSer
       // The url is CALLER INPUT: as the format string its own `%s`/`%d` would eat
       // the arguments after it and the error would vanish from the line (CodeQL
       // js/tainted-format-string). It travels as an argument, logged verbatim.
-      console.error(failed, req.url, error);
+      console.error(failed, req.url, opts.redactErrors?'request_failed':error);
       return json(400, { error: 'bad_request' });
     }
   });

@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseCsv } from '../csv';
 import { coerceRows } from '../coerce';
+import { inferColumns } from '@artifactbin/utils/shape';
 
 describe('parseCsv — RFC 4180', () => {
   it('parses the ordinary case', () => {
@@ -113,6 +114,17 @@ describe('coerceRows — types decided per column', () => {
     expect(one('d2', '03/04/2026', '04/05/2026')).toEqual(['03/04/2026', '04/05/2026']);
   });
 
+  it('keeps impossible calendar dates out of date columns', () => {
+    // One impossible day demotes the column to text, so row queries keep working.
+    const sniffed = coerceRows(['d'], [['2025-11-30'], ['2025-11-32']]);
+    expect(sniffed.map(r => r.d)).toEqual(['2025-11-30', '2025-11-32']);
+    expect(inferColumns(sniffed)).toEqual([{ name: 'd', type: 'string' }]);
+    expect(inferColumns([{ d: '2026-02-29' }])).toEqual([{ name: 'd', type: 'string' }]);
+    expect(inferColumns([{ d: '2028-02-29' }])).toEqual([{ name: 'd', type: 'date' }]);
+    // A declared date keeps its type; an impossible value becomes an honest null.
+    expect(coerceRows(['d'], [['2025-11-32'], ['2025-11-03']], [{ name: 'd', type: 'date' }]).map(r => r.d)).toEqual([null, '2025-11-03']);
+  });
+
   it('trims surrounding whitespace when deciding a number', () => {
     expect(one('n', ' 42 ', '43')).toEqual([42, 43]);
   });
@@ -169,4 +181,51 @@ describe('coerceRows — a DECLARED type wins over the sniffer', () => {
     const rows = coerceRows(['a'], [['1']], col('nope', 'string'));
     expect(rows[0]).toEqual({ a: 1 });
   });
+});
+
+describe('CSV numeric inference preserves precision by default',()=>{
+ const values=(...cells:string[])=>coerceRows(['value'],cells.map(cell=>[cell])).map(row=>row.value);
+ it('keeps unsafe integers and high precision decimals as strings',()=>{
+  expect(values('9007199254740993','9007199254740995')).toEqual(['9007199254740993','9007199254740995']);
+  expect(values('123456789012345.12','123456789012345.13')).toEqual(['123456789012345.12','123456789012345.13']);
+  expect(values('0.10000000000000001')).toEqual(['0.10000000000000001']);
+ });
+ it('keeps an entire mixed numeric precision column textual without losing nulls',()=>{
+  expect(values('1','9007199254740993','')).toEqual(['1','9007199254740993',null]);
+ });
+ it('retains safe integers, ordinary decimals and exact exponent values as numbers',()=>{
+  expect(values('9007199254740991','9007199254740990')).toEqual([9007199254740991,9007199254740990]);
+  expect(values('0.1','1.23456789012345','1.2500','1e-20','0.000')).toEqual([0.1,1.23456789012345,1.25,1e-20,0]);
+ });
+ it('preserves values that would underflow or change in a finite numeric round trip',()=>{
+  expect(values('1e-324')).toEqual(['1e-324']);
+  expect(values('1e20')).toEqual(['1e20']);
+  expect(values('1.234567890123456')).toEqual(['1.234567890123456']);
+ });
+ it('keeps explicit numeric override available while string override retains exact text',()=>{
+  expect(coerceRows(['value'],[['9007199254740993']],[{name:'value',type:'number'}])).toEqual([{value:Number('9007199254740993')}]);
+  expect(coerceRows(['value'],[['0.10000000000000001']],[{name:'value',type:'string'}])).toEqual([{value:'0.10000000000000001'}]);
+ });
+});
+
+ describe('CSV explicit empty strings',()=>{
+ const ingest=(text:string)=>{const p=parseCsv(text);return coerceRows(p.headers,p.rows,[],p.quotedEmptyCells);};
+ it('distinguishes quoted empty text from unquoted missing cells and padded fields',()=>{
+  expect(ingest('a,b,c\n"",,\nx')).toEqual([{a:'',b:null,c:null},{a:'x',b:null,c:null}]);
+ });
+ it('retains a final quoted empty single-column row without a newline',()=>{
+  expect(ingest('value\n""')).toEqual([{value:''}]);
+ });
+ it('keeps empty text as a column value instead of coercing it away beside numbers',()=>{
+  expect(ingest('value\n12\n""\n')).toEqual([{value:'12'},{value:''}]);
+ });
+ it('does not interpret literal null or NULL strings as missing cells',()=>{
+  expect(ingest('value\nnull\nNULL\n""\n')).toEqual([{value:'null'},{value:'NULL'},{value:''}]);
+ });
+});
+
+it('preserves quoted empties with explicit string type and keeps explicit numeric null semantics',()=>{
+ const parsed=parseCsv('value\n""\n12');
+ expect(coerceRows(parsed.headers,parsed.rows,[{name:'value',type:'string'}],parsed.quotedEmptyCells)).toEqual([{value:''},{value:'12'}]);
+ expect(coerceRows(parsed.headers,parsed.rows,[{name:'value',type:'number'}],parsed.quotedEmptyCells)).toEqual([{value:null},{value:12}]);
 });

@@ -20,11 +20,11 @@
 import esbuild from 'esbuild';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import { generateTeaching } from '../lib/generate-teaching.mjs';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
 import { copyRunnerAssets } from './copy-runner-assets.mjs';
+import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
 
 /*
  * Requires the bundle names but never reaches, so no image installs them: @babel/core (the
@@ -34,7 +34,6 @@ import { copyRunnerAssets } from './copy-runner-assets.mjs';
  */
 const BUNDLE_ONLY_EXTERNALS = ['@babel/preset-typescript'];
 
-await generateTeaching();
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
 mkdirSync(dirname(out), { recursive: true });
@@ -55,6 +54,7 @@ await esbuild.build({
   outfile: out,
   external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
   define: tailwindDefine,
+  plugins: [prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url))),prebuiltPreviewAssets(fileURLToPath(new URL('../../',import.meta.url)))],
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/object-store, lib/mermaid-images/fonts
   // resolve packages that way), and a plain banner declared it twice — a SyntaxError at
@@ -72,20 +72,6 @@ await esbuild.build({
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   outfile: join(dirname(out), 'pool-worker.mjs'),
   external: EXTERNALS,
-  banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
-  logLevel: 'warning',
-});
-/*
- * THE EDITOR'S DRAFT-COMPILE THREADS: services/app/lib/publish/prepared/draft-compile.server starts
- * `draft-compile-worker.mjs` from beside the bundle that holds it; without the file it compiles drafts
- * on the request thread.
- */
-await esbuild.build({
-  entryPoints: [fileURLToPath(new URL('../../services/app/lib/publish/prepared/draft-compile-worker.ts', import.meta.url))],
-  bundle: true, platform: 'node', format: 'esm', target: 'node22',
-  outfile: join(dirname(out), 'draft-compile-worker.mjs'),
-  external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS],
-  define: tailwindDefine,
   banner: { js: "import { createRequire as __mxCreateRequire } from 'node:module'; const require = __mxCreateRequire(import.meta.url);" },
   logLevel: 'warning',
 });

@@ -22,6 +22,7 @@
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
  * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
  * @property {number} seconds         measured CI duration under two-server load — the shard weight
+ * @property {1|2} [attempts]        total allowed attempts; default2 permits one contention retry
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
 
@@ -31,47 +32,34 @@
 // attempt excluded (data-journey and offline-file each passed a first attempt once). The comments on
 // the rows below record where each gate's timeout was measured; the `seconds` are these CI numbers.
 export const GATE_SPECS = Object.freeze([
+  // Candidate actual-reader suite; paired original evidence is an explicit run mode.
+  { name: 'component-baseline', needsMail: false, seconds: 30, timeoutMs: 300_000, attempts: 1 },
+  // Local container measurement: 28s; CI scheduling weight pending first run.
+  { name: 'html-components', needsMail: false, seconds: 28, timeoutMs: 60_000 },
+  // Real Mermaid/WebGL engines: 8s in the local container.
+  { name: 'html-rich-components', needsMail: false, serialGroup: 'clipboard', seconds: 8, timeoutMs: 180_000 },
+  // Installed archive/preview, hosted/download and exact direct-library examples: 32s locally.
+  { name: 'private-preview-save', needsMail: true, seconds: 32, timeoutMs: 120_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
   // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
   { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 47, timeoutMs: 90_000 },
-  // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
+  // Guest start, OAuth consent and the login door, claim, fork and folders, one persona per leg
   // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
   { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 31, timeoutMs: 70_000 },
-  // Writes reaching open pages with no reload (formerly live-data, live-reader, app-flows VIEWER and the
-  // watched-then-edit half of inplace-edit section 3).
+  // Native HTML writes and shared data reaching open pages without a reload.
   { name: 'live', needsMail: false, seconds: 19, timeoutMs: 60_000 },
-  // Browser sessions and test users through the real CLI, Linux + bubblewrap (formerly browser-sessions, testusers).
-  { name: 'sessions', needsMail: true, seconds: 44, timeoutMs: 110_000 },
-  // Split three ways (the engine, the human path around it, every way out) from one 118s script on CI
-  // run 36838282615 that held a runner to itself and set the run's critical path. editor-path also
-  // carries hydration's compiled-page edit leg; editor-exits carries mobile's editor sections. Measured in
-  // one gate container (`--servers 1`, 4 CPUs): 28s/43s/41s; editor-engine's and editor-path's timeouts stay 3x
-  // their 45s/47s CI times (the container ran editor-engine's script 17s faster than CI did).
-  { name: 'editor-engine', needsMail: false, serialGroup: 'clipboard', seconds: 36, timeoutMs: 140_000 },
-  { name: 'editor-path', needsMail: true, seconds: 53, timeoutMs: 150_000 },
-  { name: 'editor-exits', needsMail: false, seconds: 46, timeoutMs: 130_000 },
-  // Reading → editing → agent write → exit, and typing that survives a remote edit: 35s in one gate container.
-  { name: 'inplace-edit', needsMail: false, seconds: 39, timeoutMs: 110_000 },
-  // Publishes three documents, waits for the background harvest (four surface/mode loads, each drawn
-  // twice when new), then loads 14 pages across ~35 kinds. Measured 42s alone against a dev server.
-  { name: 'mermaid-prerender', needsMail: false, seconds: 52, timeoutMs: 130_000 },
   // One walk over dataflow, local-sql-state, dataset-policies and data-ux (proposal row 10). Its PostgreSQL leg is
   // services/app/lib/datasets/__tests__/postgres-routes.test.ts now, so no gate starts Docker (was 21s with it).
   // Was 21s with it; 22s in one gate container of this change (four CPUs, two servers, eight gates at once).
-  { name: 'data-journey', needsMail: true, seconds: 20, timeoutMs: 60_000 },
+  { name: 'data-journey', needsMail: false, seconds: 20, timeoutMs: 60_000 },
   // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container;
   // 27s in the eight-gate container run that dropped its forged write and second permission flip (was 33s).
-  { name: 'datasets-in-documents', needsMail: true, seconds: 30, timeoutMs: 60_000 },
+  { name: 'datasets-in-documents', needsMail: false, seconds: 30, timeoutMs: 60_000 },
   // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
   // Measured 28s in a gate container.
   { name: 'kit-and-fonts', needsMail: false, seconds: 40, timeoutMs: 90_000 },
-  // Measured in one gate-container run (4 CPUs, two servers, beside each other): viz-editor 50s, comments 13s,
-  // collab-roles 14s, exports 34s.
-  // Builds a chart by clicking, reloads, edits again, then a session-only owner and a grid (beside the journey).
-  // The slow-network rebind leg was dropped (it repeated the refused-switch leg).
-  { name: 'viz-editor', needsMail: true, serialGroup: 'clipboard', seconds: 57, timeoutMs: 150_000 },
   // One journey: the former annotations and comment-targets gates (two lanes in one browser, the fold leg alone).
   { name: 'comments', needsMail: false, serialGroup: 'clipboard', seconds: 19, timeoutMs: 60_000 },
   // One scenario: the link role's delivery to a signed-in stranger and a logged-out visitor (the named-people walk
@@ -84,9 +72,11 @@ export const GATE_SPECS = Object.freeze([
   // servers, CI's shape: 66s wall-clock); timeoutMs = max(60s, 3 × seconds), rounded up to ten seconds.
   // reader-shell and media were re-measured in one eight-gate container run of the gate diet (7s and 34s, from 22s
   // and 53s here); the seconds below keep a margin for that run's lighter load. Re-read both from CI.
+  { name: 'native-core', needsMail: false, seconds: 10, timeoutMs: 60_000 },
+  { name: 'presence', needsMail: true, seconds: 25, timeoutMs: 90_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
-  { name: 'own-origin-script', needsMail: true, seconds: 17, timeoutMs: 60_000 },
+  { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'reading-geometry', needsMail: false, seconds: 74, timeoutMs: 190_000 },
   { name: 'media', needsMail: false, serialGroup: 'clipboard', seconds: 36, timeoutMs: 110_000 },
 ]);
@@ -115,6 +105,7 @@ export function gateNamesOnDisk(fileNames) {
  * @param {readonly GateSpec[]} specs
  */
 export function checkManifest(diskNames, specs) {
+  for(const spec of specs)if(spec.attempts!==undefined&&![1,2].includes(spec.attempts))throw Error(`Invalid attempts for gate ${spec.name}: expected1 or2`);
   const disk = new Set(diskNames);
   const manifest = new Set(specs.map((spec) => spec.name));
   const missing = [...disk].filter((name) => !manifest.has(name)).sort();
@@ -142,29 +133,14 @@ export function browsersFor(names) {
 /**
  * The gate matrix's total shard count in `.github/workflows/ci.yml` (the `gates` job). Keep this in
  * step with the workflow's shard count — scripts/__tests__/ci-plan.test.mjs checks the matrix against it.
- * NINE: the isolated pair shares one runner, serially; editor-path and offline-file hold one each
- * (CI_ISOLATED_GATE_GROUPS); the other six bins pack the rest.
+ * Nine bins retain the existing CI matrix; isolated browser journeys each hold their own bin.
  */
 export const CI_GATE_SHARDS = 9;
 
-/**
- * Gates that run on a CI runner with no other gate. Both FAIL under a neighbour's browser load and then
- * pass alone in the runner's retry: inplace-edit ("typing did not move the reader (145 → 995)", then
- * "passed alone in 62s") doubled shard 4/10 to 134s on run 36875673784, and collab-edit (now collab-roles) retried on two
- * of three runs (36876517464, 36875088399), +33s each. They share ONE shard (scripts/gates.shard.mjs) and
- * run on one server, one after the other (scripts/gates.servers.mjs `serversFor`): neither ever meets
- * another gate's load, so there is no race to lose and no retry to pad for — and with one server there is
- * no retry at all, so a failure there is a failure.
- */
+/** Cross-browser downloads and role journeys keep dedicated bins while their
+ * native HTML migrations establish new timings. Every retained gate still runs. */
 export const CI_ISOLATED_GATE_GROUPS = Object.freeze([
-  Object.freeze(['inplace-edit', 'collab-roles']),
-  // Alone: it lost its first attempt beside neighbours on consecutive runs (PR #632's and #633's: "editor-path
-  // passed alone in 46-49s", dragging kit-and-fonts into a retry on the second), taking shard 5/7 to 177s and
-  // 221s, each run's critical path, while the isolated pair's shard finished in 83-95s. Its 53s does not fit
-  // beside the pair on one server (75s a shard), so it holds a runner of its own.
-  Object.freeze(['editor-path']),
-  // Alone for the same reason: the cross-browser gate lost its first attempt on two of ten PR runs
-  // (38362345174 "offline-file passed alone in 64s", taking shard 3/8 to 227s; 38187881246).
+  Object.freeze(['collab-roles']),
   Object.freeze(['offline-file']),
 ]);
 export const CI_ISOLATED_GATES = Object.freeze(CI_ISOLATED_GATE_GROUPS.flat());
@@ -196,3 +172,9 @@ export function shardWeight(name) {
   const spec = specFor(name);
   return spec.seconds + (browsersFor([name]).some(browser => browser !== 'chromium') ? CROSS_BROWSER_SETUP_SECONDS : 0);
 }
+
+/** A contention retry is optional per gate; defaults preserve existing runner behavior.
+ * @param {Pick<GateSpec,'attempts'>} spec
+ * @param {number} workerCount
+ */
+export function shouldRetryAlone(spec,workerCount){return workerCount>1&&(spec.attempts??2)>1;}

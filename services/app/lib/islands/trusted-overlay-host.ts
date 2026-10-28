@@ -18,6 +18,8 @@ interface TrustedOverlayHost {
   portal: HTMLElement;
   /** Enter the top layer (an overlay whose host was not yet connected when it was made). */
   show(): void;
+  /** Leave the top layer and suppress the inner root, including inherited-style resets. */
+  hide(): void;
   dispose(): void;
 }
 
@@ -48,12 +50,18 @@ export function createTrustedOverlayHost(options: { doc?: Document; parent?: HTM
   const overlay = !!options.overlay && typeof root.showPopover === 'function';
   if (overlay) root.setAttribute('popover', 'manual');
   const show = () => {
+    root.style.removeProperty('display');
     if (!overlay || !root.isConnected || overlays.has(root)) return;
     try { openOverlay(root, PRIORITY[options.layer ?? 'discussion']); } catch { /* a disconnected root cannot open */ }
   };
   show();
   return {
     host, content, portal, show,
+    hide() {
+      overlays.delete(root);
+      if (overlay) { try { root.hidePopover(); } catch { /* already closed */ } }
+      root.style.setProperty('display', 'none', 'important');
+    },
     dispose() {
       observer.disconnect();
       installedStyles.delete(style);

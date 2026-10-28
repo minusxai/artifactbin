@@ -6,8 +6,10 @@ import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import { setAccessFor } from '@/lib/artifacts/sharing';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { GET as query } from '@/app/a/[id]/query/route';
-import { POST as mutate } from '@/app/a/[id]/mutate/route';
+import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
+import {createDatasetGraphql} from '@/lib/dataset-graphql';
+import {ANONYMOUS_ACTOR,type AccessActor} from '@/lib/accounts';
+import {randomUUID} from 'node:crypto';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -28,9 +30,7 @@ async function fixture() {
     return (await r.json()).id as string;
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
-  const doc = await publish({
-    markup: `<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values ($n)\`}</Mutation><Import name="remove_data" src="ref:${ds}" /><Mutation name="remove">{\`delete from remove_data.rows\`}</Mutation><Value name="n" type="number" default={2} /></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`,
-  });
+  const doc = await publish({html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
   const policy = {
     version: 1,
     enforcement: 'enabled',
@@ -46,28 +46,30 @@ async function fixture() {
       },
     ],
   };
-  const write = (mutation = 'add', n = 2) =>
-    mutate(
-      request(`/a/${doc}/mutate`, {
-        method: 'POST',
-        json: { mutation, args: { n } },
-      }),
-      { params: Promise.resolve({ id: doc }) },
-    );
-  return { owner, actor, ds, doc, policy, write };
+  const api=createRetainedDatasetGraphql(),signal=new AbortController().signal;
+  const binding={kind:'dataset' as const,name:'data',datasetId:ds,mode:'live' as const};
+  const table=(await api.schema(actor,binding,signal)).tables[0]!;const column=table.columns.find(c=>c.label==='n')!;
+  const writeAs=async(caller:AccessActor,mutation='add',n=2)=>{
+    const revision=String((await getArtifactById(ds))!.version);
+    const row=(await api.read(actor,binding,{tableId:table.id,first:1},signal)).rows[0]!;
+    try{return await api.write(caller,binding,{tableId:table.id,expectedRevision:revision,requestId:randomUUID(),changes:mutation==='remove'?[{kind:'DELETE',rowId:row.id}]:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:n}}]}]},signal);}
+    catch(error){if(error instanceof Error&&error.message==='dataset_not_found')return {outcome:'rejected'};throw error;}
+  };
+  const write=(mutation='add',n=2)=>writeAs(ANONYMOUS_ACTOR,mutation,n);
+  return {owner,actor,ds,doc,policy,write,writeAs,binding,table,column};
 }
 it('applies one data policy to everyone with view access', async () => {
   const f = await fixture();
-  expect((await f.write()).status).toBe(403);
+  expect((await f.write()).outcome).toBe('rejected');
   expect(await setDatasetPolicy(f.actor, f.ds, f.policy, 0)).toMatchObject({
     revision: 1,
   });
-  expect((await f.write()).status).toBe(200);
-  expect((await f.write('remove')).status).toBeGreaterThanOrEqual(400);
-  expect((await f.write('add', -1)).status).toBeGreaterThanOrEqual(400);
+  expect((await f.write()).outcome).toBe('committed');
+  expect((await f.write('remove')).outcome).toBe('rejected');
+  expect((await f.write('add', -1)).outcome).toBe('rejected');
   expect((await getArtifactById(f.ds))?.version).toBe(2);
   await setAccessFor(f.actor, f.ds, 'read');
-  expect((await f.write()).status).toBe(403);
+  expect((await f.write()).outcome).toBe('rejected');
 });
 it('fences administration by edit access and revision, and removing a policy revokes viewer writes', async () => {
   const f = await fixture();
@@ -89,7 +91,7 @@ it('fences administration by edit access and revision, and removing a policy rev
   expect(await setDatasetPolicy(f.actor, f.ds, null, 1)).toMatchObject({
     revision: 2,
   });
-  expect((await f.write()).status).toBe(403);
+  expect((await f.write()).outcome).toBe('rejected');
 });
 /**
  * THE SECURITY INTENT IS UNCHANGED: a governed dataset's rows are not rewritable
@@ -144,7 +146,7 @@ it('refuses an owner re-push from a stale base, so rows written by viewers survi
       }),
       { params: Promise.resolve({ id: f.ds }) },
     );
-  expect((await f.write()).status).toBe(200);
+  expect((await f.write()).outcome).toBe('committed');
   const written = (await getArtifactById(f.ds))!;
   expect(written.version).toBe(2);
   const stale = await push([{ n: 1 }], base);
@@ -157,17 +159,8 @@ it('refuses an owner re-push from a stale base, so rows written by viewers survi
   });
   expect(fresh.status, await fresh.clone().text()).toBe(200);
 });
-it('returns per-mutation capability previews without executing a write', async () => {
-  const f = await fixture();
-  await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
-  const response = await query(request(`/a/${f.doc}/query?q=%7B%7D`), {
-    params: Promise.resolve({ id: f.doc }),
-  });
-  const body = await response.json();
-  expect(body.mutationAccess.add).toBeNull();
-  expect(body.mutationAccess.remove).toBeTruthy();
-  expect((await getArtifactById(f.ds))?.version).toBe(1);
-});
+// Legacy saved-JSX mutationAccess previews were removed with that transport.
+// Native write receipts are checked against the retained policy/executor below.
 
 async function sharedFixture(
   role: 'viewer' | 'commenter' | 'editor' = 'viewer',
@@ -181,15 +174,7 @@ async function sharedFixture(
     visibility: 'private',
     shares: [{ email: user.email, role }],
   });
-  const write = () =>
-    mutate(
-      request(`/a/${f.doc}/mutate`, {
-        method: 'POST',
-        actor: session,
-        json: { mutation: 'add', args: { n: 3 } },
-      }),
-      { params: Promise.resolve({ id: f.doc }) },
-    );
+  const write=()=>f.writeAs(identityForUser(user.id,token.id),'add',3);
   return { ...f, actor, user, token, session, write };
 }
 it.each(['viewer', 'commenter', 'editor'] as const)(
@@ -197,60 +182,23 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
   async (role) => {
     const f = await sharedFixture(role);
     await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
-    expect((await f.write()).status).toBe(200);
-    const ownerResponse = await mutate(
-      request(`/a/${f.doc}/mutate`, {
-        method: 'POST',
-        actor: { userId: f.owner.userId!, email: f.owner.email!, emailVerified: true, credential: 'session' },
-        json: { mutation: 'remove' },
-      }),
-      { params: Promise.resolve({ id: f.doc }) },
-    );
-    expect(ownerResponse.status).toBe(403);
+    expect((await f.write()).outcome).toBe('committed');
+    expect((await f.writeAs(f.actor,'remove')).outcome).toBe('rejected');
     await updateSharingFor(f.actor, f.ds, { shares: [] });
-    expect((await f.write()).status).toBe(403);
+    expect((await f.write()).outcome).toBe('rejected');
   },
 );
 it('requires dataset view access even when its declared app is public', async () => {
   const f = await sharedFixture();
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
-  const response = await mutate(
-    request(`/a/${f.doc}/mutate`, {
-      method: 'POST',
-      json: { mutation: 'add', args: { n: 3 } },
-    }),
-    { params: Promise.resolve({ id: f.doc }) },
-  );
-  expect(response.status).toBe(403);
+  expect((await f.writeAs(ANONYMOUS_ACTOR)).outcome).toBe('rejected');
 });
-it('rechecks dataset sharing inside the commit even after successful execution', async () => {
-  const f = await sharedFixture();
-  await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
-  const db = await getDb(),
-    original = db.query.bind(db);
-  let revoked = false;
-  const spy = vi
-    .spyOn(db, 'query')
-    .mockImplementation(async (sql: string, values?: unknown[]) => {
-      if (
-        !revoked &&
-        sql.includes('WITH updated AS') &&
-        sql.includes('actor_user_id = $12')
-      ) {
-        revoked = true;
-        await original('DELETE FROM artifact_shares WHERE artifact_id=$1', [
-          f.ds,
-        ]);
-      }
-      return original(sql, values);
-    });
-  try {
-    expect((await f.write()).status).toBe(403);
-    expect(revoked).toBe(true);
-    expect((await getArtifactById(f.ds))?.version).toBe(1);
-  } finally {
-    spy.mockRestore();
-  }
+it('rechecks dataset sharing after admission before committing a native write',async()=>{
+ const f=await sharedFixture();await setDatasetPolicy(f.actor,f.ds,f.policy,0);
+ const port=retainedDatasetGraphqlPort();let revoked=false;
+ const api=createDatasetGraphql({...port,snapshot:async(...args)=>{const snapshot=await port.snapshot(...args);await updateSharingFor(f.actor,f.ds,{shares:[]});revoked=true;return snapshot;}});
+ await expect(api.write(identityForUser(f.user.id,f.token.id),f.binding,{tableId:f.table.id,expectedRevision:'1',requestId:randomUUID(),changes:[{kind:'INSERT',cells:[{columnId:f.column.id,value:{type:'NUMBER',value:3}}]}]},new AbortController().signal)).rejects.toThrow('dataset_not_found');
+ expect(revoked).toBe(true);expect((await getArtifactById(f.ds))?.version).toBe(1);
 });
 
 it('lets editors open the visual policy editor', async () => {

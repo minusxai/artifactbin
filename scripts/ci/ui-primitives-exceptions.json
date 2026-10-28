@@ -1,5 +1,4 @@
 [
-  {"path":"services/app/solid/pages/Chat.tsx","rule":"raw-color","count":2,"reason":"The terminal is always dark in either app appearance: xterm paints its own canvas, so its background and foreground are data, not theme tokens."},
   {"path":"services/app/solid/pages/Document.tsx","rule":"raw-color","count":2,"reason":"The document's own ground around its frame, light and dark: these hexes match the served reader's ground in each mode, not the app theme."},
   {"path":"services/app/solid/editor/SourceEditorPane.tsx","rule":"raw-color","count":5,"reason":"The code editor's own dark theme (lib/source-editor/codemirror.ts: background, foreground, gutter, divider, status), repeated so the plain stand-in does not flash another surface when the lazy editor chunk loads."},
   {"path":"services/app/solid/editor/PwaSettingsPanel.tsx","rule":"raw-color","count":1,"reason":"White is the web app manifest's own default colour, shown when a theme or background colour is unset: stored settings data, not an app theme colour."}

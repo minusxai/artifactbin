@@ -1,3 +1,6 @@
+import {createPresenceRoom} from '@/lib/html-presence/room';
+import {presenceChannel} from '@/lib/html-presence/channel.server';
+import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * GET /a/:id/events — Server-Sent Events carrying this artifact's document
  * as it changes, so an open page (viewing OR editing) stays live.
@@ -12,16 +15,15 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
+import { getDb } from '@/lib/platform/db';
+import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@/lib/artifacts';
-import { datasetsForDocument } from '@/lib/document-data';
-import { isDocumentFormat } from '@/lib/publish/document/input';
-import { canAnnotate } from '@artifactbin/contracts';
-import { authorHandle, sessionActor } from '@/lib/accounts';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { authorHandle, sessionActor, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
+import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { changedSince, marksOf, marksOfToken, tokenOf } from '@/lib/publish/prepared/served-results.server';
+import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 
 /*
@@ -42,14 +44,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // (sessionActor uses the proxy-attached actor first, then direct compatibility
   // and the agent cookie). Resolving it any other way drops an anonymous
   // owner's live stream the moment their document goes private.
-  const actor = await sessionActor(request);
+  const actor = new URL(request.url).searchParams.get('anonymous')==='1'?ANONYMOUS_ACTOR:await sessionActor(request);
   if (!(await canReadArtifact(initial, actor))) return new Response('not found', { status: 404 });
-  // Annotations are OWNER-state (either browser credential — the account
-  // owner, or the anonymous agent-cookie owner), decided once here and
-  // re-checked on every wakeup like the ACL.
-  const ownerConnection = ownsArtifact(initial, actor);
-  // Annotations are narrated to everyone who may write them: the owner, an editor, a commenter.
-  const annotatorConnection = ownerConnection || canAnnotate(await effectiveRole(initial, actor));
   const artifactId = initial.id;
   // Connect only — never in the wakeup loop, which fires per remote edit.
   void trackEvent('sse_connect', artifactId, { userId: actor.userId });
@@ -73,6 +69,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * The set follows the DOCUMENT: an edit can add or drop a `<Query>`, so it
    * is re-derived on every document frame and the subscriptions are adjusted.
    */
+  let sharedMarks = new Map<string,string>();
   const datasetUnsubs = new Map<string, () => Promise<void>>();
 
   const encoder = new TextEncoder();
@@ -80,6 +77,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const writer = writable.getWriter();
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
+  let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
+  let presenceWriting=false,latestPresence:PresenceViewer[]|null=null;
+  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const viewers=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(viewers)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
 
   /**
    * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
@@ -92,6 +92,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const marks = marksOfToken(new URL(request.url).searchParams.get('since'));
   const position = () => {
+    if (initial.format === 'html') return '';
     for (const datasetId of [...marks.keys()]) if (!datasetUnsubs.has(datasetId)) marks.delete(datasetId);
     return marks.size ? `id: ${tokenOf(marks)}\n` : '';
   };
@@ -103,27 +104,28 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const sendData = (event: ArtifactDataEvent) =>
     writer.write(encoder.encode(`${position()}event: ${STORY_DATA_EVENT}\ndata: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
 
+  let sharedQueue = Promise.resolve();
+  const pushHtmlShared = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => sharedQueue = sharedQueue.then(async () => {
+    if (row.format !== 'html' || closed) return;
+    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), {mayReadDataset:async datasetId=>{const dataset=await getArtifactById(datasetId);return !!dataset&&dataset.format==='dataset'&&await canReadArtifact(dataset,actor);}});
+    if (closed) return;
+    const changed = changedHtmlSharedRevisions(sharedMarks, current);
+    sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));
+    if (changed.length) await sendData({datasets:changed.map(mark=>mark.name),version:row.version,revisions:Object.fromEntries(changed.map(mark=>[mark.name,mark.revision]))});
+  }).catch(() => { void close(); });
+
   /**
-   * ANNOTATIONS, FOR AN ANNOTATOR'S CONNECTION ONLY. The stream serves plain
-   * readers too, and a reader is never told that a conversation exists — so
-   * the named frame exists only on a connection whose credential could
-   * annotate (owner, editor, commenter), re-checked with the ACL on every
-   * wakeup, which is what makes a demotion stop the narration rather than
-   * merely stop the next one.
+   * Comment pings follow document read admission, rechecked on every wakeup.
+   * The event carries no comment content; the listing independently checks admission.
    */
-  // A PING and nothing else — the annotator's page refetches the list, which
-  // is the blind-relay rule: what travels is that something moved, never what
-  // it says. Listing also advances the stored anchors, so a document wakeup
-  // keeps pin paths current with the edit that just landed.
   const sendAnnotations = () =>
     writer.write(encoder.encode(`event: ${STORY_ANNOTATIONS_EVENT}\ndata: {}\n\n`)).catch(() => { /* client gone */ });
 
   const pushAnnotations = async () => {
-    if (closed || !annotatorConnection) return;
+    if (closed) return;
     const row = await getArtifactById(id);
     if (!row) return void close();
     if (!(await canReadArtifact(row, actor))) return void close();
-    if (!ownsArtifact(row, actor) && !canAnnotate(await effectiveRole(row, actor))) return; // demoted mid-stream: stop narrating, keep the document
     void sendAnnotations();
   };
 
@@ -145,12 +147,18 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (closed) return;
     closed = true;
     clearInterval(keepalive);
+    presenceRoom?.dispose();latestPresence=null;
     if (unsubscribe) await unsubscribe().catch(() => {});
     if (annotationsUnsub) await annotationsUnsub().catch(() => {});
     for (const drop of datasetUnsubs.values()) await drop().catch(() => {});
     datasetUnsubs.clear();
     await writer.close().catch(() => {});
   };
+  // A cancelled response reader rejects the writable side even when the request's
+  // signal stays live (for example a streaming client that releases its body).
+  // Release every LISTEN immediately, rather than waiting for another write to fail.
+  void writer.closed.catch(() => void close());
+
 
   /**
    * A dataset wakeup. The document's own ACL is re-checked here exactly as it
@@ -165,6 +173,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     const row = await getArtifactById(id);
     if (!row) return void close();
     if (!(await canReadArtifact(row, actor))) return void close();
+    if (row.format === 'html') { await pushHtmlShared(row); return; }
     const [dataset, now] = await Promise.all([getArtifactById(datasetId), datasetUnsubs.has(datasetId) ? marksOf([datasetId]) : null]);
     const mark = now?.get(datasetId);
     if (mark) marks.set(datasetId, mark);
@@ -183,7 +192,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'folder' ? [row.id] : await datasetsForDocument(isDocumentFormat(row.format) ? row : null));
+    const wanted = new Set(row.format === 'html' ? liveDatasetIds(htmlLiveLinks(row.meta)) : row.format === 'folder' ? [row.id] : []);
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);
@@ -208,7 +217,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       }
     }
     // Newly followed: marked now that they are subscribed (a mark the reader brought is kept for the catch-up).
-    if (added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
+    if (row.format !== 'html' && added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
   };
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.
@@ -228,6 +237,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     by: await authorHandle(row),
   });
 
+  let presenceRevision:string|undefined,replacingPresence=false;
+  const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
+    if(closed||row.format!=='html'||presenceRevision===String(row.version))return;
+    // A new source revision replaces only its presence room, never the document stream.
+    replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
+    latestPresence=null;presenceRevision=String(row.version);
+    const room=await createPresenceRoom({revision:String(row.version),
+      authorize:async()=>{const current=await getArtifactById(id);return !!current&&await canReadArtifact(current,actor);},
+      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
+      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
+      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>{if(!replacingPresence)void close();},
+      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
+    });
+    presenceRoom=room;if(closed)room.dispose();
+  };
+
   const queueRow = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     frameQueue = frameQueue.then(async () => {
       if (closed || row.version < lastVersionSent) return;
@@ -241,7 +266,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A FOLDER's one data dependency is ITSELF, which is what makes a
       // child's publish reach an open folder page through the path a dataset
       // write already travels.
+      await followPresence(row);
       await followDatasets(row);
+      await pushHtmlShared(row);
       await send(frame);
       // An edit shifts anchors; annotator connections' pins must follow the document
       // frame that moved them. Plain reader connections are no-ops.
@@ -272,7 +299,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
     await followDatasets(initial);
-    if (annotatorConnection) {
+    {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
       } catch (error) {
@@ -317,7 +344,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * dataset this document reads and nothing else, exactly as a wakeup would.
    */
   const since = new URL(request.url).searchParams.get('since');
-  if (since) {
+  if (since && initial.format !== 'html') {
     void changedSince(since, [...datasetUnsubs.keys()])
       .then(async (changed) => { for (const datasetId of changed) await wakeDataset(datasetId); })
       .catch(() => { /* a failed catch-up is a missed wakeup: the next change still arrives */ });

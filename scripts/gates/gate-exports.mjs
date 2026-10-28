@@ -1,3 +1,4 @@
+import { nativeHtml } from './lib/native-surface.mjs';
 /**
  * Gate: EXPORTS — what the exporter photographs, checked as pixels.
  *
@@ -16,7 +17,7 @@
  *   2. ONE FORMAT SET: PNG and JPEG bytes, the 1600×840 og card, a repeat served byte for byte from the stored
  *      render, and the capture render (`raw?chrome=0`) carrying no navigation chrome.
  *   3. THE EDITABLE SOCIAL PREVIEW: owner chrome → sharing → cropper → pointer and keyboard → saved card pixels →
- *      reset back to the top-left default. The Helmet directive it writes is asserted on the source in
+ *      reset back to the top-left default. The native HTML head directive it writes is asserted on the source in
  *      services/app/lib/document/__tests__/social-preview.test.ts; here only the card's pixels are.
  *
  *   usage: node scripts/gates/gate-exports.mjs [base]
@@ -24,6 +25,7 @@
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
+import { pagesServer } from './lib/pages-server.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
@@ -32,25 +34,10 @@ const BASE = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('exports');
 
 // ── the shared fixture set ──────────────────────────────────────────────────
-const slide = (n, body) => `<Slide title="Slide ${n}" className="justify-center p-16">${body}</Slide>`;
-const DECK =
-  '<Helmet><title>Slice gate</title></Helmet>'
-  + '<SlideDeck>'
-  + slide(1, '<h1 className="text-6xl font-bold">First slide</h1><p className="mt-6 text-lg">The cover of the deck.</p>')
-  + slide(2, '<h2 className="text-5xl font-bold">Second slide</h2><p className="mt-6 text-lg">A different claim entirely.</p>')
-  + slide(3, '<h2 className="text-5xl font-bold">Third slide</h2><p className="mt-6 text-lg">And a third.</p>')
-  + '</SlideDeck>';
-// The full shot must run PAST THE FOLD. `/docs/artifactbin/references/publishing-versions.md` promises "the fully
-// rendered page" and it was one viewport for every markup document — the shot photographed the app page's iframe
-// element, whose box is the viewport.
-const TALL = '<div className="p-10"><h1>Tall</h1>'
-  + Array.from({ length: 40 }, (_, i) => `<p>filler paragraph ${i}, long enough that this document runs well past a single screen.</p>`).join('')
-  + '</div>';
-const FIELD = `<Helmet><title>Social preview gate</title><style>{\`
-html,body{margin:0}.field{position:relative;width:1600px;height:1000px;background:rgb(51,204,51)}
-.top{position:absolute;inset:0 0 auto 0;height:10px;background:rgb(204,51,51)}
-.left{position:absolute;inset:0 auto 0 0;width:10px;background:rgb(51,51,204)}
-\`}</style></Helmet><div className="field"><div className="top"></div><div className="left"></div></div>`;
+const slide=(n,text)=>`<section data-af-slide style="height:800px;padding:60px;background:${n===1?'#f4e8e8':n===2?'#e8f4e8':'#e8e8f4'}"><h1>${text}</h1><p>Native slide ${n}</p></section>`;
+const DECK=nativeHtml('Slice gate',slide(1,'First slide')+slide(2,'Second slide')+slide(3,'Third slide'));
+const TALL=nativeHtml('Tall','<main style="padding:40px"><h1>Tall</h1>'+Array.from({length:40},(_,i)=>`<p style="margin:30px 0">filler paragraph ${i}, long enough that this document runs past one screen.</p>`).join('')+'</main>');
+const FIELD=nativeHtml('Social preview gate','<div class="field"><div class="top"></div><div class="left"></div></div>',{css:`.field{position:relative;width:1600px;height:1000px;background:rgb(51,204,51)}.top{position:absolute;inset:0 0 auto 0;height:10px;background:rgb(204,51,51)}.left{position:absolute;inset:0 auto 0 0;width:10px;background:rgb(51,51,204)}`});
 
 const publish = async (body) => {
   const start = await startDocument(BASE);
@@ -73,9 +60,9 @@ async function shot(id, query = '') {
 }
 
 const [deck, tallDoc, field] = await Promise.all([
-  publish({ title: 'Slice gate', markup: DECK, template: 'deck', theme: 'industry' }),
-  publish({ title: 'Tall', markup: TALL }),
-  publish({ markup: FIELD }),
+  publish({ title: 'Slice gate', html: DECK }),
+  publish({ title: 'Tall', html: TALL }),
+  publish({ html: FIELD }),
 ]);
 check(deck.status === 200, `published the deck (${deck.status})`);
 if (field.status !== 200) throw new Error(`seed failed: ${field.status} ${field.detail}`);
@@ -123,17 +110,70 @@ async function deckLeg(browser) {
   try {
     await page.goto(`${BASE}/a/${deck.id}/raw?chrome=0`, { waitUntil: 'load' });
     await page.waitForFunction(() => !document.getElementById('mx-story-data') || document.documentElement.hasAttribute('data-mx-ready'));
-    for (const selector of ['nav.mx-rail', '[aria-label="Slide controls"]']) {
-      const control = page.locator(selector);
-      check(await control.count() === 1 && !await control.isVisible(), `capture navigation is retained for hydration but invisible (${selector})`);
-    }
-    check(await page.locator('.mx-deck > .mx-doc').count() === 1
-      && await page.locator('.mx-doc').innerText().then((text) => text.includes('First slide')),
-    'capture hydration preserves the deck hierarchy and visible content');
+    check(await page.locator('nav.mx-rail, [aria-label="Slide controls"]').count() === 0,
+      'a capture has no platform navigation chrome');
+    check(await page.locator('[data-af-slide]').count() === 3 && (await page.locator('body').innerText()).includes('First slide'),
+      'capture preserves the native slides and visible content');
   } finally {
     await page.close();
   }
   check(capture.status === 200 && bare.includes('First slide'), `and still carries the document (${capture.status})`);
+}
+
+/** Real Chromium cache behavior, including navigation and an explicit refresh. */
+async function thumbnailCacheLeg(browser) {
+  // HTTP asset hosts deliberately use byte delivery for CLI safety. This
+  // isolated server uses same-origin grants, exercising the HTTPS redirect
+  // delivery path without replacing browser responses or disabling its cache.
+  const server=await pagesServer(undefined,'thumbnail-cache'),base=server.app;
+  const start=await startDocument(base);
+  const published=await fetch(`${base}/api/artifacts/${start.id}`,{method:'PUT',headers:{Authorization:`Bearer ${start.token}`,'Content-Type':'application/json'},body:JSON.stringify({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:red">First thumbnail</main>')})});
+  const doc={...start,status:published.status};
+  if(doc.status!==200)throw new Error(`thumbnail seed failed: ${doc.status}`);
+  const context=await browser.newContext(),page=await context.newPage();
+  const cdp=await context.newCDPSession(page),cached=new Set(),assets=new Set();
+  await cdp.send('Network.enable');
+  cdp.on('Network.requestServedFromCache',event=>cached.add(event.requestId));
+  cdp.on('Network.responseReceived',event=>{if(event.response.fromDiskCache)cached.add(event.requestId);});
+  cdp.on('Network.requestWillBeSent',event=>{if(new URL(event.request.url).pathname.startsWith('/assets/export/'))assets.add(event.requestId);});
+  const load=async(query='')=>{
+    await page.goto(`${base}/a/${doc.id}/raw?chrome=0`,{waitUntil:'load'});
+    await page.evaluate(async(src)=>{
+      const image=new Image();image.id='cache-proof';image.width=320;image.height=180;
+      const loaded=new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('thumbnail failed'));});
+      image.src=src;document.body.replaceChildren(image);await loaded;
+    },`${base}/a/${doc.id}/export?format=jpg&mode=card${query}`);
+    return page.locator('#cache-proof').screenshot();
+  };
+  try {
+    const before=await load();
+    await page.goto('about:blank');
+    const again=await load();
+    check(before.equals(again),'navigation renders the same cached thumbnail pixels');
+    // A mint-window boundary can rotate the grant on the second navigation.
+    if(![...assets].some(id=>cached.has(id)))await load();
+    check([...assets].some(id=>cached.has(id)),'Chromium reuses the private asset cache across navigation');
+    const changed=await fetch(`${base}/api/artifacts/${doc.id}`,{method:'PUT',headers:{Authorization:`Bearer ${doc.token}`,'Content-Type':'application/json'},body:JSON.stringify({html:nativeHtml('Thumbnail cache','<main style="height:400px;background:blue">Changed thumbnail</main>')})});
+    check(changed.status===200,'thumbnail source edit succeeds');
+    const after=await load('&refresh=1');
+    check(!before.equals(after),'explicit refresh displays changed thumbnail pixels instead of the cached image');
+  } finally {await context.close();server.stop();}
+}
+
+async function downloadLeg(browser) {
+  const response=await fetch(`${BASE}/a/${deck.id}/download`,{headers:{Authorization:`Bearer ${deck.token}`}});
+  check(response.status===200,'original download endpoint returns actual native HTML');
+  check(response.headers.get('content-type')?.includes('text/html'),'download is HTML rather than a retired source format');
+  check(response.headers.get('content-disposition')?.includes('.html'),'download names the HTML file');
+  const html=await response.text();
+  check(!html.includes(deck.token)&&!html.includes('afbin_pages'),'download contains no platform bearer, ticket or remote API origin');
+  const page=await browser.newPage();
+  await page.setContent(html,{waitUntil:'load'});
+  const runtime=await page.locator('script[data-af="runtime"]').evaluate(node=>JSON.parse(node.textContent));
+  check(runtime.offline===true&&runtime.appOrigin===undefined,'portable runtime cannot contact the platform');
+  check(await page.locator('[data-af-slide]').count()===3,'portable HTML retains all authored slide sections');
+  check(await page.locator('script[data-af="core"]').count()===1&&await page.locator('script[src="/af/core.js"]').count()===0,'download embeds one core without the server-relative loader');
+  await page.close();
 }
 
 // ── 3: the editable social preview, in a browser ────────────────────────────
@@ -188,7 +228,7 @@ async function socialLeg(browser) {
   await dialog.getByText('save preview').click();
   await dialog.waitFor({ state: 'detached' });
 
-  // "save persists canonical {x,y,width} in Helmet" is a source fact: social-preview.test.ts (writeSocialPreviewCrop).
+  // "save persists canonical {x,y,width} in native HTML head metadata" is a source fact: social-preview.test.ts (writeSocialPreviewCrop).
   const selected = await rgb(await cardOf(), 800, 5);
   check(JSON.stringify(selected.size) === JSON.stringify({ width: 1600, height: 840 }), 'saved card is exactly 1600×840');
   check(JSON.stringify(selected.color) === JSON.stringify([51, 204, 51]), `saved card uses the selected source region (${selected.color})`);
@@ -217,7 +257,7 @@ async function socialLeg(browser) {
 const browser = await launchChromium();
 const leg = (name, run) => run().catch((error) => check(false, `${name} could not finish (${String(error?.stack ?? error).split('\n').slice(0, 4).join(' | ')})`));
 try {
-  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser))]);
+  await Promise.all([leg('the deck leg', () => deckLeg(browser)), leg('the social preview leg', () => socialLeg(browser)), leg('the HTML download leg',()=>downloadLeg(browser)), leg('the thumbnail cache leg',()=>thumbnailCacheLeg(browser))]);
 } finally {
   await browser.close();
 }

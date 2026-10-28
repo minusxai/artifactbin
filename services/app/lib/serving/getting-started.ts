@@ -1,77 +1,31 @@
 import type {DeploymentState} from '@artifactbin/contracts';
-import {buildSetupInstructions,buildSetupCommand} from '../platform/setup-instructions';
-import {deploymentSetupOptions} from './setup-installers';
-import { DEFAULT_SERVER } from '@artifactbin/contracts';
-
-const originOf=(base:string)=>base.replace(/\/$/,'');
-/** Shell quoting is platform-specific; keep even a supplied origin one argument. */
-const quoted=(value:string,windows=false):string=>`'${windows?value.replaceAll("'","''"):value.replaceAll("'",`'"'"'`)}'`;
-const afbinServerFlag=(base:string,windows=false):string=>originOf(base)===DEFAULT_SERVER?'':` --server ${quoted(originOf(base),windows)}`;
-/** Complete setup on the serving host; the installer owns Node, npm and skill selection. */
-export const afbinInstallCommand=(base:string):string=>`curl -fsSL ${quoted(`${originOf(base)}/chat/install.sh`)} | sh`;
-/** Inline PowerShell preserves current PATH and works under Restricted execution policy. */
-export const afbinWindowsInstallCommand=(base:string):string=>`Invoke-RestMethod ${quoted(`${originOf(base)}/chat/install.ps1`,true)} | Invoke-Expression`;
+import {buildSetupInstructions} from '../platform/setup-instructions';
 
 type GuideBlock =
-  | { kind: 'text'; text: string }
-  | { kind: 'command'; label: string; language: 'sh' | 'powershell'; text: string };
-
-/** Shared setup content for the human page and compact installation panel.
- * Pure and browser-safe; the caller supplies its deployment origin. */
-export function gettingStarted(base: string, deployment?:DeploymentState) {
-  const origin = base.replace(/\/+$/, '');
-  const setupOptions=deploymentSetupOptions(deployment);
-  const setupCommand=buildSetupCommand({serverOrigin:origin,...setupOptions}).replace(/^afbin /,'npx --yes @afbin/cli@latest ');
-  const windowsSetupCommand=buildSetupCommand({serverOrigin:origin,...setupOptions},true).replace(/^afbin /,'npx.cmd --yes @afbin/cli@latest ');
-  const server = afbinServerFlag(origin);
-  const sections: Array<{ id: string; title: string; blocks: GuideBlock[] }> = [
-    { id: 'choose', title: 'Choose the available interface', blocks: [
-      { kind: 'text', text: `Use an already installed runnable afbin CLI. If afbin is absent, use HTTP: read ${origin}/llms.txt and ${origin}/llms/http-auth. Remote publishing, editing, comments and exports do not require installing the CLI. Install it only when explicitly requested or for local preview/serve. The CLI steps below apply only to that choice.` },
-    ] },
-    { id: 'install', title: 'Install afbin when requested', blocks: [
-      { kind: 'text', text: 'For an explicitly requested CLI installation or local preview/serve, run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and the artifactbin skill for your coding agents. Open a new terminal after installation. Setup supports Claude Code, Codex, Pi, and OpenCode; choose which agents receive the skill.' },
-      { kind: 'command', label: 'macOS / Linux', language: 'sh', text: afbinInstallCommand(origin) },
-      { kind: 'command', label: 'Windows · PowerShell', language: 'powershell', text: afbinWindowsInstallCommand(origin) },
-      { kind: 'text', text: `Already have Node/npm? Run ${deployment?.mode==='company'?setupCommand:`npx --yes @afbin/cli@latest setup${server}`} directly (PowerShell: ${deployment?.mode==='company'?windowsSetupCommand:`npx.cmd --yes @afbin/cli@latest setup${afbinServerFlag(origin, true)}`}). For Node only, use ${origin}/chat/install-node.sh with bash and reopen your terminal, or run ${origin}/chat/install-node.ps1 inline in PowerShell.` },
-    ] },
-    { id: 'http', title: 'Use HTTP without installing the CLI', blocks: [
-      { kind: 'text', text: `Reuse an installed artifactbin skill for ${origin}. Otherwise download ${origin}/skills/artifactbin.zip and extract its artifactbin/ folder into your harness skill directory. Restart the harness so it loads SKILL.md. With no filesystem, read ${origin}/llms.txt and its topic links. Email sign-in and authenticated HTTP requests are in ${origin}/llms/http-api. Local preview, filesystem workspaces and npm scripts require CLI/shell access.` },
-      { kind: 'command', label: 'Download skill (macOS / Linux)', language: 'sh', text: `curl -fsSL '${origin}/skills/artifactbin.zip' -o artifactbin.zip` },
-      { kind: 'text', text: 'Install once: Codex uses ~/.agents/skills; Claude Code uses ~/.claude/skills; Pi uses ~/.pi/agent/skills; OpenCode uses ~/.config/opencode/skills. First inspect existing artifactbin folders, including project/shared/symlink locations, and reuse them. Do not extract over an existing skill. Choose the directory your harness loads, then run the extraction command only when artifactbin is absent there. CLI setup reuses this installation.' },
-      { kind: 'command', label: 'Extract into chosen skill directory', language: 'sh', text: 'unzip -n artifactbin.zip -d "$SKILL_DIRECTORY"' },
-      { kind: 'text', text: 'Windows: download the same URL and use Expand-Archive only into a new empty directory; move artifactbin into your chosen harness skill directory only if that location is absent. A ZIP download alone does not install or load a skill.' },
-    ] },
-    { id: 'learn', title: 'Read the local guide', blocks: [
-      { kind: 'text', text: 'Restart your coding agent after setup so it loads the installed skill, then ask it to use the artifactbin skill to create or edit an artifact. Run afbin help to discover everything you can do, then afbin help <topic> for the task you are working on.' },
-      { kind: 'command', label: 'CLI help', language: 'sh', text: 'afbin help' },
-    ] },
-    { id: 'server', title: 'Use this server', blocks: [
-      { kind: 'text', text: `This guide is for ${origin}. ${server ? `Pass --server ${origin} to every afbin server command. The commands below already include it.` : 'This is the default afbin server; no --server flag is needed.'} Local preview and validation do not need a server.` },
-    ] },
-    { id: 'connect', title: 'Connect your agent', blocks: [
-      { kind: 'text', text: 'If you were given an artifact link, replace ARTIFACT_URL with that link in the commands below. Authenticate as the recipient using your own account or guest session with edit access. A shared link does not transfer the sender’s login or grant edit access.' },
-      { kind: 'command', label: 'Connect to an existing artifact', language: 'sh', text: `afbin auth 'ARTIFACT_URL'${server}` },
-      { kind: 'text', text: 'Starting something new? Connect to your account first, then create and push a JSX file.' },
-      { kind: 'command', label: 'Connect to your account', language: 'sh', text: `afbin auth${server}` },
-      { kind: 'text', text: 'Server commands also sign in through the browser automatically when needed; a browser already signed in on the same machine connects with no click. In automation, add --yes --json and open the returned approval URL to continue. Guest browser approval is supported by the CLI; direct HTTP clients use email authentication.' },
-    ] },
-    { id: 'edit', title: 'Make your first edit', blocks: [
-      { kind: 'text', text: 'Pull the supplied artifact into a local file, edit it, and push it back to the same link. Preserve its identity and selected page type. Push validates the file before publishing.' },
-      { kind: 'command', label: 'Pull the artifact', language: 'sh', text: `afbin pull 'ARTIFACT_URL' --output artifact.jsx${server}` },
-      { kind: 'text', text: 'After editing artifact.jsx, preview it locally, then publish the change.' },
-      { kind: 'command', label: 'Preview locally', language: 'sh', text: 'afbin preview artifact.jsx' },
-      { kind: 'command', label: 'Publish your edit', language: 'sh', text: `afbin push artifact.jsx${server}` },
-    ] },
-  ];
-  if(deployment?.mode==='company')sections.splice(1,0,{id:'deployment',title:'Set up your deployment defaults',blocks:[
-    {kind:'text',text:buildSetupInstructions({serverOrigin:origin,...setupOptions})},
-    {kind:'command',label:'Recipient setup · macOS / Linux',language:'sh',text:setupCommand},
-    {kind:'command',label:'Recipient setup · Windows',language:'powershell',text:windowsSetupCommand},
-    ...(!deployment.setup_complete?[{kind:'text' as const,text:'The designated owner must sign in and confirm the deployment default group before teammates can join. This setup selects the server; account inheritance follows the group once it is confirmed.'}]:[]),
-  ]});
-  return {
-    title: 'Getting started',
-    intro: 'Use the installed CLI or direct HTTP to create and edit artifacts. Reuse your skill and credentials.',
-    sections,
-  };
+ | {kind:'text';text:string}
+ | {kind:'command';label:string;language:'sh'|'powershell';text:string};
+export interface GettingStartedGuide {
+ title:string;intro:string;
+ sections:Array<{id:string;title:string;blocks:GuideBlock[]}>;
+}
+/** One author skill, addressed to this server; authentication stays in the HTTP guide. */
+export function gettingStarted(base:string,deployment?:DeploymentState):GettingStartedGuide {
+ const origin=base.replace(/\/+$/,'');
+ const sections:GettingStartedGuide['sections']=[
+  {id:'skill',title:'Add the author skill',blocks:[
+   {kind:'text',text:`Reuse an installed artifactbin skill for ${origin}. Otherwise download ${origin}/skills/artifactbin.zip and extract its artifactbin/ folder into your harness skill directory. Restart the harness so it loads SKILL.md. Without filesystem access, read ${origin}/llms.txt and its topic links.`},
+   {kind:'command',label:'Download skill',language:'sh',text:`curl -fsSL '${origin}/skills/artifactbin.zip' -o artifactbin.zip`},
+   {kind:'text',text:'Codex uses ~/.agents/skills; Claude Code uses ~/.claude/skills; Pi uses ~/.pi/agent/skills; OpenCode uses ~/.config/opencode/skills. Inspect existing project, shared and symlink locations first. Reuse an existing skill; choose the directory your harness loads and extract only when artifactbin is absent.'},
+   {kind:'command',label:'Extract into chosen skill directory',language:'sh',text:'unzip -n artifactbin.zip -d "$SKILL_DIRECTORY"'},
+   {kind:'text',text:'Windows: download the same ZIP and use Expand-Archive into a new empty directory; move artifactbin into your harness skill directory only if that location is absent. A ZIP download alone does not load a skill.'},
+  ]},
+  {id:'connect',title:'Connect your agent',blocks:[
+   {kind:'text',text:`Ask your agent to use the artifactbin author skill. Read ${origin}/llms/http-auth for email sign-in and origin-scoped credential storage. Reuse existing credentials. Authenticate as the recipient: a shared link does not transfer the sender’s login or grant edit access.`},
+  ]},
+  {id:'author',title:'Create or edit through HTTP',blocks:[
+   {kind:'text',text:`Read ${origin}/llms.txt for native HTML creation and editing with the skill's scripts. Preserve artifact identity when editing. Read ${origin}/llms/datasets for linked datasets, schema discovery and authorized reads and writes. Verify the published result and share its returned URL.`},
+  ]},
+ ];
+ if(deployment?.mode==='company')sections.push({id:'deployment',title:'Use your deployment',blocks:[{kind:'text',text:buildSetupInstructions({serverOrigin:origin,...(deployment.setup_complete&&deployment.default_group?{groupHandle:deployment.default_group.handle,setDefault:true}:{})})}]});
+ return {title:'Getting started',intro:'Use the artifactbin author skill and authenticated HTTP API to create and edit artifacts.',sections};
 }

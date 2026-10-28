@@ -1,0 +1,186 @@
+/*
+ * Almanac: Warm paper, one green ink, one terracotta word.
+ * Scrolly explainers, landing pages, long reads, annual reports. Mood: Warm. Opens light. Generated from
+ * design-systems/specs/almanac.json.
+ *
+ * Use: name it once in <head>: <meta name="artifactbin:design-system" content="almanac">. The platform serves this
+ * stylesheet, sets data-af-design-system and data-af-dark on <html>, and hosts the fonts: copy and link nothing.
+ * This file is for reading: it shows the exact values the page gets.
+ *
+ * Shared contract: every system defines these, so build your CSS on them with var(--name):
+ *   --background --foreground --card --card-foreground --popover --popover-foreground --primary
+ *   --primary-foreground --secondary --secondary-foreground --muted --muted-foreground --accent
+ *   --accent-foreground --destructive --destructive-foreground --border --input --ring --chart-1 --chart-2
+ *   --chart-3 --chart-4 --chart-5 --radius --font-display --font-body --font-mono
+ * Type-role classes (same names in every system, sizes differ), used as class="t-title" etc.:
+ *   t-display-xl t-display-l t-display-m t-title t-numeral-xl t-body-l t-body t-body-s t-label t-numeral t-mono
+ * Each --ds-* below is this system's own palette; its comment says what the token is for (for example a "fill
+ * only" colour is never body text). Keep the system's colour and type choices.
+ *
+ * Idea: Almanac is the studio that prints field guides: warm paper, one green ink for everything written, one
+ * terracotta word where the eye should land, and hairlines so light they feel drawn. Numbers go enormous in a
+ * serif and sit still. Panels have arched tops. Buttons are outlines until you touch them. It is calm without
+ * being beige, because the one accent is earned.
+ * Fits: Scrolly explainers, landing pages for small makers and civic things, long reads, annual and impact
+ * reports, anything that wants to feel made by hand and read slowly.
+ * Avoid when: Dense operational dashboards, dev tools, anything that must feel fast or cold, and pages that need
+ * more than one accent per view.
+ */
+/* Light values; --ds-* are this system's own palette, each annotated with its use. */
+:root[data-af-design-system="almanac"] {
+  --ds-paper: #F2E7D6; /* Page ground: warm, uncoated. In Night the ink becomes the ground. */
+  --ds-card: #F8F1E6; /* Cards, tickets, dialogs: a lighter sheet on the paper. */
+  --ds-band: #E7CFB4; /* The hero band and arch panels: a deeper warm ground that holds one big thing. */
+  --ds-screen: #C8D1A9; /* The soft green ground inside a device or a figure. */
+  --ds-paper-sunk: #E8DBC6; /* Wells, code, inactive tracks, stripes. */
+  --ds-line: #CBBFA9; /* Hairlines at a quarter strength. The only border in the system. */
+  --ds-ink: #374836; /* Forest green: all text, all rules, the first series. */
+  --ds-ink-muted: #576355; /* Secondary text at 65%: captions, notes, metadata. */
+  --ds-accent: #B44E30; /* Terracotta: the one word in a headline, the filled button, the progress bar, the second series. */
+  --ds-on-accent: #FFFFFF; /* Text on terracotta. */
+  --ds-accent-soft: #F0D9CD; /* Ground for accent tags and the selected state. */
+  --ds-mauve: #846B94; /* The third series and nothing else. */
+  --ds-positive: #3E6B3C; /* Success text and the kept share, with a word. */
+  --ds-positive-soft: #DCE6C9; /* Ground for success callouts and positive tags. */
+  --ds-caution: #775A1A; /* Warnings as text: an ochre on paper. */
+  --ds-caution-soft: #F3E5BE; /* Ground for warning callouts. */
+  --ds-negative: #B44E30; /* Errors share the terracotta; there is no second red. */
+  --ds-negative-soft: #F0D9CD; /* Ground for error callouts. */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-card);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-card);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --secondary: var(--ds-band);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-accent-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-accent);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-accent);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-accent);
+  --chart-3: var(--ds-mauve);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-soft: 23px 23px 0 0 #b44e3020;
+  --ds-shadow-soft-sm: 12px 12px 0 0 #b44e3020;
+  --ds-chip-radius: 0;
+}
+/* Dark values: the same tokens, under data-af-dark="true". */
+:root[data-af-design-system="almanac"][data-af-dark="true"] {
+  --ds-paper: #1B241B;
+  --ds-card: #243024;
+  --ds-band: #2E3B2E;
+  --ds-screen: #3A4A36;
+  --ds-paper-sunk: #141B14;
+  --ds-line: #3C4A3C;
+  --ds-ink: #F2E7D6;
+  --ds-ink-muted: #A9B5A6;
+  --ds-accent: #E07A58;
+  --ds-on-accent: #1B241B;
+  --ds-accent-soft: #4A2A1E;
+  --ds-mauve: #B7A3C4;
+  --ds-positive: #8FC28C;
+  --ds-positive-soft: #263A26;
+  --ds-caution: #E0B65A;
+  --ds-caution-soft: #3E3218;
+  --ds-negative: #E07A58;
+  --ds-negative-soft: #4A2A1E;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-card);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-card);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --secondary: var(--ds-band);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-accent-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-accent);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-accent);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-accent);
+  --chart-3: var(--ds-mauve);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-shadow-soft: 23px 23px 0 0 #e07a5826;
+  --ds-shadow-soft-sm: 12px 12px 0 0 #e07a5826;
+  --ds-chip-radius: 0;
+}
+:root[data-af-design-system="almanac"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+/* Type roles: font family, size / line height, then when to use it. */
+/* display, clamp(64px, 10.4vw, 160px) / .92: One per page. Instrument Serif at 400 with the tracking pulled tight; the italic carries the emphasised word. */
+:root[data-af-design-system="almanac"] .t-display-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(64px, 10.4vw, 160px); line-height: .92; font-weight: 400; letter-spacing: -0.055em; }
+/* display, clamp(40px, 5.5vw, 78px) / .98: Section openers and chapter heads. */
+:root[data-af-design-system="almanac"] .t-display-l { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(40px, 5.5vw, 78px); line-height: .98; font-weight: 400; letter-spacing: -0.045em; }
+/* display, 40px / 42px: Card titles and page titles. */
+:root[data-af-design-system="almanac"] .t-display-m { font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 42px; font-weight: 400; letter-spacing: -0.03em; }
+/* sans, 24px / 1.2: Sub-heads inside steps and features. */
+:root[data-af-design-system="almanac"] .t-title { font-family: "DM Sans", system-ui, sans-serif; font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.03em; }
+/* display, clamp(72px, 9vw, 120px) / 1: The outcome numbers. Instrument Serif, tracked to -.07em, one per block. */
+:root[data-af-design-system="almanac"] .t-numeral-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(72px, 9vw, 120px); line-height: 1; font-weight: 400; letter-spacing: -0.07em; font-variant-numeric: tabular-nums; }
+/* sans, 18px / 1.7: Step paragraphs and lead copy at a generous 1.7 leading. */
+:root[data-af-design-system="almanac"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 18px; line-height: 1.7; font-weight: 400; }
+/* sans, 16px / 1.6: Default reading and UI text. */
+:root[data-af-design-system="almanac"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.6; font-weight: 400; }
+/* sans, 13px / 1.5: Captions, notes, footer lines. */
+:root[data-af-design-system="almanac"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 1.5; font-weight: 400; }
+/* mono, 11px / 1.6: Eyebrows, nav links, legends, chapter numbers. Caps from CSS. */
+:root[data-af-design-system="almanac"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
+/* display, 48px / 1: KPI figures in tiles and tickets. */
+:root[data-af-design-system="almanac"] .t-numeral { font-family: "Instrument Serif", Georgia, serif; font-size: 48px; line-height: 1; font-weight: 400; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
+/* mono, 12px / 1.6: Code, IDs, table figures. */
+:root[data-af-design-system="almanac"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; font-weight: 400; }
+/* Code highlighting token colours (for @afbin/highlight). */
+:root[data-af-design-system="almanac"] .tok-comment, :root[data-af-design-system="almanac"] .tok-quote, :root[data-af-design-system="almanac"] .tok-meta { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground));font-style:italic; }
+:root[data-af-design-system="almanac"] .tok-keyword, :root[data-af-design-system="almanac"] .tok-selector-tag, :root[data-af-design-system="almanac"] .tok-doctag, :root[data-af-design-system="almanac"] .tok-name { color:color-mix(in oklab, var(--primary) 66%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-string, :root[data-af-design-system="almanac"] .tok-regexp, :root[data-af-design-system="almanac"] .tok-template-variable, :root[data-af-design-system="almanac"] .tok-addition { color:color-mix(in oklab, var(--chart-2) 59%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-number, :root[data-af-design-system="almanac"] .tok-literal, :root[data-af-design-system="almanac"] .tok-symbol, :root[data-af-design-system="almanac"] .tok-bullet { color:color-mix(in oklab, var(--chart-3) 35%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-title, :root[data-af-design-system="almanac"] .tok-section, :root[data-af-design-system="almanac"] .tok-selector-id, :root[data-af-design-system="almanac"] .tok-selector-class { color:var(--foreground);font-weight:600; }
+:root[data-af-design-system="almanac"] .tok-title.class_, :root[data-af-design-system="almanac"] .tok-type, :root[data-af-design-system="almanac"] .tok-built_in, :root[data-af-design-system="almanac"] .tok-class { color:color-mix(in oklab, var(--chart-4) 47%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-attr, :root[data-af-design-system="almanac"] .tok-attribute, :root[data-af-design-system="almanac"] .tok-property, :root[data-af-design-system="almanac"] .tok-variable, :root[data-af-design-system="almanac"] .tok-params { color:color-mix(in oklab, var(--chart-1) 66%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-tag, :root[data-af-design-system="almanac"] .tok-operator, :root[data-af-design-system="almanac"] .tok-punctuation { color:color-mix(in oklab, var(--muted-foreground) 75%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-deletion { color:color-mix(in oklab, var(--destructive) 66%, var(--foreground)); }
+:root[data-af-design-system="almanac"] .tok-emphasis { font-style:italic; }
+:root[data-af-design-system="almanac"] .tok-strong { font-weight:700; }
+
+/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */
+@font-face { font-family: "Instrument Serif"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/instrument-serif-latin-ext-400-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Serif"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/instrument-serif-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 100 1000; font-display: swap; src: url("/af/fonts/dm-sans-latin-ext-standard-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 100 1000; font-display: swap; src: url("/af/fonts/dm-sans-latin-standard-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: italic; font-weight: 100 1000; font-display: swap; src: url("/af/fonts/dm-sans-latin-ext-standard-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: italic; font-weight: 100 1000; font-display: swap; src: url("/af/fonts/dm-sans-latin-standard-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-300-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-300-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-300-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 300; font-display: swap; src: url("/af/fonts/dm-mono-latin-300-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-400-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-400-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-400-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("/af/fonts/dm-mono-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-500-italic.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: italic; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-500-italic.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-ext-500-normal.woff2") format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("/af/fonts/dm-mono-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
