@@ -21,7 +21,8 @@ export function inspectBundle(bundle,version,bytes,expected){
  const definition=statement.predicate?.buildDefinition,workflow=definition?.externalParameters?.workflow;
  if(workflow?.repository!==`https://github.com/${repository}`||workflow.path!=='.github/workflows/ci.yml'||!/^refs\/(?:heads\/[\w./-]+|pull\/\d+\/merge)$/.test(workflow.ref??'')||definition.resolvedDependencies?.length!==1||definition.resolvedDependencies[0]?.digest?.gitCommit!==expected.sha||!definition.resolvedDependencies[0]?.uri?.startsWith(`git+https://github.com/${repository}@`))throw Error('Provenance does not identify the actual afbin build source');
  const invocation=statement.predicate?.runDetails?.metadata?.invocationId;
- if(!new RegExp(`^https://github\\.com/${repository}/actions/runs/${expected.run}/attempts/[0-9]+$`).test(invocation??''))throw Error('Provenance does not identify the selected build run');
+ const runPrefix=`https://github.com/${repository}/actions/runs/${expected.run}/attempts/`;
+ if(typeof invocation!=='string'||!invocation.startsWith(runPrefix)||!/^[0-9]+$/.test(invocation.slice(runPrefix.length)))throw Error('Provenance does not identify the selected build run');
  return subject;
 }
 /** Pinned npm10/sigstore3 builder adaptation: keep the ORIGINAL signed envelope
