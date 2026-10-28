@@ -9,6 +9,10 @@ it('reopens exact canonical source and explicitly selected private state without
  expect(reopened).toEqual({version:1,source,privateState:{filter:'mine'}});
  expect(portableScript(reopened)).toBe(encoded);
 });
+it('reads a file envelope through the same allowlist, whatever the script tag case',()=>{
+ const html='<!doctype html><SCRIPT type="application/json" data-af="portable">{"version":1,"source":"<p>x</p>","token":"secret","renderedDigest":"d"}</SCRIPT>';
+ expect(readPortableDocument(html)).toEqual({version:1,source:'<p>x</p>',renderedDigest:'d'});
+});
 it('serializes an allowlisted envelope and rejects secret-bearing provenance URLs',()=>{
  expect(portableScript({version:1,source:'x',token:'secret'} as never)).not.toContain('secret');
  expect(()=>portableScript({version:1,source:'x',identity:{platformOrigin:'https://user:secret@example.test',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)}})).toThrow();

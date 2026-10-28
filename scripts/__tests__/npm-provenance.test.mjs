@@ -59,7 +59,8 @@ describe('tested npm artifact provenance boundary',()=>{
   const mismatched=change=>{const result=bundle();const statement=JSON.parse(Buffer.from(result.dsseEnvelope.payload,'base64').toString());change(statement);result.dsseEnvelope.payload=Buffer.from(JSON.stringify(statement)).toString('base64');return result;};
   const cases=[[bundle({subject:[]}), 'Provenance subject'],[bundle({subject:[{...subject,digest:{sha512:'0'.repeat(128)}}]}),'Provenance subject'],
    [mismatched(statement=>{statement.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit='b'.repeat(40);}), 'actual afbin build source'],
-   [mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/runs/42/attempts/2';}), 'selected build run']];
+   [mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/runs/42/attempts/2';}), 'selected build run'],
+   ...['runs/170/attempts/2','runs/17/attempts/','runs/17/attempts/2x','runs/17/attempts/2/'].map(tail=>[mismatched(statement=>{statement.predicate.runDetails.metadata.invocationId='https://github.com/minusxai/artifactbin/actions/'+tail;}), 'selected build run'])];
   for(const [invalid,reason] of cases){
    let generated=0,verified=0;
    await expect(signArtifact('0.4.0',bytes,context,{generateProvenance:async()=>{if(++generated===1)throw duplicate;return invalid;},verifyProvenance:async()=>{verified++;}})).rejects.toThrow(reason);

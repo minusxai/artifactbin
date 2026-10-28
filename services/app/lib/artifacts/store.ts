@@ -39,7 +39,7 @@ import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
 import { actorSubject, emit } from '../platform/events';
 import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { json } from '../http/http';
+import { json, thrownMessage } from '../http/http';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { finalizeArtifactMetadata } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
@@ -614,7 +614,7 @@ async function replaceScoped(
         const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
         // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
         input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
-      }catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
+      }catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
     }
     if(input.format==='html'){
       const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');

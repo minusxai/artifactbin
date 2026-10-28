@@ -23,7 +23,7 @@ import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls }
 import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { json } from '@/lib/http/http';
+import { json, thrownMessage } from '@/lib/http/http';
 import { ID_RE } from '@/lib/platform/ids-shape';
 import { getDb } from '@/lib/platform/db';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
@@ -65,7 +65,7 @@ async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):P
   if(prepared.length)composePageSchema(prepared.map(backend=>({name:backend.name,fileId:backend.name,version:'prepared',typeDefs:backend.typeDefs})));
   return prepared;
  }
- catch(error){return json({error:'invalid_backend',details:[error instanceof Error?error.message:String(error)]},400);}
+ catch(error){return json({error:'invalid_backend',details:[thrownMessage(error,'Invalid backend')]},400);}
 }
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {

@@ -19,11 +19,11 @@ const MAX_WIDTH = 100;
 
 /** The first comment of a file (after a shebang or an HTML doctype), with comment markers and `*` gutters removed. */
 function leadingComment(source: string): string | null {
-  const match = /^(?:#![^\n]*\n)?(?:<!doctype html>\s*\n)?(\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->)/i
+  const match = /^(?:#![^\n]*\n)?(?:<!doctype html>\s*\n)?(\/\*[\s\S]*?\*\/|<!--[\s\S]*?--!?>)/i
     .exec(source);
   if (!match) return null;
   return match[1]!
-    .replace(/^\/\*\*?|\*\/$|^<!--|-->$/g, '')
+    .replace(/^\/\*\*?|\*\/$|^<!--|--!?>$/g, '')
     .split('\n')
     .map(line => line.replace(/^\s*\* ?/, '').trimEnd())
     .join('\n')
