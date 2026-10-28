@@ -69,11 +69,13 @@ export function checkDigest(envelope,file){
  }
  // What the step labels proved, per viewport, so a reply can quote it instead of inventing claims.
  const done=(envelope.checks??[]).filter(c=>c?.viewport&&c.verified?.length&&!c.error);
+ let tested='',untested='';
  if(envelope.smokePassed&&done.length){
-  lines.push('  Verified: '+done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${
-   c.viewport.height}: ${c.verified.join('; ')}`).join(' | '));
-  lines.push('  Not verified: anything not listed in Verified:, visual appearance'+(done.some(c=>
-   c.viewer==='guest')?', and sharing between two signed-in users (the guest is signed out)':''));
+  tested=done.map(c=>`${c.viewer?c.viewer+' ':''}${c.viewport.width}x${c.viewport.height}: ${
+   c.verified.join('; ')}`).join(' | ');
+  untested='anything not listed in Verified:, visual appearance'+(done.some(c=>
+   c.viewer==='guest')?', and sharing between two signed-in users (the guest is signed out)':'');
+  lines.push('  Verified: '+tested,'  Not verified: '+untested);
  }else if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass
  // means where they read it.
@@ -82,9 +84,11 @@ export function checkDigest(envelope,file){
  else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
-  "  clean pass: reply now with the link; don't open qa JSON or screenshots."+(
-   envelope.slideLinks?.length?"\nSlide images (paste into the reply as printed; don't curl):\n"+
-   envelope.slideLinks.join('\n'):''));
+  "  clean pass: reply now with the link; don't open qa JSON or screenshots.\n"+
+  // One block the reply copies as printed, so it claims exactly what ran and what did not.
+  'Reply block (copy as printed):'+(tested?'\nTested: '+tested+'\nNot tested: '+untested.replace(
+   /Verified:/g,'Tested:'):'')+(envelope.slideLinks?.length?
+   "\nSlide images (don't curl):\n"+envelope.slideLinks.join('\n'):''));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';

@@ -62,18 +62,15 @@ const claims=await page.evaluate(()=>[...document.querySelectorAll('[data-af-sli
     'overnight|same-day|instant(ly)?|real-time|faster|cheaper|quicker|today|now|currently)$'),
     stop=new Set(['the','and','not','for','but','with','from','than','that','this','our','its',
     'your','are','was','has','have','into']),handled=new Set();
-  // "in one shift", "within a single visit", "under two weeks": a duration whatever the unit. Its
-  // unit needs the same form beside a number or quantity word in one visible element; a non-time
-  // unit may instead count the slide's items ("in four steps" over four boxes).
+  // "in one shift", "within a single visit", "under two weeks": a duration when the noun after the
+  // quantity is a time word. Its unit needs the same form beside a number or quantity word in one
+  // visible element ("in one dashboard" or "in one clamp-on unit" is not a duration).
   const Q='a few|a couple of|several|an|a|one|two|three|four|five|six|seven|eight|nine|ten|\\d+';
-  const qty=new RegExp(`\\d|\\b(${Q}|single)\\b`),counts=[slide.querySelectorAll('li').length,
-    ...[...slide.querySelectorAll('.figure svg')].map(svg=>svg.querySelectorAll('rect').length)];
-  for(const m of low.matchAll(new RegExp(`\\b(?:in|within|under|inside|over) (${Q}) (?:(?:single|`+
-    'full|whole|short|working|business) )?([a-z-]+)','g'))){const unit=m[2];handled.add(unit);
-    const n=/^\d+$/.test(m[1])?+m[1]:['one','two','three','four','five','six','seven','eight',
-      'nine','ten'].indexOf(m[1])+1;
-    if(!nodes.some(node=>new RegExp(`\\b${unit}\\b`).test(node)&&qty.test(node))&&
-      (time.test(unit)||!(n>0&&counts.includes(n))))bad.push(m[0]);}
+  const qty=new RegExp(`\\d|\\b(${Q}|single)\\b`);
+  for(const m of low.matchAll(new RegExp(`\\b(?:in|within|under|inside|over) (?:${Q}) (?:(?:`+
+    'single|full|whole|short|working|business) )?([a-z-]+)','g'))){const unit=m[1];
+    if(!time.test(unit))continue;handled.add(unit);
+    if(!nodes.some(node=>new RegExp(`\\b${unit}\\b`).test(node)&&qty.test(node)))bad.push(m[0]);}
   words.forEach((w,i)=>{if(!time.test(w)||handled.has(w))return;
     const near=[words[i-1],words[i+1]].filter(x=>x&&x.length>2&&!stop.has(x));
     if(!nodes.some(node=>new RegExp(`\\b${w}\\b`).test(node)&&(/\d/.test(node)||near.some(x=>

@@ -64,13 +64,15 @@ it('requires the Illustrative figures badge on every slide, even one without fig
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
 });
 
-it('treats "in one shift"-style phrases as durations, but a count of shown items as a count', async () => {
+it('treats "in one shift"-style phrases with a time noun as durations, and other nouns as plain copy', async () => {
   const boxes = flow(['Hear', 'Locate', 'Dispatch', 'Repair']);
   expect(await claims('From pipe noise to a repair crew in one shift', boxes)).toContain("claims 'in one shift'");
   expect(await claims('From pipe noise to a repair crew in one shift', boxes + '<p>Crew dispatched within one shift</p>')).toBeNull();
+  expect(await claims('Every main checked within a single visit', boxes)).toContain("claims 'within a single visit'");
   expect(await claims('Under two weeks to install', '<ul><li>Installs in a day</li></ul>')).toContain("claims 'under two weeks'");
   expect(await claims('From pipe noise to repair in four steps', boxes)).toBeNull();
-  expect(await claims('From pipe noise to repair in three steps', boxes)).toContain("claims 'in three steps'");
+  expect(await claims('Leak detection in one clamp-on unit', boxes)).toBeNull();
+  expect(await claims('Every main in one dashboard', boxes)).toBeNull();
 });
 
 it('fails on stray text outside the slides and the nav, such as a leftover "-->"', async () => {

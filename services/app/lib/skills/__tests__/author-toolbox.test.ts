@@ -133,10 +133,12 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  expect(failed).toContain('  session closed');
  // A guest run is labelled; a clean deck pass lists its slide images and says not to fetch them.
  const guestDeck=checkDigest({ok:true,code:'completed',smokePassed:true,slideLinks:['https://h/a/X/export?format=png&slide=1'],checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:true,task:{}}]},'qa.json');
- expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("Slide images (paste into the reply as printed; don't curl):\nhttps://h/a/X/export?format=png&slide=1");
+ expect(guestDeck).toContain('  guest 390x844:');expect(guestDeck).toContain("Slide images (don't curl):\nhttps://h/a/X/export?format=png&slide=1");
  // A passing run lists exactly the step labels it proved, per viewport, and what it did not.
  const proved=checkDigest({ok:true,code:'completed',smokePassed:true,checks:[{viewport,...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['target saves']},{viewport,viewer:'guest',...clean,overflow:{viewport:390,content:390,fits:true},contrast:{checked:1,belowAA:0,unreadable:0,low:[]},steps:{ran:true,passed:true},verified:['guest reads it']}]},'qa.json');
  expect(proved).toContain('Verified: 390x844: target saves | guest 390x844: guest reads it');expect(proved).toContain('Not verified: anything not listed in Verified:, visual appearance, and sharing between two signed-in users');
+ // One block for the reply to copy: what ran and what did not, never one without the other.
+ expect(proved).toContain('Reply block (copy as printed):\nTested: 390x844: target saves | guest 390x844: guest reads it\nNot tested: anything not listed in Tested:, visual appearance');
  // A failed or flawed run points at the summary itself, as a pass does.
  expect(failed).toContain("fix the named slides/elements from this output; don't open qa JSON.");expect(passed).not.toContain('fix the named');
  // An overflow names the element that sticks out.

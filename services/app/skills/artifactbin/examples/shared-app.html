@@ -8,8 +8,7 @@
 <link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID" data-af-mode="live">
 <link rel="af-backend" data-af-name="budget" href="./garden.ts">
 <script type="module" id="app-config">
-// KPIs, targets per category, a monthly trend, payers, a drill-down, per-viewer dark mode (Apollo
-//   local state) and a signed-in target editor (backend store).
+// KPIs, category targets, a month trend, payers, drill-down, dark mode, a shared target editor.
 // Usage: copy it as index.html with garden.ts, gen-transactions.mjs and shared-app-steps, -guest
 //   and -cleanup .mjs (as steps, guest, cleanup.mjs); run the generator once, publish its CSV
 //   (--type dataset), put the ID after ref:; edit only APP (defaultTargets: plausible monthly
@@ -80,8 +79,8 @@ const schema=q(`{${D}{schema{revision tables{id columns{id label}}}}}`);
 const rowsQuery=q(`query Rows($t:ID!,$after:String){${D}{rows(tableId:$t,first:100,after:$after){`
   +'revision rows{id cells{columnId value{string number}}} pageInfo{hasNextPage endCursor}}}}');
 const targetsQuery=q(`query T($d:String){${B}{signedIn targets(defaults:$d){category amount}}}`);
-const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{setTarget(category:$c,amount:$a){amount}}}`
-  ),clear=q(`mutation C($c:String!){${B}{clearTarget(category:$c)}}`);
+const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{saved:setTarget(category:$c,amount:$a){`+
+  'conflict}}}'),clear=q(`mutation C($c:String!){${B}{saved:clearTarget(category:$c){conflict}}}`);
 let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},views={};
 document.title=APP.title;for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,
   summary:APP.summary,'list-title':APP.labels.list,'trend-title':APP.labels.trend,
@@ -185,9 +184,10 @@ $('#editor').onsubmit=async event=>{
     const raw=$('#amount').value,result=await client.mutate(raw===''?{mutation:clear,variables:{c}}:
       {mutation:setTarget,variables:{c,a:Number(raw)}});
     if(result.errors?.length)throw Error(result.errors[0].message);
-    event.target.dataset.for='';await loadTargets();render();
-    status.textContent=`Saved the ${c} target for everyone.`;
-  }catch(error){status.textContent=(error.message||'Could not save.')+' Sign in to edit targets.';}
+    event.target.dataset.for='';await loadTargets();render(); // conflict: another edit came first
+    status.textContent=result.data[B].saved.conflict?`Someone else just changed the ${c} target; `+
+      'reloaded the latest values.':`Saved the ${c} target for everyone.`;
+  }catch(error){status.textContent=signedIn?error.message||'Could not save.':'Sign in to edit.';}
 };
 new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})
   .observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
