@@ -9,7 +9,7 @@
  * Public code only: no page, viewer or credential reaches these bytes, and the name is checked against the hosted list
  * before any file is read. Brotli is computed once per file; lib/serving/components.server chooses per request.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -22,7 +22,7 @@ export const COMPONENT_CHUNK = /^chunk-[a-z0-9]+\.js$/;
 const brotli = promisify(zlib.brotliCompress);
 
 export interface LoadedComponentFile { body: Buffer; br: Buffer; etag: string }
-const loaded = new Map<string, Promise<LoadedComponentFile | null>>();
+const loaded = new Map<string, { version: string; file: Promise<LoadedComponentFile> }>();
 
 /** The file name a request may name, or null: a hosted entry or a content-addressed chunk. */
 export function componentFile(file: string): string | null {
@@ -36,21 +36,22 @@ export async function readComponentFile(file: string): Promise<Buffer | null> {
   return (await loadComponentFile(file))?.body ?? null;
 }
 
-export function loadComponentFile(file: string): Promise<LoadedComponentFile | null> {
+export async function loadComponentFile(file: string): Promise<LoadedComponentFile | null> {
   const name = componentFile(file);
-  if (!name) return Promise.resolve(null);
-  let pending = loaded.get(name);
-  if (!pending) {
-    pending = (async () => {
-      const body = await readFile(path.join(componentDir, name)).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
-      if (!body) return null;
-      const br = await brotli(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.byteLength } });
-      return { body, br, etag: `"${createHash('sha256').update(body).digest('hex')}"` };
-    })();
-    // Production files never change; a development rebuild is read again on the next request after a miss or restart.
-    pending.then((value) => { if (!value || process.env.NODE_ENV !== 'production') loaded.delete(name); }, () => loaded.delete(name));
-    loaded.set(name, pending);
-  }
+  if (!name) return null;
+  // Keyed by size and mtime, so a development rebuild is picked up on the next request and an unchanged file is
+  // read and compressed once.
+  const info = await stat(path.join(componentDir, name)).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+  if (!info) { loaded.delete(name); return null; }
+  const version = `${info.size}:${info.mtimeMs}`;
+  const cached = loaded.get(name);
+  if (cached?.version === version) return cached.file;
+  const pending = (async () => {
+    const body = await readFile(path.join(componentDir, name));
+    const br = await brotli(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.byteLength } });
+    return { body, br, etag: `"${createHash('sha256').update(body).digest('hex')}"` };
+  })();
+  pending.catch(() => { if (loaded.get(name)?.file === pending) loaded.delete(name); });
+  loaded.set(name, { version, file: pending });
   return pending;
 }
-

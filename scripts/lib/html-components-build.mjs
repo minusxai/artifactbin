@@ -5,8 +5,8 @@ import {build} from 'esbuild';
 import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
 /** `entries` limits the compiled entry points (default: every source). With `readableDir`, compiled modules go to
  * `outputDir` and the readable `.ts` sources reached from `readableEntries` (default: every entry) go to `readableDir`
- * (the skill's reference copy); without it both land in `outputDir`.
- * @typedef {{sourceDir: string, outputDir: string, readableDir?: string, entries?: readonly string[], readableEntries?: readonly string[], appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
+ * (the skill's reference copy), minus `readableOmit`; without it both land in `outputDir`.
+ * @typedef {{sourceDir: string, outputDir: string, readableDir?: string, entries?: readonly string[], readableEntries?: readonly string[], readableOmit?: readonly string[], appDir?: string, receipt?:{root:string,path?:string}}} ComponentBuildOptions */
 const ASSET_NAME=/^[a-z][a-z0-9-]*\.(?:ts|js)$/;
 const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
 /** Flatten optional engines while retaining the author-facing lazy boundary.
@@ -27,7 +27,7 @@ function boundedEngines(appDir) {
  * Flat lowercase names obey the installed skill asset contract. Compile and validate
  * every output before replacing the previous installation; readable sources remain. */
 /** @param {ComponentBuildOptions} options */
-export async function buildComponentAssets({sourceDir,outputDir,readableDir,entries,readableEntries,appDir=APP_DIR,receipt}) {
+export async function buildComponentAssets({sourceDir,outputDir,readableDir,entries,readableEntries,readableOmit=[],appDir=APP_DIR,receipt}) {
   // fileURLToPath(directoryURL) retains a trailing separator. Staging must be a
   // sibling of the installation, never a directory inside it.
   outputDir=path.resolve(outputDir);
@@ -55,7 +55,7 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
   const graph=new Map(Object.entries(result.metafile.inputs).map(([name,input])=>[path.resolve(name),input.imports.map(item=>path.resolve(item.path))]));
   const reached=new Set(),pending=(readableEntries??names.map(name=>name.replace(/\.ts$/,''))).map(name=>path.resolve(sourceDir,name+'.ts'));
   while(pending.length){const file=pending.pop();if(reached.has(file))continue;reached.add(file);pending.push(...(graph.get(file)??[]));}
-  const readable=readableDir?available.filter(name=>reached.has(path.resolve(sourceDir,name))):available;
+  const readable=readableDir?available.filter(name=>reached.has(path.resolve(sourceDir,name))&&!readableOmit.includes(name.replace(/\.ts$/,''))):available;
   const sources=await Promise.all(readable.map(async name=>({name,content:await readFile(path.join(sourceDir,name),'utf8')})));
   const compiled=result.outputFiles.map(file=>{
     const name=renamed.get(path.basename(file.path));

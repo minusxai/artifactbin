@@ -62,7 +62,8 @@ describe('one installable native HTML author skill',()=>{
   expect(check.slice(0,check.indexOf('import'))).not.toContain('frameLocator(');
   expect(comment).toContain('watch');expect(comment).toContain('react');
   expect(files['components/slide-deck.ts']).toContain(`import '@afbin/slide-deck';`);
-  for(const [name,text] of Object.entries(files).filter(([name])=>name.startsWith('components/')))expect(text.slice(0,text.indexOf('*/')),name).not.toMatch(/\bregister(?!Component\b)[A-Z]|\.\/components\//);
+  for(const [name,text] of Object.entries(files).filter(([name])=>name.startsWith('components/')))expect(text.slice(0,text.indexOf('*/')),name).not.toMatch(/\bregister[A-Z]|\.\/components\//);
+  expect(files['components/register-component.ts']).toBeUndefined();
   for(const gone of ['html-components','html-examples','html-uploads','html-sharing','comment-reactions','publication-bundles','html-preview','local-files'])expect(files[`references/${gone}.md`],gone).toBeUndefined();
  });
  it('ships only what agents read and run: no compiled components or platform bundles, within the size budget',async()=>{

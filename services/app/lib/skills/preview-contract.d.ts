@@ -1,14 +1,18 @@
 import type { Server } from 'node:http';
-/** Read-only, loopback-only preview. No account; the only remote request is a platform font file (fontOrigin). */
+/** Read-only, loopback-only preview. No account; its only remote requests are public platform files from the selected
+ * server (platformOrigin): the core runtime and lazy modules, hosted libraries and components, their import map, one
+ * design system's stylesheet and its fonts (skills/artifactbin/scripts/preview-platform.mjs). */
 export interface PreviewOptions {
   root: string;
   /** Zero chooses a free port. */
   port?: number;
   /** Optional prebuilt public core/module assets, mounted at /af/. */
   runtimeDir?: string;
-  /** Origin whose /af/fonts/ supplies platform fonts a source checkout lacks; defaults to the archive's selected server, null for none. */
+  /** Origin supplying the platform files a source checkout lacks; defaults to the archive's selected server, null for none. */
+  platformOrigin?: string | null;
+  /** Older name of platformOrigin. */
   fontOrigin?: string | null;
-  /** Trusted source-owned pinned browser modules; never read from page markup. */
+  /** Trusted source-owned pinned browser modules (tests); never read from page markup. */
   libraryAssets?: Readonly<Record<string,string>>;
   /** Short shared content-scan cache; tests may set zero. */
   revisionIntervalMs?: number;
@@ -32,9 +36,15 @@ export declare function createRevisionSource(root: string, options?: { now?: () 
  * Mutations affect memory only; export is an explicit JSON download.
  */
 export interface PreviewLocalDatasetConfig { endpoint: string; schema: unknown }
-/** Exact code-only runtime admission at the flat /af/ addresses the build names. */
-export declare function runtimeAssetManifest(assets: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string>;
-export declare function libraryAssetManifest(assets: Readonly<Record<string,string>>): ReadonlyMap<string,string>;
+/** Platform code for the preview, admitted only at closed paths (/af/<module>.js, /libraries/<name>-<semver>/index.js,
+ * /af/components/<file>.js), fetched once per session; a source checkout's own build outputs come first. */
+export interface PlatformModules {
+  module(pathname: string): Promise<Buffer | null>;
+  importMap(): Promise<Record<string, string>>;
+  runtimeAssets(): Promise<Record<string, string>>;
+  systemCss(name: string): Promise<string | null>;
+}
+export declare function platformModules(options?: { origin?: string | null; libraryAssets?: Readonly<Record<string,string>> }): PlatformModules;
 /** Explicit local Save reads selected-root bytes only. The canonical HTML stays
  * unchanged; renderedHtml embeds a complete admitted dependency graph. No account,
  * network, upload or private viewer state enters this response. */

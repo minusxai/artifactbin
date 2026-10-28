@@ -9,27 +9,27 @@ import {packOfflineDependencies} from '../../offline-dependencies';
 import {markupCsp} from '../../page-styles/markup-csp';
 import hosted from '../../html-components/hosted.json';
 
-const get=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),{params:Promise.resolve({file})});
+const servedFile=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),{params:Promise.resolve({file})});
 const built=(file:string)=>readFileSync(path.resolve('lib/build-assets/components',file));
 const chunks=(source:string)=>[...source.matchAll(/["']\.\/(chunk-[a-z0-9]+\.js)["']/g)].map(match=>match[1]!);
 
 it('serves each hosted component entry revalidated and its content-addressed chunks immutable',async()=>{
  for(const name of [...hosted.components,...hosted.legacy]){
-  const response=await get(name+'.js');
+  const response=await servedFile(name+'.js');
   expect(response.status,name).toBe(200);expect(response.headers.get('content-type')).toMatch(/^text\/javascript/);
   expect(response.headers.get('cache-control'),name).toBe('no-cache');expect(response.headers.get('access-control-allow-origin')).toBe('*');
   expect(Buffer.from(await response.arrayBuffer()).equals(built(name+'.js')),name).toBe(true);
  }
- const entry=await get('tabs.js'),etag=entry.headers.get('etag')!;
+ const entry=await servedFile('tabs.js'),etag=entry.headers.get('etag')!;
  expect(etag).toMatch(/^"[a-f0-9]{64}"$/);
- const repeat=await get('tabs.js',{'if-none-match':etag});expect(repeat.status).toBe(304);expect(await repeat.text()).toBe('');
- const encoded=await get('tabs.js',{'accept-encoding':'gzip, br'});
+ const repeat=await servedFile('tabs.js',{'if-none-match':etag});expect(repeat.status).toBe(304);expect(await repeat.text()).toBe('');
+ const encoded=await servedFile('tabs.js',{'accept-encoding':'gzip, br'});
  expect(encoded.headers.get('content-encoding')).toBe('br');expect(encoded.headers.get('vary')).toBe('Accept-Encoding');
  expect(brotliDecompressSync(Buffer.from(await encoded.arrayBuffer())).equals(built('tabs.js'))).toBe(true);
- expect((await get('tabs.js',{'if-none-match':encoded.headers.get('etag')!,'accept-encoding':'br'})).status).toBe(304);
+ expect((await servedFile('tabs.js',{'if-none-match':encoded.headers.get('etag')!,'accept-encoding':'br'})).status).toBe(304);
  const chunk=chunks(built('select.js').toString())[0]!;expect(chunk).toBeTruthy();
- const shared=await get(chunk);expect(shared.status).toBe(200);expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
- for(const refused of ['register-component.js','tabs-model.js','../hosted.json','tabs.ts','chunk-UPPER.js','chunk-missing0.js','deck-gl-engine.js'])expect((await get(refused)).status,refused).toBe(404);
+ const shared=await servedFile(chunk);expect(shared.status).toBe(200);expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+ for(const refused of ['register-component.js','tabs-model.js','../hosted.json','tabs.ts','chunk-UPPER.js','chunk-missing0.js','deck-gl-engine.js'])expect((await servedFile(refused)).status,refused).toBe(404);
 });
 
 it('admits the component directory as a script source of the sandboxed copy',()=>{
