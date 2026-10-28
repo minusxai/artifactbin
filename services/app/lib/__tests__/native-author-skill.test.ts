@@ -89,7 +89,7 @@ describe('one installable native HTML author skill',()=>{
     expect(Object.hasOwn(files,relative),`${name}: ${target}`).toBe(true);
    }
   }
-  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','transactions.csv','garden.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
+  for(const sample of ['report.html','csv-dashboard.html','shared-app.html','deck.html','repairs.csv','gen-transactions.mjs','garden.ts','deck-steps.mjs','shared-app-steps.mjs','shared-app-guest.mjs'])expect(Object.hasOwn(files,'examples/'+sample)).toBe(true);
   expect(Object.hasOwn(files,'scripts/publish.mjs')).toBe(true);
  });
  it('prepares the documented samples from the actual installed ZIP with bounded local font graphs',async()=>{

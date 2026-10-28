@@ -17,13 +17,20 @@ if(!marks)throw Error('charts drew no marks');
 const shapes=await page.evaluate(()=>[...document.querySelectorAll('.figure svg')]
   .map(svg=>svg.querySelectorAll('rect, circle').length));
 if(shapes.some(count=>!count))throw Error('a flow or matrix diagram drew nothing');
+// Slides with a chart or a digit in their copy carry the badge unless marked real.
 const missing=await page.evaluate(real=>[...document.querySelectorAll('[data-af-slide]')]
-  .filter(slide=>!real.includes(slide.dataset.afId.replace(/^slide-/,''))&&
-    !slide.querySelector('.illustrative')).map(slide=>slide.dataset.afId),REAL);
+  .filter(slide=>!real.includes(slide.dataset.afId.replace(/^slide-/,''))&&(slide.querySelector(
+    '.chart')||/\d/.test([...slide.querySelectorAll('h1,h2,.t-body-l,li,.t-numeral')].map(e=>
+      e.textContent).join(' ')))&&!slide.querySelector('.illustrative')).map(s=>s.dataset.afId),
+  REAL);
 if(missing.length)throw Error('no Illustrative figures badge on '+missing.join(', '));
 const left=await page.evaluate(()=>[...document.querySelectorAll('[data-af-slide]')]
   .filter(slide=>slide.textContent.includes('[')).map(slide=>slide.dataset.afId));
 if(left.length&&!PLACEHOLDERS_OK)throw Error('placeholders left on '+left.join(', '));
+// The ask's shares (its items ending in N%) add up to 100.
+const shares=await page.evaluate(()=>[...document.querySelectorAll('.ink li')].map(li=>
+  li.textContent.match(/(\d+)%$/)?.[1]).filter(Boolean).map(Number));
+if(shares.length&&shares.reduce((a,b)=>a+b,0)!==100)throw Error('ask shares sum to '+shares);
 await page.getByRole('button',{name:'Next slide'}).click();await at(2);
 await page.keyboard.press('End');await at(SLIDE_COUNT);
 await page.keyboard.press('Home');await at(1);

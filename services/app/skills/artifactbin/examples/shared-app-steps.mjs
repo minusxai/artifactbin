@@ -14,7 +14,14 @@ const save=async value=>{await page.locator('#amount').fill(value);
 await page.locator(open).waitFor({timeout:5000});
 await page.waitForFunction(()=>document.querySelectorAll('#trend svg, #payer svg').length===2,
   null,{timeout:4000});
-out.push('spent '+(await page.locator('#spent').textContent()));
+// An empty dashboard fails: real budgets, a point per month for spent and budget, payer bars.
+const target=await page.locator('#target').textContent();
+if(!/[1-9]/.test(target))throw Error('Target is zero: set APP.defaultTargets');
+const months=await page.locator('#month option').count();
+const points=await page.locator('#trend .mark-symbol.role-mark path').count();
+if(points!==2*months)throw Error(`trend has ${points} points for ${months} months`);
+if(!await page.locator('#payer .mark-rect.role-mark path').count())throw Error('no payer bars');
+out.push(`spent ${await page.locator('#spent').textContent()} of ${target}; ${points} points`);
 await page.locator(open).click();
 await page.locator('[data-af-id^="row-"]').first().waitFor({timeout:3000});
 out.push('drill-down rows: '+(await page.locator('#rows li').count()));

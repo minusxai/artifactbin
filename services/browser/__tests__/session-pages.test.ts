@@ -212,7 +212,7 @@ it('reports duplicate data-af-id values and script-created IDs that change on re
   const duplicated=await run(['list'],script("['row-1','row-1','row-2']"));
   expect(duplicated.ids.duplicates).toBe(1);expect(duplicated.ids.items[0]).toEqual({id:'row-1',count:2});expect(duplicated.idStability).toMatchObject({checked:true,unstable:0});
   const random=await run(['list'],script("['row-'+Math.random(),'row-'+Math.random()]"));
-  expect(random.ids.duplicates).toBe(0);expect(random.idStability).toMatchObject({checked:true,unstable:4});expect(random.idStability!.sample!.length).toBeGreaterThan(0);
+  expect(random.ids.duplicates).toBe(0);expect(random.idStability).toMatchObject({checked:true,unstable:2});expect(random.idStability!.sample!.length).toBeGreaterThan(0);
   const saved=await run(['list','a','b'],'<li data-af-id="a">A</li><li data-af-id="b">B</li>');
   expect(saved.ids.duplicates).toBe(0);expect(saved.idStability).toEqual({checked:false,created:0});
   expect((await run(['list'],script("['row-1']"),false)).idStability).toBeUndefined();

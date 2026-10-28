@@ -3,13 +3,13 @@
 Example: a shared household-budget dashboard rendered from one APP config: KPIs, spend vs target
 per category, spend against budget by month, who paid what, a drill-down, a per-viewer dark mode
 (Apollo local state) and a signed-in-only target editor (backend store).
-Usage: copy it as index.html with garden.ts, shared-app-steps.mjs (steps.mjs) and
-  shared-app-guest.mjs (guest.mjs); publish the CSV (--type dataset) and put its ID after ref:;
-  edit only APP and garden.ts's names; then node scripts/publish.mjs index.html &&
-  node scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs
-Gotchas: replace this comment with one line describing your page. The dataset and backend links
-  need different data-af-name values. Never publish the ref: placeholder. Sample data ships as
-  generated (≤400 rows). Dark mode is saved only on a toggle. columns.note is optional.
+Usage: copy it as index.html with garden.ts, shared-app-steps.mjs (steps.mjs), shared-app-guest.mjs
+  (guest.mjs) and gen-transactions.mjs; run the generator once, publish its CSV (--type dataset),
+  put the ID after ref:; edit only APP (defaultTargets: plausible monthly amounts per category)
+  and garden.ts's names; then node scripts/publish.mjs index.html && node scripts/check.mjs
+  index.html --steps steps.mjs --guest-steps guest.mjs
+Gotchas: replace this comment with one line describing your page. The dataset and backend need
+  different data-af-name values. Never publish the ref: placeholder. columns.note is optional.
 -->
 <html lang="en">
 <head>
@@ -25,7 +25,10 @@ window.APP = {
   columns: {date:'date', category:'category', amount:'amount', payer:'payer', merchant:'merchant'},
   title: '[Household budget]', kicker: '[Our money] · sample data',
   summary: '[What we planned against what we spent, month by month.]',
-  labels: {list:'Spend vs target', trend:'Spent vs budget', payer:'Who paid what', drill:'Rows'},
+  labels: {list:'Spend vs target', trend:'Spent vs budget', payer:'Who paid what'},
+  // Monthly budget per category until a shared target is saved; clearing one reverts to it.
+  defaultTargets: {Rent:1650, Groceries:450, 'Dining out':200, Transport:120, Utilities:130,
+    Internet:55},
 };
 </script>
 <style>
@@ -43,7 +46,7 @@ button,input,select{font:inherit;padding:8px 12px;color:inherit;background:var(-
   border-top:1px solid var(--border);border-radius:0;padding:10px 4px;display:grid;gap:6px}
 #cats button[aria-pressed=true]{background:var(--accent);color:var(--accent-foreground)}
 .bar{height:8px;background:var(--muted)}.bar i{display:block;height:100%;background:var(--primary)}
-.over .bar i{background:var(--destructive)}.over b{color:var(--destructive)}
+.over .bar i{background:var(--destructive)}
 #drill li{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);
   padding:8px 0}#drill ul{list-style:none;margin:0;padding:0}
 @media(max-width:720px){.grid,.kpis{grid-template-columns:1fr}}
@@ -58,11 +61,13 @@ button,input,select{font:inherit;padding:8px 12px;color:inherit;background:var(-
 </div><div>Left<b id="left">–</b></div></div>
 <div class="grid"><section><h2 id="list-title" class="t-title"></h2><ul id="cats"></ul></section>
 <section id="drill"><h2 id="drill-title" class="t-title"></h2><ul id="rows"></ul>
-<form id="editor" class="toolbar" hidden><label for="amount">Shared target</label>
+<form id="editor" class="toolbar"><label for="amount">Shared target</label>
 <input id="amount" type="number" min="0" step="1" style="width:8em" title="Empty clears it">
 <button type="submit">Save target</button></form></section>
-<section><h2 id="trend-title" class="t-title"></h2><div id="trend" class="chart"></div></section>
-<section><h2 id="payer-title" class="t-title"></h2><div id="payer" class="chart"></div></section>
+<section><h2 id="trend-title" class="t-title"></h2><div id="trend" class="chart"></div>
+<p class="muted">Budget = current targets applied to every month.</p></section>
+<section><h2 id="payer-title" class="t-title"></h2><div id="payer" class="chart"></div>
+<p id="payers" class="number"></p></section>
 </div></main>
 <script type="module">
 import {client,gql,onBackendChange} from '@afbin/apollo';
@@ -71,16 +76,15 @@ import {compile} from '@afbin/vega-lite';
 const APP=window.APP,C=APP.columns,$=s=>document.querySelector(s),status=$('#status');
 const money=new Intl.NumberFormat(undefined,{style:'currency',currency:APP.currency});
 const preference=gql`{dark month category}`;
-// Queries name the dataset and backend from APP (gql also takes a plain one-string array).
-const schema=gql([`{${APP.dataset}{schema{revision tables{id columns{id label}}}}}`]);
-const rowsQuery=gql([`query Rows($t:ID!,$after:String){${APP.dataset}{rows(tableId:$t,first:100,`
-  +'after:$after){revision rows{id cells{columnId value{string number}}} pageInfo{hasNextPage '
-  +'endCursor}}}}']);
-const targetsQuery=gql([`{${APP.backend}{targets{category amount}}}`]);
-const setTarget=gql([`mutation Set($c:String!,$a:Float!){${APP.backend}{setTarget(category:$c,`
-  +'amount:$a){category amount}}}']),clear=gql([`mutation Clear($c:String!){${APP.backend}{`
-  +'clearTarget(category:$c)}}']);
-let rows=[],targets={},state={dark:null,month:'',category:''},views={};
+// Queries name the dataset (D) and backend (B) from APP; gql also takes a one-string array.
+const q=text=>gql([text]),D=APP.dataset,B=APP.backend;
+const schema=q(`{${D}{schema{revision tables{id columns{id label}}}}}`);
+const rowsQuery=q(`query Rows($t:ID!,$after:String){${D}{rows(tableId:$t,first:100,after:$after){`
+  +'revision rows{id cells{columnId value{string number}}} pageInfo{hasNextPage endCursor}}}}');
+const targetsQuery=q(`query T($d:String){${B}{signedIn targets(defaults:$d){category amount}}}`);
+const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{setTarget(category:$c,amount:$a){amount}}}`
+  ),clear=q(`mutation C($c:String!){${B}{clearTarget(category:$c)}}`);
+let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},views={};
 for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,summary:APP.summary,
   'list-title':APP.labels.list,'trend-title':APP.labels.trend,'payer-title':APP.labels.payer}))
   $('#'+id).textContent=text;
@@ -107,48 +111,48 @@ async function loadRows(){
   }while(after);
   rows=out.filter(row=>row.date);
 }
-async function loadTargets(){const result=await client.query({query:targetsQuery});
-  if(result.errors?.length)throw Error(result.errors[0].message);
-  targets=Object.fromEntries(result.data[APP.backend].targets.map(t=>[t.category,t.amount]));
-}
-const unique=list=>[...new Set(list)].sort(),months=()=>unique(rows.map(row=>row.date.slice(0,7)));
+async function loadTargets(){const result=await client.query({query:targetsQuery,variables:{d:
+  JSON.stringify(APP.defaultTargets??{})}});if(result.errors?.length)throw Error(result.errors[0]
+  .message);signedIn=result.data[B].signedIn;
+  targets=Object.fromEntries(result.data[B].targets.map(t=>[t.category,t.amount]));}
+const unique=list=>[...new Set(list)].sort(),months=()=>unique(rows.map(r=>r.date.slice(0,7)));
 const sum=list=>list.reduce((total,r)=>total+r.amount,0),cats=()=>unique(rows.map(r=>r.category));
 const month=()=>months().includes(state.month)?state.month:months().at(-1);
 const inMonth=(m=month())=>rows.filter(row=>row.date.startsWith(m));
 const budget=()=>cats().reduce((total,cat)=>total+(targets[cat]??0),0);
 // Script-made nodes take data-af-ids from the record (category or row id), stable across renders.
 const item=(id,tag='li')=>{const n=document.createElement(tag);n.dataset.afId=id;return n;};
-function render(){
-  if(!rows.length)return;
-  const list=inMonth(),spent=sum(list),target=budget();
+function render(){if(!rows.length)return;
+  const list=inMonth(),spent=sum(list),target=budget(),current=state.category||cats()[0];
   $('#month').replaceChildren(...months().map(m=>new Option(m,m,false,m===month())));
   for(const [id,value] of [['spent',spent],['target',target],['left',target-spent]])
     $('#'+id).textContent=money.format(value);
   $('#cats').replaceChildren(...cats().map(cat=>{
     const li=item('cat-'+cat),button=item('cat-'+cat+'-open','button'),goal=targets[cat];
     const got=sum(list.filter(row=>row.category===cat)),over=goal!=null&&got>goal;
-    button.type='button';button.setAttribute('aria-pressed',String(cat===state.category));
+    button.type='button';button.setAttribute('aria-pressed',String(cat===current));
     button.textContent=`${cat}: ${money.format(got)} of `+(goal!=null?money.format(goal):'none');
-    if(over)button.append(Object.assign(item('cat-'+cat+'-over','b'),
-      {textContent:` over by ${money.format(got-goal)}`}));
+    if(over)button.append(Object.assign(item(`cat-${cat}-over`,'b'),{textContent:` ▲ over by `+
+      money.format(got-goal)}));
     const bar=item('cat-'+cat+'-bar','span');bar.className='bar';li.classList.toggle('over',over);
-    bar.append(document.createElement('i'));button.append(bar);
-    bar.firstChild.style.width=Math.min(100,goal?got/goal*100:0)+'%';
-    button.onclick=()=>client.updateQuery({query:preference},s=>({...s,category:cat}));
-    li.append(button);return li;
-  }));
-  const cat=state.category,picked=list.filter(row=>row.category===cat);
-  $('#drill-title').textContent=cat?`${APP.labels.drill}: ${cat}, ${month()}`:'Pick a category';
+    button.append(bar);bar.appendChild(document.createElement('i')).style.width=Math.min(100,goal?
+      got/goal*100:0)+'%';
+    button.onclick=()=>setLocal({category:cat});li.append(button);return li;}));
+  const cat=current,picked=list.filter(row=>row.category===cat),n=picked.length;
+  $('#drill-title').textContent=`${cat} · ${month()} · ${n} rows · ${money.format(sum(picked))}`;
   $('#rows').replaceChildren(...picked.map(row=>{
     const li=item('row-'+row.id),b=item(`row-${row.id}-amount`,'b');
     li.textContent=`${row.date} ${row.merchant}${row.note?' · '+row.note:''} (${row.payer} paid)`;
-    b.textContent=money.format(row.amount);li.append(b);return li;}));
-  // Refill the target field only when the category changes, never over what the viewer types.
-  $('#editor').hidden=!cat;if(cat&&$('#editor').dataset.for!==cat){$('#editor').dataset.for=cat;
-    $('#amount').value=targets[cat]??'';}
+    b.textContent=money.format(row.amount);li.append(b);return li;}),...n?[]:[Object
+    .assign(item('rows-empty'),{textContent:'No rows in this category this month.'})]);
+  // Guests see a disabled "Sign in to edit"; the field refills only when the category changes.
+  Object.assign($('#editor button'),{disabled:!signedIn,textContent:signedIn?'Save target':
+    'Sign in to edit'});if($('#editor').dataset.for!==cat)[$('#editor').dataset.for,
+    $('#amount').value]=[cat,targets[cat]??''];
+  $('#payers').textContent=unique(list.map(r=>r.payer)).map(p=>{const t=sum(list.filter(r=>
+    r.payer===p));return `${p} ${money.format(t)} (${Math.round(t/(spent||1)*100)}%)`;}).join(', ');
   void drawCharts(list);
 }
-// Concrete design-system colours; charts redraw when dark mode changes.
 const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 async function chart(key,values,mark,x,color,y){
   views[key]?.finalize();const ink=token('--foreground'),sumY={aggregate:'sum',field:y,
@@ -164,7 +168,6 @@ async function chart(key,values,mark,x,color,y){
   views[key]=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:$('#'+key),
     renderer:'svg',expr:vega.expressionInterpreter});await views[key].runAsync();
 }
-// Spent against the summed targets by month; who paid what this month, stacked by category.
 const drawCharts=list=>Promise.all([chart('trend',months().flatMap(m=>[{month:m,series:'Spent',
   value:sum(inMonth(m))},{month:m,series:'Budget',value:budget()}]),'line','month','series',
   'value'),chart('payer',list,'bar','payer','category','amount')]);
@@ -173,19 +176,17 @@ const applyDark=dark=>{if(typeof dark==='boolean')document.documentElement.datas
 // Local state holds this viewer's saved choices from the first read; write only on a viewer action.
 client.watchQuery({query:preference}).subscribe(({data})=>{state=data;applyDark(data.dark);
   render();});
-$('#dark').onclick=()=>client.updateQuery({query:preference},s=>({...s,
-  dark:document.documentElement.dataset.afDark!=='true'}));
-$('#month').onchange=event=>client.updateQuery({query:preference},s=>({...s,
-  month:event.target.value}));
+const setLocal=patch=>client.updateQuery({query:preference},s=>({...s,...patch}));
+$('#dark').onclick=()=>setLocal({dark:document.documentElement.dataset.afDark!=='true'});
+$('#month').onchange=event=>setLocal({month:event.target.value});
 $('#editor').onsubmit=async event=>{
-  event.preventDefault();status.textContent='Saving the shared target…';
-  try{
-    // An empty field clears the category's target; a number sets it.
-    const raw=$('#amount').value,result=await client.mutate(raw===''?{mutation:clear,variables:
-      {c:state.category}}:{mutation:setTarget,variables:{c:state.category,a:Number(raw)}});
+  event.preventDefault();const c=event.target.dataset.for;status.textContent='Saving…';
+  try{ // An empty field clears the saved target (back to the default); a number sets it.
+    const raw=$('#amount').value,result=await client.mutate(raw===''?{mutation:clear,variables:{c}}:
+      {mutation:setTarget,variables:{c,a:Number(raw)}});
     if(result.errors?.length)throw Error(result.errors[0].message);
-    await loadTargets();render();
-    status.textContent=`Saved the ${state.category} target for everyone.`;
+    event.target.dataset.for='';await loadTargets();render();
+    status.textContent=`Saved the ${c} target for everyone.`;
   }catch(error){status.textContent=(error.message||'Could not save.')+' Sign in to edit targets.';}
 };
 new MutationObserver(()=>{if(rows.length)void drawCharts(inMonth());})

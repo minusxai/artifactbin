@@ -1,14 +1,17 @@
 /**
- * Example: check.mjs guest steps for examples/shared-app.html: a signed-out reader is refused.
+ * Example: check.mjs guest steps for examples/shared-app.html: a signed-out reader sees the shared,
+ *   seeded targets, not the signed-in viewer's dark mode, and cannot save.
  * Usage: cp examples/shared-app-guest.mjs guest.mjs; set CATEGORY, then pass it as --guest-steps.
- * Gotchas: it runs after the self steps finish, on the wide viewport only; the refusal shows in
- *   #status as a sign-in message.
+ * Gotchas: it runs after the self steps finish, on the wide viewport only.
  */
 if(page.viewportSize().width<800)return {assertions:['guest checks run on the wide viewport']};
 const CATEGORY='Rent',open=`[data-af-id="cat-${CATEGORY}-open"]`;
-await page.locator(open).waitFor({timeout:5000});await page.locator(open).click();
-await page.locator('#amount').fill('1');
-await page.getByRole('button',{name:/save target/i}).click();
-await page.waitForFunction(()=>/sign in/i.test(document.querySelector('#status').textContent),null,
-  {timeout:4000});
-return {assertions:['a guest cannot change a shared target']};
+await page.locator(open).waitFor({timeout:5000});
+if(!/[1-9]/.test(await page.locator('#target').textContent()))throw Error('guest sees no targets');
+if(await page.evaluate(()=>document.documentElement.dataset.afDark)==='true')
+  throw Error('dark mode leaked to another viewer');
+await page.locator(open).click();
+const save=page.locator('#editor button');
+if(!await save.isDisabled()||!/sign in/i.test(await save.textContent()))
+  throw Error('a guest can press Save');
+return {assertions:['a guest sees shared targets, light mode and a disabled "Sign in to edit"']};
