@@ -8,6 +8,7 @@
  */
 let seed=7;const rand=()=>{seed=seed+0x6d2b79f5|0;let t=Math.imul(seed^seed>>>15,1|seed);
   t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+// Payer names are shown to every viewer; use names, not You/Partner.
 const pick=list=>list[Math.floor(rand()*list.length)],PAYERS=['Alex','Sam'];
 const CATEGORIES=[ // name, amount range, visits a month, merchants
   ['Rent',[1650,1650],1,['Landlord']],['Utilities',[70,150],1,['Power Co']],

@@ -6,6 +6,7 @@ import { escapeHtml } from './escape';
 export function renderConnectionPage(title: string, bodyHtml: string): string {
   const escapedTitle = escapeHtml(title);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapedTitle}</title><style>
+  :root { color-scheme: dark; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background-color: #0b0e11; color: #e6edf3; font-family: var(--font-mono, ui-monospace), 'SF Mono', Menlo, monospace; font-size: 14px;
          background-image: radial-gradient(circle, #232c37 1px, transparent 1px); background-size: 26px 26px; }
   main { width: min(26rem, calc(100vw - 3rem)); background: #10151b; border: 1px solid #202832; border-radius: 8px; padding: 1.75rem; box-shadow: 0 18px 50px -20px rgba(0,0,0,0.75); }
@@ -18,5 +19,7 @@ export function renderConnectionPage(title: string, bodyHtml: string): string {
   button:hover { background: #1a8a4f; }
   .alt { margin: 1.25rem 0 0; font-size: 0.75rem; color: #7d8590; text-align: center; line-height: 1.6; }
   .err { color: #f85149; font-size: 0.85rem; }
+  a, a:visited { color: #3fe77b; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+  a:hover { color: #e6edf3; }
 </style></head><body><main><div class="brand">artifactbin</div>${bodyHtml}</main></body></html>`;
 }

@@ -85,10 +85,12 @@ export function checkDigest(envelope,file){
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
   "  clean pass: reply now with the link; don't open qa JSON or screenshots.\n"+
+  // The don't-fetch note sits above the reply block: agents copy the block's lines verbatim.
+  (envelope.slideLinks?.length?"  slide images: list them as printed; don't fetch them.\n":'')+
   // One block the reply copies as printed, so it claims exactly what ran and what did not.
   'Reply block (copy as printed):'+(tested?'\nTested: '+tested+'\nNot tested: '+untested.replace(
    /Verified:/g,'Tested:'):'')+(envelope.slideLinks?.length?
-   "\nSlide images (don't curl):\n"+envelope.slideLinks.join('\n'):''));
+   '\nSlide images:\n'+envelope.slideLinks.join('\n'):''));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';

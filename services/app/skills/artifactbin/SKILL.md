@@ -7,6 +7,14 @@ description: >-
 ---
 ## Read first
 
+Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
+
+- `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (garden.ts, shared-app-steps,
+  -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs; repairs.csv
+- `scripts/`: publish, check, read, comment, graphql, export, auth, autofix, serve (`--help` each)
+- `references/`: guides: runtime, datasets, backends, dataviz, diagrams, maps (read only one)
+- `components/`: `af-*` element sources (`head -30` each); `design-systems/`: CSS (served; skip)
+
 A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries.
 Import `@afbin/apollo` and every hosted library as `@afbin/<name>` (`vega`, `vega-lite`, `pele-*`,
 `deck-gl`, `three`, `highlight`) and the optional components below the same way; that prefix is
@@ -178,20 +186,7 @@ credentials.
 ## Installed resources
 
 [Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/`
-folder into your harness’s skill directory, then reload skills. Read only the guide needed for the
-task:
-
-- [Runtime](references/runtime.md): Apollo local state, remote namespaces and offline behavior.
-- [Data visualization](references/dataviz.md): chart choices, truthful encodings, themes and
-  Vega/Vega-Lite guidance.
-- [Diagrams](references/diagrams.md): Pele rendering of Mermaid syntax, themes, lifecycle and
-  offline behavior.
-- [Maps](references/maps.md): direct deck.gl layers, view state, resize, cleanup and basemap/data
-  limits.
-- [Offline images](references/runtime.md#portable-images): download limits.
-- [Datasets](references/datasets.md): CSV import, schema discovery and stable dataset IDs.
-- [Backend files](references/backends.md): TypeScript resolvers, shared stores and permissions.
-- `examples/`: each file's top comment says what it shows and which files go with it.
+folder into your harness’s skill directory, then reload skills.
 
 Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and
 `node scripts/check.mjs http://127.0.0.1:PORT/ --playwright-module FILE` (the preview adds a 76px
