@@ -1,0 +1,51 @@
+name: v3 server pin
+
+# Starts the private server composition on each merged v3 revision while ci, v3 CodeQL, runner
+# design validation and page speed run, instead of after all four. Pinning admits nothing: the
+# isolated deployment still requires all four on this exact revision plus the composition.
+on:
+  push:
+    branches: [ artifactbinv3 ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-server-pin
+  cancel-in-progress: false
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Pin this exact revision into the server composition when it advances the current pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVER_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          server="https://x-access-token:${SERVER_TOKEN}@github.com/minusxai/artifactbin-server.git"
+          git init -q server && cd server
+          git config user.name 'deployment automation'
+          git config user.email 'deployment-automation@users.noreply.github.com'
+          for attempt in 1 2 3 4 5; do
+            # A newer merge's own run pins that revision; never start a composition it supersedes.
+            head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/artifactbinv3" --jq .object.sha)
+            if [ "$head" != "$SHA" ]; then echo "artifactbinv3 moved to ${head:0:12}; its run pins it"; exit 0; fi
+            git fetch -q --depth 1 "$server" refs/heads/artifactbinv3
+            pinned=$(git rev-parse FETCH_HEAD:toolkit)
+            if [ "$pinned" = "$SHA" ]; then echo "Server already pins ${SHA:0:12}"; exit 0; fi
+            # A manually prepared newer composition must never be repinned backward.
+            direction=$(gh api "repos/$GITHUB_REPOSITORY/compare/$pinned...$SHA" --jq .status)
+            if [ "$direction" != ahead ]; then echo "${SHA:0:12} does not advance pin ${pinned:0:12}"; exit 0; fi
+            git read-tree FETCH_HEAD
+            git update-index --cacheinfo "160000,$SHA,toolkit"
+            commit=$(git commit-tree "$(git write-tree)" -p FETCH_HEAD -m "Update isolated toolkit to ${SHA:0:12}")
+            if git push -q "$server" "$commit:refs/heads/artifactbinv3"; then echo "Pinned ${SHA:0:12}"; exit 0; fi
+            echo "Server branch moved (attempt $attempt/5); re-pinning on top of it"
+            sleep 3
+          done
+          exit 1
