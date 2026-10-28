@@ -112,8 +112,7 @@ From repo root.
   `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (its README is the guide): copy
   it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
-- `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
-  tsc) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
+- `npm run validate` — FAST: name guard, incremental stable TypeScript (`tsc`) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
   utils/contracts add `noUncheckedIndexedAccess`.
 - `npm test` — affected api/node/ui/islands tests, ≤50 files; exit 2 means PR CI, never widen.
   `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge

@@ -1,7 +1,7 @@
 /** Owning CLI/environment boundary for the two routine local checks. */
 import path from 'node:path';
 import { runCheck } from '../lib/check-evidence.mjs';
-import { nativeCompiler, typeCheckCommands } from '../lib/type-check.mjs';
+import { typeCheckCommands } from '../lib/type-check.mjs';
 
 const [label, ...raw] = process.argv.slice(2);
 const reuse = raw.includes('--reuse');
@@ -31,7 +31,5 @@ try {
   if (label === 'test' && !refs.length && !args.includes('--files')) refs.push('HEAD');
   // A preview is not verification and must not produce a reusable pass.
   if (args.includes('--dry')) throw new Error('Agents should run npm test directly; discovery is already budgeted.');
-  if (label === 'validate' && !nativeCompiler({ root: path.resolve('.') }))
-    console.log(`[check] No native TypeScript compiler for ${process.platform}-${process.arch}; type-checking with tsc.`);
   process.exitCode = await runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });
 } catch (error) { console.error(`[check] ${error.message}`); process.exitCode = 1; }
