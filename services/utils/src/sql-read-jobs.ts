@@ -104,7 +104,8 @@ export function sqlReadExecution(
             if (cancelled || receipt.state === "cancelled")
               throw Error("sql_read_cancelled");
             if (receipt.state === "completed") return receipt.results;
-            throw Error("sql_read_rejected");
+            // The service's own reason (sql_job_output_limit, sql_job_busy, sql_job_failed…) names what refused the read.
+            throw Error(typeof receipt.code === "string" && /^sql_[a-z_]{1,60}$/.test(receipt.code) ? receipt.code : "sql_read_rejected");
           }
           if (receipt.state === "unknown" && !cancelled) action = "submit";
         }

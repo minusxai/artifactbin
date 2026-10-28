@@ -206,3 +206,13 @@ it("gives up on open at the lease and on cancellation without submitting", async
   await expect(cancelled.result).rejects.toThrow();
   expect(submits).toBe(0);
 });
+it("a refused read rejects with the service's reason, not a generic one", async () => {
+  const refused = (code: string): SqlReadJobs => ({
+    open: async () => ({ serverId: "server", now: Date.now() }),
+    submit: async (key) => ({ ...key, state: "failed", drained: true, code }),
+    status: async (key) => ({ ...key, state: "unknown", drained: false }),
+    cancel: async (key) => ({ ...key, state: "cancelled", drained: true, code: "cancelled" }),
+  });
+  await expect(sqlReadExecution(refused("sql_job_output_limit"), input, { pollMs: 0 }).result).rejects.toThrow("sql_job_output_limit");
+  await expect(sqlReadExecution(refused("unrecognised reason"), input, { pollMs: 0 }).result).rejects.toThrow("sql_read_rejected");
+});
