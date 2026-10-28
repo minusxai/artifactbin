@@ -26,7 +26,8 @@ out.push(`spent ${await page.locator('#spent').textContent()} of ${target}; ${po
 await page.locator(open).click();
 await page.locator('[data-af-id^="row-"]').first().waitFor({timeout:3000});
 out.push('drill-down rows: '+(await page.locator('#rows li').count()));
-if(wide){
+// The write step always clears its test target (finally), even when a later step fails.
+if(wide)try{
   await save(TARGET);await goal();
   await page.getByRole('button',{name:/dark mode/i}).click();
   await page.waitForFunction(()=>document.documentElement.dataset.afDark==='true',null,
@@ -34,9 +35,10 @@ if(wide){
   await page.reload();await page.locator(open).waitFor({timeout:5000});
   if(await page.evaluate(()=>document.documentElement.dataset.afDark)!=='true')
     throw Error('dark mode not remembered after reload');
-  await page.locator(open).click();await save('');
+  out.push('shared target saved; dark mode survives reload');
+}finally{
+  await page.locator(open).click({timeout:2000}).catch(()=>{});await save('').catch(()=>{});
   await page.waitForFunction(()=>/saved/i.test(document.querySelector('#status').textContent),null,
-    {timeout:4000});
-  out.push('shared target saved, then cleared back to the default; dark mode survives reload');
+    {timeout:4000}).catch(()=>{});
 }
 return {assertions:out};

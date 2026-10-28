@@ -44,6 +44,13 @@ const claims=await page.evaluate(()=>window.SLIDES.flatMap((s,n)=>{
   const time=/\b(seconds?|minutes?|hours?|days?|weeks?|months?|faster|cheaper|quicker)\b/g;
   for(const w of title.toLowerCase().match(time)??[])if(!body.includes(w.replace(/s$/,'')))
     bad.push(w);
+  // Relative time ("a year ago", "since 2024", "YoY", "quarterly") needs its period on the slide.
+  const rel=[[/\b(a year ago|last year|year[- ]over[- ]year|yoy|per year|annual(ly)?|this year)\b/,
+    /year|annual|yoy|\b(19|20)\d\d\b/],
+    [/\b(last quarter|quarterly|per quarter|qoq)\b/,/quarter|\bq[1-4]\b/],
+    [/\b(last month|monthly|per month|mom)\b/,/month/],[/\bsince ((19|20)\d\d)\b/,null]];
+  for(const [claim,need] of rel){const m=title.toLowerCase().match(claim);
+    if(m&&!(need?need.test(body):body.includes(m[1])))bad.push(m[0]);}
   return bad.map(x=>`slide ${n+1} title claims '${x}' but the slide doesn't show it: put it on the`
     +' slide or drop it from the title');}));
 if(claims.length)throw Error(claims.join('; '));
