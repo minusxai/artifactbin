@@ -27,7 +27,8 @@ Output: --output saves the full JSON and prints one summary line per viewport: e
   between two loads; checked on the first viewport, only when the page has any.
 Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
   use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
-  select them with [data-af-id="…"]. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
+  select and click them with [data-af-id="…"] (accessible names include CSS ::before/::after text, so use a regex
+  name with getByRole). Vega bars and lines are <path>, not <rect>: count path or assert rendered text. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
   the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
   reader chrome. page.keyboard reaches the page without a click. innerText applies CSS text-transform and keeps
   newlines: collapse whitespace before regex asserts and match case-insensitively. Steps run once per viewport, concurrently: guard writes to one (if (page.viewportSize().width
@@ -379,7 +380,12 @@ export async function inspectPage(page, options, task) {
               (seen.status.length ? `; status: ${seen.status.map(value => JSON.stringify(value)).join(', ')}` : '') +
               `; page text: ${JSON.stringify(seen.text)}`;
         }
-        throw call || shows ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}`) : error;
+        // A role lookup that timed out usually missed on the name: CSS ::before/::after text is part of it.
+        const hint =
+          /Timeout/.test(error.message) && /getByRole\(/.test(call ?? '')
+            ? '; hint: accessible names include CSS ::before/::after text, so click script-made controls by [data-af-id="…"] or a regex name'
+            : '';
+        throw call || shows ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}${hint}`) : error;
       } finally {
         clearTimeout(timer);
       }
