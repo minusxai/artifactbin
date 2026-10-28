@@ -13,7 +13,9 @@ const shows=()=>page.waitForFunction(([sel,value])=>document.querySelector(sel)?
   .split(' of ')[1]?.replace(/[^\d.]/g,'').startsWith(value),[open,TEST],{timeout:4000});
 await page.locator(open).waitFor({timeout:5000});
 if(!PLACEHOLDERS_OK)await step('no example [placeholder] text left',async()=>{
-  if((await page.locator('main').textContent()).includes('['))
+  if((await page.locator('main').textContent()).includes('[')||await page.evaluate(()=>
+    [document.title,document.querySelector('meta[name=description]')?.content??''].join()
+      .includes('[')))
     throw Error('example text left in the page: replace every [bracketed] part');});
 if(page.viewportSize().width>800){
   await step(`a ${CATEGORY} target of ${TEST} saves and survives a reload`,async()=>{

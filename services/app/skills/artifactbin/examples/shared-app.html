@@ -15,7 +15,7 @@ Gotchas: replace this comment with one line describing your page. The dataset an
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
-<title>[Household budget] · sample data</title>
+<title>Shared dashboard</title>
 <link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID" data-af-mode="live">
 <link rel="af-backend" data-af-name="budget" href="./garden.ts">
 <script type="module" id="app-config">
@@ -85,9 +85,9 @@ const targetsQuery=q(`query T($d:String){${B}{signedIn targets(defaults:$d){cate
 const setTarget=q(`mutation S($c:String!,$a:Float!){${B}{setTarget(category:$c,amount:$a){amount}}}`
   ),clear=q(`mutation C($c:String!){${B}{clearTarget(category:$c)}}`);
 let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},views={};
-for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,summary:APP.summary,
-  'list-title':APP.labels.list,'trend-title':APP.labels.trend,'payer-title':APP.labels.payer}))
-  $('#'+id).textContent=text;
+document.title=APP.title;for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,
+  summary:APP.summary,'list-title':APP.labels.list,'trend-title':APP.labels.trend,
+  'payer-title':APP.labels.payer}))$('#'+id).textContent=text;
 // Every row page at one dataset revision; a change between pages is reported, never mixed.
 async function loadRows(){
   const found=await client.query({query:schema}),need=Object.entries(C);

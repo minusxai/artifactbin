@@ -19,7 +19,7 @@ Gotchas: the sample is the usual pitch order (8 slides: problem, solution, how i
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="redline">
-<title>[Company] seed deck</title>
+<title>Pitch deck</title>
 <script type="module" id="slides-data">
 // The only part to edit: one entry per slide, rendered by the template below.
 window.SLIDES = [
@@ -79,7 +79,8 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:2px}
 import * as vega from '@afbin/vega';
 import {compile} from '@afbin/vega-lite';
 const SLIDES=window.SLIDES,deck=document.querySelector('#deck'),pad=n=>String(n).padStart(2,'0');
-// Script-made nodes take data-af-ids from the slide id and role, the same on every render.
+// The tab title comes from the cover's company; script-made nodes take data-af-ids from slide ids.
+document.title=`${SLIDES[0].label.split('·').pop().trim()} pitch deck`;
 const make=(node,attrs,text)=>{for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);
   if(text!==undefined)node.textContent=text;return node;};
 const el=(tag,id,attrs={},text)=>make(document.createElement(tag),{...attrs,'data-af-id':id},text);
@@ -152,12 +153,11 @@ SLIDES.forEach((s,n)=>{
 });
 const slides=[...deck.children],dots=[...document.querySelectorAll('.dot')];
 let index=0,prev=document.querySelector('#prev'),next=document.querySelector('#next');
-// Show a slide's state without moving; go() also scrolls (smooth scrolling reads mid-scroll).
 function show(i){index=Math.max(0,Math.min(slides.length-1,i));
   document.querySelector('#count').textContent=`${pad(index+1)} / ${pad(slides.length)}`;
   dots.forEach((dot,n)=>dot.setAttribute('aria-current',String(n===index)));
   prev.disabled=index===0;next.disabled=index===slides.length-1;}
-function go(i){show(i);slides[index].scrollIntoView({behavior:'auto',block:'start'});}
+function go(i){show(i);slides[index].scrollIntoView({behavior:'auto',block:'start'});} // not smooth
 prev.onclick=()=>go(index-1);next.onclick=()=>go(index+1);dots.forEach(dot=>dot.onclick=()=>
   go(Number(dot.dataset.dot)));
 document.addEventListener('keydown',event=>{
@@ -165,7 +165,7 @@ document.addEventListener('keydown',event=>{
     End:slides.length-1}[event.key];
   if(to!==undefined&&!event.target.closest?.('input,select')){event.preventDefault();go(to);}
 });
-// Keep the counter on the slide under the middle of the view now, not on a stale observer entry.
+// Keep the counter on the slide under the middle of the view, not a stale observer entry.
 const sync=()=>{const i=slides.findIndex(slide=>{const box=slide.getBoundingClientRect();
   return box.top<=innerHeight/2&&box.bottom>innerHeight/2;});if(i>=0)show(i);};
 const seen=new IntersectionObserver(sync,{threshold:.6});slides.forEach(slide=>seen.observe(slide));
@@ -175,10 +175,10 @@ let views=[];
 async function drawCharts(){views.forEach(view=>view.finalize());
   const ink=token('--ds-ink'),font=token('--font-body'),red=token('--ds-red');
   views=await Promise.all(charts.map(async({s,host})=>{
-    // Design-system colours (redrawn on light/dark); bars and a line's ends print their value.
-    const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,unit=
-      s.unit??'#',values=s.data.map((d,i)=>({...d,label:!line||!i||i===end?unit.replace('#',
-        d.y.toFixed(dp)):''}));
+    // Labels use the chart's decimals, or two significant digits under 1 ("$0.28B").
+    const dp=+(s.format?.match(/\.(\d)/)?.[1]??0),line=s.mark==='line',end=s.data.length-1,num=y=>
+      Math.abs(y)<1&&y?String(+y.toPrecision(2)):y.toFixed(dp),values=s.data.map((d,i)=>({...d,
+        label:!line||!i||i===end?(s.unit??'#').replace('#',num(d.y)):''}));
     const spec=compile({width:'container',height:240,autosize:{type:'fit',contains:'padding'},
       background:'transparent',data:{values},layer:[{mark:line?{type:'line',point:true,color:red,
         strokeWidth:3}:{type:'bar',color:red,cornerRadiusEnd:2}},{mark:{type:'text',dy:-10,

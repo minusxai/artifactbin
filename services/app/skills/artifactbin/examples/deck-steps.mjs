@@ -30,7 +30,9 @@ await step('"Illustrative figures" on every slide with made-up figures',async()=
   if(missing.length)throw Error('no Illustrative figures badge on '+missing.join(', '));});
 if(!PLACEHOLDERS_OK)await step('no [placeholders] left',async()=>{
   const left=await page.evaluate(()=>[...document.querySelectorAll('[data-af-slide]')]
-    .filter(slide=>slide.textContent.includes('[')).map(slide=>slide.dataset.afId));
+    .filter(slide=>slide.textContent.includes('[')).map(slide=>slide.dataset.afId).concat(
+      [document.title,document.querySelector('meta[name=description]')?.content??'']
+        .some(text=>text.includes('['))?['the page title or description']:[]));
   if(left.length)throw Error('placeholders left on '+left.join(', '));});
 await step('every title states only what its slide shows',async()=>{
 // Every number and time or speed word in a title must be visible on its own slide (copy, value
@@ -45,7 +47,9 @@ const claims=await page.evaluate(()=>[...document.querySelectorAll('[data-af-sli
   for(const [word,pct] of Object.entries(parts))if(new RegExp(`\\b(a|one) ${word}\\b|\\b${word} of`)
     .test(title.toLowerCase())&&![...values].some(v=>Math.abs(v-pct)<=3))bad.push(`a ${word}`);
   for(const t of title.match(/\$?\d[\d,]*\.?\d*[a-z%×]*/gi)??[])if(!values.has(num(t)))bad.push(t);
-  const time=/\b(seconds?|minutes?|hours?|days?|weeks?|months?|faster|cheaper|quicker)\b/g;
+  const time=new RegExp('\\b(seconds?|minutes?|hours?|days?|weeks?|months?|years?|mornings?|'+
+    'afternoons?|evenings?|overnight|same-day|instant(ly)?|real-time|faster|cheaper|quicker)\\b',
+    'g');
   for(const w of title.toLowerCase().match(time)??[])if(!body.includes(w.replace(/s$/,'')))
     bad.push(w);
   // Relative time ("a year ago", "since 2024", "YoY", "quarterly") needs its period on the slide.
