@@ -433,6 +433,8 @@ describe('retired CLI sign-in',()=>{
   expect(html).toContain('The artifactbin CLI is retired.');
   expect(html).toContain(`${BASE}/skills/artifactbin.zip`);
   expect(html).toContain('afbin update');
+  // The skill link uses the page's green accent (11:1 on the dark card), never the browser's default blue.
+  expect(html).toMatch(/a, a:visited \{ color: #3fe77b;/);
  });
 
  it('approves the email path and refuses the CLI protocol header with the API refusal',async()=>{

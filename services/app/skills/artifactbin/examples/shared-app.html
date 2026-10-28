@@ -16,7 +16,7 @@
 //   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
 //   cleanup.mjs. Gotchas: the dataset and backend need different data-af-name values; never
 //   publish the ref: placeholder. The comment at the top may stay as it is.
-// The only part to edit. columns maps roles to the dataset's column labels.
+// The only part to edit. columns maps roles to column labels; payers: names, never You/Partner.
 window.APP = {
   dataset: 'transactions', backend: 'budget', currency: 'USD',
   columns: {date:'date', category:'category', amount:'amount', payer:'payer', merchant:'merchant'},
