@@ -56,6 +56,18 @@ export function normalizeOrigin(value: string): string | null {
   return url.origin;
 }
 
+/** APP__ALIAS_ORIGINS: the comma-separated origins one deployment also answers at, each by `normalizeOrigin`. A malformed entry throws. */
+export function parseAliasOrigins(value: string | undefined): readonly string[] {
+  if (value === undefined || value.trim() === '') return Object.freeze([]);
+  const origins: string[] = [];
+  for (const entry of value.split(',')) {
+    const origin = normalizeOrigin(entry.trim());
+    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on a local development host such as localhost or *.lvh.me), without a path, query, fragment or credentials.');
+    if (!origins.includes(origin)) origins.push(origin);
+  }
+  return Object.freeze(origins);
+}
+
 /**
  * STRICT READING of a served identity document. A server that answers
  * something else — an HTML error page parsed as JSON, `{}` from a catch-all

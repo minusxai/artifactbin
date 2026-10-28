@@ -86,7 +86,8 @@ export interface OAuthStore {
   issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number, ttlMs?: number): Promise<string>;
   consumeAuthorizationCode(input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now?: number): Promise<AuthorizationGrant | null>;
   issueRefresh(grant: Omit<RefreshGrant, 'token'> & { accessTokenId: string }): Promise<string>;
-  rotateRefresh(token: string, clientId: string, resource: string): Promise<RefreshGrant | null>;
+  /** `resources[0]` is the canonical API resource; a grant bound to any of `resources` rotates onto it. */
+  rotateRefresh(token: string, clientId: string, resources: readonly string[]): Promise<RefreshGrant | null>;
   bindRefresh(token: string, accessTokenId: string): Promise<void>;
 }
 
@@ -177,7 +178,9 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       );
       return token;
     },
-    async rotateRefresh(presented, clientId, resource) {
+    async rotateRefresh(presented, clientId, resources) {
+      const resource = resources[0];
+      if (!resource) return null;
       await sweep();
       const next = refreshToken();
       const oldHash = hash(presented);
@@ -186,16 +189,16 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
            UPDATE ${credentials} AS current
               SET consumed_at = now()
             WHERE current.kind = $1 AND current.credential_hash = $2
-              AND current.payload->>'client_id' = $3 AND current.payload->>'resource' = $4
+              AND current.payload->>'client_id' = $3 AND current.payload->>'resource' = ANY($4::text[])
               AND current.consumed_at IS NULL AND current.deleted_at IS NULL AND current.expires_at > now()
               AND EXISTS (SELECT 1 FROM ${accessTokens} access WHERE access.id = current.payload->>'access_token_id' AND access.deleted_at IS NULL)
           RETURNING current.subject_id, current.group_id, current.payload
          ), inserted AS (
            INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at)
-           SELECT $1, $5, subject_id, group_id, payload, $6 FROM consumed
+           SELECT $1, $5, subject_id, group_id, payload || jsonb_build_object('resource', $7::text), $6 FROM consumed
          )
          SELECT subject_id, group_id, payload FROM consumed`,
-        [REFRESH_TOKEN, oldHash, clientId, resource, hash(next), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString()],
+        [REFRESH_TOKEN, oldHash, clientId, [...resources], hash(next), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(), resource],
       )).rows[0];
       if (!row) {
         await db.query(
