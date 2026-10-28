@@ -1,9 +1,11 @@
 <!doctype html>
 <!--
-Example: a responsive illustrated field report in semantic HTML and CSS, with viewer-local disclosure state (data-af="state").
-Standalone: no other files. Figures and tasks are sample content; adapt, never publish as-is.
-Publish: node scripts/publish.mjs examples/report.html   Check: node scripts/check.mjs ID --steps steps.mjs
-Verify desktop and 390px, keyboard focus, labels, overflow and console errors; test each changed control.
+Example: a responsive illustrated field report in semantic HTML and CSS, with viewer-local
+disclosure state (data-af="state"). Standalone: no other files.
+Usage: node scripts/publish.mjs examples/report.html
+  Check: node scripts/check.mjs ID --steps steps.mjs
+Gotchas: figures and tasks are sample content; adapt, never publish as-is. Verify desktop and
+390px, keyboard focus, labels, overflow and console errors; test each changed control.
 -->
 <html lang="en">
 <head>
@@ -12,18 +14,54 @@ Verify desktop and 390px, keyboard focus, labels, overflow and console errors; t
 <title>A cooler walk home</title>
 
 <style>
-*{box-sizing:border-box}body{line-height:1.6}main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}p{max-width:68ch}button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);border:1px solid currentColor;border-radius:4px}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+*{box-sizing:border-box}body{line-height:1.6}
+main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}
+p{max-width:68ch}
+button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);
+border:1px solid currentColor;border-radius:4px}button{cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}
+.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}
+svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}
+td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}
+@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}
+main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 <script type="application/json" data-af="state">{"showMethod":false}</script>
 </head><body><main>
 <p class="muted">Field report · illustrative pilot</p>
 <h1 class="t-display-xl">A cooler walk home</h1>
-<p class="lead">Three small planting changes could make the route between the library and the garden easier to walk in summer.</p>
+<p class="lead">Three small planting changes could make the route between the library and the garden
+easier to walk in summer.</p>
 <div class="layout"><article>
-<section class="rule"><h2 class="t-title">Start where people pause</h2><p>The sample route has a long exposed stretch followed by a shaded bench. This proposal puts new planting at the waiting points first, rather than distributing it evenly along the path.</p>
-<svg viewBox="0 0 640 220" role="img" aria-labelledby="route-title route-desc"><title id="route-title">Illustrative walking route</title><desc id="route-desc">The library and garden are joined by a route with two proposed shade pockets and an existing bench.</desc><path d="M35 165 C150 165 160 55 310 55 S475 165 600 165" fill="none" stroke="currentColor" stroke-width="4"/><g fill="var(--primary)" opacity=".22"><circle cx="190" cy="100" r="48"/><circle cx="443" cy="105" r="48"/></g><g fill="currentColor"><circle cx="35" cy="165" r="7"/><circle cx="600" cy="165" r="7"/></g><g font-size="17" fill="currentColor"><text x="18" y="202">Library</text><text x="540" y="202">Garden</text><text x="270" y="28">Existing bench</text></g></svg>
-</section><section class="rule"><h2 class="t-title">Test before extending</h2><p>Begin with temporary planters at the two proposed pockets. Observe use at the same time of day, keep the path clear and compare feedback before committing to permanent planting.</p><button id="show-method" type="button" aria-controls="method" aria-expanded="false">Read the observation method</button><div id="method" hidden><p>Use a short, consistent observation window. Record the weather, people pausing and any access obstruction. These are suggested measures; this sample contains no collected results.</p></div></section>
-</article><aside class="rule"><h2 class="t-title">Pilot decisions</h2><p><strong>Keep the route open.</strong> A clear walking line takes priority over another planter.</p><p><strong>Compare like with like.</strong> Weather and time of day change how people use shade.</p><p class="muted">All locations and observations in this document are illustrative. Replace them with evidence before presenting findings.</p></aside></div>
+<section class="rule"><h2 class="t-title">Start where people pause</h2>
+<p>The sample route has a long exposed stretch followed by a shaded bench. This proposal puts new
+planting at the waiting points first, rather than distributing it evenly along the path.</p>
+<svg viewBox="0 0 640 220" role="img" aria-labelledby="route-title route-desc">
+<title id="route-title">Illustrative walking route</title>
+<desc id="route-desc">The library and garden are joined by a route with two proposed shade pockets
+and an existing bench.</desc><path d="M35 165 C150 165 160 55 310 55 S475 165 600 165" fill="none"
+stroke="currentColor" stroke-width="4"/><g fill="var(--primary)" opacity=".22">
+<circle cx="190" cy="100" r="48"/><circle cx="443" cy="105" r="48"/></g><g fill="currentColor">
+<circle cx="35" cy="165" r="7"/><circle cx="600" cy="165" r="7"/></g>
+<g font-size="17" fill="currentColor"><text x="18" y="202">Library</text>
+<text x="540" y="202">Garden</text><text x="270" y="28">Existing bench</text></g></svg>
+</section><section class="rule"><h2 class="t-title">Test before extending</h2>
+<p>Begin with temporary planters at the two proposed pockets. Observe use at the same time of day,
+keep the path clear and compare feedback before committing to permanent planting.</p>
+<button id="show-method" type="button" aria-controls="method" aria-expanded="false">Read the
+observation method</button><div id="method" hidden>
+<p>Use a short, consistent observation window. Record the weather, people pausing and any access
+obstruction. These are suggested measures; this sample contains no collected results.</p></div>
+</section>
+</article><aside class="rule"><h2 class="t-title">Pilot decisions</h2>
+<p><strong>Keep the route open.</strong> A clear walking line takes priority over another
+planter.</p><p><strong>Compare like with like.</strong> Weather and time of day change how people
+use shade.</p><p class="muted">All locations and observations in this document are illustrative.
+Replace them with evidence before presenting findings.</p></aside></div>
 </main>
 <script type="module">
 import {client,gql} from '@afbin/apollo';
@@ -32,6 +70,8 @@ client.watchQuery({query:preference}).subscribe(({data})=>{
  document.querySelector('#method').hidden=!data.showMethod;
  document.querySelector('#show-method').setAttribute('aria-expanded',String(data.showMethod));
 });
-document.querySelector('#show-method').onclick=()=>client.updateQuery({query:preference},({showMethod})=>({showMethod:!showMethod}));
+// The button only flips local state; the watcher above is the single place that updates the DOM.
+document.querySelector('#show-method').onclick=
+ ()=>client.updateQuery({query:preference},({showMethod})=>({showMethod:!showMethod}));
 </script>
 </body></html>

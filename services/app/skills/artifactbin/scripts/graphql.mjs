@@ -2,16 +2,19 @@
 export const DESCRIPTION = `Read a page's GraphQL schema or run a query or mutation.
 It targets the page's linked dataset and backend namespaces.
 Usage: node scripts/graphql.mjs schema ID|URL [--revision N]
-       node scripts/graphql.mjs query|mutate ID|URL --document FILE [--operation NAME] [--variables FILE] [--revision N]
-Flags: --document FILE (required for query/mutate); --operation NAME (required when the document has several);
-  --variables FILE a JSON object; --revision N a saved page revision (default: current). Common: --server, --json, --help.
+       node scripts/graphql.mjs query|mutate ID|URL --document FILE [--operation NAME]
+         [--variables FILE] [--revision N]
+Flags: --document FILE (required for query/mutate); --operation NAME (required when the document
+  has several); --variables FILE a JSON object; --revision N a saved page revision (default:
+  current). Common: --server, --json, --help.
 Examples:
   node scripts/graphql.mjs schema ID
   node scripts/graphql.mjs query ID --document q.graphql --variables vars.json
-Gotchas: the operation is validated against the saved SDL first; use schema for exact names. query is safe to
-  repeat; mutate can write data. Exit 5 means a mutation outcome is unknown: reconcile by reading before any
-  new write. Errors or non-committed outcomes fail the command.
-Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
+Gotchas: the operation is validated against the saved SDL first; use schema for exact names.
+  query is safe to repeat; mutate can write data. Exit 5 means a mutation outcome is unknown:
+  reconcile by reading before any new write. Errors or non-committed outcomes fail the command.
+Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
+  Results never contain credentials.`;
 
 import {readFile} from 'node:fs/promises';
 import {
