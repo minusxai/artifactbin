@@ -13,9 +13,16 @@ export async function runSteps(page, hosted, task, ready, evidence) {
   evidence.steps = {ran: true, passed: false};
   // step(label, fn) runs fn and records label as verified; the summary's Verified: line lists them.
   const verified = (evidence.verified = []);
+  // Each step's elapsed ms, kept on evidence and named in a failure, so a slow step shows itself.
+  const timings = (evidence.stepTimings = []),
+    started = Date.now();
+  let current = null;
   const step = async (label, fn) => {
+    current = {label: String(label).slice(0, 160), at: Date.now()};
     await fn();
-    verified.push(String(label).slice(0, 160));
+    timings.push({label: current.label, ms: Date.now() - current.at});
+    verified.push(current.label);
+    current = null;
   };
   // Keyboard focus in the page's document, so page.keyboard reaches it without a click first.
   if (hosted)
@@ -98,7 +105,9 @@ export async function runSteps(page, hosted, task, ready, evidence) {
       })
     ]);
     evidence.steps.passed = true;
+    evidence.stepsMs = Date.now() - started;
   } catch (error) {
+    evidence.stepsMs = Date.now() - started;
     const deadline = /^Task deadline exceeded/.test(error.message);
     expired = true;
     const latest = [...pending.values()].pop(),
@@ -140,9 +149,16 @@ export async function runSteps(page, hosted, task, ready, evidence) {
         ? '; hint: accessible names include CSS ::before/::after text, so click script-made ' +
           'controls by [data-af-id="…"] or a regex name'
         : '';
-    throw call || shows
-      ? Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}${hint}`)
-      : error;
+    // Where the time went: finished steps, then the one still running (or code outside a step).
+    const spent =
+      '; step timings: ' +
+      [
+        ...timings.map(t => `${JSON.stringify(t.label)} ${t.ms} ms`),
+        current
+          ? `${JSON.stringify(current.label)} unfinished after ${Date.now() - current.at} ms`
+          : `outside a step at ${Date.now() - started} ms`
+      ].join(', ');
+    throw Error(`${error.message}${call ? ` (step call ${call})` : ''}${shows}${spent}${hint}`);
   } finally {
     clearTimeout(timer);
   }

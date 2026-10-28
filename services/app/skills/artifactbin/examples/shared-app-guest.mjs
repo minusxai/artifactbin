@@ -6,10 +6,12 @@
  *   another session, not sharing between two signed-in users.
  */
 const CATEGORY='Groceries',TEST='457',open=`[data-af-id="cat-${CATEGORY}-open"]`;
-await page.locator(open).waitFor({timeout:5000});
+await page.waitForFunction(()=>/^Loaded/.test(document.querySelector('#status')?.textContent),
+  null,{timeout:6000});
 await step('shared target visible to a second (guest) session',async()=>{
-  const shown=(await page.locator(open).textContent()).split(' of ')[1]?.replace(/[^\d.]/g,'');
-  if(!shown?.startsWith(TEST))throw Error(`guest sees ${shown} for ${CATEGORY}, not ${TEST}`);});
+  const shown=await page.evaluate(sel=>document.querySelector(sel)?.textContent.replace(/[^\d.]/g,
+    '')??'',`[data-af-id="cat-${CATEGORY}-target"]`);
+  if(!shown.startsWith(TEST))throw Error(`guest: saw ${shown||'nothing'}, wanted ${TEST}`);});
 await step('a guest cannot save and keeps light mode',async()=>{
   if(await page.evaluate(()=>document.documentElement.dataset.afDark)==='true')
     throw Error('dark mode leaked to another viewer');

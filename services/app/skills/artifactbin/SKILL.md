@@ -40,15 +40,16 @@ one, read `head -30 scripts/NAME.mjs` (usage, flags, examples, gotchas; `--help`
 Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
 (`node scripts/auth.mjs status`). Groups, ACLs, secrets and trash have no script.
 
-- **New page.** 1) Run one copy now: `cp examples/deck.html index.html` (decks),
-  `cp examples/shared-app.html index.html && cp examples/garden.ts .` (dashboards with shared edits,
-  apps with a backend) or `cp examples/csv-dashboard.html index.html` (read-only dashboards). 2)
-  Edit only the data block at the top (`SLIDES` in the deck; `APP` and `garden.ts`'s names in the
-  shared app; the `[bracketed]` text elsewhere): never rewrite the template's CSS, JS or layout, and
-  never draft copy in reasoning. 3) Publish it unchanged and let check find faults. The template
-  already uses its design system's tokens, so don't read the design-system CSS; to switch systems,
-  change the `<meta name="artifactbin:design-system" content="NAME">` from the table (the platform
-  serves the stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
+- **New page.** 1) Run one copy now: `cp examples/deck.html index.html` (decks), `cp
+  examples/shared-app.html index.html && cp examples/garden.ts .` (dashboards with shared edits,
+  apps with a backend; concurrent edits are rejected, not overwritten) or `cp
+  examples/csv-dashboard.html index.html` (read-only dashboards). 2) Edit only the data block at the
+  top (`SLIDES` in the deck; `APP` and `garden.ts`'s names in the shared app; the `[bracketed]` text
+  elsewhere): never rewrite the template's CSS, JS or layout, and never draft copy in reasoning. 3)
+  Publish it unchanged and let check find faults. The template already uses its design system's
+  tokens, so don't read the design-system CSS; to switch systems, change the `<meta
+  name="artifactbin:design-system" content="NAME">` from the table (the platform serves the
+  stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
   ([runtime](references/runtime.md)). `node scripts/publish.mjs index.html` autofixes the page and
   prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't
   publishing). Share the returned URL; a URL-only request gets the URL alone.
@@ -73,7 +74,7 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   - Decks: `examples/deck.html` has the `data-af-slide` sections, the `data-af-deck-chrome` nav,
     keys and a height budget per slide. Slides are designed for 1200x630: check decks with
     `--viewport 1200x630 --viewport 1280x800` only, add no export button and fetch no export URLs
-    ("slides N exportable" is enough); reply with the slide image links the check prints.
+    ("slides N exportable" is enough). For a deck, copy check's Slide images block as printed.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
@@ -83,14 +84,15 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   publish and check in one command: `node scripts/publish.mjs index.html && node scripts/check.mjs
   index.html --steps steps.mjs --output qa-1.json` (a new `--output` name each run; decks as above;
   with shared writes add `--guest-steps guest.mjs --cleanup-steps cleanup.mjs`). Hosted checks run
-  in a server browser: never install Playwright or Chromium (only a local
-  `node scripts/serve.mjs DIR` preview needs `--playwright-module`). Fix only what fails, rerun
-  once. After one clean steps run covering the requested behaviour (the summary is your layout
-  evidence; no pixel scripts or re-exports), reply with the link, then stop. In your reply, describe
-  testing only by quoting check's `Verified:` line; claim nothing else as tested. Republish only to
-  fix a failed requirement, never for polish, refactors or extra verification. Open screenshots only
-  if your model accepts image input; otherwise the reply says appearance is unverified. For a shared
-  app, the reply also says how others get access: open the link and sign in to edit.
+  in a server browser: never install Playwright or Chromium (only a local `node scripts/serve.mjs
+  DIR` preview needs `--playwright-module`). Never rerun an unchanged failing check; read its step
+  timings, change the steps or page, then rerun once. After one clean steps run covering the
+  requested behaviour (the summary is your layout evidence; no pixel scripts or re-exports), reply
+  with the link, then stop. Describe testing only by copying check's Tested/Not tested lines as
+  printed; don't add words like 'end to end' or 'fully verified'. Republish only to fix a failed
+  requirement, never for polish, refactors or extra verification. Open screenshots only if your
+  model accepts image input; otherwise the reply says appearance is unverified. For a shared app,
+  the reply also says how others get access: open the link and sign in to edit.
 - **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then
   `node scripts/publish.mjs page.html`; keep editing and publishing the same file and never
   regenerate the page from scratch. Publish rewrites the file with `data-af-id`s: re-read it before
