@@ -1,0 +1,21 @@
+{
+  "name": "@afbin/cli",
+  "version": "0.6.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Retired: agents now use the Artifactbin author skill",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minusxai/artifactbin.git",
+    "directory": "services/cli"
+  },
+  "bin": {
+    "afbin": "bin/afbin.mjs"
+  },
+  "files": [
+    "bin/afbin.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

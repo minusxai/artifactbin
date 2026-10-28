@@ -685,6 +685,72 @@ jobs:
             node_modules/.cache/build-islands.json
           key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
 
+  # THE CLI RETIREMENT PACKAGE (services/cli: one file, no dependencies, no build). Every run packs it and runs
+  # the tarball's own `afbin`; while its version is not on npm, a same-repository run also signs the tarball's
+  # provenance (scripts/ci/npm-provenance.mjs binds it to this workflow) and uploads `afbin-npm-release`, which
+  # .github/workflows/release-cli.yml publishes after a green push to main. It waits on nothing, not even
+  # `plan`: the push that merges a tested tree selects no other job, and the release still needs this run's package.
+  cli-pack:
+    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
+    name: CLI npm pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      # npm-provenance.mjs signs only with the npm this Node bundles (10.9.9).
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.23.4
+      - name: Pack the retirement build and run its afbin
+        id: pack
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./services/cli/package.json').version")
+          mkdir -p dist/npm
+          (cd services/cli && npm pack --ignore-scripts --pack-destination ../../dist/npm)
+          file="dist/npm/afbin-cli-$version.tgz"
+          test -f "$file"
+          mkdir -p dist/npm-check
+          tar -xzf "$file" -C dist/npm-check
+          for args in "" "--version" "setup" "update"; do
+            # shellcheck disable=SC2086  # each case is zero or one plain word
+            node dist/npm-check/package/bin/afbin.mjs $args | tee afbin-output.txt
+            grep -Fq 'https://app.artefactbin.dev/skills/artifactbin.zip' afbin-output.txt
+          done
+          if npm view "@afbin/cli@$version" version > npm-existing.txt 2> npm-error.txt; then
+            echo "@afbin/cli@$version is already on npm; nothing to release."
+          else
+            grep -q E404 npm-error.txt || { cat npm-error.txt >&2; exit 1; }
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Sign the actual build's npm provenance
+        if: steps.pack.outputs.release == 'true' && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GITHUB_REPOSITORY_VISIBILITY: public
+          AFBIN_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          AFBIN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PACKAGE_FILE: ${{ steps.pack.outputs.file }}
+          PACKAGE_VERSION: ${{ steps.pack.outputs.version }}
+        run: node scripts/ci/npm-provenance.mjs sign "$PACKAGE_FILE" "$PACKAGE_VERSION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.pack.outputs.release == 'true' && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        with:
+          name: afbin-npm-release
+          path: |
+            dist/npm/*.tgz
+            dist/npm/*.sigstore
+            dist/npm/*.build.json
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
   # A tree that passed here has been tested, and testing it again — which is exactly what the push
@@ -719,7 +785,8 @@ jobs:
         ui,
         build,
         api,
-        gates
+        gates,
+        cli-pack
       ]
     if: always() && (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
     steps:

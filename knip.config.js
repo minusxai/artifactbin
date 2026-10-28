@@ -37,6 +37,8 @@ export default {
         'scripts/fixtures/**/*.{mjs,jsx}',
         // Run by minusxai/artifactbin-server's CI (services/app/__tests__/downstream-script-paths.test.ts).
         'scripts/gate-cli-conformance.mjs', 'scripts/ci/link-npm-acceptance.mjs',
+        // The CLI retirement build: @afbin/cli's npm bin (services/cli/package.json), packed by ci.yml `cli-pack`.
+        'services/cli/bin/afbin.mjs',
         // Imported by the evals repository (evals/lib re-exports them).
         'scripts/lib/{credential,env,slug}.ts',
       ],

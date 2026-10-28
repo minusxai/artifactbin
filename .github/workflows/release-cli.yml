@@ -1,0 +1,140 @@
+# Publishes the CLI retirement build (services/cli, @afbin/cli 0.6.0) that ci.yml `cli-pack` packed and signed,
+# once a push to main passed CI and main still names that version. Never from a branch, a pull request or a dispatch of ci.
+name: Release tested afbin npm package
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful main push CI run whose tested package should be published
+        required: true
+        type: string
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+concurrency:
+  group: release-tested-afbin
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_RUN: ${{ github.event.workflow_run.id }}
+      EVENT_NAME: ${{ github.event_name }}
+      REQUESTED_RUN: ${{ inputs.source_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.21.0
+          registry-url: https://registry.npmjs.org
+      - name: Select the exact tested immutable npm artifact
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$REQUESTED_RUN" =~ ^[0-9]+$ ]]
+            admission=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REQUESTED_RUN")
+            test "$(jq -r .conclusion <<< "$admission")" = success
+            test "$(jq -r .event <<< "$admission")" = push
+            test "$(jq -r .head_branch <<< "$admission")" = main
+            test "$(jq -r .path <<< "$admission")" = .github/workflows/ci.yml
+            test "$(jq -r .head_repository.full_name <<< "$admission")" = "$GITHUB_REPOSITORY"
+            SOURCE_SHA=$(jq -r .head_sha <<< "$admission")
+            SOURCE_RUN="$REQUESTED_RUN"
+          fi
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ && "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          version_at() { gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$1" --jq .content | base64 --decode | jq -r .version; }
+          version=$(version_at "$SOURCE_SHA")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
+          test "$(jq -r .version <<< "$pointer")" = "$version"
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$(version_at "$head")" != "$version" ]; then exit 0; fi
+          # ci.yml `cli-pack` runs in every run, so the package is in the run that passed for this push.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' > artifacts.txt
+          if ! grep -Fxq afbin-npm-release artifacts.txt; then echo 'No new npm artifact; nothing to publish.'; exit 0; fi
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name afbin-npm-release --dir package
+          file="./package/afbin-cli-$version.tgz"
+          test -f "$file" && test ! -L "$file"
+          tar -xOf "$file" package/package.json > manifest.json
+          test "$(jq -r .name manifest.json)" = '@afbin/cli'
+          test "$(jq -r .version manifest.json)" = "$version"
+          # The retirement build is one file with no dependencies (services/cli).
+          tar -tzf "$file" | sort > package-files.txt
+          printf '%s\n' package/README.md package/bin/afbin.mjs package/package.json > expected-files.txt
+          diff expected-files.txt package-files.txt
+          test "$(jq -c '.dependencies // {}' manifest.json)" = '{}'
+          test -f "$file.build.json" && test ! -L "$file.build.json"
+          test "$(jq -r .run_id "$file.build.json")" = "$SOURCE_RUN"
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq .head_sha)
+          test "$(jq -r .head_sha "$file.build.json")" = "$head_sha"
+          build_sha=$(jq -r .source_sha "$file.build.json")
+          [[ "$build_sha" =~ ^[a-f0-9]{40}$ ]]
+          test -f "$file.sigstore" && test ! -L "$file.sigstore"
+          node scripts/ci/npm-provenance.mjs verify "$file" "$version" "$build_sha" "$SOURCE_RUN"
+          {
+            echo "build_run=$SOURCE_RUN"
+            echo "file=$file"
+            echo "version=$version"
+            echo "source_sha=$SOURCE_SHA"
+          } >> "$GITHUB_OUTPUT"
+      - name: Publish tested tarball through npm trusted publishing
+        id: publish
+        if: steps.package.outputs.file != ''
+        env:
+          PACKAGE_BUILD_RUN: ${{ steps.package.outputs.build_run }}
+          PACKAGE_FILE: ${{ steps.package.outputs.file }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          if npm view "@afbin/cli@$PACKAGE_VERSION" version > npm-existing.txt 2> npm-error.txt; then
+            test "$(cat npm-existing.txt)" = "$PACKAGE_VERSION"
+            published=$(npm view "@afbin/cli@$PACKAGE_VERSION" dist.integrity)
+            candidate=$(node -e 'const fs=require("node:fs"),crypto=require("node:crypto");console.log("sha512-"+crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$PACKAGE_FILE")
+            test "$published" = "$candidate" || { echo 'Published version has different bytes; refuse to mislabel the tested tarball.' >&2; exit 1; }
+          else
+            grep -q E404 npm-error.txt || { cat npm-error.txt >&2; exit 1; }
+            if ! npm view '@afbin/cli' name > npm-package.txt 2> npm-package-error.txt; then
+              grep -q E404 npm-package-error.txt || { cat npm-package-error.txt >&2; exit 1; }
+              echo 'First publication requires a verified maintainer npm login. No GitHub release has been created.'
+              echo 'After successful main CI and publication approval, run locally:'
+              echo "gh run download $PACKAGE_BUILD_RUN --repo $GITHUB_REPOSITORY --name afbin-npm-release --dir afbin-first-release"
+              echo "npm publish afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz --access public --provenance-file afbin-first-release/afbin-cli-$PACKAGE_VERSION.tgz.sigstore --ignore-scripts"
+              echo "Then configure npm trusted publishing with direct publish allowed and run: gh run rerun $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY"
+              exit 0
+            fi
+            test "$(cat npm-package.txt)" = '@afbin/cli'
+            npm publish "$PACKAGE_FILE" --access public --provenance-file "$PACKAGE_FILE.sigstore" --ignore-scripts
+          fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: Record tested package in GitHub release
+        if: steps.publish.outputs.published != ''
+        env:
+          PACKAGE_FILE: ${{ steps.package.outputs.file }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_SOURCE_SHA: ${{ steps.package.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          tag="afbin-v$PACKAGE_VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            if [ "$(cat draft.txt)" = true ]; then
+              gh release upload "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --clobber
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+            fi
+            exit 0
+          fi
+          grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
+          gh release create "$tag" "$PACKAGE_FILE" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SOURCE_SHA" --title "$tag" --notes '' --latest=false
