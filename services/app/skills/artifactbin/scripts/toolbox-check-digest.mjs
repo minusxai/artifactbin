@@ -83,8 +83,8 @@ export function checkDigest(envelope,file){
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
   "  clean pass: reply now with the link; don't open qa JSON or screenshots."+(
-   envelope.slideLinks?.length?"\n  slide images for the reply (don't curl these): "+
-   envelope.slideLinks.join(' '):''));
+   envelope.slideLinks?.length?"\nSlide images (paste into the reply as printed; don't curl):\n"+
+   envelope.slideLinks.join('\n'):''));
  else if((envelope.checks??[]).length)lines.push(
   "  fix the named slides/elements from this output; don't open qa JSON.");
  return lines.join('\n')+'\n';

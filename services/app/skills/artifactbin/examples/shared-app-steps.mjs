@@ -22,6 +22,10 @@ const shows=async value=>{const read=()=>page.evaluate(sel=>document.querySelect
   const saw=await read();if(!saw.startsWith(value))
     throw Error(`${CATEGORY} target: saw ${saw||'nothing'}, wanted ${value}`);};
 await loaded();
+// The page's own row count, so the Verified line carries the exact number.
+const count=(await status()).match(/Loaded (\d+)/)?.[1];
+await step(`page loaded ${count} sample transactions`,async()=>{
+  if(!Number(count))throw Error('no rows loaded: '+await status());});
 await step(PLACEHOLDERS_OK?'no stray text outside the app':'no [placeholder] or stray text left',
   async()=>{
   const stray=await page.evaluate(()=>{const walker=document.createTreeWalker(document.body,

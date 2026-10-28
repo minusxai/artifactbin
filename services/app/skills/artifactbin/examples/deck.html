@@ -25,6 +25,7 @@ window.SLIDES = [
     stats:[{value:'[41%]', label:'[of something lost]'}, {value:'[$2.6B]', label:'[yearly cost]'}]},
   {id:'solution', type:'bullets', label:'Solution', title:'[What the product does, in one line]',
     items:['[What it replaces]', '[What changes for the buyer]', '[Why now]']},
+  // flow labels wrap onto up to 3 lines: about 13 characters a line with 4 steps, 20 with 3.
   {id:'how', type:'flow', label:'How it works', title:'[How it works, in one line]',
     steps:['[Input]', '[Product]', '[Outcome]']},
   {id:'market', type:'chart', label:'Market', title:'[Market size in one sentence]',
@@ -92,8 +93,12 @@ function flow(s){
     const x=n*w+10,mid=n===Math.floor(steps.length/2),ink=mid?'var(--ds-on-red)':'currentColor';
     svg.append(svgEl('rect',{x,y:60,width:w-70,height:100,fill:mid?'var(--ds-red)':'none',
       stroke:'currentColor','stroke-width':2}));
-    svg.append(svgEl('text',{x:x+(w-70)/2,y:116,'text-anchor':'middle','font-size':18,fill:ink,
-      'font-family':'var(--font-mono)'},step));
+    // Labels wrap at spaces (about 11 units a character); a single word over the width overflows.
+    const lines=[],max=Math.floor((w-82)/11);for(const word of step.split(' '))lines.length&&
+      (lines.at(-1)+' '+word).length<=max?lines.push(lines.pop()+' '+word):lines.push(word);
+    const text=svgEl('text',{y:116-(lines.length-1)*11,'text-anchor':'middle','font-size':18,
+      fill:ink,'font-family':'var(--font-mono)'});svg.append(text);
+    lines.forEach((line,k)=>text.append(svgEl('tspan',{x:x+(w-70)/2,dy:k?22:0},line)));
     if(n<steps.length-1)svg.append(svgEl('path',{d:`M${x+w-56} 110h40m-10-8 10 8-10 8`,fill:'none',
       stroke:'currentColor','stroke-width':2}));
   });

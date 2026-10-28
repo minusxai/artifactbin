@@ -86,7 +86,6 @@ let rows=[],targets={},signedIn=false,state={dark:null,month:'',category:''},vie
 document.title=APP.title;for(const [id,text] of Object.entries({kicker:APP.kicker,title:APP.title,
   summary:APP.summary,'list-title':APP.labels.list,'trend-title':APP.labels.trend,
   'payer-title':APP.labels.payer}))$('#'+id).textContent=text;
-// Every row page at one dataset revision; a change between pages is reported, never mixed.
 async function loadRows(){
   const found=await client.query({query:schema}),need=Object.entries(C);
   if(found.errors?.length)throw Error(found.errors[0].message);
@@ -98,6 +97,7 @@ async function loadRows(){
   do{
     const result=await client.query({query:rowsQuery,variables:{t:table.id,after}});
     if(result.errors?.length)throw Error(result.errors[0].message);
+    // Every page at one revision; a mid-read change stops with "Data changed while loading."
     const page=result.data[APP.dataset].rows;if((revision??page.revision)!==page.revision)
       throw Error('Data changed while loading.');revision=page.revision;
     for(const row of page.rows){

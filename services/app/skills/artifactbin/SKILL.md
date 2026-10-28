@@ -74,7 +74,7 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   - Decks: `examples/deck.html` has the `data-af-slide` sections, the `data-af-deck-chrome` nav,
     keys and a height budget per slide. Slides are designed for 1200x630: check decks with
     `--viewport 1200x630 --viewport 1280x800` only, add no export button and fetch no export URLs
-    ("slides N exportable" is enough); reply with the slide image links the check prints.
+    ("slides N exportable" is enough). For a deck, paste check's Slide images block as printed.
   - Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or
     downloaded files, and never print or cat credential files (the scripts read them). Use
     authenticated account identity, never a name typed into a form, to authorize actions.
