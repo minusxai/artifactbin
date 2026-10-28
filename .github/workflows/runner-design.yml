@@ -46,6 +46,7 @@ jobs:
           node-version: 22.22.3
           cache: npm
       - run: npm ci
+      - run: node scripts/ci/prepare-esbuild.mjs
       - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
       - run: docker build -t runner-design-worker docs/proposals/runner-validation
       - name: Retained page boundary and retired public execution doors

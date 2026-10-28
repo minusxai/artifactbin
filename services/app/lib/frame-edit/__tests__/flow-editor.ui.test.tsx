@@ -695,3 +695,50 @@ describe('document-editor keys: Tab indents, links are typed, pasted and found',
     expect(setLink(e.v().state, 'javascript:alert(1)')).toBeNull();
   });
 });
+
+it.each([0, FLOW_IDLE_MS + 1])('preserves composition text while host acknowledgement is delayed (idle elapsed=%s)', elapsed => {
+  vi.useFakeTimers();
+  try {
+    const [incoming, setIncoming] = createSignal(nodes('<h1 id="title">Regional sales</h1>'));
+    let engine: EditorView | null = null;
+    const onChange = vi.fn();
+    const rendered = render(() => <FlowEditor nodes={incoming()} path="0" onChange={onChange} onView={v => {engine = v;}} />);
+    const view = engine!;
+    fireEvent.compositionStart(view.dom);
+    view.dispatch(view.state.tr.insertText('Quarterly', 1, 1 + 'Regional'.length));
+    expect(view.dom.textContent).toBe('Quarterly sales');
+    expect(onChange).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(elapsed);
+    fireEvent.compositionEnd(view.dom);
+    vi.advanceTimersByTime(30);
+    expect(view.dom.textContent).toBe('Quarterly sales');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(serializeJsx(onChange.mock.calls[0]![0])).toContain('Quarterly sales');
+    // The mounter adopts the host draft later; composition must not replay its old input.
+    setIncoming(onChange.mock.calls[0]![0]);
+    vi.advanceTimersByTime(FLOW_IDLE_MS);
+    expect(view.dom.textContent).toBe('Quarterly sales');
+    rendered.unmount();
+  } finally {vi.useRealTimers();}
+});
+
+it('adopts a genuinely changed host draft after composition while handing local text over once', () => {
+  vi.useFakeTimers();
+  try {
+    const [incoming, setIncoming] = createSignal(nodes('<h1 id="title">Regional sales</h1>'));
+    let engine: EditorView | null = null;
+    const onChange = vi.fn();
+    const rendered = render(() => <FlowEditor nodes={incoming()} path="0" onChange={onChange} onView={v => {engine = v;}} />);
+    const view = engine!;
+    fireEvent.compositionStart(view.dom);
+    view.dispatch(view.state.tr.insertText('Quarterly', 1, 1 + 'Regional'.length));
+    setIncoming(nodes('<h1 id="title">Annual report</h1>'));
+    expect(view.dom.textContent).toBe('Quarterly sales');
+    fireEvent.compositionEnd(view.dom);
+    vi.advanceTimersByTime(30);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(serializeJsx(onChange.mock.calls[0]![0])).toContain('Quarterly sales');
+    expect(view.dom.textContent).toBe('Annual report');
+    rendered.unmount();
+  } finally {vi.useRealTimers();}
+});

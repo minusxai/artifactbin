@@ -20,6 +20,6 @@
     "src"
   ],
   "peerDependencies": {
-    "hono": "4.13.7"
+    "hono": "4.13.13"
   }
 }
