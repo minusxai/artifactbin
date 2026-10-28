@@ -30,7 +30,10 @@ def parallelize_build(dest, jobs):
         anchor = '\t' + command + '\n'
         if text.count(anchor) != 1:
             raise SystemExit('Unexpected Debian build target')
-        text = text.replace(anchor, '\t$(MAKE) -j' + str(jobs) + command[len('$(MAKE)'):] + '\n')
+        # Upstream stmt.lo omits sqlite3.h from its prerequisites. Complete the
+        # public header before any parallel translation unit can include it.
+        prerequisites = '\t$(MAKE) sqlite3.h\n' if command == '$(MAKE)' else ''
+        text = text.replace(anchor, prerequisites + '\t$(MAKE) -j' + str(jobs) + command[len('$(MAKE)'):] + '\n')
     rules.write_text(text)
 
 recipe=pathlib.Path(__file__).resolve().parent
