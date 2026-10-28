@@ -1,4 +1,4 @@
-import {mkdtemp, mkdir, writeFile, readFile, readdir, rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -101,4 +101,11 @@ it('writes the standard build proof with source inputs and every generated modul
  expect(receipt.inputs.map(x=>x.path)).toContain(path.relative(root,path.join(sourceDir,'slide.ts')));
  expect(receipt.outputs.map(x=>x.path)).toEqual([path.relative(root,path.join(outputDir,'slide.js')),path.relative(root,path.join(outputDir,'slide.ts'))]);
  expect(receipt.outputs.every(x=>/^[a-f0-9]{64}$/.test(x.sha256))).toBe(true);
+});
+
+it('installs world-readable directories, which a production image copies and serves as another user',async()=>{
+ const dirs=await fixture(),readableDir=path.join(path.dirname(dirs.outputDir),'readable');
+ await writeFile(path.join(dirs.sourceDir,'tabs.ts'),'export const value=1;');
+ await buildComponentAssets({...dirs,readableDir});
+ for(const dir of [dirs.outputDir,readableDir])expect(((await stat(dir)).mode&0o777).toString(8),dir).toBe('755');
 });

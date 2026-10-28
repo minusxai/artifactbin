@@ -1,4 +1,4 @@
-import {cp, mkdir, mkdtemp, readdir, readFile, writeFile, rename, rm} from 'node:fs/promises';
+import {chmod, cp, mkdir, mkdtemp, readdir, readFile, writeFile, rename, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
@@ -80,6 +80,8 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
 async function install(dir,files){
   await mkdir(path.dirname(dir),{recursive:true});
   const stage=await mkdtemp(`${dir}.stage-`), backup=`${stage}.previous`;
+  // mkdtemp creates 0700; the installed directory is read by the app's own (often different) user in production images.
+  await chmod(stage,0o755);
   let movedPrevious=false;
   try {
     let existing=[];
