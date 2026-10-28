@@ -26,11 +26,25 @@ describe('v3 validation isolation', () => {
       expect(admitted(job.if, 'push', '')).toBe(true);
     }
     expect(workflow('v3-fast.yml').on.pull_request.branches).toEqual(['artifactbinv3']);
-    expect(workflow('runner-design.yml').on.push.branches).toEqual(['artifactbinv3']);
     expect(workflow('runner-design.yml').on.pull_request['branches-ignore']).toEqual(['artifactbinv3']);
-    expect(workflow('v3-codeql.yml').on.push.branches).toEqual(['artifactbinv3']);
-    expect(workflow('codeql.yml').on.push.branches).toEqual(['main']);
-    expect(ci.jobs['notify-consumer'].if).toContain("github.ref == 'refs/heads/main'");
+  });
+  it('runs every deployment gate and the server pin on each push to main', () => {
+    const ci = workflow('ci.yml');
+    expect(ci.on.push.branches).toContain('main');
+    expect(workflow('runner-design.yml').on.push.branches).toEqual(['main']);
+    expect(workflow('v3-codeql.yml').on.push.branches).toEqual(['main']);
+    expect(workflow('v3-codeql.yml').on.push['paths-ignore']).toBeUndefined();
+    expect(workflow('page-speed.yml').on.push.branches).toContain('main');
+    expect(workflow('page-speed.yml').on.push.paths).toContain('**');
+    expect(workflow('codeql.yml').on).not.toHaveProperty('push');
+    const pin = workflow('v3-server-pin.yml');
+    expect(pin.on.push.branches).toEqual(['main']);
+    const script = pin.jobs.pin.steps[0].run;
+    expect(script).toContain('git/ref/heads/main');
+    expect(script).toContain('refs/heads/main');
+    expect(script).not.toContain('artifactbinv3');
+    // One pin mechanism: the old consumer dispatch into the server's update-submodule workflow is gone.
+    expect(ci.jobs).not.toHaveProperty('notify-consumer');
   });
   it('keeps the v3 fast lane inside its two-minute cap', () => {
     expect(workflow('v3-fast.yml').jobs.fast['timeout-minutes']).toBe(2);

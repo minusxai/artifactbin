@@ -16,7 +16,7 @@ on:
       - 'services/app/__tests__/runner-page-boundary.test.ts'
       - '.github/workflows/runner-design.yml'
   push:
-    branches: [ artifactbinv3 ]
+    branches: [ main ]
   workflow_dispatch:
 permissions:
   contents: read

@@ -3,7 +3,7 @@ name: v3 CodeQL
 # Every merged v3 SHA receives both security scans before deployment admission.
 on:
   push:
-    branches: [ artifactbinv3 ]
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
