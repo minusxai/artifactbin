@@ -162,3 +162,47 @@ it("fails closed without a terminal receipt after a server incarnation disappear
     "sql_read_drain_unconfirmed",
   );
 });
+it("retries a failed open, which submits nothing, instead of failing the read", async () => {
+  let opens = 0;
+  const jobs: SqlReadJobs = {
+    open: async () => {
+      if (++opens < 3) throw Error("open timed out");
+      return { serverId: "server", now: Date.now() };
+    },
+    submit: async (key) => ({
+      ...key,
+      state: "completed",
+      drained: true,
+      results: { q: { columns: [{ name: "n", type: "number" }], rows: [{ n: 4 }] } },
+    }),
+    status: async (key) => ({ ...key, state: "unknown", drained: false }),
+    cancel: async (key) => ({ ...key, state: "cancelled", drained: true, code: "cancelled" }),
+  };
+  const job = sqlReadExecution(jobs, input, { pollMs: 0 });
+  expect(await job.result).toMatchObject({ q: { rows: [{ n: 4 }] } });
+  expect(opens).toBe(3);
+  await job.cancelAndDrain();
+});
+it("gives up on open at the lease and on cancellation without submitting", async () => {
+  let clock = 0,
+    submits = 0;
+  const jobs: SqlReadJobs = {
+    open: async () => {
+      clock++;
+      throw Error("sql service unavailable");
+    },
+    submit: async (key) => {
+      submits++;
+      return { ...key, state: "unknown", drained: false };
+    },
+    status: async (key) => ({ ...key, state: "unknown", drained: false }),
+    cancel: async (key) => ({ ...key, state: "cancelled", drained: true, code: "cancelled" }),
+  };
+  const expired = sqlReadExecution(jobs, input, { now: () => clock, leaseMs: 3, pollMs: 0 });
+  await expect(expired.result).rejects.toThrow("sql service unavailable");
+  await expired.cancelAndDrain();
+  const cancelled = sqlReadExecution(jobs, input, { pollMs: 1 });
+  await cancelled.cancelAndDrain();
+  await expect(cancelled.result).rejects.toThrow();
+  expect(submits).toBe(0);
+});

@@ -26,6 +26,8 @@ interface Entry {
   stop?: () => void;
   terminalAt?: number;
   bytes?: number;
+  /** A completed receipt carrying its results has been answered at least once. */
+  delivered?: boolean;
   cancelled: boolean;
 }
 /** Process-owned read receipts, not a general job service. A missing receipt NEVER attests drain. */
@@ -85,7 +87,31 @@ export function createReadJobs(
       throw Error("sql_job_conflict");
     return entry;
   };
-  const receipt = (entry: Entry) => structuredClone(entry.receipt);
+  const receipt = (entry: Entry) => {
+    if (entry.receipt.state === "completed") entry.delivered = true;
+    return structuredClone(entry.receipt);
+  };
+  /**
+   * Retained results exist only to re-answer a lost response. When new completed work does not fit the
+   * retained budget, results already answered are released, oldest first, before the new result is refused.
+   * A released receipt stays terminal and drained, so it never attests anything it did not observe.
+   */
+  const release = (needed: number, limit: number) => {
+    const answered = [...entries.values()]
+      .filter((entry) => entry.delivered && entry.receipt.state === "completed")
+      .sort((a, b) => (a.terminalAt ?? 0) - (b.terminalAt ?? 0));
+    for (const entry of answered) {
+      if (retainedBytes + needed <= limit) return;
+      retainedBytes -= entry.bytes ?? 0;
+      entry.bytes = 0;
+      entry.receipt = {
+        ...entry.key,
+        state: "failed",
+        drained: true,
+        code: "sql_job_result_released",
+      };
+    }
+  };
   const finish = (entry: Entry, outcome: SqlReadJobReceipt) => {
     if (entry.receipt.drained) return;
     entry.stop?.();
@@ -196,11 +222,13 @@ export function createReadJobs(
         .then(
           (results) => {
             if (entry.cancelled) return;
-            const bytes = Buffer.byteLength(JSON.stringify(results));
+            const bytes = Buffer.byteLength(JSON.stringify(results)),
+              retainedLimit = options.maxRetainedBytes ?? 32 * 1024 * 1024;
+            if (bytes <= (options.maxResultBytes ?? 8 * 1024 * 1024))
+              release(bytes, retainedLimit);
             if (
               bytes > (options.maxResultBytes ?? 8 * 1024 * 1024) ||
-              retainedBytes + bytes >
-                (options.maxRetainedBytes ?? 32 * 1024 * 1024)
+              retainedBytes + bytes > retainedLimit
             )
               finish(entry, {
                 ...key,

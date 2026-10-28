@@ -86,7 +86,11 @@ export function keepFrameSession(options: FrameSessionOptions): () => void {
     spoke = true;
     lastMessage = Date.now();
     const data = event.data as { type?: unknown; payload?: { kind?: unknown } } | null;
-    if (data && typeof data === 'object' && data.type === STORY_FRAME_BRIDGE_MESSAGE && data.payload?.kind === 'hello') lastHello = lastMessage;
+    // `ready` answers an attach to this document's door, so it proves the door opened just as `hello` does — and it
+    // still arrives when this watchdog started (lazily) after the door's hello, which would otherwise make the served
+    // document's own first load look like a silent reload and re-navigate the frame, re-sending every query.
+    const kind = data && typeof data === 'object' && data.type === STORY_FRAME_BRIDGE_MESSAGE ? data.payload?.kind : undefined;
+    if (kind === 'hello' || kind === 'ready') lastHello = lastMessage;
   };
   const onLoad = () => {
     clearTimeout(timer);
