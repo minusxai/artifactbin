@@ -35,7 +35,7 @@ describe('v3 validation isolation', () => {
   it('keeps the v3 fast lane inside its two-minute cap', () => {
     expect(workflow('v3-fast.yml').jobs.fast['timeout-minutes']).toBe(2);
   });
-  it('runs every retained worker proof without retired product suites on v3', () => {
+  it('runs every retained worker proof without retired product suites on every ref', () => {
     const steps = workflow('runner-design.yml').jobs['linux-worker'].steps;
     const selected = ref => new Set(steps.filter(step => !step.if || admitted(step.if, 'push', '', ref)).flatMap(step => step.run?.match(/services\/[\w/.-]+\.test\.ts/g) ?? []));
     const v3 = selected('refs/heads/artifactbinv3');
@@ -49,10 +49,10 @@ describe('v3 validation isolation', () => {
       'services/app/lib/page-operations/__tests__/backend.test.ts',
       'services/app/lib/page-operations/__tests__/runtime.test.ts',
     ].sort());
-    for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts','services/app/__tests__/lambda-operations.test.ts']) {
+    // A pull request into main (refs/pull/N/merge) and main itself run the same retained set.
+    for (const ref of ['refs/heads/main', 'refs/pull/904/merge']) expect([...selected(ref)].sort()).toEqual([...v3].sort());
+    for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts','services/app/__tests__/lambda-operations.test.ts'])
       expect(v3.has(file)).toBe(false);
-      expect(selected('refs/heads/main').has(file)).toBe(true);
-    }
     for (const script of ['os-boundary.mjs','postgres-proof.mjs','services/runner/prove-postgres.ts']) expect(steps.some(step => step.run?.includes(script))).toBe(true);
   });
   it('runs all retained service suites on every v3 SHA, including a prose-only merge', () => {
