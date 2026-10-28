@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {TokenHoldingActor} from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
-import {json} from '@/lib/http';
+import {json,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
 /** A bundle file the actor may not write, named by its project path. */
 class BundleFileRefusal extends Error {constructor(readonly code:'bundle_file_not_editable'|'bundle_file_not_creatable',readonly path:string){super(code);}}
@@ -87,5 +87,5 @@ export async function preparePublicationBundle(body:Record<string,unknown>,actor
  }catch(error){
   const cause=error instanceof Error?error.cause:undefined;
   if(cause instanceof BundleFileRefusal)return json({error:cause.code,path:cause.path,dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},403);
-  return json({error:'dependency_publication_incomplete',details:[error instanceof Error&&error.cause instanceof Error?error.cause.message:String(error)],dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},409);}
+  return json({error:'dependency_publication_incomplete',details:[error instanceof Error&&error.cause instanceof Error?error.cause.message:error instanceof Error?`${error.name}${error.message?': '+error.message:''}`:thrownMessage(error,'Dependency publication failed')],dependencyReceipts:(error as {receipts?:unknown[]}).receipts??[]},409);}
 }

@@ -4,7 +4,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import {nativeCspDeclarations} from '@/lib/trust/native-csp';
-import { json } from '../../http/http';
+import { json, thrownMessage } from '../../http/http';
 import {socialPreviewImage,socialPreviewImageValue} from '@/lib/document';
 import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
@@ -119,7 +119,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return json({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
       return {format:'html',source,meta:{refs,htmlCsp:csp.extensions},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
-    catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
+    catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
   }
 
   if (kind === 'file') {

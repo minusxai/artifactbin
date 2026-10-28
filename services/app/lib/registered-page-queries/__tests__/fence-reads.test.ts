@@ -8,8 +8,9 @@ import { POST } from "@/app/api/artifacts/route";
 import { getDb } from "@/lib/platform";
 import { readHtmlPage } from "@/lib/html-publication";
 import { ANONYMOUS_ACTOR, requestOrSessionActor } from "@/lib/accounts";
-import { getArtifactById, readableArtifactHeader } from "@/lib/artifacts";
+import { getArtifactById, readableArtifactIdentity } from "@/lib/artifacts";
 import { createRetainedRegisteredQueries } from "../retained";
+import { executeCatalog } from "@/lib/datasets/execute";
 import { prepareRegisteredQueryBackend, commitRegisteredQueryBackend, registeredPlan } from "../registry";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 useAppHarness();
@@ -41,22 +42,39 @@ it("an evaluation reads the page source once at admission and fences on its head
       await commitRegisteredQueryBackend(tx, page, owner.userId!, registration);
     });
     const plan = registeredPlan(page, registration.link, (await getHtmlBackendVersion(registration.link.backendId, registration.link.version))!)!;
-    const counts = { page: 0, document: 0, header: 0 };
-    const evaluate = (readHeader: typeof readableArtifactHeader = readableArtifactHeader) =>
+    const counts = { page: 0, document: 0, header: 0, windows: 0 };
+    const evaluate = (readIdentity: typeof readableArtifactIdentity = readableArtifactIdentity, signal = new AbortController().signal) =>
       createRetainedRegisteredQueries(ANONYMOUS_ACTOR, page, {
         readPage: (...args) => { counts.page++; return readHtmlPage(...args); },
         readDocument: (id) => { counts.document++; return getArtifactById(id); },
-        readHeader: (...args) => { counts.header++; return readHeader(...args); },
-      }).execute({ ...plan.registration, subject: null }, { values: {}, only: ["total"] }, new AbortController().signal);
+        readIdentity: (...args) => { counts.header++; return readIdentity(...args); },
+        readWindow: async (...args) => { counts.windows++; await new Promise((resolve) => setTimeout(resolve, 50)); return executeCatalog(...args); },
+      }).execute({ ...plan.registration, subject: null }, { values: {}, only: ["total"] }, signal);
     expect(await evaluate()).toMatchObject({ total: { rows: [{ amount: 6 }] } });
     expect(counts.page, "the page source is read once, at admission").toBe(1);
     expect(counts.document).toBe(1);
     expect(counts.header, "every later fence rereads the head identity").toBeGreaterThan(2);
+    // Simultaneous evaluations (one page load sends one per table) share one read of the same dataset revision.
+    counts.windows = 0;
+    const together = await Promise.all([evaluate(), evaluate(), evaluate()]);
+    for (const answer of together) expect(answer).toMatchObject({ total: { rows: [{ amount: 6 }] } });
+    expect(counts.windows, "one shared window read").toBe(1);
+    // A joiner that leaves does not cancel the read for the others; nothing is kept once it settles.
+    counts.windows = 0;
+    const leaving = new AbortController();
+    const left = evaluate(undefined, leaving.signal);
+    const stays = evaluate();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    leaving.abort(Error("reader left"));
+    await expect(left).rejects.toThrow();
+    expect(await stays).toMatchObject({ total: { rows: [{ amount: 6 }] } });
+    expect(await evaluate()).toMatchObject({ total: { rows: [{ amount: 6 }] } });
+    expect(counts.windows, "a settled read is not reused").toBe(2);
     // A republish between fences changes the head identity: the evaluation is refused, as when it reread the source.
     let fences = 0;
     await expect(
       evaluate(async (reader, id) => {
-        const head = await readableArtifactHeader(reader, id);
+        const head = await readableArtifactIdentity(reader, id);
         return head && ++fences > 1 ? { ...head, row: { ...head.row, edit_id: "republished" } } : head;
       }),
     ).rejects.toThrow("query_document_changed");

@@ -7,7 +7,7 @@ import {createRetainedRegisteredQueries} from '@/lib/registered-page-queries/ret
 import type {AccessActor} from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
-import {getArtifactHeaderById,effectiveRole,accessMoved} from '@/lib/artifacts';
+import {getArtifactHeaderById,effectiveRole,accessMoved,readableArtifactHeader} from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {createPageOperations,createBackendInvoker,pageOperationKind} from '@/lib/page-operations';
@@ -34,14 +34,16 @@ async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly
 function operations(actor:AccessActor,page:HtmlPageVersion,revalidateActor:()=>Promise<AccessActor>,retainReadFence?:(verify:()=>Promise<void>)=>void){
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
  const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
- return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:async call=>{
+ // The page this request already read for this reader and revision is not read again (its source is the costly part).
+ const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
   if(link.kind==='backend'){
    const record=await getHtmlBackendVersion(link.backendId,link.version);
    if(!record)throw Error('backend_link_mismatch');
    const {query:plan,mutation}=registeredPrograms(page,link,record);
-   if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
+   if(plan){const adapter=createRetainedRegisteredQueries(actor,page,{readPage,retainReadFence,fenceSignal:call.signal});return registeredQueryInvoker(page,{...plan.registration,subject:actor.userId},adapter.execute)(call);}
    if(mutation){const adapter=createRetainedRegisteredMutation(actor,page,link,record,revalidateActor);return registeredMutationInvoker(adapter.context,adapter.plan,(_context,_plan,args,signal)=>adapter.execute(args,signal))(call);}
    return backend(call);
   }
@@ -57,9 +59,11 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   const verifyPage=async(revision:string)=>{
    const currentActor=await requestOrSessionActor(request,{revalidate:true});
    if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
-   const current=await getArtifactHeaderById(pageId);
-   if(!current||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
-   await readHtmlPage(currentActor,pageId,revision);
+   // One header read decides both: the head did not move, and this reader may still read it.
+   const readable=await readableArtifactHeader(currentActor,pageId),current=readable?.row;
+   if(!current||current.format!=='html'||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
+   // An archived revision is immutable; its own row is checked only when it is not the head just read.
+   if(revision!==String(current.version))await readHtmlPage(currentActor,pageId,revision);
   };
   const readHeaders={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
   if(request.method==='GET'){
