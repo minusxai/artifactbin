@@ -608,9 +608,10 @@ async function replaceScoped(
     }
     if(input.format==='html'){
       if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
+      // Only the HTML check sits inside the try: a database failure is not invalid HTML, so it throws on to the route's logged, fixed 500.
+      const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
+      const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
       try{
-        const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
-        const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
         const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
         // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
         input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
