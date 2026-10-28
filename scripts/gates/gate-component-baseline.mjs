@@ -9,7 +9,7 @@ import {loadNativeMigrationCaptureBatch,runNativeMigrationCaptureBatch} from '..
 import {runNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
 import {nativeMigrationBrowserContext} from '../lib/native-migration-browser-context.mjs';
 import {createBaselineSession} from '../lib/component-baseline-session.mjs';
-import {connectAgent,signInAccount} from './lib/cli-connection.mjs';
+import {connectAgent,signInAccount} from './lib/account-connection.mjs';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -72,7 +72,7 @@ if(input.mode==='publish') {
 }
 if(input.mode==='upload') {
  const {runUploadBaseline}=await import('../lib/component-upload-baseline.mjs');
- const {signInAccount}=await import('./lib/cli-connection.mjs');
+ const {signInAccount}=await import('./lib/account-connection.mjs');
  const browser=await launchChromium();
  try{await runUploadBaseline({...input,base:process.argv[2]||input.base||'http://localhost:3030',browser,connectAgent,signInAccount});}
  finally{await browser.close();}

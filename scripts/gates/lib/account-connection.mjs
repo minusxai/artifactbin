@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { startMailSink } from '../../lib/mail-login.mjs';
 
 // Per-process fixture state: the signed-in browser and API caller have distinct
-// credentials. Never exchange the API-scoped CLI token for a browser session.
+// credentials. Never exchange the API-scoped token for a browser session.
 const browsers = new Map();
 export function connectionBrowserCookie(base, token) {
   const browser = browsers.get(token);

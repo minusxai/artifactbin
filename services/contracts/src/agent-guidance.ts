@@ -90,7 +90,6 @@ export const MARKUP_FIELD_GUIDANCE = [
   MARKUP_STYLE_RULE,
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
   'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names bound as Solid signals with signal/query/mutation from page.',
-  'Read `afbin help markup` or the installed references/markup.md first.',
   'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Chart data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,

@@ -24,19 +24,19 @@ export default {
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
         'scripts/native-migration-production.mjs', // Reviewed operator entry; dry-run by default.
-        // CI.smtp.Dockerfile starts this private SMTP sink by path.
-        'deploy/company/ci-smtp-fixture.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         // Explicit fast local framed-browser regression (not part of browser-free PR unit jobs).
         'scripts/__tests__/native-migration-browser-context.browser.mjs',
-        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
+        'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-postgres-proof.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
         'scripts/fixtures/**/*.{mjs,jsx}',
+        // Run by minusxai/artifactbin-server's CI (services/app/__tests__/downstream-script-paths.test.ts).
+        'scripts/gate-cli-conformance.mjs', 'scripts/ci/link-npm-acceptance.mjs',
         // Imported by the evals repository (evals/lib re-exports them).
         'scripts/lib/{credential,env,slug}.ts',
       ],
@@ -67,9 +67,8 @@ export default {
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/runner/runtime.ts',
-        // Build and generator scripts run by path (scripts/lib/afbin-run.mjs, scripts/lib/dev-runner.mjs, CI).
+        // Build and generator scripts run by path (scripts/lib/dev-runner.mjs, CI).
         'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
-        'skills/**/*.jsx',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
         'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv},design-systems/*.css}',
         // Generated source mirrors are reading material; canonical lib/html-components is checked above.
@@ -96,16 +95,6 @@ export default {
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },
     },
-    'services/cli': {
-      // The package's `exports` names its built dist/index.mjs; the preview client and connect bundles
-      // (scripts/build-preview.mjs) and the preview host entry (scripts/build-host.mjs).
-      entry: ['src/index.ts'],
-      ignoreDependencies: [
-        // Left out of the CLI bundle and resolved from its installed dependencies at run time
-        // (scripts/build/runtime-externals.mjs CLI_RUNTIME_EXTERNALS) with no import in the CLI's own source.
-        'playwright-core', 'vega', 'vega-lite', 'vega-interpreter', 'nunjucks', 'harfbuzzjs', 'wawoff2',
-      ],
-    },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.
     'services/auth': { ignoreBinaries: ['openssl'] },
     'services/runner': {
@@ -117,7 +106,6 @@ export default {
     'services/sql': { entry: ['src/server.ts', 'src/pool-worker.ts'] },
     'services/events': { entry: ['src/server.ts'] },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
-    // The skill's standalone helpers, compiled by name (services/cli/scripts/compile-teaching.ts).
   },
   ignoreWorkspaces: ['docs/proposals/runner-validation'],
   ignoreIssues: {

@@ -11,7 +11,6 @@ next-env.d.ts
 # input the tsconfigs point at, not a stray artifact.
 node_modules/.cache/tsc/
 # the standalone CLI build's Chromium archive cache (scripts/chromium-native.mjs), ~170 MB
-/services/cli/.cache/
 # vendored runtime assets — copied from node_modules on postinstall
 **/public/monaco/
 .artifact-objects/
@@ -46,7 +45,6 @@ tmp/
 services/app/dist/
 services/app/data/
 video/
-services/cli/dist/
 
 # Optional hosted browser libraries (built with story runtime)
 services/app/public/libraries/
@@ -63,16 +61,9 @@ services/app/public/libraries/
 .DS_Store
 
 # Built from authored references and command registries.
-/services/cli/src/generated/teaching.json
-/services/cli/src/generated/teaching.json.*.tmp
 
 # the shared island build (scripts/build/build-islands.mjs) — content-addressed chunks + manifest
 **/public/islands/
 
-# Bundled shared skill credential runtime (generate:teaching)
-services/app/skills/artifactbin/scripts/credentials.mjs
-
-services/app/skills/artifactbin/scripts/watch-comments.mjs
-
-# Untracked artifactbin page sources kept at the root: afbin tracks them by path and refuses paths outside the workspace; knip honours this file.
+# Untracked artifactbin page sources kept at the root; knip honours this file.
 /*.jsx

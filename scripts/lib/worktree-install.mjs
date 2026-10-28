@@ -12,7 +12,7 @@ export function ensureDependencies(root, run = spawnSync) {
   const read = name => existsSync(path.join(root, name)) ? readFileSync(path.join(root, name)) : Buffer.from('missing');
   const workspace = JSON.parse(read('package.json').toString()).workspaces ?? [];
   const inputs = ['package.json', 'package-lock.json', '.npmrc', ...workspace.map(w => `${w}/package.json`),
-    'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs'];
+    'services/app/scripts/copy-assets.mjs'];
   const key = digest(Buffer.concat([Buffer.from(JSON.stringify([process.version, process.platform, process.arch])),
     ...inputs.map(name => Buffer.concat([Buffer.from(name + '\0'), read(name)]))]));
   const receiptPath = path.join(root, 'node_modules/.cache/artifactbin-install.json');
@@ -25,9 +25,7 @@ export function ensureDependencies(root, run = spawnSync) {
   };
   if (receipt?.key === key && existsSync(path.join(root, 'node_modules/.package-lock.json')) && receipt.installed === installed()) {
     console.log('[worktree] Reusing pinned dependencies; refreshing checkout assets.');
-    for (const script of ['services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/generate-teaching.mjs']) {
-      if (existsSync(path.join(root, script))) checked(process.execPath, [script]);
-    }
+    checked(process.execPath, ['services/app/scripts/copy-assets.mjs']);
     return;
   }
   rmSync(receiptPath, { force: true });

@@ -7,17 +7,14 @@ import {skillTree,SKILL_MAIN_MAX_BYTES,SKILL_FILE_MAX_BYTES} from '../skills';
 import {renderSkill} from '../skills/render';
 
 describe('one root for installed and direct HTTP agents',()=>{
- it('gives URL readers complete HTTP operations while installed skills keep CLI operations',()=>{
+ it('gives URL readers complete HTTP operations',()=>{
   const origin='https://skills-contract.example';
   const http=llmsText(origin);
-  const cli=withTeachingOrigin(teaching.files['SKILL.md'],origin);
   for(const operation of ['POST /api/artifacts','PUT /api/artifacts/ID'])expect(http).toContain(operation);
   for(const field of ['expectedVersion','expectedState','Idempotency-Key','@afbin/apollo'])expect(http).toContain(field);
   expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
-  expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
-  expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');
  });
- it('distinguishes an installed CLI from downloading one through npx',()=>{
+ it('names no CLI install',()=>{
   const root=llmsText('https://skills-contract.example');
   expect(root).not.toContain('@afbin/cli');
   expect(root).not.toContain('If `afbin` is missing: run');
@@ -25,7 +22,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  it('serves precisely the root body with online topic links, without appending a second manual',()=>{
   const origin='https://skills-contract.example';
   const root=skillTree().get('artifactbin/SKILL.md')!;
-  const expected=renderSkill(root,{base:origin,transport:'http'}).replace(/\]\(references\/([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,(_match,name:string,hash:string|undefined)=>`](${origin}/llms/${name}${hash??''})`);
+  const expected=renderSkill(root,{base:origin}).replace(/\]\(references\/([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,(_match,name:string,hash:string|undefined)=>`](${origin}/llms/${name}${hash??''})`);
   expect(llmsText(origin).trim()).toBe(expected.trim());
  });
 });
@@ -37,34 +34,25 @@ import {execFileSync} from 'node:child_process';
 import {skillPackageFiles,skillZip} from '../skills/package';
 import {projectSkillLinks,renderTree,skillFileWithFrontmatter} from '../skills/serve';
 import {publicGuideText} from '@/lib/serving/agent-references.server';
-import teaching from '../../../cli/src/generated/teaching.json';
-import {withTeachingOrigin} from '../../../cli/src/teaching-origin';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
 
 describe('installable shared skill folder',()=>{
  it('rewrites root/backlinks and anchors on the supplied origin',()=>{
-  const file=skillTree().get('artifactbin/references/http-api.md')!;
+  const file=skillTree().get('artifactbin/references/http-auth.md')!;
   expect(projectSkillLinks(file,'[root](../SKILL.md#read-first) [task](./http-auth.md#sign-in)','https://recipient.example')).toBe('[root](https://recipient.example/llms.txt#read-first) [task](https://recipient.example/llms/http-auth#sign-in)');
   expect(publicGuideText('../SKILL','https://recipient.example')).toBeNull();
  });
- it('extracts a valid ZIP with the same frontmatter, references as CLI setup uses',async()=>{
+ it('extracts a valid ZIP with the rendered frontmatter and references',async()=>{
   const origin='https://recipient.example';
   const expected=skillPackageFiles(skillTree(),origin);
-  const cli=Object.fromEntries(Object.entries(teaching.files).map(([name,text])=>[name,withTeachingOrigin(text,origin)]));
-  expect(expected['SKILL.md']).not.toBe(cli['SKILL.md']);
   expect(Object.keys(expected)).not.toContain('scripts/credentials.mjs');
-  expect(Object.keys(cli)).not.toContain('scripts/credentials.mjs');
-  for(const [transport,files] of [['http',expected],['cli',cli]] as const){
-   for(const {file,text} of renderTree(skillTree(),origin,transport,transport==='http')){
-    if(transport==='http'&&file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
-    expect(files[file.path.replace(/^artifactbin\//,'')],`${transport}: ${file.path}`).toBe(skillFileWithFrontmatter(file,text));
-   }
+  for(const {file,text} of renderTree(skillTree(),origin,true)){
+   if(file.ref&&!isShippedSkillTopic(file.file.replace(/\.md$/,'')))continue;
+   expect(expected[file.path.replace(/^artifactbin\//,'')],file.path).toBe(skillFileWithFrontmatter(file,text));
   }
   expect(expected['scripts/publish.mjs']).toContain('sendPublication');
-  expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
   expect(expected['references/datasets.md']).toContain('dataset');
   expect(expected['components/file-upload.ts']).toContain('uploadFile');
-  expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
   expect(response.headers.get('content-type')).toBe('application/zip');
@@ -156,28 +144,10 @@ describe('installable shared skill folder',()=>{
  });
 });
 
- it('reuses the same procedure fragments in roots and references without changing reference transport',()=>{
-  const base='https://reuse.example';
-  const tree=skillTree();
-  const root=tree.get('artifactbin/SKILL.md')!;
-  for(const transport of ['cli'] as const){
-   const text=renderSkill(root,{base,transport});
-   for(const [operation,reference] of [['authentication','publishing-auth'],['creation','publishing'],['editing','publishing']]){
-    const fragment=renderSkill({...root,body:`[% include "fragments/${transport}-${operation}.md" %]`},{base,transport}).trim();
-    expect(text).toContain(fragment);
-    const ref=tree.get(`artifactbin/references/${reference}.md`)!;
-    const rendered=renderSkill(ref,{base,transport}).replace(/\]\((?!https:)([a-z-]+\.md)/g,'](references/$1');
-    expect(rendered).toContain(fragment);
-   }
-  }
-  expect(()=>renderSkill({...root,body:'[% include "fragments/missing.md" %]'},{base})).toThrow();
- });
 
-it.each(['https://docs.example','http://app.lvh.me:5001'])('projects the existing credential backing path for HTTP and installed help on %s',origin=>{
+it.each(['https://docs.example','http://app.lvh.me:5001'])('projects the existing credential backing path for HTTP on %s',origin=>{
  const expected=credentialPaths(origin,'~/.artifactbin').backingPath;
- const http=publicGuideText('http-auth',origin)!;
- const cli=withTeachingOrigin(teaching.files['references/http-auth.md'],origin);
- for(const text of [http,cli]){
+ for(const text of [publicGuideText('http-auth',origin)!]){
   expect(text).toContain(expected);
   expect(text).not.toContain('__AFBIN_CREDENTIAL_PATH__');
   expect(text).not.toContain('credentials.mjs');

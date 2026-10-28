@@ -38,7 +38,7 @@ describe('module graph', () => {
     expect(moduleOf('services/app/lib/publish/x/y.ts')).toBe('lib/publish');
     expect(moduleOf('services/app/lib/runner.ts')).toBe('lib/runner');
     expect(moduleOf('services/app/solid/pages/Doc.tsx')).toBe('app/solid');
-    expect(moduleOf('services/cli/src/index.ts')).toBe('pkg/cli');
+    expect(moduleOf('services/sql/src/index.ts')).toBe('pkg/sql');
     expect(moduleOf('scripts/lib/x.mjs')).toBe('scripts');
     expect(moduleOf('server.ts')).toBe('server');
   });
@@ -109,13 +109,11 @@ describe('module graph', () => {
     const root = tree({
       'services/auth/src/x.ts': "import { c } from '@artifactbin/contracts';\nimport { u } from '@artifactbin/utils/http';\nimport { q } from '@artifactbin/sql';\nimport './y';\n",
       'services/auth/src/y.ts': "export const y = await import('../../app/lib/publish/index.ts');\n",
-      'services/cli/src/z.ts': "import '@/lib/cli-toolkit';\n",
     });
     const violations = checkModuleGraph(scanModuleGraph(root), allowList([])).violations.join('\n');
     expect(violations).toContain('pkg/auth -> pkg/sql');
     expect(violations).toContain('pkg/auth -> lib/publish');
     expect(violations).not.toMatch(/-> pkg\/(contracts|utils)/);
-    expect(violations).not.toContain('pkg/cli');
   });
 
   describe('lib/islands entry (rule 4)', () => {
@@ -272,7 +270,7 @@ describe('module graph', () => {
     it('passes server code through the index or server, and listed browser code through a listed leaf', () => {
       expect(check({
         'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
-        'services/app/lib/cli-toolkit/index.ts': "export { splitHelmet } from '../document';\n",
+        'services/app/lib/serving/split.ts': "export { splitHelmet } from '../document';\n",
         'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
         'services/app/lib/editor-engine/annotation-map.ts': "import type { AnnotationOperation } from '../document/annotation-edits';\n",
         'services/app/solid/document/Native.tsx': "import { declarationsOf } from '@/lib/document/helmet';\n",
@@ -357,31 +355,6 @@ describe('module graph', () => {
     });
   });
 
-  describe('CLI toolkit entry (rule 5)', () => {
-    const check = files => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
-
-    it('passes CLI source through the toolkit entries, and leaves CLI scripts and tests alone', () => {
-      expect(check({
-        'services/cli/src/a.ts': "import { parseJsx } from '../../app/lib/cli-toolkit';\nimport { compilePage } from '../../app/lib/cli-toolkit/host.server';\nimport type { X } from '@/lib/cli-toolkit/index.ts';\n",
-        'services/cli/scripts/build.mjs': "import '../../app/lib/serving/app-font-face-css.mjs';\n",
-        'services/cli/test/fixtures/worker.ts': "import { getDb } from '../../../app/lib/platform/db';\n",
-      })).toBe('');
-    });
-
-    it('refuses a deep import of app code from CLI source, naming the rule and every import', () => {
-      const violations = check({
-        'services/cli/src/a.ts': "import { parseJsx } from '../../app/lib/jsx';\n",
-        'services/cli/src/preview/e.ts': "export const morph = () => import('../../../app/lib/frame-edit/session');\n",
-        'services/cli/src/t.ts': "export type T = import('@/solid/components/PageBar').T;\n",
-        'services/cli/src/k.ts': "import '../../app/lib/cli-toolkit/other';\n",
-      });
-      expect(violations).toContain('The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs)');
-      expect(violations).toContain('services/cli/src/a.ts imports ../../app/lib/jsx');
-      expect(violations).toContain('services/cli/src/preview/e.ts imports ../../../app/lib/frame-edit/session');
-      expect(violations).toContain('services/cli/src/t.ts imports @/solid/components/PageBar');
-      expect(violations).toContain('services/cli/src/k.ts imports ../../app/lib/cli-toolkit/other');
-    });
-  });
 
   it('records today\'s library cycles as the allow-list', () => {
     expect(recordAllowedCycles(scanModuleGraph(tree(libCycle))).cycles).toEqual([ab]);
