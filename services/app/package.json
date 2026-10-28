@@ -16,9 +16,7 @@
     "validate": "tsc --noEmit -p ../../tsconfig.json",
     "postinstall": "node scripts/copy-assets.mjs",
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
-    "generate:og": "tsx scripts/generate-og-image.ts",
-    "prebuild": "node ../../scripts/lib/generate-teaching.mjs",
-    "prevalidate": "node ../cli/scripts/generate-teaching.mjs"
+    "generate:og": "tsx scripts/generate-og-image.ts"
   },
   "dependencies": {
     "@artifactbin/contracts": "0.1.0",

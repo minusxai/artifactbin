@@ -101,8 +101,6 @@ export interface SkillTree {
 }
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
-/** Reuse the skill source envelope for transport projections of shared authoring examples. */
-export function stripFrontmatter(text: string): string { return text.replace(FRONTMATTER, ''); }
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const FILE_RE = /^[a-z0-9-]+\.md$/;
 

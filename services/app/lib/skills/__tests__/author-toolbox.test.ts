@@ -313,7 +313,7 @@ it('quotes every user-facing command in Core flows with flags and verbs its scri
  const {COMMANDS:registry}=await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
  const {describe,descriptionOf}=await import('../../../skills/artifactbin/scripts/toolbox-description.mjs');
  const COMMANDS:Record<string,any>=registry;
- const skill=renderSkill(skillTree().get('artifactbin/SKILL.md')!,{base:'https://example.test',transport:'http'});
+ const skill=renderSkill(skillTree().get('artifactbin/SKILL.md')!,{base:'https://example.test'});
  const flows=skill.slice(skill.indexOf('## Core flows'),skill.indexOf('## Optional HTML components'));
  expect(flows.length).toBeGreaterThan(500);
  // Every command (the autofix helper included) appears in the flows, each as a real invocation.
@@ -352,7 +352,7 @@ it('keeps one DESCRIPTION per command at the very top of its script, and --help 
 it('does not ask agents to write what the platform adds, and says what each side does',async()=>{
  const {readFile}=await import('node:fs/promises');
  const skill=await readFile(new URL('../../../skills/artifactbin/SKILL.md',import.meta.url),'utf8');
- const http=skill.slice(skill.indexOf('transport == "http"'),skill.indexOf('[% else %]'));
+ const http=skill;
  expect(http).toContain('You write / the platform adds');
  // No setup boilerplate: the core tag, html design attributes and copied stylesheets are the platform's.
  expect(http).not.toMatch(/<script src="\/af\/[^"]*core\.js"/);

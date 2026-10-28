@@ -8,9 +8,9 @@
  * `import("x")` types, type-only included — read with the TypeScript parser. Each import records whether it is
  * type-only (`import type`, `export type`, every named specifier marked `type`, or an `import("x")` type).
  *
- * Five rules:
+ * Four rules:
  *   1. no cycle may contain an entry point or the UI (ENTRY_OR_UI below);
- *   2. a package other than `pkg/cli` imports only `pkg/contracts`, `pkg/utils` and itself;
+ *   2. a package imports only `pkg/contracts`, `pkg/utils` and itself;
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
  *   4. a deep module (DEEP_MODULES below) is entered from outside only through its listed entries,
@@ -19,9 +19,7 @@
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
  *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
  *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
- *      still be imported, so the lists only shrink;
- *   5. the CLI's source (services/cli/src) imports app code only through lib/cli-toolkit's entries
- *      (CLI_TOOLKIT_ENTRIES below), so every app name the CLI depends on is a reviewed re-export.
+ *      still be imported, so the lists only shrink.
  *
  * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
  * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
@@ -36,9 +34,9 @@ import { fileURLToPath } from 'node:url';
 
 const ts = createRequire(import.meta.url)('typescript');
 
-const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'pkg/cli', 'scripts', 'server'];
+const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scripts', 'scripts', 'server'];
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
-const PACKAGES = ['auth', 'browser', 'cli', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
+const PACKAGES = ['auth', 'browser', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 /**
  * Rule 4's lists for lib/islands. lib/islands is browser code with one server-safe index
@@ -189,13 +187,6 @@ export const DEEP_MODULES = {
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
 };
-/**
- * Rule 5's entries, one per CLI bundle: `index` (the afbin process), `host.server` (its packaged
- * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
- * Paths without extension.
- */
-const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server'];
-const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
 /** The module a repository-relative path belongs to, or null (outside services/scripts/server.ts). */
@@ -341,18 +332,6 @@ function deepModuleViolations(graph, table) {
 }
 const constantPrefix = module => module.slice('lib/'.length).toUpperCase().replace(/-/g, '_');
 
-/** Rule 5: every import of app code from the CLI's source that does not name a toolkit entry. */
-function cliToolkitViolations(graph, entries) {
-  const refused = [];
-  for (const [to, imports] of [...(graph.get('pkg/cli') ?? [])].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!to.startsWith('lib/') && !to.startsWith('app/') && to !== 'app-root') continue;
-    for (const { file, specifier } of imports) {
-      if (file.startsWith(CLI_SOURCE) && !entries.includes(importPath(file, specifier))) refused.push(`  ${file} imports ${specifier}`);
-    }
-  }
-  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: the team host), and import it from there:`, ...refused] : [];
-}
-
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
 function buildModuleGraph(imports) {
   const graph = new Map();
@@ -426,12 +405,11 @@ export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY, deepMo
   const stale = [...allowedEdges].filter(edge => !cyclicEdges.has(edge)).sort();
   if (stale.length) violations.push('Allowed cycle edge(s) no longer in a cycle; remove them from scripts/ci/module-graph.allowed-cycles.json:', ...stale.map(edge => `  ${edge}`));
   for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!from.startsWith('pkg/') || from === 'pkg/cli') continue;
+    if (!from.startsWith('pkg/')) continue;
     const outside = [...edges.keys()].filter(to => !PACKAGE_FLOOR.includes(to)).sort();
     if (outside.length) violations.push(`Package ${from} may import only ${PACKAGE_FLOOR.join(', ')} and itself:`, ...outside.map(to => describeEdge(graph, from, to)));
   }
   violations.push(...deepModuleViolations(graph, deepModules));
-  violations.push(...cliToolkitViolations(graph, CLI_TOOLKIT_ENTRIES));
   return { violations };
 }
 

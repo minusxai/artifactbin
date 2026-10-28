@@ -4,7 +4,7 @@ import {durableMutation,accountProfile,updateAccountProfile} from '@/lib/artifac
 
 export const GET=withTokenAuth(async(request,{actor})=>{
  if(request.headers.has('authorization')&&actor.credential!=='bearer')return json({error:'auth_required'},401);
- if(!actor.userId)return json({error:'account_required',hint:'Sign in with an account using `afbin auth`.'},403);
+ if(!actor.userId)return json({error:'account_required',hint:'Sign in with an email account (/llms/http-auth).'},403);
  const profile=await accountProfile(actor.userId);return profile?json(profile):json({error:'not_found'},404);
 });
 export const PATCH=withTokenAuth(async(request,{ actor })=>{

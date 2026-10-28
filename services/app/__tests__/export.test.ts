@@ -14,7 +14,6 @@ import type { RenderRequest } from '@artifactbin/contracts';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import teaching from '../../cli/src/generated/teaching.json';
 import { createAppServer } from '@/server/app';
 import { mintAccountToken } from '@/__tests__/harness';
 import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
@@ -153,14 +152,6 @@ describe('GET /a/:id/export', () => {
       const res = await shot(id, 'png');
       expect(res.status).toBe(404);
     }
-  });
-});
-
-describe('skill doc', () => {
-  it('teaches the native export command', async () => {
-    const text = teaching.files['references/publishing-versions.md'];
-    expect(text).toContain('afbin export');
-    expect(text).not.toContain('afbin api');
   });
 });
 

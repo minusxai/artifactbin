@@ -86,7 +86,7 @@ export function withSqliteHint(message: string, sql: string): string {
     const name = (fn[1] ?? fn[2]!).toLowerCase();
     if (RENAMED[name]) return `${message} — ${RENAMED[name]}`;
     const near = CALLABLE.filter((n) => n !== name && editDistance(n, name) <= 2).slice(0, 3);
-    return near.length ? `${message} (did you mean ${near.join(', ')}?)` : `${message} — every function a statement may call is in afbin help markup-sql-functions`;
+    return near.length ? `${message} (did you mean ${near.join(', ')}?)` : `${message} — call a SQLite core function or one the engine registers`;
   }
   if (/syntax error|unrecognized token/.test(message)) {
     const hint = SYNTAX.find(([pattern]) => pattern.test(sql))?.[1];

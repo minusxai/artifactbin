@@ -4,11 +4,10 @@
  * registration and publication, owner/non-owner/anonymous private access with a leak negative control, a bound
  * query on the host, the two-workspace conflict and its explicit recovery, and a real Chromium PNG export.
  *
- * Two callers run it: the `cli` leg of scripts/gates/gate-accounts-and-workspace.mjs (the CI shard gate, beside
- * the other account journeys in one browser) and scripts/gate-cli-conformance.mjs, the standalone entry a
- * downstream deployment runs against its composition or the public host with a released executable.
+ * One caller runs it: scripts/gate-cli-conformance.mjs, the standalone entry the server repository's CI runs
+ * against its composition with a released executable.
  *
- *   CONFORMANCE__CLI                 the executable under test (default: services/cli/dist/afbin.mjs)
+ *   CONFORMANCE__CLI                 the executable under test (required: this repository builds no CLI)
  *   CONFORMANCE__CREDENTIAL_SOURCE   takes the account from the eval's credential helper (scripts/lib/credential.ts)
  *                                    instead of a browser login through the mail sink; `context` is then never called.
  */
@@ -21,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { tsImport } from 'tsx/esm/api';
 import { lane } from './lane.mjs';
 import { fixtureFetch as fetch } from './fixture-http.mjs';
-import { connectAgent, connectionBrowserCookie, signInAccount } from './cli-connection.mjs';
+import { connectAgent, connectionBrowserCookie, signInAccount } from './account-connection.mjs';
 import { connectConformanceNonOwner } from '../../lib/conformance-account.mjs';
 import { checkGuestHttpIssuance, checkDirectHttp } from './http-conformance.mjs';
 import { loginViaEmail } from '../../lib/mail-login.mjs';
@@ -36,7 +35,8 @@ import { loginViaEmail } from '../../lib/mail-login.mjs';
  */
 export async function cliConformance({ base: BASE, check, stamp, sink, context }) {
   // A downstream matrix substitutes the candidate executable without editing scenarios.
-  const cli = resolve(process.env.CONFORMANCE__CLI ?? 'services/cli/dist/afbin.mjs');
+  if (!process.env.CONFORMANCE__CLI) throw new Error('Set CONFORMANCE__CLI to the released afbin executable under test.');
+  const cli = resolve(process.env.CONFORMANCE__CLI);
   const root = await mkdtemp(join(tmpdir(), 'afbin-conformance-'));
   const home = join(root, '.artifactbin');
   const workspace = join(root, 'author');

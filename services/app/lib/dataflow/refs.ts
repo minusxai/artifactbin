@@ -231,7 +231,7 @@ export function writeRefusal(r: ResolvedRef): string | null {
   const notYours = `ref:${r.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`;
   if (r.format === 'folder') return notYours;
   if (!r.owned && r.datasetPolicy?.version !== 2) return notYours;
-  if (r.access !== 'readwrite' && r.datasetPolicy?.version !== 2) return `ref:${r.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${r.id} { "access": "readwrite" }, or use the dataset's share menu)`;
+  if (r.access !== 'readwrite' && r.datasetPolicy?.version !== 2) return `ref:${r.id} is read-only — a <Mutation> needs a writable dataset: set access on create or PUT, PATCH /api/my/artifacts/${r.id} { "access": "readwrite" }, or use the dataset's share menu`;
   return null;
 }
 

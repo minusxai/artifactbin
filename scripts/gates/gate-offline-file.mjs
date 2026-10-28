@@ -17,7 +17,7 @@ import {datavizExamples,nativeDatavizFixture} from '../fixtures/native-dataviz.m
 import { createChecker } from './lib/assert.mjs';
 import { lane } from './lib/lane.mjs';
 import { launchChromium, launchWebKit, PAGES_HOST } from './lib/browser.mjs';
-import { connectAgent } from './lib/cli-connection.mjs';
+import { connectAgent } from './lib/account-connection.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { documentLocator } from './lib/page-facts.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';

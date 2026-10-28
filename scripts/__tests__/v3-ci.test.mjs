@@ -32,12 +32,7 @@ describe('v3 validation isolation', () => {
     expect(workflow('codeql.yml').on.push.branches).toEqual(['main']);
     expect(ci.jobs['notify-consumer'].if).toContain("github.ref == 'refs/heads/main'");
   });
-  it('blocks CLI release/install dispatches from v3 while preserving main', () => {
-    for (const [file, job] of [['release-afbin.yml','release'],['release-cli.yml','release'],['windows-install-smoke.yml','install']]) {
-      const expression = workflow(file).jobs[job].if;
-      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/artifactbinv3')).toBe(false);
-      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/main')).toBe(true);
-    }
+  it('keeps the v3 fast lane inside its two-minute cap', () => {
     expect(workflow('v3-fast.yml').jobs.fast['timeout-minutes']).toBe(2);
   });
   it('runs every retained worker proof without retired product suites on v3', () => {
@@ -62,8 +57,8 @@ describe('v3 validation isolation', () => {
   });
   it('runs all retained service suites on every v3 SHA, including a prose-only merge', () => {
     git('init','-q'); git('config','user.name','CI fixture');git('config','user.email','ci@example.test');
-    mkdirSync(path.join(directory,'services/cli'),{recursive:true});
-    writeFileSync(path.join(directory,'services/cli/package.json'), JSON.stringify({version:'1.0.0'}));
+    mkdirSync(path.join(directory,'services/app'),{recursive:true});
+    writeFileSync(path.join(directory,'services/app/package.json'), JSON.stringify({version:'1.0.0'}));
     git('add','.');git('commit','-qm','initial');const base = git('rev-parse','HEAD');
     writeFileSync(path.join(directory,'README.md'),'prose only');git('add','.');git('commit','-qm','prose');
     const run = ref => JSON.parse(execFileSync(process.execPath,[path.join(root,'scripts/ci/ci.mjs'),'plan'], {
@@ -71,16 +66,14 @@ describe('v3 validation isolation', () => {
     }));
     const v3 = run('refs/heads/artifactbinv3');
     expect(v3.full).toBe(true);expect(v3.testedRun).toBeNull();
-    for (const job of ['checks','node','api','ui','integration','gates','build','cli-tests']) expect(v3.jobs[job]).toBe(true);
+    for (const job of ['checks','node','api','ui','integration','gates','build']) expect(v3.jobs[job]).toBe(true);
     expect(run('refs/heads/main').full).toBe(false);
     mkdirSync(path.join(directory,'services/utils/src'),{recursive:true});
     writeFileSync(path.join(directory,'services/utils/src/change.ts'),'export const changed = true;');
     git('add','.');git('commit','-qm','runtime change');
     const v3Runtime = run('refs/heads/artifactbinv3');
-    for (const proof of ['cli','cli-bootstrap','reference-compatibility']) expect(v3Runtime.jobs[proof]).toBe(false);
-    expect(v3Runtime.jobs['cli-tests']).toBe(true);
     expect(v3Runtime.jobs.build).toBe(true);
-    expect(run('refs/heads/main').jobs.cli).toBe(true);
+    expect(run('refs/heads/main').jobs.build).toBe(true);
 
   });
 });

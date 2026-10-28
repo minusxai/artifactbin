@@ -1,7 +1,7 @@
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createTeamApplication} from '../server/team-host';
+import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import {useAppHarness} from './harness';
 import {expect,it} from 'vitest';
@@ -9,7 +9,7 @@ useAppHarness();
 
 it('a signed-out HTTP author logs in with email OTP and receives a refreshable account bearer',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'http-login-')),origin='http://localhost:3000';
- const application=await createTeamApplication({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')},process.cwd());
+ const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
  const fetch=(path:string,init:RequestInit={})=>application.fetch(new Request(origin+path,init));
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)});
  try {
