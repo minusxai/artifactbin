@@ -84,6 +84,8 @@ describe('installed native author examples',()=>{
    const first=await publishCommand({values:{server},positionals:[source]},options);expect(first.version).toBe(1);
    // An unchanged input becomes the canonical pair in place; no sibling copies.
    expect(first.updatedInPlace).toBe(true);expect(first.source).toBe(await realpath(source));expect(first.baseline).toBe(first.source+'.af.json');
+   // The ids publish added are announced, so exact-text edits against the old text are not attempted blind.
+   expect(first.rewritten).toMatch(/^index\.html was rewritten with \d+ data-af-id attributes: re-read it before editing; match on short anchors, not whole lines\.$/);
    const canonical=await readFile(first.source,'utf8'),baseline=JSON.parse(await readFile(first.baseline,'utf8'));expect(canonical).toContain('href="./theme.css"');expect(baseline.dependencyReceipts).toHaveLength(1);
    const nodeId=/data-af-id="([^"]+)"[^>]*>One/.exec(canonical)?.[1];expect(nodeId).toBeTruthy();
    const anchor=path.join(dir,'anchor.json'),bodyFile=path.join(dir,'comment.txt');await writeFile(anchor,JSON.stringify({kind:'html-node',v:1,revision:'1',nodeId,quote:'One'}));await writeFile(bodyFile,'Review this heading');

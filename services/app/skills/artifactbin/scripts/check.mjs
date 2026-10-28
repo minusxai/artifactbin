@@ -13,13 +13,15 @@ Examples:
   steps file:  await page.getByRole('button',{name:'Add'}).click(); await page.getByText('Saved').waitFor();
                return {assertions:['add shows Saved']}
 Output: --output saves the full JSON and prints one summary line per viewport: errors, overflow, contrast
-  (text under 2:1 fails), slides, your task result; the first 3 items of each kind name their text and element or
-  slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
+  (text under 2:1 fails), slides, your task result; each failing item (up to 12 of a kind) names its text and element
+  or slide. Smoke fails on page or console errors, failed requests, overflow, unreadable text and duplicate data-af-id
   values (first ids and counts listed). A warning (not a failure) lists script-created data-af-ids that differ
   between two loads; checked on the first viewport, only when the page has any.
 Steps: each steps file gets 6 s per viewport and 2.5 s per call, so wait for data first (also after page.reload()),
-  use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. page is scoped to the page's own document frame:
-  use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the reader chrome. Click before
+  use waitForFunction(fn,null,{timeout:4000}) and avoid networkidle. Script-made nodes carry data-af-id, not id:
+  select them with [data-af-id="…"]. Skip a separate no-steps smoke run; go straight to --steps. page is scoped to
+  the page's own document frame: use page.getByRole/page.locator (not frameLocator); page.mainFrame() reaches the
+  reader chrome. Click before
   page.keyboard. Past the deadline, the error names the numbered call still running and what the page shows. Use
   disposable test data (steps can write), test persistence by changing data then reloading, and
   test refusals in a separate --viewer guest run. Viewports run concurrently, each in a fresh session; a hosted
@@ -258,7 +260,8 @@ export async function inspectPage(page, options, task) {
       }
     }
     if (task) {
-      evidence.steps = true;
+      // Whether the steps ran and passed; a failure's message is in error (a bare true here once read as "passed").
+      evidence.steps = {ran: true, passed: false};
       // Name the steps-file call that failed or was still pending, numbered so a call repeated after a reload is told apart.
       const pending = new Map();
       let failed = null,
@@ -317,6 +320,7 @@ export async function inspectPage(page, options, task) {
             );
           })
         ]);
+        evidence.steps.passed = true;
       } catch (error) {
         const deadline = /^Task deadline exceeded/.test(error.message);
         expired = true;

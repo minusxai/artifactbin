@@ -170,8 +170,8 @@ it('runs check steps in the framed document again after page.reload()', async ()
  const steps=`await page.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Loaded'),null,{timeout:4000});await page.reload({waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.querySelector('#status')?.textContent.startsWith('Loaded'),null,{timeout:4000});await page.getByText('Loaded 2').waitFor();return {status:await page.locator('#status').textContent()};`;
  const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
  expect(out.error).toBeUndefined();
- const evidence=out.result as {error?:string;task?:unknown};
- expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({status:'Loaded 2'});
+ const evidence=out.result as {error?:string;task?:unknown;steps?:unknown};
+ expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({status:'Loaded 2'});expect(evidence.steps).toEqual({ran:true,passed:true});
 },30_000);
 
 // A step past the deadline names the numbered call still running and what the page shows, so the agent sees why it waits.
@@ -179,7 +179,9 @@ it('names the running step call and the page status when a steps file hits its d
  const {chromium}=await import('playwright');const browser=await chromium.launch();const page=await browser.newPage();
  try{
   const task=new (Object.getPrototypeOf(async function(){}).constructor)('page',`await page.locator('h1').waitFor();await page.waitForFunction(()=>document.querySelector('h1').textContent==='Saved',null,{timeout:10000});`);
-  const evidence=await inspectPage(page,{target:'data:text/html,'+encodeURIComponent('<html><body><h1>Budget</h1><p role="status">Could not save: offline</p></body></html>'),viewport:{width:800,height:600}},task) as {error?:string};
+  const evidence=await inspectPage(page,{target:'data:text/html,'+encodeURIComponent('<html><body><h1>Budget</h1><p role="status">Could not save: offline</p></body></html>'),viewport:{width:800,height:600}},task) as {error?:string;steps?:unknown};
+  // A failed run says so in steps too: a bare `steps: true` once read as a pass.
+  expect(evidence.steps).toEqual({ran:true,passed:false});
   expect(evidence.error).toMatch(/^Task deadline exceeded.*\(step call #3 page\.waitForFunction\(.*; status: "Could not save: offline"; page text: "Budget Could not save: offline"/);
  }finally{await browser.close();}
 },20_000);

@@ -84,12 +84,12 @@ export function checkDigest(envelope,file){
   if(!check?.viewport){lines.push('  '+clip(check?.error??check,240));continue;}
   const errors=['pageErrors','consoleErrors','failedRequests','httpErrors'].filter(key=>check[key]?.length).map(key=>`${key} ${check[key].length}: ${clip(check[key][0],160)}`);
   if(check.ids?.duplicates)errors.push(`duplicate data-af-id ${check.ids.duplicates}: ${check.ids.items.map(item=>`${clip(item.id,60)} x${item.count}`).join(', ')}${check.ids.duplicates>check.ids.items.length?`; +${check.ids.duplicates-check.ids.items.length} more`:''}`);
-  const task=check.error?'task error: '+clip(check.error,1000):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,300);
+  const task=check.error?'task error: '+clip(check.error,1000):check.inspectionError?'inspection error: '+clip(check.inspectionError,200):check.task==null?'no task':'task '+clip(check.task,2000);
   const overflow=check.overflow?check.overflow.fits?'fits':`overflow ${check.overflow.content}>${check.overflow.viewport}${check.overflow.culprits?.length?' from '+check.overflow.culprits.map(c=>`${c.element} (right ${c.right})`).join(', '):''}`:'overflow unknown';
-  // List the first three defects of each kind, by text and element or slide, so a fix needs no trip into the JSON.
-  const few=(items,show,n=5,total=items?.length??0)=>(items??[]).slice(0,n).map(show).join('; ')+(total>n?`; +${total-n} more`:'');
-  const slides=!check.slides?'':`; slides ${check.slides.count} exportable, ${check.slides.clipped?`${check.slides.clipped} clipped (${few(check.slides.items,cut=>`slide ${cut.slide} "${cut.text}" by ${cut.by} ${cut.px}px`,3,check.slides.clipped)})`:'none clipped'}${check.slides.overlapping?`, ${check.slides.overlapping} overlapping (${few(check.slides.overlaps,o=>`slide ${o.slide} "${o.text}" over "${o.over}"`,3,check.slides.overlapping)})`:''}`;
-  const contrast=check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; ${few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.element?' '+low.element:''}${low.slide?' slide '+low.slide:''}${low.color?' '+low.color:''}`,3,check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
+  // List every defect (up to 12 of each kind), by text and element or slide, so a fix needs no trip into the JSON.
+  const few=(items,show,n=12,total=items?.length??0)=>(items??[]).slice(0,n).map(show).join('; ')+(total>n?`; +${total-n} more`:'');
+  const slides=!check.slides?'':`; slides ${check.slides.count} exportable, ${check.slides.clipped?`${check.slides.clipped} clipped (${few(check.slides.items,cut=>`slide ${cut.slide} "${cut.text}" by ${cut.by} ${cut.px}px`,12,check.slides.clipped)})`:'none clipped'}${check.slides.overlapping?`, ${check.slides.overlapping} overlapping (${few(check.slides.overlaps,o=>`slide ${o.slide} "${o.text}" over "${o.over}"`,12,check.slides.overlapping)})`:''}`;
+  const contrast=check.contrast?check.contrast.belowAA?`contrast ${check.contrast.belowAA} below AA (${check.contrast.unreadable} under 2:1; ${few(check.contrast.low,low=>`${low.ratio}:1 "${low.text}"${low.element?' '+low.element:''}${low.slide?' slide '+low.slide:''}${low.color?' '+low.color:''}`,12,check.contrast.belowAA)})`:'contrast ok':'contrast unknown';
   lines.push(`  ${check.viewport.width}x${check.viewport.height}: ${errors.length?errors.join('; '):'no errors'}; ${overflow}; ${contrast}${slides}; ${task}`);
  }
  // Script-created IDs that differ between two loads break saved comments; a warning, not a smoke failure.
@@ -97,7 +97,7 @@ export function checkDigest(envelope,file){
  if(envelope.unverified?.length)lines.push('  unverified: '+envelope.unverified.join(', '));
  // Agents keep exporting, re-checking and polishing after a clean pass; say what a clean pass means where they read it.
  if(envelope.smokePassed&&!(envelope.checks??[]).some(check=>check?.steps))lines.push('  no steps ran: this only shows the page loads; test the requested behaviour with --steps.');
- else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&!check.idStability?.unstable))lines.push('  clean pass: if your steps cover the requested behaviour, reply with the link and what you tested, then stop; no exports, re-checks or polish needed.');
+ else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&!check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&!check.idStability?.unstable))lines.push("  clean pass: reply now with the link; don't open qa JSON or screenshots.");
  return lines.join('\n')+'\n';
 }
 /** Unexpected errors keep a generic message (raw text can carry URLs or paths); a network/server blip says so and suggests one retry. */
@@ -120,6 +120,8 @@ export async function runTool(name,url,execute,args=process.argv.slice(2)){
   const envelope={ok:true,code:'completed',...result};
   const data=JSON.stringify(envelope,null,parsed.values.json?0:2)+'\n';
   if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.output,data);if(name==='check')process.stdout.write(checkDigest(envelope,parsed.values.output));}else process.stdout.write(data);
+  // A publish that added data-af-ids says so last, below the JSON, where a tail of the output still shows it.
+  if(typeof result.rewritten==='string'&&!parsed.values.json)process.stderr.write(result.rewritten+'\n');
  }catch(error){
   const envelope=toolFailure(name,error);
   if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.output,JSON.stringify(envelope,null,2)+'\n');process.stdout.write(checkDigest(envelope,parsed.values.output));}catch{process.stderr.write('Could not save check output; existing files were retained.\n');}}
