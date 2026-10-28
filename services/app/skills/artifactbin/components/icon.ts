@@ -1,9 +1,11 @@
 /**
  * <af-icon>: local Lucide glyph; no runtime fetch.
- * Import:  import '@afbin/icon';  (registers the tags; this .ts is the readable contract)
- * Props: name, size, label (accessible name; omit for decorative)
- * Usage:
+ * Usage: import '@afbin/icon';  (registers the tags; this .ts is the readable contract)
+ * Props: name, size, label (accessible name; omit for decorative).
+ * Examples:
  *   <af-icon name="check" size="16" label="Done"></af-icon>
+ * Gotchas: glyphs are bundled; an unknown name renders the circle-question-mark glyph. size
+ *   accepts a number or a CSS length; anything else falls back to the default.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
 import { iconMarkup } from './icon-glyphs';
@@ -14,14 +16,19 @@ const DEFAULT_SIZE = '16';
 const DEFAULT_CLASS = 'inline-block shrink-0 align-[-0.125em]';
 
 function safeSize(value: string | number | null): string {
-  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? String(value) : DEFAULT_SIZE;
-  if (value && /^(?:\d+(?:\.\d+)?)(?:px|em|rem|ch|vw|vh|%)?$/.test(value.trim())) return value.trim();
+if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? String(value) :
+    DEFAULT_SIZE;
+  // Bare number or a number with one CSS length unit; anything else falls back to the default.
+  if (value && /^(?:\d+(?:\.\d+)?)(?:px|em|rem|ch|vw|vh|%)?$/.test(value.trim())) {
+    return value.trim();
+  }
   return DEFAULT_SIZE;
 }
 
 let nextId = 0;
 export class AfIcon extends HTMLElement implements AfIconContract {
-  static observedAttributes = ['name', 'size', 'stroke-width', 'theme', 'label', 'aria-label', 'class'];
+static observedAttributes = ['name', 'size', 'stroke-width', 'theme', 'label', 'aria-label',
+    'class'];
   private nameIsSet = false;
   private propertyName = '';
   private sizeIsSet = false;
@@ -30,24 +37,36 @@ export class AfIcon extends HTMLElement implements AfIconContract {
   private propertyLabel: string | null = null;
   private svg: SVGSVGElement | undefined;
 
-  get name(): string { return this.nameIsSet ? this.propertyName : this.getAttribute('name') ?? ''; }
-  set name(value: string) { this.nameIsSet = true; this.propertyName = String(value ?? ''); this.sync(); }
-  get size(): string | number { return this.sizeIsSet ? this.propertySize : this.getAttribute('size') ?? DEFAULT_SIZE; }
-  set size(value: string | number) { this.sizeIsSet = true; this.propertySize = value; this.sync(); }
-  get label(): string | null { return this.labelIsSet ? this.propertyLabel : this.getAttribute('label'); }
-  set label(value: string | null) { this.labelIsSet = true; this.propertyLabel = value === null ? null : String(value); this.sync(); }
+  get name(): string {
+    return this.nameIsSet ? this.propertyName : this.getAttribute('name') ?? '';
+  }
+set name(value: string) { this.nameIsSet = true; this.propertyName = String(value ?? ''); this.sync(
+    ); }
+get size(): string | number { return this.sizeIsSet ? this.propertySize : this.getAttribute(
+    'size') ?? DEFAULT_SIZE; }
+  set size(value: string | number) {
+    this.sizeIsSet = true; this.propertySize = value; this.sync();
+  }
+get label(): string | null { return this.labelIsSet ? this.propertyLabel : this.getAttribute(
+    'label'); }
+set label(value: string | null) { this.labelIsSet = true; this.propertyLabel =
+    value === null ? null : String(value); this.sync(); }
 
   connectedCallback(): void {
-    if (Object.prototype.hasOwnProperty.call(this, 'name')) { const value = this.name; delete (this as {name?: string}).name; this.name = value; }
-    if (Object.prototype.hasOwnProperty.call(this, 'size')) { const value = this.size; delete (this as {size?: string | number}).size; this.size = value; }
-    if (Object.prototype.hasOwnProperty.call(this, 'label')) { const value = this.label; delete (this as {label?: string | null}).label; this.label = value; }
+if (Object.prototype.hasOwnProperty.call(this, 'name')) { const value = this.name; delete (this as {
+      name?: string}).name; this.name = value; }
+if (Object.prototype.hasOwnProperty.call(this, 'size')) { const value = this.size; delete (this as {
+      size?: string | number}).size; this.size = value; }
+if (Object.prototype.hasOwnProperty.call(this, 'label')) { const value = this.label; delete (
+      this as {label?: string | null}).label; this.label = value; }
     this.sync();
   }
   attributeChangedCallback(): void { this.sync(); }
 
   private sync(): void {
     if (!this.isConnected) return;
-    this.svg = this.querySelector<SVGSVGElement>('svg[data-af-icon]') ?? this.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+this.svg = this.querySelector<SVGSVGElement>('svg[data-af-icon]') ??
+      this.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
     if (!this.svg.hasAttribute('data-af-icon')) {
       let id: string;
       do { id = `af-icon-${++nextId}`; } while (this.ownerDocument.getElementById(id));
@@ -60,7 +79,8 @@ export class AfIcon extends HTMLElement implements AfIconContract {
     const parsed = new DOMParser().parseFromString(markup, 'image/svg+xml');
     const source = parsed.documentElement;
     this.svg.replaceChildren();
-    for (const child of [...source.children]) this.svg.append(this.ownerDocument.importNode(child, true));
+for (const child of [...source.children]) this.svg.append(this.ownerDocument.importNode(child,
+      true));
     this.svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     this.svg.setAttribute('width', safeSize(this.size));
     this.svg.setAttribute('height', safeSize(this.size));
@@ -70,7 +90,9 @@ export class AfIcon extends HTMLElement implements AfIconContract {
     this.svg.setAttribute('stroke-width', this.getAttribute('stroke-width') ?? '2');
     this.svg.setAttribute('stroke-linecap', 'round');
     this.svg.setAttribute('stroke-linejoin', 'round');
-    this.svg.setAttribute('class', ['lucide', source.getAttribute('class')?.split(/\s+/).filter(c => c.startsWith('lucide-')).join(' '), DEFAULT_CLASS, this.getAttribute('class')].filter(Boolean).join(' '));
+this.svg.setAttribute('class', ['lucide', source.getAttribute('class')?.split(/\s+/).filter(c =>
+      c.startsWith('lucide-')).join(' '), DEFAULT_CLASS, this.getAttribute('class')].filter(
+      Boolean).join(' '));
     this.svg.setAttribute('data-slot', 'icon');
     const theme = this.getAttribute('theme');
     if (theme && /^(light|dark|auto)$/.test(theme)) this.svg.setAttribute('data-af-theme', theme);

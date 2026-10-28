@@ -1,4 +1,7 @@
-/** Internal helper for af-input and af-textarea; not a public entry point. */
+/**
+ * Internal: shared light-DOM behaviour of the native text controls.
+ * Used by: input.ts, textarea.ts.
+ */
 /** Author-facing contract shared by the native text and textarea controls. */
 export interface TextControlContract {
   value: string | number | null | undefined;
@@ -104,7 +107,8 @@ if (native!.disabled || (native as HTMLInputElement | HTMLTextAreaElement).readO
     const detail: TextControlChangeDetail = numeric()
       ? {value: value === null ? null : Number(value)}
       : {value: value === null ? null : String(value)};
-    const event = new CustomEvent('af-change', {detail, bubbles:true, composed:true, cancelable:true});
+    const event = new CustomEvent('af-change',
+      {detail, bubbles:true, composed:true, cancelable:true});
     const accepted = host.dispatchEvent(event);
     if (property.controlled() || host.hasAttribute('value')) sync();
     else if (!accepted) setNativeValue(acceptedValue);
@@ -115,7 +119,9 @@ if (native!.disabled || (native as HTMLInputElement | HTMLTextAreaElement).readO
   const onCompositionEnd = () => {
     composing = false;
     const changed = current() !== acceptedValue;
-    if ((queuedDuringComposition || changed) && changed) { queuedDuringComposition = false; commit(); }
+    if ((queuedDuringComposition || changed) && changed) {
+      queuedDuringComposition = false; commit();
+    }
     else sync();
   };
   native.addEventListener('input', onInput);
