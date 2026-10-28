@@ -20,13 +20,11 @@ await step('flow and matrix diagrams draw',async()=>{
   const shapes=await page.evaluate(()=>[...document.querySelectorAll('.figure svg')]
     .map(svg=>svg.querySelectorAll('rect, circle').length));
   if(shapes.some(count=>!count))throw Error('a flow or matrix diagram drew nothing');});
-await step('"Illustrative figures" on every slide with made-up figures',async()=>{
-  // Slides with a chart or a digit in their copy carry the badge unless marked real.
+await step('"Illustrative figures" on every slide',async()=>{
+  // Every slide carries the badge unless marked real.
   const missing=await page.evaluate(real=>[...document.querySelectorAll('[data-af-slide]')]
-    .filter(slide=>!real.includes(slide.dataset.afId.replace(/^slide-/,''))&&(slide.querySelector(
-      '.chart')||/\d/.test([...slide.querySelectorAll('h1,h2,.t-body-l,li,.t-numeral')].map(e=>
-        e.textContent).join(' ')))&&!slide.querySelector('.illustrative')).map(s=>s.dataset.afId),
-    REAL);
+    .filter(slide=>!real.includes(slide.dataset.afId.replace(/^slide-/,''))&&
+      !slide.querySelector('.illustrative')).map(s=>s.dataset.afId),REAL);
   if(missing.length)throw Error('no Illustrative figures badge on '+missing.join(', '));});
 if(!PLACEHOLDERS_OK)await step('no [placeholders] left',async()=>{
   const left=await page.evaluate(()=>[...document.querySelectorAll('[data-af-slide]')]

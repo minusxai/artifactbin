@@ -12,9 +12,9 @@ const saved = {document: globalThis.document, NodeFilter: (globalThis as {NodeFi
 afterEach(() => Object.assign(globalThis, saved));
 
 /** Runs the steps over one slide; returns the claim error, or null when every step passes. */
-async function claims(title: string, body: string): Promise<string | null> {
+async function claims(title: string, body: string, badge = '<p class="illustrative">Illustrative figures</p>'): Promise<string | null> {
   const dom = new JSDOM(`<main><section data-af-slide data-af-id="slide-a"><p class="t-label">02 · Market</p>` +
-    `<h2>${title}</h2>${body}<p class="illustrative">Illustrative figures</p></section></main><span id="count"></span>`);
+    `<h2>${title}</h2>${body}${badge}</section></main><span id="count"></span>`);
   Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter});
   const locator: unknown = new Proxy({}, {get: (_, key) => key === 'count' ? async () => 1 : key === 'nth' ? () => locator : async () => {}});
   const page = {waitForFunction: async () => {}, evaluate: async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg),
@@ -51,4 +51,9 @@ it('treats today, so far and this quarter as claims the slide must show', async 
 it('passes plain titles whose numbers are on the slide, and skips template placeholders', async () => {
   expect(await claims('A $4.2B market, $1.1B serviceable', '<div class="chart"><svg><text>$4.2B</text><text>$1.1B</text></svg></div>')).toBeNull();
   expect(await claims('[Market size in one sentence]', '<p>[placeholder]</p>')).toContain('placeholders left');
+});
+
+it('requires the Illustrative figures badge on every slide, even one without figures', async () => {
+  expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>', '')).toContain('no Illustrative figures badge on slide-a');
+  expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
 });
