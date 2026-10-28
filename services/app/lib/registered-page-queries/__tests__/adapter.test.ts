@@ -148,7 +148,7 @@ it("executes real page GraphQL with result-only document authority and viewer fi
     {
       readPage: async () => saved,
       readDocument: async () => document as any,
-      readHeader: async () => ({ row: document as any }),
+      readIdentity: async () => ({ row: { ...document, meta_digest: "meta", updated_at: undefined } as any }),
       readBackend: async () => backend,
       resolveImport: async (doc, id, actor) => {
         calls.push([doc.id, id, actor.userId]);

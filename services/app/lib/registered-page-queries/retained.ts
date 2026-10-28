@@ -7,7 +7,7 @@ import { storedRowStats } from "@/lib/datasets/dataset-store";
 import { QUERY_LIMITS as limits } from "./contracts";
 import { createHash } from "node:crypto";
 import type { AccessActor } from "@/lib/accounts";
-import { getArtifactById, readableArtifactHeader, type ArtifactRow } from "@/lib/artifacts";
+import { getArtifactById, readableArtifactIdentity, type ArtifactIdentity, type ArtifactRow } from "@/lib/artifacts";
 import { readHtmlPage } from "@/lib/html-publication";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { registeredQueryImportForRow } from "@/lib/document-data";
@@ -25,8 +25,8 @@ interface RetainedPorts {
   readPage: typeof readHtmlPage;
   readMembers:(pageId:string)=>Promise<import("@artifactbin/contracts").Row[]>;
   readDocument: typeof getArtifactById;
-  /** The reader's admission to the page's head row, without its source: what every fence after the first rereads. */
-  readHeader: (actor: AccessActor, pageId: string) => Promise<{ row: Omit<ArtifactRow, "source" | "document"> } | null>;
+  /** The reader's admission to the page's head identity (no source, document or metadata body): what a fence rereads. */
+  readIdentity: (actor: AccessActor, pageId: string) => Promise<{ row: ArtifactIdentity } | null>;
   readBackend: typeof getHtmlBackendVersion;
   resolveImport: typeof registeredQueryImportForRow;
   readWindow: typeof executeCatalog;
@@ -63,6 +63,47 @@ const stamp = (row: Omit<ArtifactRow, "source" | "document">) =>
       ]),
     )
     .digest("hex");
+/** Every identity and access column of a page head and its metadata digest: what a republish or an access change moves. */
+const identityKey = (row: ArtifactIdentity) =>
+  JSON.stringify([row.id, row.format, row.edit_id, row.version, row.updated_at, row.user_id, row.token_id, row.group_id,
+    row.visibility, row.link_role, row.access, row.policy_revision, row.sharing_revision, row.dataset_policy, row.meta_digest]);
+/**
+ * Simultaneous evaluations of one page (a reader's page load sends one per table) read the same immutable stored
+ * dataset revision: they share one window read in flight, keyed by the reader's authority over that exact revision.
+ * Nothing outlives the read; each joiner still runs its own fences, and the read is cancelled only when every
+ * joiner has gone.
+ */
+const sharedWindows = new Map<string, { result: Promise<Awaited<ReturnType<typeof executeCatalog>>>; joined: number; controller: AbortController }>();
+async function sharedWindow(key: string, signal: AbortSignal, load: (signal: AbortSignal) => ReturnType<typeof executeCatalog>) {
+  signal.throwIfAborted();
+  let entry = sharedWindows.get(key);
+  if (!entry) {
+    const controller = new AbortController();
+    const created = { joined: 0, controller, result: Promise.resolve().then(() => load(controller.signal)) };
+    entry = created;
+    sharedWindows.set(key, created);
+    created.result.then(() => {}, () => {}).finally(() => { if (sharedWindows.get(key) === created) sharedWindows.delete(key); });
+  }
+  const joined = entry;
+  joined.joined++;
+  let leave!: () => void;
+  const left = new Promise<never>((_, reject) => {
+    leave = () => reject(signal.reason ?? Error("cancelled"));
+  });
+  left.catch(() => {});
+  const onAbort = () => leave();
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await Promise.race([joined.result, left]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    if (--joined.joined === 0 && sharedWindows.get(key) === joined) {
+      // Settled reads are already gone from the map; an unsettled one nobody waits on is cancelled.
+      sharedWindows.delete(key);
+      joined.controller.abort(Error("cancelled"));
+    }
+  }
+}
 /** Host adapter only: the page's exact saved backend link selects its immutable program. */
 export function createRetainedRegisteredQueries(
   actor: AccessActor,
@@ -73,7 +114,7 @@ export function createRetainedRegisteredQueries(
     readPage: readHtmlPage,
     readMembers:async pageId=>readRegisteredQueryMembers(await getDb(),pageId,limits.rows+1),
     readDocument: getArtifactById,
-    readHeader: readableArtifactHeader,
+    readIdentity: readableArtifactIdentity,
     readBackend: getHtmlBackendVersion,
     resolveImport: registeredQueryImportForRow,
     readWindow: executeCatalog,
@@ -119,20 +160,27 @@ export function createRetainedRegisteredQueries(
     }
   };
   let admittedDocument: ArtifactRow | null = null,
-    documentStamp: string | null = null;
-  const document = async (signal: AbortSignal) => {
+    documentStamp: string | null = null,
+    admittedIdentity: string | null = null;
+  /** The head's identity and the reader's access, reread: a republish or a lost reader fails the evaluation. */
+  const fence = async (signal: AbortSignal) => {
+    const head = await ports.readIdentity(actor, page.pageId);
     signal.throwIfAborted();
-    // After admission compared the served HTML itself, a fence rereads only the head's identity and the reader's
-    // access: the stamp (edit, version, owner, visibility, policy, sharing, meta and its links) changes with any
-    // republish, so rereading the whole page source on each of an evaluation's many fences would only repeat that.
-    if (admittedDocument && documentStamp !== null) {
-      const head = await ports.readHeader(actor, page.pageId);
-      signal.throwIfAborted();
-      if (!head || head.row.format !== "html") throw Error("query_registration_changed");
-      if (stamp(head.row) !== documentStamp || head.row.updated_at !== admittedDocument.updated_at)
-        throw Error("query_document_changed");
+    if (!head || head.row.format !== "html") throw Error("query_registration_changed");
+    return identityKey(head.row);
+  };
+  /**
+   * Admission reads the page and its head in full and compares the served HTML; after that the evaluation holds that
+   * row. A `fresh` call (the evaluation's start and end checks and its retained read fences) rereads only the head's
+   * identity columns, which move with any republish or access change; reads between them need no page I/O.
+   */
+  const document = async (signal: AbortSignal, fresh = false) => {
+    signal.throwIfAborted();
+    if (admittedDocument && admittedIdentity !== null) {
+      if (fresh && (await fence(signal)) !== admittedIdentity) throw Error("query_document_changed");
       return admittedDocument;
     }
+    const before = await fence(signal);
     const readable = await ports.readPage(actor, page.pageId, page.revision);
     const row = await ports.readDocument(page.pageId);
     signal.throwIfAborted();
@@ -144,10 +192,12 @@ export function createRetainedRegisteredQueries(
       linkStamp(readable.links) !== linkStamp(page.links)
     )
       throw Error("query_registration_changed");
-    if (documentStamp !== null && stamp(row) !== documentStamp)
+    // The identity read before the full row must still describe it: nothing was republished in between.
+    if (JSON.stringify([row.edit_id, row.version, row.updated_at]) !== JSON.stringify(JSON.parse(before).slice(2, 5)))
       throw Error("query_document_changed");
-    admittedDocument ??= row;
-    documentStamp ??= stamp(row);
+    admittedDocument = row;
+    documentStamp = stamp(row);
+    admittedIdentity = before;
     return row;
   };
   const evaluator = createRegisteredPageQueries({
@@ -170,14 +220,14 @@ export function createRetainedRegisteredQueries(
     },
     authorize: async (context, _identity, signal) => {
       if (context.subject !== actor.userId) return false;
-      await document(signal);
+      await document(signal, true);
       return true;
     },
     members:async (_context,signal)=>{
       await document(signal);
       const rows=await ports.readMembers(page.pageId),fingerprint=JSON.stringify(rows);
       signal.throwIfAborted();
-      const verify=async(active:AbortSignal)=>{await document(active);const current=await ports.readMembers(page.pageId);active.throwIfAborted();if(JSON.stringify(current)!==fingerprint)throw Error('query_members_changed');};
+      const verify=async(active:AbortSignal)=>{await document(active,true);const current=await ports.readMembers(page.pageId);active.throwIfAborted();if(JSON.stringify(current)!==fingerprint)throw Error('query_members_changed');};
       ports.retainReadFence?.(()=>verify(ports.fenceSignal??new AbortController().signal));
       return {rows,verify};
     },
@@ -194,7 +244,7 @@ export function createRetainedRegisteredQueries(
       const connectionIdentity=async()=>createHash('sha256').update(JSON.stringify(await ports.resolveConnection(resolved.catalog.connection!,actor,resolved.artifact.id))).digest('hex');
       const credential=resolved.catalog.kind==='postgres'?await connectionIdentity():null;
       const verify=async(active:AbortSignal)=>{
-        const current=await ports.resolveImport(await document(active),binding,actor);
+        const current=await ports.resolveImport(await document(active,true),binding,actor);
         active.throwIfAborted();
         if(stamp(current.artifact)!==identity||JSON.stringify(current.catalog)!==JSON.stringify(resolved.catalog))throw Error('dataset_changed');
         if(credential!==null&&await connectionIdentity()!==credential)throw Error('dataset_changed');
@@ -202,9 +252,8 @@ export function createRetainedRegisteredQueries(
       };
       ports.retainReadFence?.(()=>verify(ports.fenceSignal??new AbortController().signal));
       return {verify,execute:async(sql,params,paramTypes,active)=>{
-        await verify(active);
-        const result=await ports.readWindow(resolved.catalog,sql,params,{limit:limits.rows,offset:0,paramTypes,timeoutMs:5000,actor,datasetId:resolved.artifact.id,signal:active,authorize:()=>verify(active),execute:input=>runOwned(input,active)});
-        await verify(active);return result;
+        // The evaluator verifies this source before and after each execution; the read itself adds no fence of its own.
+        return ports.readWindow(resolved.catalog,sql,params,{limit:limits.rows,offset:0,paramTypes,timeoutMs:5000,actor,datasetId:resolved.artifact.id,signal:active,authorize:async()=>active.throwIfAborted(),execute:input=>runOwned(input,active)});
       }};
     },
     source: async (_context, binding, signal) => {
@@ -228,7 +277,7 @@ export function createRetainedRegisteredQueries(
           .update(JSON.stringify([identity, documentStamp, actor]))
           .digest("hex");
       const verify = async (active: AbortSignal) => {
-        const currentDoc = await document(active);
+        const currentDoc = await document(active, true);
         const current = await ports.resolveImport(
           currentDoc,
           binding.binding,
@@ -250,9 +299,11 @@ export function createRetainedRegisteredQueries(
       return {
         verify,
         read: async (offset, limit, active) => {
-          await verify(active);
+          // The evaluator verifies every source once all of its windows are read (and before any answer leaves);
+          // the windows themselves are reads of the revision admitted above, so they add no fence of their own.
+          active.throwIfAborted();
           const quote = (s: string) => '"' + s.replaceAll('"', '""') + '"';
-          const load = () => ports.readWindow(
+          const load = (signal: AbortSignal) => ports.readWindow(
             prepared.catalog,
             `SELECT * FROM ${quote(selected.schema)}.${quote(selected.name)}`,
             {},
@@ -261,15 +312,17 @@ export function createRetainedRegisteredQueries(
               offset:prepared.catalog.kind==='postgres'?0:offset,
               actor,
               datasetId: resolved.artifact.id,
-              signal: active,
-              authorize: () => verify(active),
-              execute: (input) => runOwned(input, active),
+              signal,
+              authorize: async () => signal.throwIfAborted(),
+              execute: (input) => runOwned(input, signal),
             },
           );
-          const result=await (prepared.catalog.kind==='postgres'?(connectedResult??=load()):load());
+          // A stored revision is immutable: concurrent evaluations by the same reader share its window read.
+          const result=await (prepared.catalog.kind==='postgres'
+            ?(connectedResult??=load(active))
+            :sharedWindow(JSON.stringify([authority,prepared.catalog,selected,offset,limit]),active,load));
           if(prepared.catalog.kind==='postgres'&&result.truncated)throw Error('query_input_limit');
           const rows=prepared.catalog.kind==='postgres'?result.rows.slice(offset,offset+limit):result.rows;
-          await verify(active);
           return {
             revision: String(resolved.artifact.version),
             authority,

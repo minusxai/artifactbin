@@ -2,7 +2,7 @@ import {grantsOf,grantsPermitRead} from '@/lib/artifacts/dataset-policy/grants';
 import { effectiveRole } from './access';
 import { type ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactHeaderById, getEditableArtifactFor, type ArtifactHeader } from './rows';
+import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 import {publicCatalogOf} from '../datasets/catalog';
@@ -18,6 +18,12 @@ async function readableRow<T extends ArtifactHeader>(actor:AccessActor,row:T|nul
 /** Read access never implies access to the editable governance or connection definition. */
 export async function readableArtifact(actor:AccessActor,id:string){
  return readableRow(actor,await getArtifactById(id));
+}
+/** Admission from the identity columns alone (no source, document or metadata body): a fence's re-check. Access decisions read no `meta`. */
+export async function readableArtifactIdentity(actor:AccessActor,id:string):Promise<{row:ArtifactIdentity;role:ArtifactRole}|null>{
+ const row=await getArtifactIdentityById(id);
+ const readable=await readableRow(actor,row as unknown as (ArtifactHeader&ArtifactIdentity)|null);
+ return readable&&{row:readable.row,role:readable.role};
 }
 /** Admission without loading a page's source or document; empty sidecar reads stay cheap. */
 export async function readableArtifactHeader(actor:AccessActor,id:string){
