@@ -1,15 +1,10 @@
 name: CodeQL
 
-# Code scanning runs after merge and weekly, outside the required PR CI path.
+# Weekly and manual scans. Every push to main is scanned by v3-codeql.yml, which the
+# isolated deployment requires on the exact revision.
 # Both languages retain the default security query suite and complete source coverage.
-# Prose-only merges need no new source scan; weekly scans catch newly published queries.
 # Advanced setup requires GitHub default setup to remain off (not-configured).
 on:
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.txt'
   schedule:
     - cron: '23 6 * * 1'
   workflow_dispatch:
