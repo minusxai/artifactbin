@@ -271,6 +271,12 @@ async function runRemote(
   };
 }
 
+/**
+ * Live backend watches one page may hold. A registered query program admits up to 64 queries and a page's
+ * controller watches each one, plus its viewer and person lookups: a cap at or below that leaves the overflow
+ * watch throwing and the page's charts waiting forever on data that already arrived.
+ */
+const MAX_REMOTE_WATCHES = 128;
 export function createClient(options: ClientOptions): AfClient {
   const backendNames=options.backends;
   const backends=()=>new Set(typeof backendNames==='function'?backendNames():backendNames);
@@ -455,7 +461,7 @@ export function createClient(options: ClientOptions): AfClient {
     const fields=fieldsOf(op.node.selectionSet,op),localFields=fields.filter(field=>!isBackend(field)),remoteFields=fields.filter(isBackend);
     const names=[...new Set(localFields.map(field=>field.name.value))];read(localFields,op,{});
     return createQueryWatch<T>({clearOnRefresh,preserveOnDataRefresh,state,signature:current=>names.map(name=>canonical(own(current,name))).join("\u0000"),local:current=>read(localFields,op,current),empty:Object.fromEntries(remoteFields.map(field=>[responseKey(field),null])),...(remoteFields.length?{remote:{
-      acquire(){if(remoteWatches>=16)throw Error("Too many remote query subscriptions");remoteWatches++;return()=>{remoteWatches--;};},
+      acquire(){if(remoteWatches>=MAX_REMOTE_WATCHES)throw Error("Too many remote query subscriptions");remoteWatches++;return()=>{remoteWatches--;};},
       subscribe(notify:(reason?:QueryInvalidation)=>void){invalidations.add(notify);try{const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};}catch(error){invalidations.delete(notify);throw error;}},
       async fetch(){const settled=await runRemote(remote,op,remoteFields,"query");return settled.errors.length?{data:settled.data,errors:settled.errors}:{data:settled.data};}
     }}:{})});
