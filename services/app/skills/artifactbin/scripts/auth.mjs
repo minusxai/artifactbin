@@ -5,22 +5,28 @@ Usage: node scripts/auth.mjs status
        node scripts/auth.mjs login --email ADDRESS
        node scripts/auth.mjs login --challenge HANDLE --code-file FILE
        node scripts/auth.mjs logout
-Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus --code-file FILE
-  (a file holding the code the user received by email; never pass codes on argv) completes it.
-  Common: --server ORIGIN (default: the archive origin), --json, --output FILE (never overwrites), --help.
+Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
+  --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
+  completes it. Common: --server ORIGIN (default: the archive origin), --json, --output FILE
+  (never overwrites), --help.
 Examples:
-  node scripts/auth.mjs status                          # reuse an existing grant before signing in again
-  node scripts/auth.mjs login --email me@example.com    # then wait for the user's emailed code
+  node scripts/auth.mjs status                        # reuse an existing grant before signing
+                                                      #   in again
+  node scripts/auth.mjs login --email me@example.com  # then wait for the user's emailed code
   node scripts/auth.mjs login --challenge HANDLE --code-file code.txt
-Gotchas: use an email the user gave you; never invent an identity. Challenges expire after 30 minutes and are
-  bound to the origin. Credentials live in the private origin store (ARTIFACTBIN_HOME or ~/.artifactbin); the
-  file format and token refresh are in references/http-auth.md. logout removes only the local grant (there is
-  no server-side revocation) and an ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
-  Every other script reuses this grant and refreshes an expired access token itself (the refresh token is single-use and
-  serialized across processes, so never refresh by hand or copy the store). Network errors, 429 and server errors keep
-  the grant: retry later. Missing credentials or invalid_grant, invalid_client or revoked_token mean log in again.
-  The store is a private directory (0700) and file (0600) per origin; never log tokens or put them in URLs or pages.
-Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
+Gotchas: use an email the user gave you; never invent an identity. Challenges expire after 30
+  minutes and are bound to the origin. Credentials live in the private origin store
+  (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
+  references/http-auth.md. logout removes only the local grant (there is no server-side
+  revocation) and an ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
+  Every other script reuses this grant and refreshes an expired access token itself (the refresh
+  token is single-use and serialized across processes, so never refresh by hand or copy the
+  store). Network errors, 429 and server errors keep the grant: retry later. Missing credentials
+  or invalid_grant, invalid_client or revoked_token mean log in again.
+  The store is a private directory (0700) and file (0600) per origin; never log tokens or put them
+  in URLs or pages.
+Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
+  Results never contain credentials.`;
 
 import path from 'node:path';
 import {mkdir, readFile, unlink} from 'node:fs/promises';
@@ -38,13 +44,16 @@ import {
   positional,
   makeClient
 } from './toolbox-client.mjs';
-// Subcommands: status (read-only), logout (local grant only), login (two steps: send the code, then exchange it).
-export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} = {}) {
+// Subcommands: status (read-only), logout (local grant only), login (two steps: send the code,
+// then exchange it).
+export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
+  {}) {
   positional(positionals, 0);
   const server = serverOrigin(selectedServer(values, env)),
     root = credentialRoot(env),
     shared = await platform();
-  // status: where the grant comes from (environment or the private store) and whether it has expired.
+  // status: where the grant comes from (environment or the private store) and whether it has
+  // expired.
   if (sub === 'status') {
     const saved = await shared.readCredentials(server, root);
     return {
@@ -74,7 +83,8 @@ export async function authCommand({sub, values, positionals}, {env = process.env
       localGrantRemoved: true,
       serverRevoked: false,
       environmentGrantStillActive: !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN),
-      note: 'No self-revocation endpoint is provided; local logout does not revoke the server grant.'
+      note: 'No self-revocation endpoint is provided; ' +
+        'local logout does not revoke the server grant.'
     };
   }
   const client = makeClient(server, {env, fetcher});
@@ -97,10 +107,12 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     return {
       server,
       challenge: handle,
-      next: 'Wait for the user-provided OTP, then auth.mjs login --challenge HANDLE --code-file FILE.'
+      next: 'Wait for the user-provided OTP, ' +
+        'then auth.mjs login --challenge HANDLE --code-file FILE.'
     };
   }
-  // login step 2: read the code from a file (never argv), exchange it for a session, then for a bearer grant.
+  // login step 2: read the code from a file (never argv), exchange it for a session, then for a
+  // bearer grant.
   requireFlags(values, ['challenge', 'code-file']);
   if (!/^[a-f0-9-]{36}$/.test(values.challenge))
     throw new ToolError('invalid_challenge', 'Use the private handle returned by login.', 2);

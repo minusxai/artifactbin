@@ -1,9 +1,10 @@
-/** Internal helper for af-icon; not a public entry point. */
+/** Internal: bundled Lucide glyph catalog for af-icon. Used by: icon.ts. */
 /** Local Lucide glyph catalog. Bundled with the component; no runtime fetches. */
 import * as lucide from 'lucide-static';
 
 const glyphs = lucide as unknown as Record<string, string>;
-const keyOf = (name: string): string => String(name).split(/[-_\s]+/).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
+const keyOf = (name: string): string => String(name).split(/[-_\s]+/).map(part => part.charAt(
+  0).toUpperCase() + part.slice(1)).join('');
 
 /** Full pinned catalog coverage, including Lucide's deprecated aliases. */
 export const LUCIDE_ICON_COUNT = Object.keys(glyphs).filter(name => name !== 'default').length;

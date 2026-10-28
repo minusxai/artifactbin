@@ -1,4 +1,9 @@
-/** Internal helper for af-data-table; not a public entry point. */
+/**
+ * Internal: pure af-data-table model (row identity, sort cycle, virtual window, loader, column
+ *   identities, class names); not a public entry point.
+ * Used by: data-table.ts, data-table-frame.ts, data-table-grid.ts, data-table-cells.ts,
+ *   data-table-compare.ts.
+ */
 import type { DatasetColumn, Row } from "@/lib/dataflow";
 import { keyedRowsError } from "@/lib/story-ui/row-key";
 import type { SortSpec } from "@/lib/story-ui/data-table";
@@ -33,6 +38,48 @@ export type TableCellRenderer = (
 export interface TableTemplate {
   col: string;
   template: HTMLTemplateElement;
+}
+export const DATA_TABLE_CLASSES = {
+  table: "af-data-table__table",
+  header: "af-data-table__header-cell",
+  cell: "af-data-table__cell",
+} as const;
+export interface TableColumnIdentity {
+  afId: string;
+  id?: string;
+}
+/** Validates header identities (non-empty, no whitespace/control chars, unique afId and id)
+ * and returns a frozen copy; throws "Invalid column identity" otherwise. */
+export function freezeColumnIdentities(
+  value: Readonly<Record<string, TableColumnIdentity>>,
+): Readonly<Record<string, TableColumnIdentity>> {
+  const ids = new Set<string>(), afIds = new Set<string>();
+  const valid = (id: unknown): id is string =>
+    typeof id === "string" && !!id && id.length <= 4096 && !/[\s\u0000-\u001f]/.test(id);
+  const next: Record<string, TableColumnIdentity> = Object.create(null);
+  for (const [column, identity] of Object.entries(value)) {
+    if (!column || !identity || !valid(identity.afId) || afIds.has(identity.afId) ||
+      identity.id !== undefined && (!valid(identity.id) || ids.has(identity.id)))
+      throw Error("Invalid column identity");
+    afIds.add(identity.afId);
+    if (identity.id !== undefined) ids.add(identity.id);
+    next[column] = Object.freeze({ ...identity });
+  }
+  return Object.freeze(next);
+}
+/** Generated data-af-id per logical key (row, cell, template node). Ids are cached per key so a
+ * row that scrolls out and back keeps the same id; prefix prefers the host's own data-af-id. */
+export function tableIdentity(
+  state: { ids: Map<string, string>; serial: number; instancePrefix: string },
+  hostId: string | null,
+  key: string,
+): string {
+  let id = state.ids.get(key);
+  if (!id) {
+    id = `${hostId ?? state.instancePrefix}-generated-${++state.serial}`;
+    state.ids.set(key, id);
+  }
+  return id;
 }
 export const TABLE_ROW_HEIGHT = 33;
 export interface MeasuredTableWindow {

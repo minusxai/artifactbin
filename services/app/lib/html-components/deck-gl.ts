@@ -1,9 +1,16 @@
 /**
  * <af-deck-gl>: legacy wrapper for a deck.gl map (new maps: references/maps.md); needs WebGL.
- * Import:  import '/af/components/deck-gl.js';  (legacy, served by URL only: `@afbin/deck-gl` is the deck.gl library)
- * Props: options={data,layers,...}, boundaries, basemap, initialViewState, tooltip/legend
- * Usage:
+ * Usage: import '/af/components/deck-gl.js';  (legacy, served by URL only:
+ *   `@afbin/deck-gl` is the deck.gl library)
+ * Props: options={data,layers,basemap,colorMode,initialViewState,tooltip,legend,title,height,
+ *   boundaries} (property only; validated on set, throws TypeError on an invalid map).
+ *   basemap auto|light|dark|none (default auto, follows the nearest data-af-dark ancestor);
+ *   tooltip true|false|column list; legend default true; height default 420.
+ * Examples:
  *   document.querySelector('af-deck-gl').options={data:rows,layers:[...]};
+ * Gotchas: the WebGL engine (deck-gl-engine.js) loads lazily on connect; a failed load shows a
+ *   role=status message. Street basemaps fetch external OpenFreeMap tiles; basemap:'none' and
+ *   supplied boundaries need no map service. No WebGL2 falls back to a plain deck.gl canvas.
  */
 import { registerComponent } from './register-component';
 import { validateDeckMap } from "../jsx/deck-spec";
@@ -13,7 +20,8 @@ export interface DeckGLAdapter {
   update(options: DeckGLOptions): void;
   dispose(): void;
 }
-/** Lazy engine import keeps WebGL dependencies out of ordinary HTML controls. Bundlers retain this local chunk. */
+/** Lazy engine import keeps WebGL dependencies out of ordinary HTML controls.
+ * Bundlers retain this local chunk. */
 export class AfDeckGL extends HTMLElement {
   private config?: DeckGLOptions;
   private adapter?: DeckGLAdapter;
@@ -100,7 +108,8 @@ export class AfDeckGL extends HTMLElement {
         if (!current()) return;
         const status = (this.status ??= this.ownerDocument.createElement("p"));
         status.setAttribute("role", "status");
-        status.textContent = `Map could not load: ${error instanceof Error ? error.message : "engine unavailable"}`;
+        status.textContent = `Map could not load: ${error instanceof Error ? error.message :
+          "engine unavailable"}`;
         this.append(status);
       });
   }

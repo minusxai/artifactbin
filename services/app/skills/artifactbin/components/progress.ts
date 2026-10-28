@@ -1,9 +1,10 @@
 /**
  * <af-progress>: native 0-100 progress indicator with no platform state.
- * Import:  import '@afbin/progress';  (registers the tags; this .ts is the readable contract)
- * Props: value (0-100, or null for indeterminate)
- * Usage:
+ * Usage: import '@afbin/progress';  (registers the tags; this .ts is the readable contract)
+ * Props: value (0-100, or null for indeterminate).
+ * Examples:
  *   <af-progress value="60"></af-progress>
+ * Gotchas: a missing or null value shows the indeterminate animation, not 0%.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
 /** A native, light DOM 0–100 progress indicator with no platform state. */
@@ -94,7 +95,8 @@ export class AfProgress extends HTMLElement implements ProgressContract {
 
     if (!this.indicator || this.indicator.parentElement !== this) {
       this.indicator = [...this.children].find((child): child is HTMLDivElement =>
-        child instanceof HTMLDivElement && child.dataset.slot === 'progress-indicator') ?? undefined;
+        child instanceof HTMLDivElement && child.dataset.slot === 'progress-indicator')
+        ?? undefined;
       if (!this.indicator) {
         this.indicator = this.ownerDocument.createElement('div');
         this.indicator.dataset.slot = 'progress-indicator';
@@ -102,7 +104,8 @@ export class AfProgress extends HTMLElement implements ProgressContract {
       }
     }
     this.indicator.dataset.state = state;
-    if (determinate) this.indicator.dataset.value = String(value); else delete this.indicator.dataset.value;
+if (determinate) this.indicator.dataset.value = String(value);
+      else delete this.indicator.dataset.value;
     this.indicator.dataset.max = '100';
     this.indicator.style.transform = `translateX(-${100 - (value ?? 0)}%)`;
   }
@@ -110,17 +113,23 @@ export class AfProgress extends HTMLElement implements ProgressContract {
 
 /** Semantic-token styles target this component only, keeping page CSS untouched. */
 export const progressStyles = `
-af-progress{display:block;position:relative;box-sizing:border-box;width:100%;height:.5rem;overflow:hidden;border-radius:var(--radius-full,9999px);background:color-mix(in srgb,var(--primary,#222) 20%,transparent)}
-af-progress>[data-slot=progress-indicator]{box-sizing:border-box;display:flex;width:100%;height:100%;flex:1;background:var(--primary,#222);transition:transform .2s ease}
-af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{width:40%;animation:af-progress-indeterminate 1.4s ease-in-out infinite}
-@keyframes af-progress-indeterminate{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
-@media(prefers-reduced-motion:reduce){af-progress>[data-slot=progress-indicator]{transition:none}af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{animation:none;transform:translateX(0)}}
+af-progress{display:block;position:relative;box-sizing:border-box;width:100%;height:.5rem;` +
+  `overflow:hidden;border-radius:var(--radius-full,9999px);background:color-mix(in srgb,` +
+  `var(--primary,#222) 20%,transparent)}
+af-progress>[data-slot=progress-indicator]{box-sizing:border-box;display:flex;width:100%;` +
+  `height:100%;flex:1;background:var(--primary,#222);transition:transform .2s ease}
+af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{width:40%;` +
+  `animation:af-progress-indeterminate 1.4s ease-in-out infinite}
+@keyframes af-progress-indeterminate{from{transform:translateX(-100%)}` +
+  `to{transform:translateX(250%)}}
+@media(prefers-reduced-motion:reduce){af-progress>[data-slot=progress-indicator]{transition:none}` +
+  `af-progress[data-state=indeterminate]>[data-slot=progress-indicator]{animation:none;` +
+  `transform:translateX(0)}}
 `;
 
 /** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
 export const progressComponent: ComponentDescriptor = {
-  styleKey: 'af-progress-styles',
-  styles: progressStyles,
+  styleKey: 'af-progress-styles', styles: progressStyles,
   elements: { 'af-progress': AfProgress },
 };
 registerComponent(progressComponent);

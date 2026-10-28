@@ -1,29 +1,26 @@
 /**
  * <af-isometric>: isometric illustration from keyed geometry.
- * Import:  import '@afbin/isometric';  (registers the tags; this .ts is the readable contract)
- * Props: options={title,parts,...}: keyed geometry, spread/angle/flow, motion
- * Usage:
+ * Usage: import '@afbin/isometric';  (registers the tags; this .ts is the readable contract)
+ * Props: options={title,parts,...} (property only): keyed geometry, spread 0..1, angle -180..180,
+ *   flow (animated dashes), motion smooth|instant, appearance outline|solid.
+ *   Invalid options throw TypeError on set.
+ * Examples:
  *   document.querySelector('af-isometric').options={title:'Stack',parts:[...]};
+ * Gotchas: parts are keyed SVG groups, retained across updates; authored children are kept.
+ *   Animation runs only while visible, the tab is shown and reduced motion is off.
  */
 import { registerComponent } from './register-component';
 import { isometricScene, type IsoDrawPath } from "../story-ui/isometric";
 import { isometricError } from "../jsx/isometric-spec";
 import {
   advanceIsometric,
+  isometricPathAttributes,
   isometricTarget,
   type IsometricOptions,
   type IsometricPose,
 } from "./isometric-model";
 export type { IsometricOptions } from "./isometric-model";
 const ns = "http://www.w3.org/2000/svg";
-const ink = "var(--ds-hand-ink, var(--foreground, #172033))";
-const ground = "var(--ds-hand-ground, var(--card, white))";
-const tones = {
-  neutral: ground,
-  accent: "var(--ds-hand-fill, var(--primary, #4263eb))",
-  secondary: "var(--ds-hand-fill2, var(--chart-2, #0d9488))",
-  muted: "var(--ds-hand-muted, var(--muted, #cbd5e1))",
-};
 export class AfIsometric extends HTMLElement {
   private config: IsometricOptions | undefined;
   private svg?: SVGSVGElement;
@@ -182,40 +179,8 @@ export class AfIsometric extends HTMLElement {
     for (const child of Array.from(svg.children))
       if (child !== title && !retained.has(child)) child.remove();
   }
-  private path(
-    node: SVGPathElement,
-    path: IsoDrawPath,
-    p: IsometricOptions,
-  ): void {
-    const tone = tones[path.tone];
-    const base =
-      p.appearance === "solid" || path.section || path.tone === "neutral"
-        ? tone
-        : `color-mix(in srgb, ${tone} 18%, ${ground})`;
-    const fill =
-      path.kind === "face"
-        ? `color-mix(in srgb, ${ink} ${path.shade * (p.appearance === "solid" ? 5 : 2)}%, ${base})`
-        : "none";
-    const stroke =
-      path.kind === "face"
-        ? fill
-        : path.tone === "muted"
-          ? `color-mix(in srgb, ${ink} 48%, ${ground})`
-          : path.tone !== "neutral"
-            ? `color-mix(in srgb, ${tone} 80%, ${ink})`
-            : ink;
-    for (const [key, value] of Object.entries({
-      d: path.d,
-      fill,
-      stroke,
-      "stroke-width":
-        path.width ??
-        (path.kind === "face" ? 0.35 : path.kind === "crease" ? 0.8 : 1.6),
-      "stroke-opacity": path.opacity ?? (path.kind === "crease" ? 0.7 : 1),
-      "vector-effect": "non-scaling-stroke",
-      "stroke-dasharray": path.dashed ? "10 10" : "none",
-      "stroke-dashoffset": path.dashed ? this.dash : 0,
-    }))
+  private path(node: SVGPathElement, path: IsoDrawPath, p: IsometricOptions): void {
+    for (const [key, value] of Object.entries(isometricPathAttributes(path, p, this.dash)))
       node.setAttribute(key, String(value));
   }
 }

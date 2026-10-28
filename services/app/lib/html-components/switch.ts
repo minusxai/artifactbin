@@ -1,10 +1,11 @@
 /**
  * <af-switch>: on/off toggle.
- * Import:  import '@afbin/switch';  (registers the tags; this .ts is the readable contract)
- * Props: checked (boolean), disabled, label
- * Events: af-change with event.detail.value (the new checked state)
- * Usage:
+ * Usage: import '@afbin/switch';  (registers the tags; this .ts is the readable contract)
+ * Props: checked (boolean), disabled, label.
+ * Events: af-change with event.detail.value (the new checked state).
+ * Examples:
  *   <af-switch label="Notifications"></af-switch>
+ * Gotchas: af-change reports user intent; set checked from your state to keep it controlled.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
 export interface AfSwitchChangeDetail {
@@ -13,7 +14,8 @@ export interface AfSwitchChangeDetail {
 
 /** A light-DOM switch that reports user intent through `af-change`. */
 export class AfSwitch extends HTMLElement {
-  static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled', 'read-only', 'readonly'];
+static observedAttributes = ['label', 'aria-label', 'checked', 'default-checked', 'disabled',
+    'read-only', 'readonly'];
 
   private shell?: HTMLDivElement;
   private caption?: HTMLSpanElement;
@@ -118,29 +120,39 @@ export class AfSwitch extends HTMLElement {
     const checked = this.currentChecked();
     this.button.setAttribute('aria-checked', String(checked));
     this.button.disabled = this.disabled;
-    this.button.setAttribute('aria-readonly', String(this.hasAttribute('read-only') || this.hasAttribute('readonly')));
+this.button.setAttribute('aria-readonly', String(this.hasAttribute('read-only') ||
+      this.hasAttribute('readonly')));
     this.button.setAttribute('data-state', checked ? 'checked' : 'unchecked');
   }
 }
 
 const switchStyles = `
 af-switch{display:inline-flex;vertical-align:top}
-af-switch .af-switch-shell{display:inline-flex;flex-direction:column;gap:.375rem;align-items:flex-start}
-af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;color:var(--muted-foreground,#555)}
+af-switch .af-switch-shell{display:inline-flex;flex-direction:column;gap:.375rem;` +
+  `align-items:flex-start}
+af-switch .af-switch-caption{display:flex;align-items:baseline;gap:.75rem;font-size:11px;` +
+  `font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;` +
+  `color:var(--muted-foreground,#555)}
 af-switch .af-switch-caption[hidden]{display:none!important}
 af-switch .af-switch-label{display:block}
-af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;font:inherit;color:inherit;transition:background-color .15s;outline:none}
+af-switch .af-switch-button{position:relative;display:inline-flex;box-sizing:border-box;` +
+  `width:36px;height:20px;flex-shrink:0;align-items:center;border:0;border-radius:9999px;` +
+  `padding:0;cursor:pointer;background:var(--input,#ddd);box-shadow:0 1px 2px #0000000d;` +
+  `font:inherit;color:inherit;transition:background-color .15s;outline:none}
 af-switch .af-switch-button[data-state=checked]{background:var(--primary,#222)}
-af-switch .af-switch-button:focus-visible{outline:2px solid transparent;outline-offset:2px;box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
+af-switch .af-switch-button:focus-visible{outline:2px solid transparent;outline-offset:2px;` +
+  `box-shadow:0 0 0 2px color-mix(in oklab,var(--ring,#777) 50%,transparent),0 1px 2px #0000000d}
 af-switch .af-switch-button:disabled{cursor:not-allowed;opacity:.5}
-af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;border-radius:9999px;background:var(--background,#fff);box-shadow:0 1px 3px 0 rgb(0 0 0 / 10%),0 1px 2px -1px rgb(0 0 0 / 10%);transform:translateX(0);transition:transform .15s}
+af-switch .af-switch-thumb{display:block;width:16px;height:16px;margin-left:2px;` +
+  `border-radius:9999px;background:var(--background,#fff);` +
+  `box-shadow:0 1px 3px 0 rgb(0 0 0 / 10%),0 1px 2px -1px rgb(0 0 0 / 10%);` +
+  `transform:translateX(0);transition:transform .15s}
 af-switch .af-switch-button[data-state=checked] .af-switch-thumb{transform:translateX(16px)}
 `;
 
 /** Registration descriptor (tags + stylesheet) applied on import; exported for tests. */
 export const switchComponent: ComponentDescriptor = {
-  styleKey: 'af-switch-styles',
-  styles: switchStyles,
+  styleKey: 'af-switch-styles', styles: switchStyles,
   elements: { 'af-switch': AfSwitch },
 };
 registerComponent(switchComponent);

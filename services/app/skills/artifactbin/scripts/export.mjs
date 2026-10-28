@@ -1,16 +1,19 @@
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Export a portable HTML copy or a rendered image (not editable source).
 Usage: node scripts/export.mjs ID|URL --format html|png|jpg --output FILE [--slide N]
-Flags: --format html|png|jpg (required); --output FILE (required, never overwrites); --slide N a visible slide number,
-  image formats only (1200x630; the Nth visible data-af-slide element, 1-based; display:none ones are skipped;
-  a missing slide returns 404 slide_not_found with the count; capture hides data-af-deck-chrome). Common: --server ORIGIN, --json, --help.
+Flags: --format html|png|jpg (required); --output FILE (required, never overwrites); --slide N a
+  visible slide number, image formats only (1200x630; the Nth visible data-af-slide element,
+  1-based; display:none ones are skipped; a missing slide returns 404 slide_not_found with the
+  count; capture hides data-af-deck-chrome). Common: --server ORIGIN, --json, --help.
 Examples:
   node scripts/export.mjs ID --format html --output copy.html
   node scripts/export.mjs ID --format png --slide 2 --output slide-2.png
-Gotchas: the HTML copy carries credential-free provenance (origin, page ID, saved revision) and opens offline; it
-  does not overwrite or publish anything, and merely opening or editing it changes nothing on the server. For deck
-  QA the check's slide summary is enough; do not export every slide to test layout.
-Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
+Gotchas: the HTML copy carries credential-free provenance (origin, page ID, saved revision) and
+  opens offline; it does not overwrite or publish anything, and merely opening or editing it
+  changes nothing on the server. For deck QA the check's slide summary is enough; do not export
+  every slide to test layout.
+Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
+  Results never contain credentials.`;
 
 import path from 'node:path';
 import {
@@ -25,7 +28,8 @@ import {
   exclusive,
   ToolError
 } from './toolbox-client.mjs';
-// Read width/height from the PNG header or JPEG frame marker so the receipt can show what was captured.
+// Read width/height from the PNG header or JPEG frame marker so the receipt can show what was
+// captured.
 export function imageDimensions(bytes, format) {
   const data = Buffer.from(bytes);
   if (
@@ -59,7 +63,8 @@ export async function exportCommand({values, positionals}, options = {}) {
     client = makeClient(server, options);
   const query = new URLSearchParams({format});
   if (values.slide) query.set('slide', String(integer(values.slide, 'slide')));
-  const response = await client.request(`/a/${id}/${format === 'html' ? 'download' : 'export'}?${query}`, {
+  const response = await client.request(
+    `/a/${id}/${format === 'html' ? 'download' : 'export'}?${query}`, {
     raw: true,
     timeoutMs: 60000
   });

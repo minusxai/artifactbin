@@ -2,17 +2,20 @@
 export const DESCRIPTION = `Read an artifact as JSON, or save its editable source with --output.
 Usage: node scripts/read.mjs ID|URL [--version N] [--output FILE]
        node scripts/read.mjs list [--limit N] [--cursor CURSOR]
-Flags: --version N reads a saved version (historical pairs cannot be published back); --output FILE saves the
-  canonical source plus FILE.af.json baseline (even with --json); list takes --limit 1-100 (default 20) and
-  --cursor (read.mjs list shows your artifacts). Common: --server ORIGIN, --json, --help.
+Flags: --version N reads a saved version (historical pairs cannot be published back); --output
+  FILE saves the canonical source plus FILE.af.json baseline (even with --json); list takes
+  --limit 1-100 (default 20) and --cursor (read.mjs list shows your artifacts).
+  Common: --server ORIGIN, --json, --help.
 Examples:
-  node scripts/read.mjs ID --output page.html     # edit page.html, then node scripts/publish.mjs page.html
-  node scripts/read.mjs ID --json                 # record with html, version and state
+  node scripts/read.mjs ID --output page.html  # edit page.html, then
+                                               #   node scripts/publish.mjs page.html
+  node scripts/read.mjs ID --json              # record with html, version and state
   node scripts/read.mjs list --limit 50
-Gotchas: --output never overwrites an existing file. HTML pages save as source carrying their data-af-ids;
-  datasets save as .json rows; images, files and PDFs save raw bytes. The .af.json companion is credential-free;
-  never copy or hand-edit it.
-Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results never contain credentials.`;
+Gotchas: --output never overwrites an existing file. HTML pages save as source carrying their
+  data-af-ids; datasets save as .json rows; images, files and PDFs save raw bytes. The .af.json
+  companion is credential-free; never copy or hand-edit it.
+Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome.
+  Results never contain credentials.`;
 
 import path from 'node:path';
 import {
@@ -26,7 +29,8 @@ import {
   ToolError
 } from './toolbox-client.mjs';
 import {saveAuthoringPair} from './toolbox-source.mjs';
-// read list pages through your artifacts; read ID returns the record, or saves source + baseline with --output.
+// read list pages through your artifacts; read ID returns the record, or saves source + baseline
+// with --output.
 export async function readCommand({sub = undefined, values, positionals}, options = {}) {
   if (sub === 'list') {
     positional(positionals, 0);
@@ -36,13 +40,16 @@ export async function readCommand({sub = undefined, values, positionals}, option
     if (values.cursor) query.set('cursor', values.cursor);
     return await client.request('/api/artifacts?' + query);
   }
-  // Resolve the target (ID or URL) against the selected server, then fetch the head or a saved --version.
+  // Resolve the target (ID or URL) against the selected server, then fetch the head or a saved
+  // --version.
   const {server, id} = resolveTarget(positional(positionals), selectedServer(values, options.env)),
     client = makeClient(server, options);
   const version = values.version ? integer(values.version, 'version') : undefined;
-  const record = await client.request('/api/artifacts/' + id + (version ? '/versions/' + version : ''));
+  const record =
+    await client.request('/api/artifacts/' + id + (version ? '/versions/' + version : ''));
   if (!values.output) return {record};
-  // HTML: saveAuthoringPair writes the source (with its data-af-ids) and the FILE.af.json baseline publish needs.
+  // HTML: saveAuthoringPair writes the source (with its data-af-ids) and the FILE.af.json baseline
+  // publish needs.
   if (record.format === 'html' || typeof record.html === 'string') {
     const pair = await saveAuthoringPair({
       record: {...record, id},
@@ -52,7 +59,8 @@ export async function readCommand({sub = undefined, values, positionals}, option
     });
     return {...pair, outputOwned: true};
   }
-  // Non-HTML: datasets save as .json rows, images/files/PDFs as raw bytes; anything else has no editable file.
+  // Non-HTML: datasets save as .json rows, images/files/PDFs as raw bytes; anything else has no
+  // editable file.
   let bytes;
   if (record.format === 'dataset') {
     if (path.extname(values.output).toLowerCase() !== '.json')
@@ -70,7 +78,8 @@ export async function readCommand({sub = undefined, values, positionals}, option
       );
     bytes = JSON.stringify(record.rows, null, 2) + '\n';
   } else if (['image', 'file', 'pdf'].includes(record.format)) {
-    const raw = await client.request(`/a/${id}/raw${version ? '?version=' + version : ''}`, {raw: true});
+    const raw =
+      await client.request(`/a/${id}/raw${version ? '?version=' + version : ''}`, {raw: true});
     bytes = new Uint8Array(await raw.arrayBuffer());
   } else
     throw new ToolError(

@@ -1,4 +1,7 @@
-/** Internal helper for af-popover, af-tooltip and af-date-picker; not a public entry point. */
+/**
+ * Internal: anchors floating panels and orders nested overlays for Escape dismissal.
+ * Used by: popover.ts, tooltip.ts, date-picker.ts.
+ */
 import {floatingPosition,type FloatingSide} from './floating-geometry';
 export {floatingPosition} from './floating-geometry';
 export type {FloatingSide,FloatingRect,FloatingPosition} from './floating-geometry';
@@ -16,14 +19,21 @@ function registryFor(document: Document): FloatingRegistry {
  }
  return registry;
 }
-export function identifyFloating(node: HTMLElement): void { if (!node.id) { let id: string; do { id = `af-floating-${++registryFor(node.ownerDocument).nextIdentity}`; } while(node.ownerDocument.getElementById(id)); node.id = id; } }
-export function positionFloating(anchor: HTMLElement, panel: HTMLElement, defaultSide: FloatingSide, offset: number): void {
+export function identifyFloating(node: HTMLElement): void { if (!node.id) { let id: string; do {
+  id = `af-floating-${++registryFor(node.ownerDocument).nextIdentity}`; } while(
+  node.ownerDocument.getElementById(id)); node.id = id; } }
+export function positionFloating(anchor: HTMLElement, panel: HTMLElement, defaultSide: FloatingSide,
+  offset: number): void {
  const view = panel.ownerDocument.defaultView!;
  const requested = panel.getAttribute('side');
- const side = requested === 'top' || requested === 'bottom' || requested === 'left' || requested === 'right' ? requested : defaultSide;
+const side = requested === 'top' || requested === 'bottom' || requested === 'left' ||
+   requested === 'right' ? requested : defaultSide;
  const raw = Number(panel.getAttribute('side-offset') ?? offset);
- const point = floatingPosition(anchor.getBoundingClientRect(),panel.getBoundingClientRect(),{width:view.innerWidth,height:view.innerHeight},side,panel.getAttribute('align') ?? 'center',Number.isFinite(raw) ? Math.max(0,raw) : offset);
- panel.style.left = `${point.left}px`; panel.style.top = `${point.top}px`; panel.dataset.side = point.side;
+const point = floatingPosition(anchor.getBoundingClientRect(),panel.getBoundingClientRect(),{width:
+   view.innerWidth,height:view.innerHeight},side,panel.getAttribute('align') ?? 'center',
+   Number.isFinite(raw) ? Math.max(0,raw) : offset);
+panel.style.left = `${point.left}px`; panel.style.top = `${point.top}px`; panel.dataset.side =
+   point.side;
  panel.dataset.align = panel.getAttribute('align') ?? 'center';
 }
 /** Shared ordering allows nested tooltip/popover Escape to dismiss one overlay. */
