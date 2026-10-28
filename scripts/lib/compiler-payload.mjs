@@ -69,7 +69,7 @@ export async function installCompiler(packageRoot,assets,{platform=process.platf
  activeDestination=undefined;operation='check installed JavaScript protocol';
  // A fresh process validates the installed package without reusing a caller's cached compiler worker.
  execFileSync(process.execPath,['-e',`
-  const esbuild=require(process.argv[1]);
+  const esbuild=module.require(process.argv[1]);
   try{if(esbuild.version!==process.argv[2]||esbuild.transformSync('const answer: number = 42',{loader:'ts'}).code.trim()!=='const answer = 42;')throw new Error('Compiler JavaScript protocol check failed');}
   finally{esbuild.stop();}
  `,packageRoot,version],{encoding:'utf8',timeout:15000});
