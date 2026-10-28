@@ -20,6 +20,7 @@
 import esbuild from 'esbuild';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import { generateTeaching } from '../lib/generate-teaching.mjs';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
@@ -34,6 +35,7 @@ import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
  */
 const BUNDLE_ONLY_EXTERNALS = ['@babel/preset-typescript'];
 
+await generateTeaching();
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
 mkdirSync(dirname(out), { recursive: true });

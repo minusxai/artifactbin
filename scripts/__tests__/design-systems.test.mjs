@@ -5,6 +5,7 @@ import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } f
 import { faces } from '../../design-systems/lib/fonts.mjs';
 import { DATA, NAMES, SHEETS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
 import { pickerSpecimen } from '../../design-systems/lib/picker.mjs';
+import { REFS, catalogueMd, systemMd } from '../../design-systems/lib/skill.mjs';
 
 /**
  * The design-systems generator (scripts/design-systems.mjs) has two committed outputs: the runtime registry
@@ -52,6 +53,13 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('describes shared system binding through metadata fields for both HTTP and CLI readers', () => {
+    for (const slug of ROSTER) {
+      expect(systemMd(slug), slug).toContain(`Set the \`theme\` metadata field to \`${slug}\` and \`template\` to the page type.`);
+    }
+    expect(catalogueMd()).toContain('`template` metadata field');
+    expect(catalogueMd()).toContain('`theme` metadata field');
+  });
   it('keeps Almanac band arches inside the mobile page surface while preserving the desktop tilt', () => {
     const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
     const mobile = css.match(/@container \(max-width: 440px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
@@ -105,14 +113,71 @@ describe('the committed outputs are what the generator emits now', () => {
     expect(read(DATA)).toBe(data);
     expect(read(SHEETS)).toBe(sheets);
   });
+  it('the catalogue and every system reference', () => {
+    expect(read(path.join(REFS, 'design-systems.md'))).toBe(catalogueMd());
+    for (const slug of ROSTER) {
+      const guide = read(path.join(REFS, `system-${slug}.md`));
+      expect(guide, slug).toBe(systemMd(slug));
+      expect(guide, slug).toContain('Use `<Markdown>` for long prose on any page type');
+      expect(guide, slug).toContain('### Doc\n\nTemplate: doc.');
+      expect(guide, slug).toContain('[the Doc guide](templates-doc.md)');
+      expect(guide, slug).toContain('inherits this system\'s fonts and colors with a transparent background');
+    }
+    expect(read(path.join(REFS, 'system-redline.md'))).toContain('`rl-paper`, `rl-red`, `rl-ink` and `rl-on-*` classes set SVG fills only; they do not paint HTML slides. For HTML, use stage classes such as `rl-stage-red`, which set background and text colors.');
+  });
 });
 
+/**
+ * What a system reference tells an agent to paste must be what the runtime serves for that system: a type
+ * role the runtime never styles leaves the pasted heading bare, and a value-keyed rule styles only the
+ * values someone thought of. Checked against the runtime's own CSS, the thing a published page receives.
+ */
+describe('a system reference pastes only what its runtime serves', () => {
+  const runtime = renderRuntime().entries;
+  const rolesServed = (slug) => new Set([...runtime.find((e) => e.name === slug).css.matchAll(/\.t-([a-z0-9-]+)/g)].map((m) => `t-${m[1]}`));
+  const rolesNamed = (text) => {
+    const inMarkup = [...text.matchAll(/className="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    const inProse = [...text.matchAll(/`(t-[a-z0-9-]+)`/g)].map((m) => m[1]);
+    return [...new Set([...inMarkup, ...inProse])].filter((c) => /^t-[a-z0-9-]+$/.test(c));
+  };
+  it('names App and Landing by their template field, as Bind it and the page-type guides do', () => {
+    for (const slug of ROSTER) {
+      const text = systemMd(slug);
+      expect(text, slug).not.toContain('without a template field');
+      expect(text, slug).toMatch(/### App · \w+\n\nTemplate: app\./);
+      expect(text, slug).toMatch(/### Landing · \w+\n\nTemplate: landing\./);
+    }
+  });
+  it('every type role a system reference names is one its runtime styles', () => {
+    for (const slug of ROSTER) {
+      const served = rolesServed(slug);
+      for (const role of rolesNamed(systemMd(slug))) expect(served.has(role), `${slug} names ${role}`).toBe(true);
+    }
+  });
+  it('a Meridian bar fill takes any width, not only the three the specimen used', () => {
+    const text = systemMd('meridian');
+    const css = runtime.find((e) => e.name === 'meridian').css;
+    expect(css).not.toMatch(/\[data-w=/);
+    const fills = [...text.matchAll(/<span className="me-bar-fill[^"]*"([^>]*)>/g)].map((m) => m[1]);
+    expect(fills.length).toBeGreaterThan(0);
+    for (const attrs of fills) expect(attrs).toMatch(/style=\{\{ ?width: '\d+%' ?\}\}/);
+  });
+  it('the landing skeleton, publishable as is, wears any system: no system-scoped class, only roles every system serves', () => {
+    const landing = read(path.join(REFS, 'templates-landing.md'));
+    const skeleton = landing.split('Skeleton of the runtime pieces')[1].split('\n## ')[0];
+    const classes = [...skeleton.matchAll(/className="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    const prefixes = ROSTER.map((slug) => (loadSpec(slug).css ?? '').match(/\.ds-[a-z]+ \.([a-z]+)-btn\b/)?.[1]).filter(Boolean);
+    expect(prefixes).toContain('v');
+    for (const c of classes) for (const prefix of prefixes) expect(c.startsWith(`${prefix}-`), `${c} belongs to one system`).toBe(false);
+    for (const slug of ROSTER) for (const role of classes.filter((c) => c.startsWith('t-'))) expect(rolesServed(slug).has(role), `${slug} lacks ${role}`).toBe(true);
+  });
+});
 
 it('keeps the shipped stylesheets generated from the specs',async()=>{
  const {nativeSystemCss}=await import('../../design-systems/lib/html-skill.mjs');
  for(const name of ROSTER){
   expect(readFileSync(path.join(REPO,'services/app/skills/artifactbin/design-systems',name+'.css'),'utf8')).toBe(nativeSystemCss(name));
-  expect(existsSync(path.join(REPO,'services/app/skills/artifactbin/references','html-system-'+name+'.md')),'the per-system guides are gone: the stylesheet documents itself').toBe(false);
+  expect(existsSync(path.join(REFS,'html-system-'+name+'.md')),'the per-system guides are gone: the stylesheet documents itself').toBe(false);
  }
 });
 it('keeps the HTML platform stylesheet data generated from the same specs and token rules',async()=>{

@@ -12,7 +12,7 @@ import {
   DOCUMENT_FRAME,
 } from './lib/page-facts.mjs';
 import { becomeOwner } from '../lib/start-doc.mjs';
-import { connectAgent, signInAccount } from './lib/account-connection.mjs';
+import { connectAgent, signInAccount } from './lib/cli-connection.mjs';
 import { expect } from 'playwright/test';
 import sharp from 'sharp';
 const BASE = process.argv[2] ?? 'http://localhost:3030';

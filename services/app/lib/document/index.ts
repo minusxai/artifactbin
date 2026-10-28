@@ -10,20 +10,26 @@
 
 // ---- Model: the stored node graph, node ids, the source form and its checks.
 export type { DocumentGraph } from './document-graph';
-export { createDocumentGraph } from './document-graph';
+export { createDocumentGraph, graphSource } from './document-graph';
+export { applyGraphPatch } from './document-graph-patch';
 export type { StoredDocument } from './document-codec';
 export { decodeDocument } from './document-codec';
-export { nodeIndex, normalizeNodeIds, stampNodeIds } from './node-ids';
+export { nodeIndex, normalizeNodeIds, stampNodeIds, stampNodeIdsInPlace } from './node-ids';
 export type { StoredContent } from './stored-content';
 export { storyBodyFor } from './body';
 export { canonicalizeMarkup } from './canonical-source';
+export { formatMarkupSource } from './format-source';
+export { validateMarkupStructure } from './local-validation';
 
 // ---- Edits: splices, edit batches, source changes and prepared updates.
 export type { EditRecord } from './splice';
 export { newEditId } from './splice';
+export { rebaseEditBatch } from './edit-batch';
 export { sourcePathToBodyPath } from './edit-compose';
 export { sourceChanges } from './source-changes';
 
+export { prepareClientDocumentPublication } from './document-update-client';
+export { documentAfterOperation } from './document-update-history';
 export { storyUpdateParts } from './update-parts';
 
 // ---- Assets: asset URLs, external images and the lazy code a page loads.

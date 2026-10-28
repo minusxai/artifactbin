@@ -5,3 +5,4 @@ const SERVED_ONLY=new Set(['http-auth','html-operations']);
 export function isPublicSkillTopic(topic:string):boolean{return PUBLIC_TOPICS.has(topic);}
 /** The guides packed into the skill zip: every public one except those served only. */
 export function isShippedSkillTopic(topic:string):boolean{return isPublicSkillTopic(topic)&&!SERVED_ONLY.has(topic);}
+export function publicSkillLinks(text:string):string{return text;}

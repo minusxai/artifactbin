@@ -1,9 +1,62 @@
-/** The direct-HTTP authentication guide served at /llms/http-auth. */
+/** The command registry is projected into the versioned local bundle; HTTP integrations have their own email-authenticated reference. */
 import {expect,it} from 'vitest';
-import {publicGuideText} from '../../serving/agent-references.server';
-it('teaches email login, the token grant, refresh and private credential storage',()=>{
- const auth=publicGuideText('http-auth','https://artifactbin.example')!;
- for(const text of ['/api/auth/email-otp/send-verification-otp','/api/authentication/token','account_created_this_login','has_created_document','Verified email sessions receive','refresh_token','client_id','persistent secret store','Atomically','/oauth/token'])expect(auth).toContain(text);
- expect(auth).not.toContain('there is no refresh token');
- expect(auth).not.toMatch(/afbin |\/docs\//);
+import {commands,commandHelp} from '../../../../cli/src/commands';
+import teaching from '../../../../cli/src/generated/teaching.json';
+import {helpDocument} from '../../../../cli/src/teaching';
+it('documents every command/flag and direct HTTP while refusing retired CLI and remote-skill transports',()=>{
+ const reference=teaching.files['references/commands.md'];
+ for(const command of commands)expect(helpDocument('commands','markdown'),command.name).toContain(commandHelp(command.name));
+ expect(reference).toContain(commandHelp('watch'));
+ expect(reference).toContain('afbin <command> -h');
+ for(const [file,text] of Object.entries(teaching.files)){
+  expect(text,file).not.toMatch(/afbin api|MCP|\/docs\/|references\/api\.md/);
+  if(!file.startsWith('references/http-'))expect(text,file).not.toContain('--method');
+ }
+ expect(Object.keys(teaching.files)).not.toContain('references/api.md');
+ const http=teaching.files['references/http-api.md'];
+ const auth=teaching.files['references/http-auth.md'];
+ expect(http).toContain('(http-auth.md)');
+ expect(auth).toContain('/api/auth/email-otp/send-verification-otp');
+ expect(auth).toContain('/api/authentication/token');
+ expect(auth).toContain('account_created_this_login');
+ expect(auth).toContain('has_created_document');
+ expect(auth).toContain('Verified email sessions receive');
+ expect(auth).toContain('refresh_token');expect(auth).toContain('client_id');
+ expect(auth).toContain('persistent secret store');expect(auth).toContain('Atomically');
+ expect(auth).toContain('/oauth/token');expect(auth).not.toContain('there is no refresh token');
+ expect(http).toContain('http-authoring.md');
+ expect(http).toContain('GET /api/artifacts/<id>/policy` for `revision`');
+ expect(http).toContain('`expectedPolicyRevision`');
+ expect(http).not.toContain('to observe `policy_revision`');
+ expect(http).toContain('CSV on a document ID converts it to a dataset');
+ expect(http).toContain('POST /api/artifacts/<id>/edits');
+ expect(teaching.files['references/http-authoring.md']).toContain('Submit the prepared update unchanged. Preparation does not save.');
+ expect(teaching.files['references/http-authoring.md']).toContain('do not publish scratch replacement documents');
+ expect(http).toContain('## Browser preview and interactive QA');
+ expect(http).toContain('POST /api/browser-sessions');
+ expect(http).toContain('output.image(await page.screenshot())');
+ expect(http).toContain("op:'status'");
+ expect(http).toContain("op:'close'");
+ expect(http).toMatch(/each changed script needs a new `execution_id`/i);
+ expect(http).toMatch(/reuse only for exact replay/i);
+ expect(http).toContain('page.on(\'pageerror\'');
+ expect(http).toContain('page.on(\'requestfailed\'');
+ expect(http).toContain('Origin:base');
+ expect(http).toContain('ariaSnapshot()');
+ expect(http).toContain('return {heading,controls,pageErrors,failedRequests};');
+ expect(http).toContain('finally {if(accepted)await call({op:\'close\',session_id});}');
+ expect(http).not.toMatch(/output\.(text|log)\s*\(/);
+ expect(http).toMatch(/no `output\.text` or `output\.log`/);
+ expect(http).toContain('[public index](../SKILL.md)');
+ expect(http).toContain('Publishing requires access to the selected server.');
+ expect(http).toMatch(/scripts run at most 20 seconds/i);
+ expect(http).toMatch(/no local Chrome/i);
+ expect(http).toContain('POST /api/artifacts/<page-id>/mutate');
+ expect(http).toContain('{"name":"vote","args":{"choice":"ramen"}}');
+ expect(http).toContain('Public/unlisted links do not grant writes');
+ expect(http).toContain('direct dataset SQL may return 403 even to owners');
+ expect(http).toContain('[actions](markup-data.md#declarations-helmet-only)');
+ expect(http).toContain('[dataset rules](apps.md#dataset-rules)');
+ expect(teaching.files['references/http-authoring.md']).toContain('function buildPlainTextUpdate');
+ expect(teaching.files['references/http-document-graph.md']).toContain('patch.claims');
 });

@@ -34,7 +34,7 @@ import { launchChromium } from './lib/browser.mjs';
 import { documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
-import { connectAgent } from './lib/account-connection.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 /*

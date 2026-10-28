@@ -1,0 +1,29 @@
+---
+name: publishing-auth
+description: "Rules and invocations for publishing auth."
+---
+## Read first
+
+First reuse saved origin credentials. This guide covers CLI installation/sign-in; direct HTTP uses [the same saved credentials](http-auth.md). Refresh expired credentials first. Only missing, revoked or unrefreshable grants require login; transient failures retain the grant.
+
+If CLI installation was selected, prepare Node/npm if needed using the selected server helpers: [[ base ]]/chat/install-node.sh (macOS/Linux), or [[ base ]]/chat/install-node.ps1 (Windows PowerShell). The helper reuses supported Node or installs official LTS for your user. If `afbin` is not installed, run `npx --yes @afbin/cli@latest setup` once (Windows PowerShell: `npx.cmd --yes @afbin/cli@latest setup`); it installs the `afbin` command and the agent skills. If an old `afbin` reports `cli_npm_required`, run the setup line once. Where PowerShell scripts are disabled, run `afbin.cmd` in place of `afbin`. npm owns package installation and version selection; automatic updates run after a successful command finishes, and the next invocation uses the new version. `afbin update` installs the version the server names (else the latest) globally through npm, falling back to a user prefix under `~/.artifactbin/npm`, and refreshes the selected skills. Successful connected commands automatically install a newer server-advertised version through npm, at most hourly. Set CLI__DISABLE_AUTO_UPDATES=true or `afbin config set updates false` to disable automatic installation. Development copies, project/npm exec installations, pinned/offline runs and managed workers skip it. Updates do not replay commands; failures leave the completed command result intact. The next invocation refreshes managed skills. Use `afbin setup` for local skill installation. If a harness loads skills at startup, restart it when setup reports `restart_required`.
+
+afbin authenticates itself the first time a command needs the server: it opens the browser, and a browser already signed in on the same machine connects with no click (otherwise log in with email); the command then resumes — nothing to paste, no token you or the agent handle. Over SSH, on headless machines, when the browser cannot open or no sign-in arrives in time (45 seconds in automation), it falls back to the device page: approve the printed code on any device. Run afbin auth to establish or check credentials deliberately; it is idempotent. Credentials share the origin-scoped CLI/HTTP store under ARTIFACTBIN_HOME or ~/.artifactbin. [HTTP authentication](http-auth.md) documents direct requests, storage and refresh; never create a second token copy. Environment credentials override saved credentials and remain origin-scoped. Local help, validation, status and diff never sign in or create state.
+
+[% include "fragments/cli-authentication.md" %]
+
+Add the same `--server <origin>` to both login commands for another server. Email login selects that account; it does not transfer guest ownership.
+
+Browser launch failure returns `browser_unavailable` immediately and keeps the pairing: approving the printed code on any device lets a rerun of the same command continue. The waiting message and timeout errors recommend `afbin auth --email <email>`; agents should ask for the email and use this fallback, then retry the original command. Agents need not invoke auth in the normal browser path; a server command signs in on demand and resumes once approved. On an unattended approval timeout the command returns a structured error carrying the approval URL and expiry to relay to a person. Denial and expiry never create credentials. Connected commands learn the available version from their normal server responses; automatic installation happens only after the command finishes. Local-only commands make no update requests.
+
+Credentials for this origin use `[[ credentialPath ]]`. Readable hostname locations alias this backing file; never copy or independently rotate it. Credentials are kept per server origin (one file per origin), so `--server`, a tracked workspace or an exported ARTIFACTBIN_URL selects the matching credential without re-approval; login never changes the default. Use `afbin config set host <origin>` to select it. Set ARTIFACTBIN_HOME to use a different private state directory, for example one per environment; exported variables reach every afbin your agent runs.
+
+## One server, several addresses
+
+A deployment may answer at more than one hostname — a marketing name that proxies to the app, or a previous name kept alive. afbin asks the origin you selected which addresses it answers at, and believes an alias only when the canonical origin's own answer names it: the two origins have to agree. A URL copied from either name then resolves to the same artifact, a folder tracked against one keeps working when the other is selected, and browser approval shown on either is accepted. Requests and credentials always go to the canonical origin of the server YOU selected — never to an origin a pasted URL named, and never to an alias; a pasted URL supplies its artifact id and nothing else. A server that publishes no addresses behaves exactly as before, with the two origins separate. Self-hosters list the extra origins in `APP__ALIAS_ORIGINS` on the deployment; `APP__PUBLIC_BASE_URL` stays the canonical one.
+
+`afbin serve --dir ./team --port 7445` initializes and runs an authenticated server in the foreground. Its directory owns settings, objects and the default PGLite database. `--db-url postgres://…` or `--db-url pglite://…` overrides only the application database. Server settings are separate from client defaults and per-host credentials. There is no managed self daemon.
+
+## Group and deployment defaults
+
+See [groups](groups.md) for recipient setup, account destination defaults and create-only publication.

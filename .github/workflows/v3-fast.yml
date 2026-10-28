@@ -46,7 +46,7 @@ jobs:
       - if: steps.deps.outputs.cache-hit == 'true'
         run: |
           npm run postinstall --workspaces --if-present &
-          npm run postinstall --if-present
+          npm run postinstall
           wait
       # validate and the behavioral tests are independent; run them concurrently, keep each
       # log grouped, and fail the step if either failed.

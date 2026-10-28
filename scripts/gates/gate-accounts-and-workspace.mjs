@@ -45,7 +45,7 @@ import { lane } from './lib/lane.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { bearerApi, connectAgent } from './lib/account-connection.mjs';
+import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs, passTheWelcomePage } from '../lib/mail-login.mjs';
 

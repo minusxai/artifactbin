@@ -8,7 +8,7 @@
  * downstream's to run.
  *
  *   usage: node scripts/gate-cli-conformance.mjs <base>
- *   env:   CONFORMANCE__CLI                the executable under test (required)
+ *   env:   CONFORMANCE__CLI                the executable under test (default: services/cli/dist/afbin.mjs)
  *          CONFORMANCE__CREDENTIAL_SOURCE  the eval credential helper's source for the account (scripts/lib/credential.ts)
  */
 import { createChecker } from './gates/lib/assert.mjs';

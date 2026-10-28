@@ -6,7 +6,7 @@
  * the same assignment from the same checkout and each file runs exactly once.
  *
  * Every shard job runs Vitest and nothing else, so every shard starts empty: work outside Vitest (the
- * integration project) is a job of its own in ci.yml, never a reserve on a shard.
+ * integration project, the CLI source suite) is a job of its own in ci.yml, never a reserve on a shard.
  * Unknown files (new since the timings were recorded) weigh the project's median.
  * Inside a shard (and in local runs) files start longest-first, so the slowest file never starts last.
  */

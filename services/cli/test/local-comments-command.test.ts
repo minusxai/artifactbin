@@ -1,0 +1,108 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,writeFile,rm,cp,mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {loadWorkspace} from '../src/workspace';
+import {parseCommand} from '../src/commands';
+import {localIdentities} from '../src/identities';
+import {localCommentCommand} from '../src/local-comments-command';
+
+test('local CLI threads, replies and resolution survive folder transfer and ID addressing without HTTP',async()=>{
+ const parent=await mkdtemp(join(tmpdir(),'local-cli-comments-')),root=join(parent,'original');await mkdir(root);
+ try{
+  await writeFile(join(root,'report.jsx'),'<article id="story"><p id="para">Keep this finding.</p></article>');
+  const workspace=await loadWorkspace(root,join(parent,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','para','--body','Review locally']));
+  assert.equal(created.local,true);assert.equal(created.thread[0].body,'Review locally');
+  const ids=await localIdentities(workspace),id=Object.keys(ids)[0]!;
+  await localCommentCommand(workspace,parseCommand(['comment',id,'--thread',created.id,'--body','Done','--state','resolved']));
+  const copy=join(parent,'copy');await cp(root,copy,{recursive:true});
+  const fresh=await loadWorkspace(copy,join(parent,'fresh-home'));
+  const listed:any=await localCommentCommand(fresh,parseCommand(['comment',id,'--filter','state=all']));
+  assert.equal(listed.annotations.length,1);assert.equal(listed.annotations[0].status,'resolved');assert.equal(listed.annotations[0].thread[1].body,'Done');
+ }finally{await rm(parent,{recursive:true,force:true});}
+});
+test('local quote anchoring chooses one smallest node and rejects repeated or missing quotes',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-quotes-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<article id="story"><p id="first">Specific words.</p><p id="second">Other words.</p></article>');
+  const workspace=await loadWorkspace(root,join(root,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--quote','Specific words.','--body','Check']));
+  assert.equal(created.anchor.nodeId,'first');assert.equal(created.quote,'Specific words.');
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--quote','absent','--body','Check'])),/not found/i);
+  await writeFile(join(root,'report.jsx'),'<p id="a">Repeated</p><p id="b">Repeated</p>');
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--quote','Repeated','--body','Check'])),/ambiguous/i);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('remote URLs and unknown IDs pass through; dry run never creates a local thread',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-pass-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="text">Local</p>');const workspace=await loadWorkspace(root,join(root,'home'));
+  assert.equal(await localCommentCommand(workspace,parseCommand(['comment','https://app.artifactbin.dev/a/abc123'])),undefined);
+  assert.equal(await localCommentCommand(workspace,parseCommand(['comment','abc123'])),undefined);
+  const result:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','text','--body','Plan','--dry-run']));assert.equal(result.dry_run,true);
+  const listed:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx']));assert.deepEqual(listed.annotations,[]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a fresh document can receive a quote comment with durable node IDs without publishing',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-fresh-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<article><p>A fresh finding.</p></article>');const workspace=await loadWorkspace(root,join(root,'home'));
+  const result:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--quote','fresh finding','--body','Review']));
+  assert.equal(typeof result.anchor.nodeId,'string');
+  const reread:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx']));assert.equal(reread.annotations[0].anchor.nodeId,result.anchor.nodeId);assert.equal(reread.annotations[0].orphaned,false);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('nested working directories retain workspace-relative discussion paths and paginate all statuses',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-nested-'));
+ try{
+  await mkdir(join(root,'nested'));await writeFile(join(root,'report.jsx'),'<p id="text">Report</p>');
+  const initial=await loadWorkspace(root,join(root,'home'));await localCommentCommand(initial,parseCommand(['comment','report.jsx','--node','text','--body','One']));
+  const workspace=await loadWorkspace(join(root,'nested'),join(root,'home'));
+  await localCommentCommand(workspace,parseCommand(['comment','../report.jsx','--node','text','--body','Two']));
+  const first:any=await localCommentCommand(workspace,parseCommand(['comment','../report.jsx','--limit','1','--filter','state=all']));assert.equal(first.annotations.length,1);assert.equal(typeof first.next_cursor,'string');
+  const second:any=await localCommentCommand(workspace,parseCommand(['comment','../report.jsx','--limit','1','--filter','state=all','--cursor',first.next_cursor]));assert.equal(second.annotations.length,1);assert.equal(second.next_cursor,null);
+  assert.notEqual(first.annotations[0].id,second.annotations[0].id);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('local comments retain custom agent identity on both posts and replies',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-agent-comments-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="p">Report</p>');
+  const workspace=await loadWorkspace(root,join(root,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','p','--body','Hello','--agent','custom-bot']));
+  assert.equal(created.thread[0].author.kind,'agent');assert.equal(created.thread[0].author.label,'custom-bot');
+  const replied:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--thread',created.id,'--body','Done','--agent','pi']));
+  assert.equal(replied.thread[1].author.label,'Pi');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('local --edit rewrites only its own author\'s words, keeps the anchor and state, and validates its grammar',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-edit-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<article id="story"><p id="para">Keep this finding.</p></article>');
+  const workspace=await loadWorkspace(root,join(root,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','para','--body','Reveiw locally']));
+  const replied:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--thread',created.id,'--body','Agent reply','--agent','codex','--state','resolved']));
+  const agentReply=replied.thread[1].id;
+  const edited:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',created.id,'--body','Review locally']));
+  assert.equal(edited.local,true);assert.equal(edited.status,'resolved');assert.equal(edited.anchor.nodeId,'para');
+  assert.deepEqual(edited.thread.map((c:any)=>c.body),['Review locally','Agent reply']);
+  assert.ok(edited.thread[0].edited_at);assert.equal(edited.thread[1].edited_at,undefined);
+  // The person at this machine did not write the agent's reply; the agent did.
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',agentReply,'--body','Put words in'])),(error:any)=>error.code==='forbidden');
+  const byAgent:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',agentReply,'--body','Agent reply, corrected','--agent','codex']));
+  assert.equal(byAgent.thread[1].body,'Agent reply, corrected');
+  const dry:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',created.id,'--body','Not saved','--dry-run']));
+  assert.equal(dry.action,'edit');
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit','missing-id','--body','x'])),/not on the local document/);
+  const listed:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--filter','state=all']));
+  assert.equal(listed.annotations[0].thread[0].body,'Review locally');
+  assert.throws(()=>parseCommand(['comment','report.jsx','--edit',created.id]),/--edit requires the new text/);
+  assert.throws(()=>parseCommand(['comment','report.jsx','--edit',created.id,'--thread',created.id,'--body','x']),/takes only --body or --input/);
+  assert.throws(()=>parseCommand(['comment','a.jsx','b.jsx','--edit',created.id,'--body','x']),/exactly one artifact/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

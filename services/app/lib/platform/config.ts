@@ -385,7 +385,7 @@ export const HOSTED_AGENT_SERVICE_URL = env('HOSTED_AGENT','SERVICE_URL');
  * The afbin release this server tells clients to run: `version` in public/chat/release.json, the pointer
  * `npm run release:cli` bumps and `afbin update` fetches. Read from disk (cwd is services/app, as for the
  * public/ mount in server/app) once, on first use, so a bundle that imports this module without serving the
- * app never needs the file.
+ * app (the CLI toolkit) never needs the file.
  */
 let cliRelease: string | undefined;
 /** The places the released CLI pointer can live, in order: the app's working directory (a production

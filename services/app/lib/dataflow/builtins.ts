@@ -30,7 +30,7 @@ interface BuiltinInputSpec {
   summary: string;
 }
 
-const BUILTIN_INPUTS: readonly BuiltinInputSpec[] = [
+export const BUILTIN_INPUTS: readonly BuiltinInputSpec[] = [
   { name: '_me.id', type: 'user', source: 'platform', readOnly: true, query: true, markup: true, summary: "The reader's account id; null for a guest." },
   { name: '_now', type: 'timestamp', source: 'platform', readOnly: true, query: true, markup: false, summary: 'The current instant, UTC ISO; the same on the server and in the browser.' },
   { name: '_tz', type: 'string', source: 'platform', readOnly: true, query: true, markup: false, summary: "The reader's IANA time zone (UTC when unknown)." },

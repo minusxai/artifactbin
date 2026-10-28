@@ -241,7 +241,7 @@ function tplPlan(S, D, T) {
 </div>`;
 }
 
-const TEMPLATES = [
+export const TEMPLATES = [
   ['dashboard', 'Dashboard', 'Template: dashboard. The template owns the 12-column grid, 24px gutters and tile stacking; the system owns the tile edge, the numeral and the chart colours.', tplDashboard],
   ['slides', 'Deck', 'Template: deck. The template owns the 16:9 stage, the acts and the slide count; the system owns the type scale on the stage, the one big number and the footer rule.', tplSlides],
   ['editorial', 'Editorial', 'Template: editorial. The template owns the measure, the folio rhythm and figure placement; the system owns the kicker, the headline face, the deck and the pull figure.', tplEditorial],
@@ -252,7 +252,7 @@ const TEMPLATES = [
 ];
 
 /** One page type's specimen markup for a spec: the spec's own override, else the generic one. */
-const specimen = (S, key, fn) => (S.templates ?? {})[key] || fn(S, S.data, S.tpl);
+export const specimen = (S, key, fn) => (S.templates ?? {})[key] || fn(S, S.data, S.tpl);
 
 const templatesSection = (S) => TEMPLATES.map(([key, title, note, fn]) => `<div className="ds-tpl-block"><div className="ds-tpl-head"><h3 className="t-title">${title}</h3><p>${esc(note)}</p></div>${specimen(S, key, fn)}</div>`).join('\n');
 

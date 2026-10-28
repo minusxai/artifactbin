@@ -31,6 +31,7 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | `scripts/dev-app.mjs` | The app alone, without login or OAuth. | `npm run dev:app` |
 | `scripts/dev-otp.mjs` | Print a local login code from the protected dev outbox. | `npm run dev:otp -- <email>` |
 | `scripts/setup.mjs` | Create or repair local settings (`.env`), planned by `lib/setup-plan.mjs`. | `npm run setup` |
+| `scripts/afbin.mjs` | This branch's CLI against this checkout's dev server, state in `~/.artifactbin-dev/<port>`. | `npm run afbin -- <args>` |
 | `scripts/port-block.mjs` | The next free 100-port block for a parallel dev server. | `agent-worktree.mjs`, by hand |
 | `scripts/agent-worktree.mjs` | Give a delegated agent a worktree, a port block in `.env` and its brief. | the orchestrating agent |
 | `scripts/agent-dev-flow.mjs` | A disposable exercise of the agent check policy against fake remotes. | by hand |
@@ -46,13 +47,13 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | `scripts/ci/fast-check.mjs` | Parse executable JavaScript and run the v3 fast module lane. | `v3-fast.yml`, v3 post-merge `ci.yml` |
 | `scripts/ci/fast-tests.mjs` | Audit full-suite ownership and enrolled tests' transitive capabilities, then run pure module behavior. | `fast-check.mjs` |
 | `scripts/ci/fast-budget.mjs` | Fail when the v3 workflow clock reaches two minutes, including setup and installation. | `v3-fast.yml` |
-| `scripts/ci/test-changed.mjs` | Discover the affected Vitest tests, enforce the 50-file budget, run them. | `check-local.mjs test` |
+| `scripts/ci/test-changed.mjs` | Discover the affected Vitest and CLI tests, enforce the 50-file budget, run them. | `check-local.mjs test` |
 
 ## CI planning
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, roll-up. | `ci.yml`, `page-speed.yml` |
+| `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, CLI bump, roll-up. | `ci.yml`, `page-speed.yml` |
 | `scripts/ci/test-timings.mjs` | Refresh `ci/test-timings.json`, the per-file times test shards are packed by. | by hand, with a CI run id |
 | `scripts/lib/ci-elapsed.mjs` | Measure the required-check chain's elapsed time for the job summary. | `ci.yml` |
 | `scripts/lib/ci-supersede.mjs` | Cancel a pull request's earlier, unfinished CI runs without making the new run wait for them. | `ci.yml` (`supersede`) |
@@ -72,7 +73,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/gates/gate-accounts-and-workspace.mjs` | Guest start, OAuth consent, login, claim, fork and folders. | `gates.mjs` |
+| `scripts/gates/gate-accounts-and-workspace.mjs` | Guest start, OAuth consent, login, claim, fork, folders and CLI acceptance. | `gates.mjs` |
 | `scripts/gates/gate-collab-roles.mjs` | Delivery follows the link's role for owner, signed-in stranger and visitor. | `gates.mjs` |
 | `scripts/gates/gate-comments.mjs` | The owner pins feedback to a node; the agent answers. | `gates.mjs` |
 | `scripts/gates/gate-component-baseline.mjs` | Verify the reader's component asset and baseline evidence. Native migration pilots use exact local app/reader trustworthy origins for production-equivalent secure-context APIs and record `browser-context.json` on both sides. | `gates.mjs` |
@@ -96,7 +97,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/gate-cli-conformance.mjs` | A released CLI executable's acceptance against a host, standalone. | artifactbin-server CI |
+| `scripts/gate-cli-conformance.mjs` | The CLI's acceptance against a host, standalone (the `cli` leg of `gate-accounts-and-workspace`). | `services/cli/scripts/test-team-host.mjs`, downstream deployments |
 
 ## Build
 
@@ -105,7 +106,8 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
 | `scripts/build/build-html-components.mjs` | Build the HTML component module graph for the installed author skill. | by hand, when refreshing the skill bundle |
 | `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
-| `scripts/build/build-gate-inputs.mjs` | Build what the browser gates run: the app and the server bundle. | `ci.yml`, `gate-container.mjs` |
+| `scripts/build/build-gate-inputs.mjs` | Build only what the browser gates run: app, server bundle, CLI bundle. | `ci.yml`, `gate-container.mjs` |
+| `scripts/lib/generate-teaching.mjs` | Generate the CLI's teaching once per input change (content-verified cache); also the library the dev tools import. | app `prebuild`, `services/cli/scripts/build.mjs` |
 
 ## Page speed
 
@@ -125,7 +127,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/generate-env-snapshot.mjs` | Regenerate the `.env.example` snapshot inside `lib/setup-plan.mjs`. | `npm run generate:env-snapshot` |
 | `scripts/design-systems.mjs` | Generate the design-system registry and agent references from `design-systems/specs`. | `npm run generate:design-systems` |
 | `scripts/generate-design-system-previews.mjs` | Render the picker and docs thumbnails from the design-system covers. | `npm run generate:design-system-previews` |
-| `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | tests |
+| `scripts/register-yaml.cjs` | `tsx -r` preload that lets Node import `.yaml` modules outside the bundler. | `services/cli/scripts/generate-teaching.mjs`, `lib/afbin-run.mjs`, tests |
 | `scripts/lib/native-migration-disposable-provider.ts` | Open a reviewed disposable migration lifecycle with isolated local storage. | Migration lifecycle adapter configuration |
 | `scripts/lib/native-migration-production-authority.ts` | Prepare and verify reviewed production migration authority bindings. | Migration operator preparation |
 | `scripts/migration_batch/reader-preflight.mjs` | Verify sealed reader inputs and expected bindings before apply, then actual receipt scope before preservation readback. | Reviewed migration host jobs |
@@ -133,14 +135,16 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/native-migration-production.mjs` | Plan or apply a reviewed latest-head migration using explicit operator approvals. | Migration operator |
 | `scripts/lib/native-migration-camera.mjs` | Adapt reviewed source-bound recipes to the existing migration capture and comparison contract. | Migration verification callers |
 
-## Downstream release tooling
-
-Kept for artifactbin-server's CI (see the contract above); nothing in this repository's CI runs them.
+## Release
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/lib/ci-artifact-wait.mjs` | Wait for and extract a run's artifacts. | artifactbin-server CI |
-| `scripts/ci/link-npm-acceptance.mjs` | Link the native acceptance tooling's `node_modules`. | artifactbin-server CI |
+| `scripts/bump-cli-version.mjs` | Bump the CLI release version (patch, minor or major). | `npm run release:cli`, `release-afbin.yml` |
+| `scripts/ci/npm-provenance.mjs` | Sign and verify the CLI tarball's build provenance. | `ci.yml` (`cli-pack`), `release-cli.yml` |
+| `scripts/lib/ci-artifact-wait.mjs` | Wait for and extract this run's release artifacts for native acceptance. | `ci.yml` |
+| `scripts/ci/link-npm-acceptance.mjs` | Link the native acceptance tooling's `node_modules`. | `ci.yml` |
+| `scripts/ci/linux-acceptance-deps.mjs` | Cache the Linux acceptance job's downloaded deb archives. | `ci.yml` |
+| `scripts/ci/docker-containerd-store.sh` | Switch a CI runner's Docker Engine to the containerd image store, which can import and export BuildKit caches (the company container's Caddy build). | `ci.yml` (`company-container`, `warm-caches`) |
 
 
 For disposable migration QA across mapped owners, set the lifecycle configuration's `runtimeAuthority` to `{mode: "disposable-scoped-tokens", ttlMs: 3600000}`. Set the pipeline authority runtime to the same mode and map each reviewed source owner to `{userId: targetUserId}`; omit token IDs. The local provider provisions credentials after the reviewed identities exist, preserves source token provenance, and revokes its credentials on cleanup. This mode requires local PGlite and local object storage. The private `runtime-actors.json` cleanup receipt contains token ID hashes and expiry/revocation state, never bearer credentials.

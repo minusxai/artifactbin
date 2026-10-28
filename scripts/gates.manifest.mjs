@@ -45,7 +45,7 @@ export const GATE_SPECS = Object.freeze([
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
   // process (formerly offline-file, -firefox, -webkit and screenshot-comments: three shards' cross-browser setup).
   { name: 'offline-file', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, seconds: 47, timeoutMs: 90_000 },
-  // Guest start, OAuth consent and the login door, claim, fork and folders, one persona per leg
+  // Guest start, OAuth consent and the login door, claim, fork, folders and CLI acceptance, one persona per leg
   // (formerly simpler-start, oauth-browser, app-flows AUTH, claim-flow, fork, folders and cli-conformance).
   { name: 'accounts-and-workspace', needsMail: true, serialGroup: 'clipboard', seconds: 31, timeoutMs: 70_000 },
   // Native HTML writes and shared data reaching open pages without a reload.

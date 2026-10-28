@@ -35,7 +35,7 @@ export function StarterInstructions(props: { id: string; template?: string | nul
     <Textarea ref={instructions} size="sm" aria-label="Agent instructions" rows={8} spellcheck={false} value={prompt()}
       onInput={(event) => { setDraft(event.currentTarget.value); setState('idle'); fitInstructions(); }}
       class="resize-y" />
-    <p class="-mt-2 font-sans text-xs text-muted">New to artifactbin? <a href={`${origin}/getting-started`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Getting started</a></p>
+    <p class="-mt-2 font-sans text-xs text-muted">New to afbin? <a href={`${origin}/getting-started`} target="_blank" rel="noopener noreferrer" class="underline decoration-edge-bright underline-offset-4 hover:text-fg">Getting started</a></p>
     <Button aria-label="Copy agent instructions" disabled={!origin} onClick={() => void copy()} class="w-full">
       <Show when={state() === 'copied'} fallback={<Copy size={18} aria-hidden="true" />}><Check size={18} aria-hidden="true" /></Show>
       {state() === 'copied' ? 'Copied — paste into your agent' : 'Copy agent instructions'}

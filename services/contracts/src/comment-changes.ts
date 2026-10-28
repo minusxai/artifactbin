@@ -3,7 +3,7 @@ import type {CommentReactionKind} from './annotation-comment';
  * Durable comment feed shared by HTTP and CLI: every comment, reply, edit and reaction on the artifact, from people and
  * agents alike. Cursors are opaque. Authorship is data, never a filter: `author.kind`/`reactor.kind` say who, and
  * `you` is true when the write was made with the credential this feed is read with (hosted: the bearer token
- * watching), so a watcher skips its own writes itself.
+ * watching; locally: `afbin comment` on the file), so a watcher skips its own writes itself.
  * A new comment or reply is the plain event. Rewriting a comment the monitor has already passed adds
  * `change: 'edited'` and `edited_at`, with the new `body` and its own `event_id` (`comment_id` stays the comment's);
  * edits since one checkpoint arrive as one event with the latest words.

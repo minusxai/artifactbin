@@ -46,7 +46,7 @@ export const PATCH = withTokenAuth(async (request: Request, { actor, params, cli
 });
 
 export const DELETE = withTokenAuth(async (_request: Request, { actor, params }) => {
-  if (!actor.userId) return json({ error: 'account_required', hint: 'Sign in with an email account (/llms/http-auth); an anonymous credential owns no comments to delete.' }, 403);
+  if (!actor.userId) return json({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential owns no comments to delete.' }, 403);
   const deleted = await deleteAnnotationFor(actor, params.id, params.annId);
   return deleted ? json({ ok: true }) : json({ error: 'not_found' }, 404);
 });

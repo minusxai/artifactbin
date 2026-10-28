@@ -12,7 +12,7 @@
  * Fonts ride on `csp-style` (a stylesheet host serves its faces too): it extends both style-src and
  * font-src. The others map one to one: connect-src, script-src, img-src, frame-src, media-src.
  *
- * PURE and dependency-light on purpose: local validation imports it, so a local check
+ * PURE and dependency-light on purpose: the CLI bundles it through local-validation, so `afbin validate`
  * refuses what publish refuses, with the same messages and spans. Nothing is stored beside the source:
  * each version's source IS its declaration (edits commit client-prepared patches, so a stored copy would
  * drift), and serving re-reads it (lib/trust/document-trust) to append the hosts a reader published or

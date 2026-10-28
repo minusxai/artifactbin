@@ -331,7 +331,8 @@ interface ReaderFrame {
 }
 
 /**
- * A local preview's draft: source only. Its controller compiles the file on disk and reads nothing else.
+ * The local preview's draft (services/cli/src/preview/client): source only. Its own controller
+ * (services/cli/src/preview/edit-controller) compiles the file on disk and reads nothing else.
  */
 interface LocalDraft {
   type: typeof STORY_DOCUMENT_MESSAGE;

@@ -119,9 +119,9 @@ export function auditFastSource(source, file) {
   return reasons;
 }
 
-/** Every test file must have an owner: a full Vitest project. */
+/** Every test file must have an owner: a full Vitest project or the CLI's native test glob. */
 export function assertFullTestCoverage(discovered, full) {
   const owners = new Set(full);
-  const missing = discovered.filter(file => !owners.has(file));
+  const missing = discovered.filter(file => !owners.has(file) && !/^services\/cli\/test\/[^/]+\.test\.ts$/.test(file));
   if (missing.length) throw new Error(`tests missing from full lane: ${missing.join(', ')}`);
 }
