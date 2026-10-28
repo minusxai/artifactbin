@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {it,expect} from 'vitest';
+import {describe,it,expect} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
@@ -248,4 +248,62 @@ it('continues dependency writes begun by the previous traversal-order allocator'
  const independent=await POST(request('/api/artifacts',{method:'POST',token:other.token,headers:{'Idempotency-Key':key},json:{html:'<img src="z.svg"><img src="a.svg">',publicationBundle:{entryPath:'index.html',files:sources}}}));const owned=await independent.json();expect(independent.status,JSON.stringify(owned)).toBe(201);expect(owned.dependencyReceipts.every((entry:{id:string})=>!saved.dependencyReceipts.some((original:{id:string})=>original.id===entry.id))).toBe(true);
 
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(6);
+});
+
+describe('editor bundle saves',()=>{
+ type Receipt={path:string;id:string;revision:string};
+ const html='<link rel="stylesheet" href="./main.css"><img src="./logo.svg"><h1>One</h1>';
+ const sources=[file('main.css','body{color:red}','text/css'),file('logo.svg','<svg/>','image/svg+xml')];
+ const setup=async(slug:string)=>{
+  const owner=await mintAccountToken('bundle-editor-owner-'+slug),editor=await mintAccountToken('bundle-editor-'+slug);
+  const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'bundle_editor_create_'+slug},json:{html,shares:[{email:editor.email,role:'editor'}],publicationBundle:{entryPath:'index.html',files:sources}}}));
+  const saved=await created.json() as {id:string;dependencyReceipts:Receipt[]};expect(created.status,JSON.stringify(saved)).toBe(201);
+  const params={params:Promise.resolve({id:saved.id})};
+  const mappings=Object.fromEntries(saved.dependencyReceipts.map(({path,...entry})=>[path,entry]));
+  const receipt=(path:string)=>saved.dependencyReceipts.find(entry=>entry.path===path)!;
+  const save=async(token:string,key:string,files:typeof sources,page=html.replace('One','Two'))=>{
+   const head=await (await GET(request('/api/artifacts/'+saved.id,{token}),params)).json();expect(head.version).toBe(1);
+   const response=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token,headers:{'Idempotency-Key':key},json:{html:page,expectedVersion:head.version,expectedState:head.state,publicationBundle:{entryPath:'index.html',files,mappings}}}),params);
+   return {status:response.status,body:await response.json()};
+  };
+  const db=await harness.db();
+  const revoke=(id:string)=>db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[id]);
+  const version=async(id:string)=>(await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[id])).rows[0]?.version;
+  const count=async()=>(await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n;
+  return {owner,editor,saved,receipt,save,revoke,version,count,db};
+ };
+ it('saves unchanged files without edit access to them',async()=>{
+  const {editor,saved,receipt,save,revoke,version}=await setup('unchanged');
+  for(const entry of saved.dependencyReceipts)await revoke(entry.id);
+  const result=await save(editor.token,'bundle_editor_unchanged_01',sources);expect(result.status,JSON.stringify(result.body)).toBe(200);
+  expect(result.body.dependencyReceipts).toEqual(saved.dependencyReceipts);
+  expect(await version(saved.id)).toBe(2);expect(await version(receipt('main.css').id)).toBe(1);
+ });
+ it('updates a changed file the editor can edit',async()=>{
+  const {editor,saved,receipt,save,version}=await setup('changed');
+  const result=await save(editor.token,'bundle_editor_changed_01',[file('main.css','body{color:blue}','text/css'),sources[1]!]);expect(result.status,JSON.stringify(result.body)).toBe(200);
+  expect(result.body.dependencyReceipts.find((entry:Receipt)=>entry.path==='main.css')).toMatchObject({id:receipt('main.css').id,revision:'2'});
+  expect(await version(receipt('main.css').id)).toBe(2);expect(await version(receipt('logo.svg').id)).toBe(1);expect(await version(saved.id)).toBe(2);
+ });
+ it('refuses a changed file the editor cannot edit, naming it, before writing anything',async()=>{
+  const {editor,saved,receipt,save,revoke,version,count}=await setup('refused');
+  await revoke(receipt('main.css').id);const before=await count();
+  const result=await save(editor.token,'bundle_editor_refused_01',[file('main.css','body{color:blue}','text/css'),sources[1]!,file('extra.svg','<svg>extra</svg>','image/svg+xml')],html.replace('One','<img src="./extra.svg">'));
+  expect(result.status).toBe(403);expect(result.body).toMatchObject({error:'bundle_file_not_editable',path:'main.css'});
+  expect(await count()).toBe(before);expect(await version(receipt('main.css').id)).toBe(1);expect(await version(saved.id)).toBe(1);
+ });
+ it('creates a new file owned by the page owner, not the editor',async()=>{
+  const {owner,editor,saved,save,db}=await setup('added');
+  const result=await save(editor.token,'bundle_editor_added_01',[...sources,file('extra.svg','<svg>extra</svg>','image/svg+xml')],html.replace('One','<img src="./extra.svg">'));expect(result.status,JSON.stringify(result.body)).toBe(200);
+  const added=result.body.dependencyReceipts.find((entry:Receipt)=>entry.path==='extra.svg');expect(added).toBeTruthy();
+  expect(saved.dependencyReceipts.some(entry=>entry.id===added.id)).toBe(false);
+  const row=(await db.query<{user_id:string|null}>('SELECT user_id FROM artifacts WHERE id=$1',[added.id])).rows[0];
+  expect(row?.user_id).toBe(owner.userId);expect(row?.user_id).not.toBe(editor.userId);
+ });
+ it('still lets the owner change and add files',async()=>{
+  const {owner,receipt,save,version}=await setup('owner');
+  const result=await save(owner.token,'bundle_editor_owner_01',[file('main.css','body{color:green}','text/css'),sources[1]!,file('extra.svg','<svg>extra</svg>','image/svg+xml')],html.replace('One','<img src="./extra.svg">'));expect(result.status,JSON.stringify(result.body)).toBe(200);
+  expect(result.body.dependencyReceipts.map((entry:Receipt)=>entry.path).sort()).toEqual(['extra.svg','logo.svg','main.css']);
+  expect(await version(receipt('main.css').id)).toBe(2);
+ });
 });

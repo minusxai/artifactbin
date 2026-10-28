@@ -8,11 +8,18 @@ export interface BundlePublisher {
  create(input:DependencyWrite):Promise<SavedDependency>;
  update?(input:DependencyWrite,mapping:PublicationBundleMapping):Promise<SavedDependency>;
 }
+/** Mapped paths whose saved dependency must be rewritten; every other mapping is reused as recorded. */
+export function changedBundlePaths(plan:Pick<BundlePlan,'dependencies'>,mappings:Readonly<Record<string,PublicationBundleMapping>>={}):Set<string>{
+ const changed=new Set<string>();
+ // A changed nested URL also updates its containing CSS/module, even when its author bytes are unchanged.
+ for(const dependency of plan.dependencies){const mapping=mappings[dependency.path];if(mapping&&(mapping.sha256!==createHash('sha256').update(dependency.bytes).digest('hex')||dependency.dependencies.some(path=>changed.has(path))))changed.add(dependency.path);}
+ return changed;
+}
 /** Four independent resources per wave; settle every started write before returning receipts. */
 const PUBLICATION_CONCURRENCY=4;
 /** Per-resource conditional writes retain their identities and durable receipts across retries. */
 export async function publishBundleDependencies(plan:BundlePlan,key:string,publisher:BundlePublisher,mappings:Readonly<Record<string,PublicationBundleMapping>>={}):Promise<{html:string;receipts:BundleReceipt[]}>{
- const addresses=new Map<string,string>(),receipts=new Map<string,BundleReceipt>(),uploaded=new Map<string,Promise<SavedDependency>>(),changed=new Set<string>();
+ const addresses=new Map<string,string>(),receipts=new Map<string,BundleReceipt>(),uploaded=new Map<string,Promise<SavedDependency>>(),changed=changedBundlePaths(plan,mappings);
  const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
  const orderedReceipts=()=>[...new Set([...plan.dependencies.map(dependency=>dependency.path),...Object.keys(mappings)])].flatMap(path=>{const receipt=receipts.get(path);return receipt?[receipt]:[];});
  const settle=async(tasks:readonly (()=>Promise<void>)[])=>{
@@ -20,8 +27,6 @@ export async function publishBundleDependencies(plan:BundlePlan,key:string,publi
   const failure=results.find((result):result is PromiseRejectedResult=>result.status==='rejected');
   if(failure)throw failure.reason;
  };
- // A changed nested URL also updates its containing CSS/module, even when its author bytes are unchanged.
- for(const dependency of plan.dependencies){const mapping=mappings[dependency.path];if(mapping&&(mapping.sha256!==digest(dependency.bytes)||dependency.dependencies.some(path=>changed.has(path))))changed.add(dependency.path);}
  try{
   const reused=Object.entries(mappings).filter(([name])=>!changed.has(name));
   for(let offset=0;offset<reused.length;offset+=PUBLICATION_CONCURRENCY){
