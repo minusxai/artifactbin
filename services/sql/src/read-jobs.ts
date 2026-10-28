@@ -48,7 +48,7 @@ export function createReadJobs(
       timer.unref();
       return () => clearTimeout(timer);
     });
-  const maxActive = options.maxActive ?? 8,
+  const maxActive = options.maxActive ?? 64,
     maxEntries = options.maxEntries ?? 1024,
     retention = options.retentionMs ?? 60000;
   const keyOf = (request: SqlReadJobKey) => {
