@@ -73,7 +73,7 @@ jobs:
           test "$(jq -r .name manifest.json)" = '@afbin/cli'
           test "$(jq -r .version manifest.json)" = "$version"
           # The retirement build is one file with no dependencies (services/cli).
-          tar -tzf "$file" | sort > package-files.txt
+          tar -tzf "$file" | LC_ALL=C sort > package-files.txt
           printf '%s\n' package/README.md package/bin/afbin.mjs package/package.json > expected-files.txt
           diff expected-files.txt package-files.txt
           test "$(jq -c '.dependencies // {}' manifest.json)" = '{}'
