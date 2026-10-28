@@ -19,6 +19,7 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
     ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }),
     wake: () => handlers!.onWake?.(),
     data: () => handlers!.onData?.({datasets:['garden']} as never),
+    dataFrame: (frame: { datasets: string[]; version: number; revisions?: Record<string, string> }) => handlers!.onData?.(frame),
   };
 }
 
@@ -268,4 +269,17 @@ it('never refreshes the native archived view when a publication arrives', () => 
  renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,enabled:false,onPublication:reload}));
  expect(backend.live).not.toHaveBeenCalled();
  expect(reload).not.toHaveBeenCalled();
+});
+
+it('forwards a native data name only when its revision moved, across reconnects', () => {
+ const {backend,dataFrame}=liveBackend(vi.fn(async()=>frame(1)));
+ const invalidate=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:vi.fn(),onData:invalidate}));
+ // Every (re)connection opens with every name; an unchanged revision is not news.
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:3:e3:true'}});
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:3:e3:true'}});
+ dataFrame({datasets:['queries','orders'],version:1,revisions:{queries:'missing',orders:'dataset:d1:4:e4:true'}});
+ // A frame without revisions (a dataset document, membership) is forwarded as it is.
+ dataFrame({datasets:['_members'],version:1});dataFrame({datasets:['_members'],version:1});
+ expect(invalidate.mock.calls.map(([event])=>event.datasets)).toEqual([['queries','orders'],['orders'],['_members'],['_members']]);
 });

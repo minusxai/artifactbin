@@ -1,9 +1,10 @@
-import {registeredMutationPlan,registeredMutationInvoker,createRetainedRegisteredMutation} from '@/lib/registered-page-mutations';
+import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
+import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import type {HtmlBackendVersionRecord} from '@/lib/html-backends';
 import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan} from '@/lib/registered-page-queries/registry';
 import {registeredQueryInvoker} from '@/lib/registered-page-queries/namespace';
-import {createRetainedRegisteredQueries} from '@/lib/registered-page-queries/retained';
+import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
 import type {AccessActor} from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';

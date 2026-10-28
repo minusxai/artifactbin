@@ -384,7 +384,9 @@ export async function executePageOperation(
             ) {
               settle("rejected");
               throw new GraphQLError(
-                "Backend request rejected before execution",
+                extensions?.code === "retryable"
+                  ? "Backend busy: the runner refused admission (busy or restarting) after retries; nothing ran, so retrying is safe"
+                  : "Backend request rejected before execution",
                 { extensions },
               );
             }

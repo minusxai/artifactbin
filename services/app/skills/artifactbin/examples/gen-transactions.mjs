@@ -28,3 +28,6 @@ for(let m=0;m<12;m++){
   }
 }
 console.log(rows.join('\n'));
+// The exact row count (the CSV's header line is not a transaction), on stderr beside the redirect.
+console.error(`wrote ${rows.length-1} transactions (12 months, ${rows[1].slice(0,7)}..`+
+  `${rows.at(-1).slice(0,7)}); use this count, not wc -l`);

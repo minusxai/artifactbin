@@ -172,7 +172,7 @@ if(parsed.values.output&&!result.outputOwned){await exclusive(parsed.values.outp
     }else process.stdout.write(data);
   // A publish that added data-af-ids says so last, below the JSON, where a tail of the output
   // still shows it.
-  for(const note of [result.rewritten,result.headers])if(typeof note==='string'&&
+  for(const note of [result.rewritten])if(typeof note==='string'&&
    !parsed.values.json)process.stderr.write(note+'\n');
  }catch(error){
   const envelope=toolFailure(name,error);

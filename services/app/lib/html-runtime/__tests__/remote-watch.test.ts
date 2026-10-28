@@ -81,3 +81,20 @@ it('a page can watch every query a registered program admits, plus its viewer, a
  const again=watch();
  again.unsubscribe();for(const subscription of subscriptions)subscription.unsubscribe();
 });
+it('a watch never delivers the same result twice in a row',async()=>{
+ let notify:(reason?:'data')=>void=()=>{};const jobs:Array<(value:any)=>void>=[];
+ const remote:RemotePort={online:()=>true,subscribe(listener){notify=listener as typeof notify;return()=>{};},execute(){return new Promise(resolve=>jobs.push(resolve));}};
+ const client=createClient({backends:['records'],state:createLocalStore(),remote}),seen:QueryResult[]=[];
+ const sub=client.watchQuery({query:gql`{records{value}}`,clearOnRefresh:true,preserveOnDataRefresh:true}).subscribe(result=>seen.push(result));
+ jobs.shift()!({data:{records:{value:1}}});await tick();
+ expect(seen).toEqual([{data:{records:null},loading:true},{data:{records:{value:1}},loading:false}]);
+ // Wakeups arriving while a refresh is running coalesce; the refetch that answers the same rows is delivered once.
+ notify('data');notify('data');notify('data');expect(seen.slice(2)).toEqual([{data:{records:{value:1}},loading:true}]);
+ jobs.shift()!({data:{records:{value:1}}});await tick();jobs.shift()!({data:{records:{value:1}}});await tick();
+ expect(jobs).toHaveLength(0);expect(seen.slice(2)).toEqual([{data:{records:{value:1}},loading:true},{data:{records:{value:1}},loading:false}]);
+ // A reconnect clears twice in a row: the second, identical empty result is not delivered again.
+ notify();notify();expect(seen.slice(4)).toEqual([{data:{records:null},loading:true}]);
+ jobs.shift()!({data:{records:{value:2}}});await tick();jobs.shift()?.({data:{records:{value:2}}});await tick();
+ expect(seen.slice(4)).toEqual([{data:{records:null},loading:true},{data:{records:{value:2}},loading:false}]);
+ sub.unsubscribe();
+});
