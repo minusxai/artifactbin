@@ -90,9 +90,9 @@ function mounted<T>(primitive: () => T): { value: T; dispose: () => void } {
 {
   let deployment: ReturnType<typeof mounted<ReturnType<typeof useSetupDeployment>>> | null = null;
   describeRetryingRead('the deployment read', () => ({
-    start: () => { deployment?.dispose(); deployment = mounted(() => useSetupDeployment()); },
+    start: () => { deployment?.dispose(); deployment = mounted(() => useSetupDeployment()); return { abort: () => deployment!.dispose() }; },
     landed: () => deployment?.value()?.mode === 'company',
-  }), { matches: (url) => pathOf(url) === '/api/deployment', ok: ok({ mode: 'company' }) });
+  }), { matches: (url) => pathOf(url) === '/api/deployment', ok: ok({ mode: 'company' }), abortable: true });
 }
 
 it('sends a write once, even when the server is restarting', async () => {
