@@ -4,6 +4,13 @@ import type {
   PageResolverFieldCall,
 } from "@artifactbin/contracts";
 import type { QueryContext, QueryPlan, RegisteredViewerDescriptor } from "./contracts";
+import { FIELD_ERROR_CODE, FieldFailed } from "@/lib/page-operations/contracts";
+/** A failed evaluation carries its sanitized reason as the field's error code (e.g. sql_read_rejected). */
+const evaluationFailure = (error: unknown) => {
+  if (error instanceof FieldFailed) return error;
+  const reason = error instanceof Error ? error.message : "";
+  return new FieldFailed(FIELD_ERROR_CODE.test(reason) ? reason : "registered_query_failed");
+};
 /** Schema generated from immutable declarations; no arbitrary JSON/SQL/dataset/builtin input. */
 export function registeredQuerySchema(
   program: Pick<QueryPlan, "scalars" | "queries">,
@@ -44,7 +51,9 @@ export function registeredQueryInvoker(
     call.signal.throwIfAborted();
     if (call.field === "viewer") return {id:context.subject};
     const args = { ...call.args, values: call.args.values ?? {} };
-    const answer = await execute(context, args, call.signal);
+    const answer = await execute(context, args, call.signal).catch((error: unknown) => {
+      throw evaluationFailure(error);
+    });
     return {
       tables: Object.entries(answer).map(([name, outcome]) =>
         "error" in outcome

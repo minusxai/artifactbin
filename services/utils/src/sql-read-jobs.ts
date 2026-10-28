@@ -28,12 +28,35 @@ export function sqlReadExecution(
     drainReject = reject;
   });
   drained.catch(() => {});
+  const pause = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        wake = undefined;
+        resolve();
+      };
+      const timer = setTimeout(finish, ms);
+      wake = finish;
+    });
+  /** Opening submits nothing, so a lost or refused open (a restarting or briefly stalled service) is retried within the lease. */
+  const openSession = async () => {
+    const until = now() + Math.min(20000, Math.max(1, options.leaseMs ?? 20000));
+    for (let attempt = 0; ; attempt++) {
+      if (cancelled) throw Error("sql_read_cancelled");
+      try {
+        return await jobs.open();
+      } catch (error) {
+        if (cancelled || now() >= until) throw error;
+      }
+      await pause(Math.min(500, (options.pollMs ?? 25) * 2 ** attempt));
+    }
+  };
   const result = (async () => {
     let key: SqlReadJobKey | undefined,
       attempted = false,
       confirmed = false;
     try {
-      const session = await jobs.open();
+      const session = await openSession();
       if (
         !session ||
         typeof session.serverId !== "string" ||
@@ -81,19 +104,12 @@ export function sqlReadExecution(
             if (cancelled || receipt.state === "cancelled")
               throw Error("sql_read_cancelled");
             if (receipt.state === "completed") return receipt.results;
-            throw Error("sql_read_rejected");
+            // The service's own reason (sql_job_output_limit, sql_job_busy, sql_job_failed…) names what refused the read.
+            throw Error(typeof receipt.code === "string" && /^sql_[a-z_]{1,60}$/.test(receipt.code) ? receipt.code : "sql_read_rejected");
           }
           if (receipt.state === "unknown" && !cancelled) action = "submit";
         }
-        await new Promise<void>((resolve) => {
-          const finish = () => {
-            clearTimeout(timer);
-            wake = undefined;
-            resolve();
-          };
-          const timer = setTimeout(finish, options.pollMs ?? 25);
-          wake = finish;
-        });
+        await pause(options.pollMs ?? 25);
       }
       throw Error("sql_read_drain_unconfirmed");
     } finally {

@@ -342,6 +342,15 @@ it('exposes only the authenticated target viewer identity through the readonly r
  await expect(invoke({...call,principal:{tenant:'page',subject:'forged'}})).rejects.toThrow('registered_query_unavailable');
  expect(registeredViewerDescriptor('queries')).toMatchObject({namespace:'queries',identity:'target-subject-v1',responsePath:['queries','viewer','id']});
 });
+it('a failed evaluation reaches the page as a field error with its sanitized reason as the code, never its detail',async()=>{
+ const {registeredQueryInvoker}=await import('../namespace');
+ const page={pageId:'page',version:1,revision:'1',html:'',nextNodeId:1,links:[]};
+ const context={pageId:'page',pageVersion:1,backendId:'backend',backendVersion:'one',sourceSha256:'a'.repeat(64),subject:null};
+ const call={operation:'query' as const,field:'evaluate',principal:{tenant:'page',subject:null},fileId:'backend',version:'one',args:{only:['total']},signal:new AbortController().signal,namespace:'queries'};
+ await expect(registeredQueryInvoker(page,context,async()=>{throw Error('sql_read_rejected');})(call)).rejects.toMatchObject({name:'FieldFailed',code:'sql_read_rejected'});
+ const failed=await registeredQueryInvoker(page,context,async()=>{throw Error('connection to 10.0.0.1 refused');})(call).catch(error=>error);
+ expect(failed).toMatchObject({name:'FieldFailed',code:'registered_query_failed'});expect(failed.detail).toBeUndefined();
+});
 it('executes immutable source queries inside their catalog without materializing large base tables',async()=>{
  const f=fixture(),checks:string[]=[];
  f.ports.registry=async()=>({...plan,queries:[{name:'total',sql:'select count(*) as amount from public.rows where amount >= $amount',source:'connectedDataset',dependencies:[]}]});

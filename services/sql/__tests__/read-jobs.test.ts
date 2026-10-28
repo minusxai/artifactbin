@@ -196,3 +196,44 @@ it("never restarts an expired identifier after terminal retention is reclaimed",
   });
   expect(starts).toBe(1);
 });
+it("releases answered results, oldest first, so new reads complete under the retained budget", async () => {
+  const output = { q: { columns: [], rows: [{ payload: "retained result" }] } };
+  const size = Buffer.byteLength(JSON.stringify(output));
+  const jobs = createReadJobs(
+    () => ({ result: Promise.resolve(structuredClone(output)), cancelAndDrain: async () => {} }),
+    { serverId: "server", now: () => 0, maxRetainedBytes: size * 2 },
+  );
+  const job = (n: number) => ({ ...key, id: `retained_job_${n}_0123456789` });
+  const settle = async (n: number) => {
+    await jobs.submit({ ...job(n), input });
+    await Promise.resolve();
+  };
+  await settle(1);
+  expect(await jobs.status(job(1))).toMatchObject({ state: "completed", results: output });
+  await settle(2);
+  // The budget is full: the answered result is released for the new one; the unanswered one is kept.
+  await settle(3);
+  expect(await jobs.status(job(3))).toMatchObject({ state: "completed", drained: true, results: output });
+  expect(await jobs.status(job(2))).toMatchObject({ state: "completed", drained: true, results: output });
+  expect(await jobs.status(job(1))).toMatchObject({ state: "failed", drained: true, code: "sql_job_result_released" });
+  // Every retained result is answered now, so the next read releases the oldest of them and completes too.
+  await settle(4);
+  expect(await jobs.status(job(4))).toMatchObject({ state: "completed", results: output });
+  expect(await jobs.status(job(2))).toMatchObject({ state: "failed", code: "sql_job_result_released" });
+  expect(await jobs.status(job(3))).toMatchObject({ state: "completed", results: output });
+});
+it("still refuses a result when only unanswered results hold the retained budget", async () => {
+  const output = { q: { columns: [], rows: [{ payload: "retained result" }] } };
+  const size = Buffer.byteLength(JSON.stringify(output));
+  const jobs = createReadJobs(
+    () => ({ result: Promise.resolve(structuredClone(output)), cancelAndDrain: async () => {} }),
+    { serverId: "server", now: () => 0, maxRetainedBytes: size },
+  );
+  const job = (n: number) => ({ ...key, id: `unanswered_job_${n}_0123456789` });
+  await jobs.submit({ ...job(1), input });
+  await Promise.resolve();
+  await jobs.submit({ ...job(2), input });
+  await Promise.resolve();
+  expect(await jobs.status(job(2))).toMatchObject({ state: "failed", drained: true, code: "sql_job_output_limit" });
+  expect(await jobs.status(job(1))).toMatchObject({ state: "completed", results: output });
+});
