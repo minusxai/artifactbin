@@ -11,7 +11,7 @@ import { documentFrame } from "./lib/page-facts.mjs";
 import { createChecker } from "./lib/assert.mjs";
 import { lane } from "./lib/lane.mjs";
 import { startDocument, becomeOwner } from "../lib/start-doc.mjs";
-import { connectAgent, connectionBrowserCookie } from "./lib/cli-connection.mjs";
+import { connectAgent, connectionBrowserCookie } from "./lib/account-connection.mjs";
 import { editableDatasetPageHtml } from "./lib/native-editable-dataset-page.mjs";
 const BASE = process.argv[2] ?? "http://localhost:3030";
 const check = createChecker("datasets-in-documents");

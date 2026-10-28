@@ -16,7 +16,7 @@ Every document is framed from its own origin under `APP__PAGES_HOST`. Its author
 `<script>` runs natively there as a Solid ES module, can access the document DOM,
 and uses declared `page` bindings for data. The document's CSP and reader consent
 control external hosts; the app session and storage remain on the app origin.
-See [serving and security](serving-and-security.md) and `afbin help markup-scripts`.
+See [serving and security](serving-and-security.md) and `<origin>/llms/html-operations`.
 
 Documents get: six dual-palette **themes** (`modernist · organic · industry ·
 terminal · manuscript · pop`, each with a light and a dark mode), a stable public link that survives edits, and full
@@ -25,7 +25,7 @@ rail and keyboard paging, `scrolly`, `dashboard`, `plan`), plus **interactive Ve
 charts** — real tooltips and hover, themed to the story, rendered by a
 runtime served from this origin (the CSP still blocks all external hosts,
 and expression evaluation uses the AST interpreter, never `eval`). The full
-component reference is bundled locally: `afbin help markup`.
+component reference is at `<origin>/llms/dataviz`.
 
 The owner/editor “social preview” control stores its locked 40:21 framing as
 `<meta name="artifactbin:og-crop" content="x=…;y=…;width=…" />` in `<Helmet>`.

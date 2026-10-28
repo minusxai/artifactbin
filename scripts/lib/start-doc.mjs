@@ -1,6 +1,6 @@
 /** Native HTML gate fixtures use the original start route, verified account
  * credentials and browser sessions. Account bearers never enter page HTML. */
-import { connectAgent, connectionBrowserCookie } from '../gates/lib/cli-connection.mjs';
+import { connectAgent, connectionBrowserCookie } from '../gates/lib/account-connection.mjs';
 import { loginViaEmail } from './mail-login.mjs';
 
 /**

@@ -1,6 +1,4 @@
 import type {RunStart} from './runner';
-/** Hosted native processes use one fixed PTY geometry, independent of viewer width. */
-export const HOSTED_TERMINAL_SIZE={cols:100,rows:30} as const;
 /** V0 remote-terminal protocol. PTY bytes stay on the user's machine until explicitly shared. */
 export interface RemoteSessionInfo {
   /** Assigned by the app for the account’s included hosted agent, never inferred from its name. */
@@ -30,31 +28,6 @@ export interface RemoteSessionInfo {
   color?: RemoteColor;
   activity?: RemoteActivity;
 }
-interface RemoteInput {
-  id: number;
-  kind: "input" | "resize";
-  data?: string;
-  cols?: number;
-  rows?: number;
-  source?: "keyboard" | "comment";
-  requestId?: string;
-}
-export interface RemoteExchange {
-  runnerKey: string;
-  outputSeq: number;
-  output: string;
-  ack: number;
-  cols: number;
-  rows: number;
-  exitCode?: number;
-  localControl?: boolean;
-  activity?: RemoteActivity;
-}
-export interface RemoteExchangeResult {
-  stop?: boolean;
-  inputs: RemoteInput[];
-  controller: "local" | "web";
-}
 interface RemoteFrame {
   seq: number;
   data: string;
@@ -70,9 +43,6 @@ export interface RemoteView {
   snapshot?: string;
 }
 
-/** Managed agents keep a stable identity independently of terminal connectivity. */
-export const REMOTE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
-export const REMOTE_HISTORY_BYTES = 128 * 1024;
 const REMOTE_COLORS = ['blue', 'violet', 'teal', 'amber', 'rose', 'slate'] as const;
 export type RemoteColor = typeof REMOTE_COLORS[number];
 export type RemoteActivity = 'queued' | 'starting' | 'listening' | 'working' | 'blocked' | 'unknown' | 'stopping' | 'stopped';

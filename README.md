@@ -35,6 +35,6 @@ The local test wrapper runs affected tests within its file budget; broader suite
 
 `services/app` owns the reader and artifact APIs. `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. The author skill lives at [services/app/skills/artifactbin](services/app/skills/artifactbin/SKILL.md).
 
-`services/cli` remains an internal compatibility dependency during this phase: the source compiler, toolkit and preview build still share it. It is not the product installation path. Its old command references and compiler tests remain until those consumers are extracted; the HTTP skill is the public authoring path. CLI installers, device approval and first-party loopback login are retired. Standard OAuth, verified email login and account API-token access remain supported. The main branch release pipeline stays separate from this branch.
+The HTTP skill is the public authoring path. Standard OAuth, verified email login and account API-token access remain supported. The main branch release pipeline stays separate from this branch.
 
 [Source format](docs/document-format.md) · [Historical editing architecture](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md) · [Apache-2.0](LICENSE).

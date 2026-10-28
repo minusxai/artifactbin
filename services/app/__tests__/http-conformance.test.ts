@@ -2,7 +2,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createTeamApplication} from '../server/team-host';
+import {createAuthComposedHost} from '@/test/helpers/auth-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import {useAppHarness} from './harness';
 import {expect,it} from 'vitest';
@@ -61,7 +61,7 @@ it.each([{cache:'public'},{mutatesOnStale:true},{mutatesUnauthorized:true},{acce
 
 it('acceptance runs against real composed email, artifact and download handlers',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'http-conformance-')),origin='http://localhost:3000';
- const application=await createTeamApplication({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')},process.cwd());
+ const application=await createAuthComposedHost({APP__PUBLIC_BASE_URL:origin,AUTH__SECRET:AUTH_SECRET,EMAIL__DEV_OUTBOX_PATH:join(directory,'outbox.jsonl')});
  const fetch=(input:string,init:RequestInit={})=>application.fetch(new Request(input,init));
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)});
  try{

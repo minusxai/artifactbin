@@ -9,7 +9,7 @@ import { documentFrame } from "./lib/page-facts.mjs";
 import { createChecker } from "./lib/assert.mjs";
 import { lane } from "./lib/lane.mjs";
 import { startDocument, becomeOwner } from "../lib/start-doc.mjs";
-import { connectAgent, connectionBrowserCookie } from "./lib/cli-connection.mjs";
+import { connectAgent, connectionBrowserCookie } from "./lib/account-connection.mjs";
 import { datasetPageHtml } from "./lib/native-dataset-page.mjs";
 import { localStatePageHtml } from "./lib/native-local-state-page.mjs";
 import { isReaderPresenceRequest } from "./lib/local-state-requests.mjs";

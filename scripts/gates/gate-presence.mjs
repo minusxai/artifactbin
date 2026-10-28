@@ -1,5 +1,5 @@
 /** Native presence: two accounts, a guest and two tabs of one session. The latter must not exhaust HTTP/1 sockets. */
-import {connectAgent} from './lib/cli-connection.mjs';
+import {connectAgent} from './lib/account-connection.mjs';
 import {mergeGuestIntoAccount} from '../lib/start-doc.mjs';
 import {launchChromium} from './lib/browser.mjs';
 import {documentFrame} from './lib/page-facts.mjs';

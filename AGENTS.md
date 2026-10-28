@@ -5,7 +5,7 @@
 ## Check tiers — read before running commands
 
 **FAST — after every change:** `npm run validate`,
-`npm test -- --files <paths>`, the running dev app, `npm run afbin`.
+`npm test -- --files <paths>`, the running dev app.
 
 **SLOW — once at completion before merge, never mid-task/per edit:** gate containers, PR CI push, bare `npm test`.
 
@@ -40,36 +40,33 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 ## Working rules
 
 - Design modules first (Ousterhout): cohesive boundaries/contracts, narrow interfaces; routes translate to HTTP.
-- Layers: entry points `server.ts`, `scripts`, `services/cli`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
+- Layers: entry points `server.ts`, `scripts`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
   import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and an unlisted
-  deep import (`DEEP_MODULES`); `services/cli/src` imports app code only via `lib/cli-toolkit` entries.
+  deep import (`DEEP_MODULES`).
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report only observed runs and red/green/end-to-end evidence.
 - Probe assumptions; record evidence/unknowns. Order milestones by risk; end with runnable checks.
 - Verify user-facing changes on the task's running app (`npm run dev`, port `APP__PORT` in `.env`;
-  a worktree has its own). Changed `services/cli` or the skill: `npm run afbin -- <args>` runs the
-  branch's CLI against that server, state in `~/.artifactbin-dev/<port>`; `npm run eval` shows an agent using them. Both take `APP__PORT=<n>`.
+  a worktree has its own). Changed the skill: `npm run eval` shows an agent using it; it takes `APP__PORT=<n>`.
   Never iterate/test on production; confirm after deploy.
-- **Local evals use the real product contract.** Supply target origin and exact candidate CLI/skill
+- **Local evals use the real product contract.** Supply target origin and exact candidate skill
   assets independently. Local/deployed briefs and scorers are identical: no local-only prompts, auth
   bypass, production deployment or published/latest fallback. Test installed/fresh-install paths
   against the candidate; HTTP discovery/guides/auth/API use the target. Isolate harness homes,
   credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
   invalidate stale assets on relevant inputs.
-  CLI, package and skill edits reach the next run.
+  Package and skill edits reach the next run.
   Reproductions/timings (including Pi) reuse this eval harness, target/candidate, isolation,
   auth, traces and metrics; add scenarios/capabilities, never separate runners. URL probes use
   verbatim user requests. Changed harness semantics require a matched new baseline.
-  Exception: complete CLI/runtime packing is local eval preparation. Use normal assembly once per
-  input-hashed snapshot; no reduced substitute, published fallback, local full suites or merge gates.
   Harness delivers local OTP; agent follows normal auth.
   Enforce caps outside model context; no evaluator/scorer/answer hints via prompts, hooks or config.
   Preserve native replies and private instruction evidence.
   Compare baseline/candidate with identical scenarios/settings; retain failures and missing metrics.
-- **50 files TOTAL across Vitest + CLI.** Above 50: neither runs; exit 2 means **DEFERRED, NOT PASSED**.
+- **50 files TOTAL.** Above 50: nothing runs; exit 2 means **DEFERRED, NOT PASSED**.
   No affected tests: unverified (exit 2). Discovery errors fail. No counting/previewing, cap increases,
   `--all`, wrapper bypasses or deferred-suite batching.
 - **Mid-task deferral**: return to `--files`. After FAST: commit, push ONCE,
@@ -90,7 +87,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a
   new exception at the boundary and verify the bundle.
-- Read env vars through owning service audited config (CLI scripts/eval harnesses own theirs). `MODULE__NAME` settings; spread typed objects, never re-enumerate keys.
+- Read env vars through owning service audited config (scripts/eval harnesses own theirs). `MODULE__NAME` settings; spread typed objects, never re-enumerate keys.
 - Product code ignores downstream deployments. Shared types/constants: `services/contracts`;
   shared transport and assembly: `services/utils`. The app never imports the proxy. Local and HTTP
   service implementations keep the same contracts.
@@ -111,7 +108,6 @@ From repo root.
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
-- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
 - `npm run eval -- --tasks <name>` — the agent eval against that server (`--deployment`, `--help`).
   `evals/` is the private, gitignored `minusxai/artifactbin-evals` repo (its README is the guide): copy
   it from `~/projects/artifactbin-evals/evals`, never symlink; a copy lacking `evals/README.md` is stale.
@@ -119,7 +115,7 @@ From repo root.
 - `npm run validate` — FAST: name guard, incremental TypeScript (`tsgo` where installed, else
   tsc) with unused declarations, the module-graph check (`scripts/ci/module-graph.mjs`);
   utils/contracts add `noUncheckedIndexedAccess`.
-- `npm test` — affected api/node/ui/islands + CLI tests, ≤50 files; exit 2 means PR CI, never widen.
+- `npm test` — affected api/node/ui/islands tests, ≤50 files; exit 2 means PR CI, never widen.
   `-- --files <paths>` is the FAST inner loop; bare and `-- <ref>` (branch changes) are SLOW, pre-merge
   only; `-- --reuse` reuses evidence. Config/package edits may defer everything (expected).
 - `node scripts/gate-container.mjs [--cpus 4] [--memory 8g] <gate ...>` — **SLOW, PRE-MERGE
@@ -131,7 +127,6 @@ From repo root.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
   `generate:og`, `generate:design-systems` (runtime registry and agent
   references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).
-- `npm run release:cli` — bump the CLI release.
 
 ## Change checks
 
@@ -140,11 +135,7 @@ From repo root.
   and review the generated diff before final CI. FAST regression checks are
   `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
   `services/app/lib/publish/__tests__/reader-sheet.test.ts`; types do not catch drift.
-- CLI releases: `npm run release:cli` in the CLI's PR, or the `Release afbin` dispatch (straight to
-  main). `checks` refuses a CLI PR without a bump; a version-only diff packs npm and verifies native consumers; a tree PR
-  CI passed is not re-tested on merge. [Steps](services/cli/README.md). Teaching is generated before
-  install/check/dev/build; never commit `services/cli/src/generated/teaching.json`. Main CI publishes
-  the tested assets; deploys advance their source pin and verify the release before serving the installer.
+- A tree PR CI passed is not re-tested on merge.
 - Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
   setup planner's snapshot via `npm run generate:env-snapshot` (its test fails on drift).

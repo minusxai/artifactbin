@@ -12,7 +12,7 @@
  * unauthenticated and cacheable, and answers ONE document: the canonical
  * origin and the other origins the same deployment answers at.
  *
- * WHAT A CLIENT MAY BELIEVE lives at the client (services/cli/src/server-identity):
+ * WHAT A CLIENT MAY BELIEVE lives at the client:
  * this module only says what the document IS and what an origin may look like.
  * Both halves read it through here so there is exactly one origin rule.
  */

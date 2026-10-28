@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {launchChromium} from './lib/browser.mjs';
-import {connectAgent} from './lib/cli-connection.mjs';
+import {connectAgent} from './lib/account-connection.mjs';
 import {documentFrame} from './lib/page-facts.mjs';
 import {createChecker} from './lib/assert.mjs';
 const base=process.argv[2]??'http://localhost:3030',check=createChecker('native-core');

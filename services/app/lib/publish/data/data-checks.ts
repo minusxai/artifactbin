@@ -139,8 +139,8 @@ async function validateQueryBindings(body: JsxNode[], columns: Record<string, Bo
   visit(body);
   for (const { name, viz } of questions) {
     // STRUCTURE FIRST, with Vega-Lite's own normaliser, HERE and not in refs.ts: this module is
-    // server-only, while refs.ts is bundled into afbin for `afbin validate` and vega-lite is
-    // ESM-with-top-level-await that the CJS binary build refuses. A spec the normaliser rejects (a
+    // server-only, while refs.ts also runs in the browser and vega-lite is
+    // ESM-with-top-level-await. A spec the normaliser rejects (a
     // top-level `facet` beside `mark`/`encoding`, where it wants a `spec` wrapper) passes every field
     // check and throws in the reader's browser instead — "Cannot destructure property 'transform'
     // of 'spec'" on a dashboard tile. Refused before publish.

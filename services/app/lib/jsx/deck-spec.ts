@@ -52,7 +52,7 @@ const DECK_BASEMAPS = ['auto', 'light', 'dark', 'none'] as const;
 const VIEW_KEYS = ['longitude', 'latitude', 'zoom', 'pitch', 'bearing'];
 /**
  * Layer `data`: omitted (the component's query rows) or an allowlisted bundled
- * boundary. An author's OWN GeoJSON is a dataset (`afbin add zones.geojson`
+ * boundary. An author's OWN GeoJSON is a dataset (uploaded as GeoJSON
  * makes one row per feature with a `geometry` column), read through a Query
  * like any other rows — so a GeoJsonLayer without `data` draws that column.
  */
