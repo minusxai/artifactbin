@@ -37,14 +37,28 @@ it('fails closed on a required producer failure and cannot reset source readines
  expect(now).toBe(started+480_000);expect(calls).toBe(2);
 });
 
-it('does not admit an uploaded artifact until its required producer succeeds',async()=>{
- const started=Date.parse(identity.workflow_started_at);let now=started+479_000;
- const request=async args=>{
-  expect(args[1]).not.toContain('/actions/artifacts/');
-  return JSON.stringify(args[1].includes('/jobs')?{jobs:[{id:101,name:'producer',status:'in_progress',conclusion:null}]}:{artifacts:[{id:12,name:'artifact',expired:false,created_at:identity.workflow_started_at}]});
- };
- await expect(collectCurrentSourceArtifacts({repository:identity.repository,run:identity.run_id,attempt:identity.run_attempt,identities:{[identity.component]:identity},artifactName:()=> 'artifact',jobName:()=> 'producer',request,now:()=>now,pause:async ms=>{now+=ms;}})).rejects.toThrow('timed out');
- expect(now).toBe(started+480_000);
+it('stages verified uploads during cleanup but admits only the same successful producer',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'source-staging-'));
+ try{
+  const tar=join(directory,identity.component+'.tar'),zip=join(directory,'artifact.zip');
+  writeFileSync(tar,buildSourceArchive(identity,[{name:'proof/native',bytes:Buffer.from('verified'),mode:0o755}]));
+  execFileSync('zip',['-q','-j',zip,tar]);const archive=readFileSync(zip);
+  for(const outcome of ['success','failure','pending','replacement-producer','replacement-artifact']){
+   const start=Date.parse(identity.workflow_started_at);let now=start+478_000,downloads=0,polls=0;
+   const request=async args=>{
+    if(args[1].includes('/actions/artifacts/12/zip')){downloads++;expect(polls).toBe(1);return archive;}
+    if(args[1].includes('/jobs')){
+     polls++;return JSON.stringify({jobs:[{id:outcome==='replacement-producer'&&polls>1?102:101,name:'producer',status:polls>1&&outcome!=='pending'?'completed':'in_progress',conclusion:polls>1?(outcome==='failure'?'failure':'success'):null}]});
+    }
+    return JSON.stringify({artifacts:[{id:outcome==='replacement-artifact'&&polls>0?13:12,name:'artifact',expired:false,created_at:identity.workflow_started_at,digest:'sha256:'+createHash('sha256').update(archive).digest('hex'),size_in_bytes:archive.length}]});
+   };
+   const operation=collectCurrentSourceArtifacts({repository:identity.repository,run:identity.run_id,attempt:identity.run_attempt,identities:{[identity.component]:identity},artifactName:()=> 'artifact',jobName:()=> 'producer',request,now:()=>now,pause:async ms=>{expect(downloads).toBe(1);expect(ms).toBe(1000);now+=ms;}});
+   if(outcome==='success')expect((await operation).get(identity.component)[0].bytes.toString()).toBe('verified');
+   else await expect(operation).rejects.toThrow(outcome==='failure'?'producer failed':outcome==='pending'?'timed out':'changed');
+   expect(downloads).toBe(1);
+   if(outcome==='pending')expect(now).toBe(start+480_000);
+  }
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
 it('records producer failure before setup errors and never starts a build on invalid run metadata',()=>{

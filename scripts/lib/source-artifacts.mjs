@@ -132,7 +132,7 @@ export async function collectCurrentSourceArtifacts({repository,run,attempt,iden
  const startedAt=identities[components[0]].workflow_started_at,policyDeadline=sourceDeadline(startedAt,now(),budget),deadline=providedDeadline??policyDeadline;
  for(const component of components){const identity=identities[component];validateIdentity(identity);assert.equal(identity.component,component);assert.equal(identity.repository,repository);assert.equal(identity.run_id,run);assert.equal(identity.run_attempt,attempt);assert.equal(identity.workflow_started_at,startedAt,'Source operation workflow start mismatch');}
  assert.ok(Number.isSafeInteger(deadline)&&deadline>0&&deadline<=policyDeadline,'Source deadline cannot extend the original operation');
- const result=new Map();
+ const result=new Map(),staged=new Map();
  while(result.size<components.length){
   if(now()>=deadline)throw Error('Current-attempt source artifacts timed out');
   const [artifacts,jobs]=await Promise.all([
@@ -146,18 +146,27 @@ export async function collectCurrentSourceArtifacts({repository,run,attempt,iden
   }
   await Promise.all(components.filter(component=>!result.has(component)).map(async component=>{
    const producer=jobs.find(job=>job.name===jobName(component));
-   if(producer?.status!=='completed'||producer.conclusion!=='success')return;
+   if(!producer)return;
    const available=artifacts.filter(artifact=>artifact.name===artifactName(component)&&!artifact.expired&&Date.parse(artifact.created_at)>=Date.parse(startedAt));
    assert.ok(available.length<=1,'Multiple current-attempt source artifacts');if(!available.length)return;
-   const directory=mkdtempSync(join(tmpdir(),'source-artifact-'));
-   try{
-    const file=join(directory,'component.tar');
-    await downloadAndExtractCurrentArtifactFile(available[0],{repo:repository,deadline,request,memberName:component+'.tar',outputPath:file,now});
-    result.set(component,readSourceArchive(readFileSync(file),identities[component]));
-   }finally{rmSync(directory,{recursive:true,force:true});}
+   const artifact=available[0],previous=staged.get(component);
+   if(previous){
+    assert.equal(artifact.id,previous.artifactId,'Source artifact changed while awaiting producer');
+    assert.equal(producer.id,previous.producerId,'Source producer changed while awaiting completion');
+   }else{
+    const directory=mkdtempSync(join(tmpdir(),'source-artifact-'));
+    try{
+     const file=join(directory,'component.tar');
+     await downloadAndExtractCurrentArtifactFile(available[0],{repo:repository,deadline,request,memberName:component+'.tar',outputPath:file,now});
+     staged.set(component,{artifactId:artifact.id,producerId:producer.id,entries:readSourceArchive(readFileSync(file),identities[component])});
+    }finally{rmSync(directory,{recursive:true,force:true});}
+   }
+   // Upload can finish before runner cleanup. Verify transport concurrently, but
+   // admit nothing until this exact producer has terminal success.
+   if(producer.status==='completed'&&producer.conclusion==='success')result.set(component,staged.get(component).entries);
   }));
   if(now()>=deadline)throw Error('Current-attempt source artifacts timed out');
-  if(result.size<components.length)await pause(Math.min(5000,deadline-now()));
+  if(result.size<components.length)await pause(Math.min(staged.size?1000:5000,deadline-now()));
  }
  return result;
 }
