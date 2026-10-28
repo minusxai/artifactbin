@@ -92,6 +92,7 @@ if [ -d "$profile/x11-xkb-utils" ]; then
   cd "$scripts"
 fi
 if [ -d "$profile/xvfb" ]; then
+  secure_rpc=$(python3 "$scripts/xvfb-auth-profile.py" "$profile/xvfb/files/usr/bin/Xvfb")
   fetch 6ad4e3c7b59a309b32c92e5c15ce1267110f9e13f1ac78da62361a628da1a0eb https://www.x.org/releases/individual/xserver/xorg-server-21.1.25.tar.xz /xorg-build/xserver.tar.xz
   mkdir /xorg-build/xserver && tar -xJf /xorg-build/xserver.tar.xz --strip-components=1 -C /xorg-build/xserver
   meson setup /xorg-build/xserver/build /xorg-build/xserver \
@@ -103,10 +104,11 @@ if [ -d "$profile/xvfb" ]; then
     -Ddri1=true -Ddri2=true -Ddri3=true -Dlibunwind=true \
     -Dxkb_dir=/usr/share/X11/xkb -Dxkb_output_dir=/var/lib/xkb -Dxkb_bin_dir=/usr/bin \
     -Ddefault_font_path='/usr/share/fonts/X11/misc,/usr/share/fonts/X11/cyrillic,/usr/share/fonts/X11/100dpi/:unscaled,/usr/share/fonts/X11/75dpi/:unscaled,/usr/share/fonts/X11/Type1,/usr/share/fonts/X11/100dpi,/usr/share/fonts/X11/75dpi,built-ins' \
-    -Dsha1=libnettle -Ddocs=false -Ddevel-docs=false
+    -Dsha1=libnettle -Ddocs=false -Ddevel-docs=false -Dsecure-rpc="$secure_rpc"
   meson compile -C /xorg-build/xserver/build -j2
   meson test -C /xorg-build/xserver/build --print-errorlogs
   DESTDIR="$stage" meson install -C /xorg-build/xserver/build
+  python3 "$scripts/xvfb-auth-profile.py" "$profile/xvfb/files/usr/bin/Xvfb" "$stage/usr/bin/Xvfb"
 fi
 python3 "$scripts/package.py" "$profile" "$stage" "$out"
 # The probe links against the rebuilt clients and is a fixture, not a new runtime package.
