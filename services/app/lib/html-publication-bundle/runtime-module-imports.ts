@@ -29,7 +29,7 @@ export function runtimeModuleArgument(argument: string): string {
     [...text]
       .map(
         (character, index) =>
-          `$afModuleUrl[${index}]===${JSON.stringify(character)}`,
+          `$afModuleUrl[${index}]==="${character}"`,
       )
       .join("&&");
   return `(($afModuleUrl)=>{if(typeof $afModuleUrl!=="string"||!((${prefix("data:")})||(${prefix("blob:")})))throw new TypeError("Computed module imports require an absolute data or blob URL");return $afModuleUrl})(${argument})`;

@@ -171,3 +171,13 @@ it("ships a self-contained installed parser that admits the same runtime adapter
     await rm(directory, { recursive: true, force: true });
   }
 });
+it("guards computed module URLs with per-character data:/blob: prefix checks", () => {
+  const guard = runtimeModuleArgument("value");
+  expect(guard).toContain('$afModuleUrl[0]==="d"&&$afModuleUrl[1]==="a"&&$afModuleUrl[2]==="t"&&$afModuleUrl[3]==="a"&&$afModuleUrl[4]===":"');
+  expect(guard).toContain('$afModuleUrl[0]==="b"&&$afModuleUrl[1]==="l"&&$afModuleUrl[2]==="o"&&$afModuleUrl[3]==="b"&&$afModuleUrl[4]===":"');
+  const run = new Function("value", `return ${guard}`) as (value: unknown) => unknown;
+  expect(run("data:text/javascript,1")).toBe("data:text/javascript,1");
+  expect(run("blob:https://x.test/1")).toBe("blob:https://x.test/1");
+  for (const value of ["https://x.test/a.js", "./a.js", "DATA:x", 1, null])
+    expect(() => run(value)).toThrow(TypeError);
+});
