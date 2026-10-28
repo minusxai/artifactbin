@@ -54,7 +54,10 @@ sort /build/sqlite/baseline-options.raw > /out/sqlite-baseline-options
 # and keeping the static archive last for normal linker ordering.
 # Avoid mixing directly compiled SQLITE_TEST core with shared non-test core.
 test -f "$source/.libs/libsqlite3.a"
-(cd "$source" && make 'TESTFIXTURE_SRC=$(sort $(TESTSRC) $(TOP)/src/tclsqlite.c $(TESTSRC2)) .libs/libsqlite3.a' testfixture)
+# Bound parallelism to the producer's actual CPU allocation; no flag changes.
+fixture_jobs=$(getconf _NPROCESSORS_ONLN)
+[ "$fixture_jobs" -le 4 ] || fixture_jobs=4
+(cd "$source" && make -f Makefile -f "$recipe/testfixture.mk" -j"$fixture_jobs" parallel-testfixture)
 for test in session9 sessionC session1; do
  (cd "$source" && ./testfixture "ext/session/$test.test") > "/out/sqlite-$test.log" 2>&1
  cat "/out/sqlite-$test.log"

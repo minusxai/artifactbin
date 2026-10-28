@@ -42,7 +42,7 @@ export default {
       // vitest.config.ts setup files: resolved by the services/app workspace, which owns them.
       ignoreUnresolved: [/^\.\/services\/app\/test\/setup\//],
       // Debian package tooling and the native C lifecycle regression fixture.
-      ignoreBinaries: ['dpkg-query', 'dpkg-deb', 'cc'],
+      ignoreBinaries: ['dpkg-query', 'dpkg-deb', 'cc', 'ar', 'make'],
       ignoreDependencies: [
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',
