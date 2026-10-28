@@ -174,6 +174,23 @@ it('runs check steps in the framed document again after page.reload()', async ()
  expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({status:'Loaded 2'});expect(evidence.steps).toEqual({ran:true,passed:true});
 },30_000);
 
+// Steps reach the framed document's keyboard without a click, and a module-style steps file runs as written.
+it('focuses the framed document for page.keyboard and runs an export-default steps file', async () => {
+ const {stepsBody}=await import('../../app/skills/artifactbin/scripts/check.mjs');
+ const html=(body:string)=>new Response(body,{headers:{'content-type':'text/html'}});
+ worker=await createSessionProcess({credential:'bearer',userId:'usr_owner'},{baseURL:BASE,pagesHost:PAGES,sandbox:{mode:'none'},request:async request=>{
+  const url=new URL(request.url);
+  if(url.origin===BASE&&url.pathname==='/a/doc1')return html(`<!doctype html><html><body><header>App bar</header><iframe data-mx-document-frame="" name="mx-document" src="${DOC_ORIGIN}/"></iframe></body></html>`);
+  if(url.origin===DOC_ORIGIN&&url.pathname==='/')return html(`<!doctype html><html><body><p id="key">none</p><script>addEventListener('keydown',e=>{document.querySelector('#key').textContent=e.key})</script></body></html>`);
+  return new Response('not found',{status:404});
+ }});
+ const steps=stepsBody(`export default async ({page}) => {await page.locator('#key').waitFor();await page.keyboard.press('End');await page.waitForFunction(()=>document.querySelector('#key').textContent==='End',null,{timeout:3000});return {key:await page.locator('#key').textContent()};};`);
+ const out=await worker.run(`const checkPage=await context.newPage();try{return await (${inspectPage.toString()})(checkPage,{target:'/a/doc1',viewport:{width:1280,height:800},hosted:true},async page=>{${steps}});}finally{await checkPage.close();}`);
+ expect(out.error).toBeUndefined();
+ const evidence=out.result as {error?:string;task?:unknown};
+ expect(evidence.error).toBeUndefined();expect(evidence.task).toEqual({key:'End'});
+},30_000);
+
 // A step past the deadline names the numbered call still running and what the page shows, so the agent sees why it waits.
 it('names the running step call and the page status when a steps file hits its deadline', async () => {
  const {chromium}=await import('playwright');const browser=await chromium.launch();const page=await browser.newPage();

@@ -65,9 +65,9 @@ export async function prepareSample(name, server, datasetId) {
     if (!['report', 'csv-dashboard', 'shared-app'].includes(name))
       throw Error('Unknown sample. Choose report, repairs-data, csv-dashboard or shared-app.');
     let html = await readFile(path.join(root, `examples/${name}.html`), 'utf8');
-    if (name === 'csv-dashboard') {
+    if (name === 'csv-dashboard' || name === 'shared-app') {
       if (!/^[A-Za-z0-9]{6,}$/.test(datasetId ?? ''))
-        throw Error('The CSV dashboard requires the real returned dataset ID.');
+        throw Error('This sample requires the real returned dataset ID.');
       html = html.replace('ref:DATASET_ID', `ref:${datasetId}`);
     }
     const {prepareBundle} = await import('./publication-bundle.mjs');
@@ -82,7 +82,7 @@ export async function prepareSample(name, server, datasetId) {
       title: {
         report: 'A cooler walk home',
         'csv-dashboard': 'Repair bench capacity',
-        'shared-app': 'Saturday garden jobs'
+        'shared-app': 'Garden shed repairs'
       }[name],
       visibility: 'unlisted'
     };

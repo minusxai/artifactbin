@@ -1,35 +1,123 @@
 <!doctype html>
 <!--
-Example: a shared task board with role-protected backend mutations; its display filter is local to each viewer.
-Goes with the backend file next to it in examples/ (the resolvers, linked from this page by af-backend; publish them together).
-Verify an editor's allowed action and a viewer's refusal (separate check runs, --viewer self and guest); the local filter must stay private
-to each browser profile, while shared task changes show after a fresh remote read. Offline, remote writes must report that they are unavailable.
+Example: a dashboard over a linked CSV dataset with shared targets in a backend store (signed-in-only edits), a per-viewer dark mode in Apollo local state, one Vega-Lite chart and a drill-down list.
+Goes with examples/repairs.csv and the backend file next to it in examples/ (linked by af-backend; publish them together): publish the CSV first
+(node scripts/publish.mjs examples/repairs.csv --type dataset) and replace the placeholder after ref: below with the returned dataset ID. Never publish the placeholder.
+Verify a signed-in edit and a guest's refusal (separate check runs, --viewer self and guest), that dark mode survives a reload for one viewer only,
+and chart values against the source cells. Offline, remote writes must report that they are unavailable.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
-<title>Saturday garden jobs</title>
+<title>Garden shed repairs</title>
+<link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
 <link rel="af-backend" data-af-name="garden" href="./garden.ts">
 <style>
-*{box-sizing:border-box}body{line-height:1.6}main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}p{max-width:68ch}button,select{font:inherit;padding:10px 16px;color:inherit;background:var(--background);border:1px solid currentColor;border-radius:4px}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}button:focus-visible,select:focus-visible{outline:3px solid var(--primary);outline-offset:3px}.muted{opacity:.72}.lead{font-size:clamp(19px,3vw,26px);line-height:1.5}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(220px,1fr);gap:clamp(24px,5vw,64px)}.rule{border-top:1px solid var(--border);padding-top:24px}.number{font-variant-numeric:tabular-nums}svg{display:block;width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left}.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}[role=status]{min-height:1.6em}@media(max-width:640px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}main{padding:24px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+*{box-sizing:border-box}body{line-height:1.6}main{max-width:1080px;margin:auto;padding:clamp(24px,5vw,72px)}h1{max-width:17ch;margin:12px 0 24px}p{max-width:68ch}
+button,input{font:inherit;padding:8px 14px;color:inherit;background:var(--background);border:1px solid currentColor;border-radius:4px}button{cursor:pointer}button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,input:focus-visible{outline:3px solid var(--primary);outline-offset:3px}.muted{opacity:.72}.number{font-variant-numeric:tabular-nums}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:clamp(24px,5vw,56px);margin-top:24px}
+.layout>*{min-width:0}.chart{width:100%;min-height:260px}.chart svg{max-width:100%;height:auto}[role=status]{min-height:1.6em}
+#weeks{list-style:none;margin:0;padding:0}#weeks li{border-top:1px solid var(--border)}#weeks button{width:100%;display:flex;justify-content:space-between;border:0;border-radius:0;padding:12px 4px;text-align:left}
+#weeks button[aria-pressed=true]{background:var(--accent);color:var(--accent-foreground)}#detail{border-top:2px solid currentColor;margin-top:24px;padding-top:16px}
+@media(max-width:720px){.layout{grid-template-columns:1fr}h1{font-size:38px!important}main{padding:24px}}
 </style>
-<script type="application/json" data-af="state">{"filter":"all"}</script>
+<script type="application/json" data-af="state">{"dark":null,"week":""}</script>
 </head><body><main>
-<p class="muted">Shared work board · sample tasks</p><h1 class="t-display-xl">Saturday garden jobs</h1><p class="lead">A few clear tasks, one shared view of what is done. Editors can update the board; each viewer chooses their own display filter.</p><div class="toolbar"><label for="filter">Show</label><select id="filter"><option value="all">All jobs</option><option value="open">Open jobs</option></select><button id="refresh" type="button">Refresh jobs</button></div><p id="status" role="status" aria-live="polite">Loading shared jobs…</p><ul id="jobs" style="list-style:none;padding:0"></ul><p class="rule muted">Changes belong to this page’s backend store. A public or unlisted link does not grant editor access. Your display filter stays in your own browser.</p>
+<p class="muted">Community garden · sample data</p><h1 class="t-display-l">Garden shed repairs</h1>
+<p class="lead">Tool repairs finished each week against a target the whole team shares. Signed-in members can change a target; your light or dark choice stays yours.</p>
+<div class="toolbar"><button id="dark" type="button" aria-pressed="false">Dark mode</button><button id="refresh" type="button">Refresh</button></div>
+<p id="status" role="status" aria-live="polite">Loading…</p>
+<div class="layout">
+<section><h2 class="t-title">Completed repairs by week</h2><div id="chart" class="chart" role="img" aria-label="Completed repairs and shared target by week"></div></section>
+<section><h2 class="t-title">Weeks</h2><ul id="weeks"></ul>
+<div id="detail" hidden><h3 id="detail-title" class="t-title"></h3><p id="detail-text" class="number"></p>
+<form id="target-form" class="toolbar"><label for="target">Shared target</label><input id="target" type="number" min="0" max="999" required style="width:7em"><button type="submit">Save target</button></form></div></section>
+</div>
 </main>
 <script type="module">
 import {client,gql,onBackendChange} from '@afbin/apollo';
-const preference=gql`{filter}`;
-const readJobs=gql`{garden{jobs{id title done}}}`;
-const changeJob=gql`mutation SetDone($id:ID!,$done:Boolean!){garden{setDone(id:$id,done:$done){id title done}}}`;
-const status=document.querySelector('#status');let jobs=[];
-async function render(){const {data}=await client.query({query:preference});document.querySelector('#filter').value=data.filter;const list=document.querySelector('#jobs');list.replaceChildren();for(const job of jobs.filter(job=>data.filter!=='open'||!job.done)){const item=document.createElement('li');item.dataset.afId='garden-job-'+job.id;item.className='rule toolbar';item.style.paddingBottom='24px';const label=document.createElement('span');label.dataset.afId='garden-job-'+job.id+'-title';label.textContent=job.title;label.style.flex='1';if(job.done)label.style.textDecoration='line-through';const button=document.createElement('button');button.dataset.afId='garden-job-'+job.id+'-toggle';button.type='button';button.textContent=job.done?'Mark open':'Mark done';button.setAttribute('aria-label',`${button.textContent}: ${job.title}`);button.onclick=async()=>{button.disabled=true;status.textContent='Saving shared job…';try{const result=await client.mutate({mutation:changeJob,variables:{id:job.id,done:!job.done}});if(result.errors?.length)throw Error(result.errors[0].message);if(!result.data?.garden?.setDone)throw Error('No committed job result was returned. Refresh before retrying.');await refresh();}catch(error){status.textContent=error.message||'Could not save. Editor access is required.';}finally{button.disabled=false;}};item.append(label,button);list.append(item);}}
-async function refresh(){try{const result=await client.query({query:readJobs});if(result.errors?.length)throw Error(result.errors[0].message);jobs=result.data.garden.jobs;await render();status.textContent=`${jobs.filter(job=>job.done).length} of ${jobs.length} shared jobs complete.`;}catch(error){status.textContent=error.message||'Could not load shared jobs.';}}
-client.watchQuery({query:preference}).subscribe(()=>void render());
-document.querySelector('#filter').onchange=event=>client.updateQuery({query:preference},()=>({filter:event.target.value}));
+import * as vega from '@afbin/vega';
+import {compile} from '@afbin/vega-lite';
+const preference=gql`{dark week}`;
+const schemaQuery=gql`{repairs{schema{revision tables{id columns{id label}}}}}`;
+const rowsQuery=gql`query Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision rows{id cells{columnId value{string number}}} pageInfo{hasNextPage endCursor}}}}`;
+const targetsQuery=gql`{garden{targets{week target}}}`;
+const setTarget=gql`mutation SetTarget($week:String!,$target:Int!){garden{setTarget(week:$week,target:$target){week target}}}`;
+const status=document.querySelector('#status');
+let rows=[],targets={},week='',view;
+// Every page of rows at one dataset revision: a change between pages restarts nothing silently, it says so.
+async function loadRows(){
+  const schema=await client.query({query:schemaQuery});if(schema.errors?.length)throw Error(schema.errors[0].message);
+  const table=schema.data.repairs.schema.tables.find(table=>['week','completed','waiting'].every(label=>table.columns.some(column=>column.label===label)));
+  if(!table)throw Error('Dataset needs week, completed and waiting columns.');
+  const ids=Object.fromEntries(table.columns.map(column=>[column.label,column.id])),loaded=[];let after=null,revision=null;
+  do{
+    const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});if(result.errors?.length)throw Error(result.errors[0].message);
+    const page=result.data.repairs.rows;if(revision!==null&&revision!==page.revision)throw Error('Dataset changed while reading. Refresh to try again.');revision=page.revision;
+    for(const row of page.rows){const cell=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));loaded.push({week:cell[ids.week]?.string,completed:cell[ids.completed]?.number??0,waiting:cell[ids.waiting]?.number??0});}
+    after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;
+  }while(after);
+  rows=loaded.filter(row=>row.week).sort((a,b)=>a.week.localeCompare(b.week));
+}
+async function loadTargets(){
+  const result=await client.query({query:targetsQuery});if(result.errors?.length)throw Error(result.errors[0].message);
+  targets=Object.fromEntries(result.data.garden.targets.map(item=>[item.week,item.target]));
+}
+// Concrete colours from the design system; redrawn when dark mode changes.
+const token=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+async function drawChart(){
+  view?.finalize();
+  const ink=token('--foreground'),values=rows.map(row=>({week:row.week,completed:row.completed,target:targets[row.week]??null}));
+  const spec=compile({width:'container',height:220,background:'transparent',data:{values},
+    encoding:{x:{field:'week',type:'nominal',title:null,axis:{labelAngle:0}}},
+    layer:[{mark:{type:'bar',color:token('--primary')},encoding:{y:{field:'completed',type:'quantitative',title:'Repairs',scale:{zero:true}},tooltip:[{field:'week',type:'nominal'},{field:'completed',type:'quantitative',format:',.0f'}]}},
+      {mark:{type:'tick',color:ink,thickness:3},encoding:{y:{field:'target',type:'quantitative'}}}],
+    config:{view:{stroke:null},axis:{labelColor:ink,titleColor:ink,domainColor:ink,tickColor:ink,gridColor:token('--border')}}}).spec;
+  view=new vega.View(vega.parse(spec,undefined,{ast:true}),{container:document.querySelector('#chart'),renderer:'svg',expr:vega.expressionInterpreter});
+  await view.runAsync();
+}
+// Script-made nodes get data-af-ids from the record (the week), so comments on them survive re-renders.
+function renderWeeks(){
+  const list=document.querySelector('#weeks');list.replaceChildren();
+  for(const row of rows){
+    const item=document.createElement('li');item.dataset.afId='week-'+row.week;
+    const button=document.createElement('button');button.type='button';button.dataset.afId='week-'+row.week+'-open';button.setAttribute('aria-pressed',String(row.week===week));
+    button.textContent=row.week;const value=document.createElement('span');value.className='number';value.dataset.afId='week-'+row.week+'-value';
+    value.textContent=`${row.completed} done${targets[row.week]!=null?' of '+targets[row.week]:''}`;button.append(value);
+    button.onclick=()=>client.updateQuery({query:preference},state=>({...state,week:row.week}));
+    item.append(button);list.append(item);
+  }
+  const row=rows.find(row=>row.week===week),detail=document.querySelector('#detail');detail.hidden=!row;if(!row)return;
+  document.querySelector('#detail-title').textContent=row.week;
+  document.querySelector('#detail-text').textContent=`${row.completed} repairs completed, ${row.waiting} waiting. Shared target: ${targets[row.week]??'not set'}.`;
+  document.querySelector('#target').value=targets[row.week]??'';
+}
+function applyDark(dark){
+  if(typeof dark==='boolean')document.documentElement.dataset.afDark=String(dark);
+  document.querySelector('#dark').setAttribute('aria-pressed',String(document.documentElement.dataset.afDark==='true'));
+}
+async function refresh(){
+  status.textContent='Reading the dataset and shared targets…';
+  try{await Promise.all([loadRows(),loadTargets()]);renderWeeks();await drawChart();status.textContent=`Loaded ${rows.length} sample weeks; ${Object.keys(targets).length} shared targets.`;}
+  catch(error){status.textContent=error.message||'Could not load the data.';}
+}
+// Local state already holds this viewer's saved choices on the first read; write only when the viewer acts.
+client.watchQuery({query:preference}).subscribe(({data})=>{week=data.week;applyDark(data.dark);if(rows.length)renderWeeks();});
+document.querySelector('#dark').onclick=()=>client.updateQuery({query:preference},state=>({...state,dark:document.documentElement.dataset.afDark!=='true'}));
 document.querySelector('#refresh').onclick=refresh;
-onBackendChange(names=>{if(names.includes('garden'))void refresh();});
+document.querySelector('#target-form').onsubmit=async event=>{
+  event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;status.textContent='Saving the shared target…';
+  try{
+    const result=await client.mutate({mutation:setTarget,variables:{week,target:Number(document.querySelector('#target').value)}});
+    if(result.errors?.length)throw Error(result.errors[0].message);
+    await loadTargets();renderWeeks();await drawChart();status.textContent=`Saved the ${week} target for everyone.`;
+  }catch(error){status.textContent=(error.message||'Could not save.')+' Signing in is required to change shared targets.';}
+  finally{button.disabled=false;}
+};
+new MutationObserver(()=>{if(rows.length)void drawChart();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-af-dark']});
+onBackendChange(names=>{if(names.includes('garden'))void loadTargets().then(()=>{renderWeeks();return drawChart();});});
 await refresh();
 </script>
 </body></html>

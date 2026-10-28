@@ -10,7 +10,7 @@ Name question, unit, grain, source, period, timezone and missing/partial data. R
 
 ## Bootstrap
 
-Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. Old `/libraries/<name>-<ver>/index.js` URLs still work. `serve.mjs` and downloads resolve the same names; external data still needs admission or an honest offline state.
+Import hosted libraries as `@afbin/<name>` (`@afbin/vega`, `@afbin/vega-lite`); never bare `vega` or globals. The core import map supplies them, and the `@afbin/` prefix is reserved: your own import map keys win. `serve.mjs` and downloads resolve the same names; external data still needs admission or an honest offline state.
 
 ```html
 <div id="chart" role="img" aria-label="Completed tasks by category"></div>
@@ -61,7 +61,7 @@ Size the host. Single/layered Vega-Lite supports `width: "container"`. For Vega 
 
 Provide title, units, `description` and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
 
-Tooltip fields need human titles/formats, not internal columns. Styled tooltips require a handler/plugin: escape text, keep overlays in the chart document/viewport, dismiss on outside action, Escape and teardown. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
+Tooltip fields need human titles/formats, not internal columns; a tooltip `format` errors on a nominal field (quantitative or temporal only). Styled tooltips require a handler/plugin: escape text, keep overlays in the chart document/viewport, dismiss on outside action, Escape and teardown. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
 
 ## Data and lifetime
 

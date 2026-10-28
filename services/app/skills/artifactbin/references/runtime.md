@@ -23,9 +23,9 @@ document.querySelector('#increment').onclick=()=>{
 </script>
 ```
 
-State in `data-af="state"` initializes each viewer’s private browser state, which then persists in that browser across reloads and tabs (so a dark-mode or month choice survives a reload). Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `await client.query({query})` reads it (a Promise); `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
+State in `data-af="state"` initializes each viewer’s private browser state, which then persists in that browser across reloads and tabs. Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `const {data}=await client.query({query})` reads it (saved values from the first call); `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
 
-Dark mode: the runtime sets `<html data-af-dark>` from the reader's light/dark switch; read it. A page toggle keeps its choice in local state and sets `document.documentElement.dataset.afDark` on load and toggle.
+Dark mode: the runtime sets `<html data-af-dark>` from the reader's switch; read it. A page toggle keeps its choice in local state and sets `document.documentElement.dataset.afDark='true'|'false'` from it on load and toggle.
 
 The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A downloaded page embeds the engine and works without fetching code.
 
@@ -79,7 +79,7 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 ## Remote namespaces
 
-An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{garden{jobs{id title done}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
+An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{garden{targets{week target}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
 
 Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
 

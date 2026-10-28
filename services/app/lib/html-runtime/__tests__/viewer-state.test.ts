@@ -45,3 +45,20 @@ it('an explicit state URL replaces the viewer document without sharing it', () =
   expect(storage.value()).toBe('{"count":7}');
   state.dispose();
 });
+it('answers the first query after a reload with the saved choice, not the state block defaults', async () => {
+  const { createClient, gql } = await import('../apollo/client');
+  const storage = browser();
+  const preference = gql`{dark month}`;
+  // First load: the viewer turns dark mode on.
+  const before = createViewerState({ ...storage.options, initial: { dark: null, month: '' } });
+  await createClient({ backends: () => [], state: before }).updateQuery({ query: preference }, () => ({ dark: true, month: '2026-09' }));
+  before.dispose();
+  // Reload: a page that fills in only missing values at boot keeps the saved ones, because the first answer is the saved document.
+  const after = createViewerState({ ...storage.options, initial: { dark: null, month: '' } });
+  const client = createClient({ backends: () => [], state: after });
+  const { data } = await client.query<{ dark: boolean | null; month: string }>({ query: preference });
+  expect(data).toEqual({ dark: true, month: '2026-09' });
+  await client.updateQuery<{ dark: boolean | null; month: string }>({ query: preference }, (current) => ({ dark: current.dark ?? false, month: current.month || '2026-10' }));
+  expect(JSON.parse(storage.value()!)).toEqual({ dark: true, month: '2026-09' });
+  after.dispose();
+});

@@ -96,7 +96,7 @@ describe('one installable native HTML author skill',()=>{
    expect(readFileSync(occupied,'utf8')).toBe('retained');
    for(const sample of ['report','csv-dashboard','shared-app']){
     const request=path.join(dir,sample+'.json'),source=readFileSync(path.join(installed,'examples',sample+'.html'),'utf8');
-    execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample==='csv-dashboard'?['--dataset-id','REALDATA123']:[])],{cwd:installed});
+    execFileSync(process.execPath,[path.join(installed,'scripts/publish.mjs'),'--prepare',sample,'--server',BASE,'--output',request,...(sample!=='report'?['--dataset-id','REALDATA123']:[])],{cwd:installed});
     const saved=JSON.parse(readFileSync(request,'utf8'));
     expect(saved).not.toHaveProperty('token');expect(saved.body.publicationBundle).toBeDefined();
     const plan=planPublicationBundle(saved.body.html,saved.body.publicationBundle);
@@ -106,7 +106,7 @@ describe('one installable native HTML author skill',()=>{
     expect(plan.dependencies.length,sample).toBeLessThan(99);
     expect(readFileSync(path.join(installed,'examples',sample+'.html'),'utf8')).toBe(source);
     if(sample==='csv-dashboard'){expect(saved.body.html).toContain('ref:REALDATA123');expect(saved.body.html).not.toContain('DATASET_ID');}
-    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(role:EDITOR)');}
+    if(sample==='shared-app'){expect(saved.body.html).toContain('data-af-name="garden"');expect(plan.backendSources.garden).toBe(saved.body.backendSources.garden);expect(saved.body.backendSources.garden).toContain('@auth(signedIn:true)');expect(saved.body.html).toContain('ref:REALDATA123');}
    }
   }finally{rmSync(dir,{recursive:true,force:true});}
  });
