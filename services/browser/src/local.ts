@@ -394,3 +394,5 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
   };
   return service;
 }
+
+// probe: pull request lane type check timing

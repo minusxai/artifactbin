@@ -226,3 +226,5 @@ describe('accordion appearance', () => {
     root.remove();
   });
 });
+
+// probe: pull request lane type check timing

@@ -19,3 +19,5 @@ try{
  await proveSchedulerPostgres(url);
  console.log('Product PostgreSQL: 16 admissions → one run; concurrent schedules → one occurrence.');
 }finally{await runner.close();await pool.end();await root.query(`DROP SCHEMA ${schema} CASCADE`);await root.end();}
+
+// probe: pull request lane type check timing

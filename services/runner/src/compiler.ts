@@ -44,3 +44,5 @@ export async function bundleSource(source: string) {
     });
     return out.outputFiles[0]!.text;
 }
+
+// probe: pull request lane type check timing

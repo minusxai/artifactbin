@@ -647,3 +647,5 @@ export async function compileWithLoader(flow: Dataflow, load: SchemaLoader, opti
   return compileDataflow(flow, await prepareCompile(flow, load, options), options.body);
 }
 
+
+// probe: pull request lane type check timing

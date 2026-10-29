@@ -109,3 +109,5 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 }
 
 export const HEAD=GET;
+
+// probe: pull request lane type check timing

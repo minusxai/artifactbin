@@ -63,3 +63,5 @@ export async function internalAssetResponse(target: string, method: string, asse
     else await response.body?.cancel().catch(() => {});
   }
 }
+
+// probe: pull request lane type check timing

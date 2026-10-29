@@ -7,3 +7,5 @@ export function catalogFromMetadata(value:unknown):DatasetCatalog|null {
   const catalog=(value as Record<string,unknown>).catalog;
   return catalog?catalog as DatasetCatalog:null;
 }
+
+// probe: pull request lane type check timing

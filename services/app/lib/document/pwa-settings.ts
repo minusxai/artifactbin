@@ -47,3 +47,5 @@ export function writePwaSettings(source: string, settings: PwaSettings): string 
   for (const node of removed.reverse()) next = next.slice(0, node.start) + next.slice(node.end);
   return next;
 }
+
+// probe: pull request lane type check timing

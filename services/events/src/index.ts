@@ -174,3 +174,5 @@ export async function runEvents(config: EventsConfig, overrides: EventsOverrides
     },
   };
 }
+
+// probe: pull request lane type check timing

@@ -30,3 +30,5 @@ export const ANONYMOUS: Actor = { credential: 'none' };
 
 /** Default lifetime of a signed header. Short: it is minted per request. */
 export const ACTOR_TTL_SECONDS = 120;
+
+// probe: pull request lane type check timing

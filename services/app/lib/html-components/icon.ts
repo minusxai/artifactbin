@@ -125,3 +125,5 @@ export const iconComponent: ComponentDescriptor = {
   elements: { 'af-icon': AfIcon },
 };
 registerComponent(iconComponent);
+
+// probe: pull request lane type check timing

@@ -41,3 +41,5 @@ export async function assertTransferDependencies(tx:Queryable,closure:ArtifactRo
   ) LIMIT 1`,[ids,pattern,needle]);
  if(inbound.rows.length)throw new DatasetError(inbound.rows[0]!.grant?'Transfer would change a dataset grant outside the closure':'Transfer includes dependencies outside the selected owner closure',409);
 }
+
+// probe: pull request lane type check timing

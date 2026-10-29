@@ -38,3 +38,5 @@ export type {FileUploadOptions} from './upload-contract';
 
 export type {UploadContext} from '@artifactbin/contracts';
 export type {PlatformUploadControl,FileUploadBinding} from './upload-contract';
+
+// probe: pull request lane type check timing

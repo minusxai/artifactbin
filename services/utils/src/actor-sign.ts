@@ -72,3 +72,5 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   }
   return actor;
 }
+
+// probe: pull request lane type check timing

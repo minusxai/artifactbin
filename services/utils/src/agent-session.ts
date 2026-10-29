@@ -69,3 +69,5 @@ export function readCookie(header: string | null, name: string): string | undefi
   }
   return undefined;
 }
+
+// probe: pull request lane type check timing

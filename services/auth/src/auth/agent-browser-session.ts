@@ -24,3 +24,5 @@ export function createAgentBrowserSessions(db:Queryable,schema='auth') {
     },
   };
 }
+
+// probe: pull request lane type check timing

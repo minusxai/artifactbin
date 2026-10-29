@@ -79,3 +79,5 @@ it('keeps label and multiline row leading at the retained control proportions',(
  expect(parseFloat(field.fontSize)*parseFloat(field.lineHeight)*native.rows).toBe(84);
  expect(getComputedStyle(root).gap).toBe('0.375rem');
 });
+
+// probe: pull request lane type check timing

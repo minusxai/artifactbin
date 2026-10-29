@@ -13,3 +13,5 @@ export function loginHref(at: Address, intent?: Intent): string {
   const search = intent ? withIntent(at.search, intent) : at.search;
   return `/login?callbackUrl=${encodeURIComponent(at.pathname + search + at.hash)}`;
 }
+
+// probe: pull request lane type check timing

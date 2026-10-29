@@ -23,3 +23,5 @@ main().catch(error => {
     ? message : 'Authentication migration failed; keep writers stopped and inspect database state and diagnostics privately.');
   process.exitCode = 1;
 });
+
+// probe: pull request lane type check timing

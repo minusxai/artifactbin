@@ -64,3 +64,5 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
     close: () => new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close((e) => (e ? reject(e) : resolve())); }),
   };
 }
+
+// probe: pull request lane type check timing

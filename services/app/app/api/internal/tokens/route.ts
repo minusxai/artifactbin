@@ -63,3 +63,5 @@ export async function POST(request: Request) {
     201,
   );
 }
+
+// probe: pull request lane type check timing

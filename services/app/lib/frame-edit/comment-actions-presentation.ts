@@ -26,3 +26,5 @@ export const COMMENT_ACTIONS_CSS = `
 @keyframes mx-selection-actions-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { [data-mx-selection-actions] { animation: none; } }
 `;
+
+// probe: pull request lane type check timing

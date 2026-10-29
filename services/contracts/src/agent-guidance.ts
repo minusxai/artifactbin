@@ -94,3 +94,5 @@ export const MARKUP_FIELD_GUIDANCE = [
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');
+
+// probe: pull request lane type check timing

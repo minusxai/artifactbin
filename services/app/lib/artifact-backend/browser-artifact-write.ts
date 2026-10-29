@@ -50,3 +50,5 @@ export async function restoreBrowserArtifact(backend:ArtifactBackend,version:num
  const committed=await backend.commitEdit({edit_id:head.edit_id,document_update:update});
  return committed.ok?committed.body.version:null;
 }
+
+// probe: pull request lane type check timing

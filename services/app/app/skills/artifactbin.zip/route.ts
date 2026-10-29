@@ -41,3 +41,5 @@ export async function GET(request:Request){
  if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
  return new Response(bytes,{headers:{...headers,'Content-Type':'application/zip','Content-Disposition':'attachment; filename="artifactbin.zip"'}});
 }
+
+// probe: pull request lane type check timing

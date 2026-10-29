@@ -61,3 +61,5 @@ const DELIVERIES_TABLE: Table = {
   indexes:[{name:'idx_delivery_pending',columns:['subscriber','available_at'],where:'delivered_at IS NULL'}],
 };
 export const EVENTS_TABLES: Table[] = [EVENTS_TABLE, DELIVERIES_TABLE];
+
+// probe: pull request lane type check timing

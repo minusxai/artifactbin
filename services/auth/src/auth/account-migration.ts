@@ -77,3 +77,5 @@ export async function migrateHumanAccountSchema(db: Kysely<Record<string, unknow
     return {changed: issuer?.is_nullable === 'NO' || !!index};
   });
 }
+
+// probe: pull request lane type check timing

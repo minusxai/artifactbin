@@ -22,3 +22,5 @@ export async function DELETE(request: Request, ctx: { params: Promise<Record<str
     ? new Response(null, { status: 204 })
     : json({ error: 'not_found' }, 404);
 }
+
+// probe: pull request lane type check timing
