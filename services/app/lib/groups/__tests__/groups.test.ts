@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import { createUser, setUsername } from '@/lib/accounts';
 import {getDb} from '@/lib/platform/db';
-import {createGroup,getGroupDetail,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '../groups';
+import {createGroup,getGroupDetail,getGroupRole,setGroupMember,removeGroupMember,getAccountPreferences,setAccountPreferences,inviteGroupMember,acceptGroupInvitations,setGroupLink} from '..';
 useAppHarness();
 const account=async(name:string)=>createUser({email:`mxmx_test_${name}@example.com`});
 describe('independent group owner contracts',()=>{

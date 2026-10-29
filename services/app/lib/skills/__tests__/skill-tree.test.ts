@@ -15,8 +15,8 @@ import { describe, it, expect } from 'vitest';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {loadSkillSources, skillPackageFiles, skillZip, buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES} from '../skills';
-import {loadSkillAssets} from '../skills/assets';
+import {loadSkillSources, skillPackageFiles, skillZip, buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES} from '..';
+import {loadSkillAssets} from '../assets';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 
 const BASE = 'https://example.test';

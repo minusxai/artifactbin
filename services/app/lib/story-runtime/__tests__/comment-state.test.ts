@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseCommentViewState } from '../../../contracts/src/comment-view-state';
-import { clearPendingCommentState, registerCommentState } from '../story-runtime/comment-state';
-import { captureCommentState, pendingCommentState, restoreCommentState, setCommentStateTransaction } from '../story-runtime/comment-state-io';
+import { parseCommentViewState } from '../../../../contracts/src/comment-view-state';
+import { clearPendingCommentState, registerCommentState } from '../comment-state';
+import { captureCommentState, pendingCommentState, restoreCommentState, setCommentStateTransaction } from '../comment-state-io';
 
 const registry = (owner: object) => ({
   register: (key: string, part: Parameters<typeof registerCommentState>[2]) => registerCommentState(owner, key, part),

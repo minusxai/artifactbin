@@ -75,9 +75,6 @@
       "@/lib/object-store/image-store",
       "@/lib/object-store/pdf-store"
     ],
-    "services/app/__tests__/document-trust.test.ts": [
-      "@/lib/trust/document-trust"
-    ],
     "services/app/__tests__/editable-table-feature.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
@@ -281,18 +278,8 @@
     "services/app/lib/__tests__/pages-origin.test.ts": [
       "@/lib/http/pages-origin"
     ],
-    "services/app/lib/__tests__/shared-skill-delivery.test.ts": [
-      "../skills/__tests__/platform-origin",
-      "../skills/public-surface"
-    ],
-    "services/app/lib/__tests__/skill-code-shape.test.ts": [
-      "../skills/assets"
-    ],
     "services/app/lib/__tests__/skill-first-onboarding.test.ts": [
       "@/lib/agent-copy/agent-discovery"
-    ],
-    "services/app/lib/__tests__/skill-tree.test.ts": [
-      "../skills/assets"
     ],
     "services/app/lib/artifact-backend/__tests__/browser-artifact-write.test.ts": [
       "../../document/document-graph-patch"
@@ -360,9 +347,6 @@
       "@/lib/frame-edit/markdown-regions",
       "@/lib/frame-edit/selection-range"
     ],
-    "services/app/lib/native-ancillary-folders/__tests__/folders.test.ts": [
-      "@/lib/native-history-import/catalog-digest"
-    ],
     "services/app/lib/native-history-import/__tests__/catalog-publication.test.ts": [
       "@/lib/page-graphql/registered-queries"
     ],
@@ -394,8 +378,7 @@
       "@/lib/page-graphql/registered-mutations"
     ],
     "services/app/lib/registered-page-queries/__tests__/adapter.test.ts": [
-      "@/lib/page-graphql/registered-queries",
-      "@/lib/page-operations/backend"
+      "@/lib/page-graphql/registered-queries"
     ],
     "services/app/lib/registered-page-queries/__tests__/fence-reads.test.ts": [
       "@/lib/page-graphql/registered-queries"

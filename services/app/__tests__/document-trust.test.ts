@@ -15,11 +15,13 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
-import { cspExtensionsFor, cspRequestFor, TRUST_SESSION_COOKIE } from '@/lib/trust/document-trust';
+import { cspExtensionsFor, cspRequestFor, sessionTrustCookie } from '@/lib/trust';
 import { EMPTY_CSP_EXTENSIONS } from '@/lib/document/csp-extensions';
 import type { Actor } from '@artifactbin/contracts';
 
 const harness = useAppHarness();
+/** The session cookie's name, as the trust module sets it. */
+const TRUST_SESSION_COOKIE = sessionTrustCookie(new Request('http://localhost/'), null, 'any', { decision: null }).split('=')[0]!;
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const METEO = 'https://api.open-meteo.com';
 const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
