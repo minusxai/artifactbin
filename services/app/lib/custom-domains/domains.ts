@@ -364,7 +364,8 @@ export function domainResolver(): DomainResolver { return resolverOverride ?? de
  */
 export function startDomainRecheck(resolve: () => DomainResolver = domainResolver, intervalMs = RECHECK_INTERVAL_MS): () => Promise<void> {
   let pending: Promise<void> | null = null;
-  const tick = () => pending ??= recheckDomains(resolve())
+  // The resolver is built inside the chain, so even a factory that throws synchronously is logged, never thrown out of the timer.
+  const tick = () => pending ??= Promise.resolve().then(() => recheckDomains(resolve()))
     .then(({ missing, detached }) => { if (missing || detached) console.warn(`[custom-domains] re-check: ${missing} missing, ${detached} detached`); })
     .catch((error) => { console.error('[custom-domains] re-check failed:', error); })
     .finally(() => { pending = null; });
