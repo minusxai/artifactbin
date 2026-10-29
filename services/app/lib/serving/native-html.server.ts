@@ -34,6 +34,8 @@ export interface NativeHtmlRender {
   renderedHtml?: string;
   /** The platform script nonce; a cached render passes its placeholder (lib/serving/render-cache), else a fresh one is drawn. */
   platformScriptNonce?: string;
+  /** Served on a custom domain: the page reads its data from that host (html-runtime/domain-reads). */
+  domainReads?: boolean;
 }
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
@@ -48,7 +50,7 @@ function htmlCore(): Promise<string> {
 }
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
-  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
+  const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
   const source=input.row.source??'';
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
@@ -58,12 +60,14 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
-export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS):string {
+export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS,options:{domainReads?:boolean}={}):string {
   if (!pages){
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
-    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`),extensions);
+    // On a custom domain the page reads its data from that host's page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
+    const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href}`:'';
+    return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }
   return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }

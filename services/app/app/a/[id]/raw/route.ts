@@ -142,7 +142,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
 
   const base = pages?.site.app ?? baseUrl(request);
   // Declarations belong to each immutable version; current viewer grants remain dynamic.
-  const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}));
+  const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}),{domainReads:!!domain});
   let policy=await policyFor(header);
   const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
   const validator = async (row: ArtifactHeader) => etagOf({
@@ -193,7 +193,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       // Retained only when the row rendered is the one the key was read from (it may have moved since).
       const retained = shared && !at && sameRevision(header, artifact) ? await frameKey(header) : null;
       // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
-      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}), ...(domain ? { domainReads: true } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
       counted();
       const html = await nativeHtmlPresentation(rendered.html,row,domain);
       if (!retained) return new Response(html, { headers: responseHeaders(etag) });

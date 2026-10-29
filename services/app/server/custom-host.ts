@@ -15,6 +15,7 @@
  *   /a/<id>/assets                  GET
  *   /a/<id>/viewer                  GET (the compiled reader's viewer overlay, as a guest)
  *   /a/<id>/story                   GET (the compiled reader's newest story fragment, as a guest)
+ *   POST /api/artifacts/<id>/graphql   a served page's dataset and backend READS, as a guest; a mutation is refused
  *   GET/HEAD /a/<id>/raw            an image, file or PDF one of the owner's public posts embeds
  *   GET/HEAD /assets/<sha>          our copy of a web image one of those posts names
  *   GET/HEAD /a/<id>/export?format=jpg&mode=card   a public post's card, the home page's thumbnail
@@ -36,6 +37,12 @@
  * redirect. Handlers see a request with no cookie, authorization or actor, so
  * they answer as they would a guest, and no response leaves with Set-Cookie.
  *
+ * The page GraphQL door exists because a post here is a top-level sandboxed page with no app frame to relay
+ * its queries (html-runtime/domain-reads): it posts them straight to this host, from an opaque origin, with no
+ * credentials. So the door answers any origin (`Access-Control-Allow-Origin: *`, never with credentials), runs
+ * only `query` operations, as a guest, against that page's own linked datasets and backends, and refuses every
+ * write with the same message the page shows. The page sends text/plain, so no preflight is asked.
+ *
  * Any host that is NOT a verified mapping passes through untouched.
  */
 import type { Context, MiddlewareHandler } from 'hono';
@@ -51,6 +58,9 @@ import { ID_RE } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { domainPostPath } from '@/lib/http';
 import { getUserById } from '@/lib/accounts';
+import { pageOperationKind } from '@/lib/page-operations';
+import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
+import { POST as graphqlPost } from '@/app/api/artifacts/[id]/graphql/route';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { GET as queryGet, POST as queryPost } from '@/app/a/[id]/query/route';
 import { OPTIONS as mutateOptions, POST as mutatePost } from '@/app/a/[id]/mutate/route';
@@ -273,6 +283,31 @@ async function embedded(request: Request, path: string, ownerId: string): Promis
   return null;
 }
 
+/** Any origin may read a served page's data; never with credentials (the page is an opaque origin, and a guest). */
+const READ_CORS = { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' };
+function withReadCors(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('access-control-allow-origin', '*');
+  headers.delete('access-control-allow-credentials');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/** A served page's dataset and backend reads (see the header): POST, a `query` operation, as a guest. */
+async function pageReads(request: Request, id: string, ownerId: string): Promise<Response> {
+  if (request.method !== 'POST') return notFound();
+  const row = ID_RE.test(id) ? await getArtifactById(id) : null;
+  if (!row || !servesDocument(ownerId, row)) return notFound();
+  const body = await readBody(request);
+  const parsed = parseJson(body);
+  const query = parsed?.query, operationName = parsed?.operationName;
+  // Classified from the operation the text names, never from the body's own `operation` label.
+  const kind = typeof query === 'string' ? pageOperationKind(query, typeof operationName === 'string' ? operationName : undefined) : null;
+  if (kind === 'mutation') return json({ data: null, errors: [{ message: DOMAIN_READ_ONLY_MESSAGE }] }, 403, READ_CORS);
+  if (kind !== 'query') return json({ error: 'invalid_graphql_operation' }, 400, READ_CORS);
+  return withReadCors(await call(graphqlPost, await asGuest(request, body), id));
+}
+const PAGE_READS_ROUTE = /^\/api\/artifacts\/([^/]+)\/graphql$/;
+
 const DOCUMENT_ROUTE = /^\/a\/([^/]+)\/(query|mutate|events|events\/frame|resolve|assets|viewer|story)$/;
 
 /**
@@ -326,6 +361,11 @@ export function customHostBoundary(options: CustomHostOptions = {}): MiddlewareH
     if (readable) {
       const bytes = await embedded(request, path, ownerId);
       if (bytes) return withoutCookies(bytes);
+    }
+    const reads = PAGE_READS_ROUTE.exec(path);
+    if (reads) {
+      try { return withoutCookies(await pageReads(request, reads[1]!, ownerId)); }
+      catch (error) { if (error instanceof PayloadTooLarge) return error.response(); throw error; }
     }
     const document = DOCUMENT_ROUTE.exec(path);
     if (document) {
