@@ -1,13 +1,13 @@
 /** Native publication wakeups and retained annotation/subscription lifecycle. */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { nativeHtml } from './native-html-fixture';
-import { observedRequest } from './conditional-request';
+import { describe, expect, it } from 'vitest';
+import { nativeHtml } from '@/__tests__/native-html-fixture';
+import { observedRequest } from '@/__tests__/conditional-request';
 import {
   useAppHarness,
   request,
   mintAccountToken as mintToken,
-} from './harness';
-import { readNamed, sseStream } from './sse';
+} from '@/__tests__/harness';
+import { readNamed, sseStream } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {
@@ -21,9 +21,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import {
   MAX_LIVE_CHANNELS,
   liveChannelCount,
-  resetLiveSubscriptions,
   subscribeToArtifact,
-} from '@/lib/publish/realtime/live';
+} from '../realtime/live';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({
@@ -61,8 +60,6 @@ const replace = async (token: string, id: string, html: string) =>
     }),
     params({ id }),
   );
-beforeEach(resetLiveSubscriptions);
-afterAll(resetLiveSubscriptions);
 it('native publication delivers author CSS and dark appearance in the complete raw file', async () => {
   const { token, doc } = await setup();
   const source =

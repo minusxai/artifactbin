@@ -12,7 +12,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * lowercased at every site. The mixed-case tests here are deterministic
  * (the id is forced), not left to the RNG.
  */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
@@ -21,7 +21,6 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { mintAccountToken } from '@/__tests__/harness';
 
 
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { ID_RE } from '@/lib/platform';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { sseStream } from '@/__tests__/sse';
@@ -50,14 +49,6 @@ async function renameArtifact(oldId: string, newId: string): Promise<void> {
 }
 
 /** Read SSE data frames until `count` arrive or the budget runs out. */
-
-beforeEach(async () => {
-  await resetLiveSubscriptions();
-});
-
-afterAll(async () => {
-  await resetLiveSubscriptions();
-});
 
 describe('the one identifier', () => {
   it('create returns a 6-char [a-zA-Z0-9] id, a /a/<id> url, and NO slug', async () => {

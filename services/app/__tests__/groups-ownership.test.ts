@@ -12,7 +12,8 @@ import { effectiveRole, ownsArtifact } from '@/lib/artifact-access';
 import { getArtifactById, getOwnedArtifactFor, selectChildren, canReadArtifact } from '@/lib/artifacts';
 import { canWriteDataset } from '@/lib/document-data';
 import {accountWorkspaceCoreFor, trashArtifactFor, restoreArtifactFor} from '@/lib/workspace';
-import {subscribeToArtifact} from '@/lib/publish/realtime/live';
+import {subscribeChannel} from '@/lib/publish';
+import {artifactChannel} from '@artifactbin/contracts';
 import {datasetGrantAllows,defaultDatasetGrants} from '@artifactbin/utils';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 useAppHarness();
@@ -141,7 +142,7 @@ it('wakes existing artifact ACL subscribers only after transferred ownership is 
  const f=await fixture(),id=await f.make({html:nativeHtml('<p>Private</p>'),visibility:'private'});
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);
  let observed:string|null|undefined;
- const stop=await subscribeToArtifact(id,()=>{void getArtifactById(id).then(row=>{observed=row?.user_id;});});
+ const stop=await subscribeChannel(artifactChannel(id),()=>{void getArtifactById(id).then(row=>{observed=row?.user_id;});});
  try{expect((await f.move(id,{type:'personal'},f.b.token)).status).toBe(200);await vi.waitFor(()=>expect(observed).toBe(f.editor.id));}
  finally{await stop();}
 });

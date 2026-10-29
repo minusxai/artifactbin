@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { fetchCsvFromUrl } from '../csv-url';
 import { IngestError } from '../types';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
@@ -39,15 +39,15 @@ beforeAll(async () => {
     }
   });
   base = server.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 
-afterEach(() => setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true }));
+afterEach(() => allowLocalWebIngest());
 
 const code = async (p: Promise<unknown>): Promise<string> => {
   try { await p; return 'NO_ERROR'; } catch (e) { return e instanceof IngestError ? e.code : `OTHER:${e}`; }
@@ -84,12 +84,12 @@ describe('fetchCsvFromUrl', () => {
   });
 
   it('refuses a forbidden target through the shared guard', async () => {
-    setWebIngestPolicyForTests(null); // production policy
+    restoreWebIngestPolicy(); // production policy
     expect(await code(fetchCsvFromUrl('https://169.254.169.254/latest/meta-data'))).toBe('csv_fetch_failed');
   });
 
   it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     useLoopbackLookup();
     for (const url of ['https://anything.localhost/data.csv', 'https://x.lvh.me/data.csv']) {
       expect(await code(fetchCsvFromUrl(url)), url).toBe('csv_fetch_failed');

@@ -20,13 +20,16 @@ import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById } from '@/lib/artifacts';
-import { setArtifactQuotaForTests } from '@/lib/artifacts';
-import { sweepTestUsers } from '@/lib/operations/testuser-erase';
+import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';
+import { eraseTestUser, sweepTestUsers } from '../testuser-erase';
 import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers, resolveTokenById, createUser, getUserById } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken } from '@/lib/authentication';
 import { count, has, link } from '@/lib/social';
+import { setAvatar } from '@/lib/avatars';
+import { objectStore, ObjectUnavailable } from '@/lib/object-store';
+import sharp from 'sharp';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -159,4 +162,33 @@ it('sweeps the ones nobody deleted, and leaves the live ones alone', async () =>
   expect((await db.query('SELECT 1 FROM artifacts WHERE user_id = $1', [stale.id])).rows).toHaveLength(0);
   expect(await getUserById(live.id)).not.toBeNull();
   expect(await sweepTestUsers(), 'the sweep is idempotent').toBe(0);
+});
+
+const png = () => sharp({ create: { width: 30, height: 30, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+
+it('erasing a test user takes its picture with it, and survives an object that has already gone', async () => {
+  const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
+  const token = await mintToken('eraser', owner.id);
+  await claimToken(owner.id, token.token);
+
+  const mint = async () => {
+    const minted = await createTestUser(identityForUser(owner.id, token.id));
+    if (!minted.ok) throw new Error(minted.error);
+    return minted;
+  };
+
+  const testuser = await mint();
+  const { key } = await setAvatar(testuser.id, await png(), 'image/png');
+  await expect(objectStore().get(key)).resolves.toBeInstanceOf(Buffer);
+
+  expect((await eraseTestUser(testuser.id)).erased).toBe(true);
+  expect(await getUserById(testuser.id)).toBeNull();
+  await expect(objectStore().get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
+
+  // The object store losing the bytes first is not the erase's problem.
+  const second = await mint();
+  const stored = await setAvatar(second.id, await png(), 'image/png');
+  await objectStore().delete(stored.key);
+  expect((await eraseTestUser(second.id)).erased).toBe(true);
+  expect(await getUserById(second.id)).toBeNull();
 });

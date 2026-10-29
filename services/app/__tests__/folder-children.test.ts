@@ -25,7 +25,8 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, childrenTableFor, updateSharingFor } from '@/lib/artifacts';
-import { subscribeToArtifact } from '@/lib/publish/realtime/live';
+import { subscribeChannel } from '@/lib/publish';
+import { artifactChannel } from '@artifactbin/contracts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
@@ -189,7 +190,7 @@ describe('the children table', () => {
     const o = await owner();
     const f = await create(o.token, { format: 'folder', title: 'Live' });
     let woke = 0;
-    const unsubscribe = await subscribeToArtifact(f.id, () => { woke += 1; });
+    const unsubscribe = await subscribeChannel(artifactChannel(f.id), () => { woke += 1; });
     try {
       await create(o.token, { html: '<p>new</p>', parent_id: f.id });
       const until = Date.now() + 5000;

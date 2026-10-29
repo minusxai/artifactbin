@@ -18,13 +18,13 @@ import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as preview } from '@/app/api/preview/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setArtifactQuotaForTests } from '@/lib/artifacts';
-import { setAssetByteQuotaForTests } from '@/lib/artifacts';
+import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';
+import { setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -56,11 +56,11 @@ beforeAll(async () => {
     }
   });
   base = web.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await web.close();
 });
 
@@ -194,7 +194,7 @@ describe('a PDF by URL', () => {
   });
 
   it('refuses a URL that is not on the public internet, like every other import', async () => {
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     try {
       const t = await mintToken('t');
       const res = await create(t.token, { pdfUrl: 'http://127.0.0.1:1/secret.pdf' });
@@ -208,7 +208,7 @@ describe('a PDF by URL', () => {
         expect((await named.json()).error, pdfUrl).toBe('pdf_fetch_failed');
       }
     } finally {
-      setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+      allowLocalWebIngest();
     }
   });
 });

@@ -21,15 +21,15 @@ import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { setAssetByteQuotaForTests } from '@/lib/artifacts';
+import { setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '../assets/web-assets';
 import { WEB_ASSET_KINDS, importForDocument } from '..';
-import { assetBytesForToken } from '@/lib/artifacts';
+import { assetBytesForToken } from '@/lib/artifacts/testing';
 import { assetUrlFor } from '@/lib/document/asset-url';
 import { webIngestRateLimited } from '@/lib/allowances';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
@@ -94,7 +94,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 
@@ -107,7 +107,7 @@ const accountToken = async () => {
 
 // Every test in this file reaches a loopback server, which the guard refuses
 // outside dev; the policy hook is the same one the ingest tests use.
-const allowLocal = () => setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+const allowLocal = () => allowLocalWebIngest();
 
 describe('importWebAsset', () => {
   it('concurrent first readers fetch a source image once', async()=>{
@@ -196,7 +196,7 @@ describe('importWebAsset', () => {
     await expect(importWebAsset(`${base}/not-an-image.png`, actor)).rejects.toMatchObject({ code: 'unsupported_type' });
     await expect(importWebAsset('https://169.254.169.254/latest/meta-data', actor)).rejects.toBeInstanceOf(WebAssetRefused);
     // A loopback NAME the server resolves itself (server.ts installs the loopback lookup) is refused as loopback.
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     useLoopbackLookup();
     for (const url of ['https://anything.localhost/a.png', 'https://x.lvh.me/a.png']) {
       await expect(importWebAsset(url, actor), url).rejects.toMatchObject({ code: 'forbidden_address' });

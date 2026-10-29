@@ -117,7 +117,9 @@ describe('tooltip timing and arrow geometry', () => {
       const [open2, setOpen2] = createSignal(false);
       return { t: createTooltipTiming({ open, setOpen, delay: () => 500 }), t2: createTooltipTiming({ open: open2, setOpen: setOpen2 }), open, open2, dispose };
     });
-    vi.setSystemTime(10_000);
+    // The skip-delay window is module state: start an hour after real time, so a tooltip another test file closed
+    // in this worker (at real time) never falls inside it.
+    vi.setSystemTime(Date.now() + 3_600_000);
     t.enter();
     vi.advanceTimersByTime(499);
     expect(t.state()).toBe('closed');

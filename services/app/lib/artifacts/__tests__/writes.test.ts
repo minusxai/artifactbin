@@ -8,7 +8,8 @@ import { useAppHarness } from '@/__tests__/harness';
 import { mintToken } from '@/lib/accounts';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { artifactChannel } from '@artifactbin/contracts';
-import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, ARTIFACT_HEADER_COLUMNS, assetBytesForToken, getArtifactHeaderById, listArtifactsFor, onDatasetCommitted, onHeadCommitted, repairRegisteredMutationHead, repairRegisteredQueryHead, setArtifactQuotaForTests, setAssetByteQuotaForTests, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
+import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, getArtifactHeaderById, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
+import { ARTIFACT_HEADER_COLUMNS, assetBytesForToken, listArtifactsFor, onDatasetCommitted, onHeadCommitted, repairRegisteredMutationHead, repairRegisteredQueryHead, setArtifactQuotaForTests, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
 

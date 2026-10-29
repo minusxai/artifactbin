@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { artifactChannel } from '@artifactbin/contracts';
-import { createGuestOwner, mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { createGuestOwner, mintAccountToken, request, setDatasetPolicy, useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
 import { claimToken, mergeGuestUsers } from '@/lib/authentication';
@@ -15,7 +15,6 @@ import { mintToken } from '@/lib/accounts/tokens';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
-import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 
 const harness = useAppHarness();
 

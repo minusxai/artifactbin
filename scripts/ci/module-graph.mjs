@@ -19,9 +19,10 @@
  *      lib/document) are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
  *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
- *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
- *      still be imported, so the lists only shrink. Tests and harnesses are held to rule 4 alone: their own module freely,
- *      another module through its entries and leaves, or a white-box import recorded in module-graph.allowed-test-imports.json.
+ *      values. A testOnly entry (lib/artifacts' testing) is refused to all product code. A new deep import is a reviewed
+ *      edit to the table, and every listed entry and leaf must still be imported, so the lists only shrink. Tests and
+ *      harnesses are held to rule 4 alone: their own module freely, another module through its entries, test-only
+ *      entries and leaves, or a white-box import recorded in module-graph.allowed-test-imports.json.
  *
  * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
  * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
@@ -310,6 +311,7 @@ const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS,
  * prefixes ending in `/`, or exact files) with the `browserLeaves` only they may import.
  * `browserLeavesOnly` (lib/islands, lib/document) also refuses entries to browser-bundled code for values.
  * `serverOnly` lists entries no browser-bundled file (any row's browserImporters) may import for values.
+ * `testOnly` lists entries only tests and the test harness may import (a module's names no product code uses).
  * Type-only imports of an entry are allowed from anywhere: they are erased and cannot change a bundle.
  * A listed index is never stale: it is the module's door even while nothing outside uses it.
  */
@@ -317,7 +319,7 @@ export const DEEP_MODULES = {
   ...Object.fromEntries(Object.keys(BUNDLED_LEAVES).map(module => [module, bundled(module)])),
   'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'] },
+  'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'], testOnly: ['testing'] },
   // The access rule below the store and the routes' wire above it: server code, like the store they stand beside.
   'lib/artifact-access': { entries: [''], serverOnly: [''] },
   'lib/artifact-wire': { entries: [''], serverOnly: [''] },
@@ -470,16 +472,17 @@ function deepModuleViolations(graph, table) {
   const modules = [...new Set([...Object.keys(table), ...[...graph.keys()].filter(module => module.startsWith('lib/'))])].sort();
   for (const module of modules) {
     if (!graph.has(module)) continue;
-    const { entries, downstream = [], serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false, leavesForAll = false } = table[module] ?? INDEX_ONLY;
+    const { entries, downstream = [], serverOnly = [], testOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false, leavesForAll = false } = table[module] ?? INDEX_ONLY;
     const dir = `services/app/${module}`;
-    const refused = [], serverRefused = [], used = new Set(), usedLeaves = new Set();
+    const refused = [], serverRefused = [], testRefused = [], used = new Set(), usedLeaves = new Set();
     for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
       if (from === module) continue;
       for (const { file, specifier, typeOnly } of edges.get(module) ?? []) {
         const base = importPath(file, specifier).replace(/\/$/, '');
         const rel = base === dir ? '' : base.slice(dir.length + 1);
         const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel) || downstream.includes(rel), leaf = (browser || leavesForAll) && browserLeaves.includes(rel);
-        if (entry && !typeOnly && serverOnly.includes(rel) && matchesImporter(bundled, file)) {
+        if (testOnly.includes(rel)) testRefused.push(`  ${file} imports ${specifier}`);
+        else if (entry && !typeOnly && serverOnly.includes(rel) && matchesImporter(bundled, file)) {
           used.add(rel);
           serverRefused.push(`  ${file} imports ${specifier} (${rel ? `entry ${rel}` : 'the index'} is server-only)`);
         } else if (browserLeavesOnly) {
@@ -492,6 +495,7 @@ function deepModuleViolations(graph, table) {
         else refused.push(`  ${file} imports ${specifier} (${rel || 'the index'} is not ${browser ? 'an entry or browser leaf' : 'an entry'} of ${module})`);
       }
     }
+    if (testRefused.length) violations.push(`${module}'s test-only entries are imported by product code (testOnly in DEEP_MODULES['${module}'], scripts/ci/module-graph.mjs): only tests and the test harness may import them. Use a name from the module's index:`, ...testRefused);
     if (serverRefused.length) violations.push(`${module}'s server-only entries are imported for values by browser-bundled code (serverOnly in DEEP_MODULES['${module}'], scripts/ci/module-graph.mjs; browser-bundled code is every row's browserImporters). Import the value from a browser entry or leaf, or import only types:`, ...serverRefused);
     const lists = browserLeavesOnly ? `${constantPrefix(module)}_BROWSER_IMPORTERS, ${constantPrefix(module)}_BROWSER_LEAVES` : `DEEP_MODULES['${module}']`;
     if (refused.length) violations.push(browserLeavesOnly
@@ -511,7 +515,7 @@ function deepModuleViolations(graph, table) {
 }
 /**
  * Rule 4 for tests and harnesses: a test may import any file of its own module, and another module only through a
- * listed entry, downstream path or browser leaf (tests are never bundled, so no importer list or server-only entry applies).
+ * listed entry, downstream path, test-only entry or browser leaf (tests are never bundled, so no importer list or server-only entry applies).
  * The white-box exceptions (a test reaching another module's internals: an unexported helper, a namespace to spy on) are
  * recorded per file in module-graph.allowed-test-imports.json; the list only shrinks, like the cycle list.
  */
@@ -520,12 +524,12 @@ function unlistedTestImports(tests, table) {
   for (const [, edges] of [...tests].sort(([a], [b]) => a.localeCompare(b))) {
     for (const [module, list] of [...edges].sort(([a], [b]) => a.localeCompare(b))) {
       if (!module.startsWith('lib/')) continue;
-      const { entries, downstream = [], browserLeaves = [] } = table[module] ?? INDEX_ONLY;
+      const { entries, downstream = [], testOnly = [], browserLeaves = [] } = table[module] ?? INDEX_ONLY;
       const dir = `services/app/${module}`;
       for (const { file, specifier } of list) {
         const base = importPath(file, specifier).replace(/\/$/, '');
         const rel = base === dir ? '' : base.slice(dir.length + 1);
-        if (![...entries, ...downstream, ...browserLeaves].includes(rel)) found.push({ file, specifier, rel, module });
+        if (![...entries, ...downstream, ...testOnly, ...browserLeaves].includes(rel)) found.push({ file, specifier, rel, module });
       }
     }
   }

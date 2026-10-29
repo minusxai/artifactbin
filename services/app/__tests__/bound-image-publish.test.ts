@@ -15,7 +15,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { assetUrlFor } from '@/lib/document/asset-url';
 import { getDb } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
@@ -35,11 +35,11 @@ beforeAll(async () => {
     res.writeHead(404); res.end();
   });
   web = server.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 

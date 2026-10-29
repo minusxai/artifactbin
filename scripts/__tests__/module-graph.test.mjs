@@ -218,6 +218,27 @@ describe('module graph', () => {
       expect(violations).toContain('services/app/lib/serving/c.ts imports @/lib/artifacts/store');
       expect(violations).toContain('services/app/lib/runner/d.ts imports ../artifacts/store');
     });
+
+    it('lets only tests and the harness import lib/artifacts/testing: product code is refused, alias or relative', () => {
+      const files = { 'services/app/lib/artifacts/index.ts': '', 'services/app/lib/artifacts/table.ts': '', 'services/app/lib/artifacts/testing.ts': '' };
+      const graph = extra => scanModuleGraph(tree({ ...files, 'services/app/lib/listings/t.ts': "import '@/lib/artifacts/table';\n", ...extra }));
+      const tests = {
+        'services/app/__tests__/quota.test.ts': "import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';\n",
+        'services/app/lib/publish/__tests__/assets.test.ts': "import { assetBytesForToken } from '../../artifacts/testing';\n",
+        'services/app/test/helpers/quota.ts': "import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';\n",
+      };
+      expect(checkModuleGraph(graph(tests), allowList([])).violations).toEqual([]);
+      expect(recordTestImports(graph(tests)).testImports).toEqual({});
+      const violations = checkModuleGraph(graph({
+        ...tests,
+        'services/app/lib/publish/quota.ts': "import { setArtifactQuotaForTests } from '@/lib/artifacts/testing';\n",
+        'services/app/lib/runner/listing.ts': "import type { listArtifactsFor } from '../artifacts/testing';\n",
+      }), allowList([])).violations.join('\n');
+      expect(violations).toContain("lib/artifacts's test-only entries are imported by product code (testOnly in DEEP_MODULES['lib/artifacts']");
+      expect(violations).toContain('services/app/lib/publish/quota.ts imports @/lib/artifacts/testing');
+      expect(violations).toContain('services/app/lib/runner/listing.ts imports ../artifacts/testing');
+      expect(violations).not.toMatch(/__tests__|test\/helpers/);
+    });
   });
 
   describe('page rows as shipped (DEEP_MODULES)', () => {

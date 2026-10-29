@@ -1,8 +1,8 @@
 /**
  * THE APP TEST HARNESS. One deep module behind every route-level test: one PGLite per FILE,
  * every table wiped before each test (FK-safe order derived from the schema, never a hand-written list), the
- * rate limiter reset, the test's session (`setSession`) cleared, the database released at the end, and the typed
- * request/actor/cookie helpers.
+ * rate limiter reset, the test's session (`setSession`) cleared and its live subscriptions dropped, the database
+ * released at the end, and the typed request/actor/cookie helpers.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
@@ -19,6 +19,7 @@ import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
+import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -158,8 +159,8 @@ interface AppHarness {
 }
 
 /**
- * Call ONCE at the top level of a test file. Registers `beforeAll` (boot one PGLite), `beforeEach` (wipe every table in
- * FK-safe order + resetAllowances), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
+ * Call ONCE at the top level of a test file. Registers `beforeAll` (boot one PGLite), `beforeEach` (drop live subscriptions,
+ * wipe every table in FK-safe order + resetAllowances), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
  */
@@ -194,9 +195,11 @@ export function useAppHarness(): AppHarness {
   });
 
   beforeEach(async () => {
-    // A view the last test buffered lands before the wipe, and no render outlives the rows it was made from.
+    // A view the last test buffered lands before the wipe, no render outlives the rows it was made from, and every
+    // test starts with no live subscription (a stream an earlier test left open, or one it counted).
     await flushViews();
     resetRenderCache();
+    await resetLiveSubscriptions();
     await wipe();
     resetAllowances();
     overrideSession(undefined);
@@ -214,6 +217,8 @@ export function useAppHarness(): AppHarness {
     await resetExportRenderer();
     await flushViews();
     resetRenderCache();
+    // Its listeners hold connections on this file's database, which closes next.
+    await resetLiveSubscriptions();
     database = undefined;
     await resetDb();
   });

@@ -2,7 +2,8 @@ import {nativeHtml} from './native-html-fixture';
 import { expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken } from './harness';
 import { POST as publish } from '@/app/api/artifacts/route';
-import { ARTIFACT_HEADER_COLUMNS, getArtifactHeaderById } from '@/lib/artifacts';
+import { getArtifactHeaderById } from '@/lib/artifacts';
+import { ARTIFACT_HEADER_COLUMNS } from '@/lib/artifacts/testing';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 
