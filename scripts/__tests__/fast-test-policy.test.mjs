@@ -126,3 +126,15 @@ describe('reviewed parser extension dispatch', () => {
     expect(auditFastSource(extension,'node_modules/unreviewed/dist/acorn.mjs')).not.toEqual([]);
   });
 });
+
+describe('reviewed zod check aggregation dispatch', () => {
+  const file='node_modules/zod/v4/core/json-schema-processors.js';
+  const fold='for (const ch of list) contributors[ch._zod.def.check]?.(agg, ch._zod.def);';
+  it('admits only the zod contributors fold with the aggregate argument', () => {
+    expect(auditFastSource(fold,file)).toEqual([]);
+  });
+  it('rejects other tables, arguments, files and constructors', () => {
+    for(const source of [fold.replace('contributors[','others['), fold.replace('(agg,','(url,'), fold.replace('?.(agg, ch._zod.def)','(agg)'), 'new contributors[kind](agg, def)'])expect(auditFastSource(source,file)).not.toEqual([]);
+    expect(auditFastSource(fold,'node_modules/unreviewed/json-schema-processors.js')).not.toEqual([]);
+  });
+});

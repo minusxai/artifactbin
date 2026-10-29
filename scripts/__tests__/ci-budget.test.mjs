@@ -5,8 +5,8 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import yaml from 'yaml';
-import {measureCiElapsed} from '../lib/ci-elapsed.mjs';
-const workflow=()=>yaml.parse(readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8'));
+import {CI_BUDGETS, describeCiElapsed, measureCiElapsed} from '../lib/ci-elapsed.mjs';
+const workflow=(name='ci.yml')=>yaml.parse(readFileSync(new URL(`../../.github/workflows/${name}`,import.meta.url),'utf8'));
 
 it('reports four-minute per-job diagnostics while the complete chain owns the hard limit',()=>{
  const jobs=workflow().jobs,step=jobs.test.steps.find(step=>step.env?.BUDGET_S);
@@ -77,4 +77,68 @@ it('keys repository install caches on the shared font pipeline without removed v
   expect(cache.with.key).not.toContain('design-systems/font-assets');
   expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');
  }
+});
+
+// The pull request lane: aim for 40s, fail over 60s (scripts/lib/ci-elapsed.mjs). Never raise it.
+it('makes the pull request lane the one that enforces the 60-second limit, in every job, as its last step',()=>{
+ const lane=workflow('pr-fast.yml');
+ expect(lane.on.pull_request.branches).toEqual(['main']);
+ expect(lane.concurrency).toBeUndefined();
+ const job=lane.jobs.fast;
+ expect(job['timeout-minutes']).toBeLessThanOrEqual(2);
+ expect(job.strategy['fail-fast']).toBe(false);
+ const clock=job.steps.at(-1);
+ expect(clock.if).toBe('always()');
+ expect(clock.run).toContain('/attempts/${GITHUB_RUN_ATTEMPT}');
+ expect(clock.run).toContain('node scripts/lib/ci-elapsed.mjs --pr ');
+ expect(job.steps.filter(step=>step.run?.includes('ci-elapsed.mjs'))).toHaveLength(1);
+ // The lane covers all of validate and the fast module list, and records no tested-tree evidence: only
+ // ci.yml's full suite may let main's push skip its tests.
+ const runs=job.steps.map(step=>step.run??'').join('\n');
+ for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint'])expect(runs).toContain(command);
+ expect(job.strategy.matrix.part).toEqual(['types','lint','tests']);
+ expect(JSON.stringify(lane)).not.toMatch(/tested-(tree|patch)/);
+ expect(job.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['tsc-buildinfo']);
+});
+it('fails the pull request lane past 60 seconds with the plain budget message',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'afbin-pr-elapsed-'));
+ const attempt=join(directory,'attempt.json'),summary=join(directory,'summary.md');
+ const run=(seconds)=>{
+  writeFileSync(attempt,JSON.stringify({run_started_at:new Date(Date.now()-seconds*1000).toISOString()}));
+  return spawnSync(process.execPath,[fileURLToPath(new URL('../lib/ci-elapsed.mjs',import.meta.url)),'--pr',attempt,summary],{encoding:'utf8'});
+ };
+ try {
+  const slow=run(75);
+  expect(slow.status).toBe(1);
+  expect(slow.stdout).toMatch(/::error::PR CI took 7\d\.\ds: the limit is 60s \(aim for 40s\)\. Fix the critical path; do not raise the budget\./);
+  const fast=run(5);
+  expect(fast.status).toBe(0); expect(fast.stdout).toContain('(target): aim for 40s; the limit is 60s');
+ } finally {rmSync(directory,{recursive:true,force:true});}
+});
+
+// THE PULL REQUEST CI BUDGET IS A HARD RULE: aim for 40s; the limit is 60s. These fail when anyone
+// raises it. Do not edit the numbers here to make a slow lane pass: fix the critical path.
+const prStart = '2026-10-29T00:00:00Z';
+const after = seconds => new Date(Date.parse(prStart) + seconds * 1000).toISOString();
+
+it('keeps the pull request budget at a 40-second aim and a 60-second hard limit', () => {
+  expect(CI_BUDGETS.pr).toEqual({targetSeconds: 40, normalSeconds: 60, hardSeconds: 60});
+  expect(Object.isFrozen(CI_BUDGETS.pr)).toBe(true);
+});
+
+it('fails a pull request run just past 60 seconds and passes one at 60', () => {
+  for (const [seconds, status] of [[0, 'target'], [39.999, 'target'], [40, 'normal'], [59.999, 'normal'], [60, 'slow'], [60.001, 'failed'], [235, 'failed']]) {
+    expect(measureCiElapsed(prStart, after(seconds), {lane: 'pr'}).status, `${seconds}s`).toBe(status);
+  }
+});
+
+it('says what failed and that the budget must not be raised', () => {
+  const failed = measureCiElapsed(prStart, after(75), {lane: 'pr'});
+  expect(describeCiElapsed(failed, 'pr')).toBe('PR CI took 75.0s: the limit is 60s (aim for 40s). Fix the critical path; do not raise the budget.');
+  expect(describeCiElapsed(measureCiElapsed(prStart, after(30), {lane: 'pr'}), 'pr')).toContain('aim for 40s; the limit is 60s');
+});
+
+it('keeps the full-suite budget separate and rejects unknown lanes', () => {
+  expect(measureCiElapsed(prStart, after(75)).status).toBe('target');
+  expect(() => measureCiElapsed(prStart, after(1), {lane: 'quick'})).toThrow(/Unknown CI lane/);
 });

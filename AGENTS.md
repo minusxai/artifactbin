@@ -21,7 +21,13 @@
 
 ## CI speed contract
 
-For the **full post-merge chain** and PRs targeting **`main`**, measure from `run_started_at` through
+For PRs targeting **`main`**, the required check is `pr fast` (`.github/workflows/pr-fast.yml`):
+validate, workflow lint, JavaScript syntax and the fast module list on three runners. Aim for
+**40 seconds**; the limit is **60 seconds**, from `run_started_at` to the last job, and each job's final
+step fails the PR past it (`scripts/lib/ci-elapsed.mjs`, pinned by `scripts/__tests__/ci-budget.test.mjs`).
+Never raise it. On a PR, `ci.yml` (affected modules) and `page speed` are informational.
+
+For the **full post-merge chain** (and `ci.yml` on a PR), measure from `run_started_at` through
 final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal
 maximum below **4 minutes**. The full chain fails above **8 minutes**. Job times, parallel sums and
 workflow durations differ; per-job durations above four minutes produce diagnostics rather than
