@@ -1,8 +1,8 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
 import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
-import {assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
-import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes} from './routes/oauth';
+import {BodyTooLargeError,readBody,assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
+import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
@@ -134,6 +134,13 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
     name: 'loginRoutes',
     mount: (app) => {
       const a = app;
+      // Sign-in bodies are tiny, and the OTP send is anonymous: refuse an oversized one before anything parses it.
+      a.use('/api/auth/*', async (c, next) => {
+        if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS') return next();
+        try { await readBody(c.req.raw.clone(), { limit: AUTH_BODY_LIMIT }); }
+        catch (error) { if (error instanceof BodyTooLargeError) return payloadTooLarge(); throw error; }
+        return next();
+      });
       a.post('/api/auth/email-otp/send-verification-otp', async (c, next) => {
         const body = await c.req.raw.clone().json().catch(() => null) as { email?: unknown } | null;
         const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';

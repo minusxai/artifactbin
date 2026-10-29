@@ -8,7 +8,8 @@
  * lib/admin-auth's, with its own uniform 404.
  */
 import { isCrossSiteRequest, json, unauthorized } from '../http/http';
-import {WEB_INGEST_MAX_PER_HOUR} from '../platform/config';
+import {TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR} from '../platform/config';
+import {forwardedFor} from '../platform/client-identity';
 import type { Harness } from '@/lib/platform';
 import type { RequestIdentity, TokenHoldingActor } from './actors';
 import { isCookieCredential, resolveRequestIdentity, sessionActor } from './request-identity';
@@ -48,11 +49,33 @@ export function webIngestRateLimited(key: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(key, WEB_INGEST_MAX_PER_HOUR, now);
 }
 
+/** The most buckets held at once; past it the least recently created are dropped, so the map cannot grow without bound. */
+const WEB_INGEST_MAX_KEYS = 50_000;
+/** Buckets whose attempts have all aged out are swept this often, not only when their own key is touched again. */
+const WEB_INGEST_SWEEP_MS = 60 * 1000;
+let nextSweepAt = 0;
+
+function sweepExpiredBuckets(now: number): void {
+  if (now < nextSweepAt && webIngestTimes.size <= WEB_INGEST_MAX_KEYS) return;
+  nextSweepAt = now + WEB_INGEST_SWEEP_MS;
+  for (const [key, times] of webIngestTimes) {
+    if (!times.length || now - times[times.length - 1]! >= WEB_INGEST_WINDOW_MS) webIngestTimes.delete(key);
+  }
+  for (const key of webIngestTimes.keys()) {
+    if (webIngestTimes.size <= WEB_INGEST_MAX_KEYS) break;
+    webIngestTimes.delete(key);
+  }
+}
+
+/** Number of live buckets — a test seam for the sweep. */
+export function webIngestBucketCount(): number { return webIngestTimes.size; }
+
 /** One hourly ATTEMPT bucket, shared by every allowance in this file. */
 function hourlyAttemptsExhausted(key: string, max: number, now: number): boolean {
+  sweepExpiredBuckets(now);
   const times = (webIngestTimes.get(key) ?? []).filter((t) => now - t < WEB_INGEST_WINDOW_MS);
   if (times.length >= max) {
-    webIngestTimes.set(key, times);
+    if (times.length) webIngestTimes.set(key, times); else webIngestTimes.delete(key);
     return true;
   }
   times.push(now);
@@ -92,12 +115,25 @@ export function docAssetImportRateLimited(id: string, now = Date.now()): boolean
  */
 const DOC_FETCHES_PER_HOUR = 600;
 let docFetchCap: number | null = null;
+/**
+ * Who a document's fetch quota is charged to: the account or token, else the anonymous reader's client IP
+ * (the address our trusted proxy saw), so one busy stranger cannot spend every other stranger's allowance.
+ */
+export function documentFetchReader(actor: { userId?: string | null; tokenId?: string | null }, request: Request): string {
+  if (actor.userId ?? actor.tokenId) return (actor.userId ?? actor.tokenId)!;
+  const ip = forwardedFor(request.headers, TRUSTED_PROXY_HOPS);
+  return ip ? `guest:${ip}` : 'guest';
+}
+
+/** Test hook for the per-document fetch ceiling. */
+export function setDocumentFetchCapForTests(cap: number | null): void { docFetchCap = cap; }
 export function documentFetchRateLimited(id: string, reader: string, now = Date.now()): boolean {
   return hourlyAttemptsExhausted(`doc-fetch:${id}:${reader}`, docFetchCap ?? DOC_FETCHES_PER_HOUR, now);
 }
 
 export function resetWebIngestRateLimit(): void {
   webIngestTimes.clear();
+  nextSweepAt = 0;
 }
 
 /**

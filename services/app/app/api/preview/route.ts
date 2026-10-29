@@ -1,4 +1,4 @@
-import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
 
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if (!actor.userId && !actor.tokenId) return unauthorized(request);
   // Cookie-authenticated: refuse a cross-site caller (this compiles markup).
   if (actor.credential !== 'bearer' && isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
-  const body = await readJson(request);
+  const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = await parseContentInput(body);
   if (parsed instanceof Response) return parsed;

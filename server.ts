@@ -10,6 +10,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { developmentPagesHosts, developmentViteOptions } from './services/app/lib/runtime/dev-vite';
+import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
@@ -265,9 +266,9 @@ async function main(): Promise<void> {
    * /@id/*, /node_modules/.vite/* and web/ sources and calls next() for
    * everything else — so in dev its asset paths are matched BEFORE the door check.
    */
-  const server = http.createServer(
+  const server = http.createServer(withRequestLog(
     vite ? (req, res) => vite!.middlewares(req, res, () => void listener(req, res)) : listener,
-  );
+  ));
   server.once('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
       console.error(`[boot] Port ${port} is already in use.${dev ? ' Choose a free app/HMR pair with: npm run setup -- --yes --port <port>' : ''}`);

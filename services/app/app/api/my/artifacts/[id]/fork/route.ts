@@ -7,7 +7,7 @@ import { canRead } from '@artifactbin/contracts';
 import { ensureUserToken } from '@/lib/accounts';
 import { ownerUsername } from '@/lib/accounts';
 import { canonicalArtifactPath } from '@/lib/http';
-import { baseUrl, json } from '@/lib/http';
+import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/fork — "make this mine", from the PAGE.
@@ -55,7 +55,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // A body is optional here (the control row sends none), so an unreadable one
   // is simply "no options" rather than a 400: this door has no overrides to
   // silently drop, which is the hazard the operation's door answers 400 for.
-  const body = (await request.json().catch(() => null)) as { dry_run?: unknown; as?: unknown } | null;
+  const body = (await readJson(request, { allowEmpty: true, limit: SMALL_BODY_LIMIT })) as { dry_run?: unknown; as?: unknown } | null;
   // `as: {testuser}` — the ONE door from the real world into a test user's
   // sandbox, and it is the same rule at both fork doors: read, refs and the
   // artifact quota stay the account's, and only the OWNER of the copy changes.

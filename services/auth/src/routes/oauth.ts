@@ -1,4 +1,4 @@
-import { renderConnectionPage } from '@artifactbin/utils';
+import { BodyTooLargeError, readBody, renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, RETIRED_CLI_MESSAGE, isRetiredCliRequest, retiredCliResponse, retiredCliSkillUrl} from '@artifactbin/contracts';
 /**
@@ -26,6 +26,10 @@ type App = AuthApp;
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 const NO_STORE = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
+
+/** Every auth body is a handful of short fields: sign-in, OTP, client metadata, token and consent forms. */
+export const AUTH_BODY_LIMIT = 16 * 1024;
+export const payloadTooLarge = () => new Response(JSON.stringify({ error: 'payload_too_large' }), { status: 413, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
 
 /** The configured public origin wins, avoiding bad forwarded-proto metadata. */
 export function baseUrlOf(request: Request, trustedHops: number, publicBaseUrl?: string): string {
@@ -170,7 +174,9 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
 
   app.options('/oauth/register', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/register', async (c) => {
-    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    let body: Record<string, unknown> | null;
+    try { body = JSON.parse(await readBody(c.req.raw, { limit: AUTH_BODY_LIMIT, as: 'text' })) as Record<string, unknown> | null; }
+    catch (error) { if (error instanceof BodyTooLargeError) return payloadTooLarge(); body = null; }
     if (!body) return new Response(JSON.stringify({ error: 'invalid_client_metadata', error_description: 'Malformed JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
     try {
       return new Response(JSON.stringify(await o.oauth.register(body)), { status: 201, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
@@ -215,7 +221,11 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
 
   app.post('/oauth/authorize/approve', async (c) => {
     if (!sameOrigin(c.req.raw)) return c.json({error:'invalid_origin'},403);
-    const form = await c.req.formData();
+    let form: FormData;
+    try {
+      const bytes = await readBody(c.req.raw, { limit: AUTH_BODY_LIMIT });
+      form = await new Response(bytes, { headers: { 'content-type': c.req.header('content-type') ?? '' } }).formData();
+    } catch (error) { if (error instanceof BodyTooLargeError) return payloadTooLarge(); throw error; }
     const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');
     const codeChallenge = String(form.get('code_challenge') ?? '');
@@ -244,10 +254,13 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const oauthJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
     const oauthError = (error: string, description?: string) => oauthJson({ error, ...(description ? { error_description: description } : {}) }, 400);
     let body: Record<string, string>;
+    let text: string;
+    try { text = await readBody(c.req.raw, { limit: AUTH_BODY_LIMIT, as: 'text' }); }
+    catch (error) { if (error instanceof BodyTooLargeError) return payloadTooLarge(); throw error; }
     if ((c.req.header('content-type') || '').includes('application/json')) {
-      try { body = await c.req.json() as Record<string, string>; } catch { return oauthError('invalid_request', 'Malformed JSON body'); }
+      try { body = JSON.parse(text) as Record<string, string>; } catch { return oauthError('invalid_request', 'Malformed JSON body'); }
     } else {
-      body = Object.fromEntries((await c.req.formData()).entries()) as Record<string, string>;
+      body = Object.fromEntries(new URLSearchParams(text).entries());
     }
     const expectedResource = resource(c.req.raw);
     if (!body.client_id) return oauthError('invalid_request', 'Missing client_id');
