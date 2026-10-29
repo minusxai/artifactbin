@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildAuthorModule, pageModuleSource } from '../author-module.server';
-import { AUTHOR_VENDOR_EXPORTS, PAGE_GLOBAL } from '@/lib/author-script/contract';
+import { AUTHOR_VENDOR_EXPORTS, ESM_CDN_ORIGIN, PAGE_GLOBAL } from '@/lib/author-script/contract';
 
 const NAMES = { values: ['region'], tables: ['sales'], queries: ['monthly'], mutations: ['rename'] };
 const built = async (script: string) => {
@@ -81,8 +81,11 @@ describe('buildAuthorModule', () => {
   });
 
   it('accepts a renamed binder and keeps bare npm names on esm.sh', async () => {
-    const module = await built(`import { signal as bind } from 'page'; import confetti from 'canvas-confetti'; const [r] = bind('$region'); confetti(r());`);
-    expect(module.code).toContain('https://esm.sh/canvas-confetti');
+    const module = await built(`import { signal as bind } from 'page'; import confetti from 'canvas-confetti'; import { Vector3 } from '@scope/three/math'; const [r] = bind('$region'); confetti(r(), Vector3);`);
+    expect(ESM_CDN_ORIGIN).toBe('https://esm.sh');
+    expect(module.code).toContain(`${ESM_CDN_ORIGIN}/canvas-confetti`);
+    // Scoped packages and subpaths keep their whole specifier under the CDN origin.
+    expect(module.code).toContain(`${ESM_CDN_ORIGIN}/@scope/three/math`);
   });
 
   it('refuses an undeclared name, a name of the wrong kind, a name without its $ and a computed name', async () => {
