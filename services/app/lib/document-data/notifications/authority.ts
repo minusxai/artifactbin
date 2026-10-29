@@ -20,7 +20,7 @@ interface Identity {actor:AccessActor;kind:string|null;revision:string}
 interface Share {user_id:string|null;email:string;role:string}
 interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
 const denied=()=>new NotificationExecutionError('notification_access_revoked');
-const owner=(row:ArtifactRow,actor:AccessActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId);
+const owner=(row:ArtifactRow,actor:AccessActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:!!actor.tokenId&&row.token_id===actor.tokenId);
 async function account(tx:Queryable,id:string):Promise<Account|null>{
  return (await tx.query<Account>("SELECT id,email,kind,expires_at FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) AND merged_into_user_id IS NULL",[id])).rows[0]??null;
 }

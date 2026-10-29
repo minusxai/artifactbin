@@ -2,7 +2,7 @@
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/platform';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
-import { canReadArtifact, getArtifactById, refusingUnservable, effectiveRole } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, refusingUnservable, effectiveRole, holdsCreatingToken } from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
@@ -29,7 +29,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // hold, an unfurler with neither. Direct token ownership counts — an
   // unclaimed token's doc has no viewer.userId to match.
   const actor = await requestOrSessionActor(request);
-  const authorized = actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor));
+  const authorized = holdsCreatingToken(artifact, actor) || (await canReadArtifact(artifact, actor));
   if (!authorized) return json({ error: 'not_found' }, 404);
   const q = new URL(request.url).searchParams;
   /*

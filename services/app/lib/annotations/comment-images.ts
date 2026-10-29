@@ -14,7 +14,7 @@ interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token
 const variants=['original','preview','thumbnail'] as const;
 type Variant=typeof variants[number];
 const key=(id:string,variant:Variant)=>`comment-images/${id}/${variant}.webp`;
-const owned=(row:ImageRow,actor:AccessActor)=>actor.userId ? row.user_id===actor.userId : row.user_id===null && row.token_id===actor.tokenId;
+const owned=(row:ImageRow,actor:AccessActor)=>actor.userId ? row.user_id===actor.userId : row.user_id===null && !!actor.tokenId && row.token_id===actor.tokenId;
 function validCommentImage(value:unknown):value is CommentImageMetadata {
  if(!value || typeof value!=='object')return false;
  const m=value as CommentImageMetadata;

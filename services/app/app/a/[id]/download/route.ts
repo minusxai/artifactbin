@@ -14,7 +14,7 @@ import {loadImage} from '@/lib/object-store/image-store';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
+import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
 
 const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
@@ -32,7 +32,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   const artifact=await getArtifactById(id);
   if (artifact?.format === 'html') {
     const actor = await requestOrSessionActor(request);
-    if (actor.tokenId !== artifact.token_id && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
+    if (!holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
     const at = await archivedVersionFor(request, artifact);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;
