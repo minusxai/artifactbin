@@ -3,7 +3,6 @@ import type { AnnotationAuthor, HtmlNodeAnchor } from '@artifactbin/contracts';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, ARTIFACTBIN_AGENT_HEADER, identityForUser } from '@/lib/accounts';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { getDb } from '@/lib/platform';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import {
   CommentWaitCapacityError, InvalidCommentCursor, actOnAnnotationFor, annotationAuthorForRequest, artifactToWireWithAnnotations, artifactWireFor,
@@ -196,9 +195,9 @@ describe('the artifact wire with annotations', () => {
 
   it('answers a reader’s snapshot with their capabilities, and null without access', async () => {
     const f = await fixture('public');
-    const owned = await readArtifactSnapshot(f.owner, f.doc.id, BASE) as { capabilities: Record<string, boolean>; id: string };
+    const owned = await readArtifactSnapshot(f.owner, f.doc.id, BASE) as unknown as { capabilities: Record<string, boolean>; id: string };
     expect(owned).toMatchObject({ id: f.doc.id, capabilities: { read: true, edit: true, delete: true } });
-    const reader = await readArtifactSnapshot(await stranger(), f.doc.id, BASE) as { capabilities: Record<string, boolean> } & Record<string, unknown>;
+    const reader = await readArtifactSnapshot(await stranger(), f.doc.id, BASE) as unknown as { capabilities: Record<string, boolean> } & Record<string, unknown>;
     expect(reader.capabilities).toMatchObject({ read: true, edit: false, delete: false });
     expect(reader).not.toHaveProperty('shares');
     const hidden = await fixture('private');

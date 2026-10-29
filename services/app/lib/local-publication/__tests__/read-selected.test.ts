@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readSelectedLocalFiles } from '..';
 
-const file = (name: string, bytes: Uint8Array | string, type = '', relative = '') => {
+const file = (name: string, bytes: BlobPart, type = '', relative = '') => {
   const made = new File([bytes], name, { type });
   if (relative) Object.defineProperty(made, 'webkitRelativePath', { value: relative });
   return made;

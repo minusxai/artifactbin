@@ -6,7 +6,7 @@ import {
 } from '../contract';
 
 /** The exported string constants, by name. */
-const strings = Object.entries(contract).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+const strings = Object.entries(contract).filter(([, value]) => typeof value === 'string') as Array<[string, string]>;
 const named = (pattern: RegExp) => strings.filter(([name]) => pattern.test(name));
 
 describe('the frame and island wire names', () => {
