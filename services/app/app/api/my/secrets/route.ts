@@ -1,8 +1,5 @@
-import {datasetResponse} from '@/lib/datasets/http';
+import {datasetResponse, createDatasetSecret, DatasetError, secretTargetShape} from '@/lib/datasets';
 import {requestActor} from '@/lib/authentication';
-import {createDatasetSecret} from '@/lib/datasets/secrets';
-import {DatasetError} from '@/lib/datasets/errors';
-import {secretTargetShape} from '@/lib/datasets/input';
 import { getArtifactFor } from '@/lib/artifacts';
 import {readJson,json,unauthorized} from '@/lib/http';
 import { withAccountToken } from '@/lib/accounts';

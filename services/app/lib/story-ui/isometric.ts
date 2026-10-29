@@ -1,5 +1,5 @@
 /** Projects a compact assembly once; controls translate cached paths or rotate only moving meshes. */
-import type { IsometricSpec, IsoPoint, IsoPlanPoint, IsoTone, IsometricPart } from '@/lib/jsx/isometric-spec';
+import type { IsometricSpec, IsoPoint, IsoPlanPoint, IsoTone, IsometricPart } from '@/lib/jsx';
 import { visibleLinework } from './isometric-visibility';
 import { projectPoint, svgPath, fitAssembly, type Projection } from './isometric-geometry';
 import { shapeGeometry, add, sub, mul, dot, cross, unit, rotate, type ShapeGeometry } from './isometric-mesh';

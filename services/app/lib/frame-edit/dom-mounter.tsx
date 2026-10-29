@@ -4,7 +4,7 @@ import { createSignal, type Setter } from 'solid-js';
 import { render } from 'solid-js/web';
 import { serializeJsx, type JsxNode } from '@/lib/jsx';
 import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-engine/model';
-import type { EditorSelectionChange } from '@/lib/editor-engine/bookmark';
+import type { EditorSelectionChange } from '@/lib/editor-engine';
 import type { EditorView } from 'prosemirror-view';
 import { isText, textHost } from '@/lib/story-ui/host-classify';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';

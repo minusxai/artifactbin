@@ -6,7 +6,7 @@ import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/l
 import { identityForUser } from '@/lib/accounts';
 import {getArtifactById} from '@/lib/artifacts';
 import {backendSecrets} from '@/lib/html-backend-secrets';
-import {forkArtifact} from '@/lib/publish/publish';
+import {forkArtifact} from '@/lib/publish';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({typeDefs:'type Query { count: Int } type Mutation { increment: Int }',compiled:source,secretBindings:['API_KEY']})}));
 const harness=useAppHarness();
 it('forks immutable backend code with independent empty stores and page ownership',async()=>{

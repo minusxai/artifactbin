@@ -1,12 +1,10 @@
 /**
  * The platform module's interface: the infrastructure every product module stands on (configuration, the
  * database and its schema, identifiers, the event log and its outbox, the request scope, the injected services,
- * query statistics and client identity). Code outside lib/platform enters only here
+ * and query statistics). Code outside lib/platform enters only here
  * (DEEP_MODULES in scripts/ci/module-graph.mjs); config.ts, db.ts and services.ts keep their paths because a
  * downstream deployment imports them directly (__tests__/downstream-exports.test.ts).
  */
-export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, logClientIdentity } from './client-identity';
-export type { Harness } from './client-identity';
 export {
   ALIAS_ORIGINS, ALLOW_PUBLIC_VISIBILITY, ANALYTICS_SECRET, APP_HMR_PORT_SETTING, ARTIFACT_QUOTA_PER_TOKEN, ASSETS_MAX_BYTES_PER_TOKEN,
   ASSETS_ORIGIN, AUTH_SECRET, BROWSER_SERVICE_URL, CUSTOM_DOMAINS_TARGET, DATABASE_URL, DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS,

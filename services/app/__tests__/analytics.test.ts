@@ -1,6 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
-import {artifactState} from '@/lib/artifacts/state';
-import {getArtifactById,getVersionFor} from '@/lib/artifacts';
+import {artifactState, getArtifactById, getVersionFor} from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
@@ -12,7 +11,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * right. Events are fired unawaited on the request path, so assertions poll.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform/request-context';
+import { overrideRequestHeaders } from '@/lib/platform';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -32,7 +31,7 @@ import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
-import { renderSparklineSvg } from '@/lib/viz/sparkline';
+import { renderSparklineSvg } from '@/lib/viz';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();

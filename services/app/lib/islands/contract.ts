@@ -14,7 +14,7 @@ import type { Scalar, TableResult, MutationRequest } from '@/lib/dataflow';
 import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { ColumnType, PersonCard } from '@artifactbin/contracts';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * What an island receives

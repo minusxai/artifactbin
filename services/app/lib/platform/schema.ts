@@ -463,7 +463,7 @@ const COMMENT_REACTION_EVENTS: Table = {
  * No FKs on purpose — an event row outlives its artifact, and a failed insert
  * must never take a request down with it. `user_id` is the session viewer or
  * write actor (NULL = anonymous); `client` is the harness guess from
- * lib/client-identity (telemetry only, never gate on it).
+ * lib/accounts/client-identity (telemetry only, never gate on it).
  */
 const ANALYTICS_EVENTS: Table = {
   name: 'analytics_events',

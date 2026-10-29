@@ -1,4 +1,4 @@
-import {fetchWebResource} from '@/lib/web-ingest/fetch';
+import {fetchWebResource} from '@/lib/web-ingest';
 import type {PageBackendFetchResult} from './backend';
 /** Minimal outbound connector: public HTTPS GET, no caller headers or ambient credentials. */
 export async function fetchPageBackendResource(url:string,signal?:AbortSignal):Promise<PageBackendFetchResult>{

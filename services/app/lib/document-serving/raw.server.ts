@@ -16,26 +16,20 @@
  * Every Cache-Control it answers with is ./cache-control's.
  */
 import {designSystemChoice} from '@/lib/html-systems';
-import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
+import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
 import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, holdsCreatingToken, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
 import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';
-import {cspExtensionsFor} from '@/lib/trust/document-trust';
+import {cspExtensionsFor} from '@/lib/trust';
 import { requestOrSessionActor } from '@/lib/authentication';
-import { baseUrl, parseByteRange } from '@/lib/http';
+import { baseUrl, parseByteRange, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { ObjectUnavailable } from '@/lib/object-store';
+import { loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
+import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import { loadImage } from '@/lib/object-store/image-store';
-import { serveStoredFile } from '@/lib/datasets/file-store';
-import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
 import type { StorySurface } from '@/lib/story-runtime/story-fragment';
-import { pagesRequestOf } from '@/lib/http/pages-origin';
-import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { servesDocument } from '@/lib/custom-domains';
-import { etagOf, matchingTag, notModified } from '@/lib/http/revalidation';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, withFreshNonce } from './render-cache';

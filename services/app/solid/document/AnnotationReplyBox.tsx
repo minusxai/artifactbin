@@ -11,7 +11,7 @@
  */
 import { createSignal, Show, type JSX } from 'solid-js';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { Button } from '../ui/Button';
 import { RetryingNote } from './RetryingNote';

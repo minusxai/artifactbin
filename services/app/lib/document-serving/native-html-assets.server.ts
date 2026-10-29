@@ -1,7 +1,7 @@
 import {pinPublicationAssetUrls} from '@/lib/html-publication-bundle';
 import {htmlAssetLinks,rewriteHtmlAssetUrls} from '@/lib/html-page';
 import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
-import {lookupWebAssets} from '@/lib/publish/assets/web-assets';
+import {lookupWebAssets} from '@/lib/publish';
 /** Published references carry admission only; each eventual byte request still enforces its current read ACL. */
 export async function nativeHtmlAssets(row:Pick<ArtifactRow,'id'|'version'|'source'|'meta'>):Promise<string>{
  const source=row.source??'',assets=htmlAssetLinks(source),urls=new Map<string,string>();

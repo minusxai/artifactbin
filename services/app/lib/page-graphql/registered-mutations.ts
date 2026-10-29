@@ -4,9 +4,7 @@ import {getArtifactById,getArtifactFor,writerFor,grantsOf,grantContext,canReadAr
 import {canWriteDataset,mutateDataset,isMutationRefused} from '@/lib/document-data';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,type HtmlBackendVersionRecord} from '@/lib/html-backends';
-import {createRegisteredMutationService} from '@/lib/registered-page-mutations/model';
-import {registeredMutationPlan} from '@/lib/registered-page-mutations/registry';
-import type {MutationContext,RegisteredMutationPorts} from '@/lib/registered-page-mutations/contracts';
+import {createRegisteredMutationService, registeredMutationPlan, type MutationContext, type RegisteredMutationPorts} from '@/lib/registered-page-mutations';
 const unavailable=()=>Error('registered_mutation_unavailable');
 /** Host factory receives actual request actor and immutable saved page/backend, not page arguments. */
 export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord,revalidateActor:()=>Promise<AccessActor>){

@@ -5,7 +5,7 @@ import { request, useAppHarness, mintAccountToken } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets';
 useAppHarness();
 it.each(['rowId', 'value'] as const)(
   'fingerprints explicit %s and replays a committed row update without writing twice',

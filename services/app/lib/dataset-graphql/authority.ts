@@ -1,7 +1,7 @@
 import type { AccessActor } from '@/lib/accounts';
 import {canReadArtifact,getArtifactById,getVersionFor,writerFor,type ArtifactRow} from '@/lib/artifacts';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
-import {catalogOf} from '@/lib/datasets/catalog';
+import {catalogOf} from '@/lib/datasets';
 export class DatasetBindingUnsupportedError extends Error {
  readonly code='dataset_stable_identity_unavailable';
  readonly hint='Native dataset bindings require stored CSV/JSON rows. Import rows into a stored dataset before linking this page.';

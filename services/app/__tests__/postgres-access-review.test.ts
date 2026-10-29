@@ -3,7 +3,7 @@ import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as sharingGet,PUT as sharingPut} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {createDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {createDatasetSecret,resolveDatasetConnection} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';

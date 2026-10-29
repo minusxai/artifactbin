@@ -24,7 +24,7 @@
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { AUTH_SECRET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
-import { parseCookie } from '@/lib/http/http';
+import { parseCookie } from '@/lib/http';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';

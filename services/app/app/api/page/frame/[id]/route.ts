@@ -7,9 +7,8 @@
  * Never cached, and readable only by the app's own origin (no CORS; a pages origin is refused before
  * it gets here, server/pages-host).
  */
-import { json } from '@/lib/http';
+import { json, pagesSite } from '@/lib/http';
 import { framedDocumentSrc } from '@/lib/document-serving';
-import { pagesSite } from '@/lib/http/pages-origin';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

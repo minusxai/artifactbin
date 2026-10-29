@@ -28,8 +28,9 @@ import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts'
 import { actorOf } from '@artifactbin/utils';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
-import { pagesRequestOf } from '../http/pages-origin';
-import { currentRequest, identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../platform';
+import { pagesRequestOf } from '../http';
+import { identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../accounts';
+import { currentRequest } from '../platform';
 import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type RequestIdentity } from '@/lib/accounts';
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';

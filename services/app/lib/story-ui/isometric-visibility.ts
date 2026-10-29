@@ -1,5 +1,5 @@
 /** Hidden-line removal for projected illustrations. Clip lines at face boundaries before stroking. */
-import type { IsoPoint, IsoPlanPoint } from '@/lib/jsx/isometric-spec';
+import type { IsoPoint, IsoPlanPoint } from '@/lib/jsx';
 import { projectPoint, svgPath, type Projection } from './isometric-geometry';
 import { add, sub, mul, dot, cross, unit, type ShapeGeometry } from './isometric-mesh';
 const cross2 = (a: IsoPlanPoint, b: IsoPlanPoint) => a[0] * b[1] - a[1] * b[0];

@@ -1,7 +1,6 @@
 /** Publish the actual installed native examples; resolver execution has separate real-runner coverage. */
 import {describe,expect,it,vi} from 'vitest';
-import {skillTree} from '@/lib/skills';
-import {skillPackageFiles} from '@/lib/skills/package';
+import {skillTree, skillPackageFiles} from '@/lib/skills';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';
 import {mkdtemp,readFile,writeFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';

@@ -1,4 +1,4 @@
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import type {ContentObjects} from '@/lib/object-store';
 /**
  * URL → stored PDF content: the guarded fetcher composed with the SAME
  * storePdfContent the upload door runs, exactly as lib/publish/ingest/image.ts
@@ -6,11 +6,10 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * one implementation rather than two that agree today.
  */
 import { MAX_PDF_BYTES } from '@/lib/platform';
-import { json } from '@/lib/http/http';
-import { storePdfContent } from '@/lib/datasets/data-tiers';
+import { json } from '@/lib/http';
+import { storePdfContent } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
-import { fetchWebResource } from '@/lib/web-ingest/fetch';
-import { WebIngestError } from '@/lib/web-ingest/guard';
+import { fetchWebResource, WebIngestError } from '@/lib/web-ingest';
 
 /**
  * Fetch and store one PDF. Refusals are ready-to-return Responses that NAME the

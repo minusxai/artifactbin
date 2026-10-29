@@ -4,7 +4,7 @@ import {setServices} from '@/lib/platform';
 import {localPageBackendCapability} from '@/lib/page-operations';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
-import {forkArtifact} from '@/lib/publish/publish';
+import {forkArtifact} from '@/lib/publish';
 import {getArtifactById} from '@/lib/artifacts';
 import { identityForUser } from '@/lib/accounts';
 import {request,useAppHarness,mintAccountToken} from './harness';

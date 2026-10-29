@@ -1,4 +1,4 @@
-import { notificationJobHttp } from '@/lib/operations/notification-job-http';
+import { notificationJobHttp } from '@/lib/operations';
 export async function GET(request:Request,context:{params:Promise<{jobId:string}>}){
  return notificationJobHttp('get_notification_job',request,await context.params);
 }

@@ -31,7 +31,7 @@ import { ID_RE } from '@/lib/platform';
 import { subtractCspExtensions } from '@/lib/document';
 import {
   allowDocument, cspRequestFor, denyDocument, extensionsHash, hostsPublishedBy, revokeTrust, sessionTrustCookie,
-} from '@/lib/trust/document-trust';
+} from '@/lib/trust';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const GRANTS = ['once', 'document', 'never'] as const;

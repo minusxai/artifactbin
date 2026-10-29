@@ -15,8 +15,7 @@
  * Consumer: the skill registry (lib/skills/render.ts), which projects this registry into
  * those docs.
  */
-import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
-import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
+import { type StoryTemplateName, STORY_TEMPLATE_NAMES } from '@/lib/validation';
 import { storyGuidance } from './story-guidance';
 
 export { STORY_TEMPLATE_NAMES };

@@ -16,7 +16,7 @@ import { Tooltip } from '../ui/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
 import { getStoryTheme, resolveStoryMode } from '@/lib/data/story/story-themes';
 import { STORY_SYSTEMS, getStorySystem } from '@/lib/data/story/story-systems';
-import type { StoryDesignName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation';
 import DesignSystemSpecimen from '../components/DesignSystemSpecimen';
 
 const designEntry = (name: StoryDesignName | null) => getStorySystem(name) ?? getStoryTheme(name);

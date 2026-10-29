@@ -3,7 +3,7 @@
  * authorization signal: both the agent header and the User-Agent are
  * self-reported.
  */
-import { ARTIFACTBIN_AGENT_HEADER, identifyClient, type Harness } from '../platform';
+import { ARTIFACTBIN_AGENT_HEADER, identifyClient, type Harness } from '../accounts';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 const AGENT_LABELS: Partial<Record<Harness, string>> = {

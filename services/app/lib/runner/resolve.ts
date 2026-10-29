@@ -3,7 +3,7 @@ import { identityForUser } from '@/lib/accounts';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow';
 import {parseJsx} from '../jsx';
 import {splitHelmet, validateHelmet} from '../document';
-import {buildLambdaModule} from '../author-script/program.server';
+import {buildLambdaModule} from '../author-script';
 import type {RunStart} from '@artifactbin/contracts';
 export type LambdaProgramResolver = (artifactId:string,userId:string)=>Promise<{version:string;document?:RunStart['document'];program:RunStart['program']}|null>;
 /** One published JSX source supplies both declarations and the executable entry point. */

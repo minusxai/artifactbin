@@ -1,4 +1,4 @@
-import {isRuntimeCoreSrc} from '../html-page/core-script';
+import {isRuntimeCoreSrc} from '../html-page';
 import {parse as parseJavaScript} from 'acorn';
 import {createHash} from 'node:crypto';
 import {build,transform,type Loader} from 'esbuild';
@@ -85,3 +85,4 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  }
  return {html,embeddedUrls:[...used]};
 }
+export { OFFLINE_MODULES_BLOCK } from './contracts';

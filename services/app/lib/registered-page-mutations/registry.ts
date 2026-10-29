@@ -5,7 +5,7 @@ import type {HtmlBackendVersionRecord} from '@/lib/html-backends';
 import type {RegisteredMutationPlan as QueryPlan,MutationProgram} from './contracts';
 import {validateMutationProgram} from './model';
 import {registeredMutationSchema} from './namespace';
-import type {RegisteredRepair,RepairableHead} from '../registered-page-queries/registry';
+import type {RegisteredRepair,RepairableHead} from '../registered-page-queries';
 export type RegisteredMutationProgram=MutationProgram;
 interface Envelope {kind:'registered-page-mutations-v1';pageId:string;pageVersion:number;sourceSha256:string;provenance:{compilerSha256:string;sourceSha256:string};program:RegisteredMutationProgram;digest:string}
 const PREFIX='!registered-page-mutations-v1\n';

@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { firstScreenFonts } from '../first-screen-fonts';
-import { storyBodyFor } from '../../document/body';
+import { storyBodyFor } from '../../document';
 import { documentFonts } from '../document-fonts';
 import { STORY_FONT_THEMES, type StoryFontAsset } from '@/lib/data/story/story-fonts';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';

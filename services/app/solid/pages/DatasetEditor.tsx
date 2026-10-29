@@ -21,7 +21,7 @@ import { Tabs } from "../ui/Tabs";
 import { CatalogRows, DatasetExplorer, type CatalogPreview, type CatalogQuery } from "../datasets/DatasetCatalogView";
 import { DatasetWhitelist, type SourceDraft } from "../datasets/DatasetWhitelist";
 import { parseDatasetDefinition, serializeDatasetDefinition } from "@/lib/datasets/definition";
-import type { CatalogInput, DatasetCatalog, DatasetConnection, DiscoveredTable, NotebookCell } from "@/lib/datasets/types";
+import type { CatalogInput, DatasetCatalog, DatasetConnection, DiscoveredTable, NotebookCell } from "@/lib/datasets";
 import type { DatasetColumn, Row } from "@/lib/dataflow";
 import { useSession } from '../lib/session';
 import { apiRequest } from '../lib/api';

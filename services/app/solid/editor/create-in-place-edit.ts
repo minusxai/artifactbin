@@ -25,7 +25,7 @@ import {
   type DocumentRuntimeRef,
 } from '@/lib/story-runtime/document-endpoint';
 import { isEditFrameMessage, type MarkdownBlockKind, type MarkdownTableAction, type StoryEditParentMessage, type StoryEditSelection } from '@/lib/edit-protocol';
-import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine/bookmark';
+import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine';
 import { editBlock } from '@/lib/editor-engine/block-edit';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/document/edit-compose';

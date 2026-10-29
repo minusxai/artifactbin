@@ -1,19 +1,10 @@
-import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
+import {prepareNativeIdentityAvatars, authorizeNativeIdentityTransaction, writeNativeIdentities} from '../../services/app/lib/native-identity-import';
 /** Actual product staging and atomic identity/catalog/comment/membership publication.
  * No account seed, grant, empty relation substitute or renderer replacement lives here. */
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {prepareNativeRuntimeBundle} from '../../services/app/lib/native-runtime-bridge';
-import type {NativeImmutableObjectSink} from '../../services/app/lib/native-history-import/catalog-contracts';
-import type {NativeRuntimeAssembly,NativeRuntimePreparationOptions} from '../../services/app/lib/native-runtime-bridge/contracts';
-import {writeNativeHistory} from '../../services/app/lib/native-history-import';
-import {prepareNativeHistoryRelations} from '../../services/app/lib/native-history-import/relations';
-import {prepareNativeArtifactRelations} from '../../services/app/lib/native-history-import/artifact-relations';
-import {canonicalNativeObjectSource} from '../../services/app/lib/native-history-import/catalog-source';
-import {createNativeLocalObjectSink} from '../../services/app/lib/native-history-import/catalog-staging';
-import {stageNativeCatalog} from '../../services/app/lib/native-history-import/catalog-objects';
-import {nativeCatalogDigest} from '../../services/app/lib/native-history-import/catalog-digest';
-import {authorizeNativeIdentityTransaction,writeNativeIdentities} from '../../services/app/lib/native-identity-import';
+import {prepareNativeRuntimeBundle, type NativeRuntimeAssembly, type NativeRuntimePreparationOptions} from '../../services/app/lib/native-runtime-bridge';
+import {type NativeImmutableObjectSink, writeNativeHistory, prepareNativeHistoryRelations, prepareNativeArtifactRelations, canonicalNativeObjectSource, createNativeLocalObjectSink, stageNativeCatalog, nativeCatalogDigest} from '../../services/app/lib/native-history-import';
 import type {NativeProductImportRecipe,NativeSerializedProductImportRecipe,NativeProductImportDb} from './native-migration-product-host-contract';
 /** Snapshot input before awaits; branded authorities are reconstructed from reviewed raw evidence. */
 export async function prepareNativeProductImport(raw:NativeProductImportRecipe|NativeSerializedProductImportRecipe,options:{catalogSink?:NativeImmutableObjectSink}={}){

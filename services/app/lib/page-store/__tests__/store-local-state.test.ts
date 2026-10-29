@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
-import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runDataflow } from '@/lib/sql';
 import { runLocalStateMutation, bindParams, bindTypes, initialTables, initialValues, mutationParams } from '@/lib/dataflow';
 import { compiledOf } from '@/test/helpers/compiled';
 import { createDataflowStore, type QueryTransport } from '../store';

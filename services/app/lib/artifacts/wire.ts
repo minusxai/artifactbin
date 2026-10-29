@@ -1,7 +1,7 @@
 import {monitoringGuidance} from './monitoring-guidance';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {artifactState} from './state';
-import {catalogOf} from '@/lib/datasets/catalog';
+import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
  * write body is validated, and the replace pipeline both write paths run.
@@ -18,14 +18,12 @@ import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { type ArtifactSummary, type ReplaceOpts } from './store';
 import { declarationsForRow } from './row-compile';
-import type { SourceRepair } from '@/lib/jsx/repair';
+import type { SourceRepair } from '@/lib/jsx';
 import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
-import { datasetCreateFields } from '@/lib/datasets/dataset-usage';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { json } from '@/lib/http/http';
+import { resolveStoredStoryDesign } from '@/lib/data';
+import { json } from '@/lib/http';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from './placement';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 

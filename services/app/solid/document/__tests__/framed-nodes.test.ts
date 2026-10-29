@@ -5,7 +5,7 @@
  */
 import { createRoot } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { createFramedStory, fetchFrameNodes } from '../create-framed-story';
 
 const PAGES = 'https://6869.pages.test';

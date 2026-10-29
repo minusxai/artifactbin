@@ -25,12 +25,11 @@
 import { paramSqlName, type ColumnType, type DatasetColumn, type Scalar, type StatementAnalysis } from '@artifactbin/contracts';
 import { loadSqlite, type Relation, type SqlExtensions, type SqliteEngine } from '@artifactbin/sql/core';
 import { isQueryFailure } from '@artifactbin/contracts';
-import type { JsxNode, ValidationError } from '@/lib/jsx';
+import { type JsxNode, type ValidationError, analyzeRowScopes } from '@/lib/jsx';
 import { BUILTIN_TABLES, builtinInput, CLOCK_FUNCTIONS, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { collectRefNameUses } from './ref-name-uses';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
-import { analyzeRowScopes } from '@/lib/jsx/row-scope';
 import { datasetSqlParams } from './sql-parameters';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
 

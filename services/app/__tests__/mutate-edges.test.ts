@@ -33,7 +33,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
-import { presenceChannel } from '@/lib/html-presence/channel.server';
+import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
 

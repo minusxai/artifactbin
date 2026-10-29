@@ -4,7 +4,7 @@ import type { Queryable } from "@artifactbin/contracts";
 import {
   nativeIdentityDigest,
   nativeIdentityTimestamp,
-} from "../native-identity-import/model";
+} from "../native-identity-import";
 import type {
   NativeArtifactRelationRow,
   NativeArtifactRelations,

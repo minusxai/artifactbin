@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-import {packOfflineHtmlImages,OfflineHtmlMediaError} from '../export/native-html-media';
+import {packOfflineHtmlImages,OfflineHtmlMediaError} from '../export';
 const html='<html><body><img data-af-id="image" src="ref:abc123"><svg><circle r="2"></circle></svg><img src="data:image/gif;base64,R0lGODlh"><a href="ref:doc123">Document</a></body></html>';
 it('packs only admitted image bytes and preserves original identities and portable SVG/data images',async()=>{
  const loadImage=vi.fn(async()=>({bytes:new Uint8Array([1,2,3]),mime:'image/png'}));

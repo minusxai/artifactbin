@@ -1,5 +1,5 @@
 import { withTokenAuth } from '@/lib/authentication';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 
 /**
  * POST /api/artifacts/:id/restore — the `restore_artifact` OPERATION: take a

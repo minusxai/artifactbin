@@ -3,9 +3,8 @@ import {agentDiscovery} from '@/lib/skills/agent-discovery';
 import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/agent-copy/agent-discovery';
 import {gettingStarted} from '@/lib/agent-copy/getting-started';
 import {existingPaste} from '@/lib/agent-copy/agent-copy';
-import {skillTree} from '@/lib/skills';
-import {skillPackageFiles} from '@/lib/skills/package';
-import {publicGuideText,llmsText} from '@/lib/agent-copy/agent-references.server';
+import {skillTree, skillPackageFiles} from '@/lib/skills';
+import {publicGuideText,llmsText} from '@/lib/agent-copy';
 import {buildSetupInstructions} from '@/lib/skills/setup-instructions';
 const BASE='https://example.test';
 describe('skill-first HTTP onboarding',()=>{

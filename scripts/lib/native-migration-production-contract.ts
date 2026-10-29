@@ -1,10 +1,10 @@
 import type { Db, Queryable } from '../../services/app/lib/platform';
 import type {S3Config} from '../../services/app/lib/object-store';
-import type {NativeImmutableObjectSink} from '../../services/app/lib/native-history-import/catalog-contracts';
+import type {NativeImmutableObjectSink} from '../../services/app/lib/native-history-import';
 import type {NativeHostFile,NativeHostKey} from './native-migration-host-contract';
 import type {NativeMigrationBootstrapOptions} from './native-migration-bootstrap-contract';
-import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
-import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders/contracts';
+import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import';
+import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders';
 import type {prepareNativeProductImport} from './native-migration-product-host';
 /** Private operator input. Connection strings and credentials never belong in this plan. */
 export interface NativeProductionPlan {

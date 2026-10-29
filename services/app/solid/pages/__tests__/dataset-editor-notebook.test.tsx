@@ -7,7 +7,7 @@ import '@testing-library/jest-dom/vitest';
  */
 import { cleanup, fireEvent, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogInput } from '@/lib/datasets/types';
+import type { CatalogInput } from '@/lib/datasets';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { addCell, catalog, change, click, connection, discover, editor, installDatasetFetch, pick, savedDefinition, selectOrders, state, tables } from '@/solid/test/dataset-catalog';
 

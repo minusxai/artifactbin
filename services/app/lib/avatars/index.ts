@@ -23,7 +23,7 @@ import { PUBLIC_BASE_URL } from '../platform';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { replaceUserImageKey } from '@/lib/accounts';
 import { objectKey, objectStore, type ObjectStore } from '../object-store/index';
-import { sniffImageType } from '../web-ingest/sniff';
+import { sniffImageType } from '../web-ingest';
 
 /** Where a person's picture is served from; public by id, like the handle. */
 export const avatarPath = (userId: string): string => `/api/users/${encodeURIComponent(userId)}/avatar`;

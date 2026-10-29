@@ -8,8 +8,8 @@ import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {artifactState,getArtifactById} from '@/lib/artifacts';
-import {createArtifactFromBody} from '@/lib/publish/publish/requests';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {createArtifactFromBody} from '@/lib/publish';
+import {loadDatasetRows} from '@/lib/datasets';
 import {account,datasetFixture,type Db} from './dataset-fixture';
 import {canUseDataPolicy,datasetPolicyRequest,readDatasetPolicy,respondToMutate,writeDatasetPolicy} from '@/lib/document-data';
 

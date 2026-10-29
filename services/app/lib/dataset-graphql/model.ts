@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type { DatasetCellValue,DatasetColumn,DatasetColumnDescriptor,DatasetReadRequest,DatasetRowFilter,DatasetRowChange,Scalar } from '@artifactbin/contracts';
-import type {DatasetTable} from '@/lib/datasets/types';
+import type {DatasetTable} from '@/lib/datasets';
 import type {DatasetStatement,DatasetRowIdentitySidecar} from './types';
 export const ID_COLUMN='__af_graphql_row_id';
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('base64url');

@@ -10,11 +10,11 @@ import { compile } from 'tailwindcss';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
+import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui';
 import { STORY_WYSIWYG_CLASSES } from './typography';
 import { storyMotionKitCss } from './motion';
 import { storyThemeCss } from './story-themes';
-import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
+import { COLOR_PALETTE } from '@/lib/chart';
 import { extractClassCandidates, isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from './story-css';
 
 // The stylesheet each story is compiled against. `dark:` keys off the `.dark` class

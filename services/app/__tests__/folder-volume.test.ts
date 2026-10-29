@@ -13,10 +13,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
-import { getArtifactById } from '@/lib/artifacts';
-import { childrenTableFor } from '@/lib/artifacts/placement';
+import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
 import { getDb, measureQueries } from '@/lib/platform';
-import { folderPageFor } from '@/lib/workspace/folders';
+import { folderPageFor } from '@/lib/workspace';
 import { mintAccountToken, request, useAppHarness } from './harness';
 
 useAppHarness();

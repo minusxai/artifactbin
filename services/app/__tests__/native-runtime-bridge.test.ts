@@ -9,10 +9,9 @@ import {getDb} from '@/lib/platform';
 import {importNativeHistory} from '@/lib/native-history-import';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {readHtmlPage} from '@/lib/html-publication';
-import {prepareNativeRuntimeBundle} from '@/lib/native-runtime-bridge';
+import {prepareNativeRuntimeBundle, type NativeRuntimeAssembly} from '@/lib/native-runtime-bridge';
 import {rewriteNativeRuntimePdfLinks} from '@/lib/native-runtime-bridge/pdf-source';
-import type {NativeRuntimeAssembly} from '@/lib/native-runtime-bridge/contracts';
-import {sniffAssetType} from '@/lib/web-ingest/sniff';
+import {sniffAssetType} from '@/lib/web-ingest';
 // This file exercises the real upload path with a 4.35 MB PDF. Use the regular
 // production tier limits here; the API size-boundary tests keep their small caps.
 vi.mock('@/lib/platform/config',async importOriginal=>{

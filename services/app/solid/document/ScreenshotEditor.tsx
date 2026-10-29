@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import type { CapturedImage } from '@/lib/capture/contract';
+import type { CapturedImage } from '@/lib/capture';
 import { encodePng } from '@/lib/capture/png';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
 import Undo2 from 'lucide-solid/icons/undo-2';

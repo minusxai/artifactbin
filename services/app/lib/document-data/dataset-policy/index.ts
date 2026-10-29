@@ -1,16 +1,11 @@
 import { grantMutationPolicy } from '@artifactbin/utils';
-import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument } from '@/lib/artifacts';
-import {validateDatasetPolicyForRow} from '@/lib/datasets/policy/validation';
-import { policySession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
+import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument, canReadArtifact, effectiveRole, commitDatasetPolicy, writerFor, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
+import {validateDatasetPolicyForRow, policySession, viewerMutationPolicy, catalogOf} from '@/lib/datasets';
 import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutationPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform';
-import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
-import { commitDatasetPolicy, writerFor, type ArtifactRow } from '@/lib/artifacts';
 import { policyReaderSql } from '@/lib/artifacts/table';
 import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor } from '@/lib/artifacts';
-import { catalogOf } from '@/lib/datasets/catalog';
 
 export async function canUseDataPolicy(
   dataset: ArtifactRow,

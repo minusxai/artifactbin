@@ -18,10 +18,9 @@
  * itself to be.
  */
 import { withTokenAuth } from '@/lib/authentication';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 import { json, readJson } from '@/lib/http';
-import { annotationAuthorForRequest } from '@/lib/annotations';
-import { deleteAnnotationFor } from '@/lib/annotations';
+import { annotationAuthorForRequest, deleteAnnotationFor } from '@/lib/annotations';
 
 export const POST = withTokenAuth(async (request: Request, { actor, params, clientHarness }) => {
   const body = await readJson(request);

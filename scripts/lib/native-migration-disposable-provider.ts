@@ -5,7 +5,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
+import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import';
 import type {NativeDisposableLifecycleConfiguration,NativeDisposableAdapterConfiguration,NativeDisposableRequest,NativeDisposableContext,NativeDisposableFile,NativeDisposableLifecycle} from './native-migration-disposable-provider-contract';
 const execute=promisify(execFile),sha=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 const digest=(value:unknown)=>sha(JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a<b?-1:a>b?1:0)):item));

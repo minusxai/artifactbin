@@ -20,9 +20,8 @@
 import { Button } from '../ui/Button';
 import { createEffect, createMemo, lazy, Match, Show, Switch, untrack, type JSX } from 'solid-js';
 import { useLocation, useParams } from '@solidjs/router';
-import type { FolderPage as FolderData } from '@/lib/workspace/folders';
+import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import type { ArtifactRole } from '@artifactbin/contracts';
-import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { claimServedPath } from '../lib/served-frame';
 import { isDocumentFormat, knownFormat } from '../lib/artifact-link';

@@ -1,5 +1,5 @@
 import { getArtifactById } from '@/lib/artifacts';
-import { canonicalArtifactPath } from '@/lib/http/urls';
+import { canonicalArtifactPath } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
 
 /**

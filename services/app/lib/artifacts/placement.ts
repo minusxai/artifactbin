@@ -24,8 +24,7 @@ import { effectiveRole, roleWithoutLink } from './access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { renderSparklineSvg } from '@/lib/viz/sparkline';
-import { dailySeries } from '@/lib/viz/daily-series';
+import { renderSparklineSvg, dailySeries } from '@/lib/viz';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.

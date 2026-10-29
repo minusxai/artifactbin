@@ -11,14 +11,14 @@
  */
 import { batch, createContext, createEffect, createSignal, For, onCleanup, Show, useContext, type Component, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { StoryEditRect } from '@/lib/edit-protocol';
 import Check from 'lucide-solid/icons/check';
 import PenLine from 'lucide-solid/icons/pen-line';
 import Reply from 'lucide-solid/icons/reply';
 import X from 'lucide-solid/icons/x';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
 import { remoteWorkLabel } from '@/lib/annotations/remote-reply';
 import { agentNameColor } from '../lib/agent-identity';

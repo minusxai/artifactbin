@@ -1,8 +1,8 @@
-import { registeredPlan } from "@/lib/registered-page-queries/registry";
+import { registeredPlan } from "@/lib/registered-page-queries";
 import type { HtmlBackendLink, HtmlPageVersion } from "@artifactbin/contracts";
 import type { HtmlBackendVersionRecord } from "@/lib/html-backends";
 import type { Queryable } from "@artifactbin/contracts";
-import { validateDatasetPolicyForRow } from "@/lib/datasets/policy/validation";
+import { validateDatasetPolicyForRow } from "@/lib/datasets";
 import { nativeCatalogDigest } from "./catalog-digest";
 import { validateNativeCatalogDatasetSelection, validateNativeCatalogRevisionScope } from "./catalog-selection";
 import type {

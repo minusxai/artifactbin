@@ -11,7 +11,7 @@
  * callback — on PGLite the transaction holds the serialized op queue, so an
  * unawaited query enqueued behind it deadlocks. Fire after the txn resolves.
  *
- * The `client` column is the harness guess from lib/platform/client-identity, derived
+ * The `client` column is the harness guess from lib/accounts/client-identity, derived
  * from the request's User-Agent via the request context — so lib callers need
  * no signature change to carry it. Outside a request scope (tests calling
  * helpers directly) the column stays NULL.
@@ -30,7 +30,8 @@
  */
 import { createHash } from 'crypto';
 import type { EventEnvelope, EventVerb } from '@artifactbin/contracts';
-import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, forwardedFor, getDb, identifyClient, services, type EventSubject } from '../platform';
+import { forwardedFor, identifyClient } from '../accounts';
+import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS, currentHeaders, emit, envelope, getDb, services, type EventSubject } from '../platform';
 
 type AnalyticsEvent =
   | 'view'
@@ -179,7 +180,7 @@ async function analyticsIdentity(userId?:string|null):Promise<{client:string|nul
     // and the secret keeps the tiny IPv4 space from being brute-forced back
     // out of the hash. The user id joins the hash when present, so two
     // accounts behind one NAT + browser still count as two people. The IP is
-    // the hop the nearest TRUSTED proxy appended (lib/platform/client-identity
+    // the hop the nearest TRUSTED proxy appended (lib/accounts/client-identity
     // forwardedFor) — reading the caller-supplied head instead would let a
     // header split one visitor into unlimited distinct ones.
     const ip = forwardedFor(h, TRUSTED_PROXY_HOPS);

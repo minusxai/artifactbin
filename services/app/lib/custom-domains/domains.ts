@@ -28,7 +28,7 @@ import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
 import { urlHash } from '@/lib/document';
-import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
+import { canonicalArtifactPath, domainPostPath } from '@/lib/http';
 import { ANONYMOUS_ACTOR, isTestAccount, ownerUsername } from '@/lib/accounts';
 
 type DomainStatus = 'pending' | 'verified';

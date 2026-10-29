@@ -5,7 +5,7 @@
  * the removed `_signals` row is refused at publish with what to use instead.
  */
 import { describe, expect, it } from 'vitest';
-import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runDataflow } from '@/lib/sql';
 import { dataRefs, queriesReadingValues } from '../compiled-flow';
 import { collectRefUses } from '../refs';
 import { compiledOf } from '@/test/helpers/compiled';

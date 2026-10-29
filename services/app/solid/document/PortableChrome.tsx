@@ -11,7 +11,7 @@ import { Menu, type MenuEntry } from '../ui/Menu';
 import { Dialog } from '../ui/Dialog';
 import { Field, Input } from '../ui/Field';
 import { portablePublishOrigin, PORTABLE_CHROME_HEIGHT } from '@/lib/html-runtime/portable-chrome-contract';
-import type { PortableChromeIdentity, PortablePreviewStatus, SavePortableOptions, PortableChromeOptions, PortableChromeUpdate } from '@/lib/html-runtime/portable-chrome-contract';
+import type { PortableChromeIdentity, PortablePreviewStatus, SavePortableOptions, PortableChromeOptions, PortableChromeUpdate } from '@/lib/html-runtime';
 
 const LABEL = {
   offline: 'Offline', connecting: 'Connecting…', connected: 'Connected', 'signin-required': 'Sign in required',

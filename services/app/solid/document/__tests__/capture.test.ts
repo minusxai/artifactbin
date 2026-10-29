@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { createRoot, createSignal } from 'solid-js';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { createCommentCapture } from '../CommentCapture';
 
 vi.mock('@/lib/capture/screen', () => ({

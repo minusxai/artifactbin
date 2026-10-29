@@ -13,9 +13,8 @@
  * `<Chart>`, leaves the source untouched. A stale path arriving from a
  * remounted canvas must never corrupt a story body.
  */
-import type { JsonValue } from '@/lib/jsx/types';
+import { type JsonValue, parseJsx } from '@/lib/jsx';
 import { refName } from '@/lib/dataflow/dataflow';
-import { parseJsx } from '@/lib/jsx';
 import { resolveJsxNodeAtPath, setStaticJsxAttr, updateJsxElementAtPath } from './jsx-edit';
 
 /** A vega-lite envelope as stored in the `viz` prop. */

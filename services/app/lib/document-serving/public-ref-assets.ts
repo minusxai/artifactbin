@@ -1,8 +1,8 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import type { WebAssetKind } from '@/lib/publish/assets/web-assets';
-import { serveStoredFile } from '@/lib/datasets/file-store';
+import type { WebAssetKind } from '@/lib/publish';
+import { serveStoredFile } from '@/lib/datasets';
 import { NO_STORE } from './cache-control';
 
 /** A read grant, login, token, or export key never widens a referenced file. */

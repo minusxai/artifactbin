@@ -1,11 +1,10 @@
 import {it,expect} from 'vitest';
 import {createHash} from 'node:crypto';
 import {signActor,verifyActor} from '@artifactbin/utils';
-import {pageBackendOperation} from '@/lib/page-operations/transport';
+import {pageBackendOperation, localPageBackendCapability} from '@/lib/page-operations';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {createRunner} from '@artifactbin/runner/local';
 import {setServices} from '@/lib/platform';
-import {localPageBackendCapability} from '@/lib/page-operations';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {GET as artifactGet,PUT as artifactPut} from '@/app/api/artifacts/[id]/route';
 import {GET,POST} from '@/app/api/artifacts/[id]/graphql/route';

@@ -10,8 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {loadSkillAssets} from '../skills/assets';
-import {skillTree} from '../skills';
-import {joinSoftBreaks} from '../skills/tree';
+import {skillTree, joinSoftBreaks} from '../skills';
 
 const ROOT = fileURLToPath(new URL('../../skills/artifactbin/', import.meta.url));
 const MAX_LINES = 200;

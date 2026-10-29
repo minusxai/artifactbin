@@ -2,17 +2,12 @@
 import {getGroupRole} from '@/lib/groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from './context';
 import {explicitNotificationMemberships} from './membership';
-import { grantsOf, grantsPermitRead, readThrough, type ReadRow } from '@/lib/artifacts';
-import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/artifacts';
+import { grantsOf, grantsPermitRead, readThrough, type ReadRow, liveAccessFacts, preloadAccessFacts, type AccessFacts, type ArtifactRow, documentEditorReaches } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
-import type { ArtifactRow } from '@/lib/artifacts';
 import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts';
-import { documentEditorReaches } from '@/lib/artifacts';
-import {catalogOf} from '@/lib/datasets/catalog';
+import {catalogOf, resolveDatasetConnection, DatasetError} from '@/lib/datasets';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
 import {NotificationExecutionError} from './errors';
-import {resolveDatasetConnection} from '@/lib/datasets/secrets';
-import {DatasetError} from '@/lib/datasets/errors';
 
 interface Account {id:string;email:string|null;kind:string;expires_at:string|null}
 interface LiveToken {id:string;user_id:string|null;expires_at:string|null;audience:string|null;scope:string|null}

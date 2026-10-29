@@ -14,11 +14,9 @@
  *
  * Browser safe by construction: nothing here reads the database or the network.
  */
-import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
-import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';
+import { STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface';
 import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from './chrome-css';
-import { getStoryFontCss } from '@/lib/data/story/story-fonts';
+import { getStoryFontCss } from '@/lib/data';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 export interface StoryBaseCssRecipe {

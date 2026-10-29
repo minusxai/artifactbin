@@ -1,31 +1,18 @@
-import { canReadArtifact, ownsArtifact } from '@/lib/artifacts';
-import { ANONYMOUS_ACTOR } from '@/lib/accounts';
-import { type ArtifactHeader, type ArtifactRow, writerFor } from '@/lib/artifacts';
-import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
-import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
-import { executeDocumentQueries, type DocumentQuerySourceMode } from '../datasets/document-queries';
+import { canReadArtifact, ownsArtifact, type ArtifactHeader, type ArtifactRow, writerFor, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts, compileErrorText, compileResultForRow, compiledForRow, declarationsForRow, grantContext, grantsOf, grantsPermitRead, can, refusalFor, type CapabilityRefusal, pinMutationContext, type MutationReceipt, childrenTableFor } from '@/lib/artifacts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { executeDocumentQueries, type DocumentQuerySourceMode } from '../datasets';
 import { JOIN_RELATIONS } from '@/lib/social';
-import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
-import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
-import { can, refusalFor, type CapabilityRefusal } from '@/lib/artifacts';
-import { pinMutationContext, type MutationReceipt } from '@/lib/artifacts';
+import { validateUserWrites, userOptions, people, catalogOf, schemaLoaderFor, type ServerRefLoader, importedRows, importedTables, storedRowStats } from '@/lib/datasets';
 import { notificationContextSnapshot } from '@/lib/notifications';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
-import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb } from '../platform';
 import { displayTitle, declarationsOf } from '../document';
 import { compileWithLoader } from '@/lib/dataflow/server';
-import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { canWriteDataset, mutationPolicy, type WriteRefusal } from './dataset-policy';
 import { isMutationRefused, mutateDataset } from './dataset-mutate';
-import { runMutation } from '@/lib/sql/engine';
-import { sqlExtensions } from '@/lib/sql/extensions';
-import { importedRows, importedTables } from '@/lib/datasets/catalog';
-import { storedRowStats } from '@/lib/datasets/dataset-store';
-import { childrenTableFor } from '@/lib/artifacts';
+import { runMutation, sqlExtensions } from '@/lib/sql';
 import type { RanDataflow } from '@/lib/story-runtime/contract';
 
 /**
@@ -348,7 +335,7 @@ type DatasetResolver = (id: string, mode?: DocumentQuerySourceMode) => Promise<R
 type ImportCache = Map<string, Promise<RefData | null>>;
 
 /** What a resolved ref contributes to the run: its tables by import name, or the catalog a query runs inside. */
-type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
+type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets').DatasetCatalog };
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
 export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
@@ -400,7 +387,7 @@ const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<Art
  * carry no row-level rules today (a read grant is the whole dataset), so the
  * dataset's rows are exactly what the viewer may read.
  */
-async function holdableDataset(row: ArtifactHeader, ref: string, viewer: AccessActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
+async function holdableDataset(row: ArtifactHeader, ref: string, viewer: AccessActor | null): Promise<import('@/lib/datasets').DatasetCatalog | null> {
   const dataset = await importedArtifactFor(row, ref);
   if (!dataset || dataset.format !== 'dataset') return null;
   const reader = viewer ?? ANONYMOUS_ACTOR;

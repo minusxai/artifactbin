@@ -44,7 +44,7 @@ import { createFrameBridgeParent, relayedRequest, urlValuesOf } from '@/lib/stor
 import { createFramedStory } from '@/solid/document/create-framed-story';
 import { createRoot, createSignal } from 'solid-js';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { STORY_ADOPT_HOOK, STORY_DOCUMENT_MESSAGE, STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 
 const APP = 'https://app.test';

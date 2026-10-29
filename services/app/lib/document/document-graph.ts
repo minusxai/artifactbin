@@ -7,7 +7,7 @@ export type {DocumentGraph,DocumentGraphNode} from '@artifactbin/contracts';
 const randomUUID=()=>runtimeId();
 const byteLength=(value:string)=>new TextEncoder().encode(value).length;
 import type {DocumentPath} from '@artifactbin/contracts';
-import type {JsxNode} from '../jsx/types';
+import type {JsxNode} from '../jsx';
 import {parseJsx} from '../jsx/parse';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {serializeJsx} from '../jsx/serialize';

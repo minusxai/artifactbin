@@ -8,7 +8,7 @@
  * here so no caller has to know where an image's bytes are.
  */
 import { objectKey, objectStore } from '@/lib/object-store';
-import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
+import { VARIANT_CONTENT_TYPE } from '@/lib/images';
 
 /** The image content types the tier accepts. */
 export const IMAGE_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'] as const;

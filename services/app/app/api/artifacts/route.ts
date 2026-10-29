@@ -1,9 +1,9 @@
-import { createArtifactFromBody } from '@/lib/publish/publish';
+import { createArtifactFromBody } from '@/lib/publish';
 import { withTokenAuth } from '@/lib/authentication';
 import { type TokenHoldingActor } from '@/lib/accounts';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
-import { readFileUpload } from '@/lib/datasets/file-store';
+import { readFileUpload } from '@/lib/datasets';
 
 /**
  * The one create path both auth modes share (bearer here, session in

@@ -21,7 +21,7 @@ import { adoptServedFrame } from '@/solid/lib/served-frame';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import { commentAccess } from '../document/comment-access';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';

@@ -9,12 +9,10 @@
  * present and unforgeable.
  */
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
-import {runOperation} from '@/lib/operations/http';
+import {runOperation} from '@/lib/operations';
 import { ensureUserToken, withAccountToken } from '@/lib/accounts';
-import { getEditableArtifactFor } from '@/lib/artifacts';
-import {updateMetadataFromBody} from '@/lib/artifacts';
+import { getEditableArtifactFor, updateMetadataFromBody, canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { browserActor } from '@/lib/authentication';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { trashArtifactFor } from '@/lib/workspace';
 import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 

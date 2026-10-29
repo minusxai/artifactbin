@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AnnotationPreview } from '../AnnotationPreview';
 import { preloadCommentField } from '../LazyCommentField';

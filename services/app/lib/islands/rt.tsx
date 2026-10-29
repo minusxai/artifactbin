@@ -21,7 +21,7 @@ import { batch, createComponent, createMemo, createRoot, createSignal, For, shar
 import type { Component, JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
-import type { ReactiveExpression } from '@/lib/jsx/reactive';
+import type { ReactiveExpression } from '@/lib/jsx';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/jsx/row-scope';
 import { keyedRowsError } from '@/lib/story-ui/row-key';

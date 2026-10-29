@@ -1,6 +1,6 @@
 /** `/af/components/<file>` (lib/libraries/components.server): entries revalidate (`no-cache` + ETag), chunks are immutable. */
-import { COMPONENT_CHUNK, loadComponentFile } from '@/lib/libraries/components.server';
-import { matchingTag, withEncoding } from '@/lib/http/revalidation';
+import { COMPONENT_CHUNK, loadComponentFile } from '@/lib/libraries/server';
+import { matchingTag, withEncoding } from '@/lib/http';
 import { NO_CACHE, NO_STORE, PUBLIC_IMMUTABLE } from './cache-control';
 
 export async function componentModuleResponse(request: Request, file: string): Promise<Response> {

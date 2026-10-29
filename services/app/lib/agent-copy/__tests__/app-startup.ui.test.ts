@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { agentDiscovery, agentDiscoveryBody } from '@/lib/agent-copy/agent-discovery';
+import { agentDiscovery, agentDiscoveryBody } from '../agent-discovery';
 
 it('paints a named product loading status before JavaScript and keeps help in the no-script fallback', () => {
   const host = document.createElement('div');

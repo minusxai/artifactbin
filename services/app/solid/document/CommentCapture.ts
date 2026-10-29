@@ -3,7 +3,7 @@ import { beginCapture } from '@/lib/capture/screen';
 import { encodePng } from '@/lib/capture/png';
 import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 
 /** What the server stores (lib/annotations/comment-images decodes exactly these). */

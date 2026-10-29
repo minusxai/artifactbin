@@ -56,7 +56,7 @@ describe('a route that throws the refusal', () => {
   it('answers 410 unservable_document, not a bare 500', async () => {
     const { Hono } = await import('hono');
     const { mountRoutes } = await import('../api');
-    const { UnservableDocument } = await import('@/lib/artifacts/servable');
+    const { UnservableDocument } = await import('@/lib/artifacts');
     const routes = [{ path: '/api/refuse', dir: '/api/refuse', methods: ['GET'] as const, module: { GET: () => { throw new UnservableDocument(2, 'unreadable'); } } }];
     const api = new Hono();
     mountRoutes(api, routes as unknown as Parameters<typeof mountRoutes>[1]);

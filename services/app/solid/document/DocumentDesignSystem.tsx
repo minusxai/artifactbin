@@ -8,7 +8,7 @@
 import { createSignal, Show, type JSX } from 'solid-js';
 import ThemePicker from '../editor/ThemePicker';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
-import type { StoryDesignName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation';
 import { HTML_SYSTEM_MODES } from '@/lib/data/html/html-system-modes';
 
 /** The mode a system opens in: the viewer's own pick still wins (the page decides). */

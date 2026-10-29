@@ -2,10 +2,7 @@ import { getVersionFor, readableArtifact, refusingUnservable, servableDocument }
 /** Authenticated immutable content reads never use public serving/import paths. */
 import { withTokenAuth } from '@/lib/authentication';
 import { canEdit } from '@artifactbin/contracts';
-import {serveStoredFile} from '@/lib/datasets/file-store';
-import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
-import {serializeDatasetDefinition} from '@/lib/datasets/definition';
-import type {DatasetCatalog} from '@/lib/datasets/types';
+import {serveStoredFile, catalogOf, publicCatalogOf, serializeDatasetDefinition, type DatasetCatalog} from '@/lib/datasets';
 import {objectStore} from '@/lib/object-store';
 import {json} from '@/lib/http';
 

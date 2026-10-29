@@ -12,7 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { STORY_FRAME_HASH_MESSAGE, type ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import * as documentNavigation from '../lib/document-navigation';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import type { FramedStory } from '../document/create-framed-story';
 
 let mockRole = 'commenter';

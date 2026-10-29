@@ -15,7 +15,7 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactbin/contracts';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/islands/file-display';
 import { rowTitle } from '@/lib/document/display-title';

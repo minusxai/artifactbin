@@ -3,7 +3,7 @@ import { identityForUser } from '@/lib/accounts';
 import {useAppHarness} from './harness';
 import {prepareContentInput,applyPreparedContent} from '@/lib/publish/prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
-import {prepareCatalog} from '@/lib/datasets/catalog';
+import {prepareCatalog} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 useAppHarness();
 const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" /></svg>');

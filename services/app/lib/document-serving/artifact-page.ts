@@ -2,7 +2,7 @@ import {htmlAppearance} from '@/lib/html-page';
 import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
-import { publicCatalogOf } from '@/lib/datasets/catalog';
+import { publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -18,34 +18,26 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
-import { UnservableDocument } from '@/lib/artifacts';
-import { countOpenAnnotations } from '@/lib/annotations/store';
-import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
-import { accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
-import { folderPageFor } from '@/lib/workspace/folders';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
+import { archivedVersionFor, servedRow, holdsCreatingToken, UnservableDocument, canReadArtifact, effectiveRole, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { countOpenAnnotations } from '@/lib/annotations';
+import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
+import { resolveStoredStoryDesign } from '@/lib/data';
 import { verifyExportKey } from '@/lib/export';
-import { baseUrl, json, parseCookie } from '@/lib/http/http';
+import { baseUrl, json, parseCookie, canonicalArtifactPath, etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
 import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
 import { count, has } from '@/lib/social';
 import { getUserById, issuePagesTicket, ownerUsername } from '@/lib/accounts';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import {ARTIFACT_FORMATS, type ArtifactFormat, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
-import { canonicalArtifactPath } from '@/lib/http/urls';
-import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
-import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http/revalidation';
-import { captureColor } from '@/lib/mermaid-images/store';
-import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
+import type { StoryDesignName } from '@/lib/validation';
+import { captureColor } from '@/lib/mermaid-images';
 import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
-import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
+import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http';
 import {storedCspExtensions} from '@/lib/document';
-import { carriedTrust,cspRequestFor } from '@/lib/trust/document-trust';
+import { carriedTrust,cspRequestFor } from '@/lib/trust';
 import type { DocumentFrame } from './document-frame';
 import { NO_STORE } from './cache-control';
 

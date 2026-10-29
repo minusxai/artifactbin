@@ -1,5 +1,5 @@
 import { browserActor, sessionActor } from '@/lib/authentication';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 import { membershipState, MembershipError } from '@/lib/artifacts';
 import { json, readJson, unauthorized } from '@/lib/http';
 type Ctx={params:Promise<{id:string}>};

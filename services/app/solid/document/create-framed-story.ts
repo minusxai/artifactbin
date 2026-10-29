@@ -13,7 +13,7 @@
  * one; the page owns its layout.
  */
 import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';

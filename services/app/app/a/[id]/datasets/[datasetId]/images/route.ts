@@ -1,5 +1,5 @@
 import { sessionActor, refusesCrossSite } from '@/lib/authentication';
-import { DatasetError } from '@/lib/datasets/errors';
+import { DatasetError } from '@/lib/datasets';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { uploadDatasetImage } from '@/lib/document-data';
 import { MAX_IMAGE_BYTES, ID_RE } from '@/lib/platform';

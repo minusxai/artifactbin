@@ -14,7 +14,7 @@
  * it through {@link refusingUnservable}. On production such rows survive only in archived versions and
  * trashed heads, and the database dump taken before the backfills holds their bytes.
  */
-import { json } from '../http/http';
+import { json } from '../http';
 import { hasCurrentDataSyntax } from '@/lib/dataflow/server';
 
 const STATUS = 410;

@@ -60,7 +60,7 @@
  * scrolls horizontally. `clip`, never `hidden`: clip does not create a scroll
  * container, so overflow-y stays visible and sticky descendants are untouched.
  */
-import { MARKDOWN_CSS } from '@/lib/markdown/styles';
+import { MARKDOWN_CSS } from '@/lib/markdown';
 export const STORY_COLUMN_CSS = MARKDOWN_CSS + `
 .mx-doc { flex: 1 1 auto; min-width: 0; container-type: inline-size; overflow-x: clip; }
 .mx-doc--document { box-sizing: border-box; width: 100%; max-width: 816px; margin-inline: auto; padding: 48px 24px 96px; overflow-wrap: anywhere; }

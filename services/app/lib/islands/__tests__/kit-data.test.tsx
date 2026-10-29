@@ -22,7 +22,7 @@ import { createIslandRuntime } from '../rt';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/page-store/store';
 import { Button } from '../kit/basic';
 import { compiledOf } from '@/test/helpers/compiled';
-import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runDataflow } from '@/lib/sql';
 import { createSqliteSql } from '@artifactbin/sql/sqlite';
 import { loadSqlite } from '@artifactbin/sql/core';
 import { createPageEngine } from '@/lib/page-store/page-engine';

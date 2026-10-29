@@ -1,11 +1,10 @@
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import {getAccountPreferences,getGroupRole} from '../groups';
-import {selectNewArtifactDestination} from '../groups/destination';
+import {getAccountPreferences, getGroupRole, selectNewArtifactDestination} from '../groups';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
 import { getDb, type Queryable } from '../platform';
-import {DatasetError} from '../datasets/errors';
+import {DatasetError} from '../datasets';
 import type { ArtifactRow } from './table';
 
 export function parseArtifactDestination(value:unknown):ArtifactDestination|undefined {

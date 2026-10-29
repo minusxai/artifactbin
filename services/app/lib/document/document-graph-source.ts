@@ -1,7 +1,7 @@
 /** The source editor's identity boundary. Authored IDs survive moves; anonymous
  * nodes are matched only within an identified parent. Ambiguous matches become
  * replacements, which conservatively consume the old subtree on commit. */
-import type {JsxNode} from '../jsx/types';
+import type {JsxNode} from '../jsx';
 import {parseJsx} from '../jsx/parse';
 import {serializeJsx} from '../jsx/serialize';
 import {createDocumentGraph,graphNodes,type DocumentGraph,type GraphAstNode} from './document-graph';

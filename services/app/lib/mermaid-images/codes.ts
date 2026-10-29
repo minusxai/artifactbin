@@ -4,8 +4,7 @@
  * reader paths (which drawings to look up) and the harvest (which drawings to
  * expect).
  */
-import type { JsxNode } from '@/lib/jsx';
-import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
+import { type JsxNode, mermaidSourceError } from '@/lib/jsx';
 
 export function mermaidCodesOf(nodes: readonly JsxNode[]): string[] {
   const codes = new Set<string>();

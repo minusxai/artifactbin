@@ -19,7 +19,7 @@
  */
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { advanceBrowserDocument, prepareBrowserDocumentUpdate, preparesOffThread, warmBrowserPreparer } from '@/lib/document/document-authoring-client';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-engine/annotation-map';
 import { rebaseEditBatch } from '@/lib/document/edit-batch';
 import { sourceChanges } from '@/lib/editor-engine/history';

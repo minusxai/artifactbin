@@ -15,11 +15,10 @@ import { readerDataflow } from '@/lib/dataflow';
  */
 import { type ArtifactRow, declarationsForRow, servableDocument } from '@/lib/artifacts';
 import { datasetsForDocument } from '@/lib/document-data';
-import { currentStoryCss } from '@/lib/data/story/story-css.server';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
+import { currentStoryCss, resolveStoredStoryDesign } from '@/lib/data';
 import { authorHandle } from '@/lib/accounts';
-import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import type { StoryDesignName } from '@/lib/validation';
+import { loadDatasetRows } from '@/lib/datasets';
 import type { ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import { storyUpdateParts, assetLookupFrom, firstHeadingTitle } from '../../document';
 import { webAssetsForSource } from '../assets/web-assets';

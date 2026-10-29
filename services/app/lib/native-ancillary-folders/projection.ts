@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import type {NativeIdentityPlan} from '@/lib/native-identity-import/contracts';
+import type {NativeIdentityPlan} from '@/lib/native-identity-import';
 import type {NativeAncillaryFolderRecipe,NativeAncillaryEncodedBytes,NativeLineageApproval,NativeLineageSelection} from './contracts';
 type LegacyRow=Record<string,unknown>;
 interface FolderIdentityPlan extends NativeIdentityPlan {artifactIds:Readonly<Record<string,string>>}

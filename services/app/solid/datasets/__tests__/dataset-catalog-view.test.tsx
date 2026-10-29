@@ -8,7 +8,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import { DatasetCatalogView } from '../DatasetCatalogView';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

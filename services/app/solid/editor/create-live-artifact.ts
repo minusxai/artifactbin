@@ -1,4 +1,4 @@
-import type {PresenceFrame} from '@/lib/html-presence/contract';
+import type {PresenceFrame} from '@/lib/html-presence';
 /**
  * Subscribe a mounted page to its
  * artifact's live document (`GET /a/<id>/events`).
@@ -24,8 +24,8 @@ import type {PresenceFrame} from '@/lib/html-presence/contract';
  * with no ref-mirroring needed, since a live getter already reads the latest.
  */
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
-import type { AnnotationWire } from '@/lib/annotations/store';
-import type { ReaderArtifactBackend } from '@/lib/artifact-backend/types';
+import type { AnnotationWire } from '@/lib/annotations';
+import type { ReaderArtifactBackend } from '@/lib/artifact-backend';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { liveBackoffDelay } from '@/lib/http/live-stream';
 

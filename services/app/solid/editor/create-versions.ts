@@ -19,7 +19,7 @@
  */
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
 import { restoreBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
-import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary } from '@/lib/artifact-backend';
 
 
 interface ArtifactVersionsOptions {

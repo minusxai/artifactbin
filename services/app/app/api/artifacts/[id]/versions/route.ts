@@ -1,5 +1,5 @@
 import { withTokenAuth } from '@/lib/authentication';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 
 /** GET /api/artifacts/:id/versions — archived versions, newest first, no content. */
 export const GET = withTokenAuth((request: Request, { actor, params }) =>

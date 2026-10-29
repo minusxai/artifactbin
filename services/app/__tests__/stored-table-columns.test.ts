@@ -8,9 +8,8 @@
 import { expect, it } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { artifactState } from '@/lib/artifacts';
-import { catalogOf } from '@/lib/datasets/catalog';
+import { getArtifactById, artifactState } from '@/lib/artifacts';
+import { catalogOf } from '@/lib/datasets';
 import { executeCatalog } from '@/lib/datasets/execute';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from './harness';

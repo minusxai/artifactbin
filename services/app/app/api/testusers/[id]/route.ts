@@ -1,5 +1,5 @@
 import { withTokenAuth } from '@/lib/authentication';
-import { runOperation } from '@/lib/operations/http';
+import { runOperation } from '@/lib/operations';
 
 /**
  * DELETE /api/testusers/:id — the `testuser_delete` OPERATION.

@@ -1,6 +1,6 @@
 /** Transfer safety without loading unrelated users' document graphs into the app. */
 import type { Queryable } from '../platform';
-import {DatasetError} from '../datasets/errors';
+import {DatasetError} from '../datasets';
 import type { ArtifactRow } from './table';
 
 const dependencies=(row:ArtifactRow):string[]=>[

@@ -9,7 +9,7 @@
  * stylesheet at build time; the server preloads APP_SHELL_FONT_PRELOADS on the
  * pages whose first screen is the shell's (server/app).
  */
-import fontManifest from '@/lib/data/story/story-font-manifest.json';
+import { storyFontManifest as fontManifest } from '@/lib/data';
 
 export interface AppFontFace {
   family: string;

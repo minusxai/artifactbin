@@ -1,7 +1,7 @@
 /** Notification shaping over the same server query execution used by document reads. */
 import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type MutationNotificationPlan,type NotificationSource,type TableResult} from '@artifactbin/contracts';
 import {NotificationExecutionError,notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal,notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications';
-import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets/document-queries';
+import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets';
 import { selectQueries, platformValues, DataflowResultError, type Row } from '@/lib/dataflow';
 import { getDb } from '@/lib/platform';
 import { tableForRef, acceptedMembers } from './dataflow';

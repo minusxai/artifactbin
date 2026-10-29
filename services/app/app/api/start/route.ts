@@ -9,17 +9,16 @@
  * Creation requires an email account session or its approved CLI bearer.
  * No browser ownership cookie or bearer is issued by this route.
  */
-import { createArtifact } from '@/lib/artifacts';
+import { createArtifact, parseArtifactDestination } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
-import {artifactStarter} from '@/lib/workspace/artifact-starters';
+import {artifactStarter} from '@/lib/workspace';
 import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/user-kinds';
 import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
 import { withAccountToken } from '@/lib/accounts';
-import { parseContentInput } from '@/lib/publish/document/input';
-import {parseArtifactDestination} from '@/lib/artifacts';
-import {DatasetError} from '@/lib/datasets/errors';
+import { parseContentInput } from '@/lib/publish';
+import {DatasetError} from '@/lib/datasets';
 
 export async function POST(request: Request) {
   // A browser session takes precedence over a bearer; both are the original request identity

@@ -4,7 +4,7 @@
  * tiers (lib/datasets, lib/object-store) can name it without importing the publish pipeline.
  */
 import type { ArtifactFormat } from '@artifactbin/contracts';
-import type { SourceRepair } from '@/lib/jsx/repair';
+import type { SourceRepair } from '@/lib/jsx';
 
 export interface StoredContent {
   format: ArtifactFormat;

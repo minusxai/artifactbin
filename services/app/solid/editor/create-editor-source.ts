@@ -14,7 +14,7 @@
  *                       the source is left alone.
  */
 import { createSignal, type Accessor } from 'solid-js';
-import type { EditorSelectionChange } from '@/lib/editor-engine/bookmark';
+import type { EditorSelectionChange } from '@/lib/editor-engine';
 import { SourceHistory, type HistoryResult } from '@/lib/editor-engine/history';
 import type { PendingChange } from './create-live-edits';
 

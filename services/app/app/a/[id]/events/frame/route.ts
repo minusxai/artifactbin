@@ -6,7 +6,7 @@
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
-import { liveFrameFor } from '@/lib/publish/data/frame';
+import { liveFrameFor } from '@/lib/publish';
 import { sessionActor } from '@/lib/authentication';
 
 /**

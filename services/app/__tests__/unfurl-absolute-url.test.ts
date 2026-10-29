@@ -11,7 +11,7 @@
  * (lib/http baseUrl) — everything else it prints uses it. The card must too.
  */
 import { describe, expect, it } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform/request-context';
+import { overrideRequestHeaders } from '@/lib/platform';
 
 const headerBag = { host: 'localhost:3000', 'x-forwarded-host': 'artifactbin.dev', 'x-forwarded-proto': 'https' };
 overrideRequestHeaders(() => headerBag);

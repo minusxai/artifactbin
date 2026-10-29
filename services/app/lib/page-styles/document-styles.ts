@@ -10,10 +10,8 @@
  * fonts), author CSS last so it sees everything it may override.
  */
 import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from './chrome-css';
-import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
-import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
-import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';
-import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
+import { STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface';
+import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 /** A domain post's one line of attribution (its words: @artifactbin/contracts DOMAIN_FOOTER_TEXT): theme-neutral, it inherits the document's colour and face and only quiets them. */

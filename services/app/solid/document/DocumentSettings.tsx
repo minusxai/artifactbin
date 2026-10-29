@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createResource, createSignal, Show, type JSX } from 'solid-js';
 import {createHttpBackend} from '@/lib/artifact-backend/http';
-import type { ArtifactBackend, ArtifactHead } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend, ArtifactHead } from '@/lib/artifact-backend';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import { contextRefOf } from '@/lib/document/helmet';
 import { writeContextRef } from '@/lib/document/context';
