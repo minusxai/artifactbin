@@ -124,9 +124,9 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   Tested) as message text in the same turn, then call `node scripts/comment.mjs watch ID --next`
   right after it: the user reads the reply while you watch. Run it in the foreground, never with
   `&`, `timeout` or a shorter `--wait` (it waits up to 4 minutes; give your shell 5). Answer each
-  comment it prints before watching again: edit and publish if asked, then `comment.mjs reply`. "No
-  new comments" means run it again: keep looping until the user stops you. Watching is part of the
-  task.
+  comment it prints before watching again: a requested change to the page is part of your task, so
+  edit and publish it, then `comment.mjs reply`. "No new comments" means run it again: keep looping
+  until the user stops you. Watching is part of the task.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

@@ -60,7 +60,8 @@ it('resumes logs and checkpoints saved under the old human-comments stream name'
 it('watch --next baselines once, resumes from its default checkpoint, skips own events and never overlaps requests',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
- const root=await mkdtemp(path.join(tmpdir(),'watch-next-')),log=path.join(root,'.comments-PAGE12.ndjson'),server='https://example.test';
+ const root=await mkdtemp(path.join(tmpdir(),'watch-next-')),server='https://example.test';
+ const {createHash}=await import('node:crypto'),log=path.join(root,'watch',createHash('sha256').update(server).digest('hex').slice(0,16),'PAGE12.ndjson');
  const mine={type:'artifactbin.comment',event_id:'e_mine',author:{kind:'agent',you:true},body:'Done'};
  const theirs={type:'artifactbin.comment',event_id:'e_theirs',author:{kind:'human',you:false},body:'Make it blue'};
  const later={type:'artifactbin.comment_reaction',event_id:'e_later',reactor:{kind:'human',you:false}};
@@ -69,13 +70,13 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  const calls:{after:string,wait:string}[]=[];let inflight=0,maxInflight=0,n=0;
  const fetcher=async(url:any)=>{inflight++;maxInflight=Math.max(maxInflight,inflight);const q=new URL(String(url)).searchParams;calls.push({after:q.get('after')!,wait:q.get('wait')!});
   await new Promise(r=>setTimeout(r,1));const batch=batches[n]??{events:[]};n++;inflight--;return Response.json({...batch,next_cursor:'c'+n,has_more:false});};
- const printed:any[]=[];const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic'},fetcher,cwd:root,deliver:async(v:any)=>{printed.push(v);}};
+ const printed:any[]=[];const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,cwd:path.join(root,'elsewhere'),deliver:async(v:any)=>{printed.push(v);}};
  try{
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.
   expect(calls).toEqual([{after:'now',wait:'0'},{after:'c1',wait:'30'},{after:'c2',wait:'30'}]);
   expect(printed.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['e_theirs']);
-  expect(printed.at(-1)).toMatch(/^next: answer each comment above now .* only then run watch --next again$/);
+  expect(printed.at(-1)).toMatch(/^next: answer each comment above now; a requested change to the page is part of your task .* only then run watch --next again$/);
   const records=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(records.filter(r=>r.kind==='event').map(r=>r.event.event_id)).toEqual(['e_mine','e_theirs']);
   expect(records.at(-1)).toMatchObject({kind:'checkpoint',cursor:'c3'});

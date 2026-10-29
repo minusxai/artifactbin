@@ -13,11 +13,11 @@ Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limi
        node scripts/comment.mjs watch ID --next [--wait SECONDS]
 Flags: write commands also take --request FILE (exclusive saved journal) and --resume FILE
   (replay it exactly; nothing else may change). list --status defaults to open; --limit 1-100
-  (default 20). watch --next prints the next comments from someone else (one JSON line each)
-  and exits 0; it resumes from .comments-ID.ndjson in the current directory (created on first
-  use, or the --output LOG --append / --cursor you pass). --wait caps it in seconds (default 240);
-  then it prints "no new comments yet; keep watching: run the same watch --next command again now"
-  and exits 0. Common: --server, --json, --help.
+  (default 20). watch --next prints the next comments from someone else (one JSON line each) and
+  exits 0; it resumes from watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or
+  ~/.artifactbin; created on first use), or the --output LOG --append / --cursor you pass. --wait
+  caps it in seconds (default 240); then it prints "no new comments yet; keep watching: run the same
+  watch --next command again now" and exits 0. Common: --server, --json, --help.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt
@@ -54,7 +54,7 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   Results never contain credentials.`;
 
 import {readFile} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   runTool,
@@ -70,7 +70,9 @@ import {
   createJournal,
   resumeJournal,
   ToolError,
-  serverOrigin
+  serverOrigin,
+  credentialRoot,
+  hash
 } from './toolbox-client.mjs';
 import {watchComments, listText} from './toolbox-comments.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
@@ -103,13 +105,16 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     return values.json || values.output ? page : listText(page);
   }
   // watch streams the comment feed until interrupted (or --once drains the backlog); --next
-  // returns after the next comment from someone else, checkpointing in .comments-ID.ndjson.
+  // returns after the next comment from someone else. Its checkpoint lives beside the saved
+  // sign-in, never in the working directory: a loop that changes directory must not baseline twice.
   if (sub === 'watch') {
     const controller = new AbortController();
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort());
     let watchValues = values;
     if (values.next && !values.output) {
-      const output = path.join(options.cwd ?? process.cwd(), `.comments-${id}.ndjson`);
+      const dir = path.join(credentialRoot(options.env), 'watch', hash(client.server).slice(0, 16));
+      mkdirSync(dir, {recursive: true, mode: 0o700});
+      const output = path.join(dir, `${id}.ndjson`);
       watchValues = {...values, output, append: existsSync(output)};
     }
     await watchComments(client, id, watchValues, {signal: controller.signal, ...options});
