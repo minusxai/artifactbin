@@ -5,6 +5,7 @@ export { signActor, verifyActor, timingSafeEqualUsed } from './actor-sign';
 export { createEnv, type Env, type EnvOptions } from './env';
 export { httpClient, jsonServer, type HttpClient, type JsonRoutes, type JsonServer } from './http';
 export { log } from './log';
+export { BodyTooLargeError, readBody, collectNodeBody } from './body';
 export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fakeActor, type FakeSql, type FakeEvents } from './fakes';
 export { TOKEN_RE, hashToken, createTokenReader } from './tokens';
 export { createCodeStore } from './codes';
@@ -28,4 +29,3 @@ export { renderConnectionPage } from './connection-page';
 export { tableQueryInput } from './table-query';
 
 export {runnerClient} from "./runner-client";
-export { hostedAgentClient, hostedAgentSessionId, hostedAgentCallbackKey, hostedAgentDeliveryKey, hostedAgentDeliveryTransport, hostedAgentTransport } from './hosted-agent-client';

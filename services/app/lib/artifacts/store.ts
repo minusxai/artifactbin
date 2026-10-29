@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
 import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries/registry';
@@ -612,6 +613,7 @@ async function replaceScoped(
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
+  let unchanged = false;
   const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
     let rebinds: CarriedRebinds = NO_REBINDS;
     const current = (
@@ -651,6 +653,12 @@ async function replaceScoped(
         // The version's script fingerprint (lib/html-autofix) lets a reader decide morph vs reload; `htmlIdentityCarry` says how this version's missing IDs were filled (D11).
         input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions(),htmlIdentityCarry:page.carry?{fromVersion:current.version,...page.carry}:undefined}};
       }catch(error){return json({error:'invalid_html',details:[thrownMessage(error,'Invalid HTML')]},400);}
+    }
+    // Republishing the head's own source (same page, same metadata, nothing else asked) adds no version: the head comes back as the answer.
+    if(isUnchangedHtmlRepublish(current,input,opts)){
+      unchanged=true;
+      if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(current));
+      return current;
     }
     if(input.format==='html'){
       const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
@@ -752,12 +760,28 @@ async function replaceScoped(
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
-  const written = result && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
+  const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
   if (written) { void trackEvent('update', written.id, { userId: written.user_id }); void queueMermaidHarvest(written); }
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
   if (written) sayMoved(actor, written.id, moved);
   return result;
+}
+
+/**
+ * True when an HTML replace asks for nothing the head does not already hold: the canonical source is
+ * byte-identical and no title, description, placement, access, share, backend, dataset, policy or
+ * annotation change rides along. The identity ledger and carry notes are derived from the source, so
+ * they are not compared; every other metadata key must match.
+ */
+function isUnchangedHtmlRepublish(current: ArtifactRow, input: ArtifactInput, opts: ReplaceOpts): boolean {
+  if (input.format !== 'html' || current.format !== 'html' || input.source !== current.source) return false;
+  if (input.title !== undefined && input.title !== current.title) return false;
+  if (input.description !== undefined && input.description !== current.description) return false;
+  if (input.visibility !== undefined || input.access !== undefined || input.ancestor_ids !== undefined || input.link_role !== undefined) return false;
+  if (input.htmlBackends?.length || input.htmlDatasets?.length || input.destination) return false;
+  if (opts.shares !== undefined || opts.expectedPolicyRevision !== undefined || opts.annotationOps?.length) return false;
+  return Object.entries(input.meta).every(([key, value]) => value === undefined || key === 'htmlIdentity' || key === 'htmlIdentityCarry' || isDeepStrictEqual(value, current.meta[key]));
 }
 
 /**

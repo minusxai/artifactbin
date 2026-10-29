@@ -14,7 +14,9 @@ Examples:
                                                       #   in again
   node scripts/auth.mjs login --email me@example.com  # then wait for the user's emailed code
   node scripts/auth.mjs login --challenge HANDLE --code-file code.txt
-Gotchas: use an email the user gave you; never invent an identity. Challenges expire after 30
+Gotchas: use an email the user gave you; never invent an identity, and never search files,
+  bundles, mailboxes or git config for credentials, codes or accounts: ask the user. status
+  refreshes a due token, so authenticated:false means log in again. Challenges expire after 30
   minutes and are bound to the origin. Credentials live in the private origin store
   (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
   references/http-auth.md. logout removes only the local grant (there is no server-side
@@ -44,8 +46,8 @@ import {
   positional,
   makeClient
 } from './toolbox-client.mjs';
-// Subcommands: status (read-only), logout (local grant only), login (two steps: send the code,
-// then exchange it).
+// Subcommands: status (refreshes a due token to prove the grant works), logout (local grant
+// only), login (two steps: send the code, then exchange it).
 export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
   {}) {
   positional(positionals, 0);
@@ -55,16 +57,25 @@ export async function authCommand({sub, values, positionals}, {env = process.env
   // status: where the grant comes from (environment or the private store) and whether it has
   // expired.
   if (sub === 'status') {
-    const saved = await shared.readCredentials(server, root);
+    let saved = await shared.readCredentials(server, root),
+      refresh = null;
+    const stored = !!saved;
+    const environment = !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN);
+    // A grant whose access token is due is refreshed now, exactly as any other script would, so
+    // status reports whether work can proceed: a refused refresh means log in again.
+    if (!environment && saved?.expiresAt && saved.expiresAt < Date.now() + 30000) {
+      try {
+        saved = await shared.refreshCredentials(saved, root, {fetch: fetcher});
+      } catch (error) {
+        refresh = error.code === 'refresh_unavailable' ? 'unavailable' : 'refused';
+        if (refresh === 'refused') saved = null;
+      }
+    }
     return {
       server,
-      authenticated: !!((env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN) || saved),
-      source:
-        env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN
-          ? 'environment'
-          : saved
-            ? 'private-store'
-            : 'none',
+      authenticated: environment || !!saved,
+      ...(refresh ? {refresh} : {}),
+      source: environment ? 'environment' : stored ? 'private-store' : 'none',
       expired: saved?.expiresAt ? Date.now() >= saved.expiresAt : null
     };
   }

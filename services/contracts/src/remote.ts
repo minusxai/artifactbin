@@ -28,21 +28,6 @@ export interface RemoteSessionInfo {
   color?: RemoteColor;
   activity?: RemoteActivity;
 }
-interface RemoteFrame {
-  seq: number;
-  data: string;
-  cols: number;
-  rows: number;
-}
-export interface RemoteView {
-  /** Changes whenever the relay rebuilds this session. */
-  generation?: string;
-  session: RemoteSessionInfo;
-  seq: number;
-  frames: RemoteFrame[];
-  snapshot?: string;
-}
-
 const REMOTE_COLORS = ['blue', 'violet', 'teal', 'amber', 'rose', 'slate'] as const;
 export type RemoteColor = typeof REMOTE_COLORS[number];
 export type RemoteActivity = 'queued' | 'starting' | 'listening' | 'working' | 'blocked' | 'unknown' | 'stopping' | 'stopped';

@@ -10,12 +10,12 @@
  * endpoint does not exist. Unset ⇒ it does not exist for anyone.
  */
 import { getUserByEmail, hasAdminCredential } from '@/lib/accounts';
-import { json } from '@/lib/http';
+import { SMALL_BODY_LIMIT, json, readJson } from '@/lib/http';
 import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   if (!hasAdminCredential(request)) return json({ error: 'not_found' }, 404);
-  const body = (await request.json().catch(() => ({}))) as { name?: unknown; expiresInHours?: unknown; email?: unknown };
+  const body = ((await readJson(request, { allowEmpty: true, limit: SMALL_BODY_LIMIT })) ?? {}) as { name?: unknown; expiresInHours?: unknown; email?: unknown };
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {

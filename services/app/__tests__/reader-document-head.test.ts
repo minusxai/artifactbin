@@ -8,6 +8,7 @@ import {nativeHtml} from './native-html-fixture';
  *
  * Crawlers do not run JavaScript, so this has to be in the SERVED HTML.
  */
+import { flushViews } from '@/lib/platform/analytics';
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
@@ -73,14 +74,14 @@ describe('a view is counted once, where the document is actually served', () => 
   it('counts the reader path, which no longer touches the page', async () => {
     const row = await publish('<h1>Counted</h1>', 'Counted');
     await serve(row.id);
-    await new Promise((r) => setTimeout(r, 50)); // trackEvent is fire-and-forget
+    await flushViews(); // served views are batched (lib/platform/analytics recordView)
     expect(await views(row.id)).toBe(1);
   });
 
   it('does NOT count the exporter photographing the document', async () => {
     const row = await publish('<h1>Shot</h1>', 'Shot');
     await serve(row.id, `?chrome=0&key=${mintExportKey(row.id)}`);
-    await new Promise((r) => setTimeout(r, 50));
+    await flushViews();
     expect(await views(row.id)).toBe(0);
   });
 });

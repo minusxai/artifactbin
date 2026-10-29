@@ -1,5 +1,6 @@
 import { currentHeaders } from '../platform/request-context';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { BodyTooLargeError, readBody as readCapped } from '@artifactbin/utils/body';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers, falling back to the request's own url. */
 export function baseUrl(request: Request): string {
@@ -55,10 +56,43 @@ export function unauthorized(request: Request): Response {
   );
 }
 
-/** Parse a JSON object; missing bodies are refused unless the route explicitly permits them. */
-export async function readJson(request: Request, options: {allowEmpty?: boolean} = {}): Promise<Record<string, unknown> | null> {
+/** The default cap on a request body read into memory. */
+export const DEFAULT_BODY_LIMIT = 4 * 1024 * 1024;
+/** Publish routes carry up to 16 MB of files as base64 JSON (about 21.4 MB) plus markup. */
+export const PUBLISH_BODY_LIMIT = 24 * 1024 * 1024;
+/** Sign-in, token and similar credential bodies: a few short fields. */
+export const SMALL_BODY_LIMIT = 16 * 1024;
+
+/** A request body passed its route's cap. Thrown by `readBody`; the route table answers it as 413. */
+export class PayloadTooLarge extends Error {
+  constructor(readonly limit: number) {
+    super('payload_too_large');
+    this.name = 'PayloadTooLarge';
+  }
+  response(): Response {
+    return json({ error: 'payload_too_large', maxBytes: this.limit }, 413, { 'Cache-Control': 'no-store' });
+  }
+}
+
+/**
+ * Read a request body into memory, counting bytes while it streams. Throws `PayloadTooLarge` past `limit`
+ * (default 4 MB) — the single cap mechanism: every route that buffers a body goes through here.
+ */
+export async function readBody(request: Request, options: { limit?: number; as: 'text' }): Promise<string>;
+export async function readBody(request: Request, options?: { limit?: number; as?: 'bytes' }): Promise<Uint8Array<ArrayBuffer>>;
+export async function readBody(request: Request, { limit = DEFAULT_BODY_LIMIT, as = 'bytes' }: { limit?: number; as?: 'bytes' | 'text' } = {}): Promise<Uint8Array<ArrayBuffer> | string> {
   try {
-    const source = await request.text();
+    return as === 'text' ? await readCapped(request, { limit, as }) : await readCapped(request, { limit });
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) throw new PayloadTooLarge(limit);
+    throw error;
+  }
+}
+
+/** Parse a JSON object; missing bodies are refused unless the route explicitly permits them. A body past `limit` throws `PayloadTooLarge`. */
+export async function readJson(request: Request, options: {allowEmpty?: boolean; limit?: number} = {}): Promise<Record<string, unknown> | null> {
+  const source = await readBody(request, { limit: options.limit, as: 'text' });
+  try {
     if (options.allowEmpty && !source.trim()) return {};
     const body: unknown = JSON.parse(source);
     return body && typeof body === 'object' && !Array.isArray(body)

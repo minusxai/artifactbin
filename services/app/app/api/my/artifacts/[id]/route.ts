@@ -16,7 +16,7 @@ import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { trashArtifactFor } from '@/lib/workspace';
-import { baseUrl, json, readJson } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 
 
 /** GET /api/my/artifacts/:id — owner-actor full read-back (for the editor). */
@@ -56,7 +56,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
+  const body=await readJson(request,{limit:PUBLISH_BODY_LIMIT});if(!body)return json({error:'invalid_json'},400);
   // Only bundled HTML allocates dependencies. Other saves keep the initiating credential for audit.
   const allocatesDependencies=typeof body.html==='string'&&body.publicationBundle!==undefined;
   const writer=allocatesDependencies?(actor.userId?{...actor,tokenId:await ensureUserToken(actor.userId)}:await withAccountToken(actor)):actor;

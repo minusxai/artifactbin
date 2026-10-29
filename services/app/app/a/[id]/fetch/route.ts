@@ -14,7 +14,7 @@
  * per document and reader, like the document's other outbound fetching (lib/accounts/auth).
  */
 import { canReadArtifact, getArtifactById, refusingUnservable } from '@/lib/artifacts';
-import { documentFetchRateLimited, requestOrSessionActor } from '@/lib/accounts';
+import { documentFetchRateLimited, documentFetchReader, requestOrSessionActor } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
@@ -75,7 +75,7 @@ async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: s
   if (!admits(trusted.connect, target)) {
     return json({ error: 'host_not_allowed', detail: `this reader has not allowed this document to reach ${target.origin}` }, 403, NO_STORE);
   }
-  const reader = actor.userId ?? actor.tokenId ?? 'guest';
+  const reader = documentFetchReader(actor, request);
   if (documentFetchRateLimited(id, reader)) return json({ error: 'rate_limited' }, 429, { ...NO_STORE, 'Retry-After': '60' });
 
   try {

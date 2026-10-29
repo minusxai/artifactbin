@@ -5,7 +5,7 @@
 export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, type AccessActor, type RequestIdentity, type TokenHoldingActor } from './actors';
 export { hasAdminCredential } from './admin-auth';
 export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, decodeAgentSessionEnvelope, encodeAgentSession, liveAgentSession, withToken, withoutToken } from './agent-session';
-export { browserActor, docAssetImportRateLimited, documentFetchRateLimited, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
+export { browserActor, docAssetImportRateLimited, documentFetchRateLimited, documentFetchReader, setDocumentFetchCapForTests, webIngestBucketCount, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
 export { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from './avatars';
 export { matchesWorkspaceAccount, mergeGuestUsers } from './guest-owner';
 export { lockMembershipUsers } from './membership-lock';

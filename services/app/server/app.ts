@@ -46,7 +46,8 @@ import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import { appBuildId, mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, precompressedStatic } from './content-encoding';
+import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
+import { cachedShell } from '@/lib/serving/shell-cache.server';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
 import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
@@ -608,11 +609,17 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
-    // Admission's 404 is final; its 200 can mean "not a document
-    // address" — a pretty path under an unknown handle still misses, and
-    // page() derives that from the profile resolution it already ran.
-    return page(c, status === 404 ? 404 : undefined, canonical, address, admitted);
+    // An anonymous reader's page is the same for everyone: lib/serving/shell-cache answers it after admission.
+    return cachedShell({
+      request: c.req.raw, id: candidateDocument(new URL(c.req.url).pathname)?.id ?? null, build: build ?? null,
+      encoding: negotiateEncoding(c.req.raw.headers.get('accept-encoding'), ['br']),
+    }, async () => {
+      const { status, address, canonical, admitted } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
+      // Admission's 404 is final; its 200 can mean "not a document
+      // address" — a pretty path under an unknown handle still misses, and
+      // page() derives that from the profile resolution it already ran.
+      return page(c, status === 404 ? 404 : undefined, canonical, address, admitted);
+    });
   };
 
   // App identity stays at its stable URL; never heal it to the pretty reader address.

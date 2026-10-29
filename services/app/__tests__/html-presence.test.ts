@@ -1,11 +1,12 @@
 import {artifactChannel} from '@artifactbin/contracts';
 import {sseStream} from './sse';
-import {beforeEach,expect,it} from 'vitest';
+import {beforeEach,expect,it,vi} from 'vitest';
 import {POST} from '@/app/api/artifacts/[id]/presence/route';
 import {GET} from '@/app/a/[id]/events/route';
 import {request,useAppHarness} from './harness';
 import {createUser} from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
+import {getDb} from '@/lib/platform/db';
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
 beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1),('presMixed','tok_presence',$1,'html','public',1)",[owner.id]);});
 const params=(id:string)=>({params:Promise.resolve({id})});
@@ -56,6 +57,17 @@ it('rebinds presence to a published source revision without closing document upd
   await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
   expect(await stream.named('message',1,200)).toEqual([]);
  }finally{abort.abort();stream.close();}
+});
+
+it('decides a presence POST from the access columns alone, never reading the document',async()=>{
+ const db=await getDb();const spy=vi.spyOn(db,'query');
+ try{
+  expect((await publish('prespublic',{session,revision:'1',visible:true},{actor:actor()})).status).toBe(200);
+  expect((await publish('presprivate',{session,revision:'1'})).status).toBe(404);
+  const artifactReads=spy.mock.calls.map(([sql])=>String(sql)).filter(sql=>/\bFROM artifacts\b/i.test(sql));
+  expect(artifactReads.length).toBeGreaterThan(0);
+  for(const sql of artifactReads){expect(sql).not.toMatch(/SELECT\s+(\w+\.)?\*/i);expect(sql).not.toMatch(/\b(document|source|meta)\b/);}
+ }finally{spy.mockRestore();}
 });
 
 /** Harness-exempt: the addressed public origin and internal transport URL are the subject. */

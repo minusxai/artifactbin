@@ -17,7 +17,7 @@
  * the proxy counts the OAuth doors in front of the approval that reaches this.
  */
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
-import { baseUrl, json } from '@/lib/http';
+import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 import { agentContract } from '@/lib/serving';
 import { canAuthenticateUser, hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const actor = await sessionActor(request);
   const userId = actor.credential === 'session' ? actor.userId : null;
   if (!await canAuthenticateUser(userId)) return json({ error: 'email_auth_required' }, 401);
-  const body = (await request.json().catch(() => ({}))) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
+  const body = ((await readJson(request, { allowEmpty: true, limit: SMALL_BODY_LIMIT })) ?? {}) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {
     if (typeof body.expiresInHours !== 'number' || !Number.isFinite(body.expiresInHours)) return json({ error: 'invalid_expiry' }, 400);

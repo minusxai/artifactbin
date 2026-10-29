@@ -318,7 +318,14 @@ const toIso = (v: string) => new Date(v).toISOString();
  * The serving pool's bounds. A request that waits 5 s for a connection fails instead of queueing behind
  * the proxy's 30 s deadline, and one runaway statement is cancelled instead of holding its connection for good.
  */
-export const SERVING_POOL = { max: 20, connectionTimeoutMillis: 5_000, statement_timeout: 60_000 } as const;
+export const SERVING_POOL = {
+  max: 20,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 60_000,
+  // A request that dies mid-transaction must not hold its row locks and connection; a statement stuck behind a lock gives up.
+  idle_in_transaction_session_timeout: 30_000,
+  lock_timeout: 10_000,
+} as const;
 
 /**
  * An idle client's error (a database restart or failover) is emitted on the pool; with no listener Node

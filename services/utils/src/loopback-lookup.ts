@@ -14,7 +14,7 @@
  * first thing, so every HTTP client in the process shares the one answer.
  *
  * A loopback name the machine's hosts file maps ELSEWHERE is the machine's own answer, not ours: a container routes
- * `app.lvh.me` to its host with `extra_hosts` (the server repo's hosted agents reach the proxy that way), and
+ * `app.lvh.me` to its host with `extra_hosts` (the server repo's runner boxes reach the proxy that way), and
  * loopback there is the container itself. Those names go to the resolver, which reads the hosts file locally,
  * so they still answer offline. A name the file maps to loopback (`localhost` in every hosts file) keeps this
  * answer: the same address, and the SSRF guards that refuse loopback see it without asking a resolver.

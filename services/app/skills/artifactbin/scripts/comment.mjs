@@ -18,8 +18,10 @@ Examples:
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt
   node scripts/comment.mjs react ID --comment C --active true
 Anchors: read the page first (read.mjs ID --json). ANCHOR.json is
-  {"kind":"html-node","v":1,"revision":"<page version string>","nodeId":"<canonical data-af-id>",
+  {"kind":"html-node","v":1,"revision":"<page version number>","nodeId":"<canonical data-af-id>",
   "quote":"<exact current text of that element, or empty for the whole node>"}.
+  Omit "revision" and this command fills it from the page's current version; supply one only
+  from read.mjs (the version number, never the state hash or edit ID).
   A comment on a script-created node also needs "ancestorId", the data-af-id of its saved ancestor.
 Gotchas: list before replying, editing or changing state. A plain reply needs no revision; resolve
   and reopen need the last observed revision (a stale one fails; reply plus a stale resolve keeps
@@ -112,6 +114,10 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     requireFlags(values, ['anchor']);
     body.anchor = await jsonFile(values.anchor);
     const anchor = body.anchor;
+    if (anchor?.kind === 'html-node' && anchor.revision === undefined) {
+      const current = await client.request(`/api/artifacts/${id}`);
+      if (Number.isSafeInteger(current?.version)) anchor.revision = String(current.version);
+    }
     if (
       anchor?.kind !== 'html-node' ||
       anchor.v !== 1 ||

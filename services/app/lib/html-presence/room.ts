@@ -1,5 +1,6 @@
 import type {PresenceViewer} from './contract';
-import {presenceGeometry,presenceRoster} from './model';
+import {PRESENCE_REAUTHORIZE_MS,presenceRoster} from './model';
+import {decodePresenceMessage} from './message';
 interface PresenceRoomPorts {
  revision:string;
  authorize():Promise<boolean>;
@@ -9,7 +10,7 @@ interface PresenceRoomPorts {
  close():void;
  clock:{now():number;setTimeout(work:()=>void,ms:number):unknown;clearTimeout(timer:unknown):void;setInterval(work:()=>void,ms:number):unknown;clearInterval(timer:unknown):void};
 }
-/** Ephemeral fanout: geometry batches never query the database. Artifact wakeups suspend delivery until ACL revalidation. */
+/** Ephemeral fanout: geometry batches never query the database. Artifact (ACL) wakeups suspend delivery until revalidation; a slow safety interval catches a missed wakeup. */
 export async function createPresenceRoom(ports:PresenceRoomPorts){
  const entries=new Map<string,PresenceViewer>(),drops:Array<()=>Promise<void>>=[];
  let closed=false,checking=false,again=false,authorized=false,flushTimer:unknown,heartbeat:unknown;
@@ -24,18 +25,14 @@ export async function createPresenceRoom(ports:PresenceRoomPorts){
  };
  const receive=(payload:string)=>{
   if(closed)return;
-  try{const entry=JSON.parse(payload) as PresenceViewer&{gone?:boolean};if(!/^[a-f0-9]{64}$/.test(entry.id))return;
-   if(entry.gone)entries.delete(entry.id);
-   else if(entry.revision===ports.revision&&typeof entry.label==='string'&&entry.label.length<=100&&Number.isFinite(entry.seen)){
-    entries.set(entry.id,{id:entry.id,label:entry.label,revision:ports.revision,seen:entry.seen,...presenceGeometry(entry)});
-    if(entries.size>100)entries.delete(entries.keys().next().value!);
-   }else return;
-   schedule();
-  }catch{/* Invalid or old notifications never enter the roster. */}
+  const message=decodePresenceMessage(payload,ports.revision);if(!message)return;
+  if('gone' in message)entries.delete(message.id);
+  else{entries.set(message.id,message);if(entries.size>100)entries.delete(entries.keys().next().value!);}
+  schedule();
  };
  try{for(const subscribe of [()=>ports.subscribe(receive,dispose),()=>ports.subscribeAcl(()=>void revalidate(),dispose)]){const drop=await subscribe();if(closed){await drop();return{dispose};}drops.push(drop);}}
  catch{dispose();throw new Error('Presence unavailable');}
  await revalidate();if(closed)return{dispose};
- heartbeat=ports.clock.setInterval(()=>void revalidate(),3000);schedule();
+ heartbeat=ports.clock.setInterval(()=>void revalidate(),PRESENCE_REAUTHORIZE_MS);schedule();
  return{dispose};
 }

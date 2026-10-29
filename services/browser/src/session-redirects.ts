@@ -1,3 +1,8 @@
+import { readBody } from '@artifactbin/utils';
+
+/** The most a browser session may replay in one request body. */
+const SESSION_REQUEST_BODY_LIMIT = 16 * 1024 * 1024;
+
 /**
  * Playwright routing only intercepts the first request in a redirect chain.
  * Resolve redirects here so the isolated browser never needs direct network
@@ -10,7 +15,7 @@
 export async function sessionRequest(request: Request, send: (request: Request) => Promise<Response>, allows: (url: URL) => boolean = () => false): Promise<Response> {
   const origin = new URL(request.url).origin;
   let url = new URL(request.url), method = request.method;
-  let body: ArrayBuffer | undefined = request.body ? await request.arrayBuffer() : undefined;
+  let body: Uint8Array<ArrayBuffer> | undefined = request.body ? await readBody(request, { limit: SESSION_REQUEST_BODY_LIMIT }) : undefined;
   const headers = new Headers(request.headers), visited = new Set<string>();
   for (let hop = 0; hop < 10; hop++) {
     const key = `${method} ${url.href}`;

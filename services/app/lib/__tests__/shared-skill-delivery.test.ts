@@ -43,6 +43,22 @@ describe('installable shared skill folder',()=>{
   expect(projectSkillLinks(file,'[root](../SKILL.md#read-first) [task](./http-auth.md#sign-in)','https://recipient.example')).toBe('[root](https://recipient.example/llms.txt#read-first) [task](https://recipient.example/llms/http-auth#sign-in)');
   expect(publicGuideText('../SKILL','https://recipient.example')).toBeNull();
  });
+ it('serves one archive per origin under an ETag, public for five minutes, and 304 on revalidation',async()=>{
+  const at=(origin:string,tag?:string)=>zipRoute(new Request(`${origin}/skills/artifactbin.zip`,tag?{headers:{'if-none-match':tag}}:{}));
+  const first=await at('https://etag.example');
+  const etag=first.headers.get('etag');
+  expect(etag).toMatch(/^"[^"]+"$/);
+  expect(first.headers.get('cache-control')).toBe('public, max-age=300');
+  const again=await at('https://etag.example');
+  expect(again.headers.get('etag')).toBe(etag);
+  expect(Buffer.from(await again.arrayBuffer()).equals(Buffer.from(await first.arrayBuffer()))).toBe(true);
+  const held=await at('https://etag.example',etag!);
+  expect(held.status).toBe(304);
+  expect(held.headers.get('etag')).toBe(etag);
+  expect(await held.text()).toBe('');
+  // The archive names its server: another origin is another archive.
+  expect((await at('https://other.example')).headers.get('etag')).not.toBe(etag);
+ });
  it('extracts a valid ZIP with the rendered frontmatter and references',async()=>{
   const origin='https://recipient.example';
   const expected=skillPackageFiles(skillTree(),origin);

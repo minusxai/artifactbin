@@ -42,9 +42,11 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
    */
   const at = await archivedVersionFor(request, artifact);
   if (at === 'not_found') return json({ error: 'not_found' }, 404);
+  // Editing chrome and re-renders are an editor's: asked only when one of them is.
+  const editor = q.get('mode') === 'preview' || q.get('refresh') !== null ? canEdit(await effectiveRole(artifact, actor)) : false;
   // The framing overview is editing chrome, not a public export surface.
   if (q.get('mode') === 'preview') {
-    if (artifact.format !== 'html' || !canEdit(await effectiveRole(artifact, actor))) {
+    if (artifact.format !== 'html' || !editor) {
       return json({ error: 'not_found' }, 404);
     }
   }
@@ -63,6 +65,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   return exportImageResponse(await servedRow(artifact, at), {
     ...(at ? { version: at.version } : {}),
     refresh: q.get('refresh'),
+    editor,
     format: q.get('format'),
     mode: q.get('mode'),
     slide: q.get('slide'),

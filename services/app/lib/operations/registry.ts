@@ -1,5 +1,5 @@
 import {notificationJobOperations} from './notification-jobs';
-import { artifactSummaryToWire, canReadArtifact, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire } from '@/lib/artifacts';
 import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
@@ -11,7 +11,7 @@ import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { identityForUser, resolveTestUser, withAccountToken } from '@/lib/accounts';
-import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { canEdit, CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -568,6 +568,8 @@ const exportArtifactOp: Operation = {
       ...(input.slide !== undefined ? { slide: String(input.slide) } : {}),
       ...(typeof input.format === 'string' ? { format: input.format } : {}),
       ...(input.refresh === true ? { refresh: '1' } : typeof input.refresh === 'string' ? { refresh: input.refresh } : {}),
+      // Only an editor's refresh re-renders (lib/export): the publishing token is its document's owner.
+      ...(input.refresh !== undefined ? { editor: ctx.actor.tokenId === artifact.token_id || canEdit(await effectiveRole(artifact, ctx.actor)) } : {}),
       ...Object.fromEntries(['mode','crop','image','search'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';
