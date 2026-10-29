@@ -133,3 +133,12 @@ it('a first watch --next prints threads still waiting on an answer, from before 
  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
  expect(delivered.at(-1)).toMatch(/^next: answer each comment above now/);
 });
+
+it('a first watch --next falls back to "now" on a server without history replay',async()=>{
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const afters:string[]=[];let n=0;
+ const client={server:'https://example.test',request:async(route:string)=>{const after=new URL(route,'https://example.test').searchParams.get('after')!;afters.push(after);
+  if(after==='start')throw Object.assign(new Error('refused'),{code:'invalid_cursor'});n++;return {events:n===2?[{type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{you:false}}]:[],has_more:false,next_cursor:'q'+n};}};
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false});
+ expect(afters).toEqual(['start','now','q1']);
+});

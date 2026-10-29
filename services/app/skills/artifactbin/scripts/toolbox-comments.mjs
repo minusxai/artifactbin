@@ -96,6 +96,8 @@ try{result=await client.request(`/api/artifacts/${id}/annotations/changes?`+new 
      String(next?Math.min(30,remaining()):30)}),{timeoutMs:40000,signal});failures=0;}
    catch(error){
     if(signal?.aborted)break;
+    // A server without history replay refuses `start`: begin at "now" as watch always did.
+    if(replay&&!cursor&&error.code==='invalid_cursor'){replay=false;continue;}
 if(values.once||error.exit===3||!['network_unavailable','http_429','too_many_comment_waits',
       'http_502','http_503','http_504'].includes(error.code)||++failures>4)throw error;
     await new Promise(resolve=>setTimeout(resolve,Math.min(1000*2**failures,10000)));continue;
