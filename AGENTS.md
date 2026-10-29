@@ -131,9 +131,8 @@ From repo root.
 
 - Kit renderer changes, including inline wrapper styles and any `EXTRA_CLASS_SOURCES` input
   (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
-  and review the generated diff before final CI. FAST regression checks are
-  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
-  `services/app/lib/publish/__tests__/reader-sheet.test.ts`; types do not catch drift.
+  and review the generated diff before final CI. The FAST regression check is
+  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts`; types do not catch drift.
 - A tree PR CI passed is not re-tested on merge.
 - Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
