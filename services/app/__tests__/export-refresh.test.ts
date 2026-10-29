@@ -11,6 +11,7 @@ import {EXPORT_PNG} from './export-helpers';
 import {mintAccountToken, request, useAppHarness} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {GET as exportRoute} from '@/app/a/[id]/export/route';
+import {GET as read, PUT} from '@/app/api/artifacts/[id]/route';
 
 const harness = useAppHarness();
 const PNG: RenderResult = {ok: true, mime: 'image/png', bytes: EXPORT_PNG};
@@ -42,6 +43,21 @@ describe('card refresh', () => {
     expect((await card(id, '&refresh=1', stranger.token)).status).toBeLessThan(400);
     expect(browser.seen).toHaveLength(1);
     expect((await card(id, '&refresh=1', actor.token)).status).toBeLessThan(400);
+    expect(browser.seen).toHaveLength(2);
+  });
+
+  it('answers a reader\'s refresh after a new version with that version\'s card, not the stored one', async () => {
+    const {actor, id} = await publish();
+    const first = await card(id);
+    const head = await (await read(request(`/api/artifacts/${id}`, {token: actor.token}), params(id))).json();
+    const saved = await PUT(request(`/api/artifacts/${id}`, {method: 'PUT', token: actor.token, json: {html: head.html.replace('Card</h1>', 'Changed</h1>'), expectedVersion: head.version, expectedState: head.state}}), params(id));
+    expect(saved.status).toBe(200);
+    const refreshed = await card(id, '&refresh=1');
+    expect(refreshed.headers.get('location')).toBeTruthy();
+    expect(refreshed.headers.get('location')).not.toBe(first.headers.get('location'));
+    expect(browser.seen).toHaveLength(2);
+    // And the reader's refresh of that now-unchanged revision renders nothing more.
+    expect((await card(id, '&refresh=1')).headers.get('location')).toBe(refreshed.headers.get('location'));
     expect(browser.seen).toHaveLength(2);
   });
 
