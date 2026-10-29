@@ -10,7 +10,7 @@
  * No browser ownership cookie or bearer is issued by this route.
  */
 import { createArtifact } from '@/lib/artifacts';
-import { existingPaste } from '@/lib/serving';
+import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 import {canUseDeploymentIdentity} from '@/lib/deployment';

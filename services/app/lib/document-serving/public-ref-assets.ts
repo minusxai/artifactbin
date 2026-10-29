@@ -3,6 +3,7 @@ import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import type { WebAssetKind } from '@/lib/publish/assets/web-assets';
 import { serveStoredFile } from '@/lib/datasets/file-store';
+import { NO_STORE } from './cache-control';
 
 /** A read grant, login, token, or export key never widens a referenced file. */
 export async function publicRefAsset(id: string, kind: WebAssetKind | 'binary' = 'binary') {
@@ -18,6 +19,6 @@ export async function publicRefAsset(id: string, kind: WebAssetKind | 'binary' =
 /** Dedicated-host response; identity-addressed refs must always re-check visibility. */
 export async function publicRefAssetResponse(request: Request, id: string): Promise<Response> {
   const row = await publicRefAsset(id);
-  if (!row) return new Response('not found', { status: 404, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' } });
+  if (!row) return new Response('not found', { status: 404, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': NO_STORE } });
   return serveStoredFile(request, row, true);
 }

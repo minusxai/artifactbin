@@ -109,7 +109,7 @@ it('describes a readonly dependency plan without reserving or creating resources
  const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(0);
 });
 it('keeps historical hosted dependencies after the latest page removes them, with exact bytes and current ACLs',async()=>{
- const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {nativeHtmlAssets}=await import('@/lib/serving/native-html-assets.server');
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {nativeHtmlAssets}=await import('@/lib/document-serving/native-html-assets.server');
  const actor=await mintAccountToken('bundle-historical');
  const html='<link rel="stylesheet" href="./main.css"><img src="./logo.svg">';
  const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_history_create_01'},json:{html,publicationBundle:{entryPath:'index.html',files:[file('main.css','body{background:url(./logo.svg)}','text/css'),file('logo.svg','<svg>old</svg>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status).toBe(201);

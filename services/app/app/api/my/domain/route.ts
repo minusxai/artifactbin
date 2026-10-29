@@ -15,7 +15,7 @@
  */
 import { auth } from '@/auth';
 import { CUSTOM_DOMAINS_TARGET } from '@/lib/platform';
-import { attachDomain, domainHomepageOptions, setDomainHomepage, setDomainPath, domainOf, domainResolver, removeDomain } from '@/lib/serving';
+import { attachDomain, domainHomepageOptions, setDomainHomepage, setDomainPath, domainOf, domainResolver, removeDomain } from '@/lib/custom-domains';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };

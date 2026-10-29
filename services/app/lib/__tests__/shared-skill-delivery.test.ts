@@ -2,7 +2,7 @@ import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic,isShippedSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
-import {llmsText} from '@/lib/serving/agent-references.server';
+import {llmsText} from '@/lib/agent-copy/agent-references.server';
 import {skillTree,SKILL_MAIN_MAX_BYTES,SKILL_FILE_MAX_BYTES} from '../skills';
 import {renderSkill} from '../skills/render';
 
@@ -33,7 +33,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {skillPackageFiles,skillZip} from '../skills/package';
 import {projectSkillLinks,renderTree,skillFileWithFrontmatter} from '../skills/serve';
-import {publicGuideText} from '@/lib/serving/agent-references.server';
+import {publicGuideText} from '@/lib/agent-copy/agent-references.server';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
 import {platformOrigin} from '../skills/__tests__/platform-origin';
 

@@ -8,6 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { etagOf, matchingTag, publicRevalidatedResponse } from '@/lib/http/revalidation';
+import { PUBLIC_IMMUTABLE } from './cache-control';
 const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
@@ -32,7 +33,7 @@ export interface NativeHtmlRender {
   designSystem?: string | null;
   /** Offline asset-packed rendering, independent of canonical stored source. */
   renderedHtml?: string;
-  /** The platform script nonce; a cached render passes its placeholder (lib/serving/render-cache), else a fresh one is drawn. */
+  /** The platform script nonce; a cached render passes its placeholder (lib/document-serving/render-cache), else a fresh one is drawn. */
   platformScriptNonce?: string;
   /** Served on a custom domain: the page reads its data from that host (html-runtime/domain-reads). */
   domainReads?: boolean;
@@ -111,7 +112,7 @@ export async function nativeHtmlApolloResponse(request:Request,digest:string):Pr
  await htmlAssets();
  const source=await retention!.read(digest);
  if(source===null)return new Response('Not found',{status:404});
- const headers={'content-type':JS,'cache-control':'public, max-age=31536000, immutable','access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
+ const headers={'content-type':JS,'cache-control':PUBLIC_IMMUTABLE,'access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
  if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
  return new Response(request.method==='HEAD'?null:source,{headers});
 }

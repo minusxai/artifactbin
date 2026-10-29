@@ -47,7 +47,7 @@ refuses to boot without it), and that is the only place a document is ever
 rendered. The app page at `/a/<id>` is the app's own shell — its bar and rail
 (`solid/document/DocumentChrome`), the consent slot above the frame, the
 comments rail and the editor's chrome — around ONE frame the server draws into
-the page (`lib/serving/document-frame`), whose first URL is the document's own address carrying a one-time
+the page (`lib/document-serving/document-frame`), whose first URL is the document's own address carrying a one-time
 ticket for exactly that document (`lib/accounts/pages-sessions`): the document's origin spends it before producing
 a byte, in the response that serves the document, and sets its own host-only cookie (`__Host-afbin_pages` over
 https; no `Domain`, so no sibling document receives or can plant it). A guest's frame carries the explicit guest

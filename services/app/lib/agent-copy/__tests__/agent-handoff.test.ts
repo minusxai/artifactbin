@@ -4,7 +4,7 @@
  * trailing slash changes nothing, every address it names is on that origin) and carries no credential.
  */
 import { describe, expect, it } from 'vitest';
-import { agentBlurb, agentContract, existingPaste } from '@/lib/serving';
+import { agentBlurb, agentContract, existingPaste } from '@/lib/agent-copy';
 
 const ORIGINS = ['https://app.example.test', 'http://127.0.0.1:45407', 'https://blog.example.org'];
 const addresses = (text: string) => [...text.matchAll(/\bhttps?:\/\/[^\s)]+?(?=[.,]?(?:\s|$))/g)].map((match) => match[0]);

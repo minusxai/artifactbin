@@ -10,7 +10,7 @@
  * helpers so neither consumer can clobber the other.
  *
  * ACROSS VISITS the reader's pick lives on the app origin (`mx_theme`, {@link chooseTheme}): the app's server
- * reads it and tells a framed document in its first URL ({@link READER_MODE_PARAM}, lib/serving/artifact-page),
+ * reads it and tells a framed document in its first URL ({@link READER_MODE_PARAM}, lib/document-serving/artifact-page),
  * so the document is served in that mode from its first byte. That URL is the visit's starting mode; a pick made
  * during the visit (the envelope) wins over it and rewrites it, so a reload of the frame is drawn in the new one.
  *
@@ -111,8 +111,8 @@ export function applyColorMode(
 
 /**
  * THE READER'S ONE LIGHT/DARK PICK, made anywhere in the app: `data-theme` on the document element, `mx_theme` in
- * storage (the key lib/serving/theme-bootstrap's pre-paint stamp reads) and in a cookie of the same name, which the
- * app's server reads to serve every document this reader opens in the pick (lib/serving/artifact-page). Storage throws
+ * storage (the key lib/page-styles/theme-bootstrap's pre-paint stamp reads) and in a cookie of the same name, which the
+ * app's server reads to serve every document this reader opens in the pick (lib/document-serving/artifact-page). Storage throws
  * in private mode and at a served document's opaque origin; the stamp still lands.
  */
 export function chooseTheme(mode: Mode, doc: Document = document): void {

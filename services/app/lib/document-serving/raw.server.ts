@@ -1,0 +1,335 @@
+/**
+ * GET /a/:id/raw — the artifact's own bytes (the standalone document for
+ * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
+ * shareable URL rather than a sibling top-level route (app/a/[id]/raw parses
+ * the request and answers with this).
+ *
+ * For the document THESE HEADERS ARE THE SANDBOX:
+ * - `default-src 'none'` blocks the network except the document's own query
+ *   endpoint (connect-src); frames are same-origin only;
+ *   subresources only from our own origin or data:/blob: — documents must be
+ *   self-contained.
+ * - `sandbox allow-scripts` (no allow-same-origin) gives the document an
+ *   opaque origin, so author JS cannot read the human UI's localStorage even
+ *   though it is same-host. Verified live: reading localStorage throws.
+ *
+ * Every Cache-Control it answers with is ./cache-control's.
+ */
+import {designSystemChoice} from '@/lib/html-systems';
+import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
+import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, holdsCreatingToken, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { recordView, verifyExportKey } from '@/lib/platform';
+import {storedCspExtensions} from '@/lib/document';
+import {cspExtensionsFor} from '@/lib/trust/document-trust';
+import { requestOrSessionActor } from '@/lib/accounts';
+import { baseUrl, parseByteRange } from '@/lib/http';
+import { ID_RE } from '@/lib/platform';
+import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { ObjectUnavailable } from '@/lib/object-store';
+import { Readable } from 'node:stream';
+import { loadImage } from '@/lib/object-store/image-store';
+import { serveStoredFile } from '@/lib/datasets/file-store';
+import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
+import type { StorySurface } from '@/lib/story-runtime/story-fragment';
+import { pagesRequestOf } from '@/lib/http/pages-origin';
+import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
+import { servesDocument } from '@/lib/custom-domains';
+import { etagOf, matchingTag, notModified } from '@/lib/http/revalidation';
+import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
+import { nativeHtmlPresentation } from './native-html-presentation.server';
+import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, withFreshNonce } from './render-cache';
+import { nativeHtmlDocument, nativeHtmlPolicy, nativeHtmlRuntimeIdentity } from './native-html.server';
+
+// The markup document's policy — per document, built in lib/page-styles/markup-csp:
+// content-independent except for the ONE connect-src that admits exactly this
+// document's own query endpoint (the top-level reader's transport).
+
+const COMMON = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Cache-Control': NO_STORE,
+};
+
+const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
+
+/**
+ * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
+ * boundary sets it — the router passes params alone — so no request can ask
+ * for this mode. It renders the reader copy with no reader chrome and no doors,
+ * a footer back to the app, and a self-canonical on the domain; every
+ * capture, archive and editing switch on the URL is ignored.
+ */
+export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean; path?: string }
+
+const notFound = () =>
+  new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
+/** The row promises bytes the store will not give: said plainly, never a 500, and never kept. */
+const unavailable = () => new Response('asset unavailable', { status: 503, headers: { 'cache-control': NO_STORE } });
+
+
+/**
+ * THE STORY FRAGMENT (`GET /a/:id/story`, app/a/[id]/story): the compiled document's newest version as
+ * the page that asks is served it, for the live morph (lib/islands/morph/engine) — `raw`, this route's
+ * own reader copy, or `app`, the app page's story (its isolated sheet, its inline drawings). Only the
+ * route sets it (the router passes params alone), so no request can ask for it here. Same admission,
+ * same compiled inputs, same sandbox; never a view, never a fallback renderer (a fallback is an answer the
+ * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
+ */
+export interface StoryFragmentRequest { surface: StorySurface }
+
+/** What a request for `/a/:id/raw` asks: the document, and the mode only the router's callers can set. */
+export interface RawDocumentRequest { id: string; domain?: DomainPost; fragment?: StoryFragmentRequest }
+
+/** A stored shape the current code no longer serves answers its 410 (lib/artifacts/servable), after the ACL below. */
+export function serveRawDocument(request: Request, asked: RawDocumentRequest): Promise<Response> {
+  return refusingUnservable(() => serveRaw(request, asked));
+}
+
+async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Response> {
+  const { id } = ctx;
+  const domain = ctx.domain ?? null;
+  // The document's own origin (APP__PAGES_HOST): server/pages-host marked this request when it routed it here.
+  const pages = domain ? null : pagesRequestOf(request);
+  if (pages && pages.id !== id) return notFound();
+  const fragment = domain ? null : ctx.fragment ?? null;
+  if (!ID_RE.test(id)) return notFound();
+  const key = domain ? null : new URL(request.url).searchParams.get('key');
+  /*
+   * A REVALIDATION is decided on the row's HEADER: a document on its own origin asked with a validator, and nothing that is
+   * never revalidated (a key, a fragment, a version). It is admitted, and answered 304 below, without the database
+   * reading or sending the document (megabytes of JSONB for a large page); only a miss reads the row whole after it.
+   * Every other request reads the row whole once, as its answer has a body.
+   */
+  const asked = request.headers.get('if-none-match');
+  const conditional = !!pages && !key && !fragment && !!asked && !new URL(request.url).searchParams.has(VERSION_PARAM);
+  // The SAME viewer the proxy and the page decide ownership with (see below), resolved before the row: it decides
+  // whether this request may be answered from the render cache, which is asked from the header alone.
+  const actor = await requestOrSessionActor(request);
+  /*
+   * A SHARED RENDER (./render-cache): an anonymous reader's head document on the app or its own origin —
+   * no key, version, fragment or custom domain, no carried grant. Admission still runs below on the header, every
+   * time, before a cached body may be served; only a miss reads the row whole.
+   */
+  const shared = request.method === 'GET' && !domain && !fragment && !key && !new URL(request.url).searchParams.has(VERSION_PARAM) && !new URL(request.url).searchParams.has('v') && anonymousReader(actor, pages?.carried);
+  const metadataOnly = conditional || shared || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
+  const loaded = metadataOnly ? null : await getArtifactById(id);
+  const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
+  if (!header) return notFound();
+  if (fragment) return notFound();
+  if (domain && !servesDocument(domain.ownerId, header)) return notFound();
+  /*
+   * The ACL decides before any bytes leave; a denied private doc is
+   * indistinguishable from a missing one.
+   *
+   * The exporter's signed key is the one way in without a session, and it must
+   * be honoured HERE and not only on the page: the page is just the outside,
+   * and the document arrives through a SEPARATE, credential-less request for
+   * this route. Without it a private document exported as a 200 PNG *of a 404
+   * page* — the shot succeeded, so nothing looked wrong.
+   *
+   * The key is scoped to one artifact and lives seconds (lib/export-key). It
+   * admits a reader; it does not relax the sandbox, which is set below either
+   * way.
+   */
+  // The SAME viewer the proxy and the page decide ownership with: sessionActor
+  // uses the proxy-attached actor first, then direct compatibility and the
+  // agent cookie. Resolving it any other way — the account session alone —
+  // makes a claimed-token browser an owner in the shell and a stranger in its
+  // own private document.
+  // Bearer first, then the browser credentials, the same order as the export route, so the CLI
+  // can fetch the page of an artifact its token owns or may read (resolved above).
+  const byExportKey = verifyExportKey(header.id, key ?? undefined);
+  const admits = async (row: ArtifactHeader) => holdsCreatingToken(row, actor) || (await canReadArtifact(row, actor)) || byExportKey;
+  if (!(await admits(header))) return notFound();
+
+  const base = pages?.site.app ?? baseUrl(request);
+  // Declarations belong to each immutable version; current viewer grants remain dynamic.
+  const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}),{domainReads:!!domain});
+  let policy=await policyFor(header);
+  const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
+  const validator = async (row: ArtifactHeader) => etagOf({
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
+    // Source is immutable within a published version; bindings are header metadata.
+    links: row.meta.htmlLinks ?? [], designSystem: designSystemChoice(row.meta), runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
+  });
+  const responseHeaders = (etag: string | null) => ({
+    ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
+    // The per-render script nonce changes bytes, while these facts retain semantic identity.
+    ...(etag ? { ETag: `W/${etag}`, 'Cache-Control': REVALIDATE } : {}),
+  });
+  // Everything a shared render's bytes depend on: the row's version, edit and metadata, who frames it, its policy and the runtime.
+  const frameKey = async (row: ArtifactHeader) => renderKey({
+    kind: 'frame', base, self: pages?.self ?? null, app: pages?.site.app ?? null, search: new URL(request.url).search,
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, title: row.title, description: row.description, meta: row.meta,
+    policy, runtime: await nativeHtmlRuntimeIdentity(),
+  });
+  // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
+  const counted = () => { if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void recordView(header.id, { userId: actor.userId }); };
+  if (header.format === 'html' && metadataOnly) {
+    const etag = revalidated ? await validator(header) : null;
+    const held = etag && matchingTag(asked, etag);
+    if (held) return notModified(`W/${held}`);
+    if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+    const hit = shared ? renderCache.get(await frameKey(header)) : undefined;
+    if (hit) {
+      counted();
+      return new Response(withFreshNonce(new TextDecoder().decode(hit.body)), { headers: responseHeaders(etag) });
+    }
+  }
+
+  const artifact = loaded ?? await getArtifactById(id);
+  if (!artifact) return notFound();
+  // Admission is asked again of the row served when its access moved after the header was read.
+  if (!loaded && accessMoved(header, artifact) && !(await admits(artifact))) return notFound();
+
+  switch (artifact.format) {
+    case 'html': {
+      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
+      if (at === 'not_found') return notFound();
+      const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+      if(at)policy=await policyFor(row);
+      const etag = revalidated && !at ? await validator(artifact) : null;
+      const held = etag && matchingTag(asked, etag);
+      if (held) return notModified(`W/${held}`);
+      if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+      // Retained only when the row rendered is the one the key was read from (it may have moved since).
+      const retained = shared && !at && sameRevision(header, artifact) ? await frameKey(header) : null;
+      // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
+      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}), ...(domain ? { domainReads: true } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      counted();
+      const html = await nativeHtmlPresentation(rendered.html,row,domain);
+      if (!retained) return new Response(html, { headers: responseHeaders(etag) });
+      renderCache.set(retained, { status: 200, headers: [], body: new TextEncoder().encode(html) }, FRAME_TTL_MS);
+      return new Response(withFreshNonce(html), { headers: responseHeaders(etag) });
+    }
+    case 'file': return serveStoredFile(request, artifact);
+    case 'dataset':
+    {
+      const catalog=catalogOf(artifact);
+      const legacyFlat=catalog?.kind==='stored'&&catalog.tables.length===1&&catalog.tables[0].schema==='public'&&catalog.tables[0].name==='rows'&&typeof (artifact.meta as Record<string,unknown>).objectKey==='string';
+      return new Response(JSON.stringify(legacyFlat||!catalog ? await loadDatasetRows(artifact) : {catalog:publicCatalogOf(artifact)}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
+      });
+    }
+
+    case 'viz':
+      return new Response(artifact.source ?? '', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
+      });
+
+    case 'image': {
+      let img: Awaited<ReturnType<typeof loadImage>>;
+      try {
+        // `w=` is the width a `srcset` asked for — one of the widths publish
+        // stored, never a resize (lib/object-store/image-store).
+        img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
+      } catch (error) {
+        // The row promises bytes the store will not give: corruption or broken
+        // credentials, both page-the-operator events — said plainly, never a 500.
+        if (error instanceof ObjectUnavailable) return unavailable();
+        throw error;
+      }
+      if (!img) return notFound();
+      // A versioned URL (`?v=<n>`, how refData embeds an image) is genuinely
+      // immutable — the version changes when the bytes do. A bare URL might be
+      // replaced under the same id, so it only gets a short freshness window.
+      const cache = storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v'));
+      // SVG is inert inside an <img>, but a DIRECT hit on /raw renders it as a
+      // document where its scripts WOULD run — so lock it down like the html
+      // tier's sandbox. Raster types need no CSP (they are not documents).
+      const svgCsp: Record<string, string> = img.contentType === 'image/svg+xml'
+        ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" }
+        : {};
+      // `new Uint8Array(buffer)` re-homes the bytes on a fresh ArrayBuffer so
+      // the type is a BodyInit (a bare Buffer widens to ArrayBufferLike, which
+      // is not) — the same pattern as ./export.
+      return new Response(new Uint8Array(img.body), {
+        status: 200,
+        headers: { ...COMMON, 'Content-Type': img.contentType, 'Cache-Control': cache, ...svgCsp },
+      });
+    }
+
+    /*
+     * THE PDF — inline, sandboxed, streamed, seekable.
+     *
+     * Every part of this shape was measured rather than chosen:
+     *  - `inline` is what makes the browser's own viewer render this instead of
+     *    downloading it. `attachment` was measured doing NOTHING when opened
+     *    from inside a document's sandbox — no popup, no download — so it is
+     *    the one disposition a <File> card must not be served under.
+     *  - `Content-Security-Policy: sandbox` does not stop the viewer (measured
+     *    headful: it rendered exactly as the bare inline response did) and puts
+     *    the response at an OPAQUE origin, where localStorage and
+     *    document.cookie both throw. That is what keeps a file any user can
+     *    cause us to store from gaining this origin's privileges — the same
+     *    posture /assets/<hash> and the served document already rely on.
+     *  - the bytes are STREAMED, never read whole: one 25 MB read is its own
+     *    size in RSS for the life of the response and would evict the object
+     *    store's entire read cache (lib/object-store getStream).
+     *  - `Accept-Ranges` plus a real 206, because a viewer opening a long
+     *    document reads its cross-reference table from the END first and then
+     *    seeks; without ranges it must download all of it before the first page.
+     */
+    case 'pdf': {
+      const meta = pdfMetaOf(artifact);
+      if (!meta) return notFound();
+      const range = parseByteRange(request.headers.get('range'), meta.bytes);
+      // Built fresh per response: @hono/node-server writes the computed
+      // Content-Length back INTO this object, so a shared constant would
+      // announce the first body's length for every later one.
+      const headers: Record<string, string> = {
+        ...COMMON,
+        'Content-Type': meta.contentType,
+        'Content-Disposition': `inline; filename="${pdfFilename(artifact.title, artifact.id)}"`,
+        'Content-Security-Policy': 'sandbox',
+        'Accept-Ranges': 'bytes',
+        // Same rule as an image (./cache-control storedBytesCacheControl).
+        'Cache-Control': storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v')),
+      };
+      if (range === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
+      }
+      const length = range ? range.end - range.start + 1 : meta.bytes;
+      // HEAD: the same answer without the body, so a viewer can learn the size
+      // and that ranges are served before it asks for one. No stream is opened.
+      if (request.method === 'HEAD') {
+        return new Response(null, { status: 200, headers: { ...headers, 'Content-Length': String(meta.bytes) } });
+      }
+      let stream: Readable;
+      try {
+        stream = await loadPdfStream(meta, range ?? undefined);
+      } catch (error) {
+        // A row promising bytes the store will not give: corruption or broken
+        // credentials, both page-the-operator events — said plainly, never a 500.
+        if (error instanceof ObjectUnavailable) return unavailable();
+        throw error;
+      }
+      return new Response(Readable.toWeb(stream) as ReadableStream, {
+        status: range ? 206 : 200,
+        headers: {
+          ...headers,
+          'Content-Length': String(length),
+          ...(range ? { 'Content-Range': `bytes ${range.start}-${range.end}/${meta.bytes}` } : {}),
+        },
+      });
+    }
+
+    /*
+     * Anything else is a row this deployment does not serve — a leftover from a
+     * retired tier. It is not a case to support: it gets the SAME uniform 404
+     * as an id that never existed, because that is what it is to us. The
+     * default exists only so the handler cannot fall off its end and answer a
+     * 500.
+     */
+    default:
+      return notFound();
+  }
+}
+
+/** The row read whole is the version, edit and metadata its header named. */
+function sameRevision(header: ArtifactHeader, row: ArtifactRow): boolean {
+  return header.version === row.version && header.edit_id === row.edit_id && String(header.updated_at) === String(row.updated_at);
+}
+

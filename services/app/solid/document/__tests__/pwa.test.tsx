@@ -4,7 +4,7 @@ import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
 import { DocumentSharing } from '../DocumentSharing';
-import { captureInstallPrompt, currentInstall } from '@/lib/serving/pwa-install';
+import { captureInstallPrompt, currentInstall } from '@/solid/lib/pwa-install';
 import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
 import { readPwaSettings } from '@/lib/document/pwa-settings';
 

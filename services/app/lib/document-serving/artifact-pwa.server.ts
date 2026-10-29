@@ -10,6 +10,7 @@ import { sessionActor } from '../accounts';
 import { escapeAttr } from '@artifactbin/utils/escape';
 import { ID_RE } from '../platform';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';
+import { NO_STORE } from './cache-control';
 
 type PwaRow = Pick<ArtifactRow, 'format' | 'version' | 'meta' | 'source' | 'document'>;
 /** Native source is the only install declaration; retired graphs cannot opt in. */
@@ -66,4 +67,17 @@ export function withArtifactAppHead(html: string, row: ArtifactRow): string {
   const base = escapeAttr(artifactAppPath(row.id));
   const theme = escapeAttr(artifactManifest(row).theme_color);
   return html.replace('</head>', () => `<link data-mx-pwa rel="manifest" href="${base}manifest.webmanifest" crossorigin="use-credentials"><link data-mx-pwa rel="apple-touch-icon" href="${base}icon-192.png"><meta data-mx-pwa name="theme-color" content="${theme}"></head>`);
+}
+
+/**
+ * `/a/:id/app/<asset>` of an app `row`'s reader may read (`readableApp`): its manifest or one of its two icons,
+ * never kept, or null (a 404) when the app is not enabled or the asset is not one of them.
+ */
+export async function artifactAppAsset(row: ArtifactRow, asset: string): Promise<Response | null> {
+  if (!artifactPwaEnabled(row)) return null;
+  const headers = { 'cache-control': NO_STORE, 'x-content-type-options': 'nosniff' };
+  if (asset === 'manifest.webmanifest') return new Response(JSON.stringify(artifactManifest(row)), { headers: { ...headers, 'content-type': 'application/manifest+json' } });
+  const size = asset === 'icon-192.png' ? 192 : asset === 'icon-512.png' ? 512 : null;
+  if (!size) return null;
+  return new Response(new Uint8Array(await artifactAppIcon(row, size)), { headers: { ...headers, 'content-type': 'image/png' } });
 }

@@ -4,8 +4,8 @@
  * here: they are server-rendered by the story runtime's own esbuild bundle.
  */
 import path from 'node:path';
-import { appFontFaceCss } from './services/app/lib/serving/app-font-face-css.mjs';
-import type { AppFontFace } from './services/app/lib/serving/app-fonts';
+import { appFontFaceCss } from './services/app/lib/page-styles/app-font-face-css.mjs';
+import type { AppFontFace } from './services/app/lib/page-styles/app-fonts';
 import tailwindcss from '@tailwindcss/vite';
 import solid from 'vite-plugin-solid';
 import { readFileSync } from 'node:fs';
@@ -75,7 +75,7 @@ const READER_SHARED = [
   'lib/html-presence/model.ts', 'lib/html-presence/contract.ts',
   'solid/components/TrustedUi.tsx', 'solid/editor/create-live-artifact.ts', 'solid/lib/document-navigation.ts',
   'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts', 'lib/http/retry-lazily.ts',
-  'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/serving/artifact-pwa.ts',
+  'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/document-serving/artifact-pwa.ts',
   'lib/http/login-href.ts', 'lib/document/display-title.ts', 'lib/edit-protocol/index.ts',
 ];
 const isReaderShared = (id: string) => READER_SHARED.some(suffix => id.replaceAll('\\', '/').endsWith('/services/app/' + suffix));

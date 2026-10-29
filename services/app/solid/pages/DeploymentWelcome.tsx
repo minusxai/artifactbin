@@ -3,7 +3,7 @@ import { Show, type JSX } from 'solid-js';
 import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/skills/agent-discovery';
 import type { DeploymentState } from '@artifactbin/contracts';
 import { buildSetupInstructions } from '@/lib/skills/setup-instructions';
-import { deploymentSetupOptions } from '@/lib/serving/setup-installers';
+import { deploymentSetupOptions } from '@/lib/agent-copy/setup-installers';
 import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
 import { PageHeader } from '../ui/PageHeader';
 import { Panel } from '../ui/Panel';

@@ -15,7 +15,7 @@ import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
-import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
+import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
 
 const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 

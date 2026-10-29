@@ -33,27 +33,6 @@ it('serves an authorized app at its stable address with manifest discovery and n
   expect(html).not.toContain('"address":');
 });
 
-it('gives each artifact a distinct stable identity, scope and PNG icons', async () => {
-  const w = await world();
-  const base = `/a/${w.public.id}/app/`;
-  const res = await app.request(`${base}manifest.webmanifest?version=1&key=ignored`);
-  expect(res.status).toBe(200);
-  expect(res.headers.get('content-type')).toContain('application/manifest+json');
-  expect(res.headers.get('cache-control')).toBe('no-store');
-  const manifest = await res.json();
-  expect(manifest).toMatchObject({ id: base, start_url: base, scope: base, name: 'My app <&>', display: 'standalone' });
-  expect(manifest.icons.map((icon: { sizes: string }) => icon.sizes)).toEqual(['192x192', '512x512']);
-  const second = await (await app.request(`/a/${w.private.id}/app/manifest.webmanifest`, { headers: w.headers })).json();
-  expect(second.id).not.toBe(manifest.id);
-  for (const icon of manifest.icons) {
-    const response = await app.request(icon.src);
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toBe('image/png');
-    const metadata = await sharp(Buffer.from(await response.arrayBuffer())).metadata();
-    expect(`${metadata.width}x${metadata.height}`).toBe(icon.sizes);
-  }
-});
-
 it('protects app pages, manifest metadata and icons, including after access is revoked', async () => {
   const w = await world();
   const denied = await app.request(`/a/${w.private.id}/app/?key=${mintExportKey(w.private.id)}`, { headers: { accept: 'text/html' } });

@@ -105,7 +105,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
 /**
  * …and the one it asks for its own stylesheet again at: the document's whole compiled Tailwind with the classes
- * it only names at runtime compiled in (app/a/[id]/css, lib/serving/runtime-css.server) — a `className` its rows
+ * it only names at runtime compiled in (app/a/[id]/css, lib/document-serving/runtime-css.server) — a `className` its rows
  * fill. Admitted on the same terms: path-exact, the same read ACL as the page, and its answer is CSS.
  */
 export const runtimeCssPath = (id: string): string => `/a/${id}/css`;

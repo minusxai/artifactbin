@@ -9,7 +9,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { createUser } from '@/lib/accounts';
 import { storeFileContent } from '@/lib/datasets/file-store';
 import { getDb } from '@/lib/platform';
-import { publicRefAsset, publicRefAssetResponse } from '@/lib/serving';
+import { publicRefAsset, publicRefAssetResponse } from '@/lib/document-serving';
 
 useAppHarness();
 

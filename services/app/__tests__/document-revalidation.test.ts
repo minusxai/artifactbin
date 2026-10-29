@@ -13,7 +13,7 @@ import {createUser} from '@/lib/accounts';
 import {pagesOriginFor,pagesSiteFor} from '@/lib/http/pages-origin';
 import { getDb, measureQueries } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
-import * as native from '@/lib/serving/native-html.server';
+import * as native from '@/lib/document-serving/native-html.server';
 import {createAppServer} from '../server/app';
 useAppHarness();afterEach(()=>{setSession(null);vi.restoreAllMocks();});
 const APP='https://app.example.test',site=pagesSiteFor('pages.example.test',APP)!;

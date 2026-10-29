@@ -33,7 +33,7 @@ import {resolveImageReference} from '@/lib/artifacts';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish/assets/web-assets';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { verifyExportKey } from '@/lib/export';
-import {publicRefAsset} from '@/lib/serving';
+import { publicRefAsset } from '@/lib/document-serving';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

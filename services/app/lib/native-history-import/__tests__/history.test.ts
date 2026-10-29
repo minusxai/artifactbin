@@ -19,7 +19,7 @@ import type { NativeHistoryImport, NativeHistoryRevision } from "../contracts";
 import { listAnnotationsFor } from "@/lib/annotations/store";
 import { prepareNativeHistoryRelations } from "../relations";
 import { importNativeHistory, writeNativeHistory } from "../index";
-import { artifactPageAnswer } from "@/lib/serving/artifact-page";
+import { artifactPageAnswer } from "@/lib/document-serving/artifact-page";
 useAppHarness();
 it("writes a large latest-only lifetime ledger in bounded statements and verifies every reservation on replay", async () => {
   const {db,input} = await fixture();

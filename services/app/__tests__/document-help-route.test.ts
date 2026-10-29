@@ -1,7 +1,7 @@
 /** HTTP discovery remains app chrome; authored native page bytes stay their own file. */
 import {expect,it} from 'vitest';
 import {createAppServer} from '@/server/app';
-import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/serving/agent-discovery';
+import {agentDiscovery,agentDiscoveryHead,agentDiscoveryTail,withAgentDiscoveryTail} from '@/lib/agent-copy/agent-discovery';
 
 it('keeps author help available in the app shell on its request origin',async()=>{
  const app=createAppServer({indexHtml:async()=>'<html><head><title>App</title></head><body></body></html>'});

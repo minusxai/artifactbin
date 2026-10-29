@@ -18,7 +18,7 @@ import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
 import { flushViews } from '@/lib/analytics';
-import { resetRenderCache } from '@/lib/serving/render-cache';
+import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -238,7 +238,7 @@ export function useAppHarness(): AppHarness {
 }
 
 /**
- * THE DOCUMENT AN APP PAGE FRAMES, as its reader's browser loads it (lib/serving/document-frame): the app page at
+ * THE DOCUMENT AN APP PAGE FRAMES, as its reader's browser loads it (lib/document-serving/document-frame): the app page at
  * `path` (asked with `init`, its reader's credentials), then the frame's first URL — the document's own origin,
  * which spends the page's one-time ticket and serves the document in that same response. Null when the app page
  * draws no frame. `app` is `createAppServer()`'s.

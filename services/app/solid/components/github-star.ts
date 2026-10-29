@@ -1,6 +1,4 @@
-import { REPO_URL } from './repo';
-
-export const GITHUB_EXTERNAL_URL = '/api/external/github';
+import { GITHUB_EXTERNAL_URL, REPO_URL } from '@/lib/http/urls';
 
 /** Always available, including before hydration or when GitHub is unavailable.
  * Label and count follow the surrounding palette; the star uses Primer’s

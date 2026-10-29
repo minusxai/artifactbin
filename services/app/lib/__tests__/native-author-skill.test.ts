@@ -6,7 +6,7 @@ import {describe,it,expect} from 'vitest';
 import {skillTree,renderSkill,SKILL_FILE_MAX_BYTES} from '@/lib/skills';
 import {isPublicSkillTopic} from '@/lib/skills/public-surface';
 import {skillPackageFiles} from '@/lib/skills/package';
-import {publicGuideText,llmsText} from '@/lib/serving/agent-references.server';
+import {publicGuideText,llmsText} from '@/lib/agent-copy/agent-references.server';
 import {htmlPwaSettings} from '@/lib/html-page';
 import {packOfflineHtmlImages} from '@/lib/export/native-html-media';
 import {GET as skillArchive} from '@/app/skills/artifactbin.zip/route';

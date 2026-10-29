@@ -23,12 +23,11 @@ import type { ArtifactRow } from '@/lib/artifacts';
 import { compileStoryCssWithExtras, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data/story/story-css';
 import { etagOf } from '@/lib/http/revalidation';
+import { runtimeCssCacheControl } from './cache-control';
 
 /** The door's parameters: the version, the compile environment the page was served under, the classes (space-separated). */
 const RUNTIME_CSS_PARAMS = { version: 'v', compile: 'k', extras: 'x' } as const;
 
-/** A year: the answer never changes for its URL. */
-const IMMUTABLE = 'max-age=31536000, immutable';
 
 /** The classes a door's URL asks for (`x`, space-separated), sorted and deduped; null when one is not a class or there are too many. */
 function askedRuntimeClasses(url: URL): string[] | null {
@@ -67,5 +66,5 @@ export async function runtimeCssAnswer(row: Pick<ArtifactRow, 'id' | 'version' |
   const environment = storyCssCompileVersion();
   const css = (await compileStoryCssWithExtras(row.source ?? '', request.extras)) ?? '';
   const current = request.compile === environment;
-  return { css, etag: etagOf({ id: row.id, version: row.version, environment, extras: request.extras }), cacheControl: current ? `${anyone ? 'public' : 'private'}, ${IMMUTABLE}` : 'private, no-cache' };
+  return { css, etag: etagOf({ id: row.id, version: row.version, environment, extras: request.extras }), cacheControl: runtimeCssCacheControl(current, anyone) };
 }

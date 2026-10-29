@@ -9,7 +9,7 @@ import { mintAccountToken, setSession, useAppHarness } from '@/__tests__/harness
 import { createArtifact, setMetadataFor } from '@/lib/artifacts';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
-import { artifactPageAnswer, artifactPageResponse, readableApp } from '@/lib/serving';
+import { artifactPageAnswer, artifactPageResponse, readableApp } from '@/lib/document-serving';
 
 useAppHarness();
 const APP = 'https://app.example.test';

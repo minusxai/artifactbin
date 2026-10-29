@@ -41,7 +41,7 @@ may be owned by exactly one process, so a second checkout changes its port in
 ### Documents on their own origins (`APP__PAGES_HOST`, required)
 
 Every document is served at `<hex(id)>.<pages host>` and the app page frames it (services/app/server/pages-host.ts,
-services/app/lib/serving/document-frame.ts); there is no other renderer, so the server refuses to boot without
+services/app/lib/document-serving/document-frame.ts); there is no other renderer, so the server refuses to boot without
 `APP__PAGES_HOST`. The frame's document reads its reader from a host-only `afbin_pages` cookie. Over https it is
 `__Host-afbin_pages` with `SameSite=None; Partitioned`, so the pages host may be a site of its own (production serves
 documents from `artefactbin.dev`, apart from `artifactbin.dev`). Over plain http it is `SameSite=Lax`, so in

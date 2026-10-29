@@ -11,11 +11,7 @@ import { createUser, setUsername } from '@/lib/accounts';
 import { urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform';
 import { overrideConfig } from '@/lib/platform/config';
-import {
-  attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, domainPath, isServable,
-  ownerForHost, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainHomepage, setDomainPath,
-  verifyDomain, type DomainResolver,
-} from '@/lib/serving';
+import { attachDomain, canonicalDocumentUrl, customHostCandidate, domainHomepage, domainHomepageOptions, domainPath, isServable, ownerForHost, removeDomain, servesDocument, servesEmbeddedArtifact, servesWebAsset, setDomainHomepage, setDomainPath, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 
 useAppHarness();
 const APP = 'https://app.example.test';

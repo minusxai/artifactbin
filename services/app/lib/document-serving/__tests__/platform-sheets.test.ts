@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { HTML_SYSTEM_NAMES } from '@/lib/html-systems';
-import { nativeHtmlSystemsResponse } from '@/lib/serving';
+import { nativeHtmlSystemsResponse } from '@/lib/document-serving';
 
 const SYSTEM = HTML_SYSTEM_NAMES[0]!;
 const ask = (query: string, init: RequestInit = {}) => nativeHtmlSystemsResponse(new Request(`https://app.example.test/af/styles.css${query}`, init));

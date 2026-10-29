@@ -47,11 +47,12 @@ import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-ori
 import {storedCspExtensions} from '@/lib/document';
 import { carriedTrust,cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
+import { NO_STORE } from './cache-control';
 
 export interface ArtifactPageAnswer {
   status: number;
   body: unknown;
-  /** The document's frame, which the app page draws (lib/serving/document-frame): only the HTML door asks for it. */
+  /** The document's frame, which the app page draws (lib/document-serving/document-frame): only the HTML door asks for it. */
   frame?: DocumentFrame;
   /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
@@ -407,7 +408,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
 export async function artifactPageResponse(request: Request, id: string): Promise<Response> {
   const answer = await artifactPageAnswer(request, id);
   if (answer.status === 304 && answer.etag) return notModified(answer.etag);
-  return answer.status === 200 ? json(answer.body, 200, answer.etag ? revalidationHeaders(answer.etag) : { 'Cache-Control': 'no-store' }) : json(answer.body, answer.status);
+  return answer.status === 200 ? json(answer.body, 200, answer.etag ? revalidationHeaders(answer.etag) : { 'Cache-Control': NO_STORE }) : json(answer.body, answer.status);
 }
 
 /**
