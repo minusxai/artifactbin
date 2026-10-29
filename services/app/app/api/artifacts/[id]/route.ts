@@ -1,6 +1,6 @@
 import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
-import { json, readJson } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, json, readJson } from '@/lib/http';
 
 /** GET /api/artifacts/:id — full read-back (source markup + meta). Actor-scope; else uniform 404. */
 export const GET = withTokenAuth((request: Request, { actor, params }) =>
@@ -11,7 +11,7 @@ export const GET = withTokenAuth((request: Request, { actor, params }) =>
  * formats): archives the current state and bumps version. URL never changes.
  */
 export const PUT = withTokenAuth(async (request: Request, { actor, params }) => {
-  const body = await readJson(request);
+  const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);
   // The path names the document; a body `id` never overrides it.
   return runOperation('update_artifact', request, actor, { ...body, id: params.id });

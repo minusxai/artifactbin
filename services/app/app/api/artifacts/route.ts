@@ -1,7 +1,7 @@
 import { createArtifactFromBody } from '@/lib/publish/publish';
 import { withTokenAuth, type TokenHoldingActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
-import { baseUrl, json, readJson } from '@/lib/http';
+import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 import { readFileUpload } from '@/lib/datasets/file-store';
 
 /**
@@ -34,7 +34,7 @@ export async function createArtifactFromRequest(
     };
     return createArtifactFromBody(body,actor,baseUrl(request),request);
   }
-  const body = await readJson(request);
+  const body = await readJson(request, { limit: PUBLISH_BODY_LIMIT });
   if (!body) return json({ error: 'invalid_json' }, 400);
   return runOperation('create_artifact', request, actor, body);
 }

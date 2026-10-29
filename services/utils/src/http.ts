@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
+import { collectNodeBody } from './body';
 
 /** JSON with a Set on the wire as an array — a Set stringifies to `{}` and binds nothing, which is a bug this was found by. */
 const replacer = (_k: string, v: unknown) => (v instanceof Set ? [...v] : v);
@@ -47,10 +48,10 @@ export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonSer
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     const route = routes[req.url ?? ''];
     if (!route) return json(404, { error: 'not_found' });
-    const chunks: Buffer[] = []; let size = 0;
-    for await (const c of req) { size += (c as Buffer).length; if (size > opts.maxBody) { json(413, { error: 'too_large' }); req.destroy(); return; } chunks.push(c as Buffer); }
+    const raw = await collectNodeBody(req, opts.maxBody);
+    if (!raw) return json(413, { error: 'too_large' });
     try {
-      return json(200, await route(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
+      return json(200, await route(JSON.parse(raw.toString('utf8'))));
     } catch (error) {
       // The url is CALLER INPUT: as the format string its own `%s`/`%d` would eat
       // the arguments after it and the error would vanish from the line (CodeQL

@@ -65,6 +65,18 @@ describe('stackHealth', () => {
   });
 });
 
+describe('stackHealth database probe', () => {
+  const none = { sql: null, browser: null, events: null };
+  it('the default probe runs SELECT 1 on the serving database and is healthy', async () => {
+    expect(await stackHealth(none)).toEqual({ ok: true, failing: [] });
+  });
+  it('a failing database reads as degraded, named db, after the services', async () => {
+    const bad = await serve(500);
+    expect(await stackHealth({ ...none, events: bad }, async () => false)).toEqual({ ok: false, failing: ['events', 'db'] });
+    expect(await stackHealth(none, async () => { throw new Error('connection refused'); })).toEqual({ ok: false, failing: ['db'] });
+  });
+});
+
 describe('GET /api/health', () => {
   it('answers 200 {"ok":true} exactly, never cached, with no credential, when every service is healthy', async () => {
     overrideConfig({ sqlServiceUrl: await serve(200) });

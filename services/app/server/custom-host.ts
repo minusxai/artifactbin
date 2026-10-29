@@ -40,7 +40,7 @@ import { getArtifactById, declarationsForRow } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
 import { customHostCandidate, domainHomepage, domainPath, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/serving';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/serving';
-import { baseUrl, json } from '@/lib/http';
+import { PayloadTooLarge, baseUrl, json, readBody } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { domainPostPath } from '@/lib/http';
@@ -98,14 +98,14 @@ function requestHostname(request: Request): string | null {
 }
 
 /** A guest's copy of the request: same method, URL and body, no credentials, no attached actor. */
-async function asGuest(request: Request, body?: ArrayBuffer | null): Promise<Request> {
+async function asGuest(request: Request, body?: Uint8Array<ArrayBuffer> | null): Promise<Request> {
   const headers = new Headers(request.headers);
   for (const name of CREDENTIAL_HEADERS) headers.delete(name);
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
-  return new Request(request.url, { method: request.method, headers, body: hasBody ? body ?? await request.arrayBuffer() : undefined });
+  return new Request(request.url, { method: request.method, headers, body: hasBody ? body ?? await readBody(request) : undefined });
 }
 
-const parseJson = (bytes: ArrayBuffer): Record<string, unknown> | null => {
+const parseJson = (bytes: Uint8Array): Record<string, unknown> | null => {
   try {
     const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -177,7 +177,7 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
       if (get) return call(queryGet, await asGuest(request), id);
       if (method !== 'POST') return notFound();
       // A POST exists for the reader's own temporary rows, and for nothing else.
-      const body = await request.arrayBuffer();
+      const body = await readBody(request);
       const local = parseJson(body)?.localTables;
       if (!local || typeof local !== 'object' || !Object.keys(local).length) return notFound();
       return call(queryPost, await asGuest(request, body), id);
@@ -185,7 +185,7 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
     case 'mutate': {
       if (method === 'OPTIONS') return call(mutateOptions, await asGuest(request), id);
       if (method !== 'POST') return notFound();
-      const body = await request.arrayBuffer();
+      const body = await readBody(request);
       const name = parseJson(body)?.mutation;
       const declared = (await declarationsForRow(row))?.flow.mutations.find((m) => m.name === name);
       // Only a local Mutation runs here: it writes the reader's own rows, never a dataset.
@@ -322,7 +322,10 @@ export function customHostBoundary(options: CustomHostOptions = {}): MiddlewareH
       if (bytes) return withoutCookies(bytes);
     }
     const document = DOCUMENT_ROUTE.exec(path);
-    if (document) return withoutCookies(await documentRoute(request, document[1]!, document[2]!, ownerId));
+    if (document) {
+      try { return withoutCookies(await documentRoute(request, document[1]!, document[2]!, ownerId)); }
+      catch (error) { if (error instanceof PayloadTooLarge) return error.response(); throw error; }
+    }
     const segment = /^\/([^/]+)$/.exec(path)?.[1];
     if (segment && readable) return withoutCookies(await post(request, segment, hostname, ownerId));
     return notFound();

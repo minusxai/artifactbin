@@ -9,6 +9,7 @@ import type { Hono } from 'hono';
 import { emit } from '@/lib/platform';
 import { runWithRequest } from '@/lib/platform';
 import { UnservableDocument } from '@/lib/artifacts';
+import { PayloadTooLarge } from '@/lib/http';
 import { ROUTES, type RouteEntry } from './routes.generated';
 
 type Handler = (request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response> | Response;
@@ -23,6 +24,8 @@ export function mountRoutes(app: Hono, routes: RouteEntry[] = ROUTES): void {
         } catch (error) {
           // A door that forgot its refusal still answers the document's 410 by name, never a bare 500.
           if (error instanceof UnservableDocument) return error.response();
+          // A body past its route's cap (lib/http readBody) is the caller's, not an outage.
+          if (error instanceof PayloadTooLarge) return error.response();
           /*
            * A 500 the operator cannot read is an outage with no handle: the
            * framework's default handler answers and swallows, which is exactly

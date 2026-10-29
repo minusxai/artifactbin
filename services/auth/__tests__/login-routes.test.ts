@@ -44,6 +44,22 @@ describe('the login door is open (the invite gate is retired)', () => {
   });
 });
 
+describe('auth bodies are capped at 16 KB', () => {
+  it('refuses an oversized OTP send with 413 before anything parses it, declared or chunked', async () => {
+    const app = await proxy({});
+    const big = JSON.stringify({ email: 'i@example.com', type: 'sign-in', pad: 'x'.repeat(20 * 1024) });
+    const declared = await app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: big });
+    expect(declared.status).toBe(413);
+    const chunked = await app.request(new Request(`${BASE}/api/auth/email-otp/send-verification-otp`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, duplex: 'half',
+      body: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(big)); c.close(); } }),
+    } as RequestInit));
+    expect(chunked.status).toBe(413);
+    expect(sent).toEqual([]);
+    expect((await send(app)).status).toBe(200);
+  });
+});
+
 describe('company denied login',()=>{
  it('withholds real verified OTP cookies and denies a captured existing session at device approval',async()=>{
   const app=await proxy({},async()=>false);

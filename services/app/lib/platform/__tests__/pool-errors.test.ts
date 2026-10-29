@@ -15,3 +15,9 @@ it('the serving pool fails fast instead of queueing forever', () => {
   expect(SERVING_POOL.connectionTimeoutMillis).toBeGreaterThan(0);
   expect(SERVING_POOL.statement_timeout).toBeGreaterThan(0);
 });
+
+it('the serving pool bounds idle transactions (30 s) and lock waits (10 s) and keeps the 60 s statement timeout', () => {
+  expect(SERVING_POOL.idle_in_transaction_session_timeout).toBe(30_000);
+  expect(SERVING_POOL.lock_timeout).toBe(10_000);
+  expect(SERVING_POOL.statement_timeout).toBe(60_000);
+});

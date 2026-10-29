@@ -17,6 +17,7 @@ import http from 'node:http';
 import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest, SvgHarvestRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import type { JsonServer } from '@artifactbin/utils';
+import { collectNodeBody } from '@artifactbin/utils';
 
 export type * from '@artifactbin/contracts';
 export { BROWSER_ROUTES } from '@artifactbin/contracts';
@@ -34,10 +35,10 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
     if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     if (req.url !== BROWSER_ROUTES.render && req.url !== BROWSER_ROUTES.renderUpload && req.url !== BROWSER_ROUTES.harvest && req.url !== BROWSER_ROUTES.sessions) return json(404, { error: 'not_found' });
-    const chunks: Buffer[] = []; let size = 0;
-    for await (const c of req) { size += (c as Buffer).length; if (size > maxBody) { json(413, { error: 'too_large' }); req.destroy(); return; } chunks.push(c as Buffer); }
+    const raw = await collectNodeBody(req, maxBody);
+    if (!raw) return json(413, { error: 'too_large' });
     let input: RenderRequest;
-    try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400, { error: 'bad_request' }); }
+    try { input = JSON.parse(raw.toString('utf8')); } catch { return json(400, { error: 'bad_request' }); }
     if (req.url === BROWSER_ROUTES.sessions) {
       if (!svc.sessions) return json(503, { error: 'sessions_unavailable' });
       const request = input as unknown as BrowserSessionRequest;

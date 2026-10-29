@@ -1,6 +1,6 @@
 import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
-import { json } from '@/lib/http';
+import { SMALL_BODY_LIMIT, json, readBody } from '@/lib/http';
 
 /**
  * ABSENT and MALFORMED are different facts, and this door is the one place in
@@ -34,7 +34,7 @@ function overridesFrom(raw: string): Record<string, unknown> | null {
  * `forkArtifact`, different credential.
  */
 export const POST = withTokenAuth(async (request: Request, { actor, params }) => {
-  const overrides = overridesFrom(await request.text());
+  const overrides = overridesFrom(await readBody(request, { limit: SMALL_BODY_LIMIT, as: 'text' }));
   if (!overrides) return json({ error: 'invalid_json' }, 400);
   return runOperation('fork_artifact', request, actor, { ...overrides, id: params.id });
 });
