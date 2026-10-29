@@ -118,8 +118,8 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
 - **Answer comments.** `node scripts/comment.mjs list ID`. If a comment asks for a change, make the
   edit first, then `node scripts/comment.mjs reply ID --thread T --body-file reply.txt` (add
   `--resolve --expected-revision R` when done). Anchors are described at the top of
-  `comment.mjs`.[% if not shipped %] Direct-HTTP agents: [authentication](references/http-auth.md)
-  and [comment anchors and browser sessions](references/html-operations.md).[% endif %]
+  `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
+  and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
 - **Monitor.** `node scripts/comment.mjs watch ID` streams new comments.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
