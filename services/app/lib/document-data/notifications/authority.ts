@@ -6,7 +6,7 @@ import { grantsOf, grantsPermitRead, readThrough, type ReadRow } from '@/lib/art
 import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts';
 import { documentEditorReaches } from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';
@@ -20,6 +20,8 @@ interface Identity {actor:AccessActor;kind:string|null;revision:string}
 interface Share {user_id:string|null;email:string;role:string}
 interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
 const denied=()=>new NotificationExecutionError('notification_access_revoked');
+/** The principal is re-read inside the commit it fences, after its row locks: the wall clock, not the transaction's start. */
+const COMMIT_LIVE_TOKEN=liveTokenSql('clock_timestamp()');
 const owner=(row:ArtifactRow,actor:AccessActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:!!actor.tokenId&&row.token_id===actor.tokenId);
 async function account(tx:Queryable,id:string):Promise<Account|null>{
  return (await tx.query<Account>("SELECT id,email,kind,expires_at FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) AND merged_into_user_id IS NULL",[id])).rows[0]??null;
@@ -28,7 +30,7 @@ export async function notificationPrincipal(tx:Queryable,principal:MutationIniti
  if(principal.kind!=='user'&&principal.kind!=='token')throw denied();
  let userId:string|null=principal.kind==='user'?principal.id:null,token:LiveToken|null=null;
  if(principal.kind==='token'){
-  token=(await tx.query<LiveToken>("SELECT id,user_id,expires_at,audience,scope FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now())",[principal.id])).rows[0]??null;
+  token=(await tx.query<LiveToken>(`SELECT id,user_id,expires_at,audience,scope FROM tokens WHERE id=$1 AND ${COMMIT_LIVE_TOKEN}`,[principal.id])).rows[0]??null;
   if(!token)throw denied();
   if(token.audience&&(token.audience!==`${new URL(PUBLIC_BASE_URL).origin}/api`||!token.scope?.split(/\s+/).includes('artifacts')))throw denied();
   userId=token.user_id;
@@ -153,4 +155,12 @@ async function canManageNotificationDocument(tx:Queryable,principal:MutationInit
   return documentEditorReaches(row,identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));
  }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}
 }
-export const notificationAuthority={validatePlan:validateNotificationPlan,admitRecipients,canManage:canManageNotificationDocument};
+/** The job worker's liveness question at its clock (`at`; null = the wall clock): an unmerged, unexpired account or a live token. */
+async function principalLive(tx:Queryable,principal:{kind:'user'|'token';id:string},at:string|null):Promise<boolean>{
+ const clock='coalesce($2::timestamptz,clock_timestamp())';
+ const alive=principal.kind==='user'
+  ?await tx.query(`SELECT id FROM users WHERE id=$1 AND merged_into_user_id IS NULL AND (expires_at IS NULL OR expires_at>${clock})`,[principal.id,at])
+  :await tx.query(`SELECT id FROM tokens WHERE id=$1 AND ${liveTokenSql(clock)}`,[principal.id,at]);
+ return alive.rows.length>0;
+}
+export const notificationAuthority={validatePlan:validateNotificationPlan,admitRecipients,canManage:canManageNotificationDocument,principalLive};

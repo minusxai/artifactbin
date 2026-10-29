@@ -8,6 +8,7 @@ import type { UserKind } from '@artifactbin/contracts';
 import { getDb,type Queryable } from '../platform/db';
 import { emit } from '../platform/events';
 import { generateInternalId } from '../platform/ids';
+import { artifactAdopter } from './artifact-adoption';
 import { forgetRequestCredentials, sha256 } from './tokens';
 import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
 
@@ -120,6 +121,11 @@ export async function ensureUsername<T extends AnyUserRow>(user: T): Promise<T> 
   throw new Error('could not assign a username');
 }
 
+/** Whether mentions of this account join it without asking; inside the caller's transaction, which holds the user row. */
+export async function setAutoAcceptMentions(tx: Queryable, userId: string, autoAccept: boolean): Promise<void> {
+  await tx.query('UPDATE users SET auto_accept_mentions=$2 WHERE id=$1', [userId, autoAccept]);
+}
+
 /**
  * Rename. The old name is RELEASED (URLs are id-anchored, so nothing breaks);
  * uniform 'invalid' for malformed and reserved names, 'taken' on conflict.
@@ -224,6 +230,7 @@ async function claimWhere(
   where: string,
   value: string,
 ): Promise<{ tokenId: string; claimedArtifacts: number } | null> {
+    const adopt = artifactAdopter();
     const db = await getDb();
     /*
      * The NAME rides out of the transaction alongside the claim, purely so the
@@ -250,12 +257,9 @@ async function claimWhere(
       // Uniform null: unknown, revoked, or someone else's — the caller cannot
       // tell which, and re-claiming your own still backfills, because that step
       // is safe to repeat and must not be skipped.
-      const backfilled = await tx.query(
-        'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL AND group_id IS NULL',
-        [userId, token.id],
-      );
+      const claimedArtifacts = await adopt.fromToken(tx, token.id, userId);
       await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL',[userId,token.id]);
-      return { tokenId: token.id, claimedArtifacts: backfilled.rowCount, name: token.name };
+      return { tokenId: token.id, claimedArtifacts, name: token.name };
     });
     if (!claimed) return null;
     // After the transaction, never inside it: PGLite serialises the op queue

@@ -13,6 +13,8 @@ export interface NotificationJobAuthority {
  validatePlan(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan):Promise<void>;
  admitRecipients(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan,ids:string[]):Promise<string[]>;
  canManage(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>;
+ /** The principal is still a live credential at `at` (the store's clock; null = the wall clock). Accounts own the rule. */
+ principalLive(tx:Queryable,principal:{kind:'user'|'token';id:string},at:string|null):Promise<boolean>;
 }
 interface NotificationJobStoreOptions {db:Db;authority:NotificationJobAuthority;clock?:()=>Date}
 interface JobRow {id:string;input:MutationNotificationJobInput;generation:number;lease_until:string;status:string;attempts:number;error_code:string|null;next_attempt_at:string|null}
@@ -33,10 +35,7 @@ export function createNotificationJobStore({db,authority,clock}:NotificationJobS
  };
  const authorized=async(tx:Queryable,principal:MutationInitiator['principal'],row:JobRow)=>{
   if(principal.kind!=='user'&&principal.kind!=='token')return false;
-  const alive=principal.kind==='user'
-   ?await tx.query('SELECT id FROM users WHERE id=$1 AND merged_into_user_id IS NULL AND (expires_at IS NULL OR expires_at>coalesce($2::timestamptz,clock_timestamp()))',[principal.id,time()])
-   :await tx.query('SELECT id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>coalesce($2::timestamptz,clock_timestamp()))',[principal.id,time()]);
-  if(!alive.rows.length)return false;
+  if(!await authority.principalLive(tx,principal,time()))return false;
   const original=row.input.initiator.principal;
   // A token's account at the run is frozen by the server; its current owner may differ.
   const initiatingAccount=original.kind==='token'&&principal.kind==='user'&&row.input.bindings.userId===principal.id;

@@ -1,4 +1,4 @@
-import { editorScope, ownerScope, type ArtifactRow, type Scope } from './table';
+import { editorScope, notifyArtifactSql, ownerScope, type ArtifactRow, type Scope } from './table';
 import { identityForUser } from '@/lib/accounts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
@@ -26,7 +26,7 @@ export function setAccessFor(actor: AccessActor, id: string, access: DatasetAcce
 async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
   const db = await getDb();
   const r = await artifactQuery<ArtifactRow>(db,
-    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
+    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, ${notifyArtifactSql('id', 'edit_id')}`,
     [id, scope.val, access],
   );
   return r.rows[0] ?? null;
@@ -104,7 +104,7 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
     if(patch.shares!==undefined)await writeShares(tx,id,patch.shares);
     // Dataset subscribers must re-read capabilities even when rows/version
     // have not changed. The existing data wakeup already refreshes queries.
-    await tx.query(`SELECT pg_notify('artifact_' || lower(id), edit_id) FROM artifacts WHERE id = $1`, [id]);
+    await tx.query(`SELECT ${notifyArtifactSql('id', 'edit_id')} FROM artifacts WHERE id = $1`, [id]);
     const row = owned.rows[0];
     const shares = await tx.query<ShareEntry>('SELECT email, role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id]);
     return {

@@ -280,3 +280,30 @@ it("rejects legacy token-only identities explicitly and revoked account credenti
     (await f.db.query("SELECT response FROM mutation_receipts")).rows,
   ).toHaveLength(0);
 });
+
+it("refuses a credential that expired while the commit transaction ran, reading the wall clock at the fence", async () => {
+  const f = await fixture();
+  const original = f.db.transaction.bind(f.db);
+  let expired = false;
+  // Expire the owner's token after the commit has taken its row locks, before the registered page's fence runs.
+  vi.spyOn(f.db, "transaction").mockImplementation((fn) =>
+    original((tx) =>
+      fn({
+        ...tx,
+        query: async (sql: string, values?: unknown[]) => {
+          const result = await tx.query(sql, values);
+          if (!expired && /FROM artifacts WHERE id=ANY\(\$1::text\[\]\) ORDER BY id FOR UPDATE/.test(sql)) {
+            expired = true;
+            await tx.query("SELECT pg_sleep(0.02)");
+            await tx.query("UPDATE tokens SET expires_at = now() + (clock_timestamp() - now()) / 2 WHERE id = $1", [f.owner.id]);
+          }
+          return result as never;
+        },
+      } as typeof tx),
+    ),
+  );
+  const reply = await f.call(f.owner.token, "expiring_request_123456789");
+  expect(expired).toBe(true);
+  expect((await reply.json()).data?.actions?.run?.outcome).not.toBe("committed");
+  expect(await f.rows()).toEqual([{ body: "seed" }]);
+});

@@ -142,6 +142,24 @@ export const ownerPredicate = ({ tokenId, userId, groupId }: AccessActor): Scope
 
 export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(actor));
 
+/** One read-access fence for policy actions: sharing remains the only audience. Placeholders are the caller's. */
+export function policyReaderSql(user = '$13', token = '$14'): string {
+  return `(artifacts.visibility<>'private' OR (artifacts.group_id IS NULL AND (artifacts.user_id=${user} OR (artifacts.user_id IS NULL AND artifacts.token_id=${token}))) OR ${groupMemberPredicate(user)}
+   OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
+     AND (policy_reader.user_id=${user} OR (policy_reader.user_id IS NULL AND
+       policy_reader.email=(SELECT email FROM users WHERE id=${user})))))`;
+}
+
+/**
+ * A row's live-update NOTIFY, spelled in SQL for a statement that notifies the rows it wrote: the channel is
+ * `artifactChannel` (@artifactbin/contracts), and __tests__/live-channels.test.ts holds the two to one answer.
+ */
+export const notifyArtifactSql = (id: string, payload: string): string => `pg_notify('artifact_' || lower(${id}), ${payload})`;
+
+/** What every new head stamps: the next version, its fresh edit id, who made it and when (placeholders are the caller's). */
+export const headBumpSql = (editId: string, user: string, token: string): string =>
+  `version = version + 1, edit_id = ${editId}, actor_user_id = ${user}, actor_token_id = ${token}, updated_at = now()`;
+
 /**
  * The LINK half of the lattice, in SQL. Only ever composed into a scope that
  * has already narrowed to an actor with an ACCOUNT (scopeAtLeast below), which

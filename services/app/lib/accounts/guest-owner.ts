@@ -1,3 +1,4 @@
+import { artifactAdopter } from './artifact-adoption';
 import { LIVE_TOKEN_SQL } from './tokens';
 import { getDb } from '@/lib/platform/db';
 
@@ -5,6 +6,7 @@ import { getDb } from '@/lib/platform/db';
  * Existing and newly registered accounts take the same atomic merge path. */
 export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): Promise<void> {
   if (!heldTokenIds.length) return;
+  const adopt = artifactAdopter();
   await (await getDb()).transaction(async tx => {
     const account = await tx.query("SELECT 1 FROM users WHERE id = $1 AND kind = 'account' AND email IS NOT NULL", [userId]);
     if (!account.rows.length) return;
@@ -13,7 +15,7 @@ export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): P
     const guests = await tx.query<{ id: string }>(`SELECT users.id FROM users WHERE kind = 'guest' AND EXISTS
       (SELECT 1 FROM tokens WHERE tokens.user_id = users.id AND tokens.id = ANY($1::text[]) AND ${LIVE_TOKEN_SQL}) FOR UPDATE`, [heldTokenIds]);
     for (const guest of guests.rows) {
-      await tx.query('UPDATE artifacts SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
+      await adopt.fromGuest(tx, guest.id, userId);
       await tx.query('UPDATE tokens SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE comment_images SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE dataset_secrets SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);

@@ -25,7 +25,13 @@ const TOKEN_PREFIX = 'mx_';
  * the two — an unqualified clause there is `column reference "deleted_at" is
  * ambiguous`, which is a 500 on the dashboard of anyone holding a token.
  */
-export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > now())';
+export const liveTokenSql = (at = 'now()'): string => `tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > ${at})`;
+/**
+ * Live at the TRANSACTION's start (`now()`): right for a request's own lookup, one statement long. A fence
+ * re-checked inside a commit transaction, after row locks it may have waited on, asks
+ * `liveTokenSql('clock_timestamp()')` instead, so a token that expired during the wait is refused.
+ */
+export const LIVE_TOKEN_SQL = liveTokenSql();
 
 /**
  * WHAT ONE REQUEST HAS ALREADY LEARNED ABOUT ITS CREDENTIAL. The bearer door asks "is this token live?"
