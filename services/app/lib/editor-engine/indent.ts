@@ -6,7 +6,7 @@ import { TextSelection, type Command } from 'prosemirror-state';
 import type { ResolvedPos } from 'prosemirror-model';
 import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import type { JsxElement } from '@/lib/jsx';
-import { currentIndentLevel, stepIndentClass } from '@/lib/data/story/typography';
+import { currentIndentLevel, stepIndentClass } from '@/lib/story-design/typography';
 import { editorSchema } from './model';
 
 const CODE_INDENT = '  ';

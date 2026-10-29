@@ -9,7 +9,7 @@
  *
  * TWO SITES THAT LOOK LIKE THIS AND ARE NOT, deliberately left alone:
  * `lib/jsx/__tests__/syntax-error.test.ts` guards the INVERSE (`if (parsed.ok) throw`), and
- * `lib/data/story/__tests__/jsx-edit-layout.test.ts` asserts `expect(parsed.ok).toBe(true)` before
+ * `lib/story-edit/__tests__/jsx-edit-layout.test.ts` asserts `expect(parsed.ok).toBe(true)` before
  * narrowing, which is an assertion rather than a guard.
  *
  * This is a genuine gap rather than a bypassed helper: nothing in `test/helpers/` covered it.
@@ -37,7 +37,7 @@ export function parseJsxOrThrow(source: string): ParsedJsx {
 
 /**
  * EVERY WRITE-BACK RESULT MUST BE VALID, RENDERABLE STORY JSX — the invariant
- * the three `lib/data/story/__tests__/jsx-*edit*.test.ts` files check after
+ * the three `lib/story-edit/__tests__/jsx-*edit*.test.ts` files check after
  * each edit. One copy, because the allowlists it validates against are the
  * product's, not a test's.
  */

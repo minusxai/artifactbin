@@ -36,7 +36,7 @@ interface StoryEditReadyMessage { type: 'mx:edit-ready'; nonce: string }
  * Frame → parent: the user finished editing a text host (blur), or is about to
  * have a format applied mid-word. `innerHtml` is the host's contenteditable
  * output — rich inline HTML, possibly hostile; the parent composes it through
- * the same sanitizing write-back the canvas used (lib/data/story/jsx-edit).
+ * the same sanitizing write-back the canvas used (lib/story-edit/jsx-edit).
  */
 export type MarkdownBlockKind = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'quote' | 'bullet' | 'number' | 'code' | 'check' | 'hr' | 'table';
 export type MarkdownTableAction = 'row-before' | 'row-after' | 'column-before' | 'column-after' | 'delete-row' | 'delete-column' | 'delete-table';

@@ -10,7 +10,7 @@
  * Explicit .ts specifiers: the skill scripts load this module directly under Node in a source checkout.
  */
 import {applyEdits,atHeadStart,attribute,parseSource,removeElement,type Edit,type Element,type SourceDocument} from './html-source.ts';
-import {HTML_SYSTEM_MODES} from '../data/html/html-system-modes.ts';
+import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
 
 const DESIGN_SYSTEM_META = 'artifactbin:design-system';
 const known = (name: string | null | undefined): name is string => !!name && Object.hasOwn(HTML_SYSTEM_MODES, name);

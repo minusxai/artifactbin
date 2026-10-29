@@ -30,7 +30,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
 - Preserve keys and node identity across updates, and never serialize generated `data-mx-*` or
   editing attributes as source.
 - Grid geometry belongs to `grid-layout.ts`; edit and view placement must use the same arithmetic.
-  Grid drag/resize writes source through `lib/data/story/jsx-edit.ts`. Slide discovery belongs to
+  Grid drag/resize writes source through `lib/story-edit/jsx-edit.ts`. Slide discovery belongs to
   `lib/reader-chrome/slides.ts`; previews must not introduce a second live data subscription.
 - Besides the renderer, this module holds the reader kit's pure helpers: table and comment-target
   identity (`data-table`, `row-key`, `repeat-identity`, `comment-target`, `control-options`), reading
@@ -42,7 +42,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
 - `lib/story-ui/recipe-classes.ts` is generated: every string-literal token in `lib/islands/kit/`
   plus the files `EXTRA_CLASS_SOURCES` names (parsed with the TypeScript scanner). After touching those
   inputs run `npm run generate-story-ui-classes`; `recipe-classes.test.ts` fails when it is stale.
-  `lib/data/story/typography.ts` supplies the editor's class vocabulary; the CSS union/version must
+  `lib/story-design/typography.ts` supplies the editor's class vocabulary; the CSS union/version must
   change together so saved documents recompile.
 - Verify parser/serialization, publish rejection, SSR/hydration and affected editing
   behavior. Use existing browser gates for geometry and real browser isolation, not DOM mocks alone.

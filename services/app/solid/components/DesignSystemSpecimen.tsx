@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
-import { resolveStoryMode } from '@/lib/data/story/story-themes';
-import type { StorySystem } from '@/lib/data';
+import { resolveStoryMode } from '@/lib/story-design/story-themes';
+import type { StorySystem } from '@/lib/story-design';
 
 /** Generated covers preserve each system's typography without loading its fonts into the app. */
 export default function DesignSystemSpecimen(props: { system: StorySystem; colorMode?: 'light' | 'dark' | null; selected?: boolean }): JSX.Element {

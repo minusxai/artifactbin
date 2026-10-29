@@ -14,7 +14,7 @@ import { getDb } from '@/lib/platform';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';
 import { json } from '@/lib/http';
-import { resolveStoredStoryDesign } from '@/lib/data';
+import { resolveStoredStoryDesign } from '@/lib/story-design';
 
 /**
  * What a forker may change about the copy AS IT IS MADE — the three fields an

@@ -7,8 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { compileStoryCss, STORY_RECIPE_UNION } from '@/lib/data/story/story-css.server';
-import { STORY_WYSIWYG_CLASSES } from '@/lib/data/story/typography';
+import { compileStoryCss, STORY_RECIPE_UNION } from '@/lib/story-design/story-css.server';
+import { STORY_WYSIWYG_CLASSES } from '@/lib/story-design/typography';
 
 describe('story CSS compile — typography recipe union', () => {
   it('compiles the full typography palette into a jsx story that uses none of it', async () => {

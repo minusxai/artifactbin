@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   freshNodeId, imageAltInJsx, imageTargetInJsx, nodeTargetInJsx, placeImageInJsx, placeMarkdownInJsx, removeJsxNodeAtPath, replaceImageSrcInJsx,
   setImageAltInJsx, type JsxInsertAnchor,
-} from '@/lib/data/story/jsx-edit';
+} from '@/lib/story-edit/jsx-edit';
 import { parseJsx } from '@/lib/jsx';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
 

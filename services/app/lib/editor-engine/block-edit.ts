@@ -2,7 +2,7 @@
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { gridCols } from '@/lib/story-ui/grid-layout';
 import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
-import { setStaticJsxAttr } from '@/lib/data/story/jsx-edit';
+import { setStaticJsxAttr } from '@/lib/story-edit/jsx-edit';
 import { bodyPathToSourcePath } from '@/lib/document/edit-compose';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 export type BlockEdit =

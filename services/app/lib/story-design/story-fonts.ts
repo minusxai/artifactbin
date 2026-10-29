@@ -12,7 +12,7 @@
  * never authored source, so it must not reach `content.story` on any save path.
  */
 import { STORY_THEMES } from './story-themes';
-import fontManifest from './story-font-manifest.json';
+import { storyFontManifest as fontManifest } from '@/lib/data';
 
 /** Marker attribute of the platform font style node in the document head. */
 export const STORY_FONTS_ATTR = 'data-mx-fonts';

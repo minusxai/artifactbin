@@ -7,7 +7,7 @@
  * an "unchanged" table field must leave the binding alone.
  */
 import { describe, it, expect } from 'vitest';
-import { readNumberEmbed, updateNumberEmbedInJsx, NUMBER_AGGS } from '@/lib/data/story/story-number';
+import { readNumberEmbed, updateNumberEmbedInJsx, NUMBER_AGGS } from '@/lib/story-edit/story-number';
 
 const SRC =
   '<div><p>Revenue <Number data="$sales" col="v" agg="sum" prefix="$" /> up</p>' +

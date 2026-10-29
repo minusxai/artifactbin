@@ -11,7 +11,7 @@
  *
  * What VARIES is the format vocabulary, and it varies here and nowhere else:
  *  - `format` (alignment, color, spacing, width — the class algebra of
- *    lib/data/story/typography) is for plain tags only. A component's classes
+ *    lib/story-design/typography) is for plain tags only. A component's classes
  *    are render output, not the author's to edit.
  *  - `text` (weight/style) is for tags whose typography is their OWN text
  *    rather than a container's; `size` too, where that is a class — never on

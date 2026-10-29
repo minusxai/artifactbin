@@ -1,11 +1,11 @@
 /**
  * Story design themes — Legacy theme registry:
  *  (a) the CSS emitter (`storyThemeCss` → appended to every jsx story's compiledCss by
- *      lib/data/story/story-css.server.ts, as tiny `[data-theme="<name>"]` variable blocks —
+ *      lib/story-design/story-css.server.ts, as tiny `[data-theme="<name>"]` variable blocks —
  *      instant in-app theme switching, no recompile),
  *  (b) the settings picker UI and the skill registry
  *      (lib/skills/render.ts projects this registry into `themes/<name>.md`),
- *  (c) font-asset generation (lib/data/story/story-fonts.ts maps each theme's families to
+ *  (c) font-asset generation (lib/story-design/story-fonts.ts maps each theme's families to
  *      the bundled font assets).
  *
  * A theme is a PERSONALITY — fonts, radius, structural CSS, a hue family — carried by TWO
@@ -24,7 +24,7 @@
  * they are DESIGN SYSTEMS (./story-systems).
  *
  * FONTS — families vs packaged assets: a theme family must be one the font catalog serves
- * (lib/data/story/story-fonts.ts, generated at install time from the @fontsource packages by
+ * (lib/story-design/story-fonts.ts, generated at install time from the @fontsource packages by
  * scripts/copy-assets.mjs — the CSP forbids font CDNs, so the binaries are copied into
  * public/fonts, never fetched at runtime and never committed). Adding a family = one npm
  * package + one FONT_FILES entry in copy-assets; families outside the catalog fall back to
@@ -38,7 +38,7 @@ export type { StoryDesignName };
 export { STORY_THEME_NAMES };
 
 interface StoryThemeFonts {
-  /** Display (heading) font family — a family registered in lib/data/story/story-fonts.ts. */
+  /** Display (heading) font family — a family registered in lib/story-design/story-fonts.ts. */
   display: string;
   /** Body font family. */
   body: string;

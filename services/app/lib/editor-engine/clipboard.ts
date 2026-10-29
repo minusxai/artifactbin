@@ -6,7 +6,7 @@ import rehypeParse from 'rehype-parse';
 import rehypeRemark from 'rehype-remark';
 import type { Root as HastRoot, Element as HastElement, RootContent as HastChild } from 'hast';
 import type { Root, RootContent } from 'mdast';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 
 export type ClipboardKind = 'html' | 'markdown' | 'text';
 const markdown = unified().use(remarkParse).use(remarkGfm);

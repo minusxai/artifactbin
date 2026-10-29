@@ -21,7 +21,7 @@ import { declarationsForRow } from './row-compile';
 import type { SourceRepair } from '@/lib/jsx';
 import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
-import { resolveStoredStoryDesign } from '@/lib/data';
+import { resolveStoredStoryDesign } from '@/lib/story-design';
 import { json } from '@/lib/http';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from './placement';
 

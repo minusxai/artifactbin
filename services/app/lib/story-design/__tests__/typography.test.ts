@@ -1,5 +1,5 @@
 /**
- * Story typography class algebra (lib/data/story/typography.ts) — the pure vocabulary +
+ * Story typography class algebra (lib/story-design/typography.ts) — the pure vocabulary +
  * class-string transforms shared by the WYSIWYG typography toolbar (live DOM mutation) and
  * the JSX source write-back, so the two always converge.
  */
@@ -29,7 +29,7 @@ import {
   storyColorClass,
   currentStoryColor,
   applyStoryColor,
-} from '@/lib/data/story/typography';
+} from '@/lib/story-design/typography';
 
 describe('typography vocabulary', () => {
   it('STORY_WYSIWYG_CLASSES is the flat union of every group (recipe-union contract)', () => {
