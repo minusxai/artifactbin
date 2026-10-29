@@ -1,15 +1,15 @@
-import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { IncomingMessage } from 'node:http';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createNativeS3ObjectSink } from '..';
 
 /** A minimal S3 stand-in: path-style PUT honouring `If-None-Match: *` and GET, recording every request. */
 const objects = new Map<string, { bytes: Buffer; type: string | undefined }>();
 const seen: Array<{ method: string; url: string; ifNoneMatch?: string }> = [];
-let server: Server, endpoint = '';
+let server: RunningServer, endpoint = '';
 const body = async (request: IncomingMessage) => { const parts: Buffer[] = []; for await (const part of request) parts.push(part as Buffer); return Buffer.concat(parts); };
 beforeAll(async () => {
-  server = createServer(async (request, response) => {
+  server = await withHttpServer(async (request, response) => {
     const url = decodeURIComponent(request.url!.split('?')[0]!);
     seen.push({ method: request.method!, url, ifNoneMatch: request.headers['if-none-match'] as string | undefined });
     if (request.method === 'PUT') {
@@ -23,10 +23,9 @@ beforeAll(async () => {
     if (!found) { response.writeHead(404, { 'content-type': 'application/xml' }).end('<Error><Code>NoSuchKey</Code></Error>'); return; }
     response.writeHead(200, { 'content-length': found.bytes.length }).end(found.bytes);
   });
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  endpoint = server.base;
 });
-afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
+afterAll(() => server.close());
 beforeEach(() => { objects.clear(); seen.length = 0; });
 const sink = (prefix = 'native/imports') => createNativeS3ObjectSink({ bucket: 'bucket', region: 'us-east-1', accessKeyId: 'test-key', secretAccessKey: 'test-secret', endpoint, forcePathStyle: true, prefix });
 
