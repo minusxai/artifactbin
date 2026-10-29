@@ -19,7 +19,7 @@ export {
 export { PostgresDb, databaseTargetForRuntime, getDb, parseDatabaseUrl, resetDb } from './db';
 export type { Db, Queryable } from './db';
 export { actorSubject, emit, envelope } from './events';
-export type { EventObject, EventSubject } from './events';
+export type { EventSubject } from './events';
 export { enqueueEvent, enqueueEvents, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';
 export { RESERVED_HANDLES, reserveHandle } from './handles';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
