@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { optimiseImage, MAX_IMAGE_EDGE, VARIANT_WIDTH } from '../optimise';
+import { VARIANT_CONTENT_TYPE } from '..';
 
 /** A photograph-ish JPEG: noisy enough that it does not compress to nothing. */
 const photo = async (width: number, height: number): Promise<Buffer> => {
@@ -141,7 +142,9 @@ describe('optimiseImage', () => {
   it('stores a narrow copy beside a wide one', async () => {
     const out = await optimiseImage(await photo(1600, 1200), 'image/jpeg');
     expect(out.variant?.width).toBe(VARIANT_WIDTH);
-    expect(out.variant?.contentType).toBe('image/webp');
+    expect(out.variant?.contentType).toBe(VARIANT_CONTENT_TYPE);
+    // The declared type is what the bytes decode as, whatever the source format was.
+    expect(`image/${(await sharp(out.variant!.buffer).metadata()).format}`).toBe(VARIANT_CONTENT_TYPE);
     expect(await sharp(out.variant!.buffer).metadata().then((m) => m.width)).toBe(VARIANT_WIDTH);
     // Same aspect ratio: the markup reserves the box from the FULL copy's
     // dimensions, and a variant of another shape would make that a lie.
