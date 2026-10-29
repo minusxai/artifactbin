@@ -1,7 +1,7 @@
 name: page speed
 
-# The lab runs on EVERY pull request so `page speed report` always reports and can be a required
-# check; `scope` decides whether the lab's inputs changed (the push trigger's own paths), and when
+# The lab runs on EVERY pull request so `page speed report` always reports; it is informational and
+# must not be a required check (the required pull request check is pr-fast.yml, limited to 60s). `scope` decides whether the lab's inputs changed (the push trigger's own paths), and when
 # they did not the report job finishes in seconds. PRs measure deterministic bytes; manual runs retain
 # the throttled timing comparison. Neither mode gates ci.yml or comments on PRs.
 on:

@@ -23,6 +23,12 @@
  *   /story, /fonts, /libraries, /geojson, /favicon.ico   the static runtime
  *   /af/styles.css, /af/fonts/<name>.woff2             the platform stylesheet and its fonts
  *   /af/components/<name>.js                           the hosted HTML components and their chunks
+ *   /af/apollo.js, /af/reader.js                       the runtime a post's `@afbin/apollo` import loads (and the reader it imports)
+ *
+ * The post's core is inline, and names those two modules relative to the post's own address, so they load from
+ * this host. The rest of /af/ stays off it: /af/core.js is only ever inlined here, /af/chrome.js and
+ * /af/portable.js serve offline copies, /af/morph.js an app-framed page, /af/import-map.json the local preview, and
+ * /af/v1/ holds pre-D17 content addresses the current core never names.
  *
  * Every `/a/<id>` route and every post is scoped to the OWNER's PUBLIC markup
  * documents — the app's own doors also admit unlisted ones to anyone, so that
@@ -66,7 +72,7 @@ type Handler = (request: Request, ctx: { params: Promise<{ id: string }> }) => P
  * `/islands/` is the compiled reader's code (docs/phase2-architecture.md §9): the shared chunks, and the
  * per-document modules and speculation rules the module store serves — all content-addressed, all public.
  */
-const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
+const STATIC = /^\/(?:story|fonts|libraries|geojson|islands)\/|^\/favicon\.ico$|^\/af\/components\/[a-z][a-z0-9-]*\.js$|^\/af\/(?:apollo|reader)\.js$|^\/af\/styles\.css$|^\/af\/fonts\/[a-z0-9-]+\.woff2$/;
 /** The app's built stylesheet and its fonts, at the address the app page links them or the manifest-checked one; never a script. */
 const buildStyle = (path: string): boolean => {
   const asset = path.startsWith(`${BUILD_ASSET_PATH}/`) ? path.slice(BUILD_ASSET_PATH.length) : path;
