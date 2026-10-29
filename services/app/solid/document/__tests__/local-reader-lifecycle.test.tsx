@@ -17,7 +17,7 @@ it('clears old comments and fences late events across reconnect, new identity an
  const first=captured.subscriptions[0];first.onAnnotations([{}]);expect(reader.annotations()).toHaveLength(1);
  setState('blocked');await waitFor(()=>expect(reader.annotations()).toBeNull());
  setNonce('two');setState('connected');await waitFor(()=>expect(captured.subscriptions.length).toBe(2));
- first.onAnnotations([{}]);first.onData({datasets:['private']});first.onPublication();first.onPresence([]);
+ first.onAnnotations([{}]);first.onData({datasets:['private']});first.onPublication();first.onPresence({viewers:[],total:0});
  expect(reader.annotations()).toBeNull();expect(invalidate).not.toHaveBeenCalled();expect(changed).not.toHaveBeenCalled();
  const second=captured.subscriptions[1];second.onAnnotations([{},{}]);expect(reader.annotations()).toHaveLength(2);
  setId({...identity,artifactId:'second'});await waitFor(()=>expect(captured.subscriptions.length).toBe(3));expect(reader.annotations()).toBeNull();

@@ -1,4 +1,4 @@
-import type {PresencePublication,PresenceViewer} from '@/lib/html-presence/contract';
+import type {PresenceFrame,PresencePublication} from '@/lib/html-presence/contract';
 /**
  * THE ARTIFACT BACKEND — every server call the document surface makes while
  * reading, editing and commenting, behind one interface.
@@ -150,7 +150,7 @@ export interface MembersAnswer {
  * read with `liveFrame()`, and annotations with `listAnnotations('open')`.
  */
 interface LiveHandlers {
-  onPresence?: (viewers: PresenceViewer[]) => void;
+  onPresence?: (frame: PresenceFrame) => void;
   /** A head ping (`{editId, version, by}`), parsed; the subscriber validates it. */
   onPing: (ping: ArtifactVersionPing) => void;
   /** A dataset under this document changed (a named `data` frame), parsed. */

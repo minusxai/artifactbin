@@ -20,7 +20,7 @@ it('preserves resumable live pings, data, annotations and presence until unsubsc
  source.onmessage!({data:JSON.stringify({version:3,editId:'e3'})});expect(onPing).toHaveBeenCalledWith({version:3,editId:'e3'});
  source.listeners.data!({data:JSON.stringify({datasets:['votes'],version:3})});expect(onData).toHaveBeenCalledWith({datasets:['votes'],version:3});
  source.listeners.annotations!({data:'{}'});expect(onAnnotations).toHaveBeenCalledOnce();
- source.listeners.presence!({data:JSON.stringify([{id:'peer',label:'Reader'}])});expect(onPresence).toHaveBeenCalledWith([{id:'peer',label:'Reader'}]);
+ source.listeners.presence!({data:JSON.stringify({viewers:[{id:'peer',label:'Reader'}],total:30})});expect(onPresence).toHaveBeenCalledWith({viewers:[{id:'peer',label:'Reader'}],total:30});source.listeners.presence!({data:JSON.stringify({viewers:[],total:'many'})});expect(onPresence).toHaveBeenCalledTimes(1);
  source.onmessage!({data:'broken'});expect(onPing).toHaveBeenCalledOnce();stop();expect(source.closed).toBe(true);
 });
 

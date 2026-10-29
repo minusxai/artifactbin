@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {PresenceViewer} from './contract';
 import {encodePresenceMessage} from './message';
-import {presenceGeometry} from './model';
+import {PRESENCE_GUEST_LABEL,presenceGeometry} from './model';
 /** Who is publishing, as the platform resolved them; never anything the page supplied. */
 export interface PresenceAuthor { userId: string | null; tokenId?: string | null }
 export interface PresencePublisherPorts {
@@ -21,7 +21,7 @@ export async function publishPresence(actor:PresenceAuthor,row:{version:number},
  if(!raw||typeof raw.session!=='string'||!/^[a-f0-9-]{36}$/.test(raw.session)||raw.revision!==revision)return null;
  const id=createHash('sha256').update(`${actor.userId??actor.tokenId??'guest'}:${raw.session}`).digest('hex');
  if(raw.visible===false){await ports.notify(encodePresenceMessage({id,gone:true}));return {id};}
- const entry:PresenceViewer={id,label:await ports.label(actor.userId)??'Guest',revision,seen:ports.now(),...presenceGeometry(raw)};
+ const entry:PresenceViewer={id,label:await ports.label(actor.userId)??PRESENCE_GUEST_LABEL,revision,seen:ports.now(),...presenceGeometry(raw)};
  await ports.notify(encodePresenceMessage(entry));
  return {id};
 }

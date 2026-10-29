@@ -1,4 +1,4 @@
-import type {PresenceViewer} from '@/lib/html-presence/contract';
+import type {PresenceFrame} from '@/lib/html-presence/contract';
 /**
  * Subscribe a mounted page to its
  * artifact's live document (`GET /a/<id>/events`).
@@ -50,7 +50,7 @@ interface LiveArtifactOptions {
    */
   whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
-  onPresence?: (viewers:PresenceViewer[])=>void;
+  onPresence?: (frame:PresenceFrame)=>void;
   onData?: (event: ArtifactDataEvent) => void;
   /** Native HTML follows each newer publication itself (in place, or by reloading its server bootstrap); it never fetches a JSX frame. */
   onPublication?: (version: number, editId?: string) => void;
@@ -190,7 +190,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
                 });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
-            onPresence: viewers => options.onPresence?.(viewers),
+            onPresence: frame => options.onPresence?.(frame),
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
               const datasets = changedData(id, frame);

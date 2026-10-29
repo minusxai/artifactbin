@@ -1,6 +1,6 @@
 import {createPresenceRoom} from '@/lib/html-presence/room';
 import {presenceChannel} from '@/lib/html-presence/channel.server';
-import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
+import {PRESENCE_EVENT,type PresenceFrame} from '@/lib/html-presence/contract';
 /**
  * GET /a/:id/events — Server-Sent Events carrying this artifact's document
  * as it changes, so an open page (viewing OR editing) stays live.
@@ -78,8 +78,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
   let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
-  let presenceWriting=false,latestPresence:PresenceViewer[]|null=null;
-  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const viewers=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(viewers)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
+  let presenceWriting=false,latestPresence:PresenceFrame|null=null;
+  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const frame=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(frame)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
 
   /**
    * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
@@ -247,7 +247,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       authorize:async()=>{const current=await getArtifactAccessById(id);return !!current&&await canReadArtifact(current,actor);},
       subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
       subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
-      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>{if(!replacingPresence)void close();},
+      send:frame=>{latestPresence=frame;writePresence();},close:()=>{if(!replacingPresence)void close();},
       clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
     });
     presenceRoom=room;if(closed)room.dispose();

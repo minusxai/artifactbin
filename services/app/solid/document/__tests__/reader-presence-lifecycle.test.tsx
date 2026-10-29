@@ -49,8 +49,8 @@ it('retains the latest peer snapshot received while the session chunk loads',asy
  let presence!:ReturnType<typeof createReaderPresence>;
  const view=render(()=>{presence=createReaderPresence({id:'p',revision:'1',nonce:()=> 'n',enabled:()=>true,runtimeRef:{current:controller},backend:{publishPresence:async()=> 'own'}},load);return <div/>;});
  const peer={id:'peer',label:'Reader',revision:'1',seen:Date.now(),cursor:null,selection:null};
- presence.receive([peer]);resolve(await import('../reader-presence-engine'));
- await waitFor(()=>expect(presence.viewers()).toEqual([peer]));view.unmount();
+ presence.receive({viewers:[peer],total:31});resolve(await import('../reader-presence-engine'));
+ await waitFor(()=>expect(presence.viewers()).toEqual([peer]));expect(presence.total()).toBe(30);view.unmount();
 });
 
 it('keeps preference changes and pagehide/pageshow that occur while loading',async()=>{

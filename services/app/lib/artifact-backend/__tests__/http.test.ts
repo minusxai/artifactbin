@@ -184,8 +184,10 @@ describe('createHttpBackend', () => {
     expect(onData).toHaveBeenCalledWith({ datasets: ['D1'], version: 2 });
     source.listeners.annotations!({});
     expect(onAnnotations).toHaveBeenCalledTimes(1);
+    source.listeners.presence!({data: JSON.stringify({viewers:[{id:'viewer',cursor:null,selection:null}],total:3})});
+    expect(onPresence).toHaveBeenCalledWith({viewers:[{id:'viewer',cursor:null,selection:null}],total:3});
     source.listeners.presence!({data: JSON.stringify([{id:'viewer',cursor:null,selection:null}])});
-    expect(onPresence).toHaveBeenCalledWith([{id:'viewer',cursor:null,selection:null}]);
+    expect(onPresence).toHaveBeenCalledTimes(1);
     expect(sources).toHaveLength(1);
     stop();
     expect(source.closed).toBe(true);
