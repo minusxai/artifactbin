@@ -182,6 +182,8 @@ const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-insta
 const BUNDLED_IMPORTERS = [
   'services/app/solid/', 'services/app/web/', 'services/app/lib/islands/', 'services/app/lib/frame-edit/', 'services/app/lib/html-components/', 'services/app/skills/',
   'services/app/lib/agent-copy/agent-copy.ts',
+  // Server-rendered, but its loading markup is checked in the ui (jsdom) project, which cannot load the skills index.
+  'services/app/lib/agent-copy/agent-discovery.ts',
   'services/app/lib/agent-copy/getting-started.ts',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/annotations/pages.ts',

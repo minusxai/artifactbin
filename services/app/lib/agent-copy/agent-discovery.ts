@@ -1,8 +1,8 @@
 /** Shared HTTP discovery for page heads, tail-keeping readers and the visible welcome page.
  * Pure and browser-safe; the serving origin supplies every help/setup address. */
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { AGENT_HELP_TITLE, type AgentDiscovery } from '../skills';
-export { AGENT_HELP_TITLE, agentDiscovery, type AgentDiscovery } from '../skills';
+import { AGENT_HELP_TITLE, type AgentDiscovery } from '../skills/agent-discovery';
+export { AGENT_HELP_TITLE, agentDiscovery, type AgentDiscovery } from '../skills/agent-discovery';
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="agents" content="${escapeHtml(help.instruction)}">`;
 }
