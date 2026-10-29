@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { services } from '@/lib/platform/services';
+import { services } from '@/lib/platform';
 import type { Actor, BrowserSessionRequest, ViewerChoice } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { forgetTestUserSession, noteTestUserSession, resolveTestUser } from '@/lib/accounts';

@@ -5,7 +5,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * composes storeImageContent — so the cap, the sniff and the stored shape are
  * one implementation rather than two that agree today.
  */
-import { MAX_PDF_BYTES } from '@/lib/platform/config';
+import { MAX_PDF_BYTES } from '@/lib/platform';
 import { json } from '@/lib/http/http';
 import { storePdfContent } from '@/lib/datasets/data-tiers';
 import type { StoredContent } from '@/lib/document';

@@ -187,6 +187,8 @@ export const DEEP_MODULES = {
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
   'lib/notifications': { entries: [''], serverOnly: [''] },
+  // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
+  'lib/platform': { entries: [''], serverOnly: [''] },
 };
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 

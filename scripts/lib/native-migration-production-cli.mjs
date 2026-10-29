@@ -31,7 +31,7 @@ export async function runNativeProductionCli({configPath,apply=false,approvedPla
  return runtime.run({...admitted.config,apply,approvedPlanSha256,openTarget:runtime.openTarget});
 }
 async function loadProductionRuntime(admitted){
- const [{runNativeProductionMigration},{PostgresDb},{parseS3Url},pg,publicationModule]=await Promise.all([import('./native-migration-production.ts'),import('../../services/app/lib/platform/db.ts'),import('../../services/app/lib/object-store/url.ts'),import('pg'),import(pathToFileURL(admitted.publication.path).href)]);
+ const [{runNativeProductionMigration},{PostgresDb},{parseS3Url},pg,publicationModule]=await Promise.all([import('./native-migration-production.ts'),import('../../services/app/lib/platform/index.ts'),import('../../services/app/lib/object-store/url.ts'),import('pg'),import(pathToFileURL(admitted.publication.path).href)]);
  if(typeof publicationModule.createNativePipelinePublication!=='function')fail('publication_factory');
  const publication=publicationModule.createNativePipelinePublication(admitted.publicationConfig);
  let decodeContext;

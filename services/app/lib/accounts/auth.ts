@@ -8,9 +8,7 @@
  * lib/admin-auth's, with its own uniform 404.
  */
 import { isCrossSiteRequest, json, unauthorized } from '../http/http';
-import {TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR} from '../platform/config';
-import {forwardedFor} from '../platform/client-identity';
-import type { Harness } from '@/lib/platform';
+import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR, forwardedFor, type Harness } from '../platform';
 import type { RequestIdentity, TokenHoldingActor } from './actors';
 import { isCookieCredential, resolveRequestIdentity, sessionActor } from './request-identity';
 import { matchesWorkspaceAccount } from './guest-owner';

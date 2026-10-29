@@ -9,7 +9,7 @@ import type { ArtifactRow } from '@/lib/artifacts';
 import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts';
 import { documentEditorReaches } from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
-import {PUBLIC_BASE_URL} from '@/lib/platform/config';
+import { PUBLIC_BASE_URL } from '@/lib/platform';
 import {NotificationExecutionError} from './errors';
 import {resolveDatasetConnection} from '@/lib/datasets/secrets';
 import {DatasetError} from '@/lib/datasets/errors';

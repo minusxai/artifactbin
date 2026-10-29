@@ -1,7 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import {datasetSecretTargetHash as targetHash,sealDatasetSecret,openDatasetSecret} from './secret-crypto';
-import {AUTH_SECRET} from '@/lib/platform/config';
-import {getDb} from '@/lib/platform/db';
+import { AUTH_SECRET, getDb } from '@/lib/platform';
 import type {Queryable} from '@artifactbin/contracts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import type {DatasetConnection,PostgresConfig} from './types';

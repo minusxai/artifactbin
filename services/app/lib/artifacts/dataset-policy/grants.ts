@@ -7,7 +7,7 @@ import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifa
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow } from '../table';
 import type { AccessActor } from '@/lib/accounts';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { DatasetError } from '@/lib/datasets/errors';
 
 export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantPolicy | null {

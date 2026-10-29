@@ -1,8 +1,7 @@
-import {getDb} from '@/lib/platform';
+import {getDb, SQL_SERVICE_URL, services} from '@/lib/platform';
 import {readRegisteredQueryMembers} from '@/lib/registered-page-queries/members';
 import {resolveDatasetConnection} from '@/lib/datasets/secrets';
 import {registeredSourceCatalog} from '@/lib/registered-page-queries/source-catalog';
-import { SQL_SERVICE_URL } from "@/lib/platform/config";
 import { storedRowStats } from "@/lib/datasets/dataset-store";
 import { QUERY_LIMITS as limits } from "@/lib/registered-page-queries/contracts";
 import { createHash } from "node:crypto";
@@ -12,7 +11,6 @@ import { readHtmlPage } from "@/lib/html-publication";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { registeredQueryImportForRow } from "@/lib/document-data";
 import { executeCatalog } from "@/lib/datasets/execute";
-import { services } from "@/lib/platform";
 import type {
   HtmlPageVersion,
   RunInput,

@@ -1,6 +1,5 @@
 import {createBackendSecretCipher} from './cipher';
-import {AUTH_SECRET} from '@/lib/platform/config';
-import {getDb} from '@/lib/platform/db';
+import { AUTH_SECRET, getDb } from '@/lib/platform';
 import {createBackendSecrets,type BackendSecretScope,type PinnedBackendSecretScope} from './contracts';
 const backendSecretCipher=createBackendSecretCipher(AUTH_SECRET);
 const args=(s:BackendSecretScope,n?:string)=>n===undefined?[s.ownerId,s.backendId]:[s.ownerId,s.backendId,n];

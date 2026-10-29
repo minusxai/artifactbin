@@ -8,11 +8,10 @@ import { overrideRequestHeaders } from '@/lib/platform/request-context';
 import type { Queryable } from '@artifactbin/contracts';
 import { createEvents, ensureEventsSchema } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
-import { trackEvent } from '@/lib/platform';
-import { EVENTS_SCHEMA } from '@/lib/platform';
+import { trackEvent } from '@/lib/analytics';
+import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
 import { dailyViewsByUser, eventsTablePresent, forkCountByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/workspace';
 import { forgetEventsTable } from '@/lib/workspace/analytics';
-import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 

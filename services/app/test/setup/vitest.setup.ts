@@ -39,13 +39,17 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  * that resolves the real one on the first render and never before: nothing to
  * launch, nothing to close, for a suite that never asks for a picture.
  */
+// Deep paths, not the platform index: a test file's `vi.mock('@/lib/platform/config')` must still reach the index,
+// which is evaluated only when the test's own imports ask for it (after the mock is registered).
 const { setServices } = await import('@/lib/platform/services');
 const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
 const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
+const { getDb } = await import('@/lib/platform/db');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
-const { getDb } = await import('@/lib/platform/db');
 const { setEventProjection } = await import('@/lib/platform/event-outbox');
+
+await import('./database');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());

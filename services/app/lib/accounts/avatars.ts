@@ -19,9 +19,8 @@
  * invent a second address for one.
  */
 import sharp from 'sharp';
-import { PUBLIC_BASE_URL } from '../platform/config';
+import { PUBLIC_BASE_URL, getDb } from '../platform';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
-import { getDb } from '../platform/db';
 import { objectKey, objectStore, type ObjectStore } from '../object-store/index';
 import { sniffImageType } from '../web-ingest/sniff';
 

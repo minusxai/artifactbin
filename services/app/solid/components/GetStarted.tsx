@@ -1,6 +1,6 @@
 import {useSetupDeployment} from '../lib/deployment-setup';
 import {deploymentSetupOptions} from '@/lib/serving/setup-installers';
-import {buildSetupInstructions} from '@/lib/platform/setup-instructions';
+import { buildSetupInstructions } from '@/lib/skills/setup-instructions';
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { DEFAULT_SERVER, type ArtifactDestination } from '@artifactbin/contracts';

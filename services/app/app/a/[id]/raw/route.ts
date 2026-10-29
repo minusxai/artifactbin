@@ -22,7 +22,8 @@ import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
  *   though it is same-host. Verified live: reading localStorage throws.
  */
 import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM, holdsCreatingToken } from '@/lib/artifacts';
-import { recordView, verifyExportKey } from '@/lib/platform';
+import { recordView } from '@/lib/analytics';
+import { verifyExportKey } from '@/lib/export';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, storedBytesCacheControl, withFreshNonce } from '@/lib/serving/render-cache';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust/document-trust';

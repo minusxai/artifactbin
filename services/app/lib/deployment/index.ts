@@ -1,8 +1,7 @@
 import {authenticatingTestParent} from '../user-kinds';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
-import {getDb,type Queryable} from '../platform/db';
-import {deploymentConfig,env} from '../platform/config';
+import { getDb, type Queryable, deploymentConfig, env } from '../platform';
 import {admissionPolicyOf} from '@artifactbin/auth';
 interface State {owner_user_id:string|null;default_group_id:string|null;setup_complete:boolean}
 const ID='company';

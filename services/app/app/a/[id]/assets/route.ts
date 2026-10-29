@@ -31,7 +31,8 @@ import { canReadArtifact, getArtifactById, holdsCreatingToken } from '@/lib/arti
 import { requestOrSessionActor } from '@/lib/accounts';
 import {resolveImageReference} from '@/lib/artifacts';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish/assets/web-assets';
-import { ASSETS_ORIGIN, verifyExportKey } from '@/lib/platform';
+import { ASSETS_ORIGIN } from '@/lib/platform';
+import { verifyExportKey } from '@/lib/export';
 import {publicRefAsset} from '@/lib/serving';
 import { json } from '@/lib/http';
 

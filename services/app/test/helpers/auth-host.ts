@@ -9,8 +9,7 @@ import {createAuthHost,createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerF
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
 import {canAuthenticateUser} from '@/lib/accounts';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from '@/lib/deployment';
-import {EVENTS_SCHEMA} from '@/lib/platform/config';
-import {setServices} from '@/lib/platform/services';
+import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
 import {createAppHost} from '@/server/host';
 
 export async function createAuthComposedHost(env:NodeJS.ProcessEnv,assets=process.cwd()){

@@ -1,7 +1,6 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import { artifactQuery } from '@/lib/artifacts/table';
-import {recordEvent} from '../platform/event-outbox';
 import {commentMentions} from './saved-mentions';
 import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
@@ -30,9 +29,7 @@ import {
   type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
 } from '@/lib/document';
 import { avatarUrl } from '@/lib/accounts';
-import { getDb, type Queryable } from '@/lib/platform/db';
-import { actorSubject } from '@/lib/platform/events';
-import { generateInternalId } from '@/lib/platform/ids';
+import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';

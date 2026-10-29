@@ -7,7 +7,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import { findDependentsFor, getArtifactById } from '@/lib/artifacts';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {artifactState} from '@/lib/artifacts';
-import { mintExportKey } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {useAppHarness,request} from './harness';

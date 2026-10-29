@@ -1,4 +1,4 @@
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { getArtifactFor } from '@/lib/artifacts';
 import { editorScope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';

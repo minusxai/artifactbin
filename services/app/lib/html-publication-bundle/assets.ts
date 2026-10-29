@@ -1,7 +1,7 @@
 import {pinPublicationAssetUrls} from './plan';
 import type {AccessActor} from '@/lib/accounts';
 import {archivedVersionFor,canReadArtifact,getArtifactById,writerFor} from '@/lib/artifacts';
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import {serveStoredFile} from '@/lib/datasets/file-store';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}

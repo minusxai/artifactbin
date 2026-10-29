@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import type {HtmlPageLink} from '@artifactbin/contracts';
 
 /*

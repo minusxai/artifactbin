@@ -106,7 +106,7 @@ export default defineConfig({
           environment: 'node',
           // One module graph per worker, not per file: re-importing the app for each of ~260 files
           // was a third of every api shard. The harness gives each file a fresh database (restored
-          // from the worker's schema snapshot, lib/db) and resets the rate limiter, so files stay
+          // from the worker's schema image, test/setup/vitest.setup.ts) and resets the rate limiter, so files stay
           // independent; a file that leaves process-level state behind must clean it up itself.
           isolate: false,
           include: API_INCLUDE,

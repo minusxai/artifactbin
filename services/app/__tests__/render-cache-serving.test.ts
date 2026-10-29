@@ -12,7 +12,7 @@ import {GET as read, PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {createAppServer} from '@/server/app';
 import {GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor, pagesSiteFor} from '@/lib/http/pages-origin';
-import {flushViews} from '@/lib/platform/analytics';
+import { flushViews } from '@/lib/analytics';
 
 const harness = useAppHarness();
 const APP = 'https://app.example.test';

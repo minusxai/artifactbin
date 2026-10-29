@@ -2,3 +2,4 @@
 export { EXPORT_RENDER_GENERATION, exportCacheKey, exportImageResponse, parseExportCapture, parseExportFormat, parseExportSlide, renderArtifactImage, resetExportRenderer } from './exporter';
 
 export {packOfflineHtmlImages,OfflineHtmlMediaError} from './native-html-media';
+export { mintExportKey, verifyExportKey } from './read-key';

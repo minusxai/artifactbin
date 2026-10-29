@@ -1,4 +1,4 @@
-import type {Db} from '../../services/app/lib/platform/db';
+import type { Db } from '../../services/app/lib/platform';
 import type {NativeMigrationBootstrapOptions} from './native-migration-bootstrap-contract';
 export interface NativeDisposableFile {path:string;sha256:string}
 /** All paths are reviewed references beneath the request receipt root. */

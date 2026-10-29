@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {getDb} from '../platform/db';
+import { getDb } from '../platform';
 import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';

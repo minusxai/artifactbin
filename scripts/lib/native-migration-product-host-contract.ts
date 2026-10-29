@@ -1,5 +1,5 @@
 import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders/contracts';
-import type {Queryable} from '../../services/app/lib/platform/db';
+import type { Queryable } from '../../services/app/lib/platform';
 import type {NativeHistoryImport} from '../../services/app/lib/native-history-import/contracts';
 import type {NativeRelationProjection} from '../../services/app/lib/native-history-import/relation-contracts';
 import type {NativeArtifactRelationsInput} from '../../services/app/lib/native-history-import/artifact-relation-contracts';

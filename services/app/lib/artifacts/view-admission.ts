@@ -2,7 +2,7 @@
  * Analytics owns persistence and daily visitor deduplication; callers only map
  * this result to HTTP. Both anonymous and signed-in readers are admitted.
  */
-import { trackEvent } from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact } from './access';
 import { getArtifactHeaderById } from './rows';
 import { isCrossSiteRequest } from '@/lib/http/http';

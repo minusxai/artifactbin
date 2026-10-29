@@ -1,5 +1,5 @@
 import { verifyNativeUserDerivations } from "./catalog-user-staging";
-import {AUTH_SECRET} from '@/lib/platform/config';
+import { AUTH_SECRET } from '@/lib/platform';
 import {stageNativeExternalCredentials} from './external-credentials';
 import type {NativeExternalCredentialSource} from './external-credential-contracts';
 import type {

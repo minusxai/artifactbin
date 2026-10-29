@@ -8,7 +8,7 @@ import {parseDatabaseUrl,type DbTarget} from './database-url';
 export {parseDatabaseUrl} from './database-url';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATABASE_URL, IS_TEST } from './config';
+import { DATABASE_URL } from './config';
 import { SCHEMA_STATEMENTS } from './schema';
 import { recordQuery } from './query-stats';
 
@@ -339,10 +339,35 @@ export function withPoolErrors<P extends { on(event: 'error', cb: (error: Error)
   return pool;
 }
 
+/**
+ * A prepared in-memory database: the schema a fresh in-memory PGLite would build, dumped once and restored by
+ * every later one in the process instead of re-running the DDL and backfills.
+ */
+export interface SchemaImage {
+  load(): Blob | File | undefined;
+  save(image: Blob | File): void;
+}
+
+/** How `getDb` opens the database when a composition root decides rather than `DATABASE_URL`. */
+export interface DbOptions {
+  /** The database to open; `DATABASE_URL` (databaseTargetForRuntime) when absent. */
+  target?: DbTarget;
+  /** Used only for in-memory PGLite. */
+  schemaImage?: SchemaImage;
+}
+
+/**
+ * Composition seam, for a process that owns its databases (the test harness: one in-memory PGLite per file, each
+ * restored from a schema image, whatever the ambient DATABASE_URL says). Takes effect at the next open (after
+ * `resetDb`). Kept on the process global, like the open database, so a module reload keeps it.
+ */
+export function configureDb(options: DbOptions | undefined): void {
+  global.__artifact_bin_db_options__ = options;
+}
+
 async function createDb(): Promise<Db> {
-  // Tests always run in-memory PGLite so they never touch a data dir or a
-  // real server, whatever the ambient DATABASE_URL says.
-  const target = IS_TEST ? ({ engine: 'pglite', dataDir: null } as const) : databaseTargetForRuntime(DATABASE_URL);
+  const options = global.__artifact_bin_db_options__ ?? {};
+  const target = options.target ?? databaseTargetForRuntime(DATABASE_URL);
 
   // Intentional dynamic imports load only the selected database engine.
   if (target.engine === 'pg') {
@@ -377,9 +402,8 @@ async function createDb(): Promise<Db> {
     const { mkdirSync } = await import('fs');
     mkdirSync(target.dataDir, { recursive: true });
   }
-  // A test process boots many in-memory databases (one per file), all from the same schema: the
-  // first applies the DDL and backfills, and every later one restores that dump instead.
-  const snapshot = IS_TEST && !target.dataDir ? global.__artifact_bin_test_schema__ : undefined;
+  const image = target.dataDir ? undefined : options.schemaImage;
+  const snapshot = image?.load();
   const raw = target.dataDir ? new PGlite(target.dataDir, { parsers })
     : new PGlite(snapshot ? { parsers, loadDataDir: snapshot } : { parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
@@ -389,7 +413,7 @@ async function createDb(): Promise<Db> {
   }
   await db.initializeSchema();
   await applyBackfills(db);
-  if (IS_TEST && !target.dataDir) global.__artifact_bin_test_schema__ = await raw.dumpDataDir('none');
+  if (image) image.save(await raw.dumpDataDir('none'));
   return db;
 }
 
@@ -412,7 +436,7 @@ declare global {
   // eslint-disable-next-line no-var
   var __artifact_bin_db__: Promise<Db> | undefined;
   // eslint-disable-next-line no-var
-  var __artifact_bin_test_schema__: Blob | File | undefined;
+  var __artifact_bin_db_options__: DbOptions | undefined;
 }
 
 export function getDb(): Promise<Db> {

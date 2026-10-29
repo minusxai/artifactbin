@@ -34,7 +34,8 @@ import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/accounts';
 import { assetUrlFor, urlHash } from '@/lib/document/asset-url';
-import { getDb, mintExportKey } from '@/lib/platform';
+import { getDb } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 useAppHarness();

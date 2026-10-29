@@ -44,9 +44,8 @@ import {paramSqlName} from '@artifactbin/contracts';
  * The head swap itself is lib/artifacts' (commitDatasetWrite), which owns the artifacts table; this
  * module computes the rows, holds the transaction, completes receipts and emits the after-commit event.
  */
-import { trackEvent } from '@/lib/platform/analytics';
-import { MAX_QUERY_ROWS } from '@/lib/platform/config';
-import { getDb } from '@/lib/platform/db';
+import { trackEvent } from '@/lib/analytics';
+import { MAX_QUERY_ROWS, getDb } from '@/lib/platform';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { commitDatasetWrite, type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';

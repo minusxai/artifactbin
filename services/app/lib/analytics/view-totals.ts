@@ -2,7 +2,7 @@
  * ALL-TIME VIEW COUNTS, read in time that does not follow the number of view events.
  *
  * A document's views are its unique daily visitors, summed over every day it was opened: one row per
- * (visitor, day), where the visitor key is a hash salted with the day (lib/platform/analytics), and a
+ * (visitor, day), where the visitor key is a hash salted with the day (lib/analytics/events), and a
  * legacy row with no visitor counts once on its own `seq`. Counting that from analytics_events costs
  * every event the document ever received, on every read of every listing.
  *
@@ -13,7 +13,7 @@
  * `closed_through`, so racing readers add a day once. The table is derived and disposable: with no row
  * the live range starts at the beginning of time and the answer is the same, only slower once.
  */
-import { getDb } from './db';
+import { getDb } from '../platform';
 
 const TODAY = "(now() AT TIME ZONE 'UTC')::date";
 

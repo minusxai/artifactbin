@@ -10,8 +10,7 @@
  * liveness) stays shallow on purpose.
  * Never throws — a probe that explodes is a probe that failed.
  */
-import { getDb } from '@/lib/platform/db';
-import { BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL } from '@/lib/platform/config';
+import { getDb, BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL } from '@/lib/platform';
 
 type ServiceName = 'sql' | 'browser' | 'events' | 'db';
 

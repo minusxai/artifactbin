@@ -26,9 +26,8 @@ import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { createHmac } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
 import { urlHash } from '@/lib/document';
-import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
 import { ANONYMOUS_ACTOR, isTestAccount, ownerUsername } from '@/lib/accounts';
 

@@ -16,7 +16,7 @@
  * this row. There is no boot-time sync: one identity, one row, ids agreeing by
  * construction.
  */
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import { ensureUsername, getUserById } from './users';
 import { isTestDomainAddress } from './test-accounts';
 

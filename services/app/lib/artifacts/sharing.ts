@@ -7,9 +7,7 @@ import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
 import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { ALLOW_PUBLIC_VISIBILITY } from '../platform/config';
-import { getDb } from '../platform/db';
-import { actorSubject, emit } from '../platform/events';
+import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 
 /**

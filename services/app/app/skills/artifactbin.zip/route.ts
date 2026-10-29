@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {baseUrl} from '@/lib/http';
 import {matchingTag} from '@/lib/http/revalidation';
-import {ALIAS_ORIGINS,IS_DEV,PUBLIC_BASE_URL} from '@/lib/platform/config';
+import { ALIAS_ORIGINS, IS_DEV, PUBLIC_BASE_URL } from '@/lib/platform';
 import {skillTree} from '@/lib/skills';
 import {buildPreviewParser,buildPreviewDatasets,buildToolboxPlatform} from '@/lib/skills/preview-assets.server';
 import {skillPackageFiles,skillZip} from '@/lib/skills/package';
