@@ -11,7 +11,7 @@ export async function buildPortableChrome():Promise<string>{
  const input=await readFile(path.join(app,'app/globals.css'),'utf8');
  const compiler=await compile(input,{base:path.join(app,'web'),onDependency:()=>{}});
  let stylesheet=compiler.build(new Scanner({sources:compiler.sources}).scan());
- const manifest=JSON.parse(await readFile(path.join(app,'lib/data/story/story-font-manifest.json'),'utf8')) as {app:{family:string;url:string;weight:string;style:string;format:string;unicodeRange?:string}[]};
+ const manifest=JSON.parse(await readFile(path.join(app,'lib/story-design/story-font-manifest.json'),'utf8')) as {app:{family:string;url:string;weight:string;style:string;format:string;unicodeRange?:string}[]};
  for(const font of manifest.app.filter(font=>['JetBrains Mono Variable','IBM Plex Sans'].includes(font.family)&&/^U\+0+(?:-|,|$)/i.test(font.unicodeRange??''))){
   const bytes=await readFile(path.join(app,'public',font.url));
   stylesheet+=`@font-face{font-family:${JSON.stringify(font.family)};font-style:${font.style};font-weight:${font.weight};font-display:swap;src:url(data:font/woff2;base64,${bytes.toString('base64')}) format(${JSON.stringify(font.format)});}`;

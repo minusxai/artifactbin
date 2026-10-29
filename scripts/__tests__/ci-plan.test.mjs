@@ -607,7 +607,7 @@ describe('CI job shape', () => {
         // skips `npm ci`, and so the postinstall) would leave every document without its fonts.
         expect(cache.with.path).toContain('node_modules');
         expect(cache.with.path).toContain('services/app/public/fonts');
-        expect(cache.with.path).toContain('services/app/lib/data/story/story-font-manifest.json');
+        expect(cache.with.path).toContain('services/app/lib/story-design/story-font-manifest.json');
         // Keyed on the lockfile, but not on the one line of it a release rewrites: the fingerprint
         // is that file with workspace versions normalised, written by the step just above.
         expect(cache.with.key).toMatch(/hashFiles\('(candidate\/package-lock\.json|\.ci-cache-key\/install\.json)'/);

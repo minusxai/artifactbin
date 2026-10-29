@@ -8,7 +8,7 @@ import {skillPackageFiles,skillZip} from '../package';
 import {componentFile} from '../../libraries/components.server';
 
 /** What the production image copies from the app package (artifactbin-server source-runtime copyAppAssets). */
-const IMAGE=['public','skills','dist/web','lib/build-assets','lib/data/story/story-guidance.yaml'];
+const IMAGE=['public','skills','dist/web','lib/build-assets'];
 const dirs=(root:string):string[]=>[root,...readdirSync(root,{withFileTypes:true}).filter(entry=>entry.isDirectory()).flatMap(entry=>dirs(path.join(root,entry.name)))];
 
 it('packs the skill zip from only what the production image ships, with every directory readable by another user',()=>{

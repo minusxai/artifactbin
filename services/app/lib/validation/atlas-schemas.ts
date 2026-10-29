@@ -34,7 +34,6 @@ export type { StoryDesignName };
  * editorial and plan, present mode for a deck), orthogonal to the design.
  */
 export const STORY_TEMPLATE_NAMES = ['doc', 'editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
-export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 export const StoryContent = Type.Object({
   description: Nullable(Type.String()),

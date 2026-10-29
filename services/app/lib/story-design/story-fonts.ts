@@ -12,7 +12,14 @@
  * never authored source, so it must not reach `content.story` on any save path.
  */
 import { STORY_THEMES } from './story-themes';
-import { storyFontManifest as fontManifest } from '@/lib/data';
+import fontManifest from './story-font-manifest.json';
+
+/**
+ * The generated font manifest (services/app/scripts/copy-assets.mjs writes it at install; gitignored): bundled
+ * families, the app shell's faces and the design systems' packaged faces, each a hashed /fonts woff2. Read by
+ * path too: artifactbin-server, vite.config.mts, design-systems/lib/packaged-fonts.mjs and the portable chrome build.
+ */
+export const storyFontManifest = fontManifest;
 
 /** Marker attribute of the platform font style node in the document head. */
 export const STORY_FONTS_ATTR = 'data-mx-fonts';

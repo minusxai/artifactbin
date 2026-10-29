@@ -153,7 +153,7 @@ const manifest = { families, app, systems };
 // In the Docker builder this runs from npm ci BEFORE `COPY lib ./lib` — the
 // tree the manifest lives in does not exist yet (writeFileSync creates no
 // directories; the later COPY merges over it without deleting this file).
-mkdirSync('lib/data/story', { recursive: true });
-writeFileSync('lib/data/story/story-font-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+mkdirSync('lib/story-design', { recursive: true });
+writeFileSync('lib/story-design/story-font-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
 
 console.log(`runtime assets copied to public/ (${copied.size} font files)`);

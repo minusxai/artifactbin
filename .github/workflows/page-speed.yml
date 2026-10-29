@@ -82,7 +82,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -177,7 +177,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs') }}
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true' && steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -207,7 +207,7 @@ jobs:
             cp -al node_modules .perf-base/node_modules
             for dir in services/*/node_modules; do cp -al "$dir" ".perf-base/$dir"; done
             cp -al services/app/public/fonts .perf-base/services/app/public/fonts
-            cp services/app/lib/data/story/story-font-manifest.json .perf-base/services/app/lib/data/story/story-font-manifest.json
+            cp services/app/lib/story-design/story-font-manifest.json .perf-base/services/app/lib/story-design/story-font-manifest.json
           else
             (cd .perf-base && npm ci)
           fi

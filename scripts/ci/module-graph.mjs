@@ -125,7 +125,6 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/page-store/runtime-graph.ts',
   'services/app/lib/page-store/store.ts',
   'services/app/lib/story-edit/story-number.ts',
-  'services/app/lib/story-edit/story-viz.ts',
   'services/app/lib/story-ui/data-table.ts',
   'services/app/lib/story-ui/interpreter-primitives.ts',
   'services/app/lib/viz/chart-envelope.ts',

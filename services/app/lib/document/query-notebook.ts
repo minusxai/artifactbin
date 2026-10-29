@@ -119,7 +119,7 @@ function findQuery(nodes: JsxNode[], name: string): JsxElement | null {
  * Replace the SQL of the `<Query name>` declaration, leaving everything else as
  * it was. The source comes back UNCHANGED when it does not parse, no such
  * query exists, the SQL is blank, or nothing would change — a stale cell must
- * never corrupt a document (the updateJsxElementAtPath rule).
+ * never corrupt a document (lib/story-edit's write-back rule).
  */
 export function updateQuerySqlInJsx(source: string, name: string, sql: string): string {
   if (sql.trim() === '') return source;

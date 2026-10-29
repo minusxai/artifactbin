@@ -1,8 +1,8 @@
-/** lib/story-design through its index: the runtime-class rule, the font faces and the themes a stored row resolves to. */
+/** lib/story-design through its index: the runtime-class rule, the font faces and manifest, and the themes a stored row resolves to. */
 import { describe, expect, it } from 'vitest';
 import {
   RUNTIME_CLASS_LIMIT, STORY_FAMILY_ASSETS, STORY_FONTS_ATTR, STORY_THEMES, getStoryFontCss, isRuntimeClassToken,
-  resolveStoredStoryDesign, storyFontFaceCss,
+  resolveStoredStoryDesign, storyFontFaceCss, storyFontManifest,
 } from '..';
 
 describe('isRuntimeClassToken', () => {
@@ -55,5 +55,16 @@ describe('themes', () => {
     expect(resolveStoredStoryDesign('volta', undefined)).toEqual({ theme: 'volta', colorMode: null });
     expect(resolveStoredStoryDesign('retired-theme', 'light')).toEqual({ theme: null, colorMode: 'light' });
     expect(resolveStoredStoryDesign(null, null)).toEqual({ theme: null, colorMode: null });
+  });
+});
+
+describe('storyFontManifest', () => {
+  it('maps families, the app shell and the design systems to hashed woff2 files', () => {
+    const families = Object.entries(storyFontManifest.families);
+    expect(families.length).toBeGreaterThan(0);
+    for (const [, assets] of families) for (const asset of assets) expect(asset.url).toMatch(/^\/fonts\/[a-z0-9-]+\.[a-f0-9]{8}\.woff2$/);
+    expect(storyFontManifest.app.length).toBeGreaterThan(0);
+    for (const face of storyFontManifest.app) expect(face.url).toMatch(/\.woff2$/);
+    expect(Object.keys(storyFontManifest.systems).length).toBeGreaterThan(0);
   });
 });
