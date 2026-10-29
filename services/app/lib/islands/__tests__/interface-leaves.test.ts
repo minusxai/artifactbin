@@ -173,9 +173,11 @@ describe('popup dismissal', () => {
     press('#out');
     expect(close).toHaveBeenCalledTimes(1);
     setOpen(true);
-    const announceOther = createRoot(() => popupDismiss(() => true, () => {}, () => host.querySelector<HTMLElement>('#out')!, () => undefined));
-    announceOther();
+    const other = createRoot((disposeOther) => ({ announce: popupDismiss(() => true, () => {}, () => host.querySelector<HTMLElement>('#out')!, () => undefined), disposeOther }));
+    other.announce();
     expect(close).toHaveBeenCalledTimes(2);
+    // An open popup's capture-phase Escape handler stops propagation: left mounted, it would eat every later Escape.
+    other.disposeOther();
     setOpen(true);
     dispose();
     press('#out');
