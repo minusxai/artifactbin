@@ -111,7 +111,15 @@ export function auditFastSource(source, file) {
         && ts.isIdentifier(expression.argumentExpression) && expression.argumentExpression.text === 'i'
         && node.arguments.length === 1
         && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === 'cls';
-      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch && !acornPluginDispatch) reasons.push(`${file}: computed callable capability`);
+      // zod's JSON-schema check fold looks up one pure aggregator per check kind in its own
+      // `contributors` table and passes it the aggregate and the check's definition.
+      const zodCheckContributorDispatch = ts.isCallExpression(node)
+        && /(?:^|\/)node_modules\/zod\/v4\/core\/json-schema-processors\.js$/.test(normalizedFile)
+        && ts.isElementAccessExpression(expression)
+        && ts.isIdentifier(expression.expression) && expression.expression.text === 'contributors'
+        && node.arguments.length === 2
+        && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === 'agg';
+      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch && !acornPluginDispatch && !zodCheckContributorDispatch) reasons.push(`${file}: computed callable capability`);
     }
     ts.forEachChild(node, visit);
   }

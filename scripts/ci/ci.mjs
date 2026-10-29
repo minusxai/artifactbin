@@ -262,6 +262,36 @@ if (mode === 'plan') {
   const { key, inputs } = buildKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
   console.log(`build key ${key} over ${inputs} build inputs`);
+} else if (mode === 'type-info') {
+  // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsc-buildinfo` artifact any run of this
+  // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`). An artifact, not a cache:
+  // caches are scoped to a branch and main, so a pull request could never read another's, while every
+  // artifact is findable by name across the repository. tsc re-checks every file whose content or
+  // dependencies differ from what the build info recorded, so an older or other-branch one only costs
+  // time. Runs from forks are skipped. Anything unreadable leaves a cold check, never a failure.
+  const repo = env.GITHUB_REPOSITORY;
+  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
+  const api = env.GITHUB_API_URL || 'https://api.github.com';
+  const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
+  try {
+    if (!repo || !token) throw new Error('no repository token');
+    const listing = await fetch(`${api}/repos/${repo}/actions/artifacts?name=tsc-buildinfo&per_page=30`, { headers });
+    if (!listing.ok) throw new Error(`listing answered ${listing.status}`);
+    const { artifacts = [] } = await listing.json();
+    const match = artifacts
+      .filter((artifact) => artifact.expired === false && artifact.workflow_run
+        && artifact.workflow_run.head_repository_id === artifact.workflow_run.repository_id)
+      .sort((a, b) => b.id - a.id)[0];
+    if (!match) throw new Error('none uploaded yet');
+    const response = await fetch(`${api}/repos/${repo}/actions/artifacts/${match.id}/zip`, { headers, redirect: 'follow' });
+    if (!response.ok) throw new Error(`download answered ${response.status}`);
+    mkdirSync('.ci-cache-key', { recursive: true });
+    writeFileSync('.ci-cache-key/tsc-buildinfo.zip', Buffer.from(await response.arrayBuffer()));
+    execFileSync('unzip', ['-o', '-q', '.ci-cache-key/tsc-buildinfo.zip', '-d', 'node_modules/.cache/tsc']);
+    console.log(`Type check build info from run ${match.workflow_run.id} (${match.workflow_run.head_branch}).`);
+  } catch (error) {
+    console.log(`No type check build info (${error.message}); the type check runs cold.`);
+  }
 } else {
-  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint or build-key');
+  throw new Error('Expected plan, node, check, record-tree, lock-fingerprint, build-key or type-info');
 }
