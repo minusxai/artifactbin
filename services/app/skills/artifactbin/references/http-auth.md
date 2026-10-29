@@ -22,7 +22,7 @@ Verified email sessions receive an OAuth bearer/refresh grant through the email-
 
 ## Installed scripts
 
-`node scripts/auth.mjs status` reports this origin's grant without secrets. Start `auth.mjs login --email ADDRESS`; wait for the user's emailed OTP, then `auth.mjs login --challenge HANDLE --code-file FILE`. The private wrapper handle is origin-bound. Credentials reuse the existing private origin store and serialized refresh. `auth.mjs logout` removes the local grant only: no self-revocation endpoint exists, and an environment grant remains active. Select `--server ORIGIN` if different from the archive origin. No token appears in results or journals.
+`node scripts/auth.mjs status` reports this origin's grant without secrets (it refreshes a due token; `authenticated: false` means sign in again). Never search files, bundles, mailboxes or git config for credentials, codes or accounts: ask the user. Start `auth.mjs login --email ADDRESS`; wait for the user's emailed OTP, then `auth.mjs login --challenge HANDLE --code-file FILE`. The private wrapper handle is origin-bound. Credentials reuse the existing private origin store and serialized refresh. `auth.mjs logout` removes the local grant only: no self-revocation endpoint exists, and an environment grant remains active. Select `--server ORIGIN` if different from the archive origin. No token appears in results or journals.
 
 ## Storage and refresh
 

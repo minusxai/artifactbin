@@ -45,6 +45,18 @@ it('rejects stale revisions and conflicting compiler coordinates; API comments u
   account = null;
   expect((await post({ anchor, body: 'guest' })).status).toBeGreaterThanOrEqual(400);
 });
+it('answers 400 naming anchor.revision when the revision is not a version number, and 409 with the current version only when stale', async () => {
+  const { id, params, token } = await page();
+  const api = (revision: string) => apiComment(request(`/api/artifacts/${id}/annotations`, { method: 'POST', token, json: { anchor: { ...anchor, revision }, body: 'revision check' } }), params);
+  for (const bad of ['3f9a0c1d2b4e', 'ed_abc123']) {
+    const refused = await api(bad);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: 'invalid_annotation_revision', field: 'anchor.revision' });
+  }
+  const stale = await api('0');
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ error: 'stale', current_revision: '1' });
+});
 it('preserves a native fractional area beside its stable HTML identity',async()=>{
  const {id,params,token}=await page();
  const area={v:1,kind:'area',box:{x:0.1,y:0.2,w:0.3,h:0.4}};
