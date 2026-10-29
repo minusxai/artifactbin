@@ -1,10 +1,10 @@
 import {describe,it,expect,vi} from 'vitest';
-import * as assetDelivery from '@/lib/export/assets';
-import {useAppHarness} from './harness';
+import * as assetDelivery from '../assets';
+import {useAppHarness} from '@/__tests__/harness';
 import { getDb, setServices } from '@/lib/platform';
-import { mintExportKey, resetExportRenderer } from '@/lib/export';
+import { mintExportKey, resetExportRenderer } from '..';
 import {objectStore,createS3Store, cachedReads} from '@/lib/object-store';
-import {exportAssetResponse,exportAssetUrl} from '@/lib/export/assets';
+import {exportAssetResponse,exportAssetUrl} from '../assets';
 import {GET as exportImage} from '@/app/a/[id]/export/route';
 import {createArtifact} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

@@ -16,7 +16,7 @@ import { overridePostgres } from '@/lib/datasets/postgres';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
-import { resetExportRenderer } from '@/lib/export/exporter';
+import { resetExportRenderer } from '@/lib/export';
 import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';

@@ -8,7 +8,9 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PostgresDb } from '@/lib/platform';
-import { liveChannelCount, resetLiveSubscriptions, subscribeChannel } from '../realtime/live';
+import { liveChannelCount, MAX_LIVE_CHANNELS, resetLiveSubscriptions, subscribeChannel } from '../realtime/live';
+import { TooManyLiveChannels, subscribeToAnnotations } from '..';
+import { annotationsChannel } from '@artifactbin/contracts';
 
 class FakeClient extends EventEmitter {
   queries: string[] = [];
@@ -99,5 +101,33 @@ describe('live subscriptions over a lost listener', () => {
     clients[1]!.notify('artifact_doc', 'e9');
     expect(reload).toHaveBeenCalledWith('e9');
     expect(tabA).not.toHaveBeenCalled();
+  });
+});
+
+describe('the live channel registry', () => {
+  it('follows a document annotations on its own channel, one LISTEN shared by every subscriber', async () => {
+    const { pool, clients } = fakePool();
+    pg.db = new PostgresDb(pool as never);
+    const a = vi.fn(), b = vi.fn();
+    const stopA = await subscribeToAnnotations('abc123', a);
+    const stopB = await subscribeToAnnotations('abc123', b);
+    expect(clients[0]!.queries).toEqual([`LISTEN "${annotationsChannel('abc123')}"`]);
+    clients[0]!.notify(annotationsChannel('abc123'), 'n1');
+    expect([a.mock.calls, b.mock.calls]).toEqual([[['n1']], [['n1']]]);
+    await stopA();
+    await stopA();
+    expect(liveChannelCount()).toBe(1);
+    await stopB();
+    expect(liveChannelCount()).toBe(0);
+  });
+
+  it('refuses a new channel past the ceiling, while more readers of a followed channel still join', async () => {
+    const { pool } = fakePool();
+    pg.db = new PostgresDb(pool as never);
+    for (let i = 0; i < MAX_LIVE_CHANNELS; i++) await subscribeChannel(`artifact_${i}`, () => {});
+    await expect(subscribeChannel('artifact_one_more', () => {})).rejects.toBeInstanceOf(TooManyLiveChannels);
+    await expect(subscribeToAnnotations('abc123', () => {})).rejects.toThrow('too many live channels');
+    await subscribeChannel('artifact_0', () => {});
+    expect(liveChannelCount()).toBe(MAX_LIVE_CHANNELS);
   });
 });
