@@ -351,6 +351,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "animate-pulse",
   "animate-spin",
   "animation-duration:0s",
+  "anonymous",
   "appearance",
   "appearance-none",
   "application/json",

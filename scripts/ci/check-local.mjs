@@ -10,7 +10,7 @@ const reuse = raw.includes('--reuse');
 const part = raw.find(arg => arg.startsWith('--part='))?.slice('--part='.length);
 const args = raw.filter(arg => arg !== '--reuse' && !arg.startsWith('--part='));
 const node = process.execPath;
-const rootTypes = command => command.at(-1) === 'tsconfig.json';
+const rootTypes = command => command[command.indexOf('-p') + 1] === 'tsconfig.json';
 const validateCommands = [
   [node, 'scripts/ci/check-residual-names.mjs'],
   [node, 'scripts/ci/check-ui-primitives.mjs'],
