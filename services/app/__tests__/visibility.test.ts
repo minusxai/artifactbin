@@ -10,7 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * Denials are uniform 404s BEFORE any other work: a private doc must be
  * indistinguishable from a missing one.
  */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -19,7 +19,6 @@ import { GET as queryGetRoute, POST as queryPostRoute } from '@/app/a/[id]/query
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
@@ -48,14 +47,9 @@ async function fixtures() {
   return { anonToken: anon.token, ownedToken: owned.token, owner };
 }
 
-beforeEach(async () => {
-  await resetLiveSubscriptions();
+beforeEach(() => {
   sessionUser.id = '';
   sessionUser.email = '';
-});
-
-afterAll(async () => {
-  await resetLiveSubscriptions();
 });
 
 describe('defaults and validation', () => {

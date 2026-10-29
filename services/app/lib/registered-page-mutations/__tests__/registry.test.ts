@@ -1,7 +1,6 @@
 import {it,expect} from 'vitest';
 import type {HtmlPageVersion} from '@artifactbin/contracts';
 import {prepareRegisteredMutationBackend,registeredMutationPlan,registeredMutationDescriptor,registeredMutationSchema,registeredMutationInvoker,commitRegisteredMutationBackend} from '../index';
-import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import type {MutationProgram} from '../index';
 const digest='a'.repeat(64),program:MutationProgram={name:'save',kind:'insert',sql:'INSERT INTO form.rows(body) VALUES ($body)',target:{datasetId:'private-dataset',schema:'form',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
 const page:HtmlPageVersion={pageId:'page',version:1,revision:'1',html:'<p data-af-id="n1">Synthetic</p>',nextNodeId:2,links:[]};
@@ -10,7 +9,7 @@ it('registration binds immutable HTML, program, provenance and backend bytes whi
  const plan=registeredMutationPlan(saved,prepared.link,record);expect(plan?.name).toBe('save');expect(()=>registeredMutationPlan({...saved,html:'changed'},prepared.link,record)).toThrow();expect(()=>registeredMutationPlan(saved,prepared.link,{...record,compiled:record.compiled+' '})).toThrow();expect(()=>registeredMutationPlan({...saved,links:[]},prepared.link,record)).toThrow();
  expect(registeredMutationSchema(program)).toContain('run(requestId:String!,values:Values!)');
  const descriptor=registeredMutationDescriptor('actions',program);expect(descriptor.outcomePath).toEqual(['actions','run']);expect(JSON.stringify(descriptor)).not.toMatch(/private-dataset|INSERT|form\.rows|parameter/);expect(descriptor.values).toEqual([{name:'body',type:'string',nullable:false}]);
- expect(typeof registeredMutationInvoker).toBe('function');expect(typeof createRetainedRegisteredMutation).toBe('function');expect(typeof commitRegisteredMutationBackend).toBe('function');
+ expect(typeof registeredMutationInvoker).toBe('function');expect(typeof commitRegisteredMutationBackend).toBe('function');
 });
 it('public typed descriptor executes through the real page GraphQL composer and reports adapter outcome',async()=>{
  const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');

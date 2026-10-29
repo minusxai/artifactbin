@@ -27,7 +27,6 @@ import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
 import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
@@ -93,8 +92,7 @@ async function expectEvent(artifactId: string, event: string): Promise<{ user_id
 /** Give any stray unawaited insert time to land before asserting absence. */
 const settle = () => new Promise((r) => setTimeout(r, 150));
 
-beforeEach(async () => {
-  await resetLiveSubscriptions();
+beforeEach(() => {
   sessionUser.id = '';
   sessionUser.email = '';
   requestHeaders.clear();

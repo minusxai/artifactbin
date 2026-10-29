@@ -1,27 +1,25 @@
 /** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
-import { beforeEach, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
 import { changeMembership, getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
-import { observedRequest } from './conditional-request';
-import { nativeHtml } from './native-html-fixture';
-import { request, useAppHarness, mintAccountToken } from './harness';
-import { sseStream } from './sse';
+import { observedRequest } from '@/__tests__/conditional-request';
+import { nativeHtml } from '@/__tests__/native-html-fixture';
+import { request, useAppHarness, mintAccountToken } from '@/__tests__/harness';
+import { sseStream } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
 import { PUT } from '@/app/api/artifacts/[id]/route';
 import { POST } from '@/app/api/artifacts/route';
 import {
-  resetLiveSubscriptions,
   liveSubscriptionSnapshot,
-} from '@/lib/publish/realtime/live';
+} from '../realtime/live';
 import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
 import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
 useAppHarness();
-beforeEach(resetLiveSubscriptions);
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const linked = (id: string) =>
   `<!doctype html><html><head><link rel="af-dataset" data-af-name="choices" href="ref:${id}"></head><body><p>Choices</p></body></html>`;

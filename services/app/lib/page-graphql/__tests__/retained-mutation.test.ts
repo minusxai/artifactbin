@@ -10,9 +10,9 @@ vi.mock('@/lib/document-data',()=>({canWriteDataset:async()=>null,isMutationRefu
  const tx={query:async(sql:string)=>({rows:sql.includes('artifact_versions')?[{source:state.page.html,meta:{htmlLinks:state.page.links}}]:sql.includes('html_backend_versions')?[{backend_id:state.backend.backendId,page_id:state.backend.pageId,version:state.backend.version,name:state.backend.name,source:state.backend.source,type_defs:state.backend.typeDefs,compiled:state.backend.compiled,owner_id:state.backend.ownerId,secret_bindings:[]}]:[state.doc]})} as unknown as Queryable;
  await state.proof!(tx);state.commits++;return {row:{id:'data',version:2},affected:1,rowCount:1};
 }}));
-import {prepareRegisteredMutationBackend} from '../registry';
-import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
-import type {MutationProgram} from '../contracts';
+import {prepareRegisteredMutationBackend} from '@/lib/registered-page-mutations';
+import {createRetainedRegisteredMutation} from '../registered-mutations';
+import type {MutationProgram} from '@/lib/registered-page-mutations';
 const actor={userId:'account',tokenId:null,email:null,documentEditor:false},digest='a'.repeat(64),program:MutationProgram={name:'save',kind:'insert',sql:'INSERT INTO form.rows(body) VALUES ($body)',target:{datasetId:'data',schema:'form',table:'rows'},values:{body:{type:'string',nullable:false,parameter:'body'}},builtins:[],expectedAffected:1,reset:['body']};
 beforeEach(()=>{state.commits=0;state.change=false;state.calls=[];state.dataset={id:'data'};const page:HtmlPageVersion={pageId:'page',version:1,revision:'1',html:'<p>Example</p>',links:[],nextNodeId:1};const prepared=prepareRegisteredMutationBackend('actions','backend',page,program,{compilerSha256:digest,sourceSha256:digest});state.page={...page,links:[prepared.link]};state.backend={...prepared.backend,...prepared.link,pageId:'page',ownerId:'owner'};state.doc={id:'page',format:'html',version:1,edit_id:'edit',user_id:'owner',source:page.html};});
 it('retained adapter forwards expectedAffected rollback and document proof to original transaction port',async()=>{

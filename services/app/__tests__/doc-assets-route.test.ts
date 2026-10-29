@@ -31,7 +31,7 @@ import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { PUT as putSharing } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { setDocAssetImportCapForTests } from '@/lib/allowances';
 import { assetUrlFor, urlHash } from '@/lib/document/asset-url';
 import { getDb } from '@/lib/platform';
@@ -57,11 +57,11 @@ beforeAll(async () => {
     res.writeHead(404); res.end();
   });
   web = server.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 
@@ -200,7 +200,7 @@ describe('the bounds, each by name', () => {
   it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
     const doc = await publicDoc();
     useLoopbackLookup();
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     try {
       for (const url of ['https://anything.localhost/iam.png', 'https://x.lvh.me/iam.png']) {
         const res = await ask(doc.id, url);
@@ -209,7 +209,7 @@ describe('the bounds, each by name', () => {
         expect(body.code, url).toBe('forbidden_address');
       }
     } finally {
-      setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+      allowLocalWebIngest();
     }
   });
 

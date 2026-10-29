@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {nativeHtmlStructuralWrapper} from '../document-serving/native-html-structural-wrapper';
+import {nativeHtmlStructuralWrapper} from '../native-html-structural-wrapper';
 
 describe('nativeHtmlStructuralWrapper typography baseline',()=>{
  it('provides the source bare-text defaults only to an unstyled inline-story document root',()=>{

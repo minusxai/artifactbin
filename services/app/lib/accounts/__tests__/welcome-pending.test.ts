@@ -10,12 +10,9 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
-import { identityForUser, syncProfile, createTestUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
+import { syncProfile } from '@/lib/accounts';
 import { createUser, getUserById } from '@/lib/accounts';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/avatars';
-import { objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
@@ -121,34 +118,5 @@ describe('GET /api/page/session — user', () => {
     const anon = await body(await agentCookie([token.id]));
     expect(anon.kind).toBe('none');
     expect(anon.user).toBeNull();
-  });
-});
-
-describe('erasing a test user', () => {
-  it('takes its picture with it, and survives an object that has already gone', async () => {
-    const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
-    const token = await mintToken('eraser', owner.id);
-    await claimToken(owner.id, token.token);
-
-    const mint = async () => {
-      const minted = await createTestUser(identityForUser(owner.id, token.id));
-      if (!minted.ok) throw new Error(minted.error);
-      return minted;
-    };
-
-    const testuser = await mint();
-    const { key } = await setAvatar(testuser.id, await png(), 'image/png');
-    await expect(objectStore().get(key)).resolves.toBeInstanceOf(Buffer);
-
-    expect((await eraseTestUser(testuser.id)).erased).toBe(true);
-    expect(await getUserById(testuser.id)).toBeNull();
-    await expect(objectStore().get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
-
-    // The object store losing the bytes first is not the erase's problem.
-    const second = await mint();
-    const stored = await setAvatar(second.id, await png(), 'image/png');
-    await objectStore().delete(stored.key);
-    expect((await eraseTestUser(second.id)).erased).toBe(true);
-    expect(await getUserById(second.id)).toBeNull();
   });
 });

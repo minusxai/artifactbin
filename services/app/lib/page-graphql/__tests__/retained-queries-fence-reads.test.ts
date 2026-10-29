@@ -10,9 +10,9 @@ import { readHtmlPage } from "@/lib/html-publication";
 import { ANONYMOUS_ACTOR } from "@/lib/accounts";
 import { requestOrSessionActor } from "@/lib/authentication";
 import { getArtifactById, readableArtifactIdentity } from "@/lib/artifacts";
-import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
+import { createRetainedRegisteredQueries } from "../registered-queries";
 import { executeCatalog } from "@/lib/datasets/execute";
-import { prepareRegisteredQueryBackend, commitRegisteredQueryBackend, registeredPlan } from "../registry";
+import { prepareRegisteredQueryBackend, commitRegisteredQueryBackend, registeredPlan } from "@/lib/registered-page-queries";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 useAppHarness();
 it("an evaluation reads the page source once at admission and fences on its head identity, still refusing a republish", async () => {

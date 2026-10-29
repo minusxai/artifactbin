@@ -33,7 +33,7 @@ it('resumes from a checkpoint and delivers a human reply on an older thread exac
 // Route requests stay real; only the subscription seam is controlled to force
 // the otherwise narrow subscribe/read race. PGLite evidence is serial only.
 const human: AnnotationAuthor = {kind: 'human', label: 'Reviewer', transport: 'browser'};
-afterEach(async () => { vi.restoreAllMocks(); await live.resetLiveSubscriptions(); });
+afterEach(() => { vi.restoreAllMocks(); });
 async function fixture() {
  const token = await mintAccountToken('monitor');
  const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));

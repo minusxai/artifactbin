@@ -20,7 +20,7 @@ import { POST as refreshRoute } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refresh/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { webAssetByHash } from '@/lib/publish';
 import { urlHash } from '@/lib/document/asset-url';
@@ -44,11 +44,11 @@ beforeAll(async () => {
     res.end();
   });
   web = server.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 

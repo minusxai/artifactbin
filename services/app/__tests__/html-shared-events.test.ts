@@ -1,10 +1,9 @@
-import {beforeEach,expect,it} from 'vitest';
+import {expect,it} from 'vitest';
 import {artifactChannel} from '@artifactbin/contracts';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {sseStream} from '@/__tests__/sse';
-import {resetLiveSubscriptions} from '@/lib/publish/realtime/live';
 import {setHtmlBackendStore} from '@/lib/html-backends';
 const harness=useAppHarness();
 // Presence shares this stream; dataset assertions wait for their named frame.
@@ -16,7 +15,6 @@ async function nextData(stream:ReturnType<typeof sseStream>){
  }
  throw new Error('Expected dataset data event');
 }
-beforeEach(resetLiveSubscriptions);
 it('two connected viewers hear committed stores; reconnect refetches writes missed while disconnected',async()=>{
  const token=await mintAccountToken('shared-events');
  const made=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:'<!doctype html><html><body><p>Shared</p></body></html>',visibility:'public'}}));

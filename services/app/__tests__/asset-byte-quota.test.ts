@@ -18,7 +18,8 @@ import { useAppHarness } from '@/__tests__/harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getDb } from '@/lib/platform';
 import { createUser } from '@/lib/accounts';
-import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/artifacts';
+import { assetByteQuotaExceeded } from '@/lib/artifacts';
+import { assetBytesForToken, setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { request } from '@/__tests__/harness';
 

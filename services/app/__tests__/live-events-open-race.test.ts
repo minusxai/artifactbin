@@ -42,7 +42,6 @@ import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import { readNamed } from '@/__tests__/sse';
 
@@ -52,8 +51,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 /** Read SSE `data:` frames until `count` arrive or the budget runs out. */
 
-beforeEach(async () => {
-  await resetLiveSubscriptions();
+beforeEach(() => {
   duringSetup = null;
 });
 
@@ -88,6 +86,5 @@ describe('a write that commits while the stream is opening', () => {
     // …and the frame that ping points at is the state after the write.
     const frame = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
     expect(frame.status).toBe(200);expect(await frame.text()).toContain('>after</p>');
-    await resetLiveSubscriptions();
   });
 });

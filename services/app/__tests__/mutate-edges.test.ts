@@ -10,7 +10,7 @@
  *  - A stream that ends must release its DATASET channels as well as its own,
  *    or a process slowly pins channels for documents nobody is reading.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -18,7 +18,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { liveSubscriptionSnapshot, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
+import { liveSubscriptionSnapshot } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 import {sseStream} from '@/__tests__/sse';
@@ -40,9 +40,6 @@ const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [anno
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
 
-beforeEach(async () => {
-  await resetLiveSubscriptions();
-});
 afterAll(async () => { vi.restoreAllMocks(); });
 
 /**

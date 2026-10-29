@@ -11,20 +11,8 @@
       "../../../../services/app/lib/html-components/data-table",
       "../../../../services/app/lib/html-components/select"
     ],
-    "services/app/__tests__/acl-holes.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/analytics.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/annotation-changes.test.ts": [
       "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/bound-image-publish.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/doc-assets-route.test.ts": [
-      "@/lib/web-ingest/fetch"
     ],
     "services/app/__tests__/document-operations.test.ts": [
       "@/lib/document/document-node-codec",
@@ -34,81 +22,32 @@
       "@/lib/object-store/image-store",
       "@/lib/object-store/pdf-store"
     ],
-    "services/app/__tests__/folder-children.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/groups-ownership.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/harness.ts": [
       "@/lib/accounts/agent-session",
       "@/lib/datasets/postgres",
       "@/lib/document-serving/render-cache",
       "@/lib/platform/ids",
-      "@/lib/platform/schema"
-    ],
-    "services/app/__tests__/html-shared-events.test.ts": [
+      "@/lib/platform/schema",
       "@/lib/publish/realtime/live"
     ],
     "services/app/__tests__/identity-workflow.test.ts": [
       "@/lib/platform/ids"
     ],
-    "services/app/__tests__/identity.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/lambda-operations.test.ts": [
       "@/lib/runner/operations"
     ],
-    "services/app/__tests__/live-data-events.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/live-events-open-race.test.ts": [
-      "@/lib/authentication/request-identity",
-      "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/live-events.test.ts": [
-      "@/lib/publish/realtime/live"
+      "@/lib/authentication/request-identity"
     ],
     "services/app/__tests__/mutate-edges.test.ts": [
       "@/lib/publish/realtime/live"
     ],
-    "services/app/__tests__/native-file-links.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
     "services/app/__tests__/pages-origin-host.test.ts": [
       "@/lib/accounts/pages-sessions",
-      "@/lib/document-serving/native-html.server",
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/pdf-tier.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/refresh-asset.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/visibility.test.ts": [
-      "@/lib/publish/realtime/live"
-    ],
-    "services/app/lib/__tests__/native-html-structural-wrapper.test.ts": [
-      "../document-serving/native-html-structural-wrapper"
-    ],
-    "services/app/lib/accounts/__tests__/testusers-erase.test.ts": [
-      "@/lib/operations/testuser-erase"
-    ],
-    "services/app/lib/accounts/__tests__/welcome-pending.test.ts": [
-      "@/lib/operations/testuser-erase"
-    ],
-    "services/app/lib/artifact-backend/__tests__/browser-artifact-write.test.ts": [
-      "../../document/document-graph-patch"
-    ],
-    "services/app/lib/artifacts/__tests__/write-ownership.test.ts": [
-      "@/lib/document-data/dataset-policy"
+      "@/lib/document-serving/native-html.server"
     ],
     "services/app/lib/custom-domains/__tests__/custom-domains.test.ts": [
       "@/lib/operations/testuser-erase"
-    ],
-    "services/app/lib/data-ingest/__tests__/csv-url.test.ts": [
-      "@/lib/web-ingest/fetch"
     ],
     "services/app/lib/datasets/__tests__/dataset-secret-boundary.test.ts": [
       "@/lib/operations/datasets"
@@ -119,23 +58,11 @@
     "services/app/lib/document-data/__tests__/speedup-metadata-reuse.test.ts": [
       "@/lib/document/parsed-artifact-metadata"
     ],
-    "services/app/lib/frame-edit/__tests__/annotate-live-morph.ui.test.ts": [
-      "@/lib/islands/morph/engine"
-    ],
-    "services/app/lib/frame-edit/__tests__/dom-mounter.ui.test.tsx": [
-      "@/lib/islands/morph/engine"
-    ],
-    "services/app/lib/frame-edit/__tests__/session.ui.test.ts": [
-      "@/lib/islands/morph/engine"
-    ],
     "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
       "../../html-components/file-upload"
     ],
     "services/app/lib/html-runtime/__tests__/native-file-upload.test.ts": [
       "@/lib/story-runtime/frame-bridge/upload"
-    ],
-    "services/app/lib/html-runtime/__tests__/upload.test.ts": [
-      "../../story-runtime/frame-bridge/upload"
     ],
     "services/app/lib/islands/__tests__/kit-mermaid.test.tsx": [
       "@/lib/mermaid-images/mermaid-render"
@@ -149,34 +76,10 @@
     "services/app/lib/notifications/__tests__/notification-jobs.test.ts": [
       "@/lib/operations/testuser-erase"
     ],
-    "services/app/lib/publish/__tests__/display-title.test.ts": [
-      "../../document/title"
-    ],
-    "services/app/lib/publish/__tests__/web-assets.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/lib/publish/ingest/__tests__/image.test.ts": [
-      "@/lib/web-ingest/fetch"
-    ],
-    "services/app/lib/registered-page-mutations/__tests__/registry.test.ts": [
-      "@/lib/page-graphql/registered-mutations"
-    ],
-    "services/app/lib/registered-page-mutations/__tests__/retained-integration.test.ts": [
-      "@/lib/page-graphql/registered-mutations"
-    ],
-    "services/app/lib/registered-page-mutations/__tests__/retained.test.ts": [
-      "@/lib/page-graphql/registered-mutations"
-    ],
     "services/app/lib/registered-page-queries/__tests__/adapter.test.ts": [
       "@/lib/page-graphql/registered-queries"
     ],
-    "services/app/lib/registered-page-queries/__tests__/fence-reads.test.ts": [
-      "@/lib/page-graphql/registered-queries"
-    ],
     "services/app/lib/registered-page-queries/__tests__/members.test.ts": [
-      "@/lib/page-graphql/registered-queries"
-    ],
-    "services/app/lib/registered-page-queries/__tests__/retained.test.ts": [
       "@/lib/page-graphql/registered-queries"
     ],
     "services/app/lib/skills/__tests__/production-image.test.ts": [
@@ -196,6 +99,9 @@
     ],
     "services/app/solid/document/__tests__/annotations.test.tsx": [
       "@/lib/artifact-backend/retrying"
+    ],
+    "services/app/test/helpers/web-ingest.ts": [
+      "@/lib/web-ingest/fetch"
     ],
     "services/app/test/setup/vitest.setup.ts": [
       "@/lib/platform/event-outbox",

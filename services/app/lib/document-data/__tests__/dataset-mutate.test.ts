@@ -7,7 +7,7 @@
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {artifactState} from '@/lib/artifacts';
-import {onDatasetCommitted} from '@/lib/artifacts';
+import { onDatasetCommitted } from '@/lib/artifacts/testing';
 import {datasetFixture as fixture,refusal,write} from './dataset-fixture';
 
 useAppHarness();

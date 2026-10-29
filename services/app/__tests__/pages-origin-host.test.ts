@@ -22,7 +22,7 @@ import { pagesOriginFor } from '@/lib/http';
 import { framedDocumentSrc } from '@/lib/document-serving';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy, setWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';
 import {nativeHtmlPolicy} from '@/lib/document-serving/native-html.server';
@@ -664,7 +664,7 @@ describe('the origin gate', () => {
 describe('the document\'s /fetch door: a script reaches the hosts its document declares, through us', () => {
   let fixture: RunningServer | null = null;
   afterEach(async () => {
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     await fixture?.close();
     fixture = null;
   });
@@ -683,7 +683,7 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     const upstream = `http://127.0.0.1:${port}`;
     // Loopback stands in for the open web here only: the test policy admits it (and a declared https origin's http
     // twin), as the dev switch does.
-    setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+    allowLocalWebIngest();
     const id = await declaring(w, [`https://127.0.0.1:${port}`]);
     const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, id)}`;
     const self = pagesOriginFor(id, site);
@@ -702,7 +702,7 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
   it('refuses an undeclared host, a private or loopback address, and every method but GET', async () => {
     const w = await world();
     const app = framing();
-    setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: false });
+    setWebIngestPolicy({ allowPrivate: false, allowHttp: false });
     const id = await declaring(w, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7', 'https://anything.localhost', 'https://x.lvh.me']);
     // The server resolves loopback names itself (server.ts installs the loopback lookup): a declared one is still loopback.
     useLoopbackLookup();
@@ -726,7 +726,7 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
 describe('a reader\'s consent reaches the document\'s own origin with the pages session (lib/trust/document-trust)', () => {
   let fixture: RunningServer | null = null;
   afterEach(async () => {
-    setWebIngestPolicyForTests(null);
+    restoreWebIngestPolicy();
     await fixture?.close();
     fixture = null;
   });
@@ -736,7 +736,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const app = framing();
     fixture = await withHttpServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); });
     const port = fixture.port;
-    setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+    allowLocalWebIngest();
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish('<h1>Weather</h1>','public',`<meta name="csp-connect" content="https://127.0.0.1:${port}"><meta name="csp-script" content="${PLOTLY}">`);
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });

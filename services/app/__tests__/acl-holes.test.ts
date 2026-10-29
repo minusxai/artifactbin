@@ -16,7 +16,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  *     differently from "no such id".
  *  4. The wire must not carry the owner's internal account id.
  */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { artifactPage as ArtifactPage, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
@@ -27,7 +27,6 @@ import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
 
@@ -66,14 +65,9 @@ const create = async (token: string, body: Record<string, unknown>) => {
 };
 
 
-beforeEach(async () => {
-  await resetLiveSubscriptions();
+beforeEach(() => {
   sessionUser.id = '';
   sessionUser.email = '';
-});
-
-afterAll(async () => {
-  await resetLiveSubscriptions();
 });
 
 describe('the exporter key is not a reader-visible value', () => {

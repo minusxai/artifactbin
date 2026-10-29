@@ -8,9 +8,9 @@ import { setDatasetPolicy } from '@/__tests__/harness';
 import {catalogOf, loadDatasetRows} from '@/lib/datasets';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
-import {prepareRegisteredMutationBackend,commitRegisteredMutationBackend} from '../registry';
-import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
-import type {MutationProgram} from '../contracts';
+import {prepareRegisteredMutationBackend,commitRegisteredMutationBackend} from '@/lib/registered-page-mutations';
+import {createRetainedRegisteredMutation} from '../registered-mutations';
+import type {MutationProgram} from '@/lib/registered-page-mutations';
 useAppHarness();afterEach(()=>{vi.restoreAllMocks();});
 const signal=()=>new AbortController().signal;
 async function fixture(kind:'insert'|'update'|'delete'='insert',guard:{expectedAffected?:number}={expectedAffected:1},eventValue=false){

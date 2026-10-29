@@ -8,7 +8,7 @@ import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import { getDb } from '@/lib/platform';
 import { assetUrlFor } from '@/lib/document/asset-url';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
+import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
@@ -30,11 +30,11 @@ beforeAll(async () => {
     }
   });
   web = server.base;
-  setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+  allowLocalWebIngest();
 });
 
 afterAll(async () => {
-  setWebIngestPolicyForTests(null);
+  restoreWebIngestPolicy();
   await server.close();
 });
 
