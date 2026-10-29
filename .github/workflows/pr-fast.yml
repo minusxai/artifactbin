@@ -84,6 +84,8 @@ jobs:
           exit "$rc"
       - if: matrix.part == 'tests'
         run: node scripts/ci/fast-check.mjs
+      - if: matrix.part == 'tests'
+        run: sleep 45
       - name: PR CI clock (aim for 40s; fails over 60s)
         if: always()
         env:
