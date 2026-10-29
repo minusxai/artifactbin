@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor, Credential } from '@artifactbin/contracts';
-import { identityForUser, type RequestIdentity } from '@/lib/accounts';
+import { identityForUser, type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
 import { resetAllowances } from '@/lib/allowances';
@@ -23,6 +23,7 @@ import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
 import { generateInternalId } from '@/lib/platform/ids';
+import type { PagesSite } from '@/lib/http';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
@@ -248,4 +249,25 @@ export async function framedDocument(app: { request(input: string | Request, ini
   const src = /<iframe data-mx-document-frame="" src="([^"]+)"/.exec(await page.text())?.[1]?.replaceAll('&amp;', '&');
   if (!src) return null;
   return app.request(src, { headers: { accept: 'text/html' } });
+}
+
+/** A pages site for a pages host under a public URL, built as lib/http's `pagesSite()` builds the deployment's. */
+export function testPagesSite(host: string, publicBaseUrl: string): PagesSite {
+  const url = new URL(publicBaseUrl);
+  return { host, scheme: url.protocol, port: url.port, app: url.origin };
+}
+
+/**
+ * Set a dataset's policy through lib/document-data's policy door (the policy route's `writeDatasetPolicy`), with the
+ * answers of the store call beneath it: the saved `{ revision, policy }`, `{ conflict: true }` for a stale revision,
+ * null when the actor cannot edit that dataset, and an Error for an invalid policy.
+ */
+export async function setDatasetPolicy(actor: AccessActor, id: string, policy: unknown, expectedPolicyRevision: number): Promise<{ revision: number; policy: unknown } | { conflict: true } | null> {
+  const { writeDatasetPolicy } = await import('@/lib/document-data');
+  const response = await writeDatasetPolicy(actor, id, { policy, expectedPolicyRevision });
+  const body = await response.json() as { revision: number; policy: unknown; detail?: string };
+  if (response.status === 404) return null;
+  if (response.status === 409) return { conflict: true };
+  if (response.status !== 200) throw new Error(body.detail ?? `policy refused (${response.status})`);
+  return body;
 }

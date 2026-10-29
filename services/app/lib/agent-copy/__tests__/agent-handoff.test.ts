@@ -1,6 +1,6 @@
 /**
- * WHAT A DOCUMENT HANDS AN AGENT, as structure: the exact words are pinned once, in lib/__tests__/agent-copy and
- * lib/__tests__/agent-starter-consistency; these pin only that the text is a pure function of its origin (a
+ * WHAT A DOCUMENT HANDS AN AGENT, as structure: the exact words are pinned once, in lib/agent-copy/__tests__/agent-copy and
+ * lib/agent-copy/__tests__/agent-starter-consistency; these pin only that the text is a pure function of its origin (a
  * trailing slash changes nothing, every address it names is on that origin) and carries no credential.
  */
 import { describe, expect, it } from 'vitest';
@@ -41,4 +41,16 @@ describe('the existing-document paste', () => {
 it('the product blurb is stable', () => {
   expect(agentBlurb()).toBe(agentBlurb());
   expect(agentBlurb()).not.toMatch(/https?:\/\//);
+});
+
+describe('deployment setup options', () => {
+  it('set the default only for a company deployment, and name its group once setup is complete', async () => {
+    const { deploymentSetupOptions } = await import('@/lib/agent-copy/setup-installers');
+    const group = { handle: 'acme' } as never;
+    expect(deploymentSetupOptions()).toEqual({});
+    expect(deploymentSetupOptions({ mode: 'public', setup_complete: true, default_group: group })).toEqual({});
+    expect(deploymentSetupOptions({ mode: 'company', setup_complete: false, default_group: group })).toEqual({ setDefault: true });
+    expect(deploymentSetupOptions({ mode: 'company', setup_complete: true, default_group: null })).toEqual({ setDefault: true });
+    expect(deploymentSetupOptions({ mode: 'company', setup_complete: true, default_group: group })).toEqual({ setDefault: true, groupHandle: 'acme' });
+  });
 });

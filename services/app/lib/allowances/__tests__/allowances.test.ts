@@ -1,6 +1,6 @@
 /** The in-memory hourly attempt buckets: per-document import ceilings, and the sweep that keeps the map bounded. */
 import { afterEach, describe, expect, it } from 'vitest';
-import { docAssetImportRateLimited, resetAllowances, setDocAssetImportCapForTests, webIngestBucketCount, webIngestRateLimited } from '@/lib/allowances';
+import { docAssetImportRateLimited, documentFetchRateLimited, documentFetchReader, resetAllowances, setDocumentFetchCapForTests, setDocAssetImportCapForTests, webIngestBucketCount, webIngestRateLimited } from '@/lib/allowances';
 
 afterEach(() => { resetAllowances(); setDocAssetImportCapForTests(null); });
 
@@ -52,5 +52,29 @@ describe('document asset imports', () => {
     const t0 = 3_000_000_000_000;
     for (let i = 0; i < 30; i++) expect(docAssetImportRateLimited('art_1', t0), `attempt ${i + 1}`).toBe(false);
     expect(docAssetImportRateLimited('art_1', t0)).toBe(true);
+  });
+});
+
+describe('document fetches', () => {
+  afterEach(() => setDocumentFetchCapForTests(null));
+
+  it('counts a signed-in reader by account or token, and a guest by the client address the trusted proxy saw', () => {
+    const request = (headers: Record<string, string> = {}) => new Request('http://x/', { headers });
+    expect(documentFetchReader({ userId: 'usr_1', tokenId: 'tok_1' }, request())).toBe('usr_1');
+    expect(documentFetchReader({ userId: null, tokenId: 'tok_1' }, request())).toBe('tok_1');
+    expect(documentFetchReader({}, request({ 'x-forwarded-for': 'spoofed, 198.51.100.7' }))).toBe('guest:198.51.100.7');
+    expect(documentFetchReader({}, request({ 'x-real-ip': '198.51.100.8' }))).toBe('guest:198.51.100.8');
+    expect(documentFetchReader({}, request())).toBe('guest');
+  });
+
+  it('limits one reader of one document per hour, independently of other readers and documents', () => {
+    setDocumentFetchCapForTests(2);
+    const t0 = 2_000_000_000_000;
+    expect(documentFetchRateLimited('doc', 'r1', t0)).toBe(false);
+    expect(documentFetchRateLimited('doc', 'r1', t0 + 1)).toBe(false);
+    expect(documentFetchRateLimited('doc', 'r1', t0 + 2)).toBe(true);
+    expect(documentFetchRateLimited('doc', 'r2', t0 + 2)).toBe(false);
+    expect(documentFetchRateLimited('other', 'r1', t0 + 2)).toBe(false);
+    expect(documentFetchRateLimited('doc', 'r1', t0 + HOUR + 1)).toBe(false);
   });
 });

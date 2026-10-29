@@ -8,7 +8,7 @@ import { afterEach, vi } from 'vitest';
 import { fireEvent, getQueriesForElement } from '@testing-library/dom';
 import { render } from 'solid-js/web';
 import type { JSX } from 'solid-js';
-import { describeRetryingRead } from '@/lib/http/__tests__/retrying-read';
+import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { resetShared } from '@/lib/http/shared-request';
 import { DocumentPeople } from '../DocumentPeople';
 import { DocumentSharing } from '../DocumentSharing';

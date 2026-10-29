@@ -6,7 +6,7 @@ import { POST as REVERT } from "@/app/api/artifacts/[id]/revert/route";
 import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
-import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";
+import { setDatasetPolicy } from "@/__tests__/harness";
 import { catalogOf, loadDatasetRows } from "@/lib/datasets";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import type { HtmlBackendLink } from "@artifactbin/contracts";

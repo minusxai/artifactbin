@@ -10,7 +10,7 @@ import { link } from '@/lib/social';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { type UserRow } from '@/lib/accounts/users';
+type UserRow = Awaited<ReturnType<typeof createUser>>;
 
 const harness = useAppHarness();
 const session = (user: { id: string; email: string | null }) => ({ credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true });

@@ -6,8 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
-import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
+import { pagesOriginFor } from '@/lib/http';
+import { mintAccountToken as mintToken, request, useAppHarness, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { createAppServer } from '../server/app';
 
 useAppHarness();

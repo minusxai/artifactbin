@@ -9,7 +9,7 @@ import { createRoot, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { MemoryRouter, Route, Router } from '@solidjs/router';
 import { vi } from 'vitest';
-import { describeRetryingRead } from '@/lib/http/__tests__/retrying-read';
+import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import type { FolderPage as FolderData } from '@/lib/workspace';
 import type { DatasetCatalog } from '@/lib/datasets';
