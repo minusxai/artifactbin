@@ -59,7 +59,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
-      - run: node scripts/ci/prepare-esbuild.mjs
       # The root type check is incremental: start from the newest native build info any run of this repository
       # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
       - if: matrix.part == 'types'

@@ -1,4 +1,4 @@
-/** The native compiler's bundled Go toolset must be no older than the one the repo builds esbuild with (scripts/lib/esbuild-toolchain.mjs); read it from the binary's build info with `go version <binary>`. */
+/** Use the supported native TypeScript compiler where its platform package is installed. */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 

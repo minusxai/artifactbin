@@ -53,7 +53,6 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, roll-up. | `ci.yml`, `page-speed.yml` |
-| `scripts/ci/prepare-esbuild.mjs` | Build pinned-source compilers with the secured Go toolchain and verify every installed package executable. | root `postinstall`, `ci.yml`, `page-speed.yml`, `runner-design.yml` |
 | `scripts/ci/npm-provenance.mjs` | Sign and verify the CLI retirement tarball's build provenance. | `ci.yml` (`cli-pack`), `release-cli.yml`, artifactbin-server CI |
 | `scripts/ci/test-timings.mjs` | Refresh `ci/test-timings.json`, the per-file times test shards are packed by. | by hand, with a CI run id |
 | `scripts/lib/ci-elapsed.mjs` | Measure the required-check chain's elapsed time for the job summary. | `ci.yml` |

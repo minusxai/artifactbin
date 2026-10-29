@@ -52,7 +52,7 @@ try {
  await page.waitForTimeout(1700);assert.ok(polls>stopped);
  await writeFile(join(root,'data.json'),'[8]');await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();
  assert.equal(await page.locator('#data').textContent(),'7');
- await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#data').textContent==='8');
+ await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#data')?.textContent==='8');
  assert.equal(await page.locator('#count').textContent(),'1');
  await writeFile(join(root,'next.html'),html.replace('Add one','Increment'));await rename(join(root,'next.html'),join(root,'index.html'));
  await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Increment',exact:true}).waitFor();
