@@ -310,11 +310,61 @@ describe('a post on a verified host', () => {
   });
 });
 
+const INTERACTIVE_DOC = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Counter</title>
+<script type="application/json" data-af="state">{"count":0}</script></head>
+<body><main><h1>Interactive post</h1><af-button id="inc">Add one</af-button><output id="count">0</output></main>
+<script type="module">
+import {client,gql} from '@afbin/apollo';
+import '@afbin/button';
+const Q=gql\`{count}\`;
+client.watchQuery({query:Q}).subscribe(({data})=>{document.getElementById('count').textContent=String(data.count);});
+document.getElementById('inc').addEventListener('click',()=>client.updateQuery({query:Q},s=>({...s,count:s.count+1})));
+</script></body></html>`;
+
+describe('an interactive post\'s runtime on a verified host', () => {
+  const shared = sharedWorld();
+  it('serves the modules the post imports (@afbin/apollo and the reader it loads, af components) with the app host\'s headers', async () => {
+    const w = shared();
+    const page = await create(w.vivek.token, { html: INTERACTIVE_DOC, title: 'Interactive', visibility: 'public' });
+    const post = await app().request(`${HOST}/${page.id}`, { headers: { accept: 'text/html' } });
+    expect(post.status).toBe(200);
+    // The inline core names the runtime modules relative to the post's own address, so they load from this host.
+    const html = await post.text();
+    expect(html).toContain('/af/apollo.js');
+    for (const path of ['/af/apollo.js', '/af/reader.js', '/af/components/button.js']) {
+      const res = await app().request(`${HOST}${path}`, { headers: { cookie: 'mx_session=anything' } });
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('content-type'), path).toMatch(/javascript/);
+      noCookie(res);
+      const onApp = await app().request(`${APP}${path}`);
+      for (const header of ['etag', 'cache-control', 'access-control-allow-origin', 'x-content-type-options']) {
+        expect(res.headers.get(header), `${path} ${header}`).toBe(onApp.headers.get(header));
+      }
+      expect(await res.text(), path).toBe(await onApp.text());
+      const head = await app().request(`${HOST}${path}`, { method: 'HEAD' });
+      expect(head.status, path).toBe(200);
+      expect(await head.text()).toBe('');
+      expect((await app().request(`${HOST}${path}`, { method: 'POST' })).status, path).toBe(404);
+    }
+  });
+
+  it('keeps the runtime a served post never asks for off the host', async () => {
+    shared();
+    // The core is inline in the post; chrome and the portable engine are offline-only; morph needs an app-framed page;
+    // the import map is the local preview's; /af/v1 holds pre-D17 content addresses the current core never names.
+    for (const path of ['/af/core.js', '/af/v1/core.js', '/af/chrome.js', '/af/portable.js', '/af/morph.js', '/af/import-map.json',
+      `/af/v1/apollo/${'0'.repeat(64)}`, `/af/v1/reader/${'0'.repeat(64)}`, '/af/apollo.js/extra', '/af/apollo.jsx']) {
+      expect((await app().request(`${HOST}${path}`)).status, path).toBe(404);
+    }
+  });
+});
+
 describe('everything else on a verified host is 404', () => {
   const shared = sharedWorld();
   it('refuses the app: login, api, profiles, app document addresses and the SPA', async () => {
     const w = shared();
     for (const path of ['/login', '/account', '/api/server', '/api/health', `/api/domains/allow?domain=blog.example.org`, '/api/my/domain',
+      '/api/auth/session', '/api/tokens', '/api/me', '/settings', '/oauth/authorize', '/mcp',
       '/@vivek', `/@vivek/${w.post.id}-hello-world`, `/a/${w.post.id}`, `/a/${w.post.id}/raw`, `/a/${w.post.id}/export?mode=card`, '/llms.txt', '/chat/install.sh', '/og.png', '/nope/deeper']) {
       const res = await app().request(`${HOST}${path}`, { headers: { accept: 'text/html' } });
       expect(res.status, path).toBe(404);
