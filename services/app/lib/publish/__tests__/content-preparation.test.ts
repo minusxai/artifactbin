@@ -1,7 +1,7 @@
 import {expect,it,vi} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
-import {useAppHarness} from './harness';
-import {prepareContentInput,applyPreparedContent} from '@/lib/publish/prepared/prepare-content';
+import {useAppHarness} from '@/__tests__/harness';
+import {prepareContentInput,applyPreparedContent} from '../prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
 import {prepareCatalog} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

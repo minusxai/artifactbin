@@ -39,9 +39,6 @@
     "services/app/__tests__/comment-images.test.ts": [
       "@/lib/artifacts/asset-quota"
     ],
-    "services/app/__tests__/content-preparation.test.ts": [
-      "@/lib/publish/prepared/prepare-content"
-    ],
     "services/app/__tests__/data-journey.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
@@ -90,12 +87,6 @@
     "services/app/__tests__/engagement-pages.test.ts": [
       "@/lib/accounts/users"
     ],
-    "services/app/__tests__/export-assets.test.ts": [
-      "@/lib/export/assets"
-    ],
-    "services/app/__tests__/export-cache.test.ts": [
-      "@/lib/export/cache"
-    ],
     "services/app/__tests__/feedback-images.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
@@ -125,7 +116,6 @@
       "@/lib/accounts/agent-session",
       "@/lib/datasets/postgres",
       "@/lib/document-serving/render-cache",
-      "@/lib/export/exporter",
       "@/lib/platform/ids",
       "@/lib/platform/schema"
     ],
@@ -158,10 +148,6 @@
     "services/app/__tests__/live-events.test.ts": [
       "@/lib/publish/realtime/live"
     ],
-    "services/app/__tests__/live-frame.test.ts": [
-      "@/lib/publish/data/frame",
-      "@/lib/publish/realtime/live"
-    ],
     "services/app/__tests__/media-headers.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
@@ -179,10 +165,6 @@
     ],
     "services/app/__tests__/native-file-links.test.ts": [
       "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/native-file-upload.test.ts": [
-      "@/lib/html-runtime/upload",
-      "@/lib/story-runtime/frame-bridge/upload"
     ],
     "services/app/__tests__/native-html-core.test.ts": [
       "@/lib/http/pages-origin"
@@ -267,11 +249,6 @@
     ],
     "services/app/__tests__/visibility.test.ts": [
       "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/web-assets.test.ts": [
-      "@/lib/artifacts/asset-quota",
-      "@/lib/publish/assets/web-assets",
-      "@/lib/web-ingest/fetch"
     ],
     "services/app/__tests__/welcome-pending.test.ts": [
       "@/lib/operations/testuser-erase"
@@ -363,6 +340,9 @@
     "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
       "../../html-components/file-upload"
     ],
+    "services/app/lib/html-runtime/__tests__/native-file-upload.test.ts": [
+      "@/lib/story-runtime/frame-bridge/upload"
+    ],
     "services/app/lib/html-runtime/__tests__/range.ui.test.ts": [
       "../../frame-edit/selection-range",
       "../../html-bridge/range"
@@ -379,9 +359,6 @@
     "services/app/lib/jsx/__tests__/component-aliases.test.ts": [
       "@/lib/document/document-node-codec",
       "@/lib/document/node-ids"
-    ],
-    "services/app/lib/libraries/__tests__/import-map.test.ts": [
-      "../../html-runtime/build.server"
     ],
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
@@ -407,6 +384,10 @@
     ],
     "services/app/lib/publish/__tests__/display-title.test.ts": [
       "../../document/title"
+    ],
+    "services/app/lib/publish/__tests__/web-assets.test.ts": [
+      "@/lib/artifacts/asset-quota",
+      "@/lib/web-ingest/fetch"
     ],
     "services/app/lib/publish/ingest/__tests__/image.test.ts": [
       "@/lib/web-ingest/fetch"

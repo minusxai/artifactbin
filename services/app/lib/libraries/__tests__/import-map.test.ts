@@ -42,8 +42,8 @@ it('exposes library URLs in the runtime JSON, never overriding an author import 
  expect(runtime(downloadableHtml({html:'<html><head></head><body></body></html>',core:'/*c*/',apollo:'export {};',reader:'export {};',config:{...base,libraries}})).libraries).toBeUndefined();
 });
 it('has the core add validated library entries to the import map, skipped for portable copies',async()=>{
- const {buildHtmlCore}=await import('../../html-runtime/build.server');
- const core=await buildHtmlCore();
+ const {buildHtmlAssets}=await import('../../html-runtime/server');
+ const core=(await buildHtmlAssets()).core;
  expect(core).toMatch(/\b\w+\.libraries\?\?\{\}/);
  expect(core).toContain('@afbin\\/[a-z][a-z0-9-]*$');
  // Hosted component entries (/af/components/<name>.js) pass the same value check as the versioned libraries.

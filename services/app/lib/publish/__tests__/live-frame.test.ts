@@ -8,12 +8,12 @@ import { GET as authorize } from '@/app/a/[id]/events/authorize/route';
 import { GET as frame } from '@/app/a/[id]/events/frame/route';
 import { GET as events } from '@/app/a/[id]/events/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
-import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
-import { resetFrameCache, frameBuilds } from '@/lib/publish/data/frame';
-import { request, useAppHarness, mintAccountToken } from './harness';
-import { observedRequest } from './conditional-request';
-import { nativeHtml } from './native-html-fixture';
-import { readNamed } from './sse';
+import { resetLiveSubscriptions } from '../realtime/live';
+import { resetFrameCache, frameBuilds } from '../data/frame';
+import { request, useAppHarness, mintAccountToken } from '@/__tests__/harness';
+import { observedRequest } from '@/__tests__/conditional-request';
+import { nativeHtml } from '@/__tests__/native-html-fixture';
+import { readNamed } from '@/__tests__/sse';
 useAppHarness();
 beforeEach(async () => {
   resetFrameCache();

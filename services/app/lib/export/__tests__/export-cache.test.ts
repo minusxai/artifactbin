@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
-import {useAppHarness} from './harness';
+import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {createExportCache,type ExportProducer} from '@/lib/export/cache';
+import {createExportCache,type ExportProducer} from '../cache';
 
 useAppHarness();
 const cacheRequest={cacheKey:'full:test',artifactId:'abc123',revision:'r1'};

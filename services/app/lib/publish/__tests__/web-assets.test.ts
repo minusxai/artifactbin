@@ -27,7 +27,8 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/artifacts/asset-quota';
-import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/publish/assets/web-assets';
+import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '../assets/web-assets';
+import { WEB_ASSET_KINDS, importForDocument } from '..';
 import { assetBytesForToken } from '@/lib/artifacts/asset-quota';
 import { assetUrlFor } from '@/lib/document/asset-url';
 import { webIngestRateLimited } from '@/lib/allowances';
@@ -352,5 +353,35 @@ describe('refreshWebAssets charges the hourly bucket PER URL', () => {
     const out = await refreshWebAssets([1, 2, 3].map((n) => `${base}/photo.png?n=${n}`), actor);
     expect(out.failed).toEqual([expect.objectContaining({ code: 'rate_limited', url: `${base}/photo.png?n=3` })]);
     expect(out.refreshed.length + out.unchanged.length).toBe(2);
+  });
+});
+
+describe('importForDocument', () => {
+  const doc = async () => { const { id, userId } = await mintToken('doc'); return { id: 'doc_' + id.slice(0, 8), token_id: id, user_id: userId }; };
+  it('names the kinds a caller may ask for', () => {
+    expect(WEB_ASSET_KINDS).toEqual(['image', 'font', 'pdf', 'script', 'binary']);
+  });
+  it('imports once as the document owner and answers our address, then answers the held copy without fetching', async () => {
+    allowLocal();hits=[];
+    const target = await doc();
+    const url = `${base}/photo.png`;
+    expect(await importForDocument(target, url)).toBe(assetUrlFor(url));
+    expect(await importForDocument(target, url)).toBe(assetUrlFor(url));
+    expect(hits.filter((h) => h === '/photo.png')).toHaveLength(1);
+    expect((await lookupWebAssets([url])).get(url)?.fetched_by_token_id).toBe(target.token_id);
+  });
+  it('refuses a held copy asked for as another kind, by name', async () => {
+    allowLocal();
+    const target = await doc();
+    await importForDocument(target, `${base}/photo.png`);
+    for (const kind of ['font', 'script', 'pdf'] as const) {
+      await expect(importForDocument(target, `${base}/photo.png`, kind)).rejects.toMatchObject({ name: 'WebAssetRefused', code: 'unsupported_type' });
+    }
+    expect(await importForDocument(target, `${base}/photo.png`, 'binary')).toBe(assetUrlFor(`${base}/photo.png`));
+  });
+  it('passes a fetch refusal through with its name, storing nothing', async () => {
+    allowLocal();
+    await expect(importForDocument(await doc(), `${base}/gone.png`)).rejects.toBeInstanceOf(WebAssetRefused);
+    expect(await lookupWebAssets([`${base}/gone.png`])).toEqual(new Map());
   });
 });
