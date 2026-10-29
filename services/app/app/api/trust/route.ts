@@ -24,13 +24,14 @@
  * a stored Never belong to an account (401 otherwise) — a signed-out Never is kept for the session.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow, holdsCreatingToken } from '@/lib/artifacts';
-import { refusesCrossSite, sessionActor, type AccessActor, type RequestIdentity } from '@/lib/accounts';
+import { refusesCrossSite, sessionActor } from '@/lib/authentication';
+import { type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { subtractCspExtensions } from '@/lib/document';
 import {
   allowDocument, cspRequestFor, denyDocument, extensionsHash, hostsPublishedBy, revokeTrust, sessionTrustCookie,
-} from '@/lib/trust/document-trust';
+} from '@/lib/trust';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const GRANTS = ['once', 'document', 'never'] as const;

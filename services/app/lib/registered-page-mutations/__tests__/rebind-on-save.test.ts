@@ -3,12 +3,11 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { GET, PUT } from "@/app/api/artifacts/[id]/route";
 import { POST as REVERT } from "@/app/api/artifacts/[id]/revert/route";
-import { requestOrSessionActor } from "@/lib/accounts";
+import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";
-import { catalogOf } from "@/lib/datasets/catalog";
-import { loadDatasetRows } from "@/lib/datasets/dataset-store";
+import { catalogOf, loadDatasetRows } from "@/lib/datasets";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import type { HtmlBackendLink } from "@artifactbin/contracts";
 import { pageGraphql } from "@/lib/page-graphql";
@@ -16,8 +15,8 @@ import {
   prepareRegisteredMutationBackend,
   commitRegisteredMutationBackend,
   registeredMutationPlan,
-  repairRegisteredMutationHead,
 } from "../registry";
+import { repairRegisteredMutationHead } from "@/lib/artifacts/registered-repair";
 import { registeredMutationDescriptor } from "../namespace";
 import type { MutationProgram } from "../contracts";
 vi.mock("@/lib/page-operations", async (original) => ({

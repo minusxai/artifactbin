@@ -2,8 +2,9 @@ import { actorOf } from '@artifactbin/utils';
 import { ANONYMOUS, canEdit } from '@artifactbin/contracts';
 import { json, readJson } from '@/lib/http';
 import { effectiveRole, getArtifactById } from '@/lib/artifacts';
-import { mergeGuestUsers, claimTokenById, identityForUser } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { mergeGuestUsers, claimTokenById } from '@/lib/authentication';
+import { identityForUser } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 /** Auth-to-app seam. Reuse/create browser ownership, never copy artifact permissions. */
 export async function POST(request: Request) {

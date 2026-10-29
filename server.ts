@@ -63,15 +63,15 @@ async function main(): Promise<void> {
   const sessionActorSecret = readEnv(env, 'CONTRACT__ACTOR_SECRET')
     || (dev ? randomBytes(32).toString('base64url') : undefined);
 
-  const { getDb } = await import('@/lib/platform/db');
-  const { canAuthenticateUser } = await import('@/lib/accounts');
+  const { getDb } = await import('@/lib/platform');
+  const { canAuthenticateUser } = await import('@/lib/user-kinds');
   const { createAppServer } = await import('@/server/app');
 
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
     RUNNER_SERVICE_URL, BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
-  } = await import('@/lib/platform/config');
+  } = await import('@/lib/platform');
 
   /*
    * THE DATABASE OPENS FIRST, because one of the services below writes through
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
    * entry that loads the native module, Playwright or the writer's own DDL,
    * and the lean image has none of them.
    */
-  const { services, setServices } = await import('@/lib/platform/services');
+  const { services, setServices } = await import('@/lib/platform');
   /** Settings another package's env boundary consumed on this process's behalf. */
   const sessionEnvNames = new Set<string>();
   if (!SQL_SERVICE_URL) {
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   }
   if (!BROWSER_SERVICE_URL) {
     const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
-    const { sessionBridge } = await import('@/lib/runtime/session-bridge');
+    const { sessionBridge } = await import('@/lib/runtime');
     // `app` is composed below; the hop is chosen once, on the first page a session opens.
     let hop: ReturnType<typeof sessionBridge> | undefined;
     setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL,
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
   let hmrPort: number | null = null;
   if (dev) {
     const { createServer } = await import('vite');
-    const { APP_HMR_PORT_SETTING, requirePagesHost, resolveHmrPort } = await import('@/lib/platform/config');
+    const { APP_HMR_PORT_SETTING, requirePagesHost, resolveHmrPort } = await import('@/lib/platform');
     hmrPort = resolveHmrPort(APP_HMR_PORT_SETTING, port);
     vite = await createServer({
       configFile: path.resolve(import.meta.dirname, 'vite.config.mts'),
@@ -208,11 +208,11 @@ async function main(): Promise<void> {
    * above. Started here, by the root, never on import — publishing never waits
    * on it, and a browser that is down only means readers draw with the engine.
    */
-  const { startMermaidHarvester } = await import('@/lib/publish/assets/mermaid-harvester');
+  const { startMermaidHarvester } = await import('@/lib/publish');
   const stopHarvester = startMermaidHarvester();
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.
-  const { startAppBackgroundTasks } = await import('@/lib/runtime/app-background-tasks');
+  const { startAppBackgroundTasks } = await import('@/lib/runtime');
   const stopBackgroundTasks = await startAppBackgroundTasks(db);
 
   const app = createAppServer({
@@ -252,7 +252,7 @@ async function main(): Promise<void> {
    * each setting (lib/config `env`), so a name of our shape that nothing asked
    * for is either a typo or a setting from a version that no longer has it.
    */
-  const { unknownEnvNames, envNamesRead } = await import('@/lib/platform/config');
+  const { unknownEnvNames, envNamesRead } = await import('@/lib/platform');
   // Split mode reads only the identity transport settings, not authentication configuration.
   const known = new Set([...envNamesRead(), ...(!appOnly ? authEnvNamesRead() : [])]);
   known.add('CONTRACT__ACTOR_SECRET');
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
     console.error('[boot] listener failed:', error);
     process.exit(1);
   });
-  const { installShutdown } = await import('@/lib/runtime/shutdown');
+  const { installShutdown } = await import('@/lib/runtime');
   installShutdown({ steps: [
     closeRunner,
     stopBackgroundTasks,

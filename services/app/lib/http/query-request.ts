@@ -7,7 +7,7 @@
  */
 import { MAX_PEOPLE_IDS } from '@artifactbin/contracts';
 import { json } from './http';
-import { MAX_QUERY_ROWS } from '@/lib/platform/config';
+import { MAX_QUERY_ROWS } from '@/lib/platform';
 import { type Scalar, type Row, parseLocalTables } from '@/lib/dataflow';
 
 export interface QueryRequest {

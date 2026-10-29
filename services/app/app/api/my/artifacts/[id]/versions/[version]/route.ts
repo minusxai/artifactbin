@@ -1,5 +1,5 @@
 import { getVersionFor, refusingUnservable, versionToWire } from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 
 /** GET /api/my/artifacts/:id/versions/:version — owner-actor version content. */

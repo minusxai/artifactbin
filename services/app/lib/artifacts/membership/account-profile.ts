@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {ProfileResource} from '@artifactbin/contracts';
-import {getDb,type Queryable} from '@/lib/platform/db';
-import { getUserById, isAccountRow, linked, replaceLinked, setUsername, type AccessActor } from '@/lib/accounts';
+import { getDb, type Queryable } from '@/lib/platform';
+import { getUserById, isAccountRow, setUsername, type AccessActor } from '@/lib/accounts';
+import { linked, replaceLinked } from '@/lib/social';
 import {readableArtifact} from '../read-access';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from '../mutation-receipt';
 

@@ -1,18 +1,18 @@
 import { isDeepStrictEqual } from "node:util";
-import type { Db, Queryable } from "@/lib/platform/db";
+import type { Db, Queryable } from "@/lib/platform";
 import { createArtifact } from "@/lib/artifacts";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
 import {
   commitRegisteredQueryBackend,
   pageSourceDigest,
   registeredPlan,
-} from "@/lib/registered-page-queries/registry";
+} from "@/lib/registered-page-queries";
 import {
   commitRegisteredMutationBackend,
   registeredMutationPlan,
 } from "@/lib/registered-page-mutations";
 import type { NativeHistoryImport, NativeImportRelations } from "./contracts";
-import { STORY_TEMPLATE_NAMES } from "@/lib/validation/atlas-schemas";
+import { STORY_TEMPLATE_NAMES } from "@/lib/validation";
 const fail = () => Error("native_import_invalid");
 /** Final lifetime reservation state, including identities absent from authored HTML. */
 interface SourceIdentity {
@@ -347,3 +347,10 @@ export { prepareNativeHistoryRelations } from './relations';
 
 export {prepareNativeArtifactRelations} from "./artifact-relations";
 export type {NativeArtifactRelationsInput,NativeArtifactRelationRow} from "./artifact-relation-contracts";
+export type { NativeCatalogProjection, NativeImmutableObjectSink } from './catalog-contracts';
+export { nativeCatalogDigest } from './catalog-digest';
+export { stageNativeCatalog } from './catalog-objects';
+export { canonicalNativeObjectSource } from './catalog-source';
+export { createNativeLocalObjectSink, createNativeS3ObjectSink } from './catalog-staging';
+export type { NativeHistoryImport } from './contracts';
+export type { NativeRelationProjection } from './relation-contracts';

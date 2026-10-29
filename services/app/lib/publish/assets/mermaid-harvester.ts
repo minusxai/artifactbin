@@ -6,20 +6,13 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { HarvestedSvg, SvgHarvestRequest } from '@artifactbin/contracts';
-import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { getDb } from '@/lib/platform/db';
-import { services } from '@/lib/platform/services';
+import { mermaidImageKey } from '@/lib/jsx';
+import { getDb, services, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
-import { mintExportKey } from '@/lib/platform/export-read-key';
+import { mintExportKey } from '@/lib/export';
 import { storyBodyFor } from '@/lib/document';
 import { emitHeadCommitted, getArtifactById, servedRow } from '@/lib/artifacts';
-import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from '@/lib/mermaid-images/engine';
-import { mermaidCodesOf } from '@/lib/mermaid-images/codes';
-import { sanitizeMermaidSvg, verifyEmbeddedMermaidSvg } from '@/lib/mermaid-images/sanitize';
-import { parseMermaidFaces, parseMermaidMetrics, type MermaidFaces } from '@/lib/mermaid-images/drawn';
-import { MermaidSubsetterUnavailable, embedMermaidFonts } from '@/lib/mermaid-images/fonts';
-import { CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from '@/lib/mermaid-images/store';
+import { MERMAID_RENDER_ENGINE, mermaidPrerenderable, mermaidCodesOf, sanitizeMermaidSvg, verifyEmbeddedMermaidSvg, parseMermaidFaces, parseMermaidMetrics, type MermaidFaces, MermaidSubsetterUnavailable, embedMermaidFonts, CAPTURE_COLOR_PARAM, MERMAID_ENGINE_PARAM, comparableSvg, MERMAID_MODES, MERMAID_SURFACES, mermaidContentKey, mermaidObjectKey, onMermaidHarvestQueued, type MermaidHarvestMap, type MermaidImageInfo, type MermaidMode, type MermaidSurface } from '@/lib/mermaid-images';
 
 type Mode = MermaidMode;
 type HarvestMap = MermaidHarvestMap;

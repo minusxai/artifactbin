@@ -1,5 +1,5 @@
 import { connectLocalDocument } from '../local-connection/browser';
-import type { LocalDocumentConnection } from '../local-connection/browser';
+import type { LocalDocumentConnection } from '../local-connection';
 import type { PortableDocument,PortableIdentity } from './portable-contract';
 import type { PortableChromeHandle,PortableChromeState } from './portable-chrome-contract';
 import {compareSource} from './source-relationship';

@@ -12,7 +12,8 @@ import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { GET as sessionRoute } from '@/app/api/page/session/route';
 import { GET as artifactsRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
-import { requestOrSessionActor, revokeToken, sessionActor } from '@/lib/accounts';
+import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
+import { revokeToken } from '@/lib/accounts';
 import { getDb, measureQueries, runWithRequest } from '@/lib/platform';
 import type { Queryable } from '@/lib/platform/db';
 

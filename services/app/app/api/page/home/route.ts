@@ -1,7 +1,7 @@
 /** Account library and view/engagement insights; anonymous callers receive landing or held drafts. `part=bootstrap` is the Home destination and its shelf in one answer. */
 import { liveAgentSession } from '@/lib/accounts';
 import { json } from '@/lib/http';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor, homeBootstrapFor, listDraftsByTokenIds } from '@/lib/workspace';
 
 export async function GET(request: Request) {

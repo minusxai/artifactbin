@@ -1,4 +1,5 @@
-import {browserActor,withAccountToken} from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
+import { withAccountToken } from '@/lib/accounts';
 import {capabilityGuard} from '@/lib/artifacts';
 import {json,unauthorized} from '@/lib/http';
 import {stageCommentImage} from '@/lib/annotations';

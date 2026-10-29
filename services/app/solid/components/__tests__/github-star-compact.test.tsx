@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { githubStarMarkup } from '@/lib/serving/github-star';
+import { githubStarMarkup } from '@/solid/components/github-star';
 
 it('offers a compact icon link with its full accessible name and no visual label or count', () => {
   const root = document.createElement('div');

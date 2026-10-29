@@ -1,49 +1,40 @@
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries/registry';
-import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations/registry';
+import { planRegisteredQueryRebinds, commitRegisteredQueryRebinds, RegisteredQueryRebindError, type RegisteredQueryRebind } from '../registered-page-queries';
+import { planRegisteredMutationRebinds, commitRegisteredMutationRebinds, RegisteredMutationRebindError, type RegisteredMutationRebind } from '../registered-page-mutations';
 import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
-import { identityForUser } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
-import type { AccessActor } from '@/lib/accounts';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, headBumpSql, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { queueMermaidHarvest } from '../mermaid-images/store';
+import { queueMermaidHarvest } from '../mermaid-images';
 import {
   sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId,
   nodeIndex, stampNodeIds,
 } from '../document';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
-import { seedOwnerJoin } from '@/lib/accounts';
+import { seedOwnerJoin } from '@/lib/social';
 import { documentMentions } from './membership/document-mentions';
 import { claimArtifactId } from './identities';
-import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
-import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
-import { userKindOf } from '@/lib/accounts';
+import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, claimPendingDatasetSecret, resolveDatasetConnection, DatasetError, loadDatasetRows } from '@/lib/datasets';
+import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
-import type { AnnotationOperation } from '../editor-engine/annotation-map';
-import { catalogOf } from '@/lib/datasets/catalog';
-import { claimPendingDatasetSecret, resolveDatasetConnection } from '@/lib/datasets/secrets';
-import { DatasetError } from '@/lib/datasets/errors';
-import { trackEvent } from '../platform/analytics';
-import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from '../platform/config';
+import type { AnnotationOperation } from '../editor-engine';
+import { trackEvent } from '../analytics';
+import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
-import { getDb, type Queryable } from '../platform/db';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { validateDatasetPolicyForRow } from '../datasets/policy/validation';
-import { actorSubject, emit } from '../platform/events';
-import { generateFileId } from '../platform/ids';
+import { validateDatasetPolicyForRow } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
-import { json, thrownMessage } from '../http/http';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { json, thrownMessage } from '../http';
 import { finalizeArtifactMetadata } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
@@ -552,8 +543,8 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     await archiveVersion(tx, current);
     const updated = await artifactQuery<ArtifactRow>(tx,
       `UPDATE artifacts
-       SET title = $3, description = $4, format = $5, source = CASE WHEN $11::jsonb IS NULL THEN $6::text ELSE NULL END, document=$11::jsonb, meta = $7, version = version + 1,
-           edit_id = $8, actor_user_id = $9, actor_token_id = $10, updated_at = now()
+       SET title = $3, description = $4, format = $5, source = CASE WHEN $11::jsonb IS NULL THEN $6::text ELSE NULL END, document=$11::jsonb, meta = $7,
+           ${headBumpSql('$8', '$9', '$10')}
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
@@ -711,7 +702,7 @@ async function replaceScoped(
        SET format = $3, source = CASE WHEN $15::jsonb IS NULL THEN $4::text ELSE NULL END, document=$15::jsonb, meta = $5, title = $6, description = $7,
            visibility = COALESCE($9, visibility), ancestor_ids = COALESCE($10::text[], ancestor_ids),
            access = COALESCE($11, access), link_role = COALESCE($14, link_role),
-           version = version + 1, edit_id = $8, actor_user_id = $12, actor_token_id = $13, updated_at = now()
+           ${headBumpSql('$8', '$12', '$13')}
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [
         id,

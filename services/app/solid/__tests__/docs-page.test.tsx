@@ -6,7 +6,7 @@ import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
 import { App } from '@/solid/App';
-import { gettingStarted } from '@/lib/serving/getting-started';
+import { gettingStarted } from '@/lib/agent-copy/getting-started';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 it('serves the human tour with current templates, live design systems and a link to Getting started', async () => {
@@ -67,7 +67,7 @@ it('company setup panel copies shared recipient defaults and preserves explicit 
 });
 
 import {DeploymentWelcome} from '@/solid/pages/DeploymentWelcome';
-import {agentDiscovery,AGENT_HELP_TITLE} from '@/lib/platform/agent-discovery';
+import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/skills/agent-discovery';
 it('shows the shared descriptive guide before skill installation',()=>{
  render(()=><DeploymentWelcome deployment={{mode:'company',setup_complete:false,is_owner:false,default_group:null}}/>);
  const help=agentDiscovery(window.location.origin);

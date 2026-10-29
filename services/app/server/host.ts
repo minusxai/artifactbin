@@ -1,15 +1,14 @@
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
-import {startDomainRecheck} from '@/lib/serving';
-import {startMermaidHarvester} from '@/lib/publish/assets/mermaid-harvester';
-import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/accounts';
+import { startDomainRecheck } from '@/lib/custom-domains';
+import {startMermaidHarvester} from '@/lib/publish';
+import { setDocumentEditorPolicy, type DocumentEditorPolicy } from '@/lib/authentication';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
-import {useSqlExtensions} from '@/lib/sql/extensions';
+import {useSqlExtensions} from '@/lib/sql';
 import type {Actor,Upstream} from '@artifactbin/contracts';
-import {getDb,type Db} from '@/lib/platform';
+import {getDb, type Db, setServices, services, type Services} from '@/lib/platform';
 import {inProcess} from '@artifactbin/utils';
-import {setServices,services,type Services} from '@/lib/platform';
 import {createAppServer,type AppServerOptions} from './app';
 export interface AppHostOptions extends AppServerOptions {
  services?:Partial<Services>;

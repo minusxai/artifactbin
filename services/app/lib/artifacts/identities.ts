@@ -1,9 +1,8 @@
 /** Shared namespace for reserved and normally created identities. */
 import type { AccessActor } from '@/lib/accounts';
-import {getDb,type Queryable} from '../platform/db';
-import {generateFileId} from '../platform/ids';
+import { getDb, type Queryable, generateFileId } from '../platform';
 import {CreationReplay} from './creation-ledger';
-import { accountOf, matchesWorkspaceAccount } from '../accounts';
+import { accountOf, matchesWorkspaceAccount } from '@/lib/accounts';
 import {reserveArtifactIdentityPool} from './reservation-pool';
 import type {ArtifactReservationCandidate} from './reservation-pool-contracts';
 const owner=accountOf;

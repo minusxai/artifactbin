@@ -10,7 +10,7 @@ import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as downloadRoute } from '@/app/a/[id]/download/route';
 import { createUser } from '@/lib/accounts';
 import { createArtifact, holdsCreatingToken } from '@/lib/artifacts';
-import { artifactPageResponse, readableApp } from '@/lib/serving';
+import { artifactPageResponse, readableApp } from '@/lib/document-serving';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

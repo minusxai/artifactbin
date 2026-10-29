@@ -14,7 +14,8 @@ import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
 import { POST as startRoute } from '@/app/api/start/route';
 
 
-import { mintToken, claimToken, createUser, getUserByEmail } from '@/lib/accounts';
+import { mintToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { listArtifactsByUser } from '@/lib/workspace';
 import { createArtifact } from '@/lib/artifacts';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -37,22 +38,6 @@ async function publish(token: string, title: string) {
   expect(res.status).toBe(201);
   return res.json() as Promise<{ id: string }>;
 }
-
-describe('accounts', () => {
-  it('creates a user and finds it by email — an account is an address, nothing else', async () => {
-    const user = await createUser({ email: 'v@minusx.ai', name: 'Vivek' });
-    expect(user.id).toMatch(/^usr_/);
-    expect(await getUserByEmail('v@minusx.ai')).toMatchObject({ id: user.id });
-    // Lookup normalizes, because the address a user types is rarely the one they registered.
-    expect(await getUserByEmail('  V@MinusX.AI ')).toMatchObject({ id: user.id });
-    expect(await getUserByEmail('nobody@x.com')).toBeNull();
-  });
-
-  it('rejects duplicate emails', async () => {
-    await createUser({ email: 'v@minusx.ai' });
-    await expect(createUser({ email: 'v@minusx.ai' })).rejects.toThrow();
-  });
-});
 
 describe('anonymous connections + claiming', () => {
   it('legacy anonymous credentials cannot publish', async () => {

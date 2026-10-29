@@ -23,7 +23,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { GET as serveRaw, HEAD as headRaw } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
-import { pdfFilename } from '@/lib/object-store/pdf-store';
+import { pdfFilename } from '@/lib/object-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -89,7 +89,7 @@ describe('the read ACL', () => {
     expect(stranger.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
 
     // The serving routes decide who is reading with sessionActor — a session or
-    // the agent cookie, never a bearer header (lib/accounts request-identity), so the owner reads
+    // the agent cookie, never a bearer header (lib/authentication request-identity), so the owner reads
     // their own file the way their browser would.
     const asOwner = await serveRaw(request(`/a/${id}/raw`, { actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }), params(id));
     expect(asOwner.status).toBe(200);

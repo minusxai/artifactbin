@@ -1,4 +1,4 @@
-import { identityForUser, createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
@@ -6,12 +6,11 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {notificationMutationFixture} from './notification-mutation-fixture';
 import {nativeHtml} from './native-html-fixture';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
-import { membershipInbox, notificationJobStore, evaluateNotificationQuery } from '@/lib/document-data';
-import {getDb} from '@/lib/platform';
-import {services,setServices} from '@/lib/platform';
+import { evaluateNotificationQuery } from '@/lib/document-data';
+import {getDb, services, setServices} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {createNotificationWorker} from '@/lib/notifications';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {createNotificationWorker,membershipInbox,notificationJobStore} from '@/lib/notifications';
+import {loadDatasetRows} from '@/lib/datasets';
 
 useAppHarness();
 

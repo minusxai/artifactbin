@@ -8,7 +8,7 @@ import GitFork from 'lucide-solid/icons/git-fork';
 import Heart from 'lucide-solid/icons/heart';
 import LayoutDashboard from 'lucide-solid/icons/layout-dashboard';
 import Users from 'lucide-solid/icons/users';
-import type { WorkspaceStats } from '@/lib/workspace/inventory';
+import type { WorkspaceStats } from '@/lib/workspace';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { SectionHeading } from '../ui/PageHeader';

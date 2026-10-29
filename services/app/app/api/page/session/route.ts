@@ -18,10 +18,10 @@
  * handle and picture, so the payload costs one lookup; the rule it reads is
  * lib/profiles' `welcomePending`, asked of that row.
  */
-import { avatarUrl } from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
 import { json } from '@/lib/http';
 import { getUserById, welcomePending } from '@/lib/accounts';
-import { browserSessionKind, sessionActor } from '@/lib/accounts';
+import { browserSessionKind, sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

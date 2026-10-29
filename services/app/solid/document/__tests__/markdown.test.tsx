@@ -9,12 +9,12 @@ import { replaceComment, selectCommentText } from './comment-input';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createSignal } from 'solid-js';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentMarkdown } from '../CommentMarkdown';
 import { PersonMentionProvider } from '../PersonMention';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { ANN as BASE, fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 
 const AGENT_BODY = ['Fixed in `lib/config.ts` — the cap was **10**:', '', '```ts', 'const MAX = 10;', '```', '', '- bumped the cap', '- added a test'].join('\n');

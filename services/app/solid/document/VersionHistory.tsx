@@ -13,7 +13,7 @@ import { Button } from '../ui/Button';
 import { SelectableItem, SelectableList } from '../ui/SelectableList';
 import { Tooltip } from '../ui/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
-import type { ArtifactVersionSummary } from '@/lib/artifact-backend/types';
+import type { ArtifactVersionSummary } from '@/lib/artifact-backend';
 
 interface VersionHistoryProps {
   versions: ArtifactVersionSummary[]; currentVersion: number; previewing: number | null;

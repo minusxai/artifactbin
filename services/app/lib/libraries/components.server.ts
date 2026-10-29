@@ -7,7 +7,7 @@
  *   /af/components/chunk-<hash>.js  a shared chunk the entries import relatively: named by its content, so immutable.
  *
  * Public code only: no page, viewer or credential reaches these bytes, and the name is checked against the hosted list
- * before any file is read. Brotli is computed once per file; lib/serving/components.server chooses per request.
+ * before any file is read. Brotli is computed once per file; lib/document-serving/components.server chooses per request.
  */
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';

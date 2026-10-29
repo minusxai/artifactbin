@@ -13,7 +13,7 @@
  * decides what that user may DO — that is `lib/capabilities` and nowhere else.
  */
 import type { Queryable, UserKind } from '@artifactbin/contracts';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 
 /**
  * The kind of one user, or null when there is no row at all.

@@ -151,7 +151,8 @@ it('allocates an edit\'s feed position only after locking the artifact', async (
 
 it('says which comments were written with the watching credential: author.you', async () => {
   const f = await fixture();
-  const { createUser, claimToken } = await import('@/lib/accounts');
+  const { createUser } = await import('@/lib/accounts');
+  const { claimToken } = await import('@/lib/authentication');
   const { updateSharingFor } = await import('@/lib/artifacts');
   const { identityForUser } = await import('@/lib/accounts');
   const colleague = await createUser({ email: 'mxmx_test_feed_colleague@example.com' });

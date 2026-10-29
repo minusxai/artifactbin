@@ -12,3 +12,6 @@ export type { AnnotationWire, CreateAnnotationInput } from './store';
 export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction, respondToAnnotationEdit, respondToCommentReaction } from './wire';
 
 export { readCommentChangesFor, InvalidCommentCursor, CommentWaitCapacityError } from './changes';
+export { expireCommentImagesFor, sweepCommentImages } from './comment-images';
+export { htmlCommentNodes } from './html-anchor';
+export type { MdMarker } from './markdown-lite';

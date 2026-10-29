@@ -1,20 +1,18 @@
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import type {ContentObjects} from '@/lib/object-store';
 import type { AccessActor } from '@/lib/accounts';
 import type { StoredContent } from '@/lib/document';
-import {json} from '@/lib/http/http';
+import {json} from '@/lib/http';
 import {publishDataset} from '@/lib/datasets/data-tiers';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import type {DatasetCatalog,DatasetHost,DatasetTable} from './types';
 import {DatasetError} from './errors';
-import {discoverPostgres} from './postgres';
+import {discoverPostgres, queryPostgres} from './postgres';
 import {executeCatalog} from './execute';
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
 import {resolveDatasetConnection} from './secrets';
 import {compileNotebookSql} from './notebook';
-import {queryPostgres} from './postgres';
-import {connectionShape} from './input';
+import {connectionShape, catalogInputShape} from './input';
 import type { DatasetColumn } from '@/lib/dataflow';
-import {catalogInputShape} from './input';
 import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
 

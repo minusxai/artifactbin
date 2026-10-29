@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, createMemo, createSignal, Index, onCleanup, onMount } from 'solid-js';
 import { isometricScene, type IsoDrawPath } from '@/lib/story-ui/isometric';
-import type { IsometricSpec } from '@/lib/jsx/isometric-spec';
+import type { IsometricSpec } from '@/lib/jsx';
 import { useIsland } from '../context';
 const ink = 'var(--ds-hand-ink, var(--foreground))';
 const ground = 'var(--ds-hand-ground, var(--card))';

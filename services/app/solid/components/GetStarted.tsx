@@ -1,6 +1,6 @@
 import {useSetupDeployment} from '../lib/deployment-setup';
-import {deploymentSetupOptions} from '@/lib/serving/setup-installers';
-import {buildSetupInstructions} from '@/lib/platform/setup-instructions';
+import { deploymentSetupOptions } from '@/lib/agent-copy/setup-installers';
+import {buildSetupInstructions} from '@/lib/skills/setup-instructions';
 /* @jsxImportSource solid-js */
 import { createSignal, For, onMount, Show, type JSX } from 'solid-js';
 import { DEFAULT_SERVER, type ArtifactDestination } from '@artifactbin/contracts';
@@ -9,7 +9,7 @@ import { CopyBlock } from '../ui/CopyBlock';
 import { AgentLink } from './AgentLink';
 import { Badge, LINK } from '../ui/ui';
 import { Panel } from '../ui/Panel';
-import { gettingStarted } from '@/lib/serving/getting-started';
+import { gettingStarted } from '@/lib/agent-copy/getting-started';
 
 const AGENTS = [
   { key: 'claude-code', label: 'Claude Code', icon: ClaudeCodeIcon, size: 13 },

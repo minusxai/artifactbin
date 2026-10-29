@@ -2,10 +2,10 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { ARTIFACT_ID_PATTERN, CARD_RENDER_GENERATION, type DatasetAccess, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import { artifactEditPath } from '@/lib/http/urls';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import type { SharingVerdict } from '@/lib/workspace/visibility-icons';
+import type { SharingVerdict } from '@/lib/workspace';
 import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';

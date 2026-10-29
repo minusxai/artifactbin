@@ -1,6 +1,5 @@
 import {createHash} from 'node:crypto';
-import {retainedRuntimeAssets} from '@/lib/html-runtime/asset-retention.server';
-import {buildHtmlAssets} from '@/lib/html-runtime/build.server';
+import {retainedRuntimeAssets, buildHtmlAssets} from '@/lib/html-runtime/server';
 import {GET as apollo} from '@/app/af/v1/apollo/[digest]/route';
 import {expect,it} from 'vitest';
 import {Hono} from 'hono';
@@ -11,7 +10,7 @@ import {GET as flatReader,HEAD as flatReaderHead} from '@/app/af/reader.js/route
 import {GET as flatMorph} from '@/app/af/morph.js/route';
 import {GET as font,HEAD as fontHead} from '@/app/af/fonts/[name]/route';
 import {readFileSync} from 'node:fs';
-import manifest from '@/lib/data/story/story-font-manifest.json';
+import { storyFontManifest as manifest } from '@/lib/data';
 import {pagesHost} from '../server/pages-host';
 import {pagesOriginFor,pagesSiteFor} from '@/lib/http/pages-origin';
 import {useAppHarness} from './harness';

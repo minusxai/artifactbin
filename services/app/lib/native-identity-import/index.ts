@@ -198,3 +198,6 @@ export async function importNativeIdentities(
   const capturedInput=plain(input),capturedSchemas=schemas&&plain(schemas);
   return db.transaction(async(tx) => writeNativeIdentities(tx, capturedInput,await authorizeNativeIdentityTransaction(tx,capturedSchemas)));
 }
+export { prepareNativeIdentityAvatars } from './avatars';
+export type { NativeIdentityPlan } from './contracts';
+export { nativeIdentityDigest, nativeIdentityTimestamp, verifyNativeIdentityInput } from './model';

@@ -1,6 +1,5 @@
 import {POST as revertRoute} from '@/app/api/artifacts/[id]/revert/route';
-import {artifactState} from '@/lib/artifacts/state';
-import { getArtifactById } from '@/lib/artifacts/rows';
+import {artifactState, getArtifactById} from '@/lib/artifacts';
 import {request} from './harness';
 
 /** Native restores retain the original artifact/version authority and CAS. */

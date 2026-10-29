@@ -1,9 +1,8 @@
 import {getDeploymentState} from '@/lib/deployment';
-import {advertisedCliVersion,cliRetirementEnabled,PUBLIC_BASE_URL} from '@/lib/platform/config';
-import { artifactAppPath } from '@/lib/serving';
+import { advertisedCliVersion, cliRetirementEnabled, PUBLIC_BASE_URL, ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
-import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
-import { loginRedirectTarget } from '@/lib/http';
+import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
+import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
@@ -19,43 +18,29 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/serving/agent-discovery';
+import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/agent-copy';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { ID_RE, verifyExportKey } from '@/lib/platform';
-import { measureQueries, runWithRequest } from '@/lib/platform';
-import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
+import { verifyExportKey, exportAssetResponse } from '@/lib/export';
+import { projectNotifications } from '@/lib/notifications';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-import { spaPaths } from '@/lib/http/app-pages';
-import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
-import { AGENT_COOKIE } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
-import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';
-import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
-import { exportAssetResponse } from '@/lib/export/assets';
-import { publicRefAssetResponse } from '@/lib/serving';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
-import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
-import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
-import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
-import { cachedShell } from '@/lib/serving/shell-cache.server';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
-import { linkedStylesheets } from '@/lib/serving';
-import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
-import { canonicalDocumentUrl } from '@/lib/serving';
-import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
-import { fontPreloadTags } from '@/lib/page-styles';
+import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/custom-domains';
+import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -89,7 +74,7 @@ function withGenericSocial(html: string, origin: string): string {
 /**
  * The frame's one new connection, started from the head: its first URL is on the document's own origin, which spends
  * the ticket and serves the document in one response. The origin comes from the frame the server drew
- * (lib/serving/artifact-page), never from the request. It follows the agent pointer, which stays the head's first element.
+ * (lib/document-serving/artifact-page), never from the request. It follows the agent pointer, which stays the head's first element.
  */
 function withPreconnects(html: string, frame: DocumentFrame): string {
   let origin: string;
@@ -102,7 +87,7 @@ function withPreconnects(html: string, frame: DocumentFrame): string {
 /**
  * THE APP PAGE FOR A DOCUMENT: the shell, named in its head as the document (its title, description and social
  * card replace the shell's), with the document's frame as the body's first element — drawn by the server, so the
- * document loads with the page, not after the app's code (lib/serving/document-frame; solid/pages/Document adopts it).
+ * document loads with the page, not after the app's code (lib/document-serving/document-frame; solid/pages/Document adopts it).
  */
 function withDocumentFrame(html: string, frame: DocumentFrame): string {
   const head = withPreconnects(html, frame)
@@ -176,7 +161,7 @@ function withReaderHeadOrder(html: string): string {
 
 // Inline scripts emitted by our source HTML. Keeping the hashes explicit preserves the production policy.
 export const APP_INLINE_SCRIPT_HASHES = [
-  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
+  THEME_BOOTSTRAP_HASH, // theme bootstrap (web/solid-app.html — lib/page-styles/theme-bootstrap, pinned by lib/__tests__/app-page-csp)
 ].join(' ');
 
 /**
@@ -328,6 +313,8 @@ const buildHeader = (build: string) => async (c: Context, next: () => Promise<vo
 };
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
+  // Every composition (server.ts, src/main.ts, server/host) serves through here: facts project into inboxes.
+  setEventProjection(projectNotifications);
   const app = new Hono();
   app.use('*', serverTiming);
   const webDir = opts.webDir ?? path.resolve('dist/web');
@@ -417,7 +404,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const found = status === 404 ? null : await bootstrapFor(c.req.raw, new URL(url).pathname, admitted);
     const data = found ? { ...found.data, ...(address ? { address } : {}) } : null;
     const appRow = admitted?.row ?? null;
-    // A document is the app page's frame (lib/serving/document-frame), named in the page's head as the document.
+    // A document is the app page's frame (lib/document-serving/document-frame), named in the page's head as the document.
     const frame = found?.frame ?? null;
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
@@ -609,7 +596,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    // An anonymous reader's page is the same for everyone: lib/serving/shell-cache answers it after admission.
+    // An anonymous reader's page is the same for everyone: lib/document-serving/shell-cache answers it after admission.
     return cachedShell({
       request: c.req.raw, id: candidateDocument(new URL(c.req.url).pathname)?.id ?? null, build: build ?? null,
       encoding: negotiateEncoding(c.req.raw.headers.get('accept-encoding'), ['br']),
@@ -633,13 +620,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   });
   app.get('/a/:id/app/:asset', async c => {
     const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
-    if (!row || !artifactPwaEnabled(row)) return c.notFound();
-    const asset = c.req.param('asset');
-    const headers = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
-    if (asset === 'manifest.webmanifest') return new Response(JSON.stringify(artifactManifest(row)), { headers: { ...headers, 'content-type': 'application/manifest+json' } });
-    const size = asset === 'icon-192.png' ? 192 : asset === 'icon-512.png' ? 512 : null;
-    if (!size) return c.notFound();
-    return new Response(new Uint8Array(await artifactAppIcon(row, size)), { headers: { ...headers, 'content-type': 'image/png' } });
+    return (row && await artifactAppAsset(row, c.req.param('asset'))) ?? c.notFound();
   });
   app.get('/a/:id/edit', documentAddress);
   app.get('/a/:id', documentAddress);

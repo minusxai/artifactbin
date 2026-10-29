@@ -4,8 +4,7 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '../helmet';
 import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
 import { validateMarkupStructure } from '../local-validation';
-import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
-import { appendCspExtensions } from '@/lib/page-styles/markup-csp';
+import { buildDocumentCsp, appendCspExtensions } from '@/lib/page-styles';
 
 const helmetOf = (metas: string) => {
   const source = `<Helmet>${metas}</Helmet><p>x</p>`;

@@ -10,15 +10,15 @@ import type { Actor, Credential } from '@artifactbin/contracts';
 import { identityForUser, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
-import { resetRateLimit } from '@/lib/accounts/auth';
+import { resetAllowances } from '@/lib/allowances';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overridePostgres } from '@/lib/datasets/postgres';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
-import { flushViews } from '@/lib/platform/analytics';
-import { resetRenderCache } from '@/lib/serving/render-cache';
+import { flushViews } from '@/lib/analytics';
+import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -84,7 +84,7 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 }
 
 /** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
-/** A resolved request identity as a door hands it to a handler (lib/accounts request-identity). It grants nothing. */
+/** A resolved request identity as a door hands it to a handler (lib/authentication request-identity). It grants nothing. */
 export function testIdentity(credential: Credential, ids: { userId?: string | null; tokenId?: string | null; email?: string | null; emailVerified?: boolean | null } = {}): RequestIdentity {
   return { ...identityForUser(ids.userId ?? null, ids.tokenId ?? null, ids.email ?? null), credential, emailVerified: ids.emailVerified ?? null };
 }
@@ -158,7 +158,7 @@ interface AppHarness {
 
 /**
  * Call ONCE at the top level of a test file. Registers `beforeAll` (boot one PGLite), `beforeEach` (wipe every table in
- * FK-safe order + resetRateLimit), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
+ * FK-safe order + resetAllowances), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
  */
@@ -197,7 +197,7 @@ export function useAppHarness(): AppHarness {
     await flushViews();
     resetRenderCache();
     await wipe();
-    resetRateLimit();
+    resetAllowances();
     overrideSession(undefined);
   });
 
@@ -223,7 +223,7 @@ export function useAppHarness(): AppHarness {
       let seeded: { value: T } | undefined;
       beforeAll(async () => {
         await wipe();
-        resetRateLimit();
+        resetAllowances();
         overrideSession(undefined);
         seeded = { value: await seed() };
         keepRows = true;
@@ -238,7 +238,7 @@ export function useAppHarness(): AppHarness {
 }
 
 /**
- * THE DOCUMENT AN APP PAGE FRAMES, as its reader's browser loads it (lib/serving/document-frame): the app page at
+ * THE DOCUMENT AN APP PAGE FRAMES, as its reader's browser loads it (lib/document-serving/document-frame): the app page at
  * `path` (asked with `init`, its reader's credentials), then the frame's first URL — the document's own origin,
  * which spends the page's one-time ticket and serves the document in that same response. Null when the app page
  * draws no frame. `app` is `createAppServer()`'s.

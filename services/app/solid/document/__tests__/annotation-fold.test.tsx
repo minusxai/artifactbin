@@ -11,7 +11,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/dom';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import { FOLD_STORAGE_KEY } from '@/lib/annotations/comment-folds';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentTimestamp } from '../AnnotationPreview';

@@ -1,9 +1,9 @@
 import {createHash} from 'node:crypto';
-import {getDb} from '../platform/db';
+import { getDb } from '../platform';
 import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import { accountOf, matchesWorkspaceAccount } from '../accounts';
+import { accountOf, matchesWorkspaceAccount } from '@/lib/accounts';
 
 interface CreationReply {status: number; body: Record<string,unknown>}
 export interface CreationOperation {

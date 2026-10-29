@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, Show } from 'solid-js';
 import Download from 'lucide-solid/icons/download';
-import { artifactAppPath } from '@/lib/serving/artifact-pwa';
-import { consumeInstall, currentInstall, subscribeInstall } from '@/lib/serving/pwa-install';
+import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
+import { consumeInstall, currentInstall, subscribeInstall } from '@/solid/lib/pwa-install';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 

@@ -18,8 +18,10 @@
  */
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
 import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
-import { agentContract } from '@/lib/serving';
-import { canAuthenticateUser, hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
+import { agentContract } from '@/lib/agent-copy';
+import { canAuthenticateUser } from '@/lib/user-kinds';
+import { hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 export async function POST(request: Request) {
   // Only an ACCOUNT session binds the mint: the agent cookie names a token

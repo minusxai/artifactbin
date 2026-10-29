@@ -2,7 +2,7 @@ import { needsCommentPresentation } from '../document/comment-presentation';
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
-import {artifactAppPath} from '@/lib/serving/artifact-pwa';
+import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
@@ -13,7 +13,7 @@ import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { JsxNode } from '@/lib/jsx';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import type { FramedRuntime } from '@/lib/serving';
+import type { FramedRuntime } from '@/lib/document-serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
@@ -21,7 +21,7 @@ import { adoptServedFrame } from '@/solid/lib/served-frame';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import { commentAccess } from '../document/comment-access';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
@@ -65,7 +65,7 @@ interface DocumentAnswer {
     heading?: string | null; pwaEnabled?: boolean; membershipAvailable?: boolean;
     visibility?: Visibility; hasInvitedUsers?: boolean;
     author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: { label: string; href: string | null } | null } | null;
-    /** The document's own origin, which the page frames (lib/serving/artifact-page). */
+    /** The document's own origin, which the page frames (lib/document-serving/artifact-page). */
     framedOrigin?: string;
     /** The reader's standing on a document that writes to datasets (the bar's Join/Joined/Pending pill). */
     membership?: 'join' | 'pending' | 'joined';
@@ -73,7 +73,7 @@ interface DocumentAnswer {
   archived?: { version: number; head: number } | null;
   /** What the document asks of the network beyond the default policy, and this reader's standing (lib/trust). */
   cspRequest?: CspRequest;
-  /** Why the head runs without its script: the builder's messages, for a writer only (lib/serving/artifact-page). */
+  /** Why the head runs without its script: the builder's messages, for a writer only (lib/document-serving/artifact-page). */
   scriptFailure?: { errors: string[] };
   like?: { liked: boolean; count: number };
   follow?: { userId: string; following: boolean; count: number } | null;
@@ -82,7 +82,7 @@ interface DocumentAnswer {
 /**
  * The admitted document page: reading for everyone and commenting for those who may.
  *
- * THE DOCUMENT IS ITS FRAME (lib/serving/document-frame): the server drew one frame on the document's own origin
+ * THE DOCUMENT IS ITS FRAME (lib/document-serving/document-frame): the server drew one frame on the document's own origin
  * into this page, and the document runs there — its islands, its script, its own live stream and its doors. This
  * page is the app's: its bar (solid/document/DocumentChrome), the consent slot above the frame, the comments rail,
  * and sharing. Comments, selections and the reader's colour choice reach the document through the
@@ -116,7 +116,7 @@ export function DocumentPage(): JSX.Element {
   /**
    * The reader's ONE light/dark pick (lib/story-runtime/reader-mode chooseTheme), made here or anywhere else in the app:
    * every document they read shows it. Null for a reader who never picked: documents show their author's mode. The
-   * server drew the frame in it already (its ground, and its first URL: lib/serving/artifact-page readerPickOf).
+   * server drew the frame in it already (its ground, and its first URL: lib/document-serving/artifact-page readerPickOf).
    */
   const [pick, setPick] = createSignal(storedTheme());
   const authorMode = page?.surface?.colorMode === 'dark' ? 'dark' : 'light';

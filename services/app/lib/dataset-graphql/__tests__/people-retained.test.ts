@@ -3,7 +3,7 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {getDb} from '@/lib/platform';
-import {createUser,setUsername} from '@/lib/accounts';
+import { createUser, setUsername } from '@/lib/accounts';
 import {nativeHtml} from '@/__tests__/native-html-fixture';
 useAppHarness();
 it('returns actual cards only for linked typed user references and refuses revoked dataset access over HTTP',async()=>{

@@ -27,12 +27,12 @@ import {serveBundleAsset} from '@/lib/html-publication-bundle';
  * document is admitted through belongs with every other door in the app, and
  * the import bounds belong with the importer.
  */
-import { canReadArtifact, getArtifactById, holdsCreatingToken } from '@/lib/artifacts';
-import { requestOrSessionActor } from '@/lib/accounts';
-import {resolveImageReference} from '@/lib/artifacts';
-import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish/assets/web-assets';
-import { ASSETS_ORIGIN, verifyExportKey } from '@/lib/platform';
-import {publicRefAsset} from '@/lib/serving';
+import { canReadArtifact, getArtifactById, holdsCreatingToken, resolveImageReference } from '@/lib/artifacts';
+import { requestOrSessionActor } from '@/lib/authentication';
+import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish';
+import { ASSETS_ORIGIN } from '@/lib/platform';
+import { verifyExportKey } from '@/lib/export';
+import { publicRefAsset } from '@/lib/document-serving';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

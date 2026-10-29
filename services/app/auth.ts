@@ -1,1 +1,1 @@
-export { auth, overrideSession, type Session } from '@/lib/accounts';
+export { auth, overrideSession, type Session } from '@/lib/authentication';

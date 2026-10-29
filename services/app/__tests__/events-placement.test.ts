@@ -25,7 +25,8 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

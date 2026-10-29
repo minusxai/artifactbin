@@ -5,7 +5,7 @@ import {POST as start} from '@/app/api/start/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 import {POST as browserCreate} from '@/app/api/my/artifacts/route';
 import {artifactStarter,ARTIFACT_STARTERS} from '@/lib/workspace/artifact-starters';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 const harness=useAppHarness();
 const html='<!doctype html><html><head><title>Native &amp; clear</title><meta name="description" content="Page description"></head><body><h1>Native</h1></body></html>';
 const params=(id:string)=>({params:Promise.resolve({id})});

@@ -1,5 +1,5 @@
-import { withTokenAuth } from '@/lib/accounts';
-import { runOperation } from '@/lib/operations/http';
+import { withTokenAuth } from '@/lib/authentication';
+import { runOperation } from '@/lib/operations';
 
 /**
  * GET|POST /api/testusers — the `testuser_list` and `testuser_create`

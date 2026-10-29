@@ -1,5 +1,5 @@
-import { withTokenAuth } from '@/lib/accounts';
-import { runOperation } from '@/lib/operations/http';
+import { withTokenAuth } from '@/lib/authentication';
+import { runOperation } from '@/lib/operations';
 import { json, readJson } from '@/lib/http';
 
 /**

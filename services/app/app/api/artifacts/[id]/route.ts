@@ -1,5 +1,5 @@
-import { withTokenAuth } from '@/lib/accounts';
-import { runOperation } from '@/lib/operations/http';
+import { withTokenAuth } from '@/lib/authentication';
+import { runOperation } from '@/lib/operations';
 import { PUBLISH_BODY_LIMIT, json, readJson } from '@/lib/http';
 
 /** GET /api/artifacts/:id — full read-back (source markup + meta). Actor-scope; else uniform 404. */

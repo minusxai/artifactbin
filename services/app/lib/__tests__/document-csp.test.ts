@@ -4,8 +4,8 @@
  * page goes back to its strict policy (lib/__tests__/app-page-csp).
  */
 import { describe, expect, it } from 'vitest';
-import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
-import { FRAME_HOSTS } from '@/lib/story-ui/document-sources';
+import { buildDocumentCsp } from '@/lib/page-styles';
+import { FRAME_HOSTS } from '@/lib/story-ui';
 
 const SELF = 'https://416233784b39.pages.example.com';
 const APP = 'https://app.example.com';

@@ -1,21 +1,13 @@
-import {verifyRegisteredHtmlMutation} from '@/lib/artifacts';
-import {NotificationExecutionError} from '@/lib/notifications/errors';
-import { artifactQuery } from '@/lib/artifacts/table';
-import { grantsOf, assertGrantCommit, getArtifactById, type GrantDocument } from '@/lib/artifacts';
-import {validateUserWrites} from '@/lib/datasets/user-fields';
-import {DatasetError} from '@/lib/datasets/errors';
-import { artifactState } from '@/lib/artifacts';
-import { completeMutationReceipt, type MutationReceipt } from '@/lib/artifacts';
+import {verifyRegisteredHtmlMutation, grantsOf, assertGrantCommit, getArtifactById, type GrantDocument, artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted} from '@/lib/artifacts';
+import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import {completeDocumentMutationReceipt} from './mutation-operation';
-import {notificationJobStore} from './notifications/runtime';
-import {lockNotificationExecution} from './notifications/authority';
+import {NotificationExecutionError,lockNotificationExecution,notificationJobStore} from '@/lib/notifications';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
-import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
-import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy, policyReaderSql } from './dataset-policy';
-import {catalogOf,importedTables} from '@/lib/datasets/catalog';
+import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy } from './dataset-policy';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
-import {sqlExtensions} from '@/lib/sql/extensions';
+import {sqlExtensions, isQueryFailure, runMutation, type MutationInput} from '@/lib/sql';
 import {paramSqlName} from '@artifactbin/contracts';
 /**
  * WRITING a dataset — the other half of lib/datasets/dataset-store.
@@ -43,25 +35,15 @@ import {paramSqlName} from '@artifactbin/contracts';
  * is archived into `artifact_versions` on the same coalescing rule text edits
  * use (so `revert` works on data), and the row's own channel is NOTIFYed, so
  * every open document reading this dataset re-queries (lib/publish/realtime/live).
- * It lives in the artifacts write path: SQL on artifact tables plus receipts, emitting its
- * after-commit event (../after-commit) for whatever else must follow a committed write.
+ * The head swap itself is lib/artifacts' (commitDatasetWrite), which owns the artifacts table; this
+ * module computes the rows, holds the transaction, completes receipts and emits the after-commit event.
  */
-import { trackEvent } from '@/lib/platform/analytics';
-import { MAX_QUERY_ROWS } from '@/lib/platform/config';
-import { getDb } from '@/lib/platform/db';
-import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { editorScope, type ArtifactRow } from '@/lib/artifacts';
-import { LIVE_ARTIFACT_SQL, groupMemberPredicate } from '@/lib/artifacts/table';
+import { trackEvent } from '@/lib/analytics';
+import { MAX_QUERY_ROWS, getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
-import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
-import { newEditId } from '../document';
 import type { Scalar } from '@/lib/dataflow';
-import { mutationInvocation } from '@/lib/artifacts';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
-import { emitDatasetCommitted } from '@/lib/artifacts';
 
-/** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
-const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
 /** A CAS miss is an ordinary outcome under concurrency; this bounds the retry, not the correctness. */
 const WRITE_CAS_RETRIES = 8;
 
@@ -132,7 +114,6 @@ export async function mutateDataset(
   const db = await getDb();
   const jobs=guard.notificationJob?await notificationJobStore():null;
   const mutationRunId=guard.notificationJob?.origin.mutationRunId;
-  const scope = editorScope(actor);
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
     if(guard.nativePolicy){const current=await getArtifactById(dataset.id);if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||await canWriteDataset(current,actor,true)||!await canUseDataPolicy(current,actor))throw new DatasetError('Dataset policy access changed',403);}
     else await recheckMutation(dataset,actor,guard.document);
@@ -155,7 +136,7 @@ export async function mutateDataset(
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
-    let selected:import('@/lib/datasets/types').DatasetTable;
+    let selected:import('@/lib/datasets').DatasetTable;
     let schema:string;
     try{
       if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
@@ -226,9 +207,9 @@ export async function mutateDataset(
     delete meta.totalRows;
     delete meta.truncated;
 
-    // ONE guarded statement: swap the pointer if and only if the rows we read
-    // are still the rows on disk, archive the previous state (coalesced, like
-    // the edit protocol), and wake every document reading this dataset.
+    // ONE guarded statement (lib/artifacts commitDatasetWrite): swap the pointer if and only if the rows
+    // we read are still the rows on disk, archive the previous state (coalesced, like the edit protocol),
+    // and wake every document reading this dataset.
     const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
      const notificationInput=guard.notificationJob;
@@ -242,57 +223,10 @@ export async function mutateDataset(
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
       const locked=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
-      if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
+      if(!locked||artifactState(locked)!==guard.expectedState)return undefined;
      }
-     // The NOTIFY below names the channel in SQL, 'artifact_' || lower(id): the same formula as
-     // artifactChannel (@artifactbin/contracts), held to it by __tests__/live-channels.test.ts.
-     const result=await artifactQuery<ArtifactRow>(tx,
-      `WITH updated AS (
-         UPDATE artifacts
-            SET meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $12, actor_token_id = $13
-          WHERE id = $1 AND edit_id = $2 AND ($20::boolean OR access = 'readwrite') AND ${LIVE_ARTIFACT_SQL}
-            AND policy_revision=$15 AND ($20::boolean OR (
-              ($19::text IS NULL AND (${scope.where('$14')})) OR
-              ($19='viewer' AND (${policyReaderSql('$12', '$13')}) AND ($18::boolean OR (${scope.where('$14')})))
-            )
-            ) AND ($20::boolean OR $16::text IS NULL OR EXISTS (
-              SELECT 1 FROM artifacts d WHERE d.id=$16 AND d.edit_id=$17 AND d.deleted_at IS NULL
-              AND (
-                (d.group_id IS NOT NULL AND artifacts.group_id=d.group_id) OR
-                (d.group_id IS NULL AND d.user_id IS NULL AND artifacts.group_id IS NULL AND artifacts.user_id IS NULL AND artifacts.token_id=d.token_id) OR
-                (d.group_id IS NULL AND d.user_id IS NOT NULL AND ((artifacts.group_id IS NULL AND artifacts.user_id=d.user_id) OR
-                  (artifacts.visibility<>'private' AND artifacts.link_role='editor') OR EXISTS (
-                    SELECT 1 FROM artifact_shares writer_share WHERE writer_share.artifact_id=artifacts.id
-                    AND writer_share.role='editor' AND (writer_share.user_id=d.user_id OR
-                      (writer_share.user_id IS NULL AND writer_share.email=(SELECT email FROM users WHERE id=d.user_id)))
-                  )))
-              )
-              AND (d.visibility <> 'private' OR (d.group_id IS NULL AND (d.user_id=$12 OR (d.user_id IS NULL AND d.token_id=$13))) OR ${groupMemberPredicate('$12',undefined,'d')} OR EXISTS (
-                SELECT 1 FROM artifact_shares s WHERE s.artifact_id=d.id AND
-                (s.user_id=$12 OR (s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$12)))
-              ))
-            ))
-          RETURNING *
-       ), archived AS (
-         INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta)
-         SELECT $1, $5, $6, $7, $8, $9, $10::jsonb
-          WHERE EXISTS (SELECT 1 FROM updated)
-            AND NOT EXISTS (
-              SELECT 1 FROM artifact_versions
-               WHERE artifact_id = $1 AND created_at > now() - ($11::int * interval '1 millisecond')
-            )
-         ON CONFLICT DO NOTHING
-       )
-       SELECT u.*, pg_notify('artifact_' || lower(u.id), u.edit_id) FROM updated u`,
-      [
-        dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
-        current.version, current.title, current.description, current.format, current.source,
-        JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,(!!guard.document||!!guard.nativePolicy)&&!!policy,policy?.role??null,v2,
-      ],
-    );
-
-     const committed=result.rows[0];
+     const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
+      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:v2});
      if(committed){
       if(jobs)await jobs.enqueue(tx,guard.notificationJob!);
       if(guard.receipt){
@@ -300,17 +234,16 @@ export async function mutateDataset(
        else await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
       }
      }
-     return result;
+     return committed;
     };
-    let updated;
-    try { updated=jobs||v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    let row;
+    try { row=jobs||v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) {
      if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
      throw error;
     }
 
-    const row = updated.rows[0];
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
       // Committed: story's listener flags the guest snapshots that read this dataset and queues their heads'
@@ -328,7 +261,7 @@ export async function mutateDataset(
 }
 
 /** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */
-async function writtenTable(catalog:import('@/lib/datasets/types').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
+async function writtenTable(catalog:import('@/lib/datasets').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
   const relations=catalog.tables.filter(t=>t.objectKey&&t.sql===undefined).map(t=>({schema:t.schema,table:t.name,columns:t.columns}));
   const writes=(await loadSqlite()).analyze(sql,relations,{mode:'write',extensions:sqlExtensions()}).writes;
   const [write]=writes;

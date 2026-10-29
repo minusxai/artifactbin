@@ -1,6 +1,6 @@
 import { visibleSelectionRects } from "./presence-selection-geometry";
 import { htmlTextFingerprint as selectionFingerprint } from '@artifactbin/contracts';
-import type { PresenceRange, PresenceViewer } from '../html-presence/contract';
+import type { PresenceRange, PresenceViewer } from '../html-presence';
 import {presenceGeometry} from '../html-presence/model';
 type SelectionPresence = {ranges: PresenceRange[]};
 type Viewer = Omit<PresenceViewer,'selection'> & {selection: SelectionPresence | null; actor: string};

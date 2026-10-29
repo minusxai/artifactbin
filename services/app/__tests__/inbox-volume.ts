@@ -8,7 +8,7 @@
 import {nativeHtml} from './native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
 import { mintAccountToken, request } from './harness';
-import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
+import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/notifications/authority';
 import type { Queryable } from '@artifactbin/contracts';
 
 export const RECIPIENT = { id: 'vol-recipient', email: 'vol-recipient@example.com' };

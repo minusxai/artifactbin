@@ -463,7 +463,7 @@ const COMMENT_REACTION_EVENTS: Table = {
  * No FKs on purpose — an event row outlives its artifact, and a failed insert
  * must never take a request down with it. `user_id` is the session viewer or
  * write actor (NULL = anonymous); `client` is the harness guess from
- * lib/client-identity (telemetry only, never gate on it).
+ * lib/accounts/client-identity (telemetry only, never gate on it).
  */
 const ANALYTICS_EVENTS: Table = {
   name: 'analytics_events',
@@ -489,7 +489,7 @@ const ANALYTICS_EVENTS: Table = {
  * UTC day up to and including `closed_through`. A day that has ended never gains a view (the visitor
  * key is salted with the day, and events are stamped on arrival), so each read folds the days that
  * closed since the last fold into this row once, and counts only the days after it live from
- * analytics_events (lib/platform/view-totals). The cost of a view count is then the views of
+ * analytics_events (lib/analytics/view-totals). The cost of a view count is then the views of
  * the days since the last fold, not the artifact's whole history. The row is derived: deleting it
  * costs one full count at the next read and changes no answer.
  */
@@ -593,7 +593,7 @@ const WEB_ASSETS: Table = {
  * pair itself. The verb vocabulary is closed (contracts RELATION_VERBS), and
  * every read carries the verb literal so the partial indexes below apply
  * (measured: a Bitmap Index Scan with it, a Seq Scan without). No FKs, as
- * everywhere here; lib/relations.ts is the only writer and reader.
+ * everywhere here; lib/social is the only writer and reader.
  */
 const RELATIONS: Table = {
   name: 'relations',

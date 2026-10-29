@@ -8,12 +8,9 @@ import {canUseDeploymentIdentity} from '../deployment';
  * creates inherit that owner at publish time.
  */
 import crypto from 'crypto';
-import { getDb, Queryable } from '../platform/db';
-import { emit } from '../platform/events';
-import { generateTokenId } from '../platform/ids';
-import type { Harness } from '@/lib/platform';
-import { canAuthenticateUser } from './user-kinds';
-import { currentRequest } from '../platform/request-context';
+import { getDb, Queryable, emit, generateTokenId, currentRequest } from '../platform';
+import type { Harness } from './client-identity';
+import { canAuthenticateUser } from '../user-kinds';
 import type { AccessActor } from './actors';
 
 const TOKEN_PREFIX = 'mx_';
@@ -25,7 +22,13 @@ const TOKEN_PREFIX = 'mx_';
  * the two — an unqualified clause there is `column reference "deleted_at" is
  * ambiguous`, which is a 500 on the dashboard of anyone holding a token.
  */
-export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > now())';
+export const liveTokenSql = (at = 'now()'): string => `tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > ${at})`;
+/**
+ * Live at the TRANSACTION's start (`now()`): right for a request's own lookup, one statement long. A fence
+ * re-checked inside a commit transaction, after row locks it may have waited on, asks
+ * `liveTokenSql('clock_timestamp()')` instead, so a token that expired during the wait is refused.
+ */
+export const LIVE_TOKEN_SQL = liveTokenSql();
 
 /**
  * WHAT ONE REQUEST HAS ALREADY LEARNED ABOUT ITS CREDENTIAL. The bearer door asks "is this token live?"
@@ -261,7 +264,7 @@ export async function revokeToken(id: string): Promise<boolean> {
  * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
  * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
- * place the app first trusts a token-bearing actor (lib/accounts/request-identity), in BOTH shapes: the bearer it resolves
+ * place the app first trusts a token-bearing actor (lib/authentication/request-identity), in BOTH shapes: the bearer it resolves
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
  */
 export const TOUCH_INTERVAL_MS = 60 * 1000;

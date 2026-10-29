@@ -15,8 +15,8 @@ import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {  createUser, ensureUsername, setUsername } from '@/lib/accounts';
-import { people } from '@/lib/datasets/user-fields';
+import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { people } from '@/lib/datasets';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();

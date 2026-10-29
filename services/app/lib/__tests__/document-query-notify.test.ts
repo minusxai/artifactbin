@@ -1,8 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
-import {executeDocumentQueries} from '../datasets/document-queries';
+import {executeDocumentQueries, type DatasetCatalog} from '../datasets';
 import type { CompiledDataflow } from '@/lib/dataflow';
-import type {DatasetCatalog} from '../datasets/types';
 const execute=vi.hoisted(()=>vi.fn());
 vi.mock('../datasets/execute',()=>({executeCatalog:execute}));
 const reads={imports:[],queries:[],values:[],builtins:[]};

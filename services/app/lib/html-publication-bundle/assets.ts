@@ -1,14 +1,15 @@
 import {pinPublicationAssetUrls} from './plan';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
+import {requestOrSessionActor} from '@/lib/authentication';
 import {archivedVersionFor,canReadArtifact,getArtifactById,writerFor} from '@/lib/artifacts';
-import {getDb} from '@/lib/platform/db';
-import {serveStoredFile} from '@/lib/datasets/file-store';
+import { getDb } from '@/lib/platform';
+import {serveStoredFile} from '@/lib/datasets';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}
 async function admission(request:Request,actor:AccessActor,pageId:string):Promise<Admission|null>{
  const page=await getArtifactById(pageId);if(!page||page.format!=='html'||!await canReadArtifact(page,actor))return null;
  // Naming the current version grants no history access beyond the already-readable head.
- const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page);
+ const version=new URL(request.url).searchParams.get('version')===String(page.version)?null:await archivedVersionFor(request,page,()=>requestOrSessionActor(request));
  if(version==='not_found')return null;
  return {delegator:writerFor(page),version:version?.version??page.version,receipts:((version?.meta??page.meta) as {htmlPublicationDependencies?:BundleReceipt[]}).htmlPublicationDependencies??[]};
 }

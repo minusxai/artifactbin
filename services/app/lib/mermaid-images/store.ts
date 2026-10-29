@@ -1,7 +1,7 @@
 /** Durable Mermaid harvest jobs, content-addressed SVG records and asset reads.
  * Drawing validation and harvest admission share this storage boundary. */
 import { createHash } from 'node:crypto';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { MERMAID_RENDER_ENGINE } from './engine';
 import type { MermaidFaces } from './drawn';

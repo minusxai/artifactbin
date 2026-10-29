@@ -1,20 +1,9 @@
-/** One event-to-notification policy. Source actions record facts, never inbox rows. */
-import type {EventEnvelope,EventPayload,EventVerb,ObjectKind,Queryable} from '@artifactbin/contracts';
-import type {EventObject,EventSubject} from '@/lib/platform';
-import {envelope} from '../platform/events';
-import {enqueueEvent} from '../platform/event-outbox';
+/** One event-to-notification policy. Source actions record facts (lib/platform recordEvent), never inbox rows. */
+import type {EventEnvelope,Queryable} from '@artifactbin/contracts';
 import {notificationChanged,notifyThread,recordNotification,removeThreadNotifications} from './write';
 
-/** Fact, recipient state and outgoing envelopes commit with the source action. */
-export async function recordEvent<K extends ObjectKind,V extends EventVerb<K>>(
- tx:Queryable,subject:EventSubject|null,verb:V,object:EventObject<K>,payload:EventPayload<K,V>,
-):Promise<void>{
- const event=envelope(subject,verb,object,payload);
- await enqueueEvent(tx,event);
- await projectNotifications(tx,event);
-}
-
-async function projectNotifications(tx:Queryable,event:EventEnvelope):Promise<void>{
+/** The platform's event projection: recipient state commits with the source action's fact. */
+export async function projectNotifications(tx:Queryable,event:EventEnvelope):Promise<void>{
  const sender=event.subject_kind==='user'?event.subject_id:null;
  const objectId=event.object_id;
  const payload=event.payload;

@@ -20,7 +20,7 @@ import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import type { MiddlewareHandler } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { withEncoding } from '@/lib/http/revalidation';
+import { withEncoding } from '@/lib/http';
 
 type ServeStaticOptions = Parameters<typeof serveStatic>[0];
 const SIBLING = /\.(?:br|gz)$/;

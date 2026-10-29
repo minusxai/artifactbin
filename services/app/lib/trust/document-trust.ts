@@ -23,9 +23,8 @@
  * `cspRequestFor` is what the app page tells the consent bar.
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { getDb } from '@/lib/platform/db';
-import { parseCookie } from '@/lib/http/http';
+import { AUTH_SECRET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
+import { parseCookie } from '@/lib/http';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
@@ -190,7 +189,7 @@ function sessionSetCookie(session: SessionTrust): string {
 const CARRIED_TRUST_KEY = 'trust';
 
 /**
- * What the app page hands a document's own origin with its reader's pages ticket (lib/serving/artifact-page
+ * What the app page hands a document's own origin with its reader's pages ticket (lib/document-serving/artifact-page
  * framedDocumentSrc): this browser session's once-grants and denies for this reader, as read from the app origin's
  * cookie. Every document's, not one: the pages cookie is shared by all of a reader's frames, and each framed load
  * replaces it. Server-minted data in a server-side row — never read from the document's request.

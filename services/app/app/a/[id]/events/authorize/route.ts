@@ -12,7 +12,7 @@ import { htmlLiveLinks } from '@/lib/html-backends';
 import { datasetsForDocument } from '@/lib/document-data';
 import { ID_RE } from '@/lib/platform';
 import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;

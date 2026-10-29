@@ -10,11 +10,13 @@
 import type { Actor } from '@artifactbin/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
-import { withTokenAuth } from '@/lib/accounts';
-import { profileWrites, syncProfile } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
+import { profileWrites } from '@/lib/accounts/profiles';
+import { syncProfile } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as createSecretRoute } from '@/app/api/my/secrets/route';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -185,7 +187,7 @@ describe('profile sync at the bearer door', () => {
  * dataset endpoints and the remote routes. An invitee whose FIRST call lands on one of those was
  * still rowless there, and the SQL scopes that read a share through `(SELECT email FROM users WHERE
  * id = $p)` — every `editorScope` — answered the uniform 404. The claims-match rule is not repeated:
- * both doors are one resolver (lib/accounts request-identity).
+ * both doors are one resolver (lib/authentication request-identity).
  */
 describe('a bearer-only invitee whose first call is not a withTokenAuth route', () => {
   const TARGET = { host: 'db.example.com', port: 5432, database: 'commerce', username: 'reader', ssl: true };

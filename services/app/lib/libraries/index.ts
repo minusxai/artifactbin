@@ -36,7 +36,7 @@ export function libraryVersions(): Record<string, string> {
 
 /**
  * Hosted HTML components (D20): `@afbin/<component>` -> `/af/components/<component>.js`, the platform's current build
- * (lib/build-assets/components, served by lib/serving/components.server). The entry address carries no version, so it
+ * (lib/build-assets/components, served by lib/document-serving/components.server). The entry address carries no version, so it
  * revalidates; the shared `chunk-<hash>.js` files it imports are content-addressed and immutable.
  */
 export const COMPONENTS_PATH = '/af/components/';

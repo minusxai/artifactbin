@@ -23,9 +23,10 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintExportKey } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';

@@ -11,10 +11,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, appPagePolicy, createAppServer, pagesFrameSources } from '@/server/app';
-import { pagesSite } from '@/lib/http/pages-origin';
+import { pagesSite } from '@/lib/http';
 import { pagesSiteFor } from '@/lib/http/pages-origin';
-import { DOMAIN_HOME_CSP } from '@/lib/serving';
-import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/serving';
+import { DOMAIN_HOME_CSP } from '@/lib/custom-domains';
+import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 

@@ -1,9 +1,8 @@
 import {AUTH_SECRET} from '@/lib/platform/config';
-import {resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {resolveDatasetConnection, datasetSecretTargetHash, openDatasetSecret, sealDatasetSecret} from '@/lib/datasets';
 import {it,expect} from 'vitest';
 import {captureNativeExternalCredential,stageNativeExternalCredentials} from '../external-credentials';
 import {nativeCatalogBytes} from '../catalog-digest';
-import {datasetSecretTargetHash,openDatasetSecret,sealDatasetSecret} from '@/lib/datasets/secret-crypto';
 import type {NativeCatalogProjection} from '../catalog-contracts';
 import type {Queryable} from '@artifactbin/contracts';
 it('reseals exact dataset-bound credentials across different deployment keys without plaintext receipts',async()=>{

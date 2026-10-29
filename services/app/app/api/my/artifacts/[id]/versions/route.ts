@@ -1,5 +1,5 @@
 import { listVersionsFor } from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 
 /** GET /api/my/artifacts/:id/versions — owner-actor version history. */

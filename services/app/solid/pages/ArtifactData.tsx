@@ -15,11 +15,11 @@
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactbin/contracts';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 import { formatFileSize } from '@/lib/islands/file-display';
 import { rowTitle } from '@/lib/document/display-title';
-import type { ReaderForkedFrom } from '@/lib/serving/fork-credit.server';
+import type { ReaderForkedFrom } from '@/lib/document-serving';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import WorkspaceShell from '../components/WorkspaceShell';

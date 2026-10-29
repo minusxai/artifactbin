@@ -13,8 +13,8 @@
  * its children are a TABLE the document's own dataflow reads, computed per
  * viewer on the server.
  */
-import { getDb } from '@/lib/platform/db';
-import { viewTotalsFor } from '@/lib/platform/view-totals';
+import { getDb } from '@/lib/platform';
+import { viewTotalsFor } from '@/lib/analytics';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // The hierarchy builds its own statements rather than going through the
 // row-loading seam, so every one of them names the trash gate: a trashed
@@ -24,8 +24,7 @@ import { effectiveRole, roleWithoutLink } from './access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { renderSparklineSvg } from '@/lib/viz/sparkline';
-import { dailySeries } from '@/lib/viz/daily-series';
+import { renderSparklineSvg, dailySeries } from '@/lib/viz';
 // The TYPED column shape (@artifactbin/contracts), not dataset-usage's loose
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
@@ -140,7 +139,7 @@ export async function selectChildren(
     children.push(c);
   }
   // The numbers cost nothing for a viewer who is told none, and one aggregate over the shelf for one who is
-  // (lib/platform/view-totals: the folded all-time counts), never a subquery per child.
+  // (lib/analytics/view-totals: the folded all-time counts), never a subquery per child.
   const views = numbers && children.length ? await viewTotalsFor(children.map((c) => c.id)) : new Map<string, number>();
   /*
    * THE SPARKLINE is the children table's alone (the Files kit draws it; the folder page's shelf shows none),

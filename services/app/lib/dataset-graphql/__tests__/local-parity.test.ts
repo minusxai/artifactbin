@@ -4,7 +4,7 @@ import {createLocalDataset} from '../local';
 import {createDatasetGraphql} from '../index';
 import {tableIdentity,columnIdentity,initialRowIds,ID_COLUMN} from '../model';
 import type {HtmlDatasetLink,DatasetQueryRequest} from '@artifactbin/contracts';
-import {ANONYMOUS_ACTOR} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 it('matches retained SQL query behavior over nulls, grouping, projection and pagination',async()=>{
  const db=new PGlite(),signal=new AbortController().signal,binding:HtmlDatasetLink={kind:'dataset',name:'sales',datasetId:'local_sales',mode:'live'};
  const table={schema:'public',name:'sales',columns:[{name:'team',type:'string' as const},{name:'amount',type:'number' as const}],rows:[{team:'A',amount:2},{team:'A',amount:null},{team:'B',amount:5},{team:null,amount:1}]};

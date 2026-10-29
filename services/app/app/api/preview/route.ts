@@ -1,6 +1,6 @@
 import { PUBLISH_BODY_LIMIT, isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { requestOrSessionActor } from '@/lib/accounts';
-import { parseContentInput } from '@/lib/publish/document/input';
+import { requestOrSessionActor } from '@/lib/authentication';
+import { parseContentInput } from '@/lib/publish';
 
 /**
  * POST /api/preview { markup, theme?, title? } → { html, format, css? }: the

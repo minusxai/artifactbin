@@ -5,10 +5,10 @@ import { getArtifactFor, getOwnedArtifactFor } from './rows';
 import { writerFor } from './table';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor } from '@/lib/accounts';
 import {resolveParent,isParentRefusal} from './placement';
-import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
-import {json} from '../http/http';
+import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation';
+import {json} from '../http';
 import {HTML_SYSTEM_NAMES,isHtmlSystem} from '../html-systems';
-import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
+import {validateDatasetPolicyForRow} from '../datasets';
 export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
  if(['document_update','markup','jsx','markdown','source','operations','annotation_ops','edit_id','old_string','new_string'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Replace page content with the complete html field and observed expectedVersion/expectedState through PUT. Metadata PATCH accepts metadata fields only.'},400);
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);

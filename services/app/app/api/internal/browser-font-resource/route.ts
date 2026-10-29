@@ -1,7 +1,6 @@
-import { isBrowserSessionRequest } from '@/lib/accounts';
+import { isBrowserSessionRequest } from '@/lib/authentication';
 import { json } from '@/lib/http';
-import { fetchBrowserFontResource } from '@/lib/web-ingest/browser-fonts';
-import { WebIngestError } from '@/lib/web-ingest/guard';
+import { fetchBrowserFontResource, WebIngestError } from '@/lib/web-ingest';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const refusalStatus = (error: WebIngestError): number => {

@@ -1,13 +1,13 @@
-import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, testAccountMayReach, type AccessActor, setRelationState } from '@/lib/accounts';
+import { identityForUser, lockMembershipUsers, testAccountMayReach, type AccessActor } from '@/lib/accounts';
+import { JOIN_RELATIONS, setRelationState } from '@/lib/social';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {recordEvent} from '@/lib/notifications/events';
-import {DatasetError} from '@/lib/datasets/errors';
+import {recordEvent, getDb} from '@/lib/platform';
+import {DatasetError} from '@/lib/datasets';
 import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
-import { getDb } from '@/lib/platform/db';
 import { effectiveRole } from '../access';
-import { type ArtifactRow } from '../table';
+import { notifyArtifactSql, type ArtifactRow } from '../table';
 import { getArtifactById, getArtifactHeaderById } from '../rows';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 import { can } from '../capabilities';
@@ -137,7 +137,7 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
       await setRelationState(tx,target,'join',id,{status,direction,initiatedBy:initiator,revision,explicitJoin});
       await recordEvent(tx,{kind:'user',id:userId},status==='pending'?'join_requested':status==='accepted'?'joined':status==='left'?'left':'invitation_dismissed',{kind:'artifact',id},{user_id:target,revision});
     }
-    await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[id]);
+    await tx.query(`SELECT ${notifyArtifactSql('$1',"'members'")}`,[id]);
   });
   return membershipState(actor,id);
 }
@@ -169,7 +169,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:Acces
   }
   await recordEvent(tx,{kind:'user',id:sender},kind==='invitation'?'invited':kind==='joined'?'joined':'mentioned',{kind:'artifact',id:artifact.id},{user_id:target,revision:previous?.status==='accepted'?previous.revision:(previous?.revision??0)+1,mention_ref:source});
  }
- await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
+ await tx.query(`SELECT ${notifyArtifactSql('$1',"'members'")}`,[artifact.id]);
 }
 
 /** The people a document's source names: every `/people/<id>` in it. Stored with the prepared page (`prepared_pages.mentions`) so nothing rescans the document for them. */

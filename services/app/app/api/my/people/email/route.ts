@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {browserActor,sessionActor} from '@/lib/accounts';
+import { browserActor, sessionActor } from '@/lib/authentication';
 import {json,unauthorized,readJson} from '@/lib/http';
 import {notificationDelivery} from '@/lib/notifications';
 const preferences=z.object({invitations:z.boolean(),comments:z.boolean(),activity:z.boolean()}).strict();

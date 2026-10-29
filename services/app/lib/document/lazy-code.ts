@@ -10,8 +10,7 @@
  * diagram engines — and code it will run must all be named, or the chain of
  * round trips stays.
  */
-import type { JsxNode } from '@/lib/jsx';
-import { mermaidDiagramKind, mermaidImageKey } from '@/lib/jsx/mermaid-source';
+import { type JsxNode, mermaidDiagramKind, mermaidImageKey } from '@/lib/jsx';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The `viz.kind`s whose branch in QuestionEmbed reaches the lazy chart module. */

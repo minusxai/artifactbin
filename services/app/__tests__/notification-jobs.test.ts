@@ -3,9 +3,8 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 import {useAppHarness} from './harness';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import {getDb} from '@/lib/platform';
-import { notificationAuthority } from '@/lib/document-data';
-import {seedOwnerJoin} from '@/lib/accounts';
-import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
+import { seedOwnerJoin } from '@/lib/social';
+import {createNotificationJobStore,notificationAuthority,type NotificationJobAuthority} from '@/lib/notifications';
 useAppHarness();
 const input:MutationNotificationJobInput={
  origin:{mutationRunId:'run1',documentId:'doc',documentEditId:'edit',documentVersion:1,mutationName:'change'},

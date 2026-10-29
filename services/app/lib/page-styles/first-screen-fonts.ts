@@ -31,8 +31,7 @@
  */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
-import { STORY_FAMILY_ASSETS, type StoryFontAsset } from '@/lib/data/story/story-fonts';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { STORY_FAMILY_ASSETS, type StoryFontAsset, STORY_THEMES } from '@/lib/data';
 import type { DocumentFonts } from './document-fonts';
 
 type Slot = 'display' | 'body' | 'mono';

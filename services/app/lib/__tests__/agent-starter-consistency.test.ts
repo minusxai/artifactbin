@@ -1,23 +1,18 @@
 /** Every discovery surface names npm afbin; CLI starters retain their auth loop,
  * while direct HTTP discovery teaches verified email issuance and graph claims.
  * Retired endpoints/brands remain forbidden on every surface. */
-import {isPublicSkillTopic} from '@/lib/skills/public-surface';
+import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import { agentContract } from '@/lib/serving';
-import { agentBlurb, existingPaste } from '@/lib/serving';
+import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { gettingStarted } from '@/lib/serving/getting-started';
-import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
+import { gettingStarted } from '@/lib/agent-copy/getting-started';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
-import { renderSkill } from '@/lib/skills/render';
-import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/agent-copy/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
-import {projectSkillLinks} from '@/lib/skills/serve';
-import { skillTree } from '@/lib/skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser } from '@/lib/accounts';
 import { request, useAppHarness } from '@/__tests__/harness';

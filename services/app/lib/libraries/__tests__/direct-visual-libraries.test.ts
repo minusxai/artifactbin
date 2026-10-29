@@ -4,7 +4,7 @@ import {build} from 'esbuild';
 import {expect,it} from 'vitest';
 import {libraryUrls} from '../index';
 import registry from '../registry.json';
-import {isPublicSkillTopic} from '../../skills/public-surface';
+import {isPublicSkillTopic} from '../../skills';
 it('ships both native visualization guides on the public HTTP and archive surface',()=>{expect(isPublicSkillTopic('maps')).toBe(true);expect(isPublicSkillTopic('diagrams')).toBe(true);});
 it('provides pinned native Mermaid and framework-free deck.gl APIs as closed browser modules',async()=>{
  expect(libraryUrls()).toMatchObject({pele:'/libraries/pele-1.12.0/index.js','deck-gl':'/libraries/deck-gl-9.4.0/index.js'});

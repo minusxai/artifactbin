@@ -4,7 +4,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 import {POST} from '@/app/api/artifacts/[id]/presence/route';
 import {GET} from '@/app/a/[id]/events/route';
 import {request,useAppHarness} from './harness';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 import {getDb} from '@/lib/platform/db';
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;

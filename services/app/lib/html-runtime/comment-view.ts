@@ -1,7 +1,7 @@
 import type { StatePort } from './apollo/apollo-contracts';
 interface HtmlCommentViewOptions { declaration: {version:string; fields:readonly string[]}; state:StatePort; backends:readonly string[] }
 import { parseCommentViewState, type ReviewJson } from '../../../contracts/src/comment-view-state';
-import type { HtmlCommentViewPort } from '../html-bridge/comment-view-contract';
+import type { HtmlCommentViewPort } from '../html-bridge';
 const safe = (key: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && key.length <= 128 && !['__proto__','prototype','constructor'].includes(key);
 /** Explicit UI projection only: no query or mutation can reach a backend. */
 export function createHtmlCommentView({declaration,state,backends}: HtmlCommentViewOptions): HtmlCommentViewPort {

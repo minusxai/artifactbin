@@ -19,7 +19,7 @@ import { createHash, randomBytes } from 'crypto';
 import { mkdir, open, readFile, rm } from 'fs/promises';
 import type { Readable } from 'node:stream';
 import path from 'path';
-import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform/config';
+import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { parseS3Url, storageKeyFor, type S3Config } from './url';
 
 export * from './url';
@@ -294,4 +294,9 @@ export function createLocalStore(dir: string): ObjectStore {
     },
   };
 }
-
+export { IMAGE_CONTENT_TYPES, loadImage, storeImage } from './image-store';
+export type { ImageMeta } from './image-store';
+export { PDF_CONTENT_TYPE, loadPdfStream, pdfFilename, pdfMetaOf, pdfPageCount, storePdf } from './pdf-store';
+export type { PdfMeta } from './pdf-store';
+export { prepareObjects } from './prepared-objects';
+export type { ContentObjects, PreparedObject } from './prepared-objects';

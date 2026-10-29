@@ -42,8 +42,9 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - Layers: entry points `server.ts`, `scripts`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
-  import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and an unlisted
-  deep import (`DEEP_MODULES`).
+  import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and a deep import:
+  a lib module is entered through its index, plus any entries and browser leaves its `DEEP_MODULES` row lists; a
+  test also reaches its own module, or a white-box import recorded in `module-graph.allowed-test-imports.json` (shrinks only).
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report only observed runs and red/green/end-to-end evidence.
@@ -130,9 +131,8 @@ From repo root.
 
 - Kit renderer changes, including inline wrapper styles and any `EXTRA_CLASS_SOURCES` input
   (such as `compiled-page/compiler.ts`): run `npm run generate-story-ui-classes`
-  and review the generated diff before final CI. FAST regression checks are
-  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts` and
-  `services/app/lib/publish/__tests__/reader-sheet.test.ts`; types do not catch drift.
+  and review the generated diff before final CI. The FAST regression check is
+  `services/app/lib/story-ui/__tests__/recipe-classes.test.ts`; types do not catch drift.
 - A tree PR CI passed is not re-tested on merge.
 - Schema changes update `services/app/lib/platform/schema.ts`, schema ownership tests, and SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the

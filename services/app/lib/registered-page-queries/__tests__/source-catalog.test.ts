@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import type {DatasetCatalog} from '@/lib/datasets/types';
+import type {DatasetCatalog} from '@/lib/datasets';
 import {registeredSourceCatalog} from '../source-catalog';
 it('keeps stored model dependencies and their complete object budget',()=>{
  const catalog:DatasetCatalog={kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'base',columns:[{name:'amount',type:'number'}],objectKey:'dataset/base'},{schema:'public',name:'rows',columns:[{name:'amount',type:'number'}],sql:'select amount*2 as amount from base'}]};

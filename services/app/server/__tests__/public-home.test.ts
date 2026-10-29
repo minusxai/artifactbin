@@ -1,6 +1,6 @@
 import {beforeEach,describe,expect,it} from 'vitest';
 import {overrideConfig} from '@/lib/platform/config';
-import {AGENT_COOKIE} from '@/lib/accounts/agent-session';
+import { AGENT_COOKIE } from '@/lib/accounts';
 import {createAppServer} from '../app';
 import {request,useAppHarness} from '@/__tests__/harness';
 useAppHarness();

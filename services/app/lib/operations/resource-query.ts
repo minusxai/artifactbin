@@ -1,14 +1,11 @@
-import {requestOrSessionActor} from '../accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import type { AccessActor } from '@/lib/accounts';
-import {catalogOf} from '../datasets/catalog';
-import {executeCatalog} from '../datasets/execute';
-import {DatasetError} from '../datasets/errors';
-import {json} from '../http/http';
-import {parseQueryRequest} from '../http/query-request';
+import {catalogOf, executeCatalog, DatasetError} from '../datasets';
+import {json, parseQueryRequest} from '../http';
 import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 

@@ -1,8 +1,7 @@
 /** HTTP translation for browser and bearer dataset uploads; policy lives in the service. */
-import { requestOrSessionActor, refusesCrossSite } from '@/lib/accounts';
-import { DatasetError } from '@/lib/datasets/errors';
+import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
+import { DatasetError, readFileUpload } from '@/lib/datasets';
 import { uploadDatasetFile, readDatasetFile } from './feedback-images';
-import { readFileUpload } from '@/lib/datasets/file-store';
 import { json } from '@/lib/http';
 
 const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox",'Referrer-Policy':'no-referrer','Vary':'Origin'};

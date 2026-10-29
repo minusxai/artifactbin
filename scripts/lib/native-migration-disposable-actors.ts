@@ -1,11 +1,9 @@
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {realpath} from 'node:fs/promises';
-import type {Db} from '../../services/app/lib/platform/db';
-import {DATABASE_URL,LOCAL_OBJECT_DIR,S3_URL} from '../../services/app/lib/platform/config';
-import {mintToken,revokeToken,MIN_TOKEN_TTL_MS,DEFAULT_TOKEN_TTL_MS} from '../../services/app/lib/accounts';
-import {verifyNativeIdentityInput} from '../../services/app/lib/native-identity-import/model';
-import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
+import { type Db, DATABASE_URL, LOCAL_OBJECT_DIR, S3_URL } from '../../services/app/lib/platform';
+import { mintToken, revokeToken, MIN_TOKEN_TTL_MS, DEFAULT_TOKEN_TTL_MS } from '@/lib/accounts';
+import {verifyNativeIdentityInput, type NativeIdentityImport} from '../../services/app/lib/native-identity-import';
 import type {NativeDisposableRuntimeActorPort,NativeDisposableRuntimeActorReceipt} from './native-migration-disposable-actors-contract';
 const sha=(text:string)=>createHash('sha256').update(text).digest('hex');
 /** Mints only inside the concrete isolated store. Bearers are discarded, never serialized or returned. */

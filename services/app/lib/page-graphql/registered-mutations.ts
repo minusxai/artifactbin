@@ -1,12 +1,10 @@
 import type {HtmlPageVersion,HtmlBackendLink,Queryable} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
+import { liveTokenSql, type AccessActor } from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,writerFor,grantsOf,grantContext,canReadArtifact,can,durableMutation,pinMutationContext,attestRegisteredHtmlMutation,artifactState,type ArtifactRow,type MutationReceipt} from '@/lib/artifacts';
 import {canWriteDataset,mutateDataset,isMutationRefused} from '@/lib/document-data';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,type HtmlBackendVersionRecord} from '@/lib/html-backends';
-import {createRegisteredMutationService} from '@/lib/registered-page-mutations/model';
-import {registeredMutationPlan} from '@/lib/registered-page-mutations/registry';
-import type {MutationContext,RegisteredMutationPorts} from '@/lib/registered-page-mutations/contracts';
+import {createRegisteredMutationService, registeredMutationPlan, type MutationContext, type RegisteredMutationPorts} from '@/lib/registered-page-mutations';
 const unavailable=()=>Error('registered_mutation_unavailable');
 /** Host factory receives actual request actor and immutable saved page/backend, not page arguments. */
 export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord,revalidateActor:()=>Promise<AccessActor>){
@@ -16,8 +14,8 @@ export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPage
  const context:MutationContext={...plan.registration,subject:actor.userId,callerKey:JSON.stringify([actor.userId,actor.tokenId,actor.groupId??null])};
  let doc:ArtifactRow|undefined,dataset:ArtifactRow|undefined,document:{id:string;editId:string;registeredHtml:object}|undefined;
  const verifyTransaction=async(tx:Queryable)=>{
-  // Token revocation and account expiry cannot race the final transaction.
-  if(actor.tokenId){const token=(await tx.query<{user_id:string|null}>('SELECT user_id FROM tokens WHERE id=$1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at>now()) FOR SHARE',[actor.tokenId])).rows[0];if(!token||token.user_id!==(actor.userId??null))throw unavailable();}
+  // Token revocation and account expiry cannot race the final transaction: the token is live at the wall clock, after the commit's row locks.
+  if(actor.tokenId){const token=(await tx.query<{user_id:string|null}>(`SELECT user_id FROM tokens WHERE id=$1 AND ${liveTokenSql('clock_timestamp()')} FOR SHARE`,[actor.tokenId])).rows[0];if(!token||token.user_id!==(actor.userId??null))throw unavailable();}
   if(actor.userId&&!(await tx.query('SELECT id FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) FOR SHARE',[actor.userId])).rows.length)throw unavailable();
   const current=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[page.pageId])).rows[0];
   // A page saved since import has its current version only in the locked head row; it is archived at the next save.

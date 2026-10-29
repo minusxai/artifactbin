@@ -1,5 +1,6 @@
 /** HTTP identity adapter; group persistence never imports authentication modules. */
-import {browserActor,withTokenAuth,type RequestIdentity} from '../accounts';
+import { browserActor, withTokenAuth } from '@/lib/authentication';
+import { type RequestIdentity } from '@/lib/accounts';
 import {json} from '../http';
 import {GroupError} from '../groups';
 export function groupRoute(handler:(request:Request,userId:string,params:Record<string,string>,actor:RequestIdentity)=>Promise<Response>,readOnly=false){

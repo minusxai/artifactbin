@@ -1,18 +1,19 @@
 import {nativeHtml} from './native-html-fixture';
-import { identityForUser, seedOwnerJoin} from '@/lib/accounts';
-import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
-import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
+import { identityForUser } from '@/lib/accounts';
+import { seedOwnerJoin } from '@/lib/social';
+import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/notifications/authority';
+import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness,request,setSession} from './harness';
 import {PATCH as patchInbox} from '@/app/api/my/people/route';
 import {POST as create} from '@/app/api/artifacts/route';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {POST as delivery} from '@/app/api/internal/notifications/route';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {overrideConfig} from '@/lib/platform/config';
-import {notifyThread,recordNotification} from '@/lib/notifications/write';
+import {notifyThread,recordNotification} from '@/lib/notifications';
 useAppHarness();
 beforeEach(()=>overrideConfig({internalServiceSecret:'notification-test-service'}));
 async function fixture(){

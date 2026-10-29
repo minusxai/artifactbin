@@ -1,6 +1,6 @@
 /**
  * GET /a/:id/css?v=<version>&k=<compile environment>&x=<classes> — A DOCUMENT'S WHOLE SHEET WITH THE CLASSES ITS DATA
- * BROUGHT (lib/serving/runtime-css.server). The page asks once its rows name a class its served sheet has no rule for,
+ * BROUGHT (lib/document-serving/runtime-css.server). The page asks once its rows name a class its served sheet has no rule for,
  * and swaps its Tailwind sheet for this answer (lib/islands/runtime-css).
  *
  * The same read ACL as the page (the fetch door's: the owning token, or `canReadArtifact`), the uniform 404, and an
@@ -8,12 +8,12 @@
  * anonymous answer carries `*` for the sandboxed copy's opaque origin, and on a document's own origin server/pages-host
  * answers its credentialed CORS.
  */
-import { ANONYMOUS_ACTOR, requestOrSessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow, holdsCreatingToken } from '@/lib/artifacts';
-import { json } from '@/lib/http';
-import { matchingTag } from '@/lib/http/revalidation';
+import { json, matchingTag } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { parseRuntimeCssRequest, runtimeCssAnswer } from '@/lib/serving/runtime-css.server';
+import { parseRuntimeCssRequest, runtimeCssAnswer } from '@/lib/document-serving';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 

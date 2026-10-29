@@ -1,26 +1,17 @@
-import {getDb} from '@/lib/platform';
-import {readRegisteredQueryMembers} from '@/lib/registered-page-queries/members';
-import {resolveDatasetConnection} from '@/lib/datasets/secrets';
-import {registeredSourceCatalog} from '@/lib/registered-page-queries/source-catalog';
-import { SQL_SERVICE_URL } from "@/lib/platform/config";
-import { storedRowStats } from "@/lib/datasets/dataset-store";
-import { QUERY_LIMITS as limits } from "@/lib/registered-page-queries/contracts";
+import {getDb, SQL_SERVICE_URL, services} from '@/lib/platform';
+import {readRegisteredQueryMembers, registeredSourceCatalog, QUERY_LIMITS as limits, createRegisteredPageQueries, pageSourceDigest, registeredPlan, type QueryContext} from '@/lib/registered-page-queries';
+import {resolveDatasetConnection, storedRowStats, executeCatalog} from '@/lib/datasets';
 import { createHash } from "node:crypto";
 import type { AccessActor } from "@/lib/accounts";
 import { getArtifactById, readableArtifactIdentity, type ArtifactIdentity, type ArtifactRow } from "@/lib/artifacts";
 import { readHtmlPage } from "@/lib/html-publication";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { registeredQueryImportForRow } from "@/lib/document-data";
-import { executeCatalog } from "@/lib/datasets/execute";
-import { services } from "@/lib/platform";
 import type {
   HtmlPageVersion,
   RunInput,
   QueryOutcome,
 } from "@artifactbin/contracts";
-import { createRegisteredPageQueries } from "@/lib/registered-page-queries/service";
-import { pageSourceDigest, registeredPlan } from "@/lib/registered-page-queries/registry";
-import type { QueryContext } from "@/lib/registered-page-queries/contracts";
 interface RetainedPorts {
   readPage: typeof readHtmlPage;
   readMembers:(pageId:string)=>Promise<import("@artifactbin/contracts").Row[]>;

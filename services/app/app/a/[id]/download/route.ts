@@ -1,8 +1,8 @@
 import {designSystemChoice} from '@/lib/html-systems';
-import {withOfflineSystemStyle} from '@/lib/html-systems/offline.server';
+import {withOfflineSystemStyle} from '@/lib/html-systems/server';
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
-import {referencedLibraryResources} from '@/lib/libraries/assets.server';
+import {referencedLibraryResources} from '@/lib/libraries/server';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
  * network and pass on. Assembly and access live in lib/offline/assemble.server
@@ -10,12 +10,12 @@ import {referencedLibraryResources} from '@/lib/libraries/assets.server';
  * the caller may not learn about is the uniform 404 every read door gives.
  */
 import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
-import {loadImage} from '@/lib/object-store/image-store';
-import { requestOrSessionActor } from '@/lib/accounts';
+import {loadImage} from '@/lib/object-store';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
-import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
+import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/document-serving';
 
 const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -33,7 +33,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   if (artifact?.format === 'html') {
     const actor = await requestOrSessionActor(request);
     if (!holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
-    const at = await archivedVersionFor(request, artifact);
+    const at = await archivedVersionFor(request, artifact, async () => actor);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };

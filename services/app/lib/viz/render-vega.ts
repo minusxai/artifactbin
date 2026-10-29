@@ -27,11 +27,10 @@ import { annotationSplit } from './encoding-edit';
 import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
 import { createVegaTooltipHandler } from './vega-tooltip-handler';
 import { materializeRecipe } from './viz-templates';
-import type { VizResultColumn } from './types';
-import { VIZ_DATASET_MAIN } from './types';
+import { type VizResultColumn, VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
 import { computeFacetLayoutPlan, record, type FacetLayoutPlan } from './facet-layout';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 
 // Facet layout math lives in ./facet-layout (pure, engine-free); re-exported here
 // because this pipeline is where every view build consumes the plan.

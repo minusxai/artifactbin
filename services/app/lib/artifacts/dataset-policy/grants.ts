@@ -2,13 +2,13 @@ import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from '../saved-html-
 import {verifyRegisteredHtmlMutation} from '../registered-html-mutation';
 import {liveAccessFacts,type AccessFacts} from '@/lib/artifacts/access-facts';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {JOIN_RELATIONS} from '@/lib/accounts';
+import { JOIN_RELATIONS } from '@/lib/social';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow } from '../table';
 import type { AccessActor } from '@/lib/accounts';
-import { getDb } from '@/lib/platform/db';
-import { DatasetError } from '@/lib/datasets/errors';
+import { getDb } from '@/lib/platform';
+import { DatasetError } from '@/lib/datasets';
 
 export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantPolicy | null {
   const value=row.dataset_policy;

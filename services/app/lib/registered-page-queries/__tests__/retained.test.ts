@@ -3,22 +3,19 @@ import { createSql } from "@artifactbin/sql/local";
 import { services, setServices } from "@/lib/platform/services";
 import { overrideConfig, resetConfigOverrides } from "@/lib/platform/config";
 import { objectStore, objectKey } from "@/lib/object-store";
-import { catalogOf } from "@/lib/datasets/catalog";
+import { catalogOf } from "@/lib/datasets";
 import { createRetainedRegisteredQueries } from "@/lib/page-graphql/registered-queries";
-import { registeredPlan } from "../registry";
+import { registeredPlan, prepareRegisteredQueryBackend, commitRegisteredQueryBackend } from "../registry";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { it, expect } from "vitest";
 import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { getDb } from "@/lib/platform";
 import { readHtmlPage } from "@/lib/html-publication";
-import { ANONYMOUS_ACTOR, requestOrSessionActor } from "@/lib/accounts";
+import { ANONYMOUS_ACTOR } from "@/lib/accounts";
+import { requestOrSessionActor } from "@/lib/authentication";
 import { getArtifactById, canReadArtifact } from "@/lib/artifacts";
 import { pageGraphql } from "@/lib/page-graphql";
-import {
-  prepareRegisteredQueryBackend,
-  commitRegisteredQueryBackend,
-} from "../registry";
 useAppHarness();
 it("persists immutable query registration atomically and serves anonymous result-only reads of private owner sources", async () => {
   let spinAdmitted!: () => void,

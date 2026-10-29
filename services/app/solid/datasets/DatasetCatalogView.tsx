@@ -8,7 +8,7 @@ import { Select } from '../ui/Select';
 import { ToggleGroup } from '../ui/ToggleGroup';
 import { LINK } from '../ui/ui';
 import { artifactEditPath } from '@/lib/http/urls';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import type { DatasetColumn, Row } from '@/lib/dataflow';
 import { apiFetch } from '../lib/api';
 import { dateTime } from '../lib/format';

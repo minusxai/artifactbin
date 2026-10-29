@@ -4,7 +4,7 @@ import {ACTOR_HEADER,ANONYMOUS} from '@artifactbin/contracts';
 import {signActor,assemble,cookieName,encodeAgentSession,createTokenReader,inProcess} from '@artifactbin/utils';
 import {authParts,type AuthOptions} from '../src/parts';
 import {mintTestToken,resetTestDb,testDb,testAuthOptions} from './helpers';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {attachActor} from '@artifactbin/utils';
 import {getDb,resetDb} from '@/lib/platform';
 import {createAppServer} from '@/server/app';

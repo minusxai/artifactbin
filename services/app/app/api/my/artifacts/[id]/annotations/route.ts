@@ -18,7 +18,7 @@ import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document';
-import { sessionActor, browserActor } from '@/lib/accounts';
+import { sessionActor, browserActor } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';

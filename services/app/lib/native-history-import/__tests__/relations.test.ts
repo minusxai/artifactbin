@@ -3,8 +3,8 @@ import { useAppHarness, mintAccountToken } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
 import { identityForUser } from "@/lib/accounts";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
-import { pageSourceDigest } from "@/lib/registered-page-queries/registry";
-import { listAnnotationsFor } from "@/lib/annotations/store";
+import { pageSourceDigest } from "@/lib/registered-page-queries";
+import { listAnnotationsFor } from "@/lib/annotations";
 import { importNativeHistory, prepareNativeHistoryRelations } from "../index";
 import type { NativeHistoryImport } from "../contracts";
 import type {

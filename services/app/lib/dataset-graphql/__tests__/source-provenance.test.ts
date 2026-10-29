@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {requestOrSessionActor} from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import {MAX_ROWS_LIMIT} from '@/lib/platform';
 import {createRetainedDatasetGraphql} from '../retained';
 import {createDatasetNamespaceInvoker} from '../index';

@@ -4,7 +4,8 @@ import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();

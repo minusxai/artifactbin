@@ -11,18 +11,16 @@
  * the answer's content type kept and the bytes inert (`sandbox`, `nosniff`, never cached).
  *
  * The same read ACL as the page: a reader who may not read the document gets the uniform 404. Counted
- * per document and reader, like the document's other outbound fetching (lib/accounts/auth).
+ * per document and reader, like the document's other outbound fetching (lib/allowances).
  */
-import { canReadArtifact, getArtifactById, refusingUnservable, holdsCreatingToken } from '@/lib/artifacts';
-import { documentFetchRateLimited, documentFetchReader, requestOrSessionActor } from '@/lib/accounts';
-import { json } from '@/lib/http';
+import { canReadArtifact, getArtifactById, refusingUnservable, holdsCreatingToken, servedRow } from '@/lib/artifacts';
+import { documentFetchRateLimited, documentFetchReader } from '@/lib/allowances';
+import { requestOrSessionActor } from '@/lib/authentication';
+import { json, pagesRequestOf } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
-import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
-import { servedRow } from '@/lib/serving';
-import { pagesRequestOf } from '@/lib/http/pages-origin';
-import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust/document-trust';
+import { fetchWebResource, webIngestAllowsHttp, WebIngestError } from '@/lib/web-ingest';
+import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust';
 import { cspOriginMatches } from '@/lib/document';
-import { WebIngestError } from '@/lib/web-ingest/guard';
 
 /** The answer cap: what a script may pull through us in one call. */
 const DOCUMENT_FETCH_MAX_BYTES = 5 * 1024 * 1024;

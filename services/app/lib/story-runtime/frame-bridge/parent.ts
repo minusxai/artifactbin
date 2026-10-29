@@ -26,7 +26,7 @@ const loadUploadRelay=()=>import('./upload');
  *    (STORY_URL_VALUES_MESSAGE): taken from this frame's window and origin only, outside any session (the author's
  *    script moves every value anyway), as a bounded query string with no hash — the page keeps only its `$` pairs.
  */
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate } from '@/lib/story-runtime/contract';

@@ -22,17 +22,13 @@
  * row before it asks the store, and a store that will not give the bytes for a
  * row we hold is corruption, not "empty".
  */
-import { getDb } from '@/lib/platform/db';
+import { getDb, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { optimiseImage } from '@/lib/images/optimise';
-import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/platform/config';
-import { fetchWebResource } from '@/lib/web-ingest/fetch';
-import { WebIngestError } from '@/lib/web-ingest/guard';
-import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
+import { optimiseImage } from '@/lib/images';
+import { fetchWebResource, WebIngestError, sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest';
 import { assetUrlFor, canonicalAssetUrl, urlHash, collectExternalAssetUrls } from '@/lib/document';
-import { docAssetImportRateLimited } from '@/lib/accounts';
+import { docAssetImportRateLimited, webIngestRateLimited } from '@/lib/allowances';
 import { assetByteQuotaExceeded } from '@/lib/artifacts';
-import { webIngestRateLimited } from '@/lib/accounts';
 
 /** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */
 export type WebAssetKind = 'image' | 'font' | 'pdf' | 'script' | 'binary';

@@ -9,7 +9,7 @@
  *    own actions only while reading the head (archived versions act on nothing here);
  *  - the controls panel ("Artifact controls"), whose rows the page supplies.
  *
- * The document itself is not here: it is the frame under this bar, on its own origin (lib/serving/document-frame).
+ * The document itself is not here: it is the frame under this bar, on its own origin (lib/document-serving/document-frame).
  */
 import { createSignal, lazy, Show, Suspense, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
@@ -18,7 +18,7 @@ import Download from 'lucide-solid/icons/download';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
-import { artifactAppPath } from '@/lib/serving/artifact-pwa';
+import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';

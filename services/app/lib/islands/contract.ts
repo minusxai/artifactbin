@@ -14,7 +14,7 @@ import type { Scalar, TableResult, MutationRequest } from '@/lib/dataflow';
 import type { ServedResults, StoryViewer } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { ColumnType, PersonCard } from '@artifactbin/contracts';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * What an island receives
@@ -282,7 +282,7 @@ export interface IslandPageData {
   /**
    * Present only on a version that fills classes at runtime (`className="{$_row.cls}"`, lib/data/story/story-css
    * RUNTIME CLASSES): where the page asks for its whole sheet again with the classes its data brought
-   * (`url`, the version's door, lib/serving/runtime-css.server), the classes its sheet was compiled from (`known`),
+   * (`url`, the version's door, lib/document-serving/runtime-css.server), the classes its sheet was compiled from (`known`),
    * and the ones the served sheet already added for the rows the server drew (`extras`). Absent: every class the
    * page can render has its rule, and the page never asks (lib/islands/runtime-css).
    */

@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {runMutation,isQueryFailure} from '@/lib/sql/engine';
+import {runMutation,isQueryFailure} from '@/lib/sql';
 it('original mutation engine refuses zero/multiple affected rows before a registered transaction can commit',async()=>{
  const table={name:'rows',schema:'forms',rows:[{id:1},{id:2}],columns:[{name:'id',type:'number' as const}]};
  for(const sql of ['DELETE FROM forms.rows WHERE id=999','DELETE FROM forms.rows']){

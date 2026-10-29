@@ -5,7 +5,7 @@
  */
 import { deleteAnnotationFor, respondToAnnotationAction, respondToAnnotationEdit } from '@/lib/annotations';
 import { capabilityGuard, durableMutation } from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
 

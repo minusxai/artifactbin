@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
-import { mintToken, createUser, resolveToken, sessionActor } from '@/lib/accounts';
+import { mintToken, createUser, resolveToken, issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { POST as start } from '@/app/api/start/route';
 import { POST as connect } from '@/app/api/internal/artifact-approval/route';
 import { POST as mint } from '@/app/api/internal/tokens/route';
 import { POST as exchange } from '@/app/api/session/token/route';
-import { issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts/pages-sessions';
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
 import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';

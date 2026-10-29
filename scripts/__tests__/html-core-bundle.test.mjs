@@ -5,8 +5,8 @@ import {mkdtemp,mkdir,writeFile,rm,readdir,copyFile,readFile} from 'node:fs/prom
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {buildPreviewParser} from '../../services/app/lib/skills/preview-assets.server.ts';
-import {buildHtmlAssets as compileActualRuntime} from '../../services/app/lib/html-runtime/build.server.ts';
+import {buildPreviewParser} from '../../services/app/lib/skills/index.ts';
+import {buildHtmlAssets as compileActualRuntime} from '../../services/app/lib/html-runtime/server.ts';
 import {createHash} from 'node:crypto';
 import {prebuiltHtmlCore} from '../build/html-core.mjs';
 const cleanup=[];afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close();});

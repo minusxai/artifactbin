@@ -8,9 +8,8 @@
  * `recipe-file.ts`). The `@1` is a behavior contract: changing a builder's output in a
  * visually meaningful way means shipping `@2` and keeping `@1` frozen.
  */
-import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
-import { VIZ_DATASET_MAIN } from './types';
-import type { VizResultColumn } from './types';
+import type { ColumnFormatConfig } from '@/lib/validation';
+import { VIZ_DATASET_MAIN, type VizResultColumn } from './types';
 import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
 import { tileUrlTemplate } from './tiles';
 

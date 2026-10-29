@@ -1,8 +1,7 @@
 /** One write boundary for membership, social and conversation notifications. */
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
-import {envelope} from '../platform/events';
-import {enqueueEvent,enqueueEvents} from '../platform/event-outbox';
+import { envelope, enqueueEvent, enqueueEvents } from '../platform';
 export const notificationChannel=(userId:string)=>'inbox_'+createHash('sha256').update(userId).digest('hex').slice(0,32);
 interface NotificationInput {id:string;artifactId:string|null;recipientId:string;senderId:string;kind:string;userId?:string;source?:string|null;once?:boolean;revision?:number;firstUpdateId?:string;sourceEventId?:string;agentLabel?:string|null}
 type NotificationChange='updated'|'read'|'removed';

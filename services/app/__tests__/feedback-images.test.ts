@@ -4,7 +4,8 @@
  * lib/artifacts/__tests__/feedback-images.test.ts, which asserted the service's edge cases over doubles.
  * The image, file and picture headers are media-headers.test.ts's rows.
  */
-import { identityForUser, claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';

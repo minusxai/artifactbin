@@ -2,7 +2,7 @@
 import { createSignal, onMount, Show, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import Copy from 'lucide-solid/icons/copy';
-import { existingPaste } from '@/lib/serving/agent-copy';
+import { existingPaste } from '@/lib/agent-copy/agent-copy';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 import { copyText } from '../lib/copy-text';
 import { Button } from '../ui/Button';

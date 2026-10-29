@@ -1,5 +1,5 @@
-import {runOperation} from '@/lib/operations/http';
-import { browserActor } from '@/lib/accounts';
+import {runOperation} from '@/lib/operations';
+import { browserActor } from '@/lib/authentication';
 import { json, readJson } from '@/lib/http';
 
 /** POST /api/my/artifacts/:id/revert { version } — owner-actor revert. */

@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import type {TokenHoldingActor} from '@/lib/accounts';
+import type { TokenHoldingActor } from '@/lib/accounts';
 import {getArtifactById,getArtifactFor,recoverCreationIds,reserveIds} from '@/lib/artifacts';
 import {json,thrownMessage} from '@/lib/http';
 import {changedBundlePaths,planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';

@@ -1,28 +1,37 @@
 /**
- * The accounts module's interface: only what other modules import. Server-only; the one other entry is
- * ./tokens, which a downstream deployment imports by path (services/app/__tests__/downstream-exports.test.ts).
+ * The accounts module's interface: the identity store — actors, users and handles, tokens, the agent and pages
+ * session cookies, profiles and test accounts. Only what other modules import; tests reach a defining file
+ * directly. Server-only; the one other entry is ./tokens, which a downstream deployment imports by path
+ * (services/app/__tests__/downstream-exports.test.ts).
+ *
+ * Who a request is lives a layer up, in lib/authentication (it also claims tokens and merges guests, which move
+ * artifacts); pictures are lib/avatars', likes and follows lib/social's, hourly quotas lib/allowances'.
  */
+
+/** Actors: the identity every access decision reads. */
+export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, logClientIdentity, type Harness } from './client-identity';
 export { ANONYMOUS_ACTOR, NO_IDENTITY, accountOf, identityForUser, type AccessActor, type RequestIdentity, type TokenHoldingActor } from './actors';
-export { hasAdminCredential } from './admin-auth';
-export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, decodeAgentSessionEnvelope, encodeAgentSession, liveAgentSession, withToken, withoutToken } from './agent-session';
-export { browserActor, docAssetImportRateLimited, documentFetchRateLimited, documentFetchReader, setDocumentFetchCapForTests, webIngestBucketCount, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
-export { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from './avatars';
-export { matchesWorkspaceAccount, mergeGuestUsers } from './guest-owner';
+
+/** Users and handles. */
+export { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, replaceUserImageKey, setAutoAcceptMentions, setUsername } from './users';
+export { RESERVED_HANDLES, reserveHandle } from './handles';
 export { lockMembershipUsers } from './membership-lock';
-export { profileSocial, type ProfileSocial } from './profile-social';
-export { confirmWelcome, profileWrites, syncProfile, welcomePending } from './profiles';
-export { JOIN_RELATIONS, dismissPendingRelations, seedOwnerJoin, setRelationState } from './relation-state';
-export { count, has, link, linked, replaceLinked, unlink } from './relations';
-export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';
-export { auth, overrideSession, type Session } from './session';
+export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } from './profiles';
+
+/** Tokens: minting, lookup and the per-request credential memo. */
+export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
+export { claimableTokensById, revokeUserToken } from './users';
+export { hasAdminCredential } from './admin-auth';
+
+/** The accounts halves of a token claim and a guest merge, run by lib/authentication inside its transaction. */
+export { attachClaimedToken } from './users';
+export { lockMergeableGuests, matchesWorkspaceAccount, retireGuest } from './guest-owner';
+
+/** Session cookies: the agent session (app origin) and pages sessions (the pages origin). */
+export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, encodeAgentSession, liveAgentSession } from './agent-session';
+export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionOf, type PagesSession } from './pages-sessions';
+
+/** Test accounts and test users. */
 export { TEST_ACCOUNT_RESTRICTED, isTestAccount, isTestOwned, shareTargetsRefusal, testAccountMayReach } from './test-accounts';
 export { closeTestUserSessions, forgetTestUserSession, noteTestUserSession, testUserSessionCount } from './testuser-sessions';
 export { createTestUser, getTestUserRow, listTestUsers, resolveTestUser } from './testusers';
-export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, TOUCH_INTERVAL_MS, ensureUserToken, withAccountToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken } from './tokens';
-export { ACCOUNT_REACH_SQL, canAuthenticateUser, userKindOf } from './user-kinds';
-export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, revokeUserToken, setUserEmail, setUsername, usernameFromEmail } from './users';
-export type { UserRow } from './users';
-export { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from './request-identity';
-export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
-export type { PagesSession } from './pages-sessions';
-export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';

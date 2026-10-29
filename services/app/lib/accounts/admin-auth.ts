@@ -1,6 +1,6 @@
 /** Operator credential shared by admin-only HTTP doors. Invalid/unset is always absent (404). */
 import crypto from 'crypto';
-import { env } from '../platform/config';
+import { env } from '../platform';
 import { sha256 } from './tokens';
 
 export function hasAdminCredential(request: Request): boolean {

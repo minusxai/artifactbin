@@ -4,7 +4,7 @@ import type {
   PageResolverFieldCall,
 } from "@artifactbin/contracts";
 import type { QueryContext, QueryPlan, RegisteredViewerDescriptor } from "./contracts";
-import { FIELD_ERROR_CODE, FieldFailed } from "@/lib/page-operations/contracts";
+import { FIELD_ERROR_CODE, FieldFailed } from "@/lib/page-operations";
 /** A failed evaluation carries its sanitized reason as the field's error code (e.g. sql_read_rejected). */
 const evaluationFailure = (error: unknown) => {
   if (error instanceof FieldFailed) return error;

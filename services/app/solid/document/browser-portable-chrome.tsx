@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { PortableChrome } from '@/solid/document/PortableChrome';
 import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
 import { configureTrustedUiStyles } from '@/lib/islands/trusted-ui-styles';
-import type { PortableChromeHandle, PortableChromeOptions, PortableChromeUpdate } from '@/lib/html-runtime/portable-chrome-contract';
+import type { PortableChromeHandle, PortableChromeOptions, PortableChromeUpdate } from '@/lib/html-runtime';
 
 /** Explicit mounting consumes bundled CSS and callbacks only. It never fetches or authenticates. */
 export function mountPortableChrome(options: PortableChromeOptions): PortableChromeHandle {

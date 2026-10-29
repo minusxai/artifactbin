@@ -17,7 +17,7 @@
  * over 5 MB + 1 is ever held in memory.
  */
 import { auth } from '@/auth';
-import { AVATAR_MAX_BYTES, AvatarError, avatarUrl, clearAvatar, setAvatar } from '@/lib/accounts';
+import { AVATAR_MAX_BYTES, AvatarError, avatarUrl, clearAvatar, setAvatar } from '@/lib/avatars';
 import { isCrossSiteRequest, json, unauthorized } from '@/lib/http';
 import { getUserById } from '@/lib/accounts';
 

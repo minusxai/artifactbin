@@ -1,29 +1,28 @@
 import {notificationJobOperations} from './notification-jobs';
-import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire, holdsCreatingToken } from '@/lib/artifacts';
-import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
+import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire, holdsCreatingToken, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
+import { notificationJobStore } from '@/lib/notifications';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
 import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit,respondToCommentReaction} from '@/lib/annotations';
-import {decodePage, encodeCursor} from '@/lib/http/pagination';
+import {decodePage, encodeCursor} from '@/lib/http';
 import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
-import { identityForUser, resolveTestUser, withAccountToken } from '@/lib/accounts';
+import { identityForUser, resolveTestUser, withAccountToken, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { canEdit, CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
-import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
-import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
-import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
-import {parseArtifactDestination,transferArtifact} from '@/lib/artifacts';
-import {DatasetError} from '@/lib/datasets/errors';
-import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
-import { trackEvent } from '@/lib/platform/analytics';
-import { exportImageResponse } from '@/lib/export/exporter';
+import { STORY_TEMPLATE_NAMES } from '@/lib/validation';
+import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish';
+import {DatasetError} from '@/lib/datasets';
+import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
+import { trackEvent } from '@/lib/analytics';
+import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 
 /** What an operation answers: a status and a JSON body, transport-free. */

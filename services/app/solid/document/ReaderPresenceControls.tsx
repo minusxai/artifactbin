@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import {createSignal,For,Show} from 'solid-js';
-import type {ReaderPreferences,PresenceViewer} from '@/lib/html-presence/contract';
+import type {ReaderPreferences,PresenceViewer} from '@/lib/html-presence';
 import {Button} from '../ui/Button';
 import {Popover} from '../ui/Popover';
 import {Switch} from '../ui/Checkbox';

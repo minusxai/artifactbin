@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import { request, setSession, useAppHarness } from './harness';
 import { createAppServer } from '../server/app';
-import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
+import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { getDb, measureQueries } from '@/lib/platform';
 import { RECIPIENT, inboxVolumeBase, seedInboxVolume } from './inbox-volume';
 

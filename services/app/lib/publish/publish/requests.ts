@@ -1,9 +1,8 @@
 import {preparePublicationBundle} from './bundle';
-import {getSharingFor,durableMutation} from '@/lib/artifacts';
-import {htmlAssetLinks} from '@/lib/html-page';
-import {trackEvent} from '@/lib/platform/analytics';
+import {getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, ownsArtifact, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor} from '@/lib/artifacts';
+import {htmlAssetLinks, htmlBackendNames, htmlPageDeclarations} from '@/lib/html-page';
+import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
-import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
@@ -16,16 +15,12 @@ import type {PreparedHtmlBackend} from '@/lib/html-backends';
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, ownsArtifact, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls } from '@/lib/document';
-import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
-import { DatasetError } from '@/lib/datasets/errors';
-import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { json, thrownMessage } from '@/lib/http/http';
-import { ID_RE } from '@/lib/platform/ids-shape';
-import { getDb } from '@/lib/platform/db';
+import { prepareCatalog, catalogOf, DatasetError, type ServerRefLoader } from '@/lib/datasets';
+import { json, thrownMessage } from '@/lib/http';
+import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 import { checkDocumentData } from '../data/data-checks';

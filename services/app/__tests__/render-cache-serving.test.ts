@@ -1,10 +1,10 @@
 /**
  * THE RENDER CACHE, through the real app server: an anonymous reader's shell (the app page at /a/<id>) and frame
  * (the document on its own origin) are rendered once per version, and never at the cost of an access decision or a
- * fresh nonce. lib/serving/render-cache's own tests pin the bounds; these pin what a reader can observe.
+ * fresh nonce. lib/document-serving/render-cache's own tests pin the bounds; these pin what a reader can observe.
  */
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import * as nativeHtml from '@/lib/serving/native-html.server';
+import * as nativeHtml from '@/lib/document-serving/native-html.server';
 import * as artifacts from '@/lib/artifacts';
 import {mintAccountToken, request, useAppHarness} from './harness';
 import {POST} from '@/app/api/artifacts/route';
@@ -12,7 +12,7 @@ import {GET as read, PUT} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {createAppServer} from '@/server/app';
 import {GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor, pagesSiteFor} from '@/lib/http/pages-origin';
-import {flushViews} from '@/lib/platform/analytics';
+import { flushViews } from '@/lib/analytics';
 
 const harness = useAppHarness();
 const APP = 'https://app.example.test';

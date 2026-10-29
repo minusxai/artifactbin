@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadSqlite, SqliteDatabase } from '@artifactbin/sql/core';
 import { DISPLAY_ROWS } from '@artifactbin/contracts';
 import { compiledOf } from '@/test/helpers/compiled';
-import { runDataflow } from '@/lib/sql/run-dataflow';
+import { runDataflow } from '@/lib/sql';
 import { mutationRequestFor } from '@/lib/dataflow/mutation-request-builder';
 import { createPageEngine } from '../page-engine';
 

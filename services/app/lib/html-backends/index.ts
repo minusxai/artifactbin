@@ -1,8 +1,7 @@
 import {createHash} from 'node:crypto';
 import {artifactChannel, type HtmlBackendLink,type HtmlJson,type Queryable} from '@artifactbin/contracts';
 import {mayPublishBackendChange,requiresFreshBackendIdentity} from './authority';
-import {getDb} from '../platform/db';
-import {generateFileId} from '../platform/ids';
+import { getDb, generateFileId } from '../platform';
 import type {PreparedHtmlBackend,HtmlBackendVersionRecord,HtmlBackendStoreValue,HtmlBackendStoreWrite,HtmlBackendWriteScope} from './contracts';
 export type {PreparedHtmlBackend,HtmlBackendVersionRecord} from './contracts';
 /** Called under the owning page lock before writing any immutable version. */

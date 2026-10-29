@@ -4,11 +4,10 @@ import path from 'node:path';
 import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {fileContentType} from '@artifactbin/contracts';
 import {getOwnedArtifactFor} from '@/lib/artifacts';
-import {objectStore} from '@/lib/object-store';
-import {MAX_PDF_BYTES} from '@/lib/platform/config';
-import {pdfPageCount} from '@/lib/object-store/pdf-store';
-import {sniffAssetType} from '@/lib/web-ingest/sniff';
-import {createArtifactFromBody} from '@/lib/publish/publish';
+import {objectStore, pdfPageCount} from '@/lib/object-store';
+import { MAX_PDF_BYTES } from '@/lib/platform';
+import {sniffAssetType} from '@/lib/web-ingest';
+import {createArtifactFromBody} from '@/lib/publish';
 import type {NativeRuntimeAssembly,NativeRuntimePreparationOptions,NativeRuntimeSourceAssetProvenance,NativeRuntimeSourceFileReceipt} from './contracts';
 
 const sha=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');

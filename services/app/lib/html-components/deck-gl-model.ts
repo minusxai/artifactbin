@@ -3,7 +3,7 @@
  * Used by: deck-gl.ts and deck-gl-engine.ts. Type-only imports from deck-engine-core keep deck.gl
  *   out of deck-gl.js; the engine passes formatters in instead.
  */
-import type { MapViewState, Feature, Row, ColorScale } from "../viz/deck-engine-core";
+import type { MapViewState, Feature, Row, ColorScale } from "../viz";
 export interface DeckGLOptions {
   data: readonly Row[];
   layers: unknown;

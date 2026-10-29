@@ -12,16 +12,16 @@ import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as sessionCreate, GET as sessionList } from '@/app/api/my/artifacts/route';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { refDataForRow } from '@/lib/document-data';
-import { storeImageContent } from '@/lib/datasets/data-tiers';
+import { storeImageContent } from '@/lib/datasets';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import type { StoredContent } from '@/lib/document/stored-content';
+import type { StoredContent } from '@/lib/document';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
-import { optimiseImage } from '@/lib/images/optimise';
+import { optimiseImage } from '@/lib/images';
 
 const harness = useAppHarness();
 beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id } } : null)));

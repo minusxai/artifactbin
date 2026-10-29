@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {useAppHarness} from './harness';
 import {overrideConfig} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
-import {gettingStarted} from '@/lib/serving/getting-started';
+import {gettingStarted} from '@/lib/agent-copy/getting-started';
 import {getDeploymentState} from '@/lib/deployment';
 useAppHarness();
 const company=()=>overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'mxmx_test_owner@example.com'});

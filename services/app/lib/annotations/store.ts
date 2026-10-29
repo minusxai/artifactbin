@@ -1,15 +1,13 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
-import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { markdownContent, markdownSource } from '@/lib/markdown';
 import { artifactQuery } from '@/lib/artifacts/table';
-import {recordEvent} from '../notifications/events';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '@/lib/artifacts';
+import {MembershipError, completeMutationReceipt, type MutationReceipt, readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
-import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
-import type { CommentTarget } from '@/lib/story-ui/comment-target';
+import type { CommentTarget } from '@/lib/story-ui';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -23,16 +21,13 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
 } from '@/lib/document';
-import { avatarUrl } from '@/lib/accounts';
-import { getDb, type Queryable } from '@/lib/platform/db';
-import { actorSubject } from '@/lib/platform/events';
-import { generateInternalId } from '@/lib/platform/ids';
+import { avatarUrl } from '@/lib/avatars';
+import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';

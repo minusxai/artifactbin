@@ -1,9 +1,7 @@
-import {sessionActor} from '@/lib/accounts';
-import {unauthorized} from '@/lib/http';
-import { membershipInbox } from '@/lib/document-data';
-import {notificationChannel} from '@/lib/notifications';
-import {subscribeChannel} from '@/lib/publish/realtime/live';
-import {LIVE_KEEPALIVE_MS,liveKeepaliveFrame} from '@/lib/http';
+import { sessionActor } from '@/lib/authentication';
+import {unauthorized, LIVE_KEEPALIVE_MS, liveKeepaliveFrame} from '@/lib/http';
+import {membershipInbox,notificationChannel} from '@/lib/notifications';
+import {subscribeChannel} from '@/lib/publish';
 /** Recipient-scoped wakeups, using the same database transport as artifact live updates. */
 export async function GET(request:Request){
  const actor=await sessionActor(request);

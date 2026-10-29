@@ -1,16 +1,16 @@
 import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { readableArtifact, changeMembership } from '@/lib/artifacts';
-import { getArtifactById } from '@/lib/artifacts';
+import { readableArtifact, changeMembership, getArtifactById } from '@/lib/artifacts';
 
-import { forkArtifact } from '@/lib/publish/publish';
+import { forkArtifact } from '@/lib/publish';
 useAppHarness();
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
@@ -55,7 +55,7 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
 });
 it('does not treat page membership as dataset authority and admits an explicit user grant',async()=>{
- const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql/retained');
+ const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
  const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
  const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
  const page=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds.id}"></head><body>Rows</body></html>`,visibility:'public'}}))).json();

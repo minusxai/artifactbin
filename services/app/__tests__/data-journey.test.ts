@@ -9,7 +9,7 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDataset } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -29,7 +29,7 @@ async function owner() {
 
 describe('native dataset column validation',()=>{
  it('discovers stable columns and rejects unknown IDs before executing a query',async()=>{
-  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql/retained');
+  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
   const o=await owner(),id=await o.created({dataset:[{region:'EU',revenue:837}]});
   const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'sales',datasetId:id,mode:'live' as const},actor=identityForUser(o.t.userId,o.t.id),signal=new AbortController().signal;
   const table=(await api.schema(actor,binding,signal)).tables[0]!;

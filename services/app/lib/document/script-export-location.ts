@@ -6,7 +6,7 @@
  * document's own, whatever escapes the literal carries. `export function Name`, `export const|let|var|class Name`
  * and a name in an `export { … }` list are found; anything else is null (the caller opens the script's top).
  */
-import { parseJsx } from '@/lib/jsx/parse';
+import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from './helmet';
 
 interface ScriptExportLocation { offset: number; line: number }

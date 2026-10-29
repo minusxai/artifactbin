@@ -5,7 +5,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
+import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import';
 import type {NativeDisposableLifecycleConfiguration,NativeDisposableAdapterConfiguration,NativeDisposableRequest,NativeDisposableContext,NativeDisposableFile,NativeDisposableLifecycle} from './native-migration-disposable-provider-contract';
 const execute=promisify(execFile),sha=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 const digest=(value:unknown)=>sha(JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a<b?-1:a>b?1:0)):item));
@@ -55,7 +55,7 @@ export async function openNativePipelineLifecycle(request:NativeDisposableReques
   // Intentional runtime imports enforce configuration-before-module initialization, including the auth package.
   const config=await import(pathToFileURL(path.join(targetRoot,'services/app/lib/platform/config.ts')).href);
   if(config.IS_TEST||config.DATABASE_URL!==databaseUrl||path.resolve(config.LOCAL_OBJECT_DIR)!==objects||config.S3_URL||config.AUTH_SECRET!==secret)throw Error('native_disposable_prior_configuration');
-  const database=await import(pathToFileURL(path.join(targetRoot,'services/app/lib/platform/db.ts')).href) as typeof import('../../services/app/lib/platform/db');reset=database.resetDb;
+  const database=await import(pathToFileURL(path.join(targetRoot,'services/app/lib/platform/db.ts')).href) as typeof import('../../services/app/lib/platform');reset=database.resetDb;
   const db=await database.getDb(),raw=db.raw();if(raw.kind!=='pglite')throw Error('native_disposable_pglite_required');
   const auth=await import('@artifactbin/auth');
   await auth.createHumanAuth({pglite:raw.instance,secret,schema:settings.fixture.kind==='reviewed-target-identities'?settings.fixture.schemas.authSchema:'auth',baseURL:origin,mail:{send:async message=>{await mkdir(path.join(storage,'outbox'),{recursive:true,mode:0o700});await writeFile(path.join(storage,'outbox',randomBytes(16).toString('hex')+'.json'),JSON.stringify(message),{flag:'wx',mode:0o600});}}});

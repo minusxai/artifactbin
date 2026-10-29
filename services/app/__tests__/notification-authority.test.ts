@@ -1,12 +1,12 @@
-import {createDatasetSecret} from '@/lib/datasets/secrets';
+import {createDatasetSecret} from '@/lib/datasets';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
-import { identityForUser, createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {seedOwnerJoin} from '@/lib/accounts';
-import { notificationExecutionFence, notificationExecutionSource, notificationSourcesReadable } from '@/lib/document-data/notifications/authority';
-import { notificationAuthority } from '@/lib/document-data';
+import { seedOwnerJoin } from '@/lib/social';
+import { notificationExecutionFence, notificationExecutionSource, notificationSourcesReadable } from '@/lib/notifications/authority';
+import { notificationAuthority } from '@/lib/notifications';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 useAppHarness();
 async function setup(){

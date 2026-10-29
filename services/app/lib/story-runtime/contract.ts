@@ -394,7 +394,7 @@ export const STORY_READER_MODE_MESSAGE = 'mx:reader-mode';
 
 /** Where the app origin keeps the reader's explicit light/dark pick: storage (the shell's pre-paint stamp) and a cookie (its server). */
 export const THEME_KEY = 'mx_theme';
-/** The query parameter a framed document's first URL carries the reader's stored pick in (lib/serving/artifact-page writes it). */
+/** The query parameter a framed document's first URL carries the reader's stored pick in (lib/document-serving/artifact-page writes it). */
 export const READER_MODE_PARAM = 'mx-mode';
 
 /** `search` carrying exactly `mode` as the reader's pick, or none of it (null). Every other param is kept, in order. */

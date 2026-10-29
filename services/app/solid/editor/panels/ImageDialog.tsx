@@ -20,7 +20,7 @@ import Link2 from 'lucide-solid/icons/link-2';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { FeatureGate } from '@/solid/components/FeatureGate';
 import { rawUrl } from '@/lib/dataflow/ref-data';
-import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend/types';
+import type { ChosenImage, ImageChoice } from '@/lib/artifact-backend';
 import { Button } from '@/solid/ui/Button';
 import { Dialog } from '@/solid/ui/Dialog';
 import { Input } from '@/solid/ui/Field';

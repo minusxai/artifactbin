@@ -8,7 +8,7 @@
  */
 import { json, unauthorized } from '@/lib/http';
 import { listTrashFor } from '@/lib/workspace';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

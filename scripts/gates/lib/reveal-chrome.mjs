@@ -1,7 +1,7 @@
 /**
  * THE APP'S BAR, for gates that click one of its controls.
  *
- * A document is served on its own origin and framed by the app page (lib/serving/document-frame); the bar around
+ * A document is served on its own origin and framed by the app page (lib/document-serving/document-frame); the bar around
  * it is the app's own (solid/document/DocumentChrome, solid/components/PageChrome), always on screen: "Open artifact
  * controls" (or "Open page controls" on an app page) and "Open menu" are ordinary buttons on the app page. Nothing in
  * a document carries the app's chrome any more, so there is nothing to reveal.

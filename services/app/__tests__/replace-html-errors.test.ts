@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { useAppHarness, mintAccountToken, request } from '@/__tests__/harness';
 import { artifactState, createArtifact, getArtifactById } from '@/lib/artifacts';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 import * as artifactRoute from '@/app/api/artifacts/[id]/route';
 import { mountRoutes } from '@/server/api';
 

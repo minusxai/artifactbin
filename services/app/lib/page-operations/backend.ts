@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { HtmlJson, PageResolverFieldCall, RunnerService, RunStart, RunnerJson } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema } from './execution-policy';
-import {secretBindingNames} from '@/lib/html-backend-secrets/contracts';
+import {secretBindingNames} from '@/lib/html-backend-secrets';
 import { FieldFailed, FieldNotExecuted } from './contracts';
 export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[]}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}

@@ -7,13 +7,13 @@
  * document's controller. `nonce` stays null until the frame's controller runs (and again while a reloaded frame's
  * new controller starts).
  *
- * THE FRAME CONDITION is `framedDocumentFor`: the server drew one frame into the page (lib/serving/document-frame,
+ * THE FRAME CONDITION is `framedDocumentFor`: the server drew one frame into the page (lib/document-serving/document-frame,
  * `iframe[data-mx-document-frame]`) and named the document's own origin in the page data (`surface.framedOrigin`).
  * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
  * one; the page owns its layout.
  */
 import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
@@ -120,7 +120,7 @@ export function keepFrameSession(options: FrameSessionOptions): () => void {
  * The framed document's link moved (lib/islands/url-sync → STORY_URL_VALUES_MESSAGE): this page's address takes
  * exactly its `$` params — the path, the hash and every other param kept, replaced rather than pushed — so the
  * address bar, a copied link and a reload carry the reader's selection (the server forwards the page's `$` params
- * into the frame's first URL, lib/serving/artifact-page).
+ * into the frame's first URL, lib/document-serving/artifact-page).
  */
 export function followFramedValues(win: Window, values: string): void {
   const { pathname, search, hash } = win.location;

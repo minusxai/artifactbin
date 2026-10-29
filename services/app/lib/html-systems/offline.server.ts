@@ -1,6 +1,6 @@
 /** The active system for exports and offline copies: its rules and faces inline, its font bytes admitted for embedding. */
 import {parse,parseFragment,serialize,type DefaultTreeAdapterMap} from 'parse5';
-import {htmlAppearance} from '../html-page/design-system';
+import {htmlAppearance} from '../html-page';
 import {htmlSystemFontPaths,htmlSystemsCss} from './index';
 import {platformFontBytes} from './fonts.server';
 

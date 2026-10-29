@@ -3,16 +3,14 @@
  * Routes authorize the artifact before calling this module. */
 import sharp from 'sharp';
 import {renderSocialPreviewImage} from './social-preview-image.server';
-import {loadImage} from '../object-store/image-store';
+import {loadImage} from '../object-store';
 import {referencedArtifactForRow} from '../document-data';
 import {Readable} from 'node:stream';
 import type {RenderRequest} from '@artifactbin/contracts';
-import {getDb} from '../platform/db';
+import { getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platform';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
 import { createHash } from 'node:crypto';
-import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
-import { services } from '@/lib/platform/services';
 import { ArtifactRow, getArtifactById, getVersionFor, writerFor, VERSION_PARAM } from '@/lib/artifacts';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
@@ -20,8 +18,8 @@ import {
 } from '../document';
 import { scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
-import { mintExportKey } from '@/lib/platform/export-read-key';
-import { json } from '../http/http';
+import { mintExportKey } from './read-key';
+import { json } from '../http';
 import { objectStore } from '../object-store/index';
 
 const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;

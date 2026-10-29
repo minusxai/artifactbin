@@ -54,3 +54,8 @@ export function domainPostPath(doc: { id: string; title: string | null }): strin
 /** Edit is a route mode on the artifact's address. */
 export const artifactViewPath = (pathname: string): string => pathname.replace(/\/edit\/?$/, '');
 export const artifactEditPath = (id: string): string => `/a/${encodeURIComponent(id)}/edit`;
+
+/** The toolkit repository shared by source links and repository metadata. */
+export const REPO_URL = 'https://github.com/minusxai/artifactbin';
+/** The app's one GitHub door (server/external/github): the repository's star count, cached server-side. */
+export const GITHUB_EXTERNAL_URL = '/api/external/github';

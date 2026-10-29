@@ -43,3 +43,8 @@ export function validateJsxSource(
   if (!parsed.ok) return [syntaxErrorDetail(source, parsed)];
   return validateJsx(parsed.nodes, { components, allowedHtmlTags, stylePolicy });
 }
+export { GEOMETRY_COLUMN, deckColumns } from './deck-spec';
+export type { IsoPlanPoint, IsoPoint, IsoTone, IsometricPart, IsometricShape, IsometricSpec } from './isometric-spec';
+export type { ReactiveExpression } from './reactive';
+export type { SourceRepair } from './repair';
+export { syntaxErrorDetail } from './syntax-error';

@@ -19,16 +19,12 @@
  * the ACT rather than the containment: one delete stamps one `now()`, and restore takes back only
  * the rows carrying that stamp. The queries below state the rest.
  */
-import { trackEvent } from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { artifactQuery, LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/table';
 import type { AccessActor } from '@/lib/accounts';
-import { getDb } from '@/lib/platform/db';
-import { servableDocument } from '@/lib/artifacts';
-import { actorSubject, emit } from '@/lib/platform/events';
-import { ancestorsForMove, notifyParent, parentOf } from '@/lib/artifacts';
-
-/** The row and everything under it — a document matches only itself. */
-const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
+import { getDb, actorSubject, emit } from '@/lib/platform';
+import { rerootArtifact, restoreTrashedSubtree, servableDocument, trashSubtree } from '@/lib/artifacts';
+import { notifyParent, parentOf } from '@/lib/artifacts';
 
 /**
  * The pre-read that authorizes a delete or a restore BEFORE an idempotency
@@ -62,23 +58,8 @@ export async function ownedArtifactState(actor: AccessActor, id: string): Promis
  */
 export async function trashArtifactFor(actor: AccessActor, id: string): Promise<string[] | null> {
   const db = await getDb();
-  const scope = ownerPredicate(actor);
-  const r = await db.query<{id:string;format:string;ancestor_ids:string[];newly_deleted:boolean}>(
-    `WITH target AS (
-      SELECT deleted_at AS stamp FROM artifacts WHERE id=$1 AND (${scope.where('$2')})
-    ), removed AS (
-      UPDATE artifacts SET deleted_at=now()
-      WHERE ${SUBTREE} AND ${LIVE_ARTIFACT_SQL} AND (${scope.where('$2')})
-        AND EXISTS (SELECT 1 FROM target WHERE stamp IS NULL)
-      RETURNING id,format,ancestor_ids
-    )
-    SELECT id,format,ancestor_ids,true AS newly_deleted FROM removed
-    UNION ALL
-    SELECT id,format,ancestor_ids,false AS newly_deleted FROM artifacts,target
-    WHERE ${SUBTREE} AND (${scope.where('$2')}) AND target.stamp IS NOT NULL AND deleted_at=target.stamp`,
-    [id,scope.val],
-  );
-  const named = r.rows.find((row) => row.id === id);
+  const rows = await trashSubtree(db, actor, id);
+  const named = rows.find((row) => row.id === id);
   if (!named) return null;
   /*
    * `deleted`, said HERE, because this is the only delete there is. The count
@@ -90,10 +71,10 @@ export async function trashArtifactFor(actor: AccessActor, id: string): Promise<
    * Fire-and-forget, and never inside a transaction (PGLite deadlock).
    */
   if(named.newly_deleted){
-    void trackEvent('delete', id, { userId: actor.userId, format: named.format, subtree: r.rows.length - 1 });
+    void trackEvent('delete', id, { userId: actor.userId, format: named.format, subtree: rows.length - 1 });
     await notifyParent(parentOf(named));
   }
-  return r.rows.map(row=>row.id);
+  return rows.map(row=>row.id);
 }
 
 /**
@@ -125,12 +106,7 @@ export async function restoreArtifactFor(actor: AccessActor, id: string): Promis
       [id, scope.val, row.deleted_at],
     );
     documents.rows.forEach((document) => servableDocument(document));
-    await tx.query(
-      `UPDATE artifacts SET deleted_at = NULL
-        WHERE (id = $1 OR (ancestor_ids @> ARRAY[$1] AND deleted_at = $3))
-          AND deleted_at IS NOT NULL AND (${scope.where('$2')})`,
-      [id, scope.val, row.deleted_at],
-    );
+    await restoreTrashedSubtree(tx, actor, id, row.deleted_at);
     const trail = row.ancestor_ids ?? [];
     if (!trail.length) return trail;
     // A trail is only a placement while every id in it is still there to hold
@@ -141,12 +117,7 @@ export async function restoreArtifactFor(actor: AccessActor, id: string): Promis
       [trail],
     );
     if ((live.rows[0]?.n ?? 0) === trail.length) return trail;
-    // The descendants FIRST, while they still carry the old prefix — the same
-    // one-statement swap a move runs, so the trail invariant holds all the way
-    // down rather than only on the row somebody asked about.
-    const swap = ancestorsForMove({ id, ancestor_ids: trail }, []);
-    await tx.query(swap.sql, swap.params);
-    await tx.query(`UPDATE artifacts SET ancestor_ids = '{}'::text[] WHERE id = $1`, [id]);
+    await rerootArtifact(tx, { id, ancestor_ids: trail });
     return [] as string[];
   });
   if (!placement) return null;

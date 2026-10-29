@@ -220,7 +220,7 @@ export const LOCAL_OBJECT_DIR = env('OBJECT_STORE', 'LOCAL_DIR') ?? '.artifact-o
  */
 export const WEB_INGEST_ALLOW_PRIVATE = env('WEB_INGEST', 'ALLOW_PRIVATE') === '1' || IS_DEV;
 export const WEB_INGEST_TIMEOUT_MS = Number(env('WEB_INGEST', 'TIMEOUT_MS') ?? '10000');
-/** Fetch ATTEMPTS one identity may spend per hour (lib/auth webIngestRateLimited). */
+/** Fetch ATTEMPTS one identity may spend per hour (lib/allowances webIngestRateLimited). */
 export const WEB_INGEST_MAX_PER_HOUR = Number(env('WEB_INGEST', 'MAX_PER_HOUR') ?? '300');
 
 /**

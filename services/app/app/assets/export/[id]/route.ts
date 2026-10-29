@@ -1,4 +1,4 @@
-import {exportAssetResponse} from '@/lib/export/assets';
+import {exportAssetResponse} from '@/lib/export';
 export async function GET(request:Request,context:{params:Promise<{id:string}>}):Promise<Response>{
  return exportAssetResponse(request,(await context.params).id);
 }

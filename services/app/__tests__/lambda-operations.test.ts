@@ -1,10 +1,11 @@
 /** The retained internal compatibility helper cannot execute native pages as JSX declarations. */
 import {expect,it} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from './harness';
-import {identityForUser,createUser,claimToken} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
 import {lambdaOperation} from '@/lib/runner/operations';
 import {runnerIdentity} from '@artifactbin/runner/capabilities';

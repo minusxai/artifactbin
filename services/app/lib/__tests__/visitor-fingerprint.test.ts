@@ -10,11 +10,11 @@
  *
  * Nothing GATES on analytics, so this is not a
  * security boundary — it is a correctness one, and it is the reason the hop
- * selection lives in one shared place (`lib/client-identity` forwardedFor)
+ * selection lives in one shared place (`lib/accounts/client-identity` forwardedFor)
  * rather than being spelled out twice.
  */
 import { describe, expect, it } from 'vitest';
-import { forwardedFor } from '@/lib/platform';
+import { forwardedFor } from '@/lib/accounts';
 import { TRUSTED_PROXY_HOPS } from '@/lib/platform';
 
 const h = (headers: Record<string, string>) => new Headers(headers);

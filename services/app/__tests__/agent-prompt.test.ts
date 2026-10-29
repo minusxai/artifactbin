@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { existingPaste } from '@/lib/serving';
+import { existingPaste } from '@/lib/agent-copy';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

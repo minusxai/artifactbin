@@ -1,4 +1,4 @@
-import type { DatasetCatalog, DatasetTable } from '@/lib/datasets/types';
+import type { DatasetCatalog, DatasetTable } from '@/lib/datasets';
 /** Execution keeps the full saved catalog: SQL models can depend on other tables. */
 export interface RegisteredSourceCatalog {
  catalog: DatasetCatalog;

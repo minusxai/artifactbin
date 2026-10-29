@@ -13,7 +13,7 @@ import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/rout
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { services, setServices } from '@/lib/platform';
-import { useSqlExtensions } from '@/lib/sql/extensions';
+import { useSqlExtensions } from '@/lib/sql';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createAppHost } from '@/server/host';
 import { request, useAppHarness } from '@/__tests__/harness';

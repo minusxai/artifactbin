@@ -1,14 +1,11 @@
 /** Private staged raster attachments. Only annotation creation consumes a stage. */
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
-import { annotationScope } from '@/lib/artifacts';
+import { annotationScope, readableArtifact, assetByteQuotaLimit } from '@/lib/artifacts';
 import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
-import {getDb,type Queryable} from '../platform/db';
+import { getDb, type Queryable, generateInternalId } from '../platform';
 import {objectStore} from '../object-store/index';
-import {generateInternalId} from '../platform/ids';
-import {json} from '../http/http';
-import {readableArtifact} from '@/lib/artifacts';
-import {assetByteQuotaLimit} from '@/lib/artifacts';
+import {json} from '../http';
 
 interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token_id:string;user_id:string|null;metadata:CommentImageMetadata;bytes:number;ready:boolean;expires_at:string}
 const variants=['original','preview','thumbnail'] as const;

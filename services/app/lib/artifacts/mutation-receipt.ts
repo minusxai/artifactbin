@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {MutationInitiator,Queryable} from '@artifactbin/contracts';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import {getDb} from '../platform/db';
+import { getDb } from '../platform';
 
 export interface MutationReply {status:number;body:Record<string,unknown>}
 export interface MutationReceipt {scope:string;key:string;fingerprint:string;runId?:string;context?:Record<string,unknown>;initiator?:MutationInitiator}

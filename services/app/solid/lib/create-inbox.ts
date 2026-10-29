@@ -1,7 +1,7 @@
 /** Account-only live inbox implementation; anonymous readers do not load it. */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
-import type { InboxState } from '@/lib/notifications/inbox';
+import type { InboxState } from '@artifactbin/contracts';
 import { openLiveStream } from '@/lib/http/live-stream';
 import type { InboxContext } from './notifications';
 const LOAD_TIMEOUT_MS = 30_000;

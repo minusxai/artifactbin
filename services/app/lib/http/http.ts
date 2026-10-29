@@ -1,5 +1,4 @@
-import { currentHeaders } from '../platform/request-context';
-import { PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { currentHeaders, PUBLIC_BASE_URL } from '../platform';
 import { BodyTooLargeError, readBody as readCapped } from '@artifactbin/utils/body';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers, falling back to the request's own url. */

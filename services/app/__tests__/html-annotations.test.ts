@@ -3,7 +3,8 @@ import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests_
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
-import { createUser, claimToken, ensureUsername } from '@/lib/accounts';
+import { createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { htmlTextFingerprint } from '@artifactbin/contracts';
 const harness = useAppHarness();
 let account: { id: string; email: string } | null = null;

@@ -42,6 +42,7 @@
   ],
   "exclude": [
     "services/app/skills/artifactbin/components",
-    "node_modules"
+    "node_modules",
+    "tmp"
   ]
 }

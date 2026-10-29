@@ -1,11 +1,8 @@
 import {getArtifactById,effectiveRole} from '@/lib/artifacts';
 import { canRead, REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
-import {requestOrSessionActor} from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import {readJson,json} from '@/lib/http';
-import {catalogOf} from '@/lib/datasets/catalog';
-import {datasetResponse} from '@/lib/datasets/http';
-import {executeCatalog} from '@/lib/datasets/execute';
-import {DatasetError} from '@/lib/datasets/errors';
+import {catalogOf, datasetResponse, executeCatalog, DatasetError} from '@/lib/datasets';
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
  const {id}=await ctx.params;const actor=await requestOrSessionActor(request);const row=await getArtifactById(id);
  if(!row||row.format!=='dataset'||!canRead(await effectiveRole(row,actor)))return json({error:'not_found'},404);

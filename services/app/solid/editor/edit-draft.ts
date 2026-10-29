@@ -9,7 +9,7 @@ import { isWebUrl } from '@/lib/document/asset-url';
 import { storyUpdatePartsShared } from '@/lib/document/update-parts';
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { STORY_DOCUMENT_MESSAGE, type EditDraft } from '@/lib/story-runtime/contract';
-import type { StoryDesignName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation';
 
 interface EditDraftState {
   editId(): string;

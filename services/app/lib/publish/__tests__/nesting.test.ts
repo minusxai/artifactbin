@@ -12,8 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/document/nesting';
-import { canonicalizeMarkup } from '@/lib/document';
-import { stampNodeIds } from '@/lib/document/node-ids';
+import { canonicalizeMarkup, stampNodeIds } from '@/lib/document';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const fix = (src: string): string => {

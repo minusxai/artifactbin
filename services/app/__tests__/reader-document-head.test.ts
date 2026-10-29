@@ -8,13 +8,14 @@ import {nativeHtml} from './native-html-fixture';
  *
  * Crawlers do not run JavaScript, so this has to be in the SERVED HTML.
  */
-import { flushViews } from '@/lib/platform/analytics';
+import { flushViews } from '@/lib/analytics';
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { mintExportKey, PUBLIC_BASE_URL } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
+import { PUBLIC_BASE_URL } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -74,7 +75,7 @@ describe('a view is counted once, where the document is actually served', () => 
   it('counts the reader path, which no longer touches the page', async () => {
     const row = await publish('<h1>Counted</h1>', 'Counted');
     await serve(row.id);
-    await flushViews(); // served views are batched (lib/platform/analytics recordView)
+    await flushViews(); // served views are batched (lib/analytics recordView)
     expect(await views(row.id)).toBe(1);
   });
 

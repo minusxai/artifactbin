@@ -1,10 +1,9 @@
 /** Allowlisted file uploads: bounded bytes, content-addressed storage, inert streaming downloads. */
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import {type ContentObjects, objectKey, objectStore, ObjectUnavailable} from '@/lib/object-store';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { MAX_FILE_BYTES } from '@/lib/platform/config';
-import { json } from '@/lib/http/http';
-import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
+import { MAX_FILE_BYTES } from '@/lib/platform';
+import { json } from '@/lib/http';
 import type { StoredContent } from '@/lib/document';
 import { fileContentType, FILE_EXTENSIONS } from '@artifactbin/contracts';
 

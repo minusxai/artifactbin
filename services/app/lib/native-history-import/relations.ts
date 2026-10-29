@@ -5,8 +5,8 @@ import {
   type Queryable,
   type HtmlNodeAnchor,
 } from "@artifactbin/contracts";
-import { htmlCommentNodes } from "@/lib/annotations/html-anchor";
-import { pageSourceDigest } from "@/lib/registered-page-queries/registry";
+import { htmlCommentNodes } from "@/lib/annotations";
+import { pageSourceDigest } from "@/lib/registered-page-queries";
 import type { NativeImportRelations } from "./contracts";
 import type { NativeRelationProjection } from "./relation-contracts";
 import type {NativeArtifactRelations} from "./artifact-relation-contracts";

@@ -2,17 +2,18 @@
  * Analytics owns persistence and daily visitor deduplication; callers only map
  * this result to HTTP. Both anonymous and signed-in readers are admitted.
  */
-import { trackEvent } from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact } from './access';
 import { getArtifactHeaderById } from './rows';
-import { isCrossSiteRequest } from '@/lib/http/http';
-import { sessionActor } from '@/lib/accounts';
+import { isCrossSiteRequest } from '@/lib/http';
+import type { AccessActor } from '@/lib/accounts';
 
-export async function recordArtifactView(request: Request, id: string): Promise<'accepted' | 'not_found' | 'forbidden'> {
+/** `reader` resolves the session door's actor (lib/authentication `sessionActor`), asked after the origin check. */
+export async function recordArtifactView(request: Request, id: string, reader: () => Promise<AccessActor>): Promise<'accepted' | 'not_found' | 'forbidden'> {
   // Anonymous readers report too, so apply the origin check without requiring
   // a cookie credential. This endpoint is called only from the app origin.
   if (isCrossSiteRequest(request)) return 'forbidden';
-  const actor = await sessionActor(request);
+  const actor = await reader();
   // The header decides (format and access): a view is never a reason to read the document itself.
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'html' || !(await canReadArtifact(artifact, actor))) return 'not_found';

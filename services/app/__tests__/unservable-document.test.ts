@@ -16,7 +16,7 @@ import { POST as restoreRoute } from '@/app/api/artifacts/[id]/restore/route';
 import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from './conditional-request';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { servableDocument, UnservableDocument } from '@/lib/artifacts/servable';
+import { servableDocument, UnservableDocument } from '@/lib/artifacts';
 import { createDocumentGraph } from '@/lib/document/document-graph';
 
 const harness = useAppHarness();

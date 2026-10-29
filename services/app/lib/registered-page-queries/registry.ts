@@ -314,30 +314,30 @@ export async function commitRegisteredQueryRebinds(
   for (const { ownerId, prepared } of rebinds)
     await commitRegisteredQueryBackend(tx, page, ownerId, prepared);
 }
+/** A head a repair reads, locked by its caller (lib/artifacts registered-repair). */
+export interface RepairableHead {
+  id: string;
+  user_id: string | null;
+  version: number;
+  source: string;
+  meta: { htmlLinks?: (HtmlBackendLink | { kind: "dataset" })[] };
+}
+/** The head's links re-bound: the caller writes `links` to the head, then `commit` binds the programs and answers the namespaces. */
+export interface RegisteredRepair {
+  links: (HtmlBackendLink | { kind: "dataset" })[];
+  commit(): Promise<string[]>;
+}
 /**
  * One-off repair for a head that was saved before re-binding existed: its registered links still
- * name a program bound to an earlier version. Re-binds them to the CURRENT head in place (the head
- * is not yet archived, so no saved version changes) through the same plan/commit path.
- * Returns the re-bound namespaces; an already valid or unregistered page is left untouched.
+ * name a program bound to an earlier version. Plans re-binding them to the CURRENT head in place (the
+ * head is not yet archived, so no saved version changes) through the same plan/commit path.
+ * Null for an already valid or unregistered page.
  */
-export async function repairRegisteredQueryHead(
+export async function planRegisteredQueryRepair(
   tx: Queryable,
-  pageId: string,
-): Promise<string[]> {
-  const head = (
-    await tx.query<{
-      user_id: string | null;
-      version: number;
-      source: string | null;
-      format: string;
-      meta: { htmlLinks?: (HtmlBackendLink | { kind: "dataset" })[] };
-    }>(
-      "SELECT user_id,version,source,format,meta FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
-      [pageId],
-    )
-  ).rows[0];
-  if (!head || head.format !== "html" || head.source === null)
-    throw Error("page_unavailable");
+  head: RepairableHead,
+): Promise<RegisteredRepair | null> {
+  const pageId = head.id;
   const page = { pageId, version: head.version, html: head.source };
   const all = head.meta.htmlLinks ?? [];
   const stale: HtmlBackendLink[] = [];
@@ -353,7 +353,7 @@ export async function repairRegisteredQueryHead(
     const envelope = verifiedEnvelope(pageId, link, backend);
     if (envelope && envelope.pageVersion !== head.version) stale.push(link);
   }
-  if (!stale.length) return [];
+  if (!stale.length) return null;
   const planned = await planRegisteredQueryRebinds(tx, page, stale, head.user_id);
   const links = all.map(
     (link) =>
@@ -361,21 +361,22 @@ export async function repairRegisteredQueryHead(
         planned.links.find((next) => next.name === link.name)) ||
       link,
   );
-  await tx.query(
-    "UPDATE artifacts SET meta=jsonb_set(meta,'{htmlLinks}',$2::jsonb) WHERE id=$1 AND version=$3",
-    [pageId, JSON.stringify(links), head.version],
-  );
-  await commitRegisteredQueryRebinds(tx, page, planned.rebinds);
-  for (const link of planned.links)
-    registeredPlan(
-      page,
-      link,
-      (
-        await tx.query<HtmlBackendVersionRecord>(
-          'SELECT backend_id AS "backendId",version,page_id AS "pageId",name,source,type_defs AS "typeDefs",compiled,owner_id AS "ownerId",secret_bindings AS "secretBindings" FROM html_backend_versions WHERE backend_id=$1 AND version=$2',
-          [link.backendId, link.version],
-        )
-      ).rows[0]!,
-    );
-  return stale.map((link) => link.name);
+  return {
+    links,
+    async commit() {
+      await commitRegisteredQueryRebinds(tx, page, planned.rebinds);
+      for (const link of planned.links)
+        registeredPlan(
+          page,
+          link,
+          (
+            await tx.query<HtmlBackendVersionRecord>(
+              'SELECT backend_id AS "backendId",version,page_id AS "pageId",name,source,type_defs AS "typeDefs",compiled,owner_id AS "ownerId",secret_bindings AS "secretBindings" FROM html_backend_versions WHERE backend_id=$1 AND version=$2',
+              [link.backendId, link.version],
+            )
+          ).rows[0]!,
+        );
+      return stale.map((link) => link.name);
+    },
+  };
 }

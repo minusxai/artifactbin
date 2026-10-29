@@ -1,5 +1,5 @@
-import { browserActor } from '@/lib/accounts';
-import { refreshAssetsFor } from '@/lib/publish/publish';
+import { browserActor } from '@/lib/authentication';
+import { refreshAssetsFor } from '@/lib/publish';
 
 /**
  * POST /api/my/artifacts/:id/assets/refresh — "refresh external images", from

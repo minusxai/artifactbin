@@ -24,10 +24,11 @@
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { can, capabilityRefusal } from '@/lib/artifacts';
-import { refusesCrossSite } from '@/lib/accounts';
+import { refusesCrossSite } from '@/lib/authentication';
 import { json, unauthorized } from '@/lib/http';
-import { count, has, link, unlink } from '@/lib/accounts';
-import { sessionActor, type AccessActor } from '@/lib/accounts';
+import { count, has, link, unlink } from '@/lib/social';
+import { sessionActor } from '@/lib/authentication';
+import { type AccessActor } from '@/lib/accounts';
 
 type Ctx = { params: Promise<{ id: string }> };
 

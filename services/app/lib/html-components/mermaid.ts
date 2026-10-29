@@ -10,7 +10,7 @@
  *   theme or font changes.
  */
 import { registerComponent } from './register-component';
-import type { MermaidImage } from '../mermaid-images/mermaid-render';
+import type { MermaidImage } from '../mermaid-images';
 /** Property code takes precedence over the code attribute, then initial literal text.
  * A stored image belongs to the current source; source/theme/font changes invalidate it. */
 export interface MermaidContract { code: string; title: string; colorMode: 'light' | 'dark' |

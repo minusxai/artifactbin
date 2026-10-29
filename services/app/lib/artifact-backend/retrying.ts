@@ -4,7 +4,7 @@
  */
 // The policy is only ever imported lazily, by lib/http/retry-lazily: a module imported both statically and dynamically
 // needs a namespace helper from the large shared chunk, which every chunk importing it would then load.
-import type { RetryOptions } from '@/lib/http/retry';
+import type { RetryOptions } from '@/lib/http';
 import { retryLazily } from '@/lib/http/retry-lazily';
 
 // The comment backend loads after the reader shell; fetch the policy now so a failed write retries without waiting for it.

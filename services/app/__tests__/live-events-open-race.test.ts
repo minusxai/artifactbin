@@ -23,8 +23,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Runs inside the handler, between its first read and its subscription. */
 let duringSetup: (() => Promise<void>) | null = null;
-vi.mock('@/lib/accounts/request-identity', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/accounts/request-identity')>();
+vi.mock('@/lib/authentication/request-identity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/authentication/request-identity')>();
   return {
     ...actual,
     sessionActor: async () => {

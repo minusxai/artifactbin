@@ -16,10 +16,10 @@ import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { createAppServer } from '@/server/app';
 import { mintAccountToken } from '@/__tests__/harness';
-import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
+import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer, mintExportKey } from '@/lib/export';
 
 
-import { setServices, mintExportKey } from '@/lib/platform';
+import { setServices } from '@/lib/platform';
 import { CARD_HEIGHT, CARD_WIDTH } from '@artifactbin/contracts';
 
 const EXPORT_BYTES = EXPORT_PNG;
@@ -187,7 +187,7 @@ describe('readable = exportable includes BEARER-readable', () => {
     // doc, asks for its export, gets refused, and silently falls back to
     // screenshotting local files. The token that can WRITE the doc must be
     // able to export it.
-    const { createUser } = await import('@/lib/accounts/users');
+    const { createUser } = await import('@/lib/accounts');
     const { mintToken } = await import('@/lib/accounts/tokens');
     const user = await createUser({ email: 'exporter@example.com' });
     const owned = await mintToken('agent', user.id);

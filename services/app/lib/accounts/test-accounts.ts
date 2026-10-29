@@ -9,7 +9,7 @@
  *
  * THE BOX. A test account is an ordinary `account` (kind) — it publishes, shares and comments like one —
  * but only among test accounts. Toward everyone else:
- *  - no custom domain (lib/serving/custom-domains);
+ *  - no custom domain (lib/custom-domains);
  *  - named shares, artifact invitations and group invitations/members may name only test-domain
  *    addresses or test accounts (shareTargetsRefusal, lib/artifacts/membership, lib/groups);
  *  - on an artifact outside the test accounts' space (isTestOwned) it may read and fork, nothing
@@ -18,8 +18,7 @@
  *  - nothing it does reaches a non-test person's notifications (lib/notifications/events).
  */
 import { isTestDomainEmail, type Queryable, type ShareEntry } from '@artifactbin/contracts';
-import { TEST_DOMAIN } from '../platform/config';
-import { getDb } from '../platform/db';
+import { TEST_DOMAIN, getDb } from '../platform';
 import type { AccessActor } from './actors';
 
 /** The refusal code every boxed door answers with (403). */

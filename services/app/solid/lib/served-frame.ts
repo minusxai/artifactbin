@@ -1,5 +1,5 @@
 /**
- * THE DOCUMENT FRAME THE SERVER DREW into this app page (lib/serving/document-frame), captured before the app
+ * THE DOCUMENT FRAME THE SERVER DREW into this app page (lib/document-serving/document-frame), captured before the app
  * mounts: its presence is what makes this load a document page (solid/App ArtifactRoute), and the document page
  * adopts it — moved, never re-created, so its document keeps loading (solid/pages/Document). A route that leaves
  * the document takes the frame and its sheet off the page.

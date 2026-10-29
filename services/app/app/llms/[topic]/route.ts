@@ -1,5 +1,5 @@
 import {baseUrl,MARKDOWN_CONTENT_TYPE} from '@/lib/http';
-import {publicGuideText} from '@/lib/serving/agent-references.server';
+import { publicGuideText } from '@/lib/agent-copy';
 
 /** The canonical skill reference, readable without authentication or installed tooling. */
 export async function GET(request:Request,{params}:{params:Promise<{topic:string}>}){

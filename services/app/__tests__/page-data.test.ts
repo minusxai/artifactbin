@@ -13,11 +13,13 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { updateSharingFor } from '@/lib/artifacts';
-import { identityForUser, link, unlink } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { link, unlink } from '@/lib/social';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
@@ -156,7 +158,7 @@ describe('GET /api/page/artifact/:id', () => {
   });
   it('lets the exporter\'s signed key read a private document without a session', async () => {
     const w = await world();
-    const { mintExportKey } = await import('@/lib/platform/export-read-key');
+    const { mintExportKey } = await import('@/lib/export');
     const res = await artifactPage(request(`/api/page/artifact/${w.priv.id}?key=${mintExportKey(w.priv.id)}`), params({ id: w.priv.id }));
     expect(res.status).toBe(200);
     expect((await res.json()).surface.captureKey).toBeTruthy();

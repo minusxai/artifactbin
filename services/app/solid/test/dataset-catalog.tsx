@@ -18,7 +18,7 @@ import { vi } from 'vitest';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { DatasetEditorPage } from '@/solid/pages/DatasetEditor';
 import { parseDatasetDefinition } from '@/lib/datasets/definition';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 
 export const connection = { host: 'db.example.com', port: 5432, database: 'analytics', username: 'reader', ssl: true, passwordSecretId: 'secret-1' };
 

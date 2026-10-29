@@ -10,8 +10,8 @@ import type { ShareRole } from '@artifactbin/contracts';
 import { SUMMARY_META_FIELDS, type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
-import { getDb } from '@/lib/platform/db';
-import { viewTotalsFor } from '@/lib/platform';
+import { getDb } from '@/lib/platform';
+import { viewTotalsFor } from '@/lib/analytics';
 
 const SUMMARY_COLS = ['id', 'title', 'description', 'format', 'version', 'visibility', 'ancestor_ids', 'created_at', 'updated_at'];
 /** The one statement parameter every listing below binds for `meta`: which keys each format's summary shows. */

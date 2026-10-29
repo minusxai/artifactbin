@@ -12,7 +12,8 @@ import {AUTH_SECRET} from '@/lib/platform';
 import {createAuthHost} from '@artifactbin/auth';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser,claimToken} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 const harness=useAppHarness();
 const queries=new Map<string,string>();
 const queryDocument=(req:Request,ctx:{params:Promise<{id:string}>})=>ctx.params.then(({id})=>queryPrivateDocument(new Request(req.url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({revision:"1",query:queries.get(id)})}),ctx));

@@ -1,10 +1,8 @@
-/** Independent owners. Membership and links never derive authority from accounts or artifacts. */
+/** Independent owners. Membership and links never derive authority from accounts or artifacts; users and groups share accounts' handle namespace. */
 import type {AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
-import {TEST_DOMAIN} from '../platform/config';
-import {getDb,type Queryable} from '../platform/db';
-import {generateInternalId} from '../platform/ids';
-import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
+import { TEST_DOMAIN, getDb, type Queryable, generateInternalId } from '../platform';
+import { reserveHandle, RESERVED_HANDLES } from '../accounts';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;}
 export class GroupError extends Error {constructor(public code:string,public status=400){super(code);}}
 const roleValid=(role:unknown):role is GroupRole=>role==='editor'||role==='viewer';
@@ -67,3 +65,4 @@ export async function acceptGroupInvitations(userId:string,verifiedEmail:string,
 export async function setGroupLink(actorId:string,groupId:string,linkedId:string,present:boolean):Promise<void>{await (await getDb()).transaction(async tx=>{await requireEditor(tx,actorId,groupId);if(present){if(groupId===linkedId||!await getGroupRole(actorId,linkedId,tx))throw new GroupError('invalid_link');await tx.query('INSERT INTO group_links(group_id,linked_group_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[groupId,linkedId]);}else await tx.query('DELETE FROM group_links WHERE group_id=$1 AND linked_group_id=$2',[groupId,linkedId]);});}
 export async function getAccountPreferences(userId:string):Promise<AccountPreferences>{return {default_destination:(await (await getDb()).query<{default_destination:DefaultDestination}>('SELECT default_destination FROM account_preferences WHERE user_id=$1',[userId])).rows[0]?.default_destination??{type:'inherit'}};}
 export async function setAccountPreferences(userId:string,destination:DefaultDestination):Promise<AccountPreferences>{if(!destination||!['personal','group','inherit'].includes(destination.type)||Object.keys(destination).some(k=>k!=='type'&&(destination.type!=='group'||k!=='id')))throw new GroupError('invalid_destination');await (await getDb()).transaction(async tx=>{if(destination.type==='group'&&(typeof destination.id!=='string'||!await getGroupRole(userId,destination.id,tx)))throw new GroupError('group_unavailable',403);await tx.query('INSERT INTO account_preferences(user_id,default_destination) VALUES($1,$2::jsonb) ON CONFLICT(user_id) DO UPDATE SET default_destination=EXCLUDED.default_destination',[userId,JSON.stringify(destination)]);});return {default_destination:destination};}
+export { selectNewArtifactDestination } from './destination';

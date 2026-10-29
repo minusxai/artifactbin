@@ -41,7 +41,7 @@ it('recovers canonical source for repeated exports and refuses corrupt source en
 });
 it('runs the installed graph parser and repeated source recovery with Node alone',async()=>{
  const {readFile,writeFile,mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
- const {buildPreviewParser}=await import('../../services/app/lib/skills/preview-assets.server.ts');const {portableScript}=await import('../../services/app/lib/html-runtime/portable.ts');const {portableRenderedDigest}=await import('../../services/app/lib/html-runtime/portable-source.ts');
+ const {buildPreviewParser}=await import('../../services/app/lib/skills/index.ts');const {portableScript}=await import('../../services/app/lib/html-runtime/portable.ts');const {portableRenderedDigest}=await import('../../services/app/lib/html-runtime/portable-source.ts');
  const html='<script type="module" src="./main.js"></script>',load=async()=>resource('export const value=42;');const rendered=await packPreviewExport({html,pathname:'/index.html',load});const saved=portableScript({version:1,source:html,renderedDigest:portableRenderedDigest(rendered)})+rendered;
  const dir=await mkdtemp(join(tmpdir(),'preview-installed-export-'));try{
   await writeFile(join(dir,'preview-html.mjs'),await buildPreviewParser(await readFile(new URL('../../services/app/skills/artifactbin/scripts/preview-html.mjs',import.meta.url),'utf8')));

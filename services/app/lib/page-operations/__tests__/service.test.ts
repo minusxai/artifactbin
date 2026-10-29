@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import {createPageOperations} from '../service';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 const actor:AccessActor={userId:'actual-user',tokenId:null,email:null,documentEditor:false};
 it('maps original commenter authority to resolver viewer and ignores forged variables',async()=>{
  let invoked=false;

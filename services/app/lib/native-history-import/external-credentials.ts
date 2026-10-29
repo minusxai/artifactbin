@@ -1,6 +1,5 @@
 import type {Queryable} from '@artifactbin/contracts';
-import {datasetSecretTargetHash,openDatasetSecret,sealDatasetSecret} from '@/lib/datasets/secret-crypto';
-import type {DatasetCatalog} from '@/lib/datasets/types';
+import {datasetSecretTargetHash, openDatasetSecret, sealDatasetSecret, type DatasetCatalog} from '@/lib/datasets';
 import type {NativeCatalogDataset,NativeCatalogProjection} from './catalog-contracts';
 import type {NativeExternalConnectionReceipt,NativeExternalCredentialSource,NativeStagedExternalCredentials} from './external-credential-contracts';
 import {nativeCatalogBytes} from './catalog-digest';

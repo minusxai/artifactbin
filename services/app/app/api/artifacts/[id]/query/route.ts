@@ -1,6 +1,6 @@
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import {json,readJson} from '@/lib/http';
-import {runOperation} from '@/lib/operations/http';
+import {runOperation} from '@/lib/operations';
 
 /** Native read-query contract; SQL and declared queries share domain authorization. */
 export const POST=withTokenAuth(async(request,{ actor,params })=>{

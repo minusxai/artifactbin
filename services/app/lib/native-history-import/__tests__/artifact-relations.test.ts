@@ -2,17 +2,12 @@ import { createHash } from "node:crypto";
 import { it, expect } from "vitest";
 import { useAppHarness, mintAccountToken } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
-import { JOIN_RELATIONS } from "@/lib/accounts";
+import { JOIN_RELATIONS } from "@/lib/social";
 import { nativeIdentityDigest } from "@/lib/native-identity-import/model";
-import { prepareNativeArtifactRelations } from "../index";
-import { prepareNativeHistoryRelations, writeNativeHistory } from "../index";
+import { prepareNativeArtifactRelations, prepareNativeHistoryRelations, writeNativeHistory, type NativeArtifactRelationsInput, type NativeArtifactRelationRow } from "../index";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
-import { pageSourceDigest } from "@/lib/registered-page-queries/registry";
+import { pageSourceDigest } from "@/lib/registered-page-queries";
 import type { NativeHistoryImport } from "../contracts";
-import type {
-  NativeArtifactRelationsInput,
-  NativeArtifactRelationRow,
-} from "../index";
 useAppHarness();
 const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
 const sha = (value: Uint8Array) =>

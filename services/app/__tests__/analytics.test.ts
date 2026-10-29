@@ -1,6 +1,5 @@
 import {nativeHtml} from './native-html-fixture';
-import {artifactState} from '@/lib/artifacts/state';
-import {getArtifactById,getVersionFor} from '@/lib/artifacts';
+import {artifactState, getArtifactById, getVersionFor} from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
@@ -12,7 +11,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * right. Events are fired unawaited on the request path, so assertions poll.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform/request-context';
+import { overrideRequestHeaders } from '@/lib/platform';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { artifactPage as ArtifactPage, artifactMetadata as artifactPageMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -25,12 +24,14 @@ import {
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
-import { trackEvent, mintExportKey } from '@/lib/platform';
+import { trackEvent } from '@/lib/analytics';
+import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser } from '@/lib/accounts';
-import { renderSparklineSvg } from '@/lib/viz/sparkline';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { renderSparklineSvg } from '@/lib/viz';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();

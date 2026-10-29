@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {POST as createPage} from '@/app/api/artifacts/route';
 import {POST as createComment,GET as listComments} from '@/app/api/artifacts/[id]/annotations/route';

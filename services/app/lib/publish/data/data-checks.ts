@@ -1,4 +1,4 @@
-import { deckColumns, GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
+import { deckColumns, GEOMETRY_COLUMN, parseJsx, type JsxNode } from '@/lib/jsx';
 /**
  * The document's DATA checks — everything about a markup document's data that
  * can only be judged with the caller's artifacts in hand: refs resolve and are
@@ -11,16 +11,12 @@ import { deckColumns, GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
  * (jsx-tier) and the refresh path (a dataset changed → which dependents
  * broke?) cannot drift apart.
  */
-import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { isQueryFailure, runMutation } from '@/lib/sql/engine';
-import { sqlExtensions } from '@/lib/sql/extensions';
-import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
-import { importedTables } from '@/lib/datasets/catalog';
-import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
+import { isQueryFailure, runMutation, sqlExtensions } from '@/lib/sql';
+import { placeholderSession, viewerMutationPolicy, importedTables, schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets';
 import { dataflowOf, splitHelmet } from '../../document';
 import { NUMERIC_AGGS, type NumberAgg, refName, isEmptyDataflow, type CompiledDataflow, bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from '@/lib/dataflow';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, compileDataflow, prepareCompile } from '@/lib/dataflow/server';
-import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
+import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz';
 import { normalize, type TopLevelSpec } from 'vega-lite';
 
 type DataCheckResult =

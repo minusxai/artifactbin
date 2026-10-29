@@ -12,8 +12,7 @@
  *
  * Pure: the site is an argument (tests build their own); `pagesSite()` is this deployment's.
  */
-import { ID_RE } from '@/lib/platform/ids-shape';
-import { PUBLIC_BASE_URL, requirePagesHost } from '@/lib/platform/config';
+import { ID_RE, PUBLIC_BASE_URL, requirePagesHost } from '@/lib/platform';
 
 export interface PagesSite {
   /** The pages hostname, lowercase, no port (`pages.example.com`, `lvh.me`). */

@@ -4,8 +4,7 @@ import { mermaidImageKey, mermaidSourceError } from '@/lib/jsx/mermaid-source';
 import { useIsland } from '../context';
 import { STORY_ROOT_SELECTOR } from '../contract';
 import { deferEngine } from '../defer-engine';
-import type { MermaidImage } from '@/lib/mermaid-images/mermaid-render';
-import type { Drawn } from '@/lib/mermaid-images/reader-draw';
+import type { MermaidImage, Drawn } from '@/lib/mermaid-images';
 
 /**
  * The retired React Mermaid, ported: a stored drawing (the island's `drawings`)

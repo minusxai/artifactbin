@@ -1,8 +1,9 @@
 /** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
 import { beforeEach, expect, it, vi } from 'vitest';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { changeMembership, getArtifactById } from '@/lib/artifacts';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets';
 import { observedRequest } from './conditional-request';
 import { nativeHtml } from './native-html-fixture';
 import { request, useAppHarness, mintAccountToken } from './harness';
@@ -16,7 +17,7 @@ import {
   liveSubscriptionSnapshot,
 } from '@/lib/publish/realtime/live';
 import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
-import { presenceChannel } from '@/lib/html-presence/channel.server';
+import { presenceChannel } from '@/lib/html-presence';
 const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
 const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
 useAppHarness();

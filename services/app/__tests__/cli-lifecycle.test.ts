@@ -11,7 +11,8 @@ import { GET as read,DELETE as remove,PUT as replace } from '@/app/api/artifacts
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as create,GET as list } from '@/app/api/artifacts/route';
-import { claimToken,createUser,identityForUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, identityForUser } from '@/lib/accounts';
 import { createArtifact,getArtifactById,updateSharingFor } from '@/lib/artifacts';
 import { ownedArtifactState } from '@/lib/workspace';
 import { expect,it } from 'vitest';

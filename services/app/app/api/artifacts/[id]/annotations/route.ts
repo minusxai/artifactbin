@@ -14,7 +14,8 @@ import { canAnnotate, parseHtmlNodeAnchor } from '@artifactbin/contracts';
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
-import { type AccessActor, withTokenAuth } from '@/lib/accounts';
+import { type AccessActor } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
 import { json, readJson } from '@/lib/http';

@@ -1,6 +1,6 @@
 // The cwd contract: the app's cwd is its package dir, because several modules
 // resolve files relative to process.cwd() — lib/skills/tree.ts,
-// lib/compiled-page/build.server.ts, lib/serving/agent-discovery.ts, server/app.ts among
+// lib/compiled-page/build.server.ts, lib/agent-copy/agent-discovery.ts, server/app.ts among
 // them — so the runners (scripts/dev.mjs, scripts/gates.mjs) and this setup
 // all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app
@@ -39,12 +39,17 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  * that resolves the real one on the first render and never before: nothing to
  * launch, nothing to close, for a suite that never asks for a picture.
  */
+// Deep paths, not the platform index: a test file's `vi.mock('@/lib/platform/config')` must still reach the index,
+// which is evaluated only when the test's own imports ask for it (after the mock is registered).
 const { setServices } = await import('@/lib/platform/services');
 const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
 const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
+const { getDb } = await import('@/lib/platform/db');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
-const { getDb } = await import('@/lib/platform/db');
+const { setEventProjection } = await import('@/lib/platform/event-outbox');
+
+await import('./database');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
@@ -70,6 +75,10 @@ setServices({
     close: async () => { await localBrowser?.close?.(); localBrowser = undefined; },
   },
 });
+
+// Facts project into inboxes as createAppServer composes them. Loaded on the first recorded fact, never
+// before: this runs for every test file, and most never record one.
+setEventProjection(async (tx, event) => (await import('@/lib/notifications')).projectNotifications(tx, event));
 
 // The api project shares one module graph per worker, so a file's test overrides (`overrideConfig`,
 // `overrideRequestHeaders`) end with the file: the next one starts on the process's real configuration.

@@ -5,13 +5,9 @@
  * this module sits above it, reads the annotation store, and passes the count
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
-import { MembershipError } from '@/lib/artifacts';
-import type { MutationReceipt } from '@/lib/artifacts';
-import type { ArtifactRow } from '@/lib/artifacts';
-import type { AccessActor } from '../accounts';
-import { artifactToWire } from '@/lib/artifacts';
-import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
-import { json } from '../http/http';
+import { MembershipError, type MutationReceipt, type ArtifactRow, artifactToWire, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
+import type { AccessActor } from '@/lib/accounts';
+import { json } from '../http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, setCommentReactionFor, type AnnotationAction, type AnnotationEdit } from './store';
 

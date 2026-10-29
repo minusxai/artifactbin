@@ -6,8 +6,8 @@
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/platform';
-import { liveFrameFor } from '@/lib/publish/data/frame';
-import { sessionActor } from '@/lib/accounts';
+import { liveFrameFor } from '@/lib/publish';
+import { sessionActor } from '@/lib/authentication';
 
 /**
  * A FRESH object per response, never this one. The Node server writes the

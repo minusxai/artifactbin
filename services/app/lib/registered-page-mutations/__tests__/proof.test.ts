@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import type {Queryable} from '@artifactbin/contracts';
-import {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from '@/lib/artifacts/registered-html-mutation';
+import {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from '@/lib/artifacts';
 it('registered HTML proof is process-local and binds exact page/edit with a transaction recheck',async()=>{
  const calls:Queryable[]=[],tx={} as Queryable,proof=attestRegisteredHtmlMutation('page','edit',async transaction=>{calls.push(transaction);});
  expect(await verifyRegisteredHtmlMutation({id:'page',editId:'edit',registeredHtml:proof},tx)).toBe(true);expect(calls).toEqual([tx]);

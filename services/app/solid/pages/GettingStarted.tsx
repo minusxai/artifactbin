@@ -1,7 +1,7 @@
 import {useSetupDeployment} from '../lib/deployment-setup';
 /* @jsxImportSource solid-js */
 import { For, type JSX } from 'solid-js';
-import { gettingStarted } from '@/lib/serving/getting-started';
+import { gettingStarted } from '@/lib/agent-copy/getting-started';
 import { CopyBlock } from '../ui/CopyBlock';
 import { LINK } from '../ui/ui';
 

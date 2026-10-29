@@ -5,7 +5,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from '@/lib/accounts';
+import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from '@/lib/avatars';
 import { createLocalStore, ObjectUnavailable, type ObjectStore } from '@/lib/object-store';
 import { createUser, getUserById } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';

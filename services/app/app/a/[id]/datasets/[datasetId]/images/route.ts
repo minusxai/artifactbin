@@ -1,9 +1,8 @@
-import { sessionActor, refusesCrossSite } from '@/lib/accounts';
-import { DatasetError } from '@/lib/datasets/errors';
+import { sessionActor, refusesCrossSite } from '@/lib/authentication';
+import { DatasetError } from '@/lib/datasets';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { uploadDatasetImage } from '@/lib/document-data';
-import { MAX_IMAGE_BYTES } from '@/lib/platform/config';
-import { ID_RE } from '@/lib/platform';
+import { MAX_IMAGE_BYTES, ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
 
 const headers={'Cache-Control':'no-store','Vary':'Origin'};

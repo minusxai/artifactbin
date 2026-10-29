@@ -16,7 +16,7 @@ import {readPortableDocument} from '@/lib/html-runtime/portable';
 import {compareSource} from '@/lib/html-runtime/source-relationship';
 import {recoverPortableSource} from '@/lib/html-runtime/portable-source';
 import {sha256Hex} from '@artifactbin/utils/sha256';
-import type {SourceObservation} from '@/lib/local-connection/contracts';
+import type {SourceObservation} from '@/lib/local-connection';
 import {localSourceStatus} from './local-source-status';
 import {createLocalReader} from '../document/create-local-reader';
 const ReaderPresenceControls=lazy(()=>import('../document/ReaderPresenceControls').then(module=>({default:module.ReaderPresenceControls})));

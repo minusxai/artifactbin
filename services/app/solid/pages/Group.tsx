@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import type { GroupDetail, GroupMember, GroupRole } from '@artifactbin/contracts';
-import type { AccountWorkspaceCore } from '@/lib/workspace/dashboard';
-import { buildGroupSetupInstructions } from '@/lib/platform/setup-instructions';
+import type { AccountWorkspaceCore } from '@/lib/workspace';
+import { buildGroupSetupInstructions } from '@/lib/skills/setup-instructions';
 import { copyText } from '../lib/copy-text';
 import { apiRequest } from '../lib/api';
 import { usePageData } from '../lib/use-page-data';

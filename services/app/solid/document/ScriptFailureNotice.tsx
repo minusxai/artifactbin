@@ -3,7 +3,7 @@
  * WHY THIS PAGE RUNS WITHOUT ITS SCRIPT, for someone who can fix it. A version stored under an earlier API (its
  * Helmet script imports a `page` export that no longer exists) is served without the script, and every copy of the
  * page tells its readers so (lib/compiled-page/assembler). This page's writers also get the builder's own messages
- * (lib/serving/artifact-page `scriptFailure`, recorded with the version by lib/publish/prepared/prepared-page.server)
+ * (lib/document-serving/artifact-page `scriptFailure`, recorded with the version by lib/publish/prepared/prepared-page.server)
  * and what resolves it. It renders in the slot above the frame, as the consent bar does (solid/pages/Document).
  */
 import { For, type JSX } from 'solid-js';

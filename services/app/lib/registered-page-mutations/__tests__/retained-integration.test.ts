@@ -1,12 +1,11 @@
 import {it,expect,vi,afterEach} from 'vitest';
 import {useAppHarness,mintAccountToken,request} from '@/__tests__/harness';
 import {POST} from '@/app/api/artifacts/route';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,changeMembership} from '@/lib/artifacts';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
-import {catalogOf} from '@/lib/datasets/catalog';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {catalogOf, loadDatasetRows} from '@/lib/datasets';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {prepareRegisteredMutationBackend,commitRegisteredMutationBackend} from '../registry';

@@ -1,16 +1,12 @@
 /** Ownership transfer is one atomic closure update, independent of content history. */
-import {actorSubject,emit} from '../platform/events';
+import { actorSubject, emit, generateInternalId, getDb, type Queryable } from '../platform';
 import {notifyParent,parentOf} from './placement';
-import {generateInternalId} from '../platform/ids';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {AccessActor} from '../accounts';
-import {getDb} from '../platform/db';
-import {DatasetError} from '../datasets/errors';
-import {catalogOf} from '../datasets/catalog';
-import { ownerPredicate, type ArtifactRow } from './table';
+import type { AccessActor } from '@/lib/accounts';
+import {DatasetError, catalogOf} from '../datasets';
+import { notifyArtifactSql, ownerPredicate, type ArtifactRow } from './table';
 import {getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
-import type {Queryable} from '../platform/db';
 
 export async function transferArtifact(actor:AccessActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
  if(!actor.userId)throw new DatasetError('Sign in to transfer ownership',403);
@@ -51,7 +47,7 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
  });
  if(result&&changed.length){
   // Wake existing ACL subscribers only after committed ownership is visible.
-  await db.query("SELECT pg_notify('artifact_' || lower(id),edit_id) FROM artifacts WHERE id=ANY($1::text[])",[changed.map(row=>row.id)]);
+  await db.query(`SELECT ${notifyArtifactSql('id','edit_id')} FROM artifacts WHERE id=ANY($1::text[])`,[changed.map(row=>row.id)]);
   await notifyParent(previousParent);await notifyParent(parentOf(result));
   await emit(actorSubject(actor),'sharing_changed',{kind:'artifact',id},{visibility:result.visibility,link_role:result.link_role});
  }

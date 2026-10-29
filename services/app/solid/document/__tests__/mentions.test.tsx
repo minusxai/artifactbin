@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { createSignal } from 'solid-js';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { replaceComment } from './comment-input';
 import { CommentMarkdownField } from '../CommentMarkdownField';

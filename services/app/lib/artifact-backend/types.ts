@@ -1,4 +1,4 @@
-import type {PresenceFrame,PresencePublication} from '@/lib/html-presence/contract';
+import type {PresenceFrame,PresencePublication} from '@/lib/html-presence';
 /**
  * THE ARTIFACT BACKEND — every server call the document surface makes while
  * reading, editing and commenting, behind one interface.
