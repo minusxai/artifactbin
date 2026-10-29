@@ -85,10 +85,12 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   expect(printed.map(v=>v.event.event_id)).toEqual(['e_later']);
   // Nothing arrives within --wait: one line, the checkpoint saved, and the command still resolves (exit 0).
   printed.length=0;
-  await commentCommand({sub:'watch',values:{next:true,wait:'1'},positionals:['PAGE12']},options);
-  expect(calls.slice(4).map(c=>c.after)).not.toContain('now');
-  expect(calls[4]).toEqual({after:'c4',wait:'1'});
-  expect(printed.at(-1)).toBe('no new comments; run watch --next again');
+  // A fake clock advances by each requested wait: the polls end 5 s inside the 240 s default.
+  let clock=0;const before=calls.length,clocked=async(url:any)=>{const response=await fetcher(url);clock+=Number(calls.at(-1)!.wait)*1000;return response;};
+  await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},{...options,fetcher:clocked,now:()=>clock});
+  expect(calls.slice(before).map(c=>c.wait)).toEqual(['30','30','30','30','30','30','30','25']);
+  expect(calls[before]!.after).toBe('c4');
+  expect(printed).toEqual(['no new comments; run watch --next again']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
   expect(calls.filter(c=>c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);

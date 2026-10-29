@@ -49,11 +49,12 @@ return {...page,annotations:page.annotations.map(annotation=>({...annotation,thr
 }
 /** Streams the feed into a log, stdout or deliver. With values.next it stops after the first batch
  * holding someone else's event (own events are logged, never printed) or when values.wait seconds
- * pass, and returns {events,timedOut}; requests never overlap. */
-export async function watchComments(client,id,values,{signal,deliver}={}){
+ * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off), and returns
+ * {events,timedOut}; requests never overlap. */
+export async function watchComments(client,id,values,{signal,deliver,now=Date.now}={}){
  const server=client.server,seen=new Set(),next=Boolean(values.next);let cursor;
  if(next&&values.once)throw new ToolError('invalid_invocation','Use --next or --once, not both.',2);
- const deadline=next?Date.now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
+ const deadline=next?now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
 if(values.cursor){const initial=await checkpointInput(values.cursor,server,id);cursor=
    initial.cursor;initial.eventIds.forEach(id=>seen.add(id));}
  let handle;
@@ -80,13 +81,13 @@ if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError
  const emit=async(value,show=true)=>{if(handle){await handle.writeFile(JSON.stringify(value)+'\n');
    await handle.sync();}if(next?show&&value.kind==='event':!handle)await print(value);};
  let failures=0,events=0,timedOut=false;
- const remaining=()=>Math.ceil((deadline-Date.now())/1000);
+ const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  try{
   while(!signal?.aborted){
    if(next&&cursor&&remaining()<=0){timedOut=true;break;}
    let result;
 try{result=await client.request(`/api/artifacts/${id}/annotations/changes?`+new URLSearchParams({
-     after:cursor??'now',wait:values.once||!cursor?'0':String(Math.min(30,remaining())),
+     after:cursor??'now',wait:values.once||!cursor?'0':String(next?Math.min(30,remaining()):30),
      limit:'100'}),{timeoutMs:40000,signal});failures=0;}
    catch(error){
     if(signal?.aborted)break;
