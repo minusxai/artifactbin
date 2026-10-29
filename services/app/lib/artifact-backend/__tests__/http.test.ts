@@ -39,8 +39,19 @@ describe('createHttpBackend', () => {
     expect(calls).toEqual([{ url: '/api/my/artifacts/AbC123', init: undefined }]);
     stubFetch(json({ error: 'not_found' }, 404));
     await expect(backend.load()).resolves.toBeNull();
-    stubFetch(new TypeError('Failed to fetch'));
-    await expect(backend.load()).rejects.toThrow('Failed to fetch');
+    // Unreachable: the read rides out a restart on the shared default policy (five waits inside its 15 s budget),
+    // then rejects with fetch's own error. Fake timers spend that budget without waiting for it.
+    vi.useFakeTimers();
+    try {
+      const offline = stubFetch(new TypeError('Failed to fetch'));
+      const started = Date.now();
+      const loading = expect(backend.load()).rejects.toThrow('Failed to fetch');
+      await vi.runAllTimersAsync();
+      await loading;
+      expect(offline).toHaveLength(6);
+      expect(Date.now() - started).toBeGreaterThan(7_000);
+      expect(Date.now() - started).toBeLessThanOrEqual(15_000);
+    } finally { vi.useRealTimers(); }
   });
 
   it('loads a companion frame with its own access check and no parent document parameters', async () => {
