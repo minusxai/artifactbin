@@ -138,7 +138,7 @@ export async function authCommand({sub, values, positionals}, {env = process.env
     );
   const code = (await readFile(values['code-file'], 'utf8')).trim();
   if (!/^[A-Za-z0-9_-]{4,128}$/.test(code))
-    throw new ToolError('invalid_code', 'OTP file must contain only the code the user provided.', 2);
+    throw new ToolError('invalid_code', 'OTP file must hold only the code the user provided.', 2);
   const response = await client.request('/api/auth/sign-in/email-otp', {
     method: 'POST',
     body: {email: challenge.email, otp: code},
