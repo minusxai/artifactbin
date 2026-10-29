@@ -239,7 +239,8 @@ export function AvatarImage(props: JSX.ImgHTMLAttributes<HTMLImageElement>) {
     const load = () => ctx.setStatus(imageStatus(image)); const fail = () => ctx.setStatus('error');
     image.addEventListener('load', load); image.addEventListener('error', fail);
     if (props.referrerPolicy) image.referrerPolicy = props.referrerPolicy;
-    image.crossOrigin = (props.crossOrigin as string | undefined) ?? null;
+    // An empty crossorigin attribute is the anonymous mode; the property takes the mode itself or null.
+    image.crossOrigin = props.crossOrigin === '' ? 'anonymous' : props.crossOrigin ?? null;
     image.src = src;
     ctx.setStatus(imageStatus(image));
     onCleanup(() => { image.removeEventListener('load', load); image.removeEventListener('error', fail); ctx.setStatus('idle'); });

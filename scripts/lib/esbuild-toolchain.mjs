@@ -9,7 +9,7 @@ import {promisify} from 'node:util';
 import {COMPILER_TARGETS,compilerPayload,compilerIntegrity} from './compiler-payload.mjs';
 
 const execute=promisify(execFile);
-const sdkVersion='go1.27.3';
+export const sdkVersion='go1.27.3';
 const sdkHashes={
  'darwin-arm64':'dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2',
  'darwin-x64':'b6f8e931e4ab497fcde6da8ae4499a58f9d258e55c8a80824a516eae5950a750',
