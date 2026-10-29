@@ -46,13 +46,9 @@ describe('who is answered', () => {
     expect((await framed(secret.id)).status).toBe(200);
   });
 
-  // BUG: artifactPageAnswer and framedDocumentSrc admit a reader whose token equals the row's creating token
-  // (`actor.tokenId !== header.token_id`), and an account-owned row may have no creating token at all (token_id NULL:
-  // lib/native-history-import accepts `owner.tokenId: null`; lib/platform/schema relaxes the column). A reader with no
-  // token has `tokenId: null` too, so `null !== null` is false and the read check is skipped: a private token-less
-  // document answers 200, frame and all, to a guest and to any signed-in stranger. lib/artifacts/access ownsArtifact
-  // guards the same comparison with `!!actor.tokenId &&`.
-  it.fails('refuses a private document with no creating token to a guest and a stranger', async () => {
+  // A row's creating token admits its holder, but an account-owned row may have no creating token (token_id NULL),
+  // and a reader with no token has `tokenId: null` too: holdsCreatingToken (lib/artifacts) never matches a null token.
+  it('refuses a private document with no creating token to a guest and a stranger', async () => {
     const w = await world();
     const secret = await w.make('private', 'Imported plan', {}, null);
     expect(await framed(secret.id)).toEqual({ status: 404, body: { error: 'not_found' } });
