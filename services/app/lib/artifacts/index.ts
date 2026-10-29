@@ -7,7 +7,7 @@
  */
 
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
-export { canReadArtifact, documentEditorReaches, ownsArtifact, effectiveRole } from './access';
+export { canReadArtifact, documentEditorReaches, holdsCreatingToken, ownsArtifact, effectiveRole } from './access';
 export { commentMonitorScope, reactionScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';

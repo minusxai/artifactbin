@@ -31,6 +31,12 @@ export async function canReadArtifact(
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
   if (row.group_id) return !!actor.groupId && actor.groupId===row.group_id;
   if (row.user_id) return !!actor.userId && row.user_id === actor.userId;
+  return holdsCreatingToken(row, actor);
+}
+
+/** Does this actor hold the token that created the row? A null token never matches: anonymous and browser
+ * actors carry `tokenId: null`, and so can rows (imported or account-anchored), so a bare equality admits them. */
+export function holdsCreatingToken(row: Pick<ArtifactRow, 'token_id'>, actor: Pick<AccessActor, 'tokenId'>): boolean {
   return !!actor.tokenId && row.token_id === actor.tokenId;
 }
 

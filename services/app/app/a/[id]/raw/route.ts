@@ -21,7 +21,7 @@ import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM, holdsCreatingToken } from '@/lib/artifacts';
 import { recordView, verifyExportKey } from '@/lib/platform';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, storedBytesCacheControl, withFreshNonce } from '@/lib/serving/render-cache';
 import {storedCspExtensions} from '@/lib/document';
@@ -137,7 +137,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   // Bearer first, then the browser credentials, the same order as the export route, so the CLI
   // can fetch the page of an artifact its token owns or may read (resolved above).
   const byExportKey = verifyExportKey(header.id, key ?? undefined);
-  const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, actor)) || byExportKey;
+  const admits = async (row: ArtifactHeader) => holdsCreatingToken(row, actor) || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
 
   const base = pages?.site.app ?? baseUrl(request);

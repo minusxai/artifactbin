@@ -18,7 +18,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, servedRow } from '@/lib/artifacts';
+import { archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
 import { UnservableDocument } from '@/lib/artifacts';
 import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
@@ -109,7 +109,7 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'html') return null;
   const actor = await sessionActor(request);
-  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return null;
+  if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return null;
   return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
 }
 
@@ -154,13 +154,13 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const key = search.get('key');
   const exporting = verifyExportKey(header.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor))) return notFound();
+  if (!admitted && !exporting && !holdsCreatingToken(header, actor) && !(await canReadArtifact(header, actor))) return notFound();
   if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !exporting && actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return notFound();
+  if (!admitted && accessMoved(header, artifact) && !exporting && !holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return notFound();
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
@@ -285,7 +285,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
   const ownerScope = role === 'owner' ? actor : null;
   // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
-  const readerAdmitted = !!admitted || !exporting || actor.tokenId === artifact.token_id;
+  const readerAdmitted = !!admitted || !exporting || holdsCreatingToken(artifact, actor);
   // Beside the served runtime and the social reads, not after them: none depends on another.
   const [[author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview], hasInvitedUsers, framedSrc] = await Promise.all([
     // A framed document runs its own first results on its own origin: the app's answer, through either door, carries none.

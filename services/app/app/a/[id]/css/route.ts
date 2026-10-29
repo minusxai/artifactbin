@@ -9,7 +9,7 @@
  * answers its credentialed CORS.
  */
 import { ANONYMOUS_ACTOR, requestOrSessionActor } from '@/lib/accounts';
-import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow } from '@/lib/artifacts';
+import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow, holdsCreatingToken } from '@/lib/artifacts';
 import { json } from '@/lib/http';
 import { matchingTag } from '@/lib/http/revalidation';
 import { ID_RE } from '@/lib/platform';
@@ -27,7 +27,7 @@ async function runtimeCss(request: Request, ctx: { params: Promise<{ id: string 
   const artifact = await getArtifactById(id);
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
-  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (!holdsCreatingToken(artifact, actor) && !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
 
   const asked = parseRuntimeCssRequest(new URL(request.url));
   if ('error' in asked) return json({ error: asked.error }, 400, NO_STORE);
