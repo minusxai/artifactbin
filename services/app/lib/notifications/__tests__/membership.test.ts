@@ -1,6 +1,6 @@
 import {seedOwnerJoin} from '@/lib/accounts';
 import {expect,it} from 'vitest';
-import {useAppHarness} from './harness';
+import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {hasExplicitNotificationMembership} from '@/lib/notifications';
 useAppHarness();

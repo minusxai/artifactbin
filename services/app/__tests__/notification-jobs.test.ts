@@ -3,9 +3,8 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 import {useAppHarness} from './harness';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import {getDb} from '@/lib/platform';
-import { notificationAuthority } from '@/lib/document-data';
 import {seedOwnerJoin} from '@/lib/accounts';
-import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
+import {createNotificationJobStore,notificationAuthority,type NotificationJobAuthority} from '@/lib/notifications';
 useAppHarness();
 const input:MutationNotificationJobInput={
  origin:{mutationRunId:'run1',documentId:'doc',documentEditId:'edit',documentVersion:1,mutationName:'change'},
@@ -17,7 +16,7 @@ const plan:MutationNotificationPlan={executionFence:{principalRevision:'p',docum
  {ruleName:'first',rows:[{recipientIds:['bob','bob'],message:'Changed'},{recipientIds:['bob'],message:'Review requested'}],sources:[{artifactId:'source1',authorityRevision:'a',schemaRevision:'s'}]},
  {ruleName:'second',rows:[{recipientIds:['bob'],message:'Changed'}],sources:[{artifactId:'source2',authorityRevision:'b',schemaRevision:'s'}]}
 ]};
-const authority:NotificationJobAuthority={validatePlan:async()=>{},admitRecipients:async(_tx,_input,_plan,ids)=>ids,canManage:async(_tx,p)=>p.kind==='user'&&p.id==='manager',principalLive:notificationAuthority.principalLive};
+const authority:NotificationJobAuthority={validatePlan:async()=>{},admitRecipients:async(_tx,_input,_plan,ids)=>ids,canManage:async(_tx,p)=>p.kind==='user'&&p.id==='manager'};
 async function fixture(){
  const db=await getDb();await db.query("INSERT INTO users(id) VALUES('alice'),('bob'),('manager'),('reader')");
  let now=new Date('2026-01-01T00:00:00Z');

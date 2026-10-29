@@ -1,10 +1,10 @@
-import {recordEvent} from '../notifications/events';
 /** Simple likes/follows and shared relation reads. Membership owns join authorization.
  * Every state change records its source event transactionally; notification rules
  * consume that fact through notification-events, not through a second write path.
  */
 import { RELATION_EVENTS, RELATION_VERBS, type ImmediateRelationVerb, type RelationVerb } from '@artifactbin/contracts';
 import { getDb,type Queryable } from '@/lib/platform/db';
+import { recordEvent } from '@/lib/platform/event-outbox';
 
 
 /** What the subject of every relation is today: an account. */

@@ -11,11 +11,11 @@ import {mintAccountToken} from './harness';
 import {GET as jobs} from '@/app/api/notification-runs/[runId]/jobs/route';
 import {GET as inbox} from '@/app/api/my/people/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { notificationJobStore, evaluateNotificationQuery } from '@/lib/document-data';
+import { evaluateNotificationQuery } from '@/lib/document-data';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {createUser} from '@/lib/accounts';
 import {overrideCatalogExecutor} from '@/lib/datasets/execute';
-import {createNotificationWorker} from '@/lib/notifications';
+import {createNotificationWorker,notificationJobStore} from '@/lib/notifications';
 import {modelNoticeSql,physicalNoticeSql,invalidRecipientSql} from '../../../scripts/fixtures/postgres-notifications.mjs';
 useAppHarness();
 it('retains create/join/approve/job/inbox authority, including suppressed and failed internal runs',async()=>{

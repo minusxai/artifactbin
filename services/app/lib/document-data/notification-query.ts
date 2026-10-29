@@ -1,12 +1,10 @@
 /** Notification shaping over the same server query execution used by document reads. */
 import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type MutationNotificationPlan,type NotificationSource,type TableResult} from '@artifactbin/contracts';
-import {NotificationExecutionError} from '@/lib/notifications/errors';
-import {notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications/context';
-import {notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal} from './authority';
+import {NotificationExecutionError,notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal,notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications';
 import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets/document-queries';
 import { selectQueries, platformValues, DataflowResultError, type Row } from '@/lib/dataflow';
 import {getDb} from '@/lib/platform/db';
-import { tableForRef, acceptedMembers } from '../dataflow';
+import { tableForRef, acceptedMembers } from './dataflow';
 import type { AccessActor } from '@/lib/accounts';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{

@@ -2,8 +2,8 @@
 import {createHash} from 'node:crypto';
 import {NOTIFICATION_QUERY_LIMITS} from '@artifactbin/contracts';
 import type {MutationInitiator,MutationNotificationClaim,MutationNotificationJobInput,MutationNotificationJobStore,MutationNotificationJobView,MutationNotificationPlan,Queryable} from '@artifactbin/contracts';
-import type {Db} from '@/lib/platform';
-import {envelope} from '../platform/events';
+import {liveTokenSql} from '@/lib/accounts';
+import {envelope,type Db} from '@/lib/platform';
 import {NotificationExecutionError} from './errors';
 import {lockMutationNotificationAuthority} from './mutation-notifications';
 import {notificationRecipients} from './run-plan';
@@ -13,8 +13,6 @@ export interface NotificationJobAuthority {
  validatePlan(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan):Promise<void>;
  admitRecipients(tx:Queryable,input:MutationNotificationJobInput,plan:MutationNotificationPlan,ids:string[]):Promise<string[]>;
  canManage(tx:Queryable,principal:MutationInitiator['principal'],documentId:string):Promise<boolean>;
- /** The principal is still a live credential at `at` (the store's clock; null = the wall clock). Accounts own the rule. */
- principalLive(tx:Queryable,principal:{kind:'user'|'token';id:string},at:string|null):Promise<boolean>;
 }
 interface NotificationJobStoreOptions {db:Db;authority:NotificationJobAuthority;clock?:()=>Date}
 interface JobRow {id:string;input:MutationNotificationJobInput;generation:number;lease_until:string;status:string;attempts:number;error_code:string|null;next_attempt_at:string|null}
@@ -35,7 +33,7 @@ export function createNotificationJobStore({db,authority,clock}:NotificationJobS
  };
  const authorized=async(tx:Queryable,principal:MutationInitiator['principal'],row:JobRow)=>{
   if(principal.kind!=='user'&&principal.kind!=='token')return false;
-  if(!await authority.principalLive(tx,principal,time()))return false;
+  if(!await principalLive(tx,principal,time()))return false;
   const original=row.input.initiator.principal;
   // A token's account at the run is frozen by the server; its current owner may differ.
   const initiatingAccount=original.kind==='token'&&principal.kind==='user'&&row.input.bindings.userId===principal.id;
@@ -99,6 +97,15 @@ export function createNotificationJobStore({db,authority,clock}:NotificationJobS
   async status(principal,id){return db.transaction(async tx=>{const row=(await tx.query<JobRow>('SELECT * FROM notification_jobs WHERE id=$1',[id])).rows[0];return row&&await authorized(tx,principal,row)?view(row):null;});},
   async retry(principal,id){return db.transaction(async tx=>{const row=(await tx.query<JobRow>("SELECT * FROM notification_jobs WHERE id=$1 AND status='failed' FOR UPDATE",[id])).rows[0];if(!row||!await authorized(tx,principal,row))return false;await tx.query("UPDATE notification_jobs SET status='pending',generation=generation+1,attempts=0,error_code=NULL,next_attempt_at=NULL,lease_until=NULL,retry_requested_by=$2::jsonb WHERE id=$1",[id,JSON.stringify(principal)]);return true;});},
  };
+}
+
+/** Liveness at the store's clock (`at`; null = the wall clock): an unmerged, unexpired account, or a live token by accounts' rule. */
+async function principalLive(tx:Queryable,principal:{kind:'user'|'token';id:string},at:string|null):Promise<boolean>{
+ const clock='coalesce($2::timestamptz,clock_timestamp())';
+ const alive=principal.kind==='user'
+  ?await tx.query(`SELECT id FROM users WHERE id=$1 AND merged_into_user_id IS NULL AND (expires_at IS NULL OR expires_at>${clock})`,[principal.id,at])
+  :await tx.query(`SELECT id FROM tokens WHERE id=$1 AND ${liveTokenSql(clock)}`,[principal.id,at]);
+ return alive.rows.length>0;
 }
 
 function validatePlanBounds(input:MutationNotificationJobInput,plan:MutationNotificationPlan):void {

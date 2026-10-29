@@ -1,6 +1,7 @@
 import {notificationJobOperations} from './notification-jobs';
 import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire, holdsCreatingToken } from '@/lib/artifacts';
-import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
+import { readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
+import { notificationJobStore } from '@/lib/notifications';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';

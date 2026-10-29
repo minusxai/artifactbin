@@ -45,6 +45,7 @@ const { overrideRequestHeaders } = await import('@/lib/platform/request-context'
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
 const { getDb } = await import('@/lib/platform/db');
+const { setEventProjection } = await import('@/lib/platform/event-outbox');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
@@ -70,6 +71,10 @@ setServices({
     close: async () => { await localBrowser?.close?.(); localBrowser = undefined; },
   },
 });
+
+// Facts project into inboxes as createAppServer composes them. Loaded on the first recorded fact, never
+// before: this runs for every test file, and most never record one.
+setEventProjection(async (tx, event) => (await import('@/lib/notifications')).projectNotifications(tx, event));
 
 // The api project shares one module graph per worker, so a file's test overrides (`overrideConfig`,
 // `overrideRequestHeaders`) end with the file: the next one starts on the process's real configuration.

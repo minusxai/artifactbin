@@ -1,5 +1,4 @@
 import {verifyRegisteredHtmlMutation} from '@/lib/artifacts';
-import {NotificationExecutionError} from '@/lib/notifications/errors';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { grantsOf, assertGrantCommit, getArtifactById, type GrantDocument } from '@/lib/artifacts';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
@@ -7,8 +6,7 @@ import {DatasetError} from '@/lib/datasets/errors';
 import { artifactState } from '@/lib/artifacts';
 import { completeMutationReceipt, type MutationReceipt } from '@/lib/artifacts';
 import {completeDocumentMutationReceipt} from './mutation-operation';
-import {notificationJobStore} from './notifications/runtime';
-import {lockNotificationExecution} from './notifications/authority';
+import {NotificationExecutionError,lockNotificationExecution,notificationJobStore} from '@/lib/notifications';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy } from './dataset-policy';

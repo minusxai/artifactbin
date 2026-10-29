@@ -3,7 +3,6 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
 import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
-import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
@@ -25,7 +24,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { getDb } from '@/lib/platform';
-import { hasExplicitNotificationMembership } from '@/lib/notifications';
+import { hasExplicitNotificationMembership, membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 
 /**

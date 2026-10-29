@@ -27,7 +27,8 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
-import { measureQueries, runWithRequest } from '@/lib/platform';
+import { measureQueries, runWithRequest, setEventProjection } from '@/lib/platform';
+import { projectNotifications } from '@/lib/notifications';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { spaPaths } from '@/lib/http/app-pages';
@@ -328,6 +329,8 @@ const buildHeader = (build: string) => async (c: Context, next: () => Promise<vo
 };
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
+  // Every composition (server.ts, src/main.ts, server/host) serves through here: facts project into inboxes.
+  setEventProjection(projectNotifications);
   const app = new Hono();
   app.use('*', serverTiming);
   const webDir = opts.webDir ?? path.resolve('dist/web');

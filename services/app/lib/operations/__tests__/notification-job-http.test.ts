@@ -7,7 +7,7 @@ import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {useAppHarness,request,mintAccountToken,setSession} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {notificationJobStore} from '@/lib/document-data';
+import {notificationJobStore} from '@/lib/notifications';
 import {notificationJobHttp} from '../notification-job-http';
 
 useAppHarness();
