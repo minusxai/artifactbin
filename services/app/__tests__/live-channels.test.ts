@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { annotationsChannel, artifactChannel } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform/db';
 import { useAppHarness } from '@/__tests__/harness';
+import { notifyArtifactSql } from '@/lib/artifacts/table';
 
 useAppHarness();
 
@@ -31,6 +32,16 @@ describe('live channel names', () => {
     expect(r.rows[0]).toEqual({ doc: artifactChannel(MIXED), notes: annotationsChannel(MIXED) });
     expect(artifactChannel(MIXED)).toBe('artifact_abc9xyz');
     expect(annotationsChannel(MIXED)).toBe('annotations_abc9xyz');
+  });
+
+  it("the in-SQL notify helper reaches the contract's channel on a mixed-case id", async () => {
+    const db = await getDb();
+    const heard: string[] = [];
+    const stop = await db.listen(artifactChannel(MIXED), (payload) => heard.push(payload));
+    await db.query(`SELECT ${notifyArtifactSql('$1', "'woke'")}`, [MIXED]);
+    await db.query('SELECT 1');
+    await stop();
+    expect(heard).toEqual(['woke']);
   });
 
   it('every SQL notify in lib/ spells the document channel the same way', () => {

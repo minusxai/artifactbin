@@ -10,7 +10,7 @@ import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, headBumpSql, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -552,8 +552,8 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     await archiveVersion(tx, current);
     const updated = await artifactQuery<ArtifactRow>(tx,
       `UPDATE artifacts
-       SET title = $3, description = $4, format = $5, source = CASE WHEN $11::jsonb IS NULL THEN $6::text ELSE NULL END, document=$11::jsonb, meta = $7, version = version + 1,
-           edit_id = $8, actor_user_id = $9, actor_token_id = $10, updated_at = now()
+       SET title = $3, description = $4, format = $5, source = CASE WHEN $11::jsonb IS NULL THEN $6::text ELSE NULL END, document=$11::jsonb, meta = $7,
+           ${headBumpSql('$8', '$9', '$10')}
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
@@ -711,7 +711,7 @@ async function replaceScoped(
        SET format = $3, source = CASE WHEN $15::jsonb IS NULL THEN $4::text ELSE NULL END, document=$15::jsonb, meta = $5, title = $6, description = $7,
            visibility = COALESCE($9, visibility), ancestor_ids = COALESCE($10::text[], ancestor_ids),
            access = COALESCE($11, access), link_role = COALESCE($14, link_role),
-           version = version + 1, edit_id = $8, actor_user_id = $12, actor_token_id = $13, updated_at = now()
+           ${headBumpSql('$8', '$12', '$13')}
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [
         id,

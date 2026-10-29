@@ -11,8 +11,8 @@ import {
   prepareRegisteredQueryBackend,
   commitRegisteredQueryBackend,
   registeredPlan,
-  repairRegisteredQueryHead,
 } from "../registry";
+import { repairRegisteredQueryHead } from "@/lib/artifacts/registered-repair";
 vi.mock("@/lib/page-operations", async (original) => ({
   ...(await original<typeof import("@/lib/page-operations")>()),
   compilePageBackend: async (source: string) => ({

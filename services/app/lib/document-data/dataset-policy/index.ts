@@ -6,20 +6,12 @@ import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutatio
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/platform/db';
 import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
-import { editorScope, writerFor, type ArtifactRow } from '@/lib/artifacts';
-import { groupMemberPredicate } from '@/lib/artifacts/table';
+import { commitDatasetPolicy, writerFor, type ArtifactRow } from '@/lib/artifacts';
+import { policyReaderSql } from '@/lib/artifacts/table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 
-/** One read-access fence for policy actions: sharing remains the only audience.
- * Identifiers/placeholders are owned by this module and its caller. */
-export function policyReaderSql(user = '$13', token = '$14'): string {
-  return `(artifacts.visibility<>'private' OR (artifacts.group_id IS NULL AND (artifacts.user_id=${user} OR (artifacts.user_id IS NULL AND artifacts.token_id=${token}))) OR ${groupMemberPredicate(user)}
-   OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
-     AND (policy_reader.user_id=${user} OR (policy_reader.user_id IS NULL AND
-       policy_reader.email=(SELECT email FROM users WHERE id=${user})))))`;
-}
 export async function canUseDataPolicy(
   dataset: ArtifactRow,
   actor: AccessActor,
@@ -52,32 +44,8 @@ export async function setDatasetPolicy(
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');
   const policy = validateDatasetPolicyForRow(row,value);
-  const db = await getDb(),
-    scope = editorScope(actor);
-  const result = await db.query<{ policy_revision: number }>(
-    `WITH updated AS (
- UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1
- WHERE id=$1 AND ${scope.where('$2')} AND policy_revision=$4 AND deleted_at IS NULL
- AND version=$7 AND edit_id=$8 AND sharing_revision=$9
- RETURNING *), audit AS (
- INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
- SELECT id,policy_revision,dataset_policy,$5,$6 FROM updated)
- SELECT policy_revision,pg_notify('artifact_' || lower(id),edit_id) FROM updated`,
-    [
-      id,
-      scope.val,
-      JSON.stringify(policy),
-      revision,
-      actor.userId,
-      actor.tokenId,
-      row.version,
-      row.edit_id,
-      row.sharing_revision ?? 0,
-    ],
-  );
-  return result.rows[0]
-    ? { revision: result.rows[0].policy_revision, policy }
-    : { conflict: true };
+  const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
+  return committed === null ? { conflict: true } : { revision: committed, policy };
 }
 export async function mutationPolicy(
   dataset: ArtifactRow,

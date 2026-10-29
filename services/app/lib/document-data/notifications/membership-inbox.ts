@@ -1,5 +1,5 @@
 import {mutationNotificationInbox} from './mutation-inbox';
-import {JOIN_RELATIONS,dismissPendingRelations} from '@/lib/accounts';
+import {JOIN_RELATIONS,dismissPendingRelations,setAutoAcceptMentions} from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged,notificationsChanged} from '@/lib/notifications/write';
 import {getDb} from '@/lib/platform/db';
@@ -34,7 +34,7 @@ export async function updateMembershipInbox(actor:AccessActor,input:{autoAccept?
  const db=await getDb();
  await db.transaction(async tx=>{
   const account=await tx.query("SELECT id FROM users WHERE id=$1 AND kind<>'guest' FOR UPDATE",[actor.userId]);if(!account.rows.length)throw new MembershipError('Sign in to update notifications');
-  if(input.autoAccept!==undefined)await tx.query('UPDATE users SET auto_accept_mentions=$2 WHERE id=$1',[actor.userId,input.autoAccept]);
+  if(input.autoAccept!==undefined)await setAutoAcceptMentions(tx,actor.userId!,input.autoAccept);
   if(input.readAll){
    // Acknowledge the current revisions across the whole inbox, including unloaded pages.
    const changed:Array<{id:string;revision:number}>=[];

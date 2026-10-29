@@ -6,6 +6,9 @@
  * files, and notifications) is its own module above this one (document data): nothing here imports it.
  */
 
+// Installs the artifacts half of a token claim and a guest merge into lib/accounts (artifact-adoption).
+import './owner-adoption';
+
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
 export { canReadArtifact, documentEditorReaches, holdsCreatingToken, ownsArtifact, effectiveRole } from './access';
 export { commentMonitorScope, reactionScope, annotationScope, editorScope, writerFor } from './table';
@@ -43,7 +46,9 @@ export { findDependentsFor } from './dependents';
 export { getSharingFor, updateSharingFor } from './sharing';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
-export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
+export { isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
+/** The trash's writes, for lib/workspace's delete and restore. */
+export { rerootArtifact, restoreTrashedSubtree, trashSubtree } from './trash';
 export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/grants';
 
 /** Serving: what may be served, and archived versions. */
@@ -60,10 +65,12 @@ export {transferArtifact} from './transfer';
 /**
  * For the document data module alone (its runs, writes, policies, files and notifications stand on these):
  * the grant context and its commit check, the access facts and editor policy a read decision consults,
- * the capability refusal, the mutation context pin and invocation seam, the dataset commit emitter,
- * the compiled-row result and its error text, and the folder table.
+ * the capability refusal, the mutation context pin and invocation seam, the dataset and policy commits and
+ * the dataset commit emitter, the compiled-row result and its error text, and the folder table.
  */
 export { assertGrantCommit, grantContext, uploadGrantContext, readThrough } from './dataset-policy/grants';
+export { commitDatasetWrite } from './dataset-commit';
+export { commitDatasetPolicy } from './dataset-policy/commit';
 export type { GrantDocument, ReadRow } from './dataset-policy/grants';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';

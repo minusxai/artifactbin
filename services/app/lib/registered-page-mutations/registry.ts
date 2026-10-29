@@ -5,6 +5,7 @@ import type {HtmlBackendVersionRecord} from '@/lib/html-backends';
 import type {RegisteredMutationPlan as QueryPlan,MutationProgram} from './contracts';
 import {validateMutationProgram} from './model';
 import {registeredMutationSchema} from './namespace';
+import type {RegisteredRepair,RepairableHead} from '../registered-page-queries/registry';
 export type RegisteredMutationProgram=MutationProgram;
 interface Envelope {kind:'registered-page-mutations-v1';pageId:string;pageVersion:number;sourceSha256:string;provenance:{compilerSha256:string;sourceSha256:string};program:RegisteredMutationProgram;digest:string}
 const PREFIX='!registered-page-mutations-v1\n';
@@ -97,24 +98,23 @@ export async function commitRegisteredMutationRebinds(tx:Queryable,page:BoundPag
 }
 /**
  * One-off repair for a head saved before mutation re-binding existed: its registered mutation links still name a
- * program bound to an earlier version. Re-binds them to the CURRENT head in place through the same plan/commit path.
- * Returns the re-bound namespaces; an already valid or unregistered page is left untouched.
+ * program bound to an earlier version. Plans re-binding them to the CURRENT head in place through the same plan/commit
+ * path; the caller (lib/artifacts registered-repair) writes the links. Null for an already valid or unregistered page.
  */
-export async function repairRegisteredMutationHead(tx:Queryable,pageId:string):Promise<string[]>{
- const head=(await tx.query<{user_id:string|null;version:number;source:string|null;format:string;meta:{htmlLinks?:(HtmlBackendLink|{kind:'dataset'})[]}}>('SELECT user_id,version,source,format,meta FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[pageId])).rows[0];
- if(!head||head.format!=='html'||head.source===null)throw Error('page_unavailable');
- const page={pageId,version:head.version,html:head.source},all=head.meta.htmlLinks??[],stale:HtmlBackendLink[]=[];
+export async function planRegisteredMutationRepair(tx:Queryable,head:RepairableHead):Promise<RegisteredRepair|null>{
+ const pageId=head.id,page={pageId,version:head.version,html:head.source},all=head.meta.htmlLinks??[],stale:HtmlBackendLink[]=[];
  for(const link of all){
   if(link.kind!=='backend')continue;
   const backend=await backendRecord(tx,link);if(!backend)continue;
   const envelope=verifiedEnvelope(pageId,link,backend);
   if(envelope&&envelope.pageVersion!==head.version)stale.push(link);
  }
- if(!stale.length)return [];
+ if(!stale.length)return null;
  const planned=await planRegisteredMutationRebinds(tx,page,stale,head.user_id);
  const links=all.map(link=>(link.kind==='backend'&&planned.links.find(next=>next.name===link.name))||link);
- await tx.query("UPDATE artifacts SET meta=jsonb_set(meta,'{htmlLinks}',$2::jsonb) WHERE id=$1 AND version=$3",[pageId,JSON.stringify(links),head.version]);
- await commitRegisteredMutationRebinds(tx,page,planned.rebinds);
- for(const link of planned.links)registeredMutationPlan({...page,links:links.filter((value):value is HtmlBackendLink=>value.kind==='backend')},link,(await backendRecord(tx,link))!);
- return stale.map(link=>link.name);
+ return {links,async commit(){
+  await commitRegisteredMutationRebinds(tx,page,planned.rebinds);
+  for(const link of planned.links)registeredMutationPlan({...page,links:links.filter((value):value is HtmlBackendLink=>value.kind==='backend')},link,(await backendRecord(tx,link))!);
+  return stale.map(link=>link.name);
+ }};
 }
