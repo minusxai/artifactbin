@@ -58,7 +58,7 @@ describe('the CLI retirement release path', () => {
   it('packs and signs in every ci run, independent of the plan, and the roll-up requires it', () => {
     const job = ci.jobs['cli-pack'];
     expect(job.needs).toBeUndefined();
-    expect(job.if).toBe("(github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')");
+    expect(job.if).toBeUndefined();
     expect(job.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
     expect(job.steps.find((step) => step.uses?.startsWith('actions/setup-node@')).with['node-version']).toBe('22.23.4');
     const run = job.steps.map((step) => step.run ?? '').join('\n');

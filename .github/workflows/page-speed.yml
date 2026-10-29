@@ -6,9 +6,8 @@ name: page speed
 # the throttled timing comparison. Neither mode gates ci.yml or comments on PRs.
 on:
   pull_request:
-    branches-ignore: [ artifactbinv3 ]
   push:
-    branches: [ main, artifactbinv3 ]
+    branches: [ main ]
     paths:
       # Every merged revision needs exact-SHA release evidence. The remaining patterns
       # define lab inputs for PR scoping and cached-base byte equivalence.

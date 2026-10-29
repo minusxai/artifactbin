@@ -21,13 +21,6 @@
 
 ## CI speed contract
 
-For PRs targeting **`artifactbinv3`**, the required `v3 fast checks` workflow must finish below
-**2 minutes**. It runs a full pinned install, `npm run validate`, JavaScript syntax checks and the
-explicit capability-audited module test list. Its clock checks elapsed time from `run_started_at`
-before final GitHub post steps, and the job has a two-minute execution timeout. Measure the completed
-workflow too; prior-run timing does not prove a new revision's duration. Full service/browser suites
-are not part of this required fast PR lane: retain exact-revision selected checks and user-scenario evidence.
-
 For the **full post-merge chain** and PRs targeting **`main`**, measure from `run_started_at` through
 final rollup, including runner setup, dependency waits and uploads. Aim below **3 minutes**; normal
 maximum below **4 minutes**. The full chain fails above **8 minutes**. Job times, parallel sums and

@@ -9,7 +9,6 @@
   "services/app/lib/html-components/select-model.test.ts",
   "scripts/__tests__/conformance-account.test.mjs",
   "scripts/__tests__/edit-chart-observation.test.mjs",
-  "scripts/__tests__/fast-budget.test.mjs",
   "scripts/__tests__/fast-test-policy.test.mjs",
   "scripts/__tests__/native-dataset-page.test.mjs",
   "services/app/lib/__tests__/app-pages.test.ts",

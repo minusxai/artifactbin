@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [ main, artifactbinv3 ]
+    branches: [ main ]
   workflow_dispatch:
 
 # New commits supersede earlier checks on the same PR — through the `supersede` job, NOT a workflow-level
@@ -28,7 +28,7 @@ jobs:
   # `test` roll-up needs it, so the new run starts at once while the old one winds down beside it
   # (scripts/lib/ci-supersede.mjs, builtin-only: no install).
   supersede:
-    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3') && github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request'
     name: supersede earlier runs
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -48,7 +48,6 @@ jobs:
         run: node scripts/lib/ci-supersede.mjs
 
   plan:
-    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
     name: affected modules
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -129,8 +128,8 @@ jobs:
       - name: Lint the workflows
         run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color
       - run: npm run validate
-      - name: v3 fast-lane coverage and syntax
-        if: github.ref == 'refs/heads/artifactbinv3'
+      - name: Fast-lane coverage and syntax
+        if: github.ref == 'refs/heads/main'
         run: node scripts/ci/fast-check.mjs
 
   # THE NODE PROJECT SHARDS, like api and ui: four, packed by measured file time
@@ -699,7 +698,6 @@ jobs:
   # .github/workflows/release-cli.yml publishes after a green push to main. It waits on nothing, not even
   # `plan`: the push that merges a tested tree selects no other job, and the release still needs this run's package.
   cli-pack:
-    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
     name: CLI npm pack
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -796,7 +794,7 @@ jobs:
         gates,
         cli-pack
       ]
-    if: always() && (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
+    if: always()
     steps:
       # PR checkout is the synthetic merge: depth two includes its base parent for the
       # three-dot patch diff below. Main records only the current tree; neither needs full history.
