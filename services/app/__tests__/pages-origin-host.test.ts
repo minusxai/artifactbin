@@ -17,13 +17,13 @@ import { DELETE as clearSession } from '@/app/api/session/token/route';
 import { measureQueries } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
-import { framedDocumentSrc } from '@/lib/serving/artifact-page';
+import { framedDocumentSrc } from '@/lib/document-serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';
-import {nativeHtmlPolicy} from '@/lib/serving/native-html.server';
+import {nativeHtmlPolicy} from '@/lib/document-serving/native-html.server';
 
 useAppHarness();
 

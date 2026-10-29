@@ -8,7 +8,7 @@ import { useLocation } from '@solidjs/router';
 import { crumbsFor } from '@/lib/workspace/breadcrumb';
 import { PageBar } from './PageBar';
 import { CHROME_IDENTITY } from './chrome-identity';
-import { githubStarMarkup, wireGithubStar } from '@/lib/serving/github-star';
+import { githubStarMarkup, wireGithubStar } from '@/solid/components/github-star';
 import { useSession } from '../lib/session';
 import { Tooltip } from '../ui/Tooltip';
 import { Button } from '../ui/Button';

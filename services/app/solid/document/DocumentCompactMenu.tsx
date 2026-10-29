@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import type { Accessor, JSX } from 'solid-js';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
-import { REPO_URL } from '@/lib/serving/repo';
-import { artifactAppPath } from '@/lib/serving/artifact-pwa';
+import { REPO_URL } from '@/lib/http/urls';
+import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { Menu, type MenuEntry } from '../ui/Menu';
 import { Button } from '../ui/Button';
 import type { DocumentChromeProps } from './DocumentChrome';

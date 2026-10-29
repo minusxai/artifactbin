@@ -1,12 +1,12 @@
 import {describe,expect,it} from 'vitest';
-import { agentDiscovery } from '@/lib/skills/agent-discovery';
-import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/serving/agent-discovery';
-import {gettingStarted} from '@/lib/serving/getting-started';
-import {existingPaste} from '@/lib/serving/agent-copy';
+import {agentDiscovery} from '@/lib/skills/agent-discovery';
+import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/agent-copy/agent-discovery';
+import {gettingStarted} from '@/lib/agent-copy/getting-started';
+import {existingPaste} from '@/lib/agent-copy/agent-copy';
 import {skillTree} from '@/lib/skills';
 import {skillPackageFiles} from '@/lib/skills/package';
-import {publicGuideText,llmsText} from '@/lib/serving/agent-references.server';
-import { buildSetupInstructions } from '@/lib/skills/setup-instructions';
+import {publicGuideText,llmsText} from '@/lib/agent-copy/agent-references.server';
+import {buildSetupInstructions} from '@/lib/skills/setup-instructions';
 const BASE='https://example.test';
 describe('skill-first HTTP onboarding',()=>{
  it('hands agents the same tokenless HTTP guide on every entry point',()=>{

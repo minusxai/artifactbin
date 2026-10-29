@@ -25,7 +25,7 @@ export interface StoryBaseCssRecipe {
   /** False for a capture (`chrome=0`): no navigation chrome. */
   chrome: boolean;
   theme: string | null;
-  /** Never written: retained only until lib/serving/artifact-page stops reading it (a contract request). */
+  /** Never written: retained only until lib/document-serving/artifact-page stops reading it (a contract request). */
   faces?: never[];
   /** The Helmet's font slot overrides. */
   fonts: DocumentFonts;

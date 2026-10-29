@@ -9,7 +9,7 @@
  *
  * THE BOX. A test account is an ordinary `account` (kind) — it publishes, shares and comments like one —
  * but only among test accounts. Toward everyone else:
- *  - no custom domain (lib/serving/custom-domains);
+ *  - no custom domain (lib/custom-domains);
  *  - named shares, artifact invitations and group invitations/members may name only test-domain
  *    addresses or test accounts (shareTargetsRefusal, lib/artifacts/membership, lib/groups);
  *  - on an artifact outside the test accounts' space (isTestOwned) it may read and fork, nothing

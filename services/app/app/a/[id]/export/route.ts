@@ -1,7 +1,7 @@
 /** Authorize and resolve an image, then redirect to a scoped persistent asset.
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
-import { archivedVersionFor, servedRow } from '@/lib/serving';
+import { archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { canReadArtifact, getArtifactById, refusingUnservable, effectiveRole, holdsCreatingToken } from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';

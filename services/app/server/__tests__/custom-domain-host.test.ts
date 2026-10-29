@@ -26,7 +26,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { setAvatar } from '@/lib/accounts';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/platform';
-import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/serving';
+import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/custom-domains';
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';

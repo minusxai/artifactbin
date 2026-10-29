@@ -18,7 +18,7 @@
  */
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
 import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
-import { agentContract } from '@/lib/serving';
+import { agentContract } from '@/lib/agent-copy';
 import { canAuthenticateUser, hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
 
 export async function POST(request: Request) {

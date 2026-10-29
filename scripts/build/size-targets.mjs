@@ -19,7 +19,7 @@
  * read `jsBeforeReadyGzip` on the document's own page (`raw` route): the script
  * bytes finished before the page was ready (scripts/lib/document-views.mjs).
  * That page is exactly what the app page frames on the document's own origin
- * (lib/serving/document-frame); the `view` route's "ready" is the app shell's
+ * (lib/document-serving/document-frame); the `view` route's "ready" is the app shell's
  * DOMContentLoaded, which measures the shell's bundle and none of the
  * document's. Target 3 reads the prose view's `totalGzip`: every response body
  * a reader's page loads, the shell and its frame together. The production

@@ -6,7 +6,8 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
-import { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome, THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT, type ProfileListingData } from '@/lib/serving';
+import { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome, type ProfileListingData } from '@/lib/custom-domains';
+import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
 
 const NOW = new Date().toISOString();
 const file = (id: string, format: string, title: string | null, version = 1) => ({ id, format, title, updated_at: NOW, version });

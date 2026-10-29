@@ -1,7 +1,7 @@
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
-import {startDomainRecheck} from '@/lib/serving';
+import { startDomainRecheck } from '@/lib/custom-domains';
 import {startMermaidHarvester} from '@/lib/publish/assets/mermaid-harvester';
 import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/accounts';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';

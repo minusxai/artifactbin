@@ -317,7 +317,7 @@ session; republishing with a fixed script resolves each.
 ## 7. The app, the editor and the overlays
 
 The page is HTML-first. The server draws the document's frame into the app page
-(`lib/serving/document-frame`, `iframe[data-mx-document-frame]`) beside the Solid app shell; the frame
+(`lib/document-serving/document-frame`, `iframe[data-mx-document-frame]`) beside the Solid app shell; the frame
 holds the compiled story, which runs on `APP__PAGES_HOST` and never waits for the app. The app
 (`web/served-frame.ts` captures the served frame before it mounts) adopts that frame and talks to the
 story only through the frame bridge.

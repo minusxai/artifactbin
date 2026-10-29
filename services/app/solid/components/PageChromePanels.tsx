@@ -8,7 +8,7 @@
 import { Show, type JSX } from 'solid-js';
 import { BookOpen, FileText, LogIn, LogOut, Moon, Sun, User, X } from 'lucide-solid';
 import { useLocation } from '@solidjs/router';
-import { REPO_URL } from '@/lib/serving/repo';
+import { REPO_URL } from '@/lib/http/urls';
 import { loginHref } from '@/lib/http/login-href';
 import { endPagesSessions } from './browser-session';
 import { PageControlsBody } from './PageBar';

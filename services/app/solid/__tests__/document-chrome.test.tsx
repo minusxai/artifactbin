@@ -52,7 +52,7 @@ vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
-import {captureInstallPrompt} from '@/lib/serving/pwa-install';
+import { captureInstallPrompt } from '@/solid/lib/pwa-install';
 vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 // The test exercises the real editor tabs; CodeMirror geometry is outside this page-level contract.
 vi.mock('../editor/SourceEditor', () => ({ default: () => <textarea aria-label="Markup source" /> }));

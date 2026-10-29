@@ -2,7 +2,7 @@
 /** The Solid application entry for the Trash HTML page. */
 // FIRST: the address bar holds the canonical path before anything below reads it (solid/lib/heal-address).
 import './lib/heal-address';
-import { captureInstallPrompt } from '@/lib/serving/pwa-install';
+import { captureInstallPrompt } from '@/solid/lib/pwa-install';
 import { render } from 'solid-js/web';
 import '@/solid/lib/heal-address';
 import { captureServedFrame } from '@/solid/lib/served-frame';

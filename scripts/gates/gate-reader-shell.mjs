@@ -60,7 +60,7 @@ const sink = await startMailSink();
 const browser = await launchChromium();
 
 /*
- * Every reader gets the app page framing the document on the document's own origin (lib/serving/document-frame).
+ * Every reader gets the app page framing the document on the document's own origin (lib/document-serving/document-frame).
  */
 const framedOnItsOrigin = async (page, id) => {
   const doc = await documentFrame(page).catch(() => null);

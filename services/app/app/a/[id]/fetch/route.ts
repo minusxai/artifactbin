@@ -18,7 +18,7 @@ import { documentFetchRateLimited, documentFetchReader, requestOrSessionActor } 
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';
-import { servedRow } from '@/lib/serving';
+import { servedRow } from '@/lib/artifacts';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { cspExtensionsFor, declaredCspExtensions } from '@/lib/trust/document-trust';
 import { cspOriginMatches } from '@/lib/document';

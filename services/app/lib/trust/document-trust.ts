@@ -189,7 +189,7 @@ function sessionSetCookie(session: SessionTrust): string {
 const CARRIED_TRUST_KEY = 'trust';
 
 /**
- * What the app page hands a document's own origin with its reader's pages ticket (lib/serving/artifact-page
+ * What the app page hands a document's own origin with its reader's pages ticket (lib/document-serving/artifact-page
  * framedDocumentSrc): this browser session's once-grants and denies for this reader, as read from the app origin's
  * cookie. Every document's, not one: the pages cookie is shared by all of a reader's frames, and each framed load
  * replaces it. Server-minted data in a server-side row — never read from the document's request.

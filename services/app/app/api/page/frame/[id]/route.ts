@@ -8,7 +8,7 @@
  * it gets here, server/pages-host).
  */
 import { json } from '@/lib/http';
-import { framedDocumentSrc } from '@/lib/serving/artifact-page';
+import { framedDocumentSrc } from '@/lib/document-serving';
 import { pagesSite } from '@/lib/http/pages-origin';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {

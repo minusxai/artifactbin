@@ -1,7 +1,7 @@
 import { getArtifactFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
 import { baseUrl, json } from '@/lib/http';
-import { existingPaste } from '@/lib/serving';
+import { existingPaste } from '@/lib/agent-copy';
 
 /**
  * POST /api/my/artifacts/:id/agent-prompt — "hand this document to an agent".

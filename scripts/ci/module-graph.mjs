@@ -163,6 +163,13 @@ const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
 const ACCOUNTS_ENTRIES = ['', 'tokens'];
 /**
+ * lib/document-serving and lib/agent-copy: server code enters through the index (it reads the database, the skill
+ * tree and image tools); the app's browser code imports these pure leaf files for values (the app address of an
+ * installable artifact, the frame's sandbox, the agent paste and getting-started copy).
+ */
+const DOCUMENT_SERVING_BROWSER_LEAVES = ['artifact-pwa', 'document-frame'];
+const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-installers'];
+/**
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
  * module directory without extension; `''` is the index), and optionally `browserImporters` (path
  * prefixes ending in `/`, or exact files) with the `browserLeaves` only they may import.
@@ -189,6 +196,9 @@ export const DEEP_MODULES = {
   'lib/notifications': { entries: [''], serverOnly: [''] },
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
   'lib/platform': { entries: [''], serverOnly: [''] },
+  'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
+  'lib/custom-domains': { entries: [''], serverOnly: [''] },
+  'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
 };
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 

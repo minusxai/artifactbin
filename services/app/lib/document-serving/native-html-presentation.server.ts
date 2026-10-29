@@ -4,7 +4,7 @@ import {DOMAIN_FOOTER_TEXT} from '@artifactbin/contracts/domain-footer';
 import {CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {PUBLIC_BASE_URL} from '@/lib/platform';
-import {canonicalDocumentUrl} from './custom-domains';
+import {canonicalDocumentUrl} from '@/lib/custom-domains';
 import {documentHeadTags} from './document-frame';
 import {nativeHtmlTitle} from './native-html.server';
 interface DomainPresentation {hostname:string;homepage?:boolean;path?:string}

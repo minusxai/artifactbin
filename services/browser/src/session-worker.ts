@@ -18,7 +18,7 @@ const rpc = payload => new Promise((resolve, reject) => {
 // shared reference grammar, so the sandbox never carries a second copy of it.
 const pageList = () => [...pages].filter(([,page]) => !page.isClosed()).map(([page_id,page]) => ({page_id,url:page.url()}));
 // THE PAGE IS THE DOCUMENT. The app page frames every document on the document's own origin
-// (lib/serving/document-frame: iframe[data-mx-document-frame], name "mx-document"), and window.page lives
+// (lib/document-serving/document-frame: iframe[data-mx-document-frame], name "mx-document"), and window.page lives
 // inside that frame. So on a page that frames a document, what a script reads, waits for, locates and acts
 // on resolves in the frame; page.url(), goto, screenshot, keyboard and mouse stay the app page's.
 const DOCUMENT_FRAME = 'iframe[data-mx-document-frame]';

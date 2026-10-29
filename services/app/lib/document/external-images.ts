@@ -1,7 +1,7 @@
 /**
  * WHICH EXTERNAL URLs A DOCUMENT NAMES. Publish no longer imports them (a web
  * URL is served as written); this lister remains only for the serve-time lookup
- * of copies already held (lib/serving web-assets, custom-domains, prepared-page,
+ * of copies already held (lib/document-serving, lib/custom-domains, prepared-page,
  * draft-preview), pending its removal there.
  *
  * One position holds an image: `<img src>`, the place refs.ts treats as an

@@ -1,12 +1,12 @@
 /**
  * AN ARTIFACT AS AN INSTALLABLE APP, without a server: the source's own `artifactbin:pwa-*` head metas decide
  * whether it is an app and what its manifest says; the address is stable and carries no viewer state; disabled
- * means no discovery at all. The ACL and the HTTP (server/__tests__/artifact-pwa) are the route's.
+ * means no discovery at all. Its assets are never kept; the ACL and the routes (server/__tests__/artifact-pwa) are the app's.
  */
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import type { ArtifactRow } from '@/lib/artifacts';
-import { artifactAppIcon, artifactAppPath, artifactManifest, artifactPwaEnabled, withArtifactAppHead } from '@/lib/serving';
+import { artifactAppAsset, artifactAppIcon, artifactAppPath, artifactManifest, artifactPwaEnabled, withArtifactAppHead } from '@/lib/document-serving';
 
 const head = (metas: Record<string, string>) => `<!doctype html><html><head>${Object.entries(metas).map(([name, content]) => `<meta name="artifactbin:pwa-${name}" content="${content}">`).join('')}</head><body><h1>App</h1></body></html>`;
 const row = (source: string, overrides: Partial<ArtifactRow> = {}) => ({
@@ -92,5 +92,32 @@ describe('the generated icon', () => {
     }
     expect(again.equals(small)).toBe(true);
     expect(other.equals(small)).toBe(false);
+  });
+});
+
+describe('the app\'s assets', () => {
+  it('answers the manifest as uncached, unsniffed manifest JSON', async () => {
+    const app = row(head({ enabled: 'true', name: 'Tracker' }));
+    const res = (await artifactAppAsset(app, 'manifest.webmanifest'))!;
+    expect([res.status, res.headers.get('content-type'), res.headers.get('cache-control'), res.headers.get('x-content-type-options')])
+      .toEqual([200, 'application/manifest+json', 'no-store', 'nosniff']);
+    expect(await res.json()).toEqual(artifactManifest(app));
+  });
+
+  it('answers each listed icon as an uncached PNG of its size', async () => {
+    const app = row(head({ enabled: 'true' }));
+    for (const { src, sizes } of artifactManifest(app).icons) {
+      const res = (await artifactAppAsset(app, src.slice(artifactAppPath(app.id).length)))!;
+      expect([res.status, res.headers.get('content-type'), res.headers.get('cache-control'), res.headers.get('x-content-type-options')])
+        .toEqual([200, 'image/png', 'no-store', 'nosniff']);
+      const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+      expect(`${meta.width}x${meta.height}`).toBe(sizes);
+    }
+  });
+
+  it('answers nothing for a disabled app or an unknown asset', async () => {
+    const off = row(head({ enabled: 'false' }));
+    for (const asset of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png']) expect(await artifactAppAsset(off, asset), asset).toBeNull();
+    expect(await artifactAppAsset(row(head({ enabled: 'true' })), 'icon-64.png')).toBeNull();
   });
 });

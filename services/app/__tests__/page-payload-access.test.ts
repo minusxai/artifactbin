@@ -8,7 +8,7 @@ import { POST as publish } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { GET as membersRoute } from '@/app/api/my/artifacts/[id]/members/route';
 import { GET as annotationsRoute, POST as createCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { artifactPageAnswer } from '@/lib/serving/artifact-page';
+import { artifactPageAnswer } from '@/lib/document-serving/artifact-page';
 import { pagesSite } from '@/lib/http/pages-origin';
 
 useAppHarness();

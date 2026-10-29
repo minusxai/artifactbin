@@ -7,4 +7,4 @@ export { loginHref } from './login-href';
 export { decodePage, encodeCursor } from './pagination';
 export { internalRedirectTarget, loginRedirectTarget } from './safe-redirect';
 export { forgetShared, primeShared, sharedRequest } from './shared-request';
-export { artifactViewPath, canonicalArtifactPath, domainPostPath, parsePrettyPath, titleSlug } from './urls';
+export { GITHUB_EXTERNAL_URL, REPO_URL, artifactViewPath, canonicalArtifactPath, domainPostPath, parsePrettyPath, titleSlug } from './urls';

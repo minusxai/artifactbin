@@ -8,7 +8,7 @@ import { can, capabilityGuard, changeMembership, createArtifact } from '@/lib/ar
 import { claimToken, createUser, identityForUser, isTestAccount, shareTargetsRefusal, syncProfile } from '@/lib/accounts';
 import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/lib/groups';
 import { recordNotification } from '@/lib/notifications';
-import { attachDomain, verifyDomain } from '@/lib/serving';
+import { attachDomain, verifyDomain } from '@/lib/custom-domains';
 import { overrideConfig } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform';
 

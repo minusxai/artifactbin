@@ -99,13 +99,3 @@ export function withFreshNonce(template: string): string {
 export function anonymousReader(actor: {userId?: string | null; tokenId?: string | null}, carried?: Record<string, unknown> | null): boolean {
   return !actor.userId && !actor.tokenId && !(carried && Object.keys(carried).length);
 }
-
-/**
- * The cache policy of a stored image or PDF's own bytes (/raw): a versioned address (`?v=<n>`) is immutable,
- * a bare one might be replaced under the same id and only gets a short freshness window; a shared cache may
- * hold only what everyone may read.
- */
-export function storedBytesCacheControl(row: {visibility: string}, versioned: boolean): string {
-  const scope = row.visibility === 'public' ? 'public' : 'private';
-  return versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`;
-}
