@@ -1,5 +1,5 @@
 /** The initial reader's transport. Authoring/comment modules compose this port when opened. */
-import {PRESENCE_EVENT,type PresencePublication,type PresenceViewer} from '@/lib/html-presence/contract';
+import {PRESENCE_EVENT,type PresenceFrame,type PresencePublication} from '@/lib/html-presence/contract';
 import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type ArtifactLiveEvent,type ArtifactVersionPing} from '@/lib/story-runtime/contract';
 import {openLiveStream} from '@/lib/http/live-stream';
 import {readAnnotationPages} from '@/lib/annotations/pages';
@@ -37,7 +37,7 @@ export function createReaderHttpBackend(id:string,options:ReaderHttpOptions={}):
           handlers.onPing(ping);
         },
         events: {
-          [PRESENCE_EVENT]: data => {try {const viewers:unknown=JSON.parse(data);if(Array.isArray(viewers))handlers.onPresence?.(viewers as PresenceViewer[]);}catch{}},
+          [PRESENCE_EVENT]: data => {try {const frame=JSON.parse(data) as Partial<PresenceFrame>|null;if(frame&&Array.isArray(frame.viewers)&&Number.isInteger(frame.total))handlers.onPresence?.(frame as PresenceFrame);}catch{}},
           [STORY_DATA_EVENT]: (data) => {
             try { handlers.onData(JSON.parse(data) as ArtifactDataEvent); } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
           },

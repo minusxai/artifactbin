@@ -33,7 +33,7 @@ it('two connected viewers hear committed stores; reconnect refetches writes miss
  try{
   for(const viewer of [a,b])expect((await viewer.next(2)).find(e=>e.event==='data')?.data).toMatchObject({datasets:['counter'],revisions:{counter:`backend:${backendId}:0`}});
   expect(await setHtmlBackendStore(backendId,{count:1},0)).toEqual({ok:true,version:1});
-  for(const viewer of [a,b])expect((await viewer.next(2)).find(e=>e.event==='data')?.data).toMatchObject({revisions:{counter:`backend:${backendId}:1`}});
+  for(const viewer of [a,b])expect((await nextData(viewer)).data).toMatchObject({revisions:{counter:`backend:${backendId}:1`}});
   a.close();b.close();
   expect(await setHtmlBackendStore(backendId,{count:2},1)).toEqual({ok:true,version:2});
   const reconnected=await connect();
@@ -78,7 +78,7 @@ it('public page readers never receive private dataset activity, including after 
   await connected.next(2);
   await db.query("UPDATE artifacts SET visibility='private',version=version+1 WHERE id=$1",[dataset]);
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(id)]);
-  expect((await connected.next(2)).find(e=>e.event==='data')?.data.revisions).toEqual({rows:'unavailable'});
+  expect((await nextData(connected)).data.revisions).toEqual({rows:'unavailable'});
   await db.query('UPDATE artifacts SET version=version+1 WHERE id=$1',[dataset]);
   await db.query("SELECT pg_notify($1,'')",[artifactChannel(dataset)]);
   expect((await connected.next(1,100)).filter(e=>e.event==='data')).toEqual([]);
