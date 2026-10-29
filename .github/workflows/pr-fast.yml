@@ -1,0 +1,94 @@
+name: pr fast
+
+# PULL REQUEST CI BUDGET, A HARD RULE: aim for 40s; the limit is 60s. Each job's last step measures
+# the run from its start (queue, setup and install included) and FAILS the pull request past 60s
+# (scripts/lib/ci-elapsed.mjs --pr). Do not raise the budget: fix the critical path instead.
+#
+# This is the required pull request check. It runs validate (type check, knip, module graph, name and
+# UI-primitive guards), the workflow lint, JavaScript syntax and the fast module test list
+# (scripts/ci/fast-tests.json) on three runners at once, each restoring main's install cache; the type
+# check starts from the newest incremental build info any run uploaded.
+# The full suite stays in ci.yml: it runs on every push to main and gates deploys there, and on a pull
+# request it still runs, selected by affected modules, as an informational check that also records the
+# tested tree main's push reuses. page-speed.yml is informational too.
+#
+# No workflow-level `concurrency` group: cancel-in-progress holds a new run pending until the old one
+# stops (ci.yml's header has the measurements), which alone would cost more than this lane's budget.
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: fast (${{ matrix.part }})
+    runs-on: ubuntu-latest
+    # A job that reaches two minutes is already twice over the limit.
+    timeout-minutes: 2
+    # Reading this run's own attempt (the clock below) needs `actions: read`; a job-level block replaces
+    # the workflow's, so `contents: read` is restated.
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [ types, lint, tests ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # No `cache: npm`: the whole install is restored below, and npm's download cache would only add a restore.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      # ci.yml's whole-install cache, same key (see its `checks` job for why it holds the fonts too). Main's
+      # `warm-caches` and every ci.yml miss save it; this lane only restores.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+      - run: node scripts/ci/prepare-esbuild.mjs
+      # The root type check is incremental (tsconfig.json `tsBuildInfoFile`): start from the newest build info
+      # any run of this repository uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
+      - if: matrix.part == 'types'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/ci.mjs type-info
+      - if: matrix.part == 'types'
+        run: node scripts/ci/check-local.mjs validate --part=types
+      - if: matrix.part == 'types'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tsc-buildinfo
+          path: node_modules/.cache/tsc/root.tsbuildinfo
+          # Kept as long as tested-tree evidence: a quiet stretch must not leave the next PR a cold type check.
+          retention-days: 14
+          if-no-files-found: ignore
+      # actionlint reads every workflow and shellchecks every `run:` block; it runs beside the lint half.
+      - if: matrix.part == 'lint'
+        name: Lint the workflows and validate the rest
+        run: |
+          docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color & lint=$!
+          rc=0
+          node scripts/ci/check-local.mjs validate --part=lint || rc=1
+          wait "$lint" || rc=1
+          exit "$rc"
+      - if: matrix.part == 'tests'
+        run: node scripts/ci/fast-check.mjs
+      - name: PR CI clock (aim for 40s; fails over 60s)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" > "$RUNNER_TEMP/pr-attempt.json"
+          node scripts/lib/ci-elapsed.mjs --pr "$RUNNER_TEMP/pr-attempt.json" "$GITHUB_STEP_SUMMARY"

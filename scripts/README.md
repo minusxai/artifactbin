@@ -40,11 +40,11 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/ci/check-local.mjs` | The FAST checks: `validate` (names, types, module graph) and `test` (affected tests). | `npm run validate`, `npm test`, `ci.yml` |
+| `scripts/ci/check-local.mjs` | The FAST checks: `validate` (names, types, module graph) and `test` (affected tests). | `npm run validate`, `npm test`, `ci.yml`, `pr-fast.yml` (`validate --part=types\|lint`) |
 | `scripts/ci/check-residual-names.mjs` | Refuse retired product names outside the allowlist. | `check-local.mjs validate` |
 | `scripts/ci/check-ui-primitives.mjs` | Refuse controls, overlays and one-off styles drawn outside `services/app/solid/ui` (app chrome in `solid/` and the offline file's `lib/offline/*.tsx`); ratchets migration debt in `ui-primitives-allowlist.json` and requires an exact count and a `reason` for each permanent exception in `ui-primitives-exceptions.json`. | `check-local.mjs validate` |
 | `scripts/ci/module-graph.mjs` | Refuse import cycles and layer violations between modules. | `check-local.mjs validate` |
-| `scripts/ci/fast-check.mjs` | Parse executable JavaScript and run the fast module lane. | post-merge `ci.yml` on main |
+| `scripts/ci/fast-check.mjs` | Parse executable JavaScript and run the fast module lane. | `pr-fast.yml` on pull requests, `ci.yml` on main |
 | `scripts/ci/fast-tests.mjs` | Audit full-suite ownership and enrolled tests' transitive capabilities, then run pure module behavior. | `fast-check.mjs` |
 | `scripts/ci/test-changed.mjs` | Discover the affected Vitest tests, enforce the 50-file budget, run them. | `check-local.mjs test` |
 

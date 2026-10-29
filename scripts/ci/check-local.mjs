@@ -5,18 +5,24 @@ import { typeCheckCommands } from '../lib/type-check.mjs';
 
 const [label, ...raw] = process.argv.slice(2);
 const reuse = raw.includes('--reuse');
-const args = raw.filter(arg => arg !== '--reuse');
+// `--part=types|lint` runs one half of validate: the pull request lane (.github/workflows/pr-fast.yml)
+// runs the halves on separate runners so the root type check does not share four CPUs with knip.
+const part = raw.find(arg => arg.startsWith('--part='))?.slice('--part='.length);
+const args = raw.filter(arg => arg !== '--reuse' && !arg.startsWith('--part='));
 const node = process.execPath;
-const commands = label === 'validate' && !args.length ? [
+const rootTypes = command => command.at(-1) === 'tsconfig.json';
+const validateCommands = [
   [node, 'scripts/ci/check-residual-names.mjs'],
   [node, 'scripts/ci/check-ui-primitives.mjs'],
   [node, 'scripts/ci/module-graph.mjs'],
   // Unused files, exports, types and dependencies (knip.config.js names the entry points); a stale entry fails too.
   [node, 'node_modules/knip/bin/knip.js', '--no-progress', '--treat-config-hints-as-errors'],
   ...typeCheckCommands({ root: path.resolve('.'), node }),
-] : label === 'test' ? [[node, 'scripts/ci/test-changed.mjs', ...args]] : null;
+].filter(command => part === undefined || (part === 'types') === rootTypes(command));
+const commands = label === 'validate' && !args.length && [undefined, 'types', 'lint'].includes(part) ? validateCommands
+  : label === 'test' ? [[node, 'scripts/ci/test-changed.mjs', ...args]] : null;
 try {
-  if (!commands) throw new Error('Expected validate [--reuse] or test [--reuse] [test options].');
+  if (!commands) throw new Error('Expected validate [--reuse] [--part=types|lint] or test [--reuse] [test options].');
   // npm lifecycle/terminal bookkeeping changes across shells; application and
   // tool settings remain part of the fingerprint. Only digests are persisted.
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>

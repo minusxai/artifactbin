@@ -1,4 +1,4 @@
-import { readBody } from '@artifactbin/utils';
+import { readBody } from '@artifactbin/utils/body';
 
 /** The most a browser session may replay in one request body. */
 const SESSION_REQUEST_BODY_LIMIT = 16 * 1024 * 1024;
