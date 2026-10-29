@@ -12,7 +12,7 @@
   "scripts/__tests__/fast-test-policy.test.mjs",
   "scripts/__tests__/native-dataset-page.test.mjs",
   "services/app/lib/__tests__/app-pages.test.ts",
-  "services/app/lib/__tests__/comment-state.test.ts",
+  "services/app/lib/story-runtime/__tests__/comment-state.test.ts",
   "services/app/lib/groups/__tests__/group-destination.test.ts",
   "services/app/lib/export/__tests__/native-html-media.test.ts",
   "services/app/lib/annotations/__tests__/html-anchor.test.ts",

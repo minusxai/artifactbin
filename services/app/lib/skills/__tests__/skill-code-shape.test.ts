@@ -9,10 +9,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {loadSkillAssets} from '../skills/assets';
-import {skillTree, joinSoftBreaks} from '../skills';
+import {loadSkillAssets} from '../assets';
+import {skillTree, joinSoftBreaks} from '..';
 
-const ROOT = fileURLToPath(new URL('../../skills/artifactbin/', import.meta.url));
+const ROOT = fileURLToPath(new URL('../../../skills/artifactbin/', import.meta.url));
 const MAX_LINES = 200;
 const MAX_WIDTH = 100;
 
@@ -110,7 +110,7 @@ describe('the rules', () => {
 });
 
 it('every shipped hand-written code file has its header and fits 200 lines of 100 columns', async () => {
-  const {COMMANDS} = await import('../../skills/artifactbin/scripts/toolbox-commands.mjs');
+  const {COMMANDS} = await import('../../../skills/artifactbin/scripts/toolbox-commands.mjs');
   const assets = loadSkillAssets(path.resolve(ROOT));
   const commands = Object.keys(COMMANDS);
   const problems: string[] = [];

@@ -17,7 +17,7 @@ it('shows refusal and unknown-readiness outcomes without claiming work began',()
  expect(remoteWorkLabel({...work,activity:'unknown'})).toMatch(/readiness unknown/);
 });
 
-import {REMOTE_COLOR_CSS} from '../../../contracts/src/remote';
+import {REMOTE_COLOR_CSS} from '../../../../contracts/src/remote';
 it('agent name colors meet normal-text contrast on light and dark comment surfaces',()=>{
  const luminance=(hex:string)=>{const channels=hex.match(/[a-f0-9]{2}/gi)!.map(s=>parseInt(s,16)/255).map(n=>n<=0.04045?n/12.92:((n+0.055)/1.055)**2.4);return channels[0]*0.2126+channels[1]*0.7152+channels[2]*0.0722;};
  const contrast=(a:string,b:string)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);};

@@ -82,7 +82,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   transcripts/assets/dependencies; batch reads, never repeat searches.
 - Author skill: test contracts, never prose. Pinned docs/copy/errors: find their tests and gates
   (`buildQuickSheet`, `agentDiscovery`, `renderDoc`, exact text) and update them. Guide edits run
-  `services/app/lib/__tests__/skill-tree.test.ts`: rendered guides stay within 8,192 bytes.
+  `services/app/lib/skills/__tests__/skill-tree.test.ts`: rendered guides stay within 8,192 bytes.
   Reuse only the task's own dev server.
 - After a merge: local main to latest origin/main, `git worktree prune`, remove finished worktrees.
 - Top-level imports, except intentional lazy browser chunks and engine-selecting imports; document a

@@ -1,9 +1,9 @@
 import {pathToFileURL} from 'node:url';
-import {isPublicSkillTopic,isShippedSkillTopic} from '../skills/public-surface';
+import {isPublicSkillTopic,isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText, publicGuideText} from '@/lib/agent-copy';
-import {skillTree, SKILL_MAIN_MAX_BYTES, SKILL_FILE_MAX_BYTES, renderSkill, skillPackageFiles, skillZip, projectSkillLinks, renderTree, skillFileWithFrontmatter} from '../skills';
+import {skillTree, SKILL_MAIN_MAX_BYTES, SKILL_FILE_MAX_BYTES, renderSkill, skillPackageFiles, skillZip, projectSkillLinks, renderTree, skillFileWithFrontmatter} from '..';
 
 describe('one root for installed and direct HTTP agents',()=>{
  it('gives URL readers complete HTTP operations',()=>{
@@ -31,7 +31,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
-import {platformOrigin} from '../skills/__tests__/platform-origin';
+import {platformOrigin} from './platform-origin';
 
 describe('installable shared skill folder',()=>{
  it('rewrites root/backlinks and anchors on the supplied origin',()=>{
