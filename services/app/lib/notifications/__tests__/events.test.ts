@@ -6,7 +6,8 @@
 import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {notificationChannel,recordEvent} from '@/lib/notifications';
+import {recordEvent} from '@/lib/platform';
+import {notificationChannel} from '@/lib/notifications';
 
 useAppHarness();
 type Db=Awaited<ReturnType<typeof getDb>>;

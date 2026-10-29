@@ -7,7 +7,7 @@
  */
 import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
-import { eraseMutationNotifications, lockMutationNotificationAuthority } from '@/lib/notifications/mutation-notifications';
+import { eraseMutationNotifications, lockMutationNotificationAuthority } from '@/lib/notifications';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations/comment-images';
 import { objectStore } from '@/lib/object-store';
 import { getDb } from '@/lib/platform/db';

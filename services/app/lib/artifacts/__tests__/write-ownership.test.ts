@@ -12,7 +12,8 @@ import { POST as create } from '@/app/api/artifacts/route';
 import { claimToken, createUser, identityForUser, installArtifactAdopter, mergeGuestUsers } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts/tokens';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { isMutationRefused, membershipInbox, mutateDataset, updateMembershipInbox } from '@/lib/document-data';
+import { isMutationRefused, mutateDataset } from '@/lib/document-data';
+import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 
 const harness = useAppHarness();

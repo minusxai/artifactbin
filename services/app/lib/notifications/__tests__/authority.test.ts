@@ -12,8 +12,8 @@ import {getDb} from '@/lib/platform';
 import {createUser,identityForUser,seedOwnerJoin} from '@/lib/accounts';
 import {createArtifactFromBody} from '@/lib/publish/publish/requests';
 import type {CompiledDataflow} from '@/lib/dataflow';
-import {notificationContextSnapshot} from '@/lib/notifications';
-import {evaluateNotificationQuery,mutationInitiator,notificationAuthority} from '@/lib/document-data';
+import {notificationAuthority,notificationContextSnapshot} from '@/lib/notifications';
+import {evaluateNotificationQuery,mutationInitiator} from '@/lib/document-data';
 
 useAppHarness();
 type Db=Awaited<ReturnType<typeof getDb>>;

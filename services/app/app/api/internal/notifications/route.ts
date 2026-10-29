@@ -2,7 +2,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {INTERNAL_SERVICE_SECRET} from '@/lib/platform';
 import {getDb} from '@/lib/platform';
-import { membershipInbox } from '@/lib/document-data';
+import { membershipInbox } from '@/lib/notifications';
 import { identityForUser } from '@/lib/accounts';
 import {json,readJson} from '@/lib/http';
 export async function POST(request:Request){

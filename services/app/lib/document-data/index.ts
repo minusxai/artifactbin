@@ -22,10 +22,7 @@ export { readFileRequest, uploadFileRequest } from './dataset-files/file-upload-
 export { readDatasetImage, uploadDatasetImage } from './dataset-files/feedback-images';
 
 /** Notifications (the runtime's background tasks, the people and notifications routes, the operation registry). */
-export { evaluateNotificationQuery } from './notifications/query';
-export { notificationAuthority } from './notifications/authority';
-export { notificationJobStore } from './notifications/runtime';
-export { membershipInbox, updateMembershipInbox } from './notifications/membership-inbox';
+export { evaluateNotificationQuery } from './notification-query';
 
 /** Native dataset GraphQL shares the retained write and policy boundary. */
 export {mutateDataset,isMutationRefused} from './dataset-mutate';

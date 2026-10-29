@@ -1,7 +1,7 @@
 /** Transaction-only authorization shared by query execution, result commit and disclosure. */
-import {getGroupRole} from '../../groups';
-import {notificationRuleSourceIds,notificationRevision as hash} from '@/lib/notifications/context';
-import {explicitNotificationMemberships} from '@/lib/notifications/membership';
+import {getGroupRole} from '@/lib/groups';
+import {notificationRuleSourceIds,notificationRevision as hash} from './context';
+import {explicitNotificationMemberships} from './membership';
 import { grantsOf, grantsPermitRead, readThrough, type ReadRow } from '@/lib/artifacts';
 import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
@@ -10,7 +10,7 @@ import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts'
 import { documentEditorReaches } from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';
-import {NotificationExecutionError} from '@/lib/notifications/errors';
+import {NotificationExecutionError} from './errors';
 import {resolveDatasetConnection} from '@/lib/datasets/secrets';
 import {DatasetError} from '@/lib/datasets/errors';
 
@@ -155,12 +155,4 @@ async function canManageNotificationDocument(tx:Queryable,principal:MutationInit
   return documentEditorReaches(row,identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));
  }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}
 }
-/** The job worker's liveness question at its clock (`at`; null = the wall clock): an unmerged, unexpired account or a live token. */
-async function principalLive(tx:Queryable,principal:{kind:'user'|'token';id:string},at:string|null):Promise<boolean>{
- const clock='coalesce($2::timestamptz,clock_timestamp())';
- const alive=principal.kind==='user'
-  ?await tx.query(`SELECT id FROM users WHERE id=$1 AND merged_into_user_id IS NULL AND (expires_at IS NULL OR expires_at>${clock})`,[principal.id,at])
-  :await tx.query(`SELECT id FROM tokens WHERE id=$1 AND ${liveTokenSql(clock)}`,[principal.id,at]);
- return alive.rows.length>0;
-}
-export const notificationAuthority={validatePlan:validateNotificationPlan,admitRecipients,canManage:canManageNotificationDocument,principalLive};
+export const notificationAuthority={validatePlan:validateNotificationPlan,admitRecipients,canManage:canManageNotificationDocument};

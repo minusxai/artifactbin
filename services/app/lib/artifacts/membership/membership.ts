@@ -1,6 +1,6 @@
 import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, testAccountMayReach, type AccessActor, setRelationState } from '@/lib/accounts';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {recordEvent} from '@/lib/notifications/events';
+import {recordEvent} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets/errors';
 import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';

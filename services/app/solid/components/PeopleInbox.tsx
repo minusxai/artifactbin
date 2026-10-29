@@ -1,8 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, For, Show, type JSX } from 'solid-js';
 import { Bell, Check } from 'lucide-solid';
-import { isMutationNotification, type InboxItem, type MemberNotificationItem } from '@/lib/notifications/inbox';
-import type { MutationNotificationView } from '@artifactbin/contracts';
+import { isMutationNotification, type InboxItem, type MemberNotificationItem, type MutationNotificationView } from '@artifactbin/contracts';
 import { timeAgo } from '../ui/ui';
 import { Button } from '../ui/Button';
 import { StatusMessage } from '../ui/StatusMessage';

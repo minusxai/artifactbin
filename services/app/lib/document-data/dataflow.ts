@@ -12,7 +12,7 @@ import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, ty
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
 import { can, refusalFor, type CapabilityRefusal } from '@/lib/artifacts';
 import { pinMutationContext, type MutationReceipt } from '@/lib/artifacts';
-import { notificationContextSnapshot } from '../notifications/context';
+import { notificationContextSnapshot } from '@/lib/notifications';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { getDb } from '../platform/db';

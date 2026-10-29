@@ -3,13 +3,12 @@
  * scheduling, leases, retry backoff and exhaustion, recipient admission and who may read or retry
  * a job. Time is the store's injected clock over a faked Date, so leases and token/account expiry
  * move without sleeping. Assertions read the store's answers, never its SQL. Principal liveness is the
- * real document-data rule (principalLive), so token and account expiry are checked as production checks them.
+ * store's own rule (accounts' token liveness), so token and account expiry are checked as production checks them.
  */
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {notificationAuthority} from '@/lib/document-data';
 import {createNotificationJobStore,type NotificationJobAuthority} from '@/lib/notifications';
 
 useAppHarness();
@@ -23,7 +22,7 @@ const input:MutationNotificationJobInput={
  bindings:{values:{},types:{},userId:'alice',now:'2026-01-01T00:00:00Z',tz:'UTC'},contextRevision:'context',contextSnapshot:{version:1},
 };
 const plan=(recipientIds:string[]):MutationNotificationPlan=>({executionFence:{principalRevision:'p',documentRevision:'d',contextRevision:'context'},rules:[{ruleName:'only',rows:[{recipientIds,message:'Changed'}],sources:[]}]});
-const authority:NotificationJobAuthority={validatePlan:async()=>{},admitRecipients:async(_tx,_input,_plan,ids)=>ids,canManage:async(_tx,p)=>p.kind==='user'&&p.id==='manager',principalLive:notificationAuthority.principalLive};
+const authority:NotificationJobAuthority={validatePlan:async()=>{},admitRecipients:async(_tx,_input,_plan,ids)=>ids,canManage:async(_tx,p)=>p.kind==='user'&&p.id==='manager'};
 const tick=(ms:number)=>vi.setSystemTime(Date.now()+ms);
 
 async function fixture(job=input){
