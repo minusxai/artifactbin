@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {startHtmlPresence} from '../../html-bridge/presence';
+import {startHtmlPresence} from '../presence';
 import {readerDefaults,type PresenceGeometry} from '../../html-presence/contract';
 afterEach(()=>{document.body.innerHTML='';window.getSelection()?.removeAllRanges();vi.restoreAllMocks();});
 it('shares offsets without text, excludes private inputs and duplicate identities, and paints without changing native selection',()=>{

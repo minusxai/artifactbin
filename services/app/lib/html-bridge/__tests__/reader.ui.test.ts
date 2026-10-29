@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { installHtmlReaderCommands } from '../../html-bridge/reader';
+import { installHtmlReaderCommands } from '../reader';
 
 it('refuses synthetic reader commands even with a forged parent and platform origin', () => {
   const stop = installHtmlReaderCommands(window, 'https://platform.example');

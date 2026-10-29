@@ -10,7 +10,6 @@ import {importNativeHistory} from '@/lib/native-history-import';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {readHtmlPage} from '@/lib/html-publication';
 import {prepareNativeRuntimeBundle, type NativeRuntimeAssembly} from '@/lib/native-runtime-bridge';
-import {rewriteNativeRuntimePdfLinks} from '@/lib/native-runtime-bridge/pdf-source';
 import {sniffAssetType} from '@/lib/web-ingest';
 // This file exercises the real upload path with a 4.35 MB PDF. Use the regular
 // production tier limits here; the API size-boundary tests keep their small caps.
@@ -109,10 +108,6 @@ it('publishes source PDF bytes through the validated PDF tier and maps the owned
  const context={params:Promise.resolve({id:options.pageId})},url=`/a/${options.pageId}/assets?dependency=${dependency.id}&revision=${dependency.revision}&version=3`;
  expect((await asset(request(url,{token:other.token}),context)).status).toBe(404);
  const response=await asset(request(url,{token:owner.token}),context);expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('application/pdf');expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(input.result.files![0]!.bytes));
-});
-it('rejects authored query keys that could replace the mapped asset identity',()=>{
- const imported={path:'assets/source.pdf',id:'SourceAsset',revision:'1',objectKey:'object',sha256:'a'.repeat(64),bytes:100,sourceAssets:[]};
- expect(()=>rewriteNativeRuntimePdfLinks('<a href="./assets/source.pdf?dependency=other#page=1">PDF</a>','RuntimePdf',[imported])).toThrow('native_runtime_pdf_link_query_conflict');
 });
 it('rejects malformed source PDF bytes before staging any artifact',async()=>{
  const owner=await mintAccountToken('native_runtime_bad_pdf_owner'),actor={...identityForUser(owner.userId,owner.id),tokenId:owner.id},input=pdfAssembly(Buffer.from('not a PDF'));

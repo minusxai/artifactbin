@@ -8,10 +8,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { resolveHmrPort } from '@/lib/platform';
-import { developmentViteOptions } from '@/lib/runtime';
-import { resolvePort, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
+import { developmentViteOptions } from '..';
+import { resolvePort, DEFAULT_DEV_PORT } from '../../../../../scripts/lib/dev-env.mjs';
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 describe('resolvePort', () => {
   it('takes the port out of PUBLIC_BASE_URL', () => {
@@ -62,5 +62,14 @@ describe('developmentViteOptions', () => {
   });
   it('keeps separate dev servers from replacing each other’s optimized dependencies', () => {
     expect(developmentViteOptions(appRoot, 7242).cacheDir).not.toBe(developmentViteOptions(appRoot, 7284).cacheDir);
+  });
+});
+
+describe('developmentPagesHosts', () => {
+  it('lets Vite answer every document label under the pages domain and the app host, with its own CORS off', async () => {
+    const { developmentPagesHosts } = await import('../dev-vite');
+    expect(developmentPagesHosts('lvh.me', 'http://localhost:3030/')).toEqual({ allowedHosts: ['.lvh.me', 'localhost'], cors: false });
+    expect(developmentPagesHosts('pages.test', 'https://app.example:8443')).toEqual({ allowedHosts: ['.pages.test', 'app.example'], cors: false });
+    expect(() => developmentPagesHosts('lvh.me', 'not a url')).toThrow();
   });
 });

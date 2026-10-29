@@ -1,8 +1,8 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
-import {getDb,type Queryable} from '../platform/db';
-import {overrideConfig} from '../platform/config';
-import {admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment} from '../deployment';
+import {getDb,type Queryable} from '@/lib/platform/db';
+import {overrideConfig} from '@/lib/platform/config';
+import {DeploymentError,admitDeploymentIdentity,canUseDeploymentIdentity,getDeploymentDefaultDestination,getDeploymentState,setupDeployment,validateDeploymentConfiguration} from '..';
 useAppHarness();
 const identity=(userId:string,email:string)=>({userId,email,emailVerified:true});
 describe('company admission',()=>{
@@ -100,4 +100,28 @@ describe('company admission',()=>{
   expect((await db.query("SELECT role FROM group_members WHERE group_id='team' AND user_id='newcomer'")).rows).toEqual([{role:'viewer'}]);
  });
  it('public mode remains open',async()=>{overrideConfig({}, {APP__DEPLOYMENT_MODE:'public'});expect(await admitDeploymentIdentity(identity('any','any@example.com'))).toBe(true);});
+});
+
+describe('deployment configuration and public mode',()=>{
+ it('refuses a company owner email the admission patterns would never admit',()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__ALLOWED_EMAIL_PATTERNS:'*@other.com'});
+  expect(()=>validateDeploymentConfiguration()).toThrow('APP__DEPLOYMENT_OWNER_EMAIL must match AUTH__ALLOWED_EMAIL_PATTERNS.');
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com',AUTH__ALLOWED_EMAIL_PATTERNS:'*@example.com'});
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'public',AUTH__ALLOWED_EMAIL_PATTERNS:'*@other.com'});
+  expect(()=>validateDeploymentConfiguration()).not.toThrow();
+ });
+ it('a public deployment is set up, has no default group, admits every identity and refuses company setup',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'public'});
+  expect(await getDeploymentState('anyone')).toEqual({mode:'public',setup_complete:true,is_owner:false,default_group:null});
+  expect(await getDeploymentDefaultDestination()).toBeUndefined();
+  expect(await canUseDeploymentIdentity(null)).toBe(true);
+  const refusal=await setupDeployment('owner','group').catch(error=>error);
+  expect(refusal).toBeInstanceOf(DeploymentError);expect(refusal).toMatchObject({code:'company_required',status:400,message:'Company deployment required'});
+ });
+ it('a company deployment never admits a missing or unknown credential',async()=>{
+  overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
+  for(const id of [null,undefined,'','nobody'])expect(await canUseDeploymentIdentity(id)).toBe(false);
+  expect(await getDeploymentState(null)).toMatchObject({mode:'company',setup_complete:false,is_owner:false,default_group:null});
+ });
 });

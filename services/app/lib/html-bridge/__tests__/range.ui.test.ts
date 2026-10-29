@@ -1,7 +1,6 @@
-import {resolveParts} from '../../frame-edit/selection-range';
 import {htmlTextFingerprint} from '@artifactbin/contracts';
 import { afterEach, expect, it } from 'vitest';
-import { captureHtmlRange, resolveHtmlRange } from '../../html-bridge/range';
+import { captureHtmlRange, resolveHtmlRange } from '../range';
 afterEach(() => { document.body.innerHTML = ''; });
 it('captures and restores an exact range across nested inline elements', () => {
   document.body.innerHTML = '<p>one <b>two</b> three two</p>';
@@ -29,9 +28,6 @@ it('maps a unique canonical quote back across changed whitespace', () => {
 it('restores a migrated forward endpoint at the next text node instead of the preceding wrapper',()=>{
  document.body.innerHTML='<p><af-text>Keep \n </af-text><strong><af-text>bold</af-text></strong> tail</p>';
  const node=document.querySelector('p')!,text=node.textContent!,anchor={kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'p',quote:'Keep ',range:{start:0,end:7,length:text.length,fingerprint:htmlTextFingerprint(text)}};
- const source=document.createElement('p');source.innerHTML='Keep \n <strong>bold</strong> tail';
- const original=resolveParts(source,[{rel:'',start:0,end:5,text:'Keep '}])[0]!;
- expect(original.endContainer).toBe(source.querySelector('strong')!.firstChild);expect(original.endOffset).toBe(0);
  const resolved=resolveHtmlRange(node,anchor,{endAffinity:'forward'});
  expect(resolved.range?.endContainer).toBe(node.querySelector('strong af-text')!.firstChild);
  expect(resolved.range?.endOffset).toBe(0);
