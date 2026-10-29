@@ -11,7 +11,7 @@ export { canReadArtifact, documentEditorReaches, ownsArtifact, effectiveRole } f
 export { commentMonitorScope, reactionScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, readableArtifactHeader, readableArtifactIdentity, snapshotForReader, snapshotHeadFor } from './read-access';
-export { accessMoved, getArtifact, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader, ArtifactIdentity } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';

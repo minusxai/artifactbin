@@ -18,7 +18,7 @@ import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
 import { getDb } from '@/lib/platform/db';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, sessionActor, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
@@ -244,7 +244,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
     latestPresence=null;presenceRevision=String(row.version);
     const room=await createPresenceRoom({revision:String(row.version),
-      authorize:async()=>{const current=await getArtifactById(id);return !!current&&await canReadArtifact(current,actor);},
+      authorize:async()=>{const current=await getArtifactAccessById(id);return !!current&&await canReadArtifact(current,actor);},
       subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
       subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
       send:viewers=>{latestPresence=viewers;writePresence();},close:()=>{if(!replacingPresence)void close();},

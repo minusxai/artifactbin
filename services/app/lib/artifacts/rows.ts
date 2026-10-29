@@ -50,6 +50,18 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
   return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
 }
 
+/** The columns a read-access decision consults (lib/artifacts/access canReadArtifact) plus the revision: no content, no metadata. */
+const ARTIFACT_ACCESS_COLUMNS = ['id', 'token_id', 'user_id', 'group_id', 'visibility', 'link_role', 'format', 'version'] as const satisfies readonly (keyof ArtifactHeader)[];
+export type ArtifactAccessRow = Pick<ArtifactHeader, typeof ARTIFACT_ACCESS_COLUMNS[number]>;
+/**
+ * The cheapest row a hot path can decide read access on — a presence heartbeat, a live stream's re-authorization —
+ * without shipping the document or metadata. Same trash gate and same row as {@link getArtifactById}.
+ */
+export async function getArtifactAccessById(id: string): Promise<ArtifactAccessRow | null> {
+  const db = await getDb();
+  return (await db.query<ArtifactAccessRow>(`SELECT ${ARTIFACT_ACCESS_COLUMNS.join(', ')} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
+}
+
 /** The header without its metadata body: the identity and access columns, and a digest standing for `meta`. */
 export type ArtifactIdentity = Omit<ArtifactHeader, 'meta'> & { meta_digest: string };
 const IDENTITY_SELECT = ARTIFACT_HEADER_COLUMNS.filter((column) => column !== 'meta').join(', ') + ', md5(meta::text) AS meta_digest';

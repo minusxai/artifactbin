@@ -17,3 +17,16 @@ it('shares offsets without text, excludes private inputs and duplicate identitie
  const privateRange=document.createRange();privateRange.selectNodeContents(document.querySelector('[data-af-id="mixed"]')!);window.getSelection()!.removeAllRanges();window.getSelection()!.addRange(privateRange);document.dispatchEvent(new Event('selectionchange'));expect(sent.at(-1)?.selection).toBeNull();
  presence.dispose();expect(document.querySelector('[data-af="presence-overlay"]')).toBeNull();
 });
+it('glides a moved cursor across one publication window and repaints a scrolled one without lag',()=>{
+ document.body.innerHTML='<p data-af-id="a">Public text</p>';
+ vi.spyOn(document.querySelector('p')!,'getBoundingClientRect').mockReturnValue({x:0,y:0,width:200,height:100,left:0,top:0,right:200,bottom:100,toJSON(){}});
+ const presence=startHtmlPresence(window,()=>{});
+ const viewer=(x:number)=>({id:'other',label:'Other viewer',revision:'1',seen:1,cursor:{nodeId:'a',x,y:.5},selection:null});
+ presence.receive({preferences:readerDefaults,viewers:[viewer(.25)]});
+ const mark=document.querySelector<HTMLElement>('[data-af-presence-cursor]')!;expect(mark.style.left).toBe('50px');expect(mark.style.transition).toBe('none');
+ presence.receive({preferences:readerDefaults,viewers:[viewer(.75)]});
+ expect(document.querySelector('[data-af-presence-cursor]')).toBe(mark);expect(mark.style.left).toBe('150px');expect(mark.style.transition).toContain('250ms');
+ presence.paint();expect(mark.style.transition).toBe('none');
+ presence.receive({preferences:readerDefaults,viewers:[]});expect(document.querySelector('[data-af-presence-cursor]')).toBeNull();
+ presence.dispose();
+});
