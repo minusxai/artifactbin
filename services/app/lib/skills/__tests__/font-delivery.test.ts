@@ -8,7 +8,7 @@ import {GET} from '@/app/skills/artifactbin.zip/route';
 import {platformOrigin} from './platform-origin';
 import {skillZip} from '../package';
 import {planPublicationBundle} from '../../html-publication-bundle/plan';
-import {STORY_SYSTEM_SHEETS} from '../../data/story/story-system-sheets';
+import {STORY_SYSTEM_SHEETS} from '@/lib/story-design/server';
 import { storyFontManifest as manifest } from '../../data';
 
 it('packages no font members: the archive is text only',()=>{
@@ -24,7 +24,7 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
   execFileSync('unzip',['-t',zip],{stdio:'pipe'});execFileSync('unzip',['-q',zip,'-d',root]);
   const installed=path.join(root,'artifactbin');
   expect(existsSync(path.join(installed,'fonts'))).toBe(false);
-  const names=Object.keys(JSON.parse(readFileSync('lib/data/story/story-system-sheets.json','utf8')));
+  const names=Object.keys(JSON.parse(readFileSync('lib/story-design/story-system-sheets.json','utf8')));
   for(const name of names){
    const css=readFileSync(path.join(installed,'design-systems',name+'.css'),'utf8');
    expect(css,name).not.toMatch(/url\(\s*["']?https?:|fonts\.gstatic|\.\.\/fonts\//);

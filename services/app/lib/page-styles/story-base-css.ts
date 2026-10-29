@@ -18,7 +18,7 @@ import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface/task-checkbox-css';
 import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from './chrome-css';
-import { getStoryFontCss } from '@/lib/data/story/story-fonts';
+import { getStoryFontCss } from '@/lib/story-design/story-fonts';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 export interface StoryBaseCssRecipe {
@@ -30,7 +30,7 @@ export interface StoryBaseCssRecipe {
   /** The Helmet's font slot overrides. */
   fonts: DocumentFonts;
   /**
-   * A design system's faces and classes (lib/data/story/story-system-sheets storySystemSheetCss), when the
+   * A design system's faces and classes (lib/story-design/story-system-sheets storySystemSheetCss), when the
    * document names one. The TEXT, not the name: the browser rebuilds this sheet from the recipe and
    * must not carry the registry to do it.
    */

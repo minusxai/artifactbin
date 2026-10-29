@@ -67,9 +67,9 @@ const SCANS: Scan[] = [
     label: 'no retired theme name is used as a value (the alias table is gone too)',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
-    // broadsheet and nocturne returned as design systems (lib/data/story/story-systems) on 3 Oct 2026.
+    // broadsheet and nocturne returned as design systems (lib/story-design/story-systems) on 3 Oct 2026.
     pattern: /['"](classical)['"]/,
-    proof: { atLeast: 50, contains: `${APP}/lib/data/story/story-themes.ts` },
+    proof: { atLeast: 50, contains: `${APP}/lib/story-design/story-themes.ts` },
   },
   {
     // Two generations of docs addresses answer 404 with no alias: the pre-tree pages and the

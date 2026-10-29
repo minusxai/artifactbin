@@ -3,10 +3,10 @@
  * system's variables, each keyed by `:root[data-af-design-system="NAME"]` (dark values under `[data-af-dark="true"]`),
  * plus every family's @font-face rules on the platform's /af/fonts/ files (a face downloads only when text uses it).
  * Hosted pages link the whole sheet at one stable address (PLATFORM_STYLES_PATH, revalidated by ETag); exports, offline copies and the
- * local preview carry only the active system. Data: lib/data/html/html-systems (generated from design-systems/specs).
+ * local preview carry only the active system. Data: lib/html-systems/html-systems (generated from design-systems/specs).
  */
-import {HTML_SYSTEMS,HTML_SYSTEM_FACES} from '../data/html/html-systems.ts';
-import {HTML_SYSTEM_MODES} from '../data/html/html-system-modes.ts';
+import {HTML_SYSTEMS,HTML_SYSTEM_FACES} from './html-systems.ts';
+import {HTML_SYSTEM_MODES} from '../validation/html-system-modes.ts';
 
 /** The platform stylesheet's one address: no version or hash, so a deploy shows up on the next load (ETag + no-cache). */
 export const PLATFORM_STYLES_PATH = '/af/styles.css';

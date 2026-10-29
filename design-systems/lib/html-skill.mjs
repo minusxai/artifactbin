@@ -51,8 +51,8 @@ export function nativeSystemCss(slug){
  const spec=loadSpec(slug);
  return `${cssHeader(slug)}${nativeSystemRules(slug,{comments:true})}\n/* Font faces: the platform hosts these files; they stay here so the sheet is complete on its own. */\n${packagedFontFaces(spec.fonts.map(([family])=>family))}\n`;
 }
-const HTML_SYSTEMS=path.join(REPO,'services/app/lib/data/html/html-systems.ts');
-const HTML_SYSTEM_MODES=path.join(REPO,'services/app/lib/data/html/html-system-modes.ts');
+const HTML_SYSTEMS=path.join(REPO,'services/app/lib/html-systems/html-systems.ts');
+const HTML_SYSTEM_MODES=path.join(REPO,'services/app/lib/validation/html-system-modes.ts');
 /**
  * The platform stylesheet's data (lib/html-systems): every system's rules, and one set of font faces per family with
  * absolute /af/fonts/ URLs (the platform's immutable font files). A tiny leaf carries the names and default modes for

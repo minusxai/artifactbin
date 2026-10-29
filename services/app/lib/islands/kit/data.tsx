@@ -25,7 +25,7 @@ import { numberFormatter } from '@/lib/dataflow/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story-ui/data-table';
 import { TABLE_CLASSES } from './data/table-classes';
 import { commentMetadata, keyedRowsError } from '@/lib/story-ui/repeat-identity';
-import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
+import { questionEmbedHeightPx } from '@/lib/story-ui/question-height';
 import { personFaceBackground, personInitial } from '../person-face';
 import type { PersonCard } from '@artifactbin/contracts';
 export { Select } from './select';

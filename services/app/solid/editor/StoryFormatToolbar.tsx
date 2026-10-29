@@ -45,8 +45,8 @@ import {
   stepPaddingClass,
   stepSizeClass,
   stepSpacingClass,
-} from '@/lib/data/story/typography';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+} from '@/lib/story-design/typography';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 import { selectionToolbarPlan } from '@/solid/lib/selection-toolbar';
 import type { MarkdownBlockKind, MarkdownTableAction, StoryEditSelection } from '@/lib/edit-protocol';
 import type { ComposableFormatEdit } from '@/lib/document/edit-compose';

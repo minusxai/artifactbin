@@ -15,7 +15,8 @@ import { readerDataflow } from '@/lib/dataflow';
  */
 import { type ArtifactRow, declarationsForRow, servableDocument } from '@/lib/artifacts';
 import { datasetsForDocument } from '@/lib/document-data';
-import { currentStoryCss, resolveStoredStoryDesign } from '@/lib/data';
+import { resolveStoredStoryDesign } from '@/lib/story-design';
+import { currentStoryCss } from '@/lib/story-design/server';
 import { authorHandle } from '@/lib/accounts';
 import type { StoryDesignName } from '@/lib/validation';
 import { loadDatasetRows } from '@/lib/datasets';

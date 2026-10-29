@@ -11,7 +11,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { kitTextAcceptsLinks } from '@/lib/jsx/component-names';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { setLink } from '@/lib/editor-engine/links';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel, StoryEditFramePost } from '@/lib/edit-protocol';
 import type { EditViews } from './hover-select';

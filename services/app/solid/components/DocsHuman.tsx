@@ -3,7 +3,7 @@ import WorkspaceHeading from './WorkspaceHeading';
 /** The human docs — the tour of the product. */
 import FlowSchematic from './FlowSchematic';
 import { FormatBadge, LINK } from '../ui/ui';
-import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
+import { STORY_SYSTEMS } from '@/lib/story-design/story-systems';
 import DesignSystemSpecimen from './DesignSystemSpecimen';
 
 

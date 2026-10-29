@@ -9,7 +9,7 @@
  * from dragging the whole AST-editing machinery — the validator and the
  * component tables with it — into the document's edit chunk.
  *
- * Nothing here reaches for a DOM, and nothing imports upward. `lib/data/story`
+ * Nothing here reaches for a DOM, and nothing imports upward. `lib/story-design`
  * re-exports these so no caller has to learn a second name for them.
  */
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';

@@ -5,7 +5,7 @@
  * or source the publish door would refuse can never corrupt a body.
  */
 import { describe, it, expect } from 'vitest';
-import { readMermaidEmbed, updateMermaidEmbedInJsx } from '@/lib/data/story/story-mermaid';
+import { readMermaidEmbed, updateMermaidEmbedInJsx } from '@/lib/story-edit/story-mermaid';
 
 const CODE = 'flowchart TD\n  A["Draft"] --> B{Saved?}';
 const SRC = `<div><p>x</p><Mermaid title="Flow" code={${JSON.stringify(CODE)}} /><Question data="$t" /></div>`;

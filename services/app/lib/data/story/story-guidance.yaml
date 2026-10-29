@@ -1,10 +1,10 @@
 # Story authoring guidance ("mini-skills") returned with Clarify picks.
 #
 # - `templates:` — FULL definitions of the story templates (structural genres). Projected
-#   into the registry by lib/data/story/story-templates.ts; the `guidance` block is returned
+#   into the registry by lib/story-design/story-templates.ts; the `guidance` block is returned
 #   verbatim to the agent when the user picks that template (Clarify `type: 'template'`).
 # - `themes:` — authoring guidance ONLY for the six design themes (their code entries + CSS
-#   tokens live in lib/data/story/story-themes.ts, which must stay YAML-free so tsx scripts
+#   tokens live in lib/story-design/story-themes.ts, which must stay YAML-free so tsx scripts
 #   can import it). Returned with the Clarify `type: 'design'` pick.
 #
 # Style contract for guidance blocks (learned from claude.ai/design's system readmes):

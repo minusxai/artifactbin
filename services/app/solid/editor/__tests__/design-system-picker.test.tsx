@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { screen } from '@testing-library/dom';
-import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
+import { STORY_SYSTEMS } from '@/lib/story-design/story-systems';
 import type { StoryDesignName } from '@/lib/validation/story-theme-names';
 import ThemePicker, { ModeChip, TemplateChip } from '../ThemePicker';
 

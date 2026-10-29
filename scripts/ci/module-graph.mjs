@@ -96,8 +96,6 @@ const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport',
  * name a leaf; their types and everything else use the entries.
  */
 const DATAFLOW_BROWSER_IMPORTERS = [
-  'services/app/lib/data/story/story-number.ts',
-  'services/app/lib/data/story/story-viz.ts',
   'services/app/lib/document/asset-url.ts',
   'services/app/lib/document/document-graph-selectors.ts',
   'services/app/lib/document/helmet.ts',
@@ -126,6 +124,8 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/page-store/page-engine.ts',
   'services/app/lib/page-store/runtime-graph.ts',
   'services/app/lib/page-store/store.ts',
+  'services/app/lib/story-edit/story-number.ts',
+  'services/app/lib/story-edit/story-viz.ts',
   'services/app/lib/story-ui/data-table.ts',
   'services/app/lib/story-ui/interpreter-primitives.ts',
   'services/app/lib/viz/chart-envelope.ts',
@@ -188,10 +188,6 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/annotations/remote-reply.ts',
   'services/app/lib/artifact-backend/reader-http.ts',
   'services/app/lib/artifact-backend/retrying.ts',
-  'services/app/lib/data/story/jsx-edit.ts',
-  'services/app/lib/data/story/story-systems.ts',
-  'services/app/lib/data/story/story-themes.ts',
-  'services/app/lib/data/story/typography.ts',
   'services/app/lib/dataflow/image-source.ts',
   'services/app/lib/dataflow/ref-name-uses.ts',
   'services/app/lib/dataflow/refs.ts',
@@ -237,6 +233,10 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/mermaid-images/mermaid-render.ts',
   'services/app/lib/reader-chrome/outline.ts',
   'services/app/lib/reader-chrome/script-mount.ts',
+  'services/app/lib/story-design/story-systems.ts',
+  'services/app/lib/story-design/story-themes.ts',
+  'services/app/lib/story-design/typography.ts',
+  'services/app/lib/story-edit/jsx-edit.ts',
   'services/app/lib/story-runtime/anchor.ts',
   'services/app/lib/story-ui/compare.ts',
   'services/app/lib/story-ui/host-classify.ts',
@@ -252,10 +252,6 @@ const BUNDLED_LEAVES = {
   'lib/author-script': ['contract'],
   'lib/capture': ['contract', 'png', 'screen'],
   'lib/chart': ['chart-theme'],
-  'lib/data': [
-    'html/html-system-modes', 'html/html-systems', 'story/jsx-edit', 'story/link-edit', 'story/question-height',
-    'story/story-css', 'story/story-fonts', 'story/story-number', 'story/story-systems', 'story/story-themes', 'story/typography',
-  ],
   'lib/data-ingest': ['coerce', 'csv', 'types'],
   'lib/datasets': ['dataset-usage', 'definition', 'types'],
   'lib/editor-engine': [
@@ -289,12 +285,14 @@ const BUNDLED_LEAVES = {
   'lib/remote': ['session-mentions'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/source-editor': ['codemirror'],
+  'lib/story-design': ['story-css', 'story-fonts', 'story-systems', 'story-themes', 'typography'],
+  'lib/story-edit': ['jsx-edit', 'link-edit', 'story-number'],
   'lib/story-surface': ['bare-controls', 'bare-typography', 'task-checkbox-css'],
   'lib/story-ui': [
     'ast-path', 'comment-target', 'compare', 'data-table', 'edit-bar', 'file-glyphs', 'grid-css', 'grid-layout',
-    'host-classify', 'icon-contract', 'isometric', 'node-names', 'recipe-classes', 'repeat-identity', 'row-key', 'scroll-anchor',
+    'host-classify', 'icon-contract', 'isometric', 'node-names', 'question-height', 'recipe-classes', 'repeat-identity', 'row-key', 'scroll-anchor',
   ],
-  'lib/validation': ['atlas-schemas', 'story-system-names', 'story-theme-names'],
+  'lib/validation': ['atlas-schemas', 'html-system-modes', 'story-system-names', 'story-theme-names'],
   'lib/viz': [
     'basemap', 'chart-envelope', 'chart-tokens', 'deck-chrome', 'deck-engine-core', 'deck-height', 'encoding-edit',
     'geo-assets', 'query-data', 'question-envelope', 'render-readiness', 'render-vega', 'spark-markup',
@@ -347,6 +345,10 @@ export const DEEP_MODULES = {
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.
   'lib/html-systems': { entries: ['', 'server'], serverOnly: ['server'] },
+  // A story's design vocabulary and its CSS compile (node, tailwind), and the edits to its JSX source: browser-bundled
+  // code imports the leaves, because each index re-exports files a bundle would keep.
+  'lib/story-design': { ...bundled('lib/story-design'), entries: ['', 'server'], serverOnly: ['', 'server'] },
+  'lib/story-edit': { ...bundled('lib/story-edit'), serverOnly: [''] },
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
   // Loaded by file path, outside the app's `@/` resolution: model from a target checkout

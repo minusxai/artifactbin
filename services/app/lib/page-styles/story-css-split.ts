@@ -2,7 +2,7 @@
  * A DOCUMENT'S COMPILED TAILWIND AS SHARED SHEETS PLUS WHAT IT ADDS.
  *
  * Every document's stored `compiledCss` is the compile of the recipe union (kit and embed classes, the typography
- * palette — lib/data/story/story-css.server STORY_RECIPE_UNION) plus the few utilities the document itself names,
+ * palette — lib/story-design/story-css.server STORY_RECIPE_UNION) plus the few utilities the document itself names,
  * followed by every theme's token blocks. Measured: a small page's 130 KB sheet differs from the union's alone by
  * a few hundred bytes. The union is the same bytes for every document of a build, so it is served as immutable,
  * content-addressed stylesheets (lib/page-styles/linked-sheets.server) and the document carries only the

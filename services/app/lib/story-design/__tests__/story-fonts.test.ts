@@ -9,8 +9,8 @@ import { createHash } from 'node:crypto';
 import { brotliDecompressSync } from 'node:zlib';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { getStoryFontCss, STORY_FONT_THEMES, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { getStoryFontCss, STORY_FONT_THEMES, STORY_FONTS_ATTR } from '@/lib/story-design/story-fonts';
+import { STORY_THEMES } from '@/lib/story-design/story-themes';
 
 const FONT_DIR = path.join(process.cwd(), 'public', 'fonts');
 const allAssets = () => Object.values(STORY_FONT_THEMES).flat();

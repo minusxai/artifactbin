@@ -5,8 +5,8 @@ import path from 'node:path';
 import type { RolldownOutput } from 'rolldown';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
-import { getStoryFontCss } from '@/lib/data';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { getStoryFontCss } from '@/lib/story-design';
+import { STORY_THEMES } from '@/lib/story-design/story-themes';
 
 interface Built { css: string; assets: Map<string, Uint8Array> }
 let built: Promise<Built> | undefined;

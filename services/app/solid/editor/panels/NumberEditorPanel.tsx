@@ -17,7 +17,7 @@ import { Input } from '@/solid/ui/Field';
 import { Select } from '@/solid/ui/Select';
 import BoundQuery from '../BoundQuery';
 import type { TableChoice } from '@/lib/document/table-catalog';
-import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';
+import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/story-edit/story-number';
 
 interface NumberEditorPanelProps {
   binding: NumberEmbedBinding;

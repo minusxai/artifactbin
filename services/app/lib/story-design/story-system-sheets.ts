@@ -8,7 +8,7 @@
  * carries. Nothing a browser bundle reaches may import this module.
  */
 import sheets from './story-system-sheets.json';
-import fontManifest from './story-font-manifest.json';
+import { storyFontManifest as fontManifest } from '@/lib/data';
 import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation';
 
 interface StorySystemSheet {

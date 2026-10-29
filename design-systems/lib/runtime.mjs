@@ -1,13 +1,13 @@
 /**
  * The runtime registry the server serves a design system from: services/app/lib/validation/story-system-names.ts
- * (the thirteen names, a dependency-free leaf like story-theme-names.ts), services/app/lib/data/story/story-systems.json
+ * (the thirteen names, a dependency-free leaf like story-theme-names.ts), services/app/lib/story-design/story-systems.json
  * (per system: label, description, default mode, the light and dark variable maps — small, and shared with the
- * browser through story-themes) and services/app/lib/data/story/story-system-sheets.json (per system: the @font-face
+ * browser through story-themes) and services/app/lib/story-design/story-system-sheets.json (per system: the @font-face
  * rules for every weight and the class css: type roles, components, the hand and the page-type kit, scoped to the
  * document root's data-theme — half a megabyte the server and the CLI read and the browser never carries).
  *
  * A document names its system in the fence `theme`; the server emits the variables with the theme suffix of the
- * compiled sheet (lib/data/story/story-themes storyThemeCss, pruned per reader) and the fonts and classes with the
+ * compiled sheet (lib/story-design/story-themes storyThemeCss, pruned per reader) and the fonts and classes with the
  * document's base sheet (lib/compiled-page/styles/story-base-css). The agent writes no CSS. Output is committed and reviewed
  * in the diff; scripts/__tests__/design-systems.test.mjs regenerates in process and fails on drift.
  */
@@ -18,8 +18,8 @@ import { fontFaceCss } from './fonts.mjs';
 import { PAGE_CHROME, filterBlock, selectorOf } from './css-blocks.mjs';
 
 export const NAMES = path.join(REPO, 'services', 'app', 'lib', 'validation', 'story-system-names.ts');
-export const DATA = path.join(REPO, 'services', 'app', 'lib', 'data', 'story', 'story-systems.json');
-export const SHEETS = path.join(REPO, 'services', 'app', 'lib', 'data', 'story', 'story-system-sheets.json');
+export const DATA = path.join(REPO, 'services', 'app', 'lib', 'story-design', 'story-systems.json');
+export const SHEETS = path.join(REPO, 'services', 'app', 'lib', 'story-design', 'story-system-sheets.json');
 
 /** The variable block as a map, in the order the page's binding block writes it. */
 export function varsMap(spec, mode) {
@@ -83,7 +83,7 @@ export function renderRuntime() {
  *
  * The design systems a document may name in its fence \`theme\`, beside the six themes
  * (./story-theme-names). A dependency-free leaf for the same reason: the reader route resolves a
- * document's mode from the name alone. The registry itself is lib/data/story/story-systems.
+ * document's mode from the name alone. The registry itself is lib/story-design/story-systems.
  */
 export const STORY_SYSTEM_NAMES = [${ROSTER.map((s) => `'${s}'`).join(', ')}] as const;
 export type StorySystemName = (typeof STORY_SYSTEM_NAMES)[number];

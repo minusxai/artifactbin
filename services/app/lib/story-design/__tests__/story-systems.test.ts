@@ -5,8 +5,6 @@ import { STORY_SYSTEMS, STORY_SYSTEM_NAMES, getStorySystem } from '../story-syst
 import { STORY_SYSTEM_SHEETS, storySystemSheetCss } from '../story-system-sheets';
 import { STORY_THEMES, STORY_THEME_NAMES, resolveStoredStoryDesign, resolveStoryMode, storyThemeCss } from '../story-themes';
 import { STORY_DESIGN_NAMES, StoryContent } from '@/lib/validation/atlas-schemas';
-import { storyBaseCss } from '@/lib/page-styles/story-base-css';
-import { documentStyleSheets } from '@/lib/page-styles/document-styles';
 
 /** The shadcn contract every theme fills (story-themes.test pins the same list for themes). */
 const CONTRACT = ['background', 'foreground', 'card', 'card-foreground', 'popover', 'popover-foreground', 'primary', 'primary-foreground', 'secondary', 'secondary-foreground', 'muted', 'muted-foreground', 'accent', 'accent-foreground', 'destructive', 'destructive-foreground', 'border', 'input', 'ring', 'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5'];
@@ -93,19 +91,5 @@ describe('a system is a theme to the fence, the emitter and the resolution', () 
     // No faces or classes in the suffix: those ride the base sheet, per document.
     expect(all).not.toContain('@font-face');
     expect(all).not.toContain('.t-label');
-  });
-
-  it('the base sheet and the standalone document carry the system\'s faces and classes, after the fonts and before the author', () => {
-    const fonts = { slots: {}, families: [] };
-    const bare = storyBaseCss({ chrome: true, theme: 'volta', fonts });
-    expect(bare).not.toContain('.t-label');
-    const dressed = storyBaseCss({ chrome: true, theme: 'volta', fonts, systemCss: storySystemSheetCss('volta') });
-    expect(dressed).toContain('@font-face { font-family: "Bricolage Grotesque"');
-    expect(dressed).toContain(':where(:root[data-theme="volta"]) .t-label {');
-    const sheets = documentStyleSheets({ compiledCss: null, chrome: true, bare: false, theme: 'volta', docFonts: fonts, systemCss: storySystemSheetCss('volta'), authorCss: ':root { --ds-volt: red }' });
-    const attrs = sheets.map((s) => s.attr);
-    expect(attrs.indexOf('data-mx-system')).toBeGreaterThan(attrs.indexOf('data-mx-fonts'));
-    expect(attrs.indexOf('data-mx-system')).toBeLessThan(attrs.indexOf('data-mx-author'));
-    expect(documentStyleSheets({ compiledCss: null, chrome: true, bare: false, theme: 'modernist', docFonts: fonts, systemCss: storySystemSheetCss('modernist'), authorCss: null }).map((s) => s.attr)).not.toContain('data-mx-system');
   });
 });

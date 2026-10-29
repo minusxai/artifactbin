@@ -17,7 +17,7 @@
 import {
   applyDomEditsToJsx, applyFormatEditsToJsx, applyLayoutEditsToJsx,
   type JsxLayoutEdit,
-} from '@/lib/data/story/jsx-edit';
+} from '@/lib/story-edit/jsx-edit';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { isEditableTextHost, resolveJsxNodeAtPath, textOwnerPath } from '@/lib/story-ui/host-classify';
 

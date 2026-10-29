@@ -19,7 +19,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { STORY_THEMES } from '@/lib/data/story/story-themes';
+import { STORY_THEMES } from '@/lib/story-design/story-themes';
 
 const AA = 4.5;
 

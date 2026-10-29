@@ -6,7 +6,7 @@
  * script, and its style byte-stable in the emitted source.
  */
 import { describe, expect, it } from 'vitest';
-import { applyDomEditsToJsx } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx } from '@/lib/story-edit/jsx-edit';
 import { canonicalizeMarkup } from '@/lib/document';
 
 const HELMET =

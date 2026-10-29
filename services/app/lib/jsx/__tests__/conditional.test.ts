@@ -6,7 +6,7 @@ import { collectRefUses } from '@/lib/dataflow/references';
 import { collectRefNameUses } from '@/lib/dataflow';
 import { validateDataflow } from '@/lib/dataflow/dataflow';
 import { splitHelmet, hoistHelmet } from '@/lib/document/helmet';
-import {applyDomEditsToJsx, removeJsxNodeAtPath} from '@/lib/data/story/jsx-edit';
+import {applyDomEditsToJsx, removeJsxNodeAtPath} from '@/lib/story-edit/jsx-edit';
 
 const nodes = (source: string) => {const p = parseJsx(source); if (!p.ok) throw new Error(p.error); return p.nodes;};
 const validate = (source: string) => validateJsxSource(source, STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS);

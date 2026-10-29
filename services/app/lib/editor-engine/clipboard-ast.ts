@@ -1,6 +1,6 @@
 /** Independent insertion gate: converter output is untrusted until its dialect shape is checked. */
 import type { Root } from 'mdast';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 const blocks = new Set(['paragraph', 'heading', 'blockquote', 'list', 'table', 'code', 'thematicBreak']);
 const inline = new Set(['text', 'strong', 'emphasis', 'delete', 'inlineCode', 'link', 'break']);
 export function validateClipboardAst(root: Root): void {

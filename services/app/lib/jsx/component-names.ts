@@ -110,7 +110,7 @@ export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'U
  * the node's `data-mx-ast`), so a caret in that element types into exactly the children the source holds.
  *
  * Opt-in, and the one declaration: the editor's text-host rule (lib/story-ui/host-classify), the write-back
- * (lib/data/story/jsx-edit) and the toolbar read it. A kit component missing here stays locked — its DOM is render
+ * (lib/story-edit/jsx-edit) and the toolbar read it. A kit component missing here stays locked — its DOM is render
  * output. `compiled-page/__tests__/kit-text-hosts.test.ts` proves each entry renders as declared. Layout shells
  * (Card, CardHeader, Alert, the Table sections), controls (Button, the triggers), islands and components that draw
  * their own content (BreadcrumbEllipsis, Separator) are deliberately absent.

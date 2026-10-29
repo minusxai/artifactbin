@@ -24,7 +24,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
  * typebox; it is re-exported here for every schema-side caller.
  */
 export { STORY_THEME_NAMES };
-/** Everything a fence `theme` may name: the six themes, then the design systems (lib/data/story/story-systems). */
+/** Everything a fence `theme` may name: the six themes, then the design systems (lib/story-design/story-systems). */
 export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NAMES, ...STORY_SYSTEM_NAMES];
 export type { StoryDesignName };
 

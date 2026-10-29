@@ -4,7 +4,7 @@
  * a chrome token in a kit recipe compiles to no rule at all, and the tooltip drew transparent over the text behind it.
  */
 import { describe, expect, it } from 'vitest';
-import { compileStoryCss } from '@/lib/data/story/story-css.server';
+import { compileStoryCss } from '@/lib/story-design/server';
 import { RECIPES } from '../kit/recipes';
 
 /** The selector Tailwind writes for a plain class token (`/` and `.` escaped). */

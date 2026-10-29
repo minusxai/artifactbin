@@ -101,7 +101,7 @@ export async function runDev({ appOnly, args = [] }) {
  * The sources used by the server reader and the offline editor. Rebuild their assets
  * when one changes, then let tsx restart the server from the changed bundle.
  */
-const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/reader-chrome', 'lib/frame-edit', 'lib/edit-protocol', 'lib/page-store', 'lib/story-ui', 'lib/publish', 'lib/offline', 'lib/viz', 'lib/data/story'];
+const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/reader-chrome', 'lib/frame-edit', 'lib/edit-protocol', 'lib/page-store', 'lib/story-ui', 'lib/publish', 'lib/offline', 'lib/viz', 'lib/story-design', 'lib/story-edit'];
 
 /**
  * The compiled reader's shared island build (scripts/build/build-islands.mjs → public/islands): the island

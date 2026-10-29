@@ -1,5 +1,5 @@
 /**
- * A DOCUMENT'S SHEET WITH THE CLASSES ITS DATA BRINGS (lib/data/story/story-css RUNTIME CLASSES).
+ * A DOCUMENT'S SHEET WITH THE CLASSES ITS DATA BRINGS (lib/story-design/story-css RUNTIME CLASSES).
  *
  * A document's Tailwind is compiled at save from the classes its markup names. A class its rows fill
  * (`className="{$_row.cls}"`, the row saying `bg-lime-500`) is on the element and has no rule. Three places
@@ -20,7 +20,8 @@
  * other page never loads the client half and never asks.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { compileStoryCssWithExtras, storyCssCompileVersion, isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data';
+import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/story-design';
+import { compileStoryCssWithExtras, storyCssCompileVersion } from '@/lib/story-design/server';
 import { etagOf } from '@/lib/http';
 import { runtimeCssCacheControl } from './cache-control';
 

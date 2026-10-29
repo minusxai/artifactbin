@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { applyDomEditsToJsx, applyFormatEditsToJsx } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx, applyFormatEditsToJsx } from '@/lib/story-edit/jsx-edit';
 import { expectValidStoryJsx } from '@/test/helpers/jsx';
 
 describe('applyFormatEditsToJsx — className/style attr write-back (typography toolbar)', () => {
