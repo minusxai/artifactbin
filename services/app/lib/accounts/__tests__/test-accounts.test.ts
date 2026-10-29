@@ -1,7 +1,8 @@
 /** The test-account box: a test account reaches only test accounts and shares only with test-domain addresses. */
 import { afterEach, describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { TEST_ACCOUNT_RESTRICTED, createUser, identityForUser, isTestAccount, isTestOwned, shareTargetsRefusal, testAccountMayReach } from '@/lib/accounts';
+import { TEST_ACCOUNT_RESTRICTED, createUser, identityForUser, isTestAccount, shareTargetsRefusal, testAccountMayReach } from '@/lib/accounts';
+import { isTestOwned } from '@/lib/accounts/test-accounts';
 import { getDb } from '@/lib/platform';
 import { overrideConfig, resetConfigOverrides } from '@/lib/platform/config';
 

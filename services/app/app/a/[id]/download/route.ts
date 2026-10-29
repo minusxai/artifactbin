@@ -11,7 +11,7 @@ import {referencedLibraryResources} from '@/lib/libraries/assets.server';
  */
 import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
 import {loadImage} from '@/lib/object-store/image-store';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow, holdsCreatingToken } from '@/lib/artifacts';
@@ -33,7 +33,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   if (artifact?.format === 'html') {
     const actor = await requestOrSessionActor(request);
     if (!holdsCreatingToken(artifact, actor) && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
-    const at = await archivedVersionFor(request, artifact);
+    const at = await archivedVersionFor(request, artifact, async () => actor);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const platformOrigin=new URL(baseUrl(request)).origin;
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };

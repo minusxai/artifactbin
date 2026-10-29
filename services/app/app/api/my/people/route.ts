@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {browserActor,sessionActor} from '@/lib/accounts';
+import { browserActor, sessionActor } from '@/lib/authentication';
 import {json,readJson,unauthorized} from '@/lib/http';
 import { MembershipError } from '@/lib/artifacts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';

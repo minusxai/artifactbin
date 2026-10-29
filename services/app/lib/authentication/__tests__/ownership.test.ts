@@ -1,7 +1,8 @@
-/** Guest adoption: an email account adopts the legacy guests whose live tokens its browser holds. */
+/** What a credential brings to an account: a claimed token its artifacts, and a verified login the legacy guests whose live tokens its browser holds. */
 import { describe, expect, it } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
-import { createUser, matchesWorkspaceAccount, mergeGuestUsers, revokeToken } from '@/lib/accounts';
+import { createUser, matchesWorkspaceAccount, mintToken, revokeToken } from '@/lib/accounts';
+import { claimToken, claimTokenById, mergeGuestUsers } from '@/lib/authentication';
 import { getDb } from '@/lib/platform';
 
 useAppHarness();
@@ -10,11 +11,46 @@ const ownerOf = async (table: 'artifacts' | 'tokens', id: string) =>
   (await (await getDb()).query<{ user_id: string | null }>(`SELECT user_id FROM ${table} WHERE id = $1`, [id])).rows[0]!.user_id;
 const mergedInto = async (id: string) =>
   (await (await getDb()).query<{ merged_into_user_id: string | null }>('SELECT merged_into_user_id FROM users WHERE id = $1', [id])).rows[0]!.merged_into_user_id;
+const artifact = async (id: string, columns: { token_id: string; group_id?: string }) =>
+  (await getDb()).query('INSERT INTO artifacts (id, token_id, group_id) VALUES ($1, $2, $3)', [id, columns.token_id, columns.group_id ?? null]);
+const artifactOwner = (id: string) => ownerOf('artifacts', id);
 async function guestWithArtifact(name: string) {
   const guest = await createGuestOwner();
   await (await getDb()).query('INSERT INTO artifacts (id, token_id, user_id) VALUES ($1, $2, $3)', [name, guest.tokenId, guest.userId]);
   return guest;
 }
+
+describe('claimToken', () => {
+  it('attaches an anonymous token and backfills only its unowned, ungrouped artifacts', async () => {
+    const user = await createUser({ email: 'claimer@example.test' });
+    const minted = await mintToken('cli', null);
+    await artifact('art_loose', { token_id: minted.id });
+    await artifact('art_grouped', { token_id: minted.id, group_id: 'grp_1' });
+    await artifact('art_other', { token_id: (await mintToken('other', null)).id });
+    expect(await claimToken(user.id, minted.token)).toEqual({ tokenId: minted.id, claimedArtifacts: 1 });
+    expect(await artifactOwner('art_loose')).toBe(user.id);
+    expect(await artifactOwner('art_grouped')).toBeNull();
+    expect(await artifactOwner('art_other')).toBeNull();
+    // Re-claiming your own is not a refusal: it backfills again (nothing left here).
+    expect(await claimToken(user.id, minted.token)).toEqual({ tokenId: minted.id, claimedArtifacts: 0 });
+    await artifact('art_later', { token_id: minted.id });
+    expect(await claimTokenById(user.id, minted.id)).toEqual({ tokenId: minted.id, claimedArtifacts: 1 });
+  });
+
+  it('answers a uniform null for a non-token, an unknown or revoked token, and someone else\'s', async () => {
+    const owner = await createUser({ email: 'owner@example.test' }), other = await createUser({ email: 'other@example.test' });
+    const minted = await mintToken('cli', null);
+    expect(await claimToken(owner.id, minted.id)).toBeNull();
+    expect(await claimToken(owner.id, `mx_${'a'.repeat(43)}`)).toBeNull();
+    expect(await claimToken(owner.id, minted.token)).not.toBeNull();
+    expect(await claimToken(other.id, minted.token)).toBeNull();
+    expect(await claimTokenById(other.id, minted.id)).toBeNull();
+    const revoked = await mintToken('gone', null);
+    await revokeToken(revoked.id);
+    expect(await claimTokenById(owner.id, revoked.id)).toBeNull();
+    expect(await claimTokenById(owner.id, 'tok_unknown')).toBeNull();
+  });
+});
 
 describe('mergeGuestUsers', () => {
   it('moves a held guest\'s artifacts and tokens to the account and keeps the guest row, marked merged', async () => {

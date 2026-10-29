@@ -5,7 +5,8 @@ import {POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {createClient,createLocalStore,gql} from '@/lib/html-runtime';
 import {mintAccountToken,request,useAppHarness} from './harness';
-import {createUser,claimToken} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 useAppHarness();
 const html='<!doctype html><html><body><script data-af="state" type="application/json">{"count":0}</script><button>Increment</button></body></html>';
 async function fixture(visibility='unlisted'){

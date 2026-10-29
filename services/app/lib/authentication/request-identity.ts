@@ -18,7 +18,7 @@
  * bearer, never under the browser-session header, never for an agent cookie or a direct session), and
  * recorded as `documentEditor`; nothing downstream sees a claim.
  *
- * MEMOISED per request (`answeredOnce`, lib/accounts/tokens), so the side effects — token touch, profile
+ * MEMOISED per request (`answeredOnce`, lib/accounts tokens), so the side effects — token touch, profile
  * sync, invitations, guest merge, admission, hosted refusal — run once however many times a request asks.
  * Only while the request is the current one (the server runs every handler inside `runWithRequest`), and
  * forgotten with the request's other credential answers whenever it writes a token row. A route that
@@ -30,14 +30,12 @@ import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
 import { pagesRequestOf } from '../http/pages-origin';
 import { currentRequest, identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../platform';
-import { NO_IDENTITY, type RequestIdentity } from './actors';
+import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type RequestIdentity } from '@/lib/accounts';
+import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
-import { mergeGuestUsers } from './guest-owner';
-import { DuplicateProfileEmail, syncProfile } from './profiles';
+import { mergeGuestUsers } from './ownership';
 import { hostedRequestRefusal } from './request-authority';
 import { auth } from './session';
-import { answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, touchToken } from './tokens';
-import { canAuthenticateUser } from './user-kinds';
 
 /**
  * The door asking. `token`: `withTokenAuth`, a token required, dry runs leave no trace. `request`: an

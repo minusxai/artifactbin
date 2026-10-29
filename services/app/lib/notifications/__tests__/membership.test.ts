@@ -1,4 +1,4 @@
-import {seedOwnerJoin} from '@/lib/accounts';
+import { seedOwnerJoin } from '@/lib/social';
 import {expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';

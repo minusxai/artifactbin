@@ -13,7 +13,7 @@ import {GET as inbox} from '@/app/api/my/people/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { evaluateNotificationQuery } from '@/lib/document-data';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {createNotificationWorker,notificationJobStore} from '@/lib/notifications';
 import {modelNoticeSql,physicalNoticeSql,invalidRecipientSql} from '../../../scripts/fixtures/postgres-notifications.mjs';

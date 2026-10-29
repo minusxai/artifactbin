@@ -17,7 +17,7 @@
  * here — a cookie caller is the human, a bearer caller the agent it declares
  * itself to be.
  */
-import { withTokenAuth } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations/http';
 import { json, readJson } from '@/lib/http';
 import { annotationAuthorForRequest } from '@/lib/annotations';

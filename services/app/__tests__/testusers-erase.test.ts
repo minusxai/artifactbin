@@ -26,8 +26,9 @@ import { identityForUser, noteTestUserSession, testUserSessionCount, createTestU
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, getUserById } from '@/lib/accounts';
-import { count, has, link } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, getUserById } from '@/lib/accounts';
+import { count, has, link } from '@/lib/social';
 import { request, useAppHarness } from './harness';
 
 const harness = useAppHarness();

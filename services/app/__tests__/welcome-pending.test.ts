@@ -11,8 +11,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { identityForUser, syncProfile, createTestUser } from '@/lib/accounts';
-import { claimToken, createUser, getUserById } from '@/lib/accounts';
-import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, getUserById } from '@/lib/accounts';
+import { avatarUrl, avatarVersion, setAvatar } from '@/lib/avatars';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

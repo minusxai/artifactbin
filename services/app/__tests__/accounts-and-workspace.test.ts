@@ -8,7 +8,8 @@ import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { claimToken, createUser, mintToken } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, mintToken } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '../server/app';
 

@@ -3,11 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { agentCookie, createGuestOwner, request, testIdentity, useAppHarness } from '@/__tests__/harness';
-import {
-  AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, createUser, decodeAgentSessionEnvelope, encodeAgentSession,
-  endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, liveAgentSession, mintToken, pagesSessionActor,
-  pagesSessionOf, revokeToken, withToken, withoutToken,
-} from '@/lib/accounts';
+import { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, createUser, encodeAgentSession, endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, liveAgentSession, mintToken, pagesSessionOf, revokeToken } from '@/lib/accounts';
+import { decodeAgentSessionEnvelope, withToken, withoutToken } from '@/lib/accounts/agent-session';
+import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();

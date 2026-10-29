@@ -1,4 +1,5 @@
-import { ownerUsername, withTokenAuth } from '@/lib/accounts';
+import { ownerUsername } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { readJson } from '@/lib/http';
 import { annotationAuthorForRequest, respondToCommentReaction } from '@/lib/annotations';
 /** PUT {kind:'thumbs_up',active:boolean}; retries set the same state rather than toggling it twice. Attributed as the reply door attributes. */

@@ -20,12 +20,12 @@ import {
   nodeIndex, stampNodeIds,
 } from '../document';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
-import { seedOwnerJoin } from '@/lib/accounts';
+import { seedOwnerJoin } from '@/lib/social';
 import { documentMentions } from './membership/document-mentions';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
 import { validateUserContent, retainUserScope, resolveUserColumnScope } from '@/lib/datasets/user-fields';
-import { userKindOf } from '@/lib/accounts';
+import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
 import type { AnnotationOperation } from '../editor-engine/annotation-map';

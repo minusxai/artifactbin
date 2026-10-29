@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
-import { requestOrSessionActor, sessionActor, setDocumentEditorPolicy } from '@/lib/accounts';
+import { requestOrSessionActor, sessionActor, setDocumentEditorPolicy } from '@/lib/authentication';
 import { revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken, useAppHarness } from '@/__tests__/harness';
 
@@ -43,7 +43,7 @@ describe('sessionActor', () => {
   it('a correctly signed header alone is nobody: the fallback is gone', async () => {
     const secret = 's'.repeat(32);
     vi.stubEnv('CONTRACT__ACTOR_SECRET', secret); vi.resetModules();
-    const { sessionActor: fresh } = await import('@/lib/accounts/request-identity');
+    const { sessionActor: fresh } = await import('@/lib/authentication/request-identity');
     const req = new Request('http://x/api/page/session', {
       headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: 'usr_header', email: 'h@example.com', emailVerified: true }, secret) },
     });

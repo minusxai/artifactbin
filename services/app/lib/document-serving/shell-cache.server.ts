@@ -8,7 +8,8 @@
  * anonymous read decision on them. A row that has gone private or been deleted is never answered from memory;
  * its version, edit and metadata digest are in the key, so a new version is a miss, never the old body.
  */
-import {ANONYMOUS_ACTOR, sessionActor} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import {readableArtifactIdentity} from '@/lib/artifacts';
 import {baseUrl, parseCookie} from '@/lib/http';
 import {runWithRequest} from '@/lib/platform';

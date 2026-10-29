@@ -1,6 +1,6 @@
 import { getVersionFor, readableArtifact, refusingUnservable, servableDocument } from '@/lib/artifacts';
 /** Authenticated immutable content reads never use public serving/import paths. */
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { canEdit } from '@artifactbin/contracts';
 import {serveStoredFile} from '@/lib/datasets/file-store';
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';

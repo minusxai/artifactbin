@@ -11,10 +11,11 @@
  * the answer's content type kept and the bytes inert (`sandbox`, `nosniff`, never cached).
  *
  * The same read ACL as the page: a reader who may not read the document gets the uniform 404. Counted
- * per document and reader, like the document's other outbound fetching (lib/accounts/auth).
+ * per document and reader, like the document's other outbound fetching (lib/allowances).
  */
 import { canReadArtifact, getArtifactById, refusingUnservable, holdsCreatingToken } from '@/lib/artifacts';
-import { documentFetchRateLimited, documentFetchReader, requestOrSessionActor } from '@/lib/accounts';
+import { documentFetchRateLimited, documentFetchReader } from '@/lib/allowances';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { fetchWebResource, webIngestAllowsHttp } from '@/lib/web-ingest/fetch';

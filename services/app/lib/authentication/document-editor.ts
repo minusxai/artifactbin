@@ -1,4 +1,13 @@
-import type { VerifiedAccount } from './actors';
+/**
+ * Verified account claims — the INPUT of the host's document-editor policy and of nothing else. The
+ * request-identity resolver evaluates the policy once, from the claims the door admitted, and records the
+ * answer as `AccessActor.documentEditor`; access code never sees a claim.
+ */
+export interface VerifiedAccount {
+  userId: string | null;
+  email?: string | null;
+  emailVerified?: boolean;
+}
 
 /**
  * The host's optional grant for editing page documents (production: ADMIN__EMAILS), read from VERIFIED

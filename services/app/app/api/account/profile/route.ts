@@ -1,4 +1,4 @@
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import {json,readJson} from '@/lib/http';
 import {durableMutation,accountProfile,updateAccountProfile} from '@/lib/artifacts';
 

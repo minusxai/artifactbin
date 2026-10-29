@@ -12,7 +12,7 @@ import sharp from 'sharp';
 import { DELETE as deleteImageRoute, PUT as putImageRoute } from '@/app/api/my/profile/image/route';
 import { GET as getAvatar } from '@/app/api/users/[id]/avatar/route';
 import { GET as getProfile, PATCH as patchProfile } from '@/app/api/my/profile/route';
-import { AVATAR_MAX_BYTES, avatarVersion } from '@/lib/accounts';
+import { AVATAR_MAX_BYTES, avatarVersion } from '@/lib/avatars';
 import { getDb } from '@/lib/platform';
 import { createUser, ensureUsername, getUserById } from '@/lib/accounts';
 import { request, useAppHarness, setSession } from '@/__tests__/harness';

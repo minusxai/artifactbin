@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { datasetActor } from '@/lib/datasets/http';
+import { requestActor } from '@/lib/authentication';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { readJson, json } from '@/lib/http';
 
@@ -10,7 +10,7 @@ const source = z.discriminatedUnion('kind', [
 
 /** Import into an editor draft: parsing/fetching only, no artifact or object writes. */
 export async function POST(request: Request) {
-  const actor = await datasetActor(request);
+  const actor = await requestActor(request);
   if (actor instanceof Response) return actor;
   const parsed = source.safeParse(await readJson(request));
   if (!parsed.success) return json({ error: 'invalid_dataset', details: ['Choose a CSV file or a public Google Sheets link.'] }, 400);

@@ -1,4 +1,4 @@
-import { withTokenAuth } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { CommentWaitCapacityError, InvalidCommentCursor, readCommentChangesFor } from '@/lib/annotations';
 import { json } from '@/lib/http';
 import { COMMENT_CHANGES_MAX_WAIT_SECONDS } from '@artifactbin/contracts';

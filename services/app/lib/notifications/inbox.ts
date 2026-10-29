@@ -1,5 +1,6 @@
 import {mutationNotificationInbox} from './mutation-inbox';
-import {JOIN_RELATIONS,dismissPendingRelations,setAutoAcceptMentions} from '@/lib/accounts';
+import { JOIN_RELATIONS, dismissPendingRelations } from '@/lib/social';
+import { setAutoAcceptMentions } from '@/lib/accounts';
 import {canAnnotate} from '@artifactbin/contracts';
 import {notificationChanged,notificationsChanged} from './write';
 import {getDb} from '@/lib/platform';

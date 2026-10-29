@@ -12,7 +12,8 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { getDb } from "@/lib/platform";
 import { readHtmlPage } from "@/lib/html-publication";
-import { ANONYMOUS_ACTOR, requestOrSessionActor } from "@/lib/accounts";
+import { ANONYMOUS_ACTOR } from "@/lib/accounts";
+import { requestOrSessionActor } from "@/lib/authentication";
 import { getArtifactById, canReadArtifact } from "@/lib/artifacts";
 import { pageGraphql } from "@/lib/page-graphql";
 import {

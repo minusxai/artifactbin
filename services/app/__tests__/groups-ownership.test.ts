@@ -2,7 +2,7 @@ import {nativeHtml} from './native-html-fixture';
 import {afterEach,expect,it,vi} from 'vitest';
 import {observedRequest} from './conditional-request';
 import {useAppHarness,request,mintAccountToken} from './harness';
-import { ANONYMOUS_ACTOR, identityForUser, createUser} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, identityForUser, createUser } from '@/lib/accounts';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import {POST as create,GET as list} from '@/app/api/artifacts/route';

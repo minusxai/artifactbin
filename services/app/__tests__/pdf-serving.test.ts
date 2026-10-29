@@ -89,7 +89,7 @@ describe('the read ACL', () => {
     expect(stranger.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
 
     // The serving routes decide who is reading with sessionActor — a session or
-    // the agent cookie, never a bearer header (lib/accounts request-identity), so the owner reads
+    // the agent cookie, never a bearer header (lib/authentication request-identity), so the owner reads
     // their own file the way their browser would.
     const asOwner = await serveRaw(request(`/a/${id}/raw`, { actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }), params(id));
     expect(asOwner.status).toBe(200);

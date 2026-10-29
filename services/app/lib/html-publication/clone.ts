@@ -1,5 +1,5 @@
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import type {PreparedHtmlBackend,HtmlBackendVersionRecord} from '@/lib/html-backends';
 /** A clone contains code and authorized references only; runtime stores and credentials never cross pages. */
 export interface HtmlClonePlan {htmlBackends:readonly PreparedHtmlBackend[];htmlDatasets:readonly HtmlDatasetLink[]}

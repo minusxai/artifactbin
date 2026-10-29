@@ -1,7 +1,7 @@
 /** HTML row controls use stable row IDs and expected revisions, replacing JSX row snapshots. */
 import {describe,it,expect} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';

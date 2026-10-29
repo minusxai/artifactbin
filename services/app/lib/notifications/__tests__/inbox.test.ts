@@ -8,7 +8,8 @@
 import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {ANONYMOUS_ACTOR,identityForUser,link,seedOwnerJoin} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
+import { link, seedOwnerJoin } from '@/lib/social';
 import {changeMembership,getArtifactById,invitePeople} from '@/lib/artifacts';
 import {recordEvent} from '@/lib/platform';
 import {membershipInbox,recordNotification,updateMembershipInbox} from '@/lib/notifications';

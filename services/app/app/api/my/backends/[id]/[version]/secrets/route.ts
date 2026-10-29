@@ -1,4 +1,5 @@
-import {requestOrSessionActor,refusesCrossSite,accountOf} from '@/lib/accounts';
+import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
+import { accountOf } from '@/lib/accounts';
 import {getOwnedArtifactFor} from '@/lib/artifacts';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {backendSecrets} from '@/lib/html-backend-secrets';

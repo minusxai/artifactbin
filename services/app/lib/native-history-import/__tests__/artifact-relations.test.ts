@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { it, expect } from "vitest";
 import { useAppHarness, mintAccountToken } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";
-import { JOIN_RELATIONS } from "@/lib/accounts";
+import { JOIN_RELATIONS } from "@/lib/social";
 import { nativeIdentityDigest } from "@/lib/native-identity-import/model";
 import { prepareNativeArtifactRelations } from "../index";
 import { prepareNativeHistoryRelations, writeNativeHistory } from "../index";

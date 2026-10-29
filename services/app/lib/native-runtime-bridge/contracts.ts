@@ -1,4 +1,4 @@
-import type {TokenHoldingActor} from '@/lib/accounts';
+import type { TokenHoldingActor } from '@/lib/accounts';
 import type {publishBundleDependencies} from '@/lib/html-publication-bundle';
 export interface NativeRuntimeSourceFileReceipt {
  source:string;

@@ -1,4 +1,4 @@
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import {commentImageResponse} from '@/lib/annotations';
 /** Same attachment and artifact read checks as the browser, with bearer authentication. */
 export const GET = withTokenAuth(async (request,{ actor,params }) =>

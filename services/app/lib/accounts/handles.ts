@@ -1,5 +1,5 @@
 /** One reservation boundary shared by account and group identity. Call inside the owning transaction. */
-import type {Queryable} from './db';
+import type { Queryable } from '../platform';
 export const RESERVED_HANDLES=new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens']);
 export async function reserveHandle(query:Queryable,handle:string,kind:'user'|'group',id:string):Promise<void>{
  // Backfill legacy account handles before any new claim. Existing names always win.

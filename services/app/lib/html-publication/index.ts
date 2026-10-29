@@ -1,5 +1,5 @@
 import type {HtmlPageLink,HtmlPageVersion} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {readableArtifact} from '@/lib/artifacts';
 import { getDb } from '../platform';
 import type {HtmlIdentityLedger} from '../html-page';

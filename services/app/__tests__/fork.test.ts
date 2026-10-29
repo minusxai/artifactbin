@@ -30,7 +30,8 @@ import { getArtifactById, getSharingFor } from '@/lib/artifacts';
 import { listArtifactsFor } from '@/lib/artifacts/store';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();

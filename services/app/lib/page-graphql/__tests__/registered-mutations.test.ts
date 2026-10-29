@@ -1,7 +1,7 @@
 import { it, expect, vi, afterEach } from "vitest";
 import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
-import { requestOrSessionActor } from "@/lib/accounts";
+import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb, services } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";

@@ -1,6 +1,6 @@
 import {getArtifactById,effectiveRole} from '@/lib/artifacts';
 import { canRead, REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
-import {requestOrSessionActor} from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import {readJson,json} from '@/lib/http';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {datasetResponse} from '@/lib/datasets/http';

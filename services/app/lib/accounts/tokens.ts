@@ -9,7 +9,7 @@ import {canUseDeploymentIdentity} from '../deployment';
  */
 import crypto from 'crypto';
 import { getDb, Queryable, emit, generateTokenId, currentRequest, type Harness } from '../platform';
-import { canAuthenticateUser } from './user-kinds';
+import { canAuthenticateUser } from '../user-kinds';
 import type { AccessActor } from './actors';
 
 const TOKEN_PREFIX = 'mx_';
@@ -263,7 +263,7 @@ export async function revokeToken(id: string): Promise<boolean> {
  * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
  * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
- * place the app first trusts a token-bearing actor (lib/accounts/request-identity), in BOTH shapes: the bearer it resolves
+ * place the app first trusts a token-bearing actor (lib/authentication/request-identity), in BOTH shapes: the bearer it resolves
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
  */
 export const TOUCH_INTERVAL_MS = 60 * 1000;

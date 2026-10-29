@@ -15,7 +15,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { mintToken } from '@/lib/accounts';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
 import { appPagePolicy, createAppServer } from '../app';

@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {DATASET_GRAPHQL_MAX_PEOPLE} from '@artifactbin/contracts';
 import type {DatasetGraphql,DatasetReadRequest,DatasetReadResult,DatasetWriteRequest,HtmlDatasetLink} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {compileDatasetQuery,parameterizedFilters} from './query';
 import {compileRead,compileChanges,columnIdentity,descriptors,tableIdentity,typedCell,ID_COLUMN} from './model';
 import type {DatasetGraphqlPort,DatasetSnapshot} from './types';

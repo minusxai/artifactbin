@@ -3,7 +3,7 @@ export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
 import { startDomainRecheck } from '@/lib/custom-domains';
 import {startMermaidHarvester} from '@/lib/publish/assets/mermaid-harvester';
-import {setDocumentEditorPolicy,type DocumentEditorPolicy} from '@/lib/accounts';
+import { setDocumentEditorPolicy, type DocumentEditorPolicy } from '@/lib/authentication';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql/extensions';
 import type {Actor,Upstream} from '@artifactbin/contracts';

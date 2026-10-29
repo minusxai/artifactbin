@@ -10,10 +10,10 @@
  */
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
 import {runOperation} from '@/lib/operations/http';
-import {ensureUserToken,withAccountToken} from '@/lib/accounts';
+import { ensureUserToken, withAccountToken } from '@/lib/accounts';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { trashArtifactFor } from '@/lib/workspace';
 import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';

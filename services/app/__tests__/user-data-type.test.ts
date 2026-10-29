@@ -11,9 +11,10 @@ import {getDb} from '@/lib/platform';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import {people,userOptions} from '@/lib/datasets/user-fields';
-import {avatarUrl} from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 

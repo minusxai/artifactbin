@@ -14,7 +14,8 @@ import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { resolveToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, identityForUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, identityForUser } from '@/lib/accounts';
 import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
 

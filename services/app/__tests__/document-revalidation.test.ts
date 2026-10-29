@@ -9,7 +9,7 @@ import {observedRequest} from './conditional-request';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as putRoute} from '@/app/api/artifacts/[id]/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {pagesOriginFor,pagesSiteFor} from '@/lib/http/pages-origin';
 import { getDb, measureQueries } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';

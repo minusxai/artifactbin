@@ -12,7 +12,8 @@
  * lib/accounts/{users,guest-owner,testusers} (account merges and cascades), lib/notifications/events
  * (recipient joins) and lib/datasets/user-fields.
  */
-import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor } from '@/lib/accounts';
+import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
 
 export { artifactQuery } from './document';

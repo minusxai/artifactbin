@@ -1,7 +1,7 @@
 import {expect,it,vi} from 'vitest';
 import {createDatasetNamespaceInvoker,datasetNamespaceSources} from '../index';
 import type {DatasetGraphql,PageResolverFieldCall} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 const actor:AccessActor={userId:'viewer',tokenId:null,email:null,documentEditor:false};
 const binding={kind:'dataset' as const,name:'data',datasetId:'dataset',mode:'live' as const};
 const call:PageResolverFieldCall={namespace:'data',fileId:'dataset',version:'live',operation:'query',field:'rows',args:{tableId:'table',first:2},principal:{tenant:'tenant',subject:'untrusted-page'},signal:new AbortController().signal};

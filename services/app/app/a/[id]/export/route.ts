@@ -3,7 +3,7 @@
 import { trackEvent } from '@/lib/analytics';
 import { archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { canReadArtifact, getArtifactById, refusingUnservable, effectiveRole, holdsCreatingToken } from '@/lib/artifacts';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -40,7 +40,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
    * (lib/archived-version) and the same uniform 404 — a reader who may see this
    * artifact but not its history learns nothing, here either.
    */
-  const at = await archivedVersionFor(request, artifact);
+  const at = await archivedVersionFor(request, artifact, async () => actor);
   if (at === 'not_found') return json({ error: 'not_found' }, 404);
   // Editing chrome and re-renders are an editor's: asked only when one of them is.
   const editor = q.get('mode') === 'preview' || q.get('refresh') !== null ? canEdit(await effectiveRole(artifact, actor)) : false;

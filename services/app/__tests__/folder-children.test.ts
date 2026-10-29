@@ -29,7 +29,8 @@ import { updateSharing } from '@/lib/artifacts/sharing';
 import { childrenTableFor } from '@/lib/artifacts/placement';
 import { subscribeToArtifact } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser, type AccessActor } from '@/lib/accounts';
+import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

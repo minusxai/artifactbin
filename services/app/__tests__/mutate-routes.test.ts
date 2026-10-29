@@ -26,7 +26,8 @@ import { setDatasetRowCap } from '@/lib/document-data/dataset-mutate';
 
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 import { useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
 
 useAppHarness();

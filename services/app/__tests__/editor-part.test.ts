@@ -4,7 +4,8 @@ import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests_
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as headRead } from '@/app/api/my/artifacts/[id]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { createUser, claimToken, ensureUsername } from '@/lib/accounts';
+import { createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 let account: { id: string; email: string } | null = null;

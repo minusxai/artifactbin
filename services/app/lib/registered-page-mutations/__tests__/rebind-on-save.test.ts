@@ -3,7 +3,7 @@ import { useAppHarness, mintAccountToken, request } from "@/__tests__/harness";
 import { POST } from "@/app/api/artifacts/route";
 import { GET, PUT } from "@/app/api/artifacts/[id]/route";
 import { POST as REVERT } from "@/app/api/artifacts/[id]/revert/route";
-import { requestOrSessionActor } from "@/lib/accounts";
+import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";

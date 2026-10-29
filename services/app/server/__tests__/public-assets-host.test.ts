@@ -10,7 +10,7 @@ import { getDb } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
 import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
-import {mintToken} from '@/lib/accounts';
+import { mintToken } from '@/lib/accounts';
 import {createArtifact} from '@/lib/artifacts';
 import {storeFileContent} from '@/lib/datasets/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';

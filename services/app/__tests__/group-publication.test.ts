@@ -1,7 +1,7 @@
 import {nativeHtml} from './native-html-fixture';
 import {describe,expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {createGroup,setGroupMember,removeGroupMember,setAccountPreferences} from '@/lib/groups';
 import {getDb} from '@/lib/platform/db';
 import {POST as publish} from '@/app/api/artifacts/route';

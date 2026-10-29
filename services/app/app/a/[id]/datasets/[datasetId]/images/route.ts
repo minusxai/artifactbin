@@ -1,4 +1,4 @@
-import { sessionActor, refusesCrossSite } from '@/lib/accounts';
+import { sessionActor, refusesCrossSite } from '@/lib/authentication';
 import { DatasetError } from '@/lib/datasets/errors';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { uploadDatasetImage } from '@/lib/document-data';

@@ -593,7 +593,7 @@ const WEB_ASSETS: Table = {
  * pair itself. The verb vocabulary is closed (contracts RELATION_VERBS), and
  * every read carries the verb literal so the partial indexes below apply
  * (measured: a Bitmap Index Scan with it, a Seq Scan without). No FKs, as
- * everywhere here; lib/relations.ts is the only writer and reader.
+ * everywhere here; lib/social is the only writer and reader.
  */
 const RELATIONS: Table = {
   name: 'relations',

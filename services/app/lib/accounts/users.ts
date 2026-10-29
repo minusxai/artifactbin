@@ -1,13 +1,13 @@
 /**
  * Accounts + ownership. A user is the durable owner; tokens are machine
  * credentials that may be anonymous (user_id NULL) until claimed. Claiming a
- * token backfills ownership onto everything it published.
+ * token (lib/authentication ownership) backfills ownership onto everything it published.
  */
 import crypto from 'crypto';
 import type { UserKind } from '@artifactbin/contracts';
-import { getDb, type Queryable, emit, generateInternalId, reserveHandle, RESERVED_HANDLES } from '../platform';
-import { artifactAdopter } from './artifact-adoption';
+import { getDb, type Queryable, emit, generateInternalId } from '../platform';
 import { forgetRequestCredentials, sha256 } from './tokens';
+import { reserveHandle, RESERVED_HANDLES } from './handles';
 
 /**
  * AN ACCOUNT ROW: a person with a login identity. The KIND is on every row now
@@ -175,6 +175,18 @@ export async function createUser(input: { email: string; name?: string }): Promi
   return r.rows[0];
 }
 
+/**
+ * Point the user's `image_key` at `key` (null: no picture) and answer the key it replaced, so lib/avatars can
+ * delete the object the row no longer names. Absent users and unchanged-null rows answer null.
+ */
+export async function replaceUserImageKey(userId: string, key: string | null): Promise<string | null> {
+  const db = await getDb();
+  const previous = (await db.query<{ image_key: string | null }>('SELECT image_key FROM users WHERE id = $1', [userId]))
+    .rows[0]?.image_key ?? null;
+  if (previous !== key && (previous || key)) await db.query('UPDATE users SET image_key = $1 WHERE id = $2', [key, userId]);
+  return previous;
+}
+
 /** Change the login email. Callers verify the NEW address first (a code to it) — this only records the result. */
 export async function setUserEmail(userId: string, email: string): Promise<void> {
   const db = await getDb();
@@ -194,76 +206,31 @@ export async function getUserById(id: string,query?:Queryable,lock=false): Promi
 }
 
 /**
- * Claim a token: attach it (and backfill its unowned artifacts) to the user.
- * Uniform null for unknown/revoked tokens and tokens claimed by someone else;
- * re-claiming your own token is a harmless no-op.
+ * The accounts half of a token claim (lib/authentication ownership), inside the caller's transaction: attach the
+ * live token `by` names (its secret, or its id for a browser holding the signed agent-session cookie) to the
+ * user, and move the comment images it uploaded. Uniform null for unknown, revoked and someone else's tokens;
+ * re-claiming your own answers it again, because the caller's backfill is safe to repeat and must not be skipped.
  */
-export async function claimToken(
+export async function attachClaimedToken(
+  tx: Queryable,
   userId: string,
-  presented: string,
-): Promise<{ tokenId: string; claimedArtifacts: number } | null> {
-  if (!presented.startsWith('mx_')) return null;
-  return claimWhere(userId, 'token_hash = $1', sha256(presented));
-}
-
-/**
- * Claim by token ID — what a browser holding the agent-session cookie can do,
- * since that cookie names tokens instead of carrying them (lib/agent-session).
- *
- * An id is not a capability on its own; the capability is the SIGNED cookie
- * that produced it, exactly as the plaintext variant's capability is the
- * secret. Both land in the same transaction, so the ownership rule ("already
- * someone else's" → null) is written once.
- */
-export async function claimTokenById(
-  userId: string,
-  tokenId: string,
-): Promise<{ tokenId: string; claimedArtifacts: number } | null> {
-  return claimWhere(userId, 'id = $1', tokenId);
-}
-
-async function claimWhere(
-  userId: string,
-  where: string,
-  value: string,
-): Promise<{ tokenId: string; claimedArtifacts: number } | null> {
-    const adopt = artifactAdopter();
-    const db = await getDb();
-    /*
-     * The NAME rides out of the transaction alongside the claim, purely so the
-     * log's sentence reads as something a person recognises ("cli-one") rather
-     * than an opaque id. It is stripped off again below: the callers' contract
-     * is unchanged.
-     */
-    const claimed = await db.transaction(async (tx) => {
-      // The token table is the app's own: attach and backfill in ONE
-      // transaction, so "token attached" and "artifacts owned" commit together.
-      const token = (
-        await tx.query<{ id: string; user_id: string | null; name: string | null }>(
-          `SELECT id, user_id, name FROM tokens WHERE ${where} AND deleted_at IS NULL`,
-          [value],
-        )
-      ).rows[0];
-      if (!token) return null;
-      if (token.user_id && token.user_id !== userId) return null;
-      if (!token.user_id) {
-        await tx.query('UPDATE tokens SET user_id = $1 WHERE id = $2', [userId, token.id]);
-        forgetRequestCredentials();
-      }
-
-      // Uniform null: unknown, revoked, or someone else's — the caller cannot
-      // tell which, and re-claiming your own still backfills, because that step
-      // is safe to repeat and must not be skipped.
-      const claimedArtifacts = await adopt.fromToken(tx, token.id, userId);
-      await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL',[userId,token.id]);
-      return { tokenId: token.id, claimedArtifacts, name: token.name };
-    });
-    if (!claimed) return null;
-    // After the transaction, never inside it: PGLite serialises the op queue
-    // behind an open one and the log writes to the same database.
-    const { name, ...claim } = claimed;
-    await emit({ kind: 'user', id: userId }, 'claimed', { kind: 'token', id: claim.tokenId }, { name });
-    return claim;
+  by: { secret: string } | { id: string },
+): Promise<{ id: string; name: string | null } | null> {
+  const [where, value] = 'secret' in by ? ['token_hash = $1', sha256(by.secret)] : ['id = $1', by.id];
+  const token = (
+    await tx.query<{ id: string; user_id: string | null; name: string | null }>(
+      `SELECT id, user_id, name FROM tokens WHERE ${where} AND deleted_at IS NULL`,
+      [value],
+    )
+  ).rows[0];
+  if (!token) return null;
+  if (token.user_id && token.user_id !== userId) return null;
+  if (!token.user_id) {
+    await tx.query('UPDATE tokens SET user_id = $1 WHERE id = $2', [userId, token.id]);
+    forgetRequestCredentials();
+  }
+  await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL', [userId, token.id]);
+  return { id: token.id, name: token.name };
 }
 
 /**

@@ -1,10 +1,11 @@
 import {recordEvent} from '@/lib/platform';
-import { identityForUser, link} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { link } from '@/lib/social';
 import {actOnAnnotationFor,deleteAnnotationFor} from '@/lib/annotations';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 useAppHarness();
 it('coalesces an agent reply and resolution, including its own account, and notifies reopening',async()=>{

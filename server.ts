@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     || (dev ? randomBytes(32).toString('base64url') : undefined);
 
   const { getDb } = await import('@/lib/platform');
-  const { canAuthenticateUser } = await import('@/lib/accounts');
+  const { canAuthenticateUser } = await import('@/lib/user-kinds');
   const { createAppServer } = await import('@/server/app');
 
   // An image built without an engine or a browser needs to be told where they

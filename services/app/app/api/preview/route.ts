@@ -1,5 +1,5 @@
 import { PUBLISH_BODY_LIMIT, isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { parseContentInput } from '@/lib/publish/document/input';
 
 /**

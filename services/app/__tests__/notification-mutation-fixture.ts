@@ -1,7 +1,7 @@
 /** Retained commit-engine proof, independent of the retired markup authoring DSL.
  * Native resolver notification declarations are not an author-facing capability. */
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {durableMutation,getArtifactById} from '@/lib/artifacts';
 import {mutateDataset,isMutationRefused,adaptMutationOperationReply,mutationInitiator} from '@/lib/document-data';
 import {notificationContextSnapshot} from '@/lib/notifications';

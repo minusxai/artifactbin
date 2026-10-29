@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {ANONYMOUS_ACTOR} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import {planHtmlClone} from '../clone';
 it('copies an explicit immutable code allowlist without credentials, owner authority or state',async()=>{
  const record={backendId:'b',version:'v',pageId:'p',name:'db',source:'code',compiled:'compiled',typeDefs:'type Query { ok: Boolean }',ownerId:'original',secretBindings:['API_KEY'],value:{private:'hidden'}};

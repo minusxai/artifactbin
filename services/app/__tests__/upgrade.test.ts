@@ -24,7 +24,7 @@ import { PUT as editRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as readRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken } from '@/__tests__/harness';
-import { resetRateLimit } from '@/lib/accounts';
+import { resetAllowances } from '@/lib/allowances';
 import { getDb, resetDb } from '@/lib/platform';
 import { SCHEMA_STATEMENTS } from '@/lib/platform';
 import { request } from '@/__tests__/harness';
@@ -42,7 +42,7 @@ const mint = async (): Promise<string> => {
 };
 
 beforeEach(async () => {
-  resetRateLimit();
+  resetAllowances();
   const db = await getDb();
   for (const table of ['artifact_edits', 'artifact_versions', 'artifacts', 'tokens']) {
     await db.query(`DELETE FROM ${table}`);

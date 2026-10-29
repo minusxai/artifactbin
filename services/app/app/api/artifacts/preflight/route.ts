@@ -1,4 +1,4 @@
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import {PUBLISH_BODY_LIMIT,readJson,json} from '@/lib/http';
 import {preflightPublication} from '@/lib/publish/publish';
 export const POST=withTokenAuth(async(request,{ actor })=>{

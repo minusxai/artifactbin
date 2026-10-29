@@ -2,7 +2,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {GET as documentEvents} from '@/app/a/[id]/events/route';
 import {GET as peopleEvents} from '@/app/api/my/people/events/route';
 import {request,useAppHarness} from './harness';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 import {LIVE_KEEPALIVE_EVENT} from '@/lib/http';
 const harness=useAppHarness();

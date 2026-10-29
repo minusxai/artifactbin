@@ -1,4 +1,5 @@
-import { browserActor, ownerUsername } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
+import { ownerUsername } from '@/lib/accounts';
 import { readJson } from '@/lib/http';
 import { respondToCommentReaction } from '@/lib/annotations';
 /** Account-only desired reaction state; admission follows reading the conversation. The browser is the person. */

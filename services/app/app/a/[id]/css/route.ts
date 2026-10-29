@@ -8,7 +8,8 @@
  * anonymous answer carries `*` for the sandboxed copy's opaque origin, and on a document's own origin server/pages-host
  * answers its credentialed CORS.
  */
-import { ANONYMOUS_ACTOR, requestOrSessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow, holdsCreatingToken } from '@/lib/artifacts';
 import { json } from '@/lib/http';
 import { matchingTag } from '@/lib/http/revalidation';

@@ -8,7 +8,7 @@
 import { MembershipError } from '@/lib/artifacts';
 import type { MutationReceipt } from '@/lib/artifacts';
 import type { ArtifactRow } from '@/lib/artifacts';
-import type { AccessActor } from '../accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { artifactToWire } from '@/lib/artifacts';
 import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { json } from '../http/http';

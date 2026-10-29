@@ -189,7 +189,7 @@ describe('the surviving vocabulary', () => {
 
 /** Application identity has no request-rate engine. */
 describe('the app counts no door of its own', () => {
-  const authSource = readFileSync(path.join(APP_ROOT, 'lib/accounts/auth.ts'), 'utf8');
+  const authSource = ['lib/authentication/doors.ts', 'lib/allowances/index.ts'].map((file) => readFileSync(path.join(APP_ROOT, file), 'utf8')).join('\n');
 
   it('makes no request limiter call', () => {
     expect([...authSource.matchAll(/\.(limit|check|hit)\(\s*'?([A-Za-z_]*)/g)].map((m) => `${m[1]}(${m[2]})`)).toEqual([]);

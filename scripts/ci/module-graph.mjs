@@ -199,6 +199,11 @@ export const DEEP_MODULES = {
   'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
   'lib/custom-domains': { entries: [''], serverOnly: [''] },
   'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
+  // Above lib/accounts and lib/artifacts: request identity, its doors, token claims and guest merges.
+  'lib/authentication': { entries: [''], serverOnly: [''] },
+  'lib/avatars': { entries: [''], serverOnly: [''] },
+  'lib/social': { entries: [''], serverOnly: [''] },
+  'lib/allowances': { entries: [''], serverOnly: [''] },
 };
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 

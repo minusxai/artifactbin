@@ -22,7 +22,8 @@ import { parseCustomDomainsTarget } from '@/lib/platform';
 import { attachDomain, domainOf, isServable, normalizeHostname, ownerForHost, recheckDomains, removeDomain, verifiedHostOf, verifyDomain, type CaaRecord, type DomainResolver } from '@/lib/custom-domains';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { identityForUser, mintToken, createTestUser } from '@/lib/accounts';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 beforeEach(() => { settings.target = 'domains.example.test'; });

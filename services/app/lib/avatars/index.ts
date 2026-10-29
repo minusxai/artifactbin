@@ -19,8 +19,9 @@
  * invent a second address for one.
  */
 import sharp from 'sharp';
-import { PUBLIC_BASE_URL, getDb } from '../platform';
+import { PUBLIC_BASE_URL } from '../platform';
 import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
+import { replaceUserImageKey } from '@/lib/accounts';
 import { objectKey, objectStore, type ObjectStore } from '../object-store/index';
 import { sniffImageType } from '../web-ingest/sniff';
 
@@ -147,10 +148,7 @@ export async function setAvatar(
   // is a path segment rather than something the object store has to defend.
   const key = objectKey(`avatar/${userId}`, webp);
   await objects.put(key, webp, 'image/webp');
-  const db = await getDb();
-  const previous = (await db.query<{ image_key: string | null }>('SELECT image_key FROM users WHERE id = $1', [userId]))
-    .rows[0]?.image_key ?? null;
-  await db.query('UPDATE users SET image_key = $1 WHERE id = $2', [key, userId]);
+  const previous = await replaceUserImageKey(userId, key);
   // The ROW points at the new object before the old one goes: the reverse
   // order would leave a live row addressing bytes that no longer exist.
   if (previous && previous !== key) await forget(previous, objects);
@@ -159,12 +157,8 @@ export async function setAvatar(
 
 /** Give a person no picture: the column goes null and the object goes away. */
 export async function clearAvatar(userId: string, objects: ObjectStore = objectStore()): Promise<void> {
-  const db = await getDb();
-  const previous = (await db.query<{ image_key: string | null }>('SELECT image_key FROM users WHERE id = $1', [userId]))
-    .rows[0]?.image_key ?? null;
-  if (!previous) return;
-  await db.query('UPDATE users SET image_key = NULL WHERE id = $1', [userId]);
-  await forget(previous, objects);
+  const previous = await replaceUserImageKey(userId, null);
+  if (previous) await forget(previous, objects);
 }
 
 /**

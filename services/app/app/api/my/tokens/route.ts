@@ -6,7 +6,7 @@
  */
 import { json, unauthorized } from '@/lib/http';
 import { listTokensByUser, tokenStatus } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);

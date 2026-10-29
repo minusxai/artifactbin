@@ -1,5 +1,5 @@
 /** Authenticated, actor-owned, idempotent batches of 100; guests retain their token identity. */
-import {withTokenAuth} from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import {json} from '@/lib/http';
 import {reserveIds} from '@/lib/artifacts';
 import {CreationReplay} from '@/lib/artifacts';

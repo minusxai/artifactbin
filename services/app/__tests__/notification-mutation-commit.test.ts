@@ -1,4 +1,4 @@
-import { identityForUser, createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';

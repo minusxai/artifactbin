@@ -37,7 +37,9 @@ import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './table';
 import { getArtifactById } from './rows';
-import { isTestAccount, isTestOwned, TEST_ACCOUNT_RESTRICTED, userKindOf, type AccessActor } from '../accounts';
+import { isTestAccount, TEST_ACCOUNT_RESTRICTED, type AccessActor } from '@/lib/accounts';
+import { isTestOwned } from '@/lib/accounts';
+import { userKindOf } from '@/lib/user-kinds';
 
 /** A user target (follow) rather than a document one. */
 interface UserTarget { userId: string }

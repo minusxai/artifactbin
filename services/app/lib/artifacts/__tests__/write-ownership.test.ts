@@ -9,7 +9,8 @@ import { artifactChannel } from '@artifactbin/contracts';
 import { createGuestOwner, mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
-import { claimToken, createUser, identityForUser, installArtifactAdopter, mergeGuestUsers } from '@/lib/accounts';
+import { claimToken, mergeGuestUsers } from '@/lib/authentication';
+import { createUser, identityForUser } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts/tokens';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
@@ -111,19 +112,6 @@ describe('adoption on claim and on guest merge', () => {
     const db = await harness.db();
     expect((await db.query('SELECT user_id FROM tokens WHERE id=$1', [guest.tokenId])).rows).toEqual([{ user_id: account.id }]);
     expect((await db.query('SELECT merged_into_user_id FROM users WHERE id=$1', [guest.userId])).rows).toEqual([{ merged_into_user_id: account.id }]);
-  });
-
-  it('a claim or merge with no artifacts adopter installed fails before writing anything', async () => {
-    const user = await createUser({ email: 'uninstalled@example.test' });
-    const loose = await mintToken('loose', null);
-    const made = await createArtifact(loose.id, null, page('Kept'));
-    const installed = installArtifactAdopter(null);
-    try {
-      await expect(claimToken(user.id, loose.token)).rejects.toThrow(/artifacts adopter/);
-      await expect(mergeGuestUsers(user.id, [loose.id])).rejects.toThrow(/artifacts adopter/);
-    } finally { installArtifactAdopter(installed); }
-    expect((await (await harness.db()).query('SELECT user_id FROM tokens WHERE id=$1', [loose.id])).rows).toEqual([{ user_id: null }]);
-    expect((await getArtifactById(made.id))!.user_id).toBeNull();
   });
 });
 

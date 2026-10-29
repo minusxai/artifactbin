@@ -1,11 +1,8 @@
-/** Accounts: creation, email changes, usernames, and claiming tokens with the artifacts they published. */
+/** Accounts: creation, email changes, usernames, and the tokens an account may claim (the claim itself: lib/authentication). */
 import { describe, expect, it } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
-import {
-  USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail,
-  getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, ownerUsername, revokeToken, revokeUserToken,
-  setUserEmail, setUsername, usernameFromEmail,
-} from '@/lib/accounts';
+import { USERNAME_RE, setUserEmail, usernameFromEmail } from '@/lib/accounts/users';
+import { authorHandle, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, ownerUsername, revokeToken, revokeUserToken, setUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
@@ -15,7 +12,6 @@ const artifact = async (id: string, columns: { token_id?: string; user_id?: stri
     'INSERT INTO artifacts (id, token_id, user_id, group_id, title, creator_user_id, format) VALUES ($1, $2, $3, $4, $5, $6, $7)',
     [id, columns.token_id ?? null, columns.user_id ?? null, columns.group_id ?? null, columns.title ?? null, columns.creator_user_id ?? null, columns.format ?? 'markup'],
   );
-const ownerOf = async (id: string) => (await (await getDb()).query<{ user_id: string | null }>('SELECT user_id FROM artifacts WHERE id = $1', [id])).rows[0]!.user_id;
 
 describe('username rules', () => {
   // Pure: no rows, so the describe skips the per-test wipe.
@@ -116,37 +112,7 @@ describe('accounts', () => {
   });
 });
 
-describe('claiming tokens', () => {
-  it('attaches an anonymous token and backfills only its unowned, ungrouped artifacts', async () => {
-    const user = await createUser({ email: 'claimer@example.test' });
-    const minted = await mintToken('cli', null);
-    await artifact('art_loose', { token_id: minted.id });
-    await artifact('art_grouped', { token_id: minted.id, group_id: 'grp_1' });
-    await artifact('art_other', { token_id: (await mintToken('other', null)).id });
-    expect(await claimToken(user.id, minted.token)).toEqual({ tokenId: minted.id, claimedArtifacts: 1 });
-    expect(await ownerOf('art_loose')).toBe(user.id);
-    expect(await ownerOf('art_grouped')).toBeNull();
-    expect(await ownerOf('art_other')).toBeNull();
-    // Re-claiming your own is not a refusal: it backfills again (nothing left here).
-    expect(await claimToken(user.id, minted.token)).toEqual({ tokenId: minted.id, claimedArtifacts: 0 });
-    await artifact('art_later', { token_id: minted.id });
-    expect(await claimTokenById(user.id, minted.id)).toEqual({ tokenId: minted.id, claimedArtifacts: 1 });
-  });
-
-  it('answers a uniform null for a non-token, an unknown or revoked token, and someone else\'s', async () => {
-    const owner = await createUser({ email: 'owner@example.test' }), other = await createUser({ email: 'other@example.test' });
-    const minted = await mintToken('cli', null);
-    expect(await claimToken(owner.id, minted.id)).toBeNull();
-    expect(await claimToken(owner.id, `mx_${'a'.repeat(43)}`)).toBeNull();
-    expect(await claimToken(owner.id, minted.token)).not.toBeNull();
-    expect(await claimToken(other.id, minted.token)).toBeNull();
-    expect(await claimTokenById(other.id, minted.id)).toBeNull();
-    const revoked = await mintToken('gone', null);
-    await revokeToken(revoked.id);
-    expect(await claimTokenById(owner.id, revoked.id)).toBeNull();
-    expect(await claimTokenById(owner.id, 'tok_unknown')).toBeNull();
-  });
-
+describe('claimable tokens', () => {
   it('offers recent unclaimed tokens by id with their titles, and nothing else', async () => {
     const user = await createUser({ email: 'claimer@example.test' });
     const fresh = await mintToken('fresh', null), empty = await mintToken('empty', null), old = await mintToken('old', null);

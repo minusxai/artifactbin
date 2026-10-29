@@ -5,7 +5,7 @@ import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan} from '@/lib/registered-page-queries/registry';
 import {registeredQueryInvoker} from '@/lib/registered-page-queries/namespace';
 import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
 import {getArtifactHeaderById,effectiveRole,accessMoved,readableArtifactHeader} from '@/lib/artifacts';
@@ -16,7 +16,7 @@ import {createDatasetNamespaceInvoker,datasetNamespaceSources} from '@/lib/datas
 import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
 import {services} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
-import {requestOrSessionActor,refusesCrossSite} from '@/lib/accounts';
+import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
 /** Reserved host programs are validated before discovery or invocation; unknown kinds never reach the runner. */
 function registeredPrograms(page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord){
  const query=registeredPlan(page,link,backend),mutation=registeredMutationPlan(page,link,backend);

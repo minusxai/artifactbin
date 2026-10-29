@@ -4,7 +4,7 @@
  * people they follow who also follow this profile. The owner and anonymous
  * readers get the counts alone — there is no relationship to describe.
  */
-import { avatarUrl } from './avatars';
+import { avatarUrl } from '../avatars';
 import { count, countLinked, followersYouKnow, has } from './relations';
 
 /** How many followers-you-know are named; the rest are counted. */

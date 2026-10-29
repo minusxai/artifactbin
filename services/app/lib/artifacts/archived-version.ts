@@ -29,7 +29,7 @@
  */
 import { getVersionFor, listVersionsFor, versionForCapture } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/table';
-import { requestOrSessionActor, type AccessActor } from '@/lib/accounts';
+import { type AccessActor } from '@/lib/accounts';
 import { servableDocument } from '@/lib/artifacts/servable';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -89,10 +89,14 @@ function archived(version: number, head: number, body: RenderBody): ArchivedRend
  * export key and no session (lib/export photographs `raw?chrome=0&version=N`),
  * and the version ACL for it ran at the export door before that key existed.
  * Only a caller that has verified the key for this row may pass it.
+ *
+ * `reader` resolves the request door's actor (lib/authentication `requestOrSessionActor`); it is asked only
+ * when a version is asked and no capture key decides.
  */
 export async function archivedVersionFor(
   request: Request,
   row: ArtifactRow,
+  reader: () => Promise<AccessActor>,
   opts: { capture?: boolean } = {},
 ): Promise<ArchivedRender | 'not_found' | null> {
   const asked = versionAsked(request.url);
@@ -106,7 +110,7 @@ export async function archivedVersionFor(
     const shot = await versionForCapture(row, asked);
     return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
-  return archivedVersionForActor(await requestOrSessionActor(request), row, asked);
+  return archivedVersionForActor(await reader(), row, asked);
 }
 
 /**

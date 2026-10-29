@@ -10,7 +10,7 @@ import type { Actor, Credential } from '@artifactbin/contracts';
 import { identityForUser, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
-import { resetRateLimit } from '@/lib/accounts/auth';
+import { resetAllowances } from '@/lib/allowances';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overridePostgres } from '@/lib/datasets/postgres';
 import { overrideCatalogExecutor } from '@/lib/datasets/execute';
@@ -84,7 +84,7 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 }
 
 /** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
-/** A resolved request identity as a door hands it to a handler (lib/accounts request-identity). It grants nothing. */
+/** A resolved request identity as a door hands it to a handler (lib/authentication request-identity). It grants nothing. */
 export function testIdentity(credential: Credential, ids: { userId?: string | null; tokenId?: string | null; email?: string | null; emailVerified?: boolean | null } = {}): RequestIdentity {
   return { ...identityForUser(ids.userId ?? null, ids.tokenId ?? null, ids.email ?? null), credential, emailVerified: ids.emailVerified ?? null };
 }
@@ -158,7 +158,7 @@ interface AppHarness {
 
 /**
  * Call ONCE at the top level of a test file. Registers `beforeAll` (boot one PGLite), `beforeEach` (wipe every table in
- * FK-safe order + resetRateLimit), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
+ * FK-safe order + resetAllowances), `afterAll` (resetDb) on vitest's current suite. Two tests in the same file observe the
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
  */
@@ -197,7 +197,7 @@ export function useAppHarness(): AppHarness {
     await flushViews();
     resetRenderCache();
     await wipe();
-    resetRateLimit();
+    resetAllowances();
     overrideSession(undefined);
   });
 
@@ -223,7 +223,7 @@ export function useAppHarness(): AppHarness {
       let seeded: { value: T } | undefined;
       beforeAll(async () => {
         await wipe();
-        resetRateLimit();
+        resetAllowances();
         overrideSession(undefined);
         seeded = { value: await seed() };
         keepRows = true;

@@ -1,4 +1,4 @@
-import {sessionActor} from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import {unauthorized} from '@/lib/http';
 import {membershipInbox,notificationChannel} from '@/lib/notifications';
 import {subscribeChannel} from '@/lib/publish/realtime/live';

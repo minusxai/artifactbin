@@ -31,7 +31,7 @@ import { ANONYMOUS, type Actor, type Queryable } from '@artifactbin/contracts';
 import { getDb } from '../platform';
 import { resolveTokenById, sha256 } from './tokens';
 import type { AccessActor, RequestIdentity } from './actors';
-import { canAuthenticateUser } from './user-kinds';
+import { canAuthenticateUser } from '../user-kinds';
 
 /** How long a ticket is good for: the frame loads it at once. */
 const PAGES_TICKET_TTL_MS = 60_000;
@@ -59,7 +59,7 @@ const codes = async () => createCodeStore(await getDb());
 /**
  * A pages session carries an email account session or a trusted scripted browser's account token.
  * One browser reads as a bearer: a browser SESSION's scripted browser (`BROWSER_SESSION_HEADER` on a request
- * the trusted session transport attached its actor to, lib/accounts/request-identity `isBrowserSessionRequest`). It is
+ * the trusted session transport attached its actor to, lib/authentication/request-identity `isBrowserSessionRequest`). It is
  * a browser holding a token, so its pages session is exactly that: an agent cookie for that token.
  */
 function snapshotOf(actor: RequestIdentity, browserSession: boolean): ActorSnapshot | null {

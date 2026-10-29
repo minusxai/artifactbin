@@ -2,7 +2,7 @@
 import { actorSubject, emit, generateInternalId, getDb, type Queryable } from '../platform';
 import {notifyParent,parentOf} from './placement';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {AccessActor} from '../accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';
 import { notifyArtifactSql, ownerPredicate, type ArtifactRow } from './table';

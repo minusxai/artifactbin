@@ -1,11 +1,8 @@
 /** Agent bearer tokens: mint, resolve, revoke, expiry, liveness and sampled usage stamps. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
-import {
-  DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, TOUCH_INTERVAL_MS, createUser, ensureUserToken, identityForUser,
-  listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus,
-  touchToken, withAccountToken,
-} from '@/lib/accounts';
+import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, createUser, ensureUserToken, identityForUser, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from '@/lib/accounts';
+import { LIVE_TOKEN_SQL, TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();

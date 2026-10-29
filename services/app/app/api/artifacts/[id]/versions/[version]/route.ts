@@ -1,4 +1,4 @@
-import { withTokenAuth } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations/http';
 
 /** GET /api/artifacts/:id/versions/:version — one archived version with content (`markup` carries the source). */

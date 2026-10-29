@@ -13,11 +13,13 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { updateSharingFor } from '@/lib/artifacts';
-import { identityForUser, link, unlink } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import { link, unlink } from '@/lib/social';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();

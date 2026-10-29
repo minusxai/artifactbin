@@ -1,6 +1,6 @@
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {AccessActor} from '../accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {getAccountPreferences,getGroupRole} from '../groups';
 import {selectNewArtifactDestination} from '../groups/destination';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';

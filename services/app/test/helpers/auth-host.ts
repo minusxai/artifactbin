@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {createTokenReader} from '@artifactbin/utils';
 import {createAuthHost,createHumanAuth,ensureAuthSchema,loginProvidersOf,mailerForRuntime,mailSettingsOf,readEnv,sessionStoreOf} from '@artifactbin/auth';
 import {createEvents,ensureEventsSchema} from '@artifactbin/events/local';
-import {canAuthenticateUser} from '@/lib/accounts';
+import { canAuthenticateUser } from '@/lib/user-kinds';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from '@/lib/deployment';
 import { EVENTS_SCHEMA, setServices } from '@/lib/platform';
 import {createAppHost} from '@/server/host';
