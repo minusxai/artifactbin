@@ -38,6 +38,21 @@ await step(PLACEHOLDERS_OK?'no stray text outside the app':'no [placeholder] or 
     .evaluate(()=>[document.title,document.querySelector('meta[name=description]')?.content??'']
       .join().includes('['))))
     throw Error('example text left in the page: replace every [bracketed] part');});
+await step('the HTML title matches the page name',async()=>{
+  // Link previews, search and the platform's og:title read the published <title>, not the one the
+  // script sets: read the served source (hosted: /a/ID/raw, fetched from the app page).
+  const url=new URL(page.url()),id=url.pathname.match(/^\/(?:a|@[^/]+)\/([A-Za-z0-9]+)/)?.[1];
+  const src=/^(127\.0\.0\.1|localhost|\[::1\])$/.test(url.hostname)||!id?url.href:
+    `${url.origin}/a/${id}/raw`;
+  const served=await page.mainFrame().evaluate(async src=>{const res=await fetch(src,
+    {cache:'no-store'});return res.ok?new DOMParser().parseFromString(await res.text(),
+    'text/html').title:`(served page: HTTP ${res.status})`;},src);
+  const name=await page.evaluate(()=>document.title),tag=name.replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;');
+  // A [bracketed] or older starter title is still the template's.
+  if(served!==name||!PLACEHOLDERS_OK&&/\[|^Shared dashboard$/.test(served))
+    throw Error(`the HTML title is "${served}" but the page is named "${name}": `+
+      `set <title>${tag}</title> in index.html`);});
 if(page.viewportSize().width>800){
   await step(`a ${CATEGORY} target of ${TEST} saves and survives a reload`,async()=>{
     await page.locator(open).click();
