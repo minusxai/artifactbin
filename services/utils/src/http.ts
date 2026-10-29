@@ -49,7 +49,7 @@ export function jsonServer(routes: JsonRoutes, opts: JsonServerOptions): JsonSer
     const route = routes[req.url ?? ''];
     if (!route) return json(404, { error: 'not_found' });
     const raw = await collectNodeBody(req, opts.maxBody);
-    if (!raw) return json(413, { error: 'too_large' });
+    if (!raw) { json(413, { error: 'too_large' }); req.destroy(); return; }
     try {
       return json(200, await route(JSON.parse(raw.toString('utf8'))));
     } catch (error) {

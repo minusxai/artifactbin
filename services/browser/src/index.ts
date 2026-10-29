@@ -36,7 +36,7 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     if (req.url !== BROWSER_ROUTES.render && req.url !== BROWSER_ROUTES.renderUpload && req.url !== BROWSER_ROUTES.harvest && req.url !== BROWSER_ROUTES.sessions) return json(404, { error: 'not_found' });
     const raw = await collectNodeBody(req, maxBody);
-    if (!raw) return json(413, { error: 'too_large' });
+    if (!raw) { json(413, { error: 'too_large' }); req.destroy(); return; }
     let input: RenderRequest;
     try { input = JSON.parse(raw.toString('utf8')); } catch { return json(400, { error: 'bad_request' }); }
     if (req.url === BROWSER_ROUTES.sessions) {

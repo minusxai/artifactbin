@@ -45,13 +45,13 @@ export async function readBody(request: BodyHolder, { limit, as = 'bytes' }: { l
   return as === 'text' ? new TextDecoder().decode(bytes) : bytes;
 }
 
-/** A Node request's body, or null once it passes `max` bytes (the request is destroyed). */
-export async function collectNodeBody(req: AsyncIterable<Buffer> & { destroy(): unknown }, max: number): Promise<Buffer | null> {
+/** A Node request's body, or null once it passes `max` bytes. The caller answers 413 and then destroys the request. */
+export async function collectNodeBody(req: AsyncIterable<Buffer>, max: number): Promise<Buffer | null> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > max) { req.destroy(); return null; }
+    if (size > max) return null;
     chunks.push(chunk);
   }
   return Buffer.concat(chunks, size);

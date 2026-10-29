@@ -13,21 +13,21 @@ import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const jsonOf = (bytes: number): string => JSON.stringify({ pad: 'x'.repeat(bytes - '{"pad":""}'.length) });
-const post = (body: string, headers: Record<string, string> = {}) => new Request('http://x.test/', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
+const jsonBody = (body: string, headers: Record<string, string> = {}) => new Request('http://x.test/', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
 
 describe('readJson / readBody caps', () => {
   it('default 4 MB: accepted at the cap, PayloadTooLarge one byte over', async () => {
-    expect(await readJson(post(jsonOf(DEFAULT_BODY_LIMIT)))).not.toBeNull();
-    await expect(readJson(post(jsonOf(DEFAULT_BODY_LIMIT + 1)))).rejects.toBeInstanceOf(PayloadTooLarge);
+    expect(await readJson(jsonBody(jsonOf(DEFAULT_BODY_LIMIT)))).not.toBeNull();
+    await expect(readJson(jsonBody(jsonOf(DEFAULT_BODY_LIMIT + 1)))).rejects.toBeInstanceOf(PayloadTooLarge);
   });
   it('the publish cap takes a 16 MB body and refuses past 24 MB', async () => {
-    expect(await readJson(post(jsonOf(16 * 1024 * 1024)), { limit: PUBLISH_BODY_LIMIT })).not.toBeNull();
-    await expect(readJson(post(jsonOf(PUBLISH_BODY_LIMIT + 1)), { limit: PUBLISH_BODY_LIMIT })).rejects.toBeInstanceOf(PayloadTooLarge);
+    expect(await readJson(jsonBody(jsonOf(16 * 1024 * 1024)), { limit: PUBLISH_BODY_LIMIT })).not.toBeNull();
+    await expect(readJson(jsonBody(jsonOf(PUBLISH_BODY_LIMIT + 1)), { limit: PUBLISH_BODY_LIMIT })).rejects.toBeInstanceOf(PayloadTooLarge);
   });
   it('readBody serves text and bytes under the same cap', async () => {
-    expect(await readBody(post('hello'), { as: 'text' })).toBe('hello');
-    expect((await readBody(post('hello'))).byteLength).toBe(5);
-    await expect(readBody(post('x'.repeat(SMALL_BODY_LIMIT + 1)), { limit: SMALL_BODY_LIMIT })).rejects.toBeInstanceOf(PayloadTooLarge);
+    expect(await readBody(jsonBody('hello'), { as: 'text' })).toBe('hello');
+    expect((await readBody(jsonBody('hello'))).byteLength).toBe(5);
+    await expect(readBody(jsonBody('x'.repeat(SMALL_BODY_LIMIT + 1)), { limit: SMALL_BODY_LIMIT })).rejects.toBeInstanceOf(PayloadTooLarge);
   });
 });
 
