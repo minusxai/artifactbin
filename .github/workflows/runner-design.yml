@@ -1,7 +1,6 @@
 name: runner design validation
 on:
   pull_request:
-    branches-ignore: [ artifactbinv3 ]
     paths:
       - 'docs/proposals/runner-validation/**'
       - 'services/runner/**'

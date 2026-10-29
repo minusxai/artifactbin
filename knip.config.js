@@ -19,8 +19,8 @@ export default {
     '.': {
       entry: [
         'server.ts',
-        // The v3 fast workflow and its independent Vitest configuration.
-        'scripts/ci/{fast-check,fast-tests,fast-budget}.mjs', 'vitest.fast.config.ts',
+        // The fast lane ci.yml runs on main pushes and its independent Vitest configuration.
+        'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
         'scripts/native-migration-production.mjs', // Reviewed operator entry; dry-run by default.

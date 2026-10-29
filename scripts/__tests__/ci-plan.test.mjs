@@ -467,7 +467,7 @@ describe('GitHub CI adapter', () => {
       expect(jobs.test.needs).toContain(job);
     }
     expect(jobs.test.needs).toContain('plan');
-    expect(jobs.test.if).toBe("always() && (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')");
+    expect(jobs.test.if).toBe("always()");
     expect(jobs.node.steps.some((step) => step.run?.includes('scripts/ci/ci.mjs node'))).toBe(true);
   });
 });
@@ -495,7 +495,7 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     // A workflow-level group with cancel-in-progress holds the new run pending until the old one has stopped.
     expect(workflow.concurrency).toBeUndefined();
     const job = workflow.jobs.supersede;
-    expect(job.if).toBe("(github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3') && github.event_name == 'pull_request'");
+    expect(job.if).toBe("github.event_name == 'pull_request'");
     expect(job.needs).toBeUndefined();
     expect(job.permissions).toEqual({ contents: 'read', actions: 'write' });
     const cancel = job.steps.find(step => step.run === 'node scripts/lib/ci-supersede.mjs');
@@ -687,7 +687,7 @@ describe('CI job shape', () => {
     expect(jobs.test.needs).not.toContain('notify-consumer');
     expect(jobs.test.needs).not.toContain('warm-caches');
     expect(jobs.test.needs).toEqual(expect.arrayContaining(named));
-    expect(jobs.test.if).toBe("always() && (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')");
+    expect(jobs.test.if).toBe("always()");
     const step = jobs.test.steps.find((candidate) => (candidate.run ?? '').includes('/actions/runs/'));
     expect(step.if).toBe('always()');
     // Per-job durations are diagnostics on both PRs and main; the chain owns timing failures.
