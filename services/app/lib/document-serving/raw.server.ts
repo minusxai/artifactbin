@@ -18,7 +18,8 @@
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
 import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, holdsCreatingToken, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
-import { recordView, verifyExportKey } from '@/lib/platform';
+import { recordView } from '@/lib/analytics';
+import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust/document-trust';
 import { requestOrSessionActor } from '@/lib/accounts';

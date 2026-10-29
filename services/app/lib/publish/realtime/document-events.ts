@@ -15,9 +15,9 @@
 import {createPresenceRoom} from '@/lib/html-presence/room';
 import {presenceChannel} from '@/lib/html-presence/channel.server';
 import {PRESENCE_EVENT,type PresenceFrame} from '@/lib/html-presence/contract';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
-import { trackEvent } from '@/lib/platform';
+import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, sessionActor, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
