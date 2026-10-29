@@ -30,11 +30,12 @@
  */
 import { createHash } from 'crypto';
 import { currentHeaders } from './request-context';
-import type { EventVerb } from '@artifactbin/contracts';
+import type { EventEnvelope, EventVerb } from '@artifactbin/contracts';
 import { forwardedFor, identifyClient } from './client-identity';
 import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS } from './config';
 import { getDb } from './db';
-import { emit, type EventSubject } from './events';
+import { emit, envelope, type EventSubject } from './events';
+import { services } from './services';
 
 type AnalyticsEvent =
   | 'view'
@@ -112,6 +113,60 @@ export async function trackEvent(
   } catch {
     // trackEvent never rejects, whatever the mapping or the service did.
   }
+}
+
+/**
+ * A SERVED VIEW, batched: the document frame's view is the one write every render made (a counter row and a log
+ * sentence each), so views are buffered and written together — one multi-row INSERT and one log append — every
+ * few seconds, or sooner when the buffer fills, and on shutdown (lib/runtime/app-background-tasks).
+ *
+ * Each view keeps its own row and sentence: the visitor, client and moment are taken NOW, in the request's scope,
+ * and only the write is deferred. Never rejects; the returned promise settles when this view's batch is written.
+ */
+const VIEW_FLUSH_MS = 2_000;
+const VIEW_BATCH_MAX = 500;
+interface PendingView { artifactId: string; userId: string | null; client: string | null; visitor: string | null; at: Date; sentence: EventEnvelope }
+let pendingViews: PendingView[] = [];
+let viewTimer: ReturnType<typeof setTimeout> | undefined;
+let viewBatch: { promise: Promise<void>; resolve: () => void } | undefined;
+export async function recordView(artifactId: string, opts: { userId?: string | null } = {}): Promise<void> {
+  const { client, visitor } = await analyticsIdentity(opts.userId);
+  const userId = opts.userId ?? null;
+  // A VIEW's subject is ALWAYS the daily visitor hash (see trackEvent); the sentence is stamped now, at the view.
+  const sentence = envelope(visitor ? { kind: 'visitor', id: visitor } : null, 'viewed', { kind: 'artifact', id: artifactId }, { client, user_id: userId });
+  pendingViews.push({ artifactId, userId, client, visitor, at: new Date(sentence.at), sentence });
+  let resolve!: () => void;
+  const batch = viewBatch ??= { promise: new Promise<void>(r => { resolve = r; }), resolve: () => resolve() };
+  if (pendingViews.length >= VIEW_BATCH_MAX) void flushViews();
+  else if (!viewTimer) {
+    viewTimer = setTimeout(() => void flushViews(), VIEW_FLUSH_MS);
+    viewTimer.unref?.();
+  }
+  return batch.promise;
+}
+
+/** Write every buffered view now. Never rejects; resolves once they are written (or failed quietly). */
+export async function flushViews(): Promise<void> {
+  if (viewTimer) clearTimeout(viewTimer);
+  viewTimer = undefined;
+  const views = pendingViews, batch = viewBatch;
+  pendingViews = [];
+  viewBatch = undefined;
+  if (!views.length) { batch?.resolve(); return; }
+  try {
+    const db = await getDb();
+    const params = views.flatMap(v => ['view', v.artifactId, v.userId, v.client, v.visitor, v.at]);
+    const rows = views.map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`).join(', ');
+    await db.query(`INSERT INTO analytics_events (event, artifact_id, user_id, client, visitor, created_at) VALUES ${rows}`, params);
+  } catch {
+    // Analytics must never take a request down with it.
+  }
+  try {
+    await services().events.emit(views.map(v => v.sentence));
+  } catch (error) {
+    console.error('[events] emit failed:', error);
+  }
+  batch?.resolve();
 }
 
 /** Request metadata only: no database access. */

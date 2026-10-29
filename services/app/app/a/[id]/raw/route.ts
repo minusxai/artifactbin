@@ -22,7 +22,8 @@ import { LIVE_VERSION_HEADER } from '@/lib/html-runtime/live-morph-contract';
  *   though it is same-host. Verified live: reading localStorage throws.
  */
 import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
-import { trackEvent, verifyExportKey } from '@/lib/platform';
+import { recordView, verifyExportKey } from '@/lib/platform';
+import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, storedBytesCacheControl, withFreshNonce } from '@/lib/serving/render-cache';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust/document-trust';
 import { requestOrSessionActor } from '@/lib/accounts';
@@ -99,7 +100,16 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
    */
   const asked = request.headers.get('if-none-match');
   const conditional = !!pages && !key && !fragment && !!asked && !new URL(request.url).searchParams.has(VERSION_PARAM);
-  const metadataOnly = conditional || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
+  // The SAME viewer the proxy and the page decide ownership with (see below), resolved before the row: it decides
+  // whether this request may be answered from the render cache, which is asked from the header alone.
+  const actor = await requestOrSessionActor(request);
+  /*
+   * A SHARED RENDER (lib/serving/render-cache): an anonymous reader's head document on the app or its own origin —
+   * no key, version, fragment or custom domain, no carried grant. Admission still runs below on the header, every
+   * time, before a cached body may be served; only a miss reads the row whole.
+   */
+  const shared = request.method === 'GET' && !domain && !fragment && !key && !new URL(request.url).searchParams.has(VERSION_PARAM) && !new URL(request.url).searchParams.has('v') && anonymousReader(actor, pages?.carried);
+  const metadataOnly = conditional || shared || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
   const loaded = metadataOnly ? null : await getArtifactById(id);
   const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
   if (!header) return notFound();
@@ -125,8 +135,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   // makes a claimed-token browser an owner in the shell and a stranger in its
   // own private document.
   // Bearer first, then the browser credentials, the same order as the export route, so the CLI
-  // can fetch the page of an artifact its token owns or may read.
-  const actor = await requestOrSessionActor(request);
+  // can fetch the page of an artifact its token owns or may read (resolved above).
   const byExportKey = verifyExportKey(header.id, key ?? undefined);
   const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
@@ -146,11 +155,24 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
     // The per-render script nonce changes bytes, while these facts retain semantic identity.
     ...(etag ? { ETag: `W/${etag}`, 'Cache-Control': REVALIDATE } : {}),
   });
+  // Everything a shared render's bytes depend on: the row's version, edit and metadata, who frames it, its policy and the runtime.
+  const frameKey = async (row: ArtifactHeader) => renderKey({
+    kind: 'frame', base, self: pages?.self ?? null, app: pages?.site.app ?? null, search: new URL(request.url).search,
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at, title: row.title, description: row.description, meta: row.meta,
+    policy, runtime: await nativeHtmlRuntimeIdentity(),
+  });
+  // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
+  const counted = () => { if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void recordView(header.id, { userId: actor.userId }); };
   if (header.format === 'html' && metadataOnly) {
     const etag = revalidated ? await validator(header) : null;
     const held = etag && matchingTag(asked, etag);
     if (held) return notModified(`W/${held}`);
     if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+    const hit = shared ? renderCache.get(await frameKey(header)) : undefined;
+    if (hit) {
+      counted();
+      return new Response(withFreshNonce(new TextDecoder().decode(hit.body)), { headers: responseHeaders(etag) });
+    }
   }
 
   const artifact = loaded ?? await getArtifactById(id);
@@ -168,11 +190,15 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(`W/${held}`);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+      // Retained only when the row rendered is the one the key was read from (it may have moved since).
+      const retained = shared && !at && sameRevision(header, artifact) ? await frameKey(header) : null;
       // The owner's design-system choice is page metadata, current for every version shown (not part of the source).
-      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}) });
-      // An open page reading its own newest version (lib/html-runtime/live-morph) is the same view, not another.
-      if (!key && request.method !== 'HEAD' && !request.headers.has(LIVE_VERSION_HEADER)) void trackEvent('view', artifact.id, { userId: actor.userId });
-      return new Response(await nativeHtmlPresentation(rendered.html,row,domain), { headers: responseHeaders(etag) });
+      const rendered = await nativeHtmlDocument({ row, designSystem: designSystemChoice(artifact.meta), ...(pages ? { appOrigin: pages.site.app } : {}), ...(retained ? { platformScriptNonce: NONCE_PLACEHOLDER } : {}) });
+      counted();
+      const html = await nativeHtmlPresentation(rendered.html,row,domain);
+      if (!retained) return new Response(html, { headers: responseHeaders(etag) });
+      renderCache.set(retained, { status: 200, headers: [], body: new TextEncoder().encode(html) }, FRAME_TTL_MS);
+      return new Response(withFreshNonce(html), { headers: responseHeaders(etag) });
     }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
@@ -207,9 +233,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       // A versioned URL (`?v=<n>`, how refData embeds an image) is genuinely
       // immutable — the version changes when the bytes do. A bare URL might be
       // replaced under the same id, so it only gets a short freshness window.
-      const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
-      const cache = versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`;
+      const cache = storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v'));
       // SVG is inert inside an <img>, but a DIRECT hit on /raw renders it as a
       // document where its scripts WOULD run — so lock it down like the html
       // tier's sandbox. Raster types need no CSP (they are not documents).
@@ -253,17 +277,14 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       // Built fresh per response: @hono/node-server writes the computed
       // Content-Length back INTO this object, so a shared constant would
       // announce the first body's length for every later one.
-      const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
       const headers: Record<string, string> = {
         ...COMMON,
         'Content-Type': meta.contentType,
         'Content-Disposition': `inline; filename="${pdfFilename(artifact.title, artifact.id)}"`,
         'Content-Security-Policy': 'sandbox',
         'Accept-Ranges': 'bytes',
-        // Same rule as an image: a versioned address is genuinely immutable,
-        // a bare one only gets a short freshness window.
-        'Cache-Control': versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`,
+        // Same rule as an image (lib/serving/render-cache storedBytesCacheControl).
+        'Cache-Control': storedBytesCacheControl(artifact, new URL(request.url).searchParams.has('v')),
       };
       if (range === 'unsatisfiable') {
         return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
@@ -315,6 +336,11 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
  * a HEAD and never opens a stream; every other format pays for a body it then
  * discards — honest, and what a HEAD costs anywhere.
  */
+/** The row read whole is the version, edit and metadata its header named. */
+function sameRevision(header: ArtifactHeader, row: ArtifactRow): boolean {
+  return header.version === row.version && header.edit_id === row.edit_id && String(header.updated_at) === String(row.updated_at);
+}
+
 export async function HEAD(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost }) {
   const res = await GET(request, ctx);
   // Cancel rather than leak: an unread stream holds its file handle open.

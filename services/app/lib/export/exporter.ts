@@ -258,7 +258,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
  try {
   const image=await (await sharedCache()).read({
    cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null),
-   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,current:capture!=='card',
+   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,current:capture!=='card',stable:capture==='card',
   },async id=>{
    const input={urlFor:opts.pageUrl,target:opts.target,scriptOrigins:opts.scriptOrigins},store=objectStore(),browser=services().browser;
    if(store.signedUpload&&browser.renderAndUpload){
@@ -316,6 +316,8 @@ export async function exportImageResponse(
   // reads it — through its own declarations. See `selection` below.
   artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null;
+    /** The caller's reader may EDIT the artifact (the door decided): only then does `refresh` re-render. */
+    editor?: boolean;
     /**
      * The ARCHIVED version to photograph (`?version=N`), already AUTHORIZED by
      * the calling door under the served document's own rule
@@ -331,6 +333,8 @@ export async function exportImageResponse(
   // Default png; anything unrecognized is a client error rather than a
   // surprise format, since this path exists only to produce an image.
   if(q.refresh!=null&&q.refresh!=='1')return json({error:'unknown_refresh'},400);
+  // A re-render is the editor's to ask for: anyone else's `refresh=1` is answered from the stored image.
+  const refresh=q.refresh==='1'&&q.editor===true;
   const format = parseExportFormat(q.format ?? 'png');
   if (!format) return json({ error: 'unknown_format', allowed: ['png', 'jpg'] }, 400);
   // Default full page (agents ask for this to see the whole document); 'card'
@@ -373,7 +377,7 @@ export async function exportImageResponse(
         if(imageOverview)return new Response(new Uint8Array(await produceCover()),{headers:{'content-type':EXPORT_MIME[format],'cache-control':'private, no-store','x-content-type-options':'nosniff'}});
         const cover=await (await sharedCache()).read({
           cacheKey:`${artifact.id}:cover-g${EXPORT_RENDER_GENERATION}:${format}`,
-          artifactId:artifact.id,revision:`${exportRevision(artifact)}:${image.id}:${exportRevision(image)}`,refresh:q.refresh==='1',
+          artifactId:artifact.id,revision:`${exportRevision(artifact)}:${image.id}:${exportRevision(image)}`,refresh,stable:true,
         },async id=>storeBytes(id,await produceCover(),format));
         return imageResponse(cover,base,delivery);
       } catch {
@@ -385,7 +389,7 @@ export async function exportImageResponse(
 
   const version = q.version ?? null;
   const options:ImageOptions = {
-    refresh:q.refresh==='1',
+    refresh,
     capture,
     ...(version === null ? {} : { version }),
     ...(draftCrop
