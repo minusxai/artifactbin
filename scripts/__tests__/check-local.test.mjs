@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, utimesSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runCheck } from '../lib/check-evidence.mjs';
-import { typeCheckCommands } from '../lib/type-check.mjs';
+import { NATIVE_ROOT_BUILD_INFO, typeCheckCommands } from '../lib/type-check.mjs';
 
 async function fixture(test) {
   const root = mkdtempSync(path.join(tmpdir(), 'check-evidence-'));
@@ -82,27 +82,79 @@ describe('successful local check evidence', () => {
   }));
 });
 
-// Validate retains the stable compiler and every strict/incremental diagnostic on all platforms.
+// The validate type-checker: TypeScript 7's native compiler where its platform package is installed, tsc 5
+// elsewhere. Both must read the same tsconfig the same way, so a fixture's errors are compared between them.
 describe('validate type-checker', () => {
   const repo = path.resolve(new URL('../..', import.meta.url).pathname);
+  const native = typeCheckCommands({ root: repo })[0][0];
   const tsc = [process.execPath, path.join(repo, 'node_modules/typescript/bin/tsc')];
-  const compile = root => {
-    const run = spawnSync(tsc[0], [...tsc.slice(1), '--noEmit', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8' });
+  const compile = (root, command = tsc, extra = []) => {
+    const run = spawnSync(command[0], [...command.slice(1), '--noEmit', '-p', 'tsconfig.json', ...extra], { cwd: root, encoding: 'utf8' });
     return { status: run.status, errors: (run.stdout + run.stderr).split('\n').filter(line => /error TS\d+/.test(line)).map(line => line.trim()) };
   };
-  it('uses stable TypeScript even when an old native preview binary remains installed', () => {
+  it('uses the platform binary with its own build info, and tsc 5 when the binary is missing', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'type-check-'));
     try {
-      const expected = [
+      const options = { root, node: 'node', platform: 'plan9', arch: 'mips' };
+      expect(typeCheckCommands(options)).toEqual([
         ['node', 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json'],
         ['node', 'node_modules/typescript/bin/tsc', '--noEmit', '-p', 'services/utils/tsconfig.strict.json'],
-      ];
-      expect(typeCheckCommands({root,node:'node',platform:'plan9',arch:'mips'})).toEqual(expected);
-      const exe = path.join(root, 'node_modules/@typescript/native-preview-plan9-mips/lib/tsgo');
-      mkdirSync(path.dirname(exe), {recursive:true});writeFileSync(exe,'');
-      expect(typeCheckCommands({root,node:'node',platform:'plan9',arch:'mips'})).toEqual(expected);
-    } finally {rmSync(root,{recursive:true,force:true});}
+      ]);
+      // A leftover native preview binary is never picked up.
+      const preview = path.join(root, 'node_modules/@typescript/native-preview-plan9-mips/lib/tsgo');
+      mkdirSync(path.dirname(preview), { recursive: true }); writeFileSync(preview, '');
+      expect(typeCheckCommands(options).map(command => command[0])).toEqual(['node', 'node']);
+      const exe = path.join(root, 'node_modules/@typescript/typescript-plan9-mips/lib/tsc');
+      mkdirSync(path.dirname(exe), { recursive: true }); writeFileSync(exe, '');
+      const commands = typeCheckCommands(options);
+      expect(commands.map(command => command[0])).toEqual([exe, exe]);
+      expect(commands.map(command => command.slice(1, 4))).toEqual([['--noEmit', '-p', 'tsconfig.json'], ['--noEmit', '-p', 'services/utils/tsconfig.strict.json']]);
+      // tsc 5 and the native compiler write incompatible build info; the root one is what CI uploads.
+      expect(commands.map(command => command[command.indexOf('--tsBuildInfoFile') + 1]))
+        .toEqual([NATIVE_ROOT_BUILD_INFO, 'node_modules/.cache/tsgo/utils-strict.tsbuildinfo']);
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
+  it('pins every platform package to one exact version', () => {
+    const { optionalDependencies } = JSON.parse(readFileSync(path.join(repo, 'package.json'), 'utf8'));
+    const versions = Object.entries(optionalDependencies).filter(([name]) => name.startsWith('@typescript/typescript-')).map(([, version]) => version);
+    expect(versions).toHaveLength(5);
+    expect(new Set(versions).size).toBe(1);
+    expect(versions[0]).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+  // CI installs the binary (linux-x64): there a missing one fails here instead of silently checking with tsc 5.
+  it.skipIf(!process.env.CI && native === process.execPath)('reports the same errors at the same file:line as tsc 5, including after an incremental edit', () => {
+    expect(native).not.toBe(process.execPath);
+    const root = mkdtempSync(path.join(tmpdir(), 'type-check-parity-'));
+    const put = (name, text) => { mkdirSync(path.dirname(path.join(root, name)), { recursive: true }); writeFileSync(path.join(root, name), text); };
+    const nativeRun = () => compile(root, [native], ['--tsBuildInfoFile', 'native.tsbuildinfo']);
+    try {
+      put('tsconfig.json', JSON.stringify({ compilerOptions: { strict: true, noEmit: true, incremental: true, noUnusedLocals: true,
+        noUnusedParameters: true, noUncheckedSideEffectImports: true, module: 'esnext', moduleResolution: 'bundler', target: 'ES2022',
+        types: [], tsBuildInfoFile: 'tsc.tsbuildinfo' }, include: ['src/**/*.ts'] }));
+      put('src/ok.ts', 'export const answer: number = 42;\n');
+      expect(nativeRun()).toEqual({ status: 0, errors: [] });
+      put('src/broken.ts', [
+        "import './missing.css';",
+        'const unusedProbe = 1;',
+        'export function probe(n: number, unused: string) { return n; }',
+        "probe('wrong', '');",
+        '// @ts-expect-error nothing is wrong here',
+        'export const fine = 1;',
+        'export function maybe(x?: { y: number }) { return x.y; }',
+        '',
+      ].join('\n'));
+      const fromNative = nativeRun(), fromTsc = compile(root);
+      expect(fromNative.status).not.toBe(0);
+      expect(fromTsc.status).not.toBe(0);
+      const where = errors => errors.map(line => line.slice(0, line.indexOf(':')));
+      expect(where(fromNative.errors)).toEqual(['src/broken.ts(1,8)', 'src/broken.ts(2,7)', 'src/broken.ts(3,34)', 'src/broken.ts(4,7)', 'src/broken.ts(5,1)', 'src/broken.ts(7,51)']);
+      expect(where(fromNative.errors)).toEqual(where(fromTsc.errors));
+      // Same wording too, except the unresolved side-effect import: TS2882 from the native compiler, TS2307 from tsc 5.
+      expect(fromNative.errors.slice(1)).toEqual(fromTsc.errors.slice(1));
+      put('src/broken.ts', 'export {};\n');
+      expect(nativeRun()).toEqual({ status: 0, errors: [] });
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }, 60_000);
   it('reports unresolved imports, unused locals and type errors after incremental edits, then clears repaired diagnostics', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'type-check-incremental-'));
     const put = (name,text) => {mkdirSync(path.dirname(path.join(root,name)),{recursive:true});writeFileSync(path.join(root,name),text);};

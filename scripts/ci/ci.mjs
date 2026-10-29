@@ -3,8 +3,10 @@
  * path lists never become shell code. Missing diff evidence selects all jobs. */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { normalisedLock } from '../lib/lock-fingerprint.mjs';
 import { CI_JOBS, buildKey, checkCiResults, planCi } from '../lib/ci-plan.mjs';
+import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
 
 const env = process.env;
 const mode = process.argv[2];
@@ -263,19 +265,20 @@ if (mode === 'plan') {
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `key=${key}\n`);
   console.log(`build key ${key} over ${inputs} build inputs`);
 } else if (mode === 'type-info') {
-  // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsc-buildinfo` artifact any run of this
-  // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`). An artifact, not a cache:
-  // caches are scoped to a branch and main, so a pull request could never read another's, while every
-  // artifact is findable by name across the repository. tsc re-checks every file whose content or
-  // dependencies differ from what the build info recorded, so an older or other-branch one only costs
-  // time. Runs from forks are skipped. Anything unreadable leaves a cold check, never a failure.
+  // THE ROOT TYPE CHECK'S INCREMENTAL STATE, from the newest `tsgo-buildinfo` artifact any run of this
+  // repository uploaded (pr-fast.yml's `types` job and main's `warm-caches`): the native compiler's build info
+  // (scripts/lib/type-check.mjs), under its own artifact name so tsc 5's older uploads are never read. An
+  // artifact, not a cache: caches are scoped to a branch and main, so a pull request could never read
+  // another's, while every artifact is findable by name across the repository. The compiler re-checks every
+  // file whose content or dependencies differ from what the build info recorded, so an older or other-branch
+  // one only costs time. Runs from forks are skipped. Anything unreadable leaves a cold check, never a failure.
   const repo = env.GITHUB_REPOSITORY;
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
   const api = env.GITHUB_API_URL || 'https://api.github.com';
   const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' };
   try {
     if (!repo || !token) throw new Error('no repository token');
-    const listing = await fetch(`${api}/repos/${repo}/actions/artifacts?name=tsc-buildinfo&per_page=30`, { headers });
+    const listing = await fetch(`${api}/repos/${repo}/actions/artifacts?name=tsgo-buildinfo&per_page=30`, { headers });
     if (!listing.ok) throw new Error(`listing answered ${listing.status}`);
     const { artifacts = [] } = await listing.json();
     const match = artifacts
@@ -286,8 +289,8 @@ if (mode === 'plan') {
     const response = await fetch(`${api}/repos/${repo}/actions/artifacts/${match.id}/zip`, { headers, redirect: 'follow' });
     if (!response.ok) throw new Error(`download answered ${response.status}`);
     mkdirSync('.ci-cache-key', { recursive: true });
-    writeFileSync('.ci-cache-key/tsc-buildinfo.zip', Buffer.from(await response.arrayBuffer()));
-    execFileSync('unzip', ['-o', '-q', '.ci-cache-key/tsc-buildinfo.zip', '-d', 'node_modules/.cache/tsc']);
+    writeFileSync('.ci-cache-key/tsgo-buildinfo.zip', Buffer.from(await response.arrayBuffer()));
+    execFileSync('unzip', ['-o', '-q', '.ci-cache-key/tsgo-buildinfo.zip', '-d', path.dirname(NATIVE_ROOT_BUILD_INFO)]);
     console.log(`Type check build info from run ${match.workflow_run.id} (${match.workflow_run.head_branch}).`);
   } catch (error) {
     console.log(`No type check build info (${error.message}); the type check runs cold.`);

@@ -6,8 +6,10 @@ name: pr fast
 #
 # This is the required pull request check. It runs validate (type check, knip, module graph, name and
 # UI-primitive guards), the workflow lint, JavaScript syntax and the fast module test list
-# (scripts/ci/fast-tests.json) on three runners at once, each restoring main's install cache; the type
-# check starts from the newest incremental build info any run uploaded.
+# (scripts/ci/fast-tests.json) on three runners at once, each restoring main's install cache. The root type
+# check uses TypeScript 7's native compiler (scripts/lib/type-check.mjs): about 7s cold on a runner where tsc 5
+# took 30s, and longer still from stale build info, so no diff size can push it past the limit. It starts from
+# the newest incremental build info any run uploaded.
 # The full suite stays in ci.yml: it runs on every push to main and gates deploys there, and on a pull
 # request it still runs, selected by affected modules, as an informational check that also records the
 # tested tree main's push reuses. page-speed.yml is informational too.
@@ -58,8 +60,8 @@ jobs:
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
       - run: node scripts/ci/prepare-esbuild.mjs
-      # The root type check is incremental (tsconfig.json `tsBuildInfoFile`): start from the newest build info
-      # any run of this repository uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
+      # The root type check is incremental: start from the newest native build info any run of this repository
+      # uploaded (scripts/ci/ci.mjs `type-info`), and pass this one on.
       - if: matrix.part == 'types'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,8 +71,8 @@ jobs:
       - if: matrix.part == 'types'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: tsc-buildinfo
-          path: node_modules/.cache/tsc/root.tsbuildinfo
+          name: tsgo-buildinfo
+          path: node_modules/.cache/tsgo/root.tsbuildinfo
           # Kept as long as tested-tree evidence: a quiet stretch must not leave the next PR a cold type check.
           retention-days: 14
           if-no-files-found: ignore

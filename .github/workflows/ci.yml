@@ -639,13 +639,14 @@ jobs:
         run: npm ci
       - run: node scripts/ci/prepare-esbuild.mjs
       # The root type check's incremental build info, which pr-fast.yml's `types` job starts from so a pull
-      # request re-checks only what it changed (scripts/ci/ci.mjs `type-info` finds the newest upload).
+      # request re-checks only what it changed (scripts/ci/ci.mjs `type-info` finds the newest upload). The same
+      # command as that job, so the same compiler writes it (scripts/lib/type-check.mjs).
       - name: Type check for the build info pull requests start from
-        run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json || echo "::warning::type check failed; its build info is uploaded anyway"
+        run: node scripts/ci/check-local.mjs validate --part=types || echo "::warning::type check failed; its build info is uploaded anyway"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: tsc-buildinfo
-          path: node_modules/.cache/tsc/root.tsbuildinfo
+          name: tsgo-buildinfo
+          path: node_modules/.cache/tsgo/root.tsbuildinfo
           retention-days: 14
           if-no-files-found: ignore
       # Disjoint engine caches: a Chromium-only writer cannot freeze an incomplete all-browser key.

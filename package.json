@@ -69,6 +69,13 @@
     "vitest": "4.1.12",
     "yaml": "2.9.0"
   },
+  "optionalDependencies": {
+    "@typescript/typescript-darwin-arm64": "7.0.2",
+    "@typescript/typescript-darwin-x64": "7.0.2",
+    "@typescript/typescript-linux-arm64": "7.0.2",
+    "@typescript/typescript-linux-x64": "7.0.2",
+    "@typescript/typescript-win32-x64": "7.0.2"
+  },
   "workspaces": [
     "services/contracts",
     "services/utils",
