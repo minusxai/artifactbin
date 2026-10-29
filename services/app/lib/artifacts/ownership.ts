@@ -4,7 +4,7 @@ import type {AccessActor} from '../accounts';
 import {getAccountPreferences,getGroupRole} from '../groups';
 import {selectNewArtifactDestination} from '../groups/destination';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
-import {getDb,type Queryable} from '../platform/db';
+import { getDb, type Queryable } from '../platform';
 import {DatasetError} from '../datasets/errors';
 import type { ArtifactRow } from './table';
 

@@ -3,7 +3,7 @@ import {NOTIFICATION_QUERY_LIMITS,type MutationNotificationJobInput,type Mutatio
 import {NotificationExecutionError,notificationArtifactAuthority,notificationExecutionFence,notificationExecutionSource,notificationPrincipal,notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications';
 import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySourceMode} from '@/lib/datasets/document-queries';
 import { selectQueries, platformValues, DataflowResultError, type Row } from '@/lib/dataflow';
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { tableForRef, acceptedMembers } from './dataflow';
 import type { AccessActor } from '@/lib/accounts';
 export interface NotificationQueryDependencies {

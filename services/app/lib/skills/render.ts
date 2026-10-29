@@ -12,7 +12,7 @@ import { credentialPaths } from '@artifactbin/utils/node/credentials';
 import path from 'node:path';
 import nunjucks from 'nunjucks';
 import type { SkillFile } from './tree';
-import { AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
+import { AUTHENTICATION_INSTRUCTION } from './agent-discovery';
 
 export interface RenderOptions {
   base: string;

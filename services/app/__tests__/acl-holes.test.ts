@@ -23,7 +23,7 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
-import { mintExportKey } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';

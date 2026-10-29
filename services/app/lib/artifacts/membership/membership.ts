@@ -5,7 +5,7 @@ import {DatasetError} from '@/lib/datasets/errors';
 import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { effectiveRole } from '../access';
 import { notifyArtifactSql, type ArtifactRow } from '../table';
 import { getArtifactById, getArtifactHeaderById } from '../rows';

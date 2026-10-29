@@ -1,4 +1,4 @@
-import type {Db} from '../../services/app/lib/platform/db';
+import type { Db } from '../../services/app/lib/platform';
 import type {NativeHostContext,NativeHostRecipe,NativeHostFiles,NativeHostComparison,NativeHostPrepared} from './native-migration-host-contract';
 import type {NativeProductImportRecipe,NativeSerializedProductImportRecipe} from './native-migration-product-host-contract';
 import type {NativeRuntimeAssembly,NativeRuntimePreparationOptions} from '../../services/app/lib/native-runtime-bridge/contracts';

@@ -1,5 +1,5 @@
 /** Transfer safety without loading unrelated users' document graphs into the app. */
-import type {Queryable} from '../platform/db';
+import type { Queryable } from '../platform';
 import {DatasetError} from '../datasets/errors';
 import type { ArtifactRow } from './table';
 

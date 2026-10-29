@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import type { CommentChangesPage, CommentFeedEvent, CommentReactionKind } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifacts';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { commentChangeEvent, reactionChangeEvents } from '@artifactbin/utils/comment-watch';
 

@@ -21,11 +21,10 @@
  */
 import { AGENT_COOKIE_MAX_AGE, cookieName, decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned, withToken, withoutToken } from '@artifactbin/utils';
 import type { AgentSession } from '@artifactbin/contracts';
-import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
+import { AUTH_SECRET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
 import { createHash, randomBytes } from 'node:crypto';
 import { parseCookie } from '@/lib/http/http';
 import { actorOf } from '@artifactbin/utils';
-import { getDb } from '@/lib/platform/db';
 
 /**
  * `__Host-` WHEN THE COOKIE IS SECURE, and never otherwise: the prefix forces

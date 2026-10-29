@@ -28,7 +28,7 @@
 import crypto from 'node:crypto';
 import { createCodeStore } from '@artifactbin/utils';
 import { ANONYMOUS, type Actor, type Queryable } from '@artifactbin/contracts';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import { resolveTokenById, sha256 } from './tokens';
 import type { AccessActor, RequestIdentity } from './actors';
 import { canAuthenticateUser } from './user-kinds';

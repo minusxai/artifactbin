@@ -15,12 +15,11 @@ import {PRESENCE_EVENT,type PresenceFrame} from '@/lib/html-presence/contract';
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
-import { getDb } from '@/lib/platform/db';
+import { getDb, ID_RE } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
-import { trackEvent } from '@/lib/platform';
+import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, sessionActor, ANONYMOUS_ACTOR } from '@/lib/accounts';
-import { ID_RE } from '@/lib/platform';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';

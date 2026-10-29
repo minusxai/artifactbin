@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { Db, Queryable } from "@/lib/platform/db";
+import type { Db, Queryable } from "@/lib/platform";
 import { createArtifact } from "@/lib/artifacts";
 import { canonicalizeHtmlPage } from "@/lib/html-page";
 import {

@@ -7,11 +7,9 @@
 import { randomUUID } from 'node:crypto';
 import type { HarvestedSvg, SvgHarvestRequest } from '@artifactbin/contracts';
 import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
-import { getDb } from '@/lib/platform/db';
-import { services } from '@/lib/platform/services';
+import { getDb, services, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
-import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
-import { mintExportKey } from '@/lib/platform/export-read-key';
+import { mintExportKey } from '@/lib/export';
 import { storyBodyFor } from '@/lib/document';
 import { emitHeadCommitted, getArtifactById, servedRow } from '@/lib/artifacts';
 import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from '@/lib/mermaid-images/engine';

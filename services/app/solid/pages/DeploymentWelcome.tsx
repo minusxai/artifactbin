@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 import { Show, type JSX } from 'solid-js';
-import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/platform/agent-discovery';
+import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/skills/agent-discovery';
 import type { DeploymentState } from '@artifactbin/contracts';
-import { buildSetupInstructions } from '@/lib/platform/setup-instructions';
+import { buildSetupInstructions } from '@/lib/skills/setup-instructions';
 import { deploymentSetupOptions } from '@/lib/serving/setup-installers';
 import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
 import { PageHeader } from '../ui/PageHeader';

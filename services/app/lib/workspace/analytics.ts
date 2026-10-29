@@ -15,8 +15,7 @@ import { dailySeries } from '@/lib/viz/daily-series';
 // row-loading seam, so each one has to name the gate itself. `git grep
 // LIVE_ARTIFACT_SQL` is still the whole audit.
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
-import { EVENTS_SCHEMA } from '@/lib/platform/config';
-import { getDb } from '@/lib/platform/db';
+import { EVENTS_SCHEMA, getDb } from '@/lib/platform';
 
 
 

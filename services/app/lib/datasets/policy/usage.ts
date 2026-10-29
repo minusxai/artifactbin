@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 
 export async function throttlePublicMutation(datasetId: string) {
   const db = await getDb();

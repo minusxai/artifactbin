@@ -2,7 +2,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-import {IS_DEV} from '@/lib/platform/config';
+import { IS_DEV } from '@/lib/platform';
 /** The deployed app cwd owns skill/source paths, including after server relocation.
  * Production inputs are immutable. Development cache keys cover the local export
  * and canonical recovery graph; dependency installations require a process restart.

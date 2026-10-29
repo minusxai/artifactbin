@@ -10,8 +10,7 @@ import { closeTestUserSessions, testUserSessionCount } from '@/lib/accounts';
 import { eraseMutationNotifications, lockMutationNotificationAuthority } from '@/lib/notifications';
 import { expireCommentImagesFor, sweepCommentImages } from '@/lib/annotations/comment-images';
 import { objectStore } from '@/lib/object-store';
-import { getDb } from '@/lib/platform/db';
-import { TABLES } from '@/lib/platform/schema';
+import { getDb, TABLES } from '@/lib/platform';
 
 /** What an erase removed — what the person was holding at the moment it ran. */
 interface TestUserErased { erased: boolean; artifacts: number; sessions: number }

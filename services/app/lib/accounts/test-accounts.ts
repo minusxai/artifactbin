@@ -18,8 +18,7 @@
  *  - nothing it does reaches a non-test person's notifications (lib/notifications/events).
  */
 import { isTestDomainEmail, type Queryable, type ShareEntry } from '@artifactbin/contracts';
-import { TEST_DOMAIN } from '../platform/config';
-import { getDb } from '../platform/db';
+import { TEST_DOMAIN, getDb } from '../platform';
 import type { AccessActor } from './actors';
 
 /** The refusal code every boxed door answers with (403). */

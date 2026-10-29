@@ -5,7 +5,7 @@
  */
 import type { AccessActor } from '@/lib/accounts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import { artifactQuery, loadArtifactDocument } from './document';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
 import { servableDocument } from './servable';

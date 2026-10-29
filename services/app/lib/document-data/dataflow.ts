@@ -15,7 +15,7 @@ import { pinMutationContext, type MutationReceipt } from '@/lib/artifacts';
 import { notificationContextSnapshot } from '@/lib/notifications';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import { displayTitle, declarationsOf } from '../document';
 import { compileWithLoader } from '@/lib/dataflow/server';
 import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';

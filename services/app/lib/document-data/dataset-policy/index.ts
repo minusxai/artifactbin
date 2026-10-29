@@ -4,7 +4,7 @@ import {validateDatasetPolicyForRow} from '@/lib/datasets/policy/validation';
 import { policySession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
 import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutationPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
 import { commitDatasetPolicy, writerFor, type ArtifactRow } from '@/lib/artifacts';
 import { policyReaderSql } from '@/lib/artifacts/table';

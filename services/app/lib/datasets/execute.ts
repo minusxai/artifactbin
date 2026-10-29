@@ -10,7 +10,7 @@ import {resolveDatasetConnection} from './secrets';
 import type { AccessActor } from '@/lib/accounts';
 import {storedTables} from './catalog';
 import type {DatasetCatalog} from './types';
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import {createDatasetResultCache} from './result-cache';
 interface CatalogQueryOptions {/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
 export type CatalogResult=TableResult&{refreshedAt:string};

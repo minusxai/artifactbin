@@ -16,7 +16,7 @@
  * with a timing-safe compare.
  */
 import { createHmac, timingSafeEqual } from 'crypto';
-import { AUTH_SECRET } from './config';
+import { AUTH_SECRET } from '../platform';
 
 /** A render is one page load; a minute is already generous. */
 const TTL_MS = 60_000;

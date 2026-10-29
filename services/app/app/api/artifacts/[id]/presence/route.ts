@@ -1,7 +1,7 @@
 import {baseUrl} from '@/lib/http';
 import {getArtifactAccessById,canReadArtifact} from '@/lib/artifacts';
 import {sessionActor,authorHandle} from '@/lib/accounts';
-import {getDb} from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import {publishPresence} from '@/lib/html-presence/publish.server';
 import {presenceChannel} from '@/lib/html-presence/channel.server';
 /** The access columns only: a heartbeat never ships the document. */

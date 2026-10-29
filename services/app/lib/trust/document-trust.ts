@@ -23,8 +23,7 @@
  * `cspRequestFor` is what the app page tells the consent bar.
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { getDb } from '@/lib/platform/db';
+import { AUTH_SECRET, PUBLIC_BASE_URL, getDb } from '@/lib/platform';
 import { parseCookie } from '@/lib/http/http';
 import { type ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';

@@ -1,4 +1,4 @@
-import type {Queryable} from '../../services/app/lib/platform/db';
+import type { Queryable } from '../../services/app/lib/platform';
 /** Trusted local lifecycle capability; never accepted in a serialized page/import input. */
 export interface NativeDisposableRuntimeActorPort {
  provision(tx:Queryable,userId:string):Promise<{userId:string;tokenId:string}>;

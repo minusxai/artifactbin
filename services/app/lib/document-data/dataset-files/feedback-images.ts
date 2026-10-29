@@ -1,5 +1,4 @@
-import { getDb } from '@/lib/platform/db';
-import { generateInternalId, ID_RE } from '@/lib/platform';
+import { getDb, generateInternalId, ID_RE, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
@@ -14,7 +13,6 @@ import { storeImageContent } from '@/lib/datasets/data-tiers';
 import { objectStore } from '@/lib/object-store';
 import { IMAGE_CONTENT_TYPES } from '@/lib/object-store/image-store';
 import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
-import { MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform/config';
 import { uploadedSha256, storeFileContent } from '@/lib/datasets/file-store';
 
 const MAX_DATASET_FILES = 1000;
@@ -55,7 +53,7 @@ function liveRow(rows:ArtifactRow[],id:string,format?:string):ArtifactRow {
 async function declaredDataset(document:ArtifactRow,datasetId:string):Promise<boolean> {
   return document.format==='html'&&Array.isArray(document.meta.htmlLinks)&&(document.meta.htmlLinks as HtmlPageLink[]).some(link=>link.kind==='dataset'&&link.datasetId===datasetId&&link.mode==='live');
 }
-async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
+async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform').Queryable):Promise<void> {
   const db=tx??await getDb(),grants=grantsOf(dataset);
   if(grants){
     // Preserve direct actor grants independently of artifact membership.
@@ -70,7 +68,7 @@ async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:Ac
     if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
   }else if(dataset.access!=='readwrite'||!canEdit(await effectiveRole(dataset,actor,liveAccessFacts(actor,db))))throw new DatasetError('This dataset does not grant file uploads',403);
 }
-async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform/db').Queryable):Promise<boolean> {
+async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform').Queryable):Promise<boolean> {
   if(grantsOf(dataset))return grantsPermitRead(dataset,actor,document,tx);
   return await readThrough(tx,dataset,actor)&&await readThrough(tx,document,actor);
 }
@@ -93,12 +91,12 @@ async function uploadContent(input:UploadInput&{filename?:string},generic=false)
   if(!doc||doc.edit_id!==editId||!(await readThrough(await getDb(),doc,actor))||!dataset||dataset.format!=='dataset'||dataset.deleted_at||catalogOf(dataset)?.kind!=='stored'||!await declaredDataset(doc,datasetId))throw new DatasetError('Dataset file is unavailable',404);
   await authorizeInsert(dataset,doc,actor);
   const actorId=actorKey(actor),sha256=uploadedSha256(bytes),db=await getDb();
-  const replay=async(tx:import('@/lib/platform/db').Queryable):Promise<DatasetImageRow|null>=>{
+  const replay=async(tx:import('@/lib/platform').Queryable):Promise<DatasetImageRow|null>=>{
     const found=(await tx.query<DatasetImageRow>('SELECT * FROM dataset_images WHERE dataset_id=$1 AND actor_id=$2 AND operation_key=$3',[datasetId,actorId,operationKey])).rows[0]??null;
     if(found&&(found.document_id!==documentId||found.sha256!==sha256||(!generic&&found.meta.format&&found.meta.format!=='image')||(generic&&found.meta.filename!==filename)))throw new DatasetError('Idempotency-Key was already used for another file',409);
     return found;
   };
-  const authorizeCurrent=async(tx:import('@/lib/platform/db').Queryable,lock:'UPDATE'|'SHARE')=>{
+  const authorizeCurrent=async(tx:import('@/lib/platform').Queryable,lock:'UPDATE'|'SHARE')=>{
     await tx.query(`SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR ${lock}`,[[datasetId,documentId]]);
     const rows=(await artifactQuery<ArtifactRow>(tx,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[ [datasetId,documentId] ])).rows;
     const currentDataset=liveRow(rows,datasetId,'dataset'),currentDoc=liveRow(rows,documentId,'html');

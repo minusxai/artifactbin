@@ -1,7 +1,7 @@
 import type {HtmlPageLink,HtmlPageVersion} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 import {readableArtifact} from '@/lib/artifacts';
-import {getDb} from '../platform/db';
+import { getDb } from '../platform';
 import type {HtmlIdentityLedger} from '../html-page';
 /** Original artifact ACL and immutable artifact_versions remain the read authority. */
 export async function readHtmlPage(actor:AccessActor,pageId:string,revision?:string):Promise<HtmlPageVersion>{

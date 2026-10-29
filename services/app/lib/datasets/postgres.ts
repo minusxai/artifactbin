@@ -1,5 +1,5 @@
 import {approvedDatasetPrivateTarget} from './private-target-policy';
-import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS,DATASET_PRIVATE_TARGET_HASHES} from '@/lib/platform/config';
+import { DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS, DATASET_PRIVATE_TARGET_HASHES } from '@/lib/platform';
 import {resolvePostgresHost} from './network';
 import {DatasetError} from './errors';
 import {isIP} from 'node:net';

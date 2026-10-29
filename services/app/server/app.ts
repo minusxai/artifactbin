@@ -1,5 +1,5 @@
 import {getDeploymentState} from '@/lib/deployment';
-import {advertisedCliVersion,cliRetirementEnabled,PUBLIC_BASE_URL} from '@/lib/platform/config';
+import { advertisedCliVersion, cliRetirementEnabled, PUBLIC_BASE_URL, ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN } from '@/lib/platform';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -26,8 +26,8 @@ import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { ID_RE, verifyExportKey } from '@/lib/platform';
-import { measureQueries, runWithRequest, setEventProjection } from '@/lib/platform';
+import { setEventProjection } from '@/lib/platform';
+import { verifyExportKey } from '@/lib/export';
 import { projectNotifications } from '@/lib/notifications';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
@@ -36,7 +36,6 @@ import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
 import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';
-import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { exportAssetResponse } from '@/lib/export/assets';
 import { publicRefAssetResponse } from '@/lib/serving';

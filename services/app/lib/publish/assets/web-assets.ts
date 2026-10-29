@@ -22,10 +22,9 @@
  * row before it asks the store, and a store that will not give the bytes for a
  * row we hold is corruption, not "empty".
  */
-import { getDb } from '@/lib/platform/db';
+import { getDb, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images/optimise';
-import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/platform/config';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';

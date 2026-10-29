@@ -23,7 +23,7 @@ import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, 
 import {parseArtifactDestination,transferArtifact} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace/trash';
-import { trackEvent } from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export/exporter';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 

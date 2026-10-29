@@ -5,7 +5,7 @@ import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {S3_URL} from '../../services/app/lib/platform/config';
+import { S3_URL } from '../../services/app/lib/platform';
 import {objectStore} from '../../services/app/lib/object-store';
 import {parseS3Url} from '../../services/app/lib/object-store/url';
 import {mintToken,revokeToken,MIN_TOKEN_TTL_MS,MAX_TOKEN_TTL_MS} from '../../services/app/lib/accounts';

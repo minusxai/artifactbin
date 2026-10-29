@@ -3,7 +3,7 @@
  *
  * A folder of 100 documents, each with a long view history, read as its page (app chrome) and as its
  * `rows` table (a document's `<Files>`):
- *  - the view counts come from the folded totals (lib/platform/view-totals), one aggregate over the
+ *  - the view counts come from the folded totals (lib/analytics/view-totals), one aggregate over the
  *    children, never a subquery per row and never a read of all-time events: the answer does not
  *    change when old events leave the table, and a view recorded since is added once;
  *  - a viewer who is told no numbers pays for none: no statement reads the view events for them;

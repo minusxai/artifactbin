@@ -1,7 +1,7 @@
 import {preparePublicationBundle} from './bundle';
 import {getSharingFor,durableMutation} from '@/lib/artifacts';
 import {htmlAssetLinks} from '@/lib/html-page';
-import {trackEvent} from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
@@ -24,8 +24,7 @@ import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { json, thrownMessage } from '@/lib/http/http';
-import { ID_RE } from '@/lib/platform/ids-shape';
-import { getDb } from '@/lib/platform/db';
+import { ID_RE, getDb } from '@/lib/platform';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 import { checkDocumentData } from '../data/data-checks';

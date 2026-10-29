@@ -1,16 +1,13 @@
 /** Ownership transfer is one atomic closure update, independent of content history. */
-import {actorSubject,emit} from '../platform/events';
+import { actorSubject, emit, generateInternalId, getDb, type Queryable } from '../platform';
 import {notifyParent,parentOf} from './placement';
-import {generateInternalId} from '../platform/ids';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type {AccessActor} from '../accounts';
-import {getDb} from '../platform/db';
 import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';
 import { notifyArtifactSql, ownerPredicate, type ArtifactRow } from './table';
 import {getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
-import type {Queryable} from '../platform/db';
 
 export async function transferArtifact(actor:AccessActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
  if(!actor.userId)throw new DatasetError('Sign in to transfer ownership',403);

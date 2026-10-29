@@ -21,10 +21,9 @@ import { declarationsForRow } from './row-compile';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
 import { datasetCreateFields } from '@/lib/datasets/dataset-usage';
-import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform/config';
+import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json } from '@/lib/http/http';
-import { ID_RE } from '@/lib/platform/ids-shape';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from './placement';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 

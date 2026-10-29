@@ -6,7 +6,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * BYTES (sniff), never the remote header — a dead link's html error page must
  * refuse, not become an "image" that renders broken forever.
  */
-import { MAX_IMAGE_BYTES } from '@/lib/platform/config';
+import { MAX_IMAGE_BYTES } from '@/lib/platform';
 import { json } from '@/lib/http/http';
 import { storeImageContent } from '@/lib/datasets/data-tiers';
 import type { StoredContent } from '@/lib/document';

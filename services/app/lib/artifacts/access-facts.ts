@@ -12,7 +12,7 @@
 import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
 import { getGroupRole } from '../groups';
 import { userKindOf } from '../user-kinds';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import type { AccessActor } from '@/lib/accounts';
 
 export interface AccessFacts {

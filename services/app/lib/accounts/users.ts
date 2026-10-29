@@ -5,12 +5,9 @@
  */
 import crypto from 'crypto';
 import type { UserKind } from '@artifactbin/contracts';
-import { getDb,type Queryable } from '../platform/db';
-import { emit } from '../platform/events';
-import { generateInternalId } from '../platform/ids';
+import { getDb, type Queryable, emit, generateInternalId, reserveHandle, RESERVED_HANDLES } from '../platform';
 import { artifactAdopter } from './artifact-adoption';
 import { forgetRequestCredentials, sha256 } from './tokens';
-import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
 
 /**
  * AN ACCOUNT ROW: a person with a login identity. The KIND is on every row now

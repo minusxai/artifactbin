@@ -4,7 +4,7 @@
  * listed) is lib/artifacts/placement's; this module projects it for app chrome.
  */
 import {getGroupById} from '@/lib/groups';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 import { canRead } from '@artifactbin/contracts';
 import { effectiveRole, type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';

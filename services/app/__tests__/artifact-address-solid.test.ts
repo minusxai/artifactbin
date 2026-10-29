@@ -5,7 +5,7 @@ import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 import {artifactPageAnswer} from '@/lib/serving';
 import {pagesSite} from '@/lib/http/pages-origin';
-import {mintExportKey} from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 useAppHarness();beforeEach(()=>setSession(null));
 const PAGES={pages:pagesSite()};

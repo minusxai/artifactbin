@@ -17,7 +17,7 @@ import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
-import { flushViews } from '@/lib/platform/analytics';
+import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/serving/render-cache';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';

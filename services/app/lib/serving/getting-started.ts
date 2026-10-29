@@ -1,5 +1,5 @@
 import type {DeploymentState} from '@artifactbin/contracts';
-import {buildSetupInstructions} from '../platform/setup-instructions';
+import { buildSetupInstructions } from '../skills/setup-instructions';
 
 type GuideBlock =
  | {kind:'text';text:string}

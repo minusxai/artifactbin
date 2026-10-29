@@ -29,8 +29,7 @@ import { actorOf } from '@artifactbin/utils';
 import { admitDeploymentIdentity } from '../deployment';
 import { acceptGroupInvitations } from '../groups';
 import { pagesRequestOf } from '../http/pages-origin';
-import { currentRequest } from '../platform/request-context';
-import type { Harness } from '@/lib/platform';
+import { currentRequest, identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../platform';
 import { NO_IDENTITY, type RequestIdentity } from './actors';
 import { hasDocumentEditorAccess } from './document-editor';
 import { mergeGuestUsers } from './guest-owner';
@@ -39,7 +38,6 @@ import { hostedRequestRefusal } from './request-authority';
 import { auth } from './session';
 import { answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, touchToken } from './tokens';
 import { canAuthenticateUser } from './user-kinds';
-import { identifyClient, ARTIFACTBIN_AGENT_HEADER } from '../platform/client-identity';
 
 /**
  * The door asking. `token`: `withTokenAuth`, a token required, dry runs leave no trace. `request`: an

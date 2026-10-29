@@ -25,10 +25,10 @@ import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
 import { accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/workspace/folders';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { verifyExportKey } from '@/lib/platform/export-read-key';
+import { verifyExportKey } from '@/lib/export';
 import { baseUrl, json, parseCookie } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
-import { ID_RE } from '@/lib/platform/ids';
+import { ID_RE } from '@/lib/platform';
 import {
   avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
   issuePagesTicket, ownerUsername, sessionActor,

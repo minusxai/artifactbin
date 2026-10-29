@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {prepareNativeAncillaryFolders,type NativeAncillaryFolderRecipe,type NativePreparedAncillaryFolders} from '../../services/app/lib/native-ancillary-folders';
 import {identityForUser} from '../../services/app/lib/accounts';
-import {LOCAL_OBJECT_DIR,S3_URL} from '../../services/app/lib/platform/config';
+import { LOCAL_OBJECT_DIR, S3_URL } from '../../services/app/lib/platform';
 import {authorizeNativeIdentityTransaction,writeNativeIdentities} from '../../services/app/lib/native-identity-import';
 import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
 import {htmlCommentNodes} from '../../services/app/lib/annotations/html-anchor';

@@ -7,7 +7,7 @@ import type {HtmlPageLink} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
 import { storedMediaReferences } from '../datasets/media-references';
-import { getDb } from '../platform/db';
+import { getDb } from '../platform';
 import { artifactQuery } from './document';
 import { compiledForRow } from './row-compile';
 import { getArtifactById } from './rows';

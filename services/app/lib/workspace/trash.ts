@@ -19,12 +19,11 @@
  * the ACT rather than the containment: one delete stamps one `now()`, and restore takes back only
  * the rows carrying that stamp. The queries below state the rest.
  */
-import { trackEvent } from '@/lib/platform/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { artifactQuery, LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/table';
 import type { AccessActor } from '@/lib/accounts';
-import { getDb } from '@/lib/platform/db';
+import { getDb, actorSubject, emit } from '@/lib/platform';
 import { rerootArtifact, restoreTrashedSubtree, servableDocument, trashSubtree } from '@/lib/artifacts';
-import { actorSubject, emit } from '@/lib/platform/events';
 import { notifyParent, parentOf } from '@/lib/artifacts';
 
 /**

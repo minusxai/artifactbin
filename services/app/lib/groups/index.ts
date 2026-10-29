@@ -1,10 +1,7 @@
 /** Independent owners. Membership and links never derive authority from accounts or artifacts. */
 import type {AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
-import {TEST_DOMAIN} from '../platform/config';
-import {getDb,type Queryable} from '../platform/db';
-import {generateInternalId} from '../platform/ids';
-import {reserveHandle,RESERVED_HANDLES} from '../platform/handles';
+import { TEST_DOMAIN, getDb, type Queryable, generateInternalId, reserveHandle, RESERVED_HANDLES } from '../platform';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;}
 export class GroupError extends Error {constructor(public code:string,public status=400){super(code);}}
 const roleValid=(role:unknown):role is GroupRole=>role==='editor'||role==='viewer';

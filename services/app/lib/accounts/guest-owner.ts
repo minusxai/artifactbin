@@ -1,6 +1,6 @@
 import { artifactAdopter } from './artifact-adoption';
 import { LIVE_TOKEN_SQL } from './tokens';
-import { getDb } from '@/lib/platform/db';
+import { getDb } from '@/lib/platform';
 
 /** Called with a verified account and cookie-held token IDs, never request JSON.
  * Existing and newly registered accounts take the same atomic merge path. */

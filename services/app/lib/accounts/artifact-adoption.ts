@@ -5,7 +5,7 @@
  * lib/artifacts installs its adopter here when it loads (artifacts/owner-adoption). A claim or merge with
  * nothing installed throws before writing, never attaches a token without what it published.
  */
-import type { Queryable } from '../platform/db';
+import type { Queryable } from '../platform';
 
 export interface ArtifactAdopter {
   /** Every artifact the guest owns becomes the account's. */

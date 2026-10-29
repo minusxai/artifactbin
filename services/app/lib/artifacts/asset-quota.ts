@@ -31,8 +31,7 @@
  * and the cap would be bypassed by delete-and-reimport. Stated in the docs
  * beside the row cap, which counts the same way for the same reason.
  */
-import { getDb } from '@/lib/platform/db';
-import { ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/platform/config';
+import { getDb, ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/platform';
 
 let override: number | null | undefined;
 /** Test hook, mirroring setArtifactQuotaForTests — config freezes at import. */

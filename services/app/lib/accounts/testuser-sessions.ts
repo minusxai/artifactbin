@@ -14,7 +14,7 @@
  * `lib/capabilities`.
  */
 import type { Actor } from '@artifactbin/contracts';
-import { services } from '../platform/services';
+import { services } from '../platform';
 
 /** testuser userId → session ids, each with the OWNER's actor, which is what may close it. */
 const live = new Map<string, Map<string, Actor>>();

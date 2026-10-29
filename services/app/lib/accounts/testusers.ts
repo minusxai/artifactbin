@@ -21,8 +21,7 @@
 import type { AccessActor } from './actors';
 import type { TestUser } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
-import { getDb } from '../platform/db';
-import { generateInternalId } from '../platform/ids';
+import { getDb, generateInternalId } from '../platform';
 import { mintToken } from './tokens';
 import { userKindOf } from './user-kinds';
 import { testUserSessionCount } from './testuser-sessions';

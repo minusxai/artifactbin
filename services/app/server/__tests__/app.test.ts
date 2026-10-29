@@ -6,7 +6,7 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * document's stranger gets the uniform 404 page; the app's paths get the SPA
  * under the app CSP; and anything else is a plain 404.
  */
-import { agentDiscovery } from '@/lib/platform/agent-discovery';
+import { agentDiscovery } from '@/lib/skills/agent-discovery';
 import { pagesSite } from '@/lib/http/pages-origin';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -17,7 +17,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
-import { mintExportKey } from '@/lib/platform';
+import { mintExportKey } from '@/lib/export';
 import { appPagePolicy, createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
 

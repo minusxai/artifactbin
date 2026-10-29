@@ -1,4 +1,4 @@
-import { EMAIL_AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
+import { EMAIL_AUTHENTICATION_INSTRUCTION } from '../skills/agent-discovery';
 import { ARTIFACT_STARTERS } from '@/lib/workspace/artifact-starters';
 
 /**

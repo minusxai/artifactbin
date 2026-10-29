@@ -19,7 +19,7 @@ import { createHash, randomBytes } from 'crypto';
 import { mkdir, open, readFile, rm } from 'fs/promises';
 import type { Readable } from 'node:stream';
 import path from 'path';
-import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform/config';
+import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/platform';
 import { parseS3Url, storageKeyFor, type S3Config } from './url';
 
 export * from './url';

@@ -5,7 +5,7 @@ import {parse,type DefaultTreeAdapterMap} from 'parse5';
 import {fileContentType} from '@artifactbin/contracts';
 import {getOwnedArtifactFor} from '@/lib/artifacts';
 import {objectStore} from '@/lib/object-store';
-import {MAX_PDF_BYTES} from '@/lib/platform/config';
+import { MAX_PDF_BYTES } from '@/lib/platform';
 import {pdfPageCount} from '@/lib/object-store/pdf-store';
 import {sniffAssetType} from '@/lib/web-ingest/sniff';
 import {createArtifactFromBody} from '@/lib/publish/publish';
