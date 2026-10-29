@@ -13,7 +13,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, ANONYMOUS, BROWSER_FONT_RESOURCE_PATH, type Actor } from '@artifactbin/contracts';
 import { actorOf, verifyActor } from '@artifactbin/utils';
-import { sessionBridge } from '@/lib/runtime';
+import { sessionBridge } from '..';
 
 const SECRET = 'a-per-boot-secret-0000000000000000000000';
 const VITE_MODULE = 'export const hmr = true;\n';

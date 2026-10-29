@@ -143,9 +143,6 @@
       "@/lib/document-serving/native-html.server",
       "@/lib/http/pages-origin"
     ],
-    "services/app/__tests__/native-runtime-bridge.test.ts": [
-      "@/lib/native-runtime-bridge/pdf-source"
-    ],
     "services/app/__tests__/notification-authority.test.ts": [
       "@/lib/notifications/authority"
     ],
@@ -270,10 +267,6 @@
     "services/app/lib/html-runtime/__tests__/native-file-upload.test.ts": [
       "@/lib/story-runtime/frame-bridge/upload"
     ],
-    "services/app/lib/html-runtime/__tests__/range.ui.test.ts": [
-      "../../frame-edit/selection-range",
-      "../../html-bridge/range"
-    ],
     "services/app/lib/html-runtime/__tests__/upload.test.ts": [
       "../../story-runtime/frame-bridge/upload"
     ],
@@ -352,9 +345,6 @@
     ],
     "services/app/solid/pages/__tests__/retrying-reads.test.tsx": [
       "@/lib/http/__tests__/retrying-read"
-    ],
-    "services/app/test/helpers/artifact-backend.ts": [
-      "@/lib/artifact-backend/types"
     ],
     "services/app/test/setup/vitest.setup.ts": [
       "@/lib/platform/event-outbox",

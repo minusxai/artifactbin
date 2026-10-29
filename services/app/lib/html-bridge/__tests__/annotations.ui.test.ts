@@ -1,6 +1,6 @@
 import {htmlTextFingerprint} from '@artifactbin/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createHtmlAnnotationPainter } from '../../html-bridge/annotations';
+import { createHtmlAnnotationPainter } from '../annotations';
 afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ''; document.querySelectorAll('[data-af="annotation-overlay"]').forEach((node) => node.remove()); window.getSelection()?.removeAllRanges(); });
 it('paints migrated block context as an original node outline, including changed or repeated words',()=>{
  document.body.innerHTML='<section data-af-id="block">context context</section>';
@@ -64,7 +64,7 @@ it('keeps resolved history geometry without painting until explicitly inspected'
  painter.paint({...input,pins:[{...pin,layoutOnly:false}]});expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(1);painter.dispose();
 });
 
-import { revealHtmlAnnotation } from '../../html-bridge/annotations';
+import { revealHtmlAnnotation } from '../annotations';
 it('reveals only a unique scoped target and leaves stale anchors missing', () => {
  document.body.innerHTML='<section data-af-id="scope"><p data-af-id="target">inside</p></section><p data-af-id="target">outside</p>';
  const inside=document.querySelector('section p')!,outside=document.querySelector('body > p')!;

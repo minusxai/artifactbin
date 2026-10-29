@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { htmlSelection } from '../../html-bridge/selection';
+import { htmlSelection } from '../selection';
 afterEach(() => { document.body.innerHTML = ''; window.getSelection()?.removeAllRanges(); });
 it('anchors native text selection to persistent HTML identity with an explicit version', () => {
   document.body.innerHTML = '<main data-af-id="n1"><p data-af-id="n2">hello <strong>world</strong></p></main>';
