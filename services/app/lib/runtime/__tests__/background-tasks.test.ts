@@ -1,4 +1,4 @@
-import {expect,it,vi} from 'vitest';
+import {expect,it} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {startAppBackgroundTasks} from '..';

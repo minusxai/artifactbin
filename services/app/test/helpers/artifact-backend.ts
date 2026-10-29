@@ -4,7 +4,7 @@
  */
 import { vi } from 'vitest';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import type { ArtifactBackend, BackendFeature } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend, BackendFeature } from '@/lib/artifact-backend';
 
 const backends = new Map<string, ArtifactBackend>();
 /** One backend per id for the whole file, as the page memoises it: a rerender must not re-subscribe. */
