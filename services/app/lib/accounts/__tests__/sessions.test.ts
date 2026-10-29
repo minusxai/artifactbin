@@ -1,4 +1,5 @@
 /** Browser credentials: the signed agent-session cookie, and the one-time pages tickets a document origin exchanges. */
+// harness-exempt: cookie the agent-session codec (encode, decode, tamper) is the subject under test
 import { describe, expect, it } from 'vitest';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { agentCookie, createGuestOwner, request, testIdentity, useAppHarness } from '@/__tests__/harness';
