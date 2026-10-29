@@ -5,8 +5,9 @@ export interface ExportImage {
   id:string; artifact_id:string; object_key:string; mime:'image/png'|'image/jpeg';
   bytes:number; width:number; height:number;
 }
-/** `current`: never answer with an image of another source revision (explicit exports); social cards may serve the previous one while refreshing. */
-interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean }
+/** `current`: never answer with an image of another source revision (explicit exports); social cards may serve the previous one while refreshing.
+ * `stable`: the picture is a function of its revision alone (a social card), so an image of this revision never goes stale. */
+interface ExportCacheRequest { cacheKey:string; artifactId:string; revision:string; refresh?:boolean; current?:boolean; stable?:boolean }
 interface ExportCacheOptions { freshMs?:number; leaseMs?:number; waitMs?:number; retryMs?:number; pollMs?:number[] }
 export type ExportProducer=(id:string)=>Promise<Omit<ExportImage,'id'|'artifact_id'>>;
 
@@ -55,7 +56,7 @@ export function createExportCache(db:Db,options:ExportCacheOptions={}) {
       for(;;){
         const image=state.image,usable=!!image&&!request.refresh&&(!request.current||state.source_revision===request.revision);
         const refreshed=!request.refresh||image?.id!==baseline;
-        if(image&&state.fresh&&state.source_revision===request.revision&&refreshed)return image;
+        if(image&&(state.fresh||request.stable)&&state.source_revision===request.revision&&refreshed)return image;
         if(state.backoff){if(usable)return image!;throw new ExportCacheUnavailable();}
         const token=randomUUID();
         // The conditional update is the cross-process mutex. Preserve the old image.

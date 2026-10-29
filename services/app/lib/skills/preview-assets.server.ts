@@ -2,6 +2,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
+import {IS_DEV} from '@/lib/platform/config';
 /** The deployed app cwd owns skill/source paths, including after server relocation.
  * Production inputs are immutable. Development cache keys cover the local export
  * and canonical recovery graph; dependency installations require a process restart.
@@ -38,7 +39,13 @@ export function buildPreviewDatasets():Promise<string>{
 
 /** Native toolbox shares platform credentials, publication planning and GraphQL parsing; installs need only Node.
  * Its HTML parsing (./preview-html.mjs) and GraphQL (./preview-datasets.mjs, which bundles graphql) stay sibling imports. */
-export async function buildToolboxPlatform():Promise<string>{
+let toolbox:Promise<string>|undefined;
+export function buildToolboxPlatform():Promise<string>{
+ // Production sources are immutable: one bundle per process. Development bundles its current sources each time.
+ if(IS_DEV)return bundleToolboxPlatform();
+ return toolbox??=bundleToolboxPlatform().catch(error=>{toolbox=undefined;throw error;});
+}
+async function bundleToolboxPlatform():Promise<string>{
  const siblings={name:'archive-siblings',setup(builder:import('esbuild').PluginBuild){
   builder.onResolve({filter:/^(?:\.\/preview-html\.mjs|graphql)$/},args=>({path:args.path==='graphql'?'./preview-datasets.mjs':args.path,external:true}));
   builder.onResolve({filter:PARSER_SHARED},args=>args.importer.endsWith('toolbox-platform.mjs')?{path:'./preview-html.mjs',external:true}:undefined);

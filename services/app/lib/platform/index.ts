@@ -1,5 +1,5 @@
 /** The platform module's interface: only what other modules import. */
-export { trackEvent } from './analytics';
+export { recordView, trackEvent } from './analytics';
 export { ARTIFACTBIN_AGENT_HEADER, describeClient, forwardedFor, identifyClient, logClientIdentity } from './client-identity';
 export type { Harness } from './client-identity';
 export { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, EVENTS_SCHEMA, INTERNAL_SERVICE_SECRET, LOCAL_OBJECT_DIR, MAX_QUERY_ROWS, MAX_ROWS_LIMIT, PUBLIC_BASE_URL, QUERY_TIMEOUT_MS, TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR, parseCustomDomainsTarget, resolveHmrPort } from './config';

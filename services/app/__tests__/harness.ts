@@ -17,6 +17,8 @@ import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
+import { flushViews } from '@/lib/platform/analytics';
+import { resetRenderCache } from '@/lib/serving/render-cache';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -191,6 +193,9 @@ export function useAppHarness(): AppHarness {
   });
 
   beforeEach(async () => {
+    // A view the last test buffered lands before the wipe, and no render outlives the rows it was made from.
+    await flushViews();
+    resetRenderCache();
     await wipe();
     resetRateLimit();
     overrideSession(undefined);
@@ -206,6 +211,8 @@ export function useAppHarness(): AppHarness {
     // The export cache holds the database it was opened on; the next file on this worker (the api
     // project shares one module graph per worker) must open its own, not reuse a closed one.
     await resetExportRenderer();
+    await flushViews();
+    resetRenderCache();
     database = undefined;
     await resetDb();
   });
