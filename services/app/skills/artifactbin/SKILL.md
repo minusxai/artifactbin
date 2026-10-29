@@ -120,8 +120,10 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   `--resolve --expected-revision R` when done). Anchors are described at the top of
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Watch, always.** After every publish and every edit, run `node scripts/comment.mjs watch ID`
-  and keep it running: answer each new comment as in Answer comments (skip `you:true` events).
+- **Watch, always.** After every publish and every edit, run
+  `node scripts/comment.mjs watch ID --next`: it waits up to 4 minutes (give your shell command that
+  timeout). Answer each comment it prints (edit and publish if asked, then reply), then run it
+  again; keep looping until the user stops you, never ending your turn while watching.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

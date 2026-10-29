@@ -10,9 +10,14 @@ Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limi
        node scripts/comment.mjs react ID --comment C --active true|false [--kind thumbs_up]
        node scripts/comment.mjs watch ID [--once] [--cursor CHECKPOINT_OR_LOG]
          [--output LOG --append]
+       node scripts/comment.mjs watch ID --next [--wait SECONDS]
 Flags: write commands also take --request FILE (exclusive saved journal) and --resume FILE
   (replay it exactly; nothing else may change). list --status defaults to open; --limit 1-100
-  (default 20). Common: --server, --json, --help.
+  (default 20). watch --next prints the next comments from someone else (one JSON line each)
+  and exits 0; it resumes from .comments-ID.ndjson in the current directory (created on first
+  use, or the --output LOG --append / --cursor you pass). --wait caps it in seconds (default 240);
+  then it prints "no new comments; run watch --next again" and exits 0. Common: --server, --json,
+  --help.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt
@@ -28,9 +33,10 @@ Gotchas: list before replying, editing or changing state. A plain reply needs no
   the reply and reports status_conflict). Reactions are idempotent desired state per account
   (retry the same call, never invert it); counts are unique accounts, only thumbs_up exists, and
   they change no source or revision. Resolve and reopen are not feed events.
-  watch --once establishes "now" without a cursor; events deduplicate by ID and only delivered
-  ones advance checkpoints. Logs and checkpoints saved under the old "human-comments" stream name
-  still resume.
+  Loop: watch --next, answer what it prints (edit and publish if asked, then reply), watch --next
+  again; never background it or start a new watch. watch --once establishes "now" without a
+  cursor; events deduplicate by ID and only delivered ones advance checkpoints. Logs and
+  checkpoints saved under the old "human-comments" stream name still resume.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
@@ -48,6 +54,8 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   Results never contain credentials.`;
 
 import {readFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import path from 'node:path';
 import {
   runTool,
   resolveTarget,
@@ -94,11 +102,17 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
     // structure.
     return values.json || values.output ? page : listText(page);
   }
-  // watch streams the comment feed until interrupted (or --once drains the backlog).
+  // watch streams the comment feed until interrupted (or --once drains the backlog); --next
+  // returns after the next comment from someone else, checkpointing in .comments-ID.ndjson.
   if (sub === 'watch') {
     const controller = new AbortController();
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort());
-    await watchComments(client, id, values, {signal: controller.signal, ...options});
+    let watchValues = values;
+    if (values.next && !values.output) {
+      const output = path.join(options.cwd ?? process.cwd(), `.comments-${id}.ndjson`);
+      watchValues = {...values, output, append: existsSync(output)};
+    }
+    await watchComments(client, id, watchValues, {signal: controller.signal, ...options});
     return;
   }
   let body = {},
