@@ -120,11 +120,12 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   `--resolve --expected-revision R` when done). Anchors are described at the top of
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Watch, always.** After every publish and every edit, send your reply (link, Built with, Tested)
-  first, then run `node scripts/comment.mjs watch ID --next` in the foreground: never with `&`,
-  `timeout` or a shorter `--wait` (it waits up to 4 minutes; give your shell 5). Answer each comment
-  it prints (edit and publish if asked, then reply) and run it again. "No new comments" means run it
-  again: keep looping until the user stops you. Watching is part of the task, never a reason to end.
+- **Watch, always.** After every publish and every edit, write your full reply (link, Built with,
+  Tested) as message text in the same turn, then call `node scripts/comment.mjs watch ID --next`
+  right after it: the user reads the reply while you watch. Run it in the foreground, never with
+  `&`, `timeout` or a shorter `--wait` (it waits up to 4 minutes; give your shell 5). Answer each
+  comment it prints (edit and publish if asked, then reply) and run it again. "No new comments"
+  means run it again: keep looping until the user stops you. Watching is part of the task.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

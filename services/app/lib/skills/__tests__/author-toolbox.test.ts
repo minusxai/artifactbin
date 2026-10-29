@@ -126,7 +126,7 @@ it('summarizes a saved check per viewport so the file need not be reopened',asyn
  // Screenshot paths stay in the saved file; agents without image input otherwise try to open them.
  expect(passed).not.toContain('/tmp/390x844.png');
  // Only a fully clean pass tells the author they may stop.
- expect(passed).toMatch(/clean pass: send the reply now with the link, then watch for comments/);
+ expect(passed).toMatch(/clean pass: write the reply with the link as text now, in this turn, then call comment.mjs/);
  expect(passed).toMatch(/until the user stops you; don't open qa JSON or/);
  const failed=checkDigest({ok:false,code:'check_failed',smokePassed:false,checks:[{viewport,...clean,pageErrors:['boom'],overflow:{viewport:390,content:512,fits:false},contrast:{checked:9,belowAA:2,unreadable:1,low:[{text:'Stop the loss',ratio:1.01,need:3}]},error:'Expected 7 labels'},{error:'session closed'}]},'qa.json');
  expect(failed).toContain('check check_failed: smoke failed');

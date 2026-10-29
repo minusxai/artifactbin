@@ -84,8 +84,8 @@ export function checkDigest(envelope,file){
  else if(envelope.smokePassed&&(envelope.checks??[]).every(check=>check?.viewport&&check.steps&&
   !check.error&&!check.contrast?.belowAA&&!check.slides?.clipped&&!check.slides?.overlapping&&
   !check.idStability?.unstable))lines.push(
-  "  clean pass: send the reply now with the link, then watch for comments (comment.mjs watch\n"+
-  "  ID --next, again after every answer) until the user stops you; don't open qa JSON or\n"+
+  "  clean pass: write the reply with the link as text now, in this turn, then call comment.mjs\n"+
+  "  watch ID --next (again after every answer) until the user stops you; don't open qa JSON or\n"+
   "  screenshots.\n"+
   // The don't-fetch note sits above the reply block: agents copy the block's lines verbatim.
   (envelope.slideLinks?.length?"  slide images: list them as printed; don't fetch them.\n":'')+
