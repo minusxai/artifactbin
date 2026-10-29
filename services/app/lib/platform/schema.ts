@@ -49,6 +49,10 @@ const USERS: Table = {
     // set at insert rather than a timestamp that would have to be back-dated.
     { name: 'auto_accept_mentions', type: 'BOOLEAN', notNull: true, default: 'true' },
     { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
+    // TRUE for an account whose row was CREATED for an address at the test domain while test-domain
+    // sign-in was on (lib/accounts/test-accounts). Set at insert only, like welcome_pending: existing
+    // rows take the default and are never marked, so a later cleanup can select exactly these.
+    { name: 'test_account', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
   ],
   primaryKey: ['id'],

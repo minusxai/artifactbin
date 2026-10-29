@@ -13,7 +13,7 @@ import { developmentPagesHosts, developmentViteOptions } from './services/app/li
 import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
+import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
@@ -179,6 +179,7 @@ async function main(): Promise<void> {
       devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
     });
     const loginProviders = loginProvidersOf(env);
+    const testDomain = testDomainSignInOf(env);
     human = await createHumanAuth({
       secret: authSecret,
       baseURL,
@@ -186,6 +187,7 @@ async function main(): Promise<void> {
       events,
       ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),
       ...loginProviders,
+      ...(testDomain ? { testDomain } : {}),
       secure: baseURL.startsWith('https://'),
       ...(authSchema ? { schema: authSchema } : {}),
     });

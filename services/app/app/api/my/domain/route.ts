@@ -19,7 +19,7 @@ import { attachDomain, domainHomepageOptions, setDomainHomepage, setDomainPath, 
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const ATTACH_STATUS = { disabled: 403, invalid_hostname: 400, taken: 409, limit: 409 } as const;
+const ATTACH_STATUS = { disabled: 403, test_account_restricted: 403, invalid_hostname: 400, taken: 409, limit: 409 } as const;
 
 export async function GET(request: Request) {
   const session = await auth();

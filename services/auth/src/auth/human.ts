@@ -23,10 +23,10 @@
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware } from 'better-auth/api';
 import { getMigrations } from 'better-auth/db/migration';
-import type { EventsService, Queryable } from '@artifactbin/contracts';
+import { isTestDomainEmail, type EventsService, type Queryable, type TestDomainSignIn } from '@artifactbin/contracts';
 import { emailOTP, genericOAuth } from 'better-auth/plugins';
 import { Kysely, PostgresDialect } from 'kysely';
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { say } from '../events';
 import { pgliteDialect } from './pglite';
@@ -73,6 +73,36 @@ export interface HumanAuthOptions {
    * hooks, the only seam those moments cross. Absent = nothing is said. Never awaited on the login's path.
    */
   events?: EventsService;
+  /**
+   * Disposable accounts (config `testDomainSignInOf`): a `sign-in` code for an address at exactly this
+   * domain IS `code`, and no mail of any kind is sent to that domain. Absent = off.
+   */
+  testDomain?: TestDomainSignIn;
+}
+
+/**
+ * THE TEST-DOMAIN CODE, through Better Auth's own seams rather than a second login route:
+ * `generateOTP` hands out the fixed code for a matching sign-in, the mailer drops that domain's mail,
+ * and Better Auth verifies as it does every code — single use, its attempt cap, and its
+ * `constantTimeEqual` over the value `storeOTP.decrypt` returns. The stored row holds a keyed marker,
+ * never the code; ordinary codes are stored exactly as before (plain), so `resendStrategy: 'reuse'`
+ * keeps working. The marker is an HMAC under the auth secret, so a row left behind after the feature
+ * is turned off cannot be replayed by sending the marker as a code.
+ */
+function testDomainSeams(testDomain: TestDomainSignIn | undefined, secret: string) {
+  if (!testDomain) return { matches: (_email: string) => false, plugin: {} };
+  const marker = 'test-domain.' + createHmac('sha256', secret).update(testDomain.code).digest('base64url');
+  const matches = (email: string) => isTestDomainEmail(email, testDomain.domain);
+  return {
+    matches,
+    plugin: {
+      generateOTP: ({ email, type }: { email: string; type: string }) => (type === 'sign-in' && matches(email) ? testDomain.code : undefined),
+      storeOTP: {
+        encrypt: async (otp: string) => (otp === testDomain.code ? marker : otp),
+        decrypt: async (stored: string) => (stored === marker ? testDomain.code : stored),
+      },
+    },
+  };
 }
 
 /** A plain lowercase identifier — it goes into SQL unparameterised. */
@@ -117,6 +147,9 @@ export type BetterAuthOptions = Parameters<typeof betterAuth>[0];
  */
 export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<string, unknown>>): BetterAuthOptions {
   const createdUsers = new WeakMap<Request, string>();
+  const testDomain = testDomainSeams(opts.testDomain, opts.secret);
+  // Test-domain addresses have no inbox: nothing is mailed to them, a login code included.
+  const mail: Mailer = { send: async (message) => { if (!testDomain.matches(message.to)) await opts.mail.send(message); } };
   const trusted = ['email-otp', ...(opts.google ? ['google'] : []), ...(opts.oidc ? [opts.oidc.providerId] : [])];
   return {
     baseURL: opts.baseURL,
@@ -195,13 +228,13 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
         enabled: true,
         // The CURRENT address confirms the change; only then does Better Auth mail the new address its verification link.
         sendChangeEmailConfirmation: async ({ user, newEmail, url }: { user: { email: string }; newEmail: string; url: string }) => {
-          await opts.mail.send({ to: user.email, kind: 'change-email', subject: 'Confirm your email change', text: `Confirm changing your email to ${newEmail}: ${url}`, url });
+          await mail.send({ to: user.email, kind: 'change-email', subject: 'Confirm your email change', text: `Confirm changing your email to ${newEmail}: ${url}`, url });
         },
       },
     },
     emailVerification: {
       sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
-        await opts.mail.send({ to: user.email, kind: 'verify-email', subject: 'Verify your email', text: url, url });
+        await mail.send({ to: user.email, kind: 'verify-email', subject: 'Verify your email', text: url, url });
       },
     },
     ...(opts.google ? { socialProviders: { google: { clientId: opts.google.clientId, clientSecret: opts.google.clientSecret } } } : {}),
@@ -212,8 +245,9 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
         allowedAttempts: 5,
         // A resend inside the code's lifetime re-sends the same code: the one already in the mail app stays valid.
         resendStrategy: 'reuse',
+        ...testDomain.plugin,
         sendVerificationOTP: async ({ email, otp, type }) => {
-          await opts.mail.send({ to: email, kind: 'otp', subject: 'Your login code', text: `Your code is ${otp}`, otp: `${otp}`, url: type });
+          await mail.send({ to: email, kind: 'otp', subject: 'Your login code', text: `Your code is ${otp}`, otp: `${otp}`, url: type });
         },
       }),
       ...(opts.oidc ? [genericOAuth({ config: [{

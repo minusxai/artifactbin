@@ -18,6 +18,7 @@
  */
 import { getDb } from '../platform/db';
 import { ensureUsername, getUserById } from './users';
+import { isTestDomainAddress } from './test-accounts';
 
 /**
  * ONE ADDRESS, TWO IDS — the provisioning fault below, as a type callers can single out. A door that
@@ -69,10 +70,12 @@ export async function syncProfile(claims: { userId: string; email?: string }): P
   try {
     await db.query(
       // A NEW person starts with the welcome page pending; an existing row keeps
-      // whatever it had (the conflict branch never touches the flag).
-      `INSERT INTO users (id, email, welcome_pending) VALUES ($1, $2, true)
+      // whatever it had (the conflict branch never touches the flag). The same
+      // holds for test_account: only a row created here for a test-domain
+      // address is marked (lib/accounts/test-accounts), never an existing one.
+      `INSERT INTO users (id, email, welcome_pending, test_account) VALUES ($1, $2, true, $3)
        ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email WHERE users.email IS DISTINCT FROM EXCLUDED.email`,
-      [claims.userId, email],
+      [claims.userId, email, isTestDomainAddress(email)],
     );
   } catch (error) {
     /*

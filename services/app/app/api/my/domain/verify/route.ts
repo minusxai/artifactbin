@@ -12,7 +12,7 @@ import { domainResolver, verifyDomain } from '@/lib/serving';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const VERIFY_STATUS = { disabled: 403, not_found: 404, taken: 409, txt_missing: 422, not_pointing: 422, caa_blocks: 422 } as const;
+const VERIFY_STATUS = { disabled: 403, test_account_restricted: 403, not_found: 404, taken: 409, txt_missing: 422, not_pointing: 422, caa_blocks: 422 } as const;
 
 export async function POST(request: Request) {
   const session = await auth();

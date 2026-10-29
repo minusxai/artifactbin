@@ -1,4 +1,5 @@
 import type { OidcProvider } from './auth/human';
+import {parseTestDomainSignIn, type TestDomainSignIn} from '@artifactbin/contracts';
 import {readEnv} from './env';
 import type { MailSettings } from './mail';
 const LOGIN_PROVIDER_ENV_NAMES = {
@@ -120,4 +121,16 @@ export function admissionPolicyOf(source:Record<string,string|undefined>,read:ty
  if(patterns.some(p=>!p||!/^[a-z0-9._+@*\-]+$/.test(p)||(p!=='*'&&(!p.includes('@')||p.split('@').length!==2||p.split('@').some(part=>!part)))))throw new Error('AUTH__ALLOWED_EMAIL_PATTERNS must contain nonempty email addresses or simple email globs.');
  const rules=patterns.map(p=>new RegExp('^'+p.split('*').map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$'));
  return {inviteOnly:value==='true',matches:email=>rules.some(rule=>rule.test(email.trim().toLowerCase()))};
+}
+
+/**
+ * `TEST_DOMAIN` + `TEST_DOMAIN_OTP` (contracts `parseTestDomainSignIn`): disposable accounts at one
+ * exact domain sign in with one fixed code and receive no mail. Both names, or nothing. An invalid
+ * pair leaves the feature OFF and says why once, never echoing the code. Unnamespaced on purpose:
+ * the operator, the eval harness and CI secrets share these two names.
+ */
+export function testDomainSignInOf(source:Record<string,string|undefined>,warn:(line:string)=>void=console.warn):TestDomainSignIn|undefined {
+ const parsed=parseTestDomainSignIn(readEnv(source,'TEST_DOMAIN'),readEnv(source,'TEST_DOMAIN_OTP'));
+ if(parsed.state==='invalid')warn(`[auth] test-domain sign-in disabled: ${parsed.reason}`);
+ return parsed.state==='on'?parsed.value:undefined;
 }

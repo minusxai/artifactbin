@@ -3,7 +3,7 @@ import {artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedV
 import { isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { getArtifactFor, getOwnedArtifactFor } from './rows';
 import { writerFor } from './table';
-import type { AccessActor } from '@/lib/accounts';
+import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED, type AccessActor } from '@/lib/accounts';
 import {resolveParent,isParentRefusal} from './placement';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';
@@ -23,7 +23,7 @@ export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Re
   if(!Number.isSafeInteger(body.expectedPolicyRevision)||Number(body.expectedPolicyRevision)<0)return json({error:'policy_revision_required'},400);
   try{patch.policy=validateDatasetPolicyForRow(current,body.policy);}catch(error){return json({error:'invalid_policy',detail:error instanceof Error?error.message:'Invalid policy'},400);}
  }else if(body.expectedPolicyRevision!==undefined)return json({error:'invalid_metadata',field:'expectedPolicyRevision'},400);
- const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;if(shares!==undefined)patch.shares=shares;
+ const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;const boxed=await shareTargetsRefusal(actor,shares);if(boxed)return json({error:TEST_ACCOUNT_RESTRICTED,detail:boxed},403);if(shares!==undefined)patch.shares=shares;
  for(const key of ['title','description','theme','template','colorMode'] as const){
   const value=body[key];if(value===undefined)continue;
   if(value!==null&&typeof value!=='string')return json({error:'invalid_metadata',field:key},400);

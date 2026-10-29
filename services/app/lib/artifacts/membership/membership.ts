@@ -1,4 +1,4 @@
-import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, type AccessActor, setRelationState } from '@/lib/accounts';
+import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, testAccountMayReach, type AccessActor, setRelationState } from '@/lib/accounts';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '@/lib/notifications/events';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -74,6 +74,7 @@ export async function changeMembership(actor: AccessActor, id: string, input: Me
       if(typeof raw!=='string'||!/^@?[a-z0-9_]+$/i.test(raw))fail('Use @username',400);
       const found=(await db.query<{id:string}>('SELECT id FROM users WHERE username=$1',[raw.replace(/^@/,'').toLowerCase()])).rows[0];
       if(!found)fail('Person is not eligible for an invitation');
+      if(!(await testAccountMayReach(userId,found.id)))fail('A test account invites only test accounts');
       targets.push(found.id);
     }
   } else targets.push(input.userId??userId);

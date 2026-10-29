@@ -4,7 +4,7 @@
  */
 import { capabilityGuard, getArtifactFor, getSharingFor, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, updateSharingFor } from '@/lib/artifacts';
 import type { SharingPatch } from '@artifactbin/contracts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
 import { json, readJson } from '@/lib/http';
 import { catalogOf } from '@/lib/datasets/catalog';
 
@@ -61,6 +61,8 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (access) patch.access = access;
   const shares = parseShareEntries(body.shares);
   if (shares instanceof Response) return shares;
+  const boxed = await shareTargetsRefusal(actor, shares);
+  if (boxed) return json({ error: TEST_ACCOUNT_RESTRICTED, detail: boxed }, 403);
   if (shares) patch.shares = shares;
 
   const state = await updateSharingFor(actor, id, patch);
