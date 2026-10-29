@@ -1,6 +1,6 @@
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {createReaderPresenceSession} from '@/lib/html-presence/reader-session';
-import type {ReaderPreferences,PresenceViewer} from '@/lib/html-presence/contract';
+import type {PresenceFrame,ReaderPreferences,PresenceViewer} from '@/lib/html-presence/contract';
 import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
 import type {ArtifactBackend} from '@/lib/artifact-backend/types';
 export interface ReaderPresenceEngineOptions {
@@ -8,11 +8,11 @@ export interface ReaderPresenceEngineOptions {
  controller:NonNullable<DocumentRuntimeRef['current']>;
  backend:Pick<ArtifactBackend,'publishPresence'>;
  preferences:()=>ReaderPreferences;
- changed:(viewers:PresenceViewer[])=>void;
+ changed:(viewers:PresenceViewer[],total:number)=>void;
 }
 /** The optional presence lifecycle starts after the frame bridge is ready, outside the shell's eager payload. */
 export function startReaderPresence(options:ReaderPresenceEngineOptions){
- let active=options.active,receivePeers=(_viewers:PresenceViewer[])=>{};
+ let active=options.active,receivePeers=(_frame:PresenceFrame)=>{};
  const session=createReaderPresenceSession({session:runtimeId(),revision:options.revision,nonce:options.nonce,readPreferences:options.preferences,active:()=>active,
   publish:input=>options.backend.publishPresence(input),
   connect:receive=>{receivePeers=receive;return()=>{receivePeers=()=>{};};},
@@ -22,6 +22,6 @@ export function startReaderPresence(options:ReaderPresenceEngineOptions){
  const unsubscribe=options.controller.subscribe(session.receive);
  const leave=()=>{active=false;session.activeChanged();},restore=()=>{active=true;session.activeChanged();};
  window.addEventListener('pagehide',leave);window.addEventListener('pageshow',restore);
- return {receive:(peers:PresenceViewer[])=>receivePeers(peers),update:session.preferencesChanged,
-  dispose:()=>{unsubscribe();window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',restore);session.dispose();options.changed([]);}};
+ return {receive:(frame:PresenceFrame)=>receivePeers(frame),update:session.preferencesChanged,
+  dispose:()=>{unsubscribe();window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',restore);session.dispose();options.changed([],0);}};
 }

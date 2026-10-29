@@ -9,7 +9,7 @@ const defaults:ReaderPreferences={visible:true,shareCursor:true,shareSelection:t
 const viewers:PresenceViewer[]=[{id:'one',label:'Alex',revision:'1',seen:0,cursor:null,selection:null},{id:'two',label:'Guest reader',revision:'1',seen:0,cursor:null,selection:null}];
 it('names the readers and exposes all five independent privacy preferences',()=>{
  const changed=vi.fn();const [preferences,setPreferences]=createSignal(defaults);
- const view=render(()=><ReaderPresenceControls preferences={preferences()} viewers={viewers} onChange={(name,value)=>{changed(name,value);setPreferences(p=>({...p,[name]:value}));}}/>);
+ const view=render(()=><ReaderPresenceControls preferences={preferences()} viewers={viewers} total={2} onChange={(name,value)=>{changed(name,value);setPreferences(p=>({...p,[name]:value}));}}/>);
  const trigger=view.getByRole('button',{name:'Readers · 2'});expect(trigger).toHaveAttribute('aria-expanded','false');fireEvent.click(trigger);
  expect(screen.getByText('Alex')).toBeVisible();expect(screen.getByText('Guest reader')).toBeVisible();
  const settings=[['visible','Show me to other readers'],['shareCursor','Share my cursor'],['shareSelection','Share my selections'],['showCursors','Show other cursors'],['showSelections','Show other selections']] as const;
@@ -18,7 +18,12 @@ it('names the readers and exposes all five independent privacy preferences',()=>
 });
 it('updates the reader count and provides an empty state without opening itself',()=>{
  const [people,setPeople]=createSignal<readonly PresenceViewer[]>([]);
- const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={people()} onChange={()=>{}}/>);
+ const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={people()} total={people().length} onChange={()=>{}}/>);
  const trigger=view.getByRole('button',{name:'Readers · 0'});fireEvent.click(trigger);expect(screen.getByText('No other readers here')).toBeVisible();
  setPeople(viewers);expect(trigger).toHaveAccessibleName('Readers · 2');expect(screen.queryByText('No other readers here')).toBeNull();expect(screen.getByText('Alex')).toBeVisible();
+});
+it('counts readers beyond the capped roster and names how many are not listed',()=>{
+ const view=render(()=><ReaderPresenceControls preferences={defaults} viewers={viewers} total={40} onChange={()=>{}}/>);
+ fireEvent.click(view.getByRole('button',{name:'Readers · 40'}));
+ expect(screen.getByText('Here now · 40')).toBeVisible();expect(screen.getByText('Alex')).toBeVisible();expect(screen.getByText('+38 more')).toBeVisible();
 });
