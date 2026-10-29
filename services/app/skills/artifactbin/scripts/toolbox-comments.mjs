@@ -110,9 +110,9 @@ for(const event of result.events){if(typeof event.event_id!=='string')throw new 
  }finally{await handle?.close();}
  if(timedOut)await print(
   'no new comments yet; keep watching: run the same watch --next command again now');
- // Agents re-watched before replying and missed the person's wait: say the order where they read it.
- else if(next&&events>0)await print('next: answer each comment above now (edit and publish first if'+
-  ' it asks for a change, then comment.mjs reply ID --thread <annotation_id> --body-file FILE);'+
-  ' only then run watch --next again');
+ // Agents re-watched before replying and missed the person's wait: print the order here.
+ else if(next&&events>0)await print('next: answer each comment above now (edit and publish'+
+  ' first if it asks for a change, then comment.mjs reply ID --thread <annotation_id> --body-file'+
+  ' FILE); only then run watch --next again');
  return {events,timedOut};
 }
