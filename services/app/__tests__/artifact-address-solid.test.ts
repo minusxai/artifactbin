@@ -4,7 +4,7 @@ import {useAppHarness,request,setSession,mintAccountToken} from '@/__tests__/har
 import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
 import { artifactPageAnswer } from '@/lib/document-serving';
-import {pagesSite} from '@/lib/http/pages-origin';
+import {pagesSite} from '@/lib/http';
 import { mintExportKey } from '@/lib/export';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 useAppHarness();beforeEach(()=>setSession(null));

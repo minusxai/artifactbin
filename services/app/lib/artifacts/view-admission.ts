@@ -5,7 +5,7 @@
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact } from './access';
 import { getArtifactHeaderById } from './rows';
-import { isCrossSiteRequest } from '@/lib/http/http';
+import { isCrossSiteRequest } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
 
 /** `reader` resolves the session door's actor (lib/authentication `sessionActor`), asked after the origin check. */

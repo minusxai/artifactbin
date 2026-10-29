@@ -42,8 +42,9 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - Layers: entry points `server.ts`, `scripts`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
-  import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and an unlisted
-  deep import (`DEEP_MODULES`).
+  import outside that floor, a new edge in the lib cycle (`module-graph.allowed-cycles.json`) and a deep import:
+  a lib module is entered through its index, plus any entries and browser leaves its `DEEP_MODULES` row lists; a
+  test also reaches its own module, or a white-box import recorded in `module-graph.allowed-test-imports.json` (shrinks only).
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report only observed runs and red/green/end-to-end evidence.

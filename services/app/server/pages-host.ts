@@ -41,7 +41,7 @@ import { attachActor, readCookie } from '@artifactbin/utils';
 import { ANONYMOUS } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
-import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http/pages-origin';
+import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http';
 import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 

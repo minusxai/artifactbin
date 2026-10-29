@@ -3,11 +3,10 @@ import { dataflowForRow, holdImport, nameablePeople } from '@/lib/document-data'
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { ID_RE } from '@/lib/platform';
-import { json, readJson } from '@/lib/http';
-import { parseQueryRequest, type QueryRequest } from '@/lib/http/query-request';
+import { json, readJson, parseQueryRequest, type QueryRequest } from '@/lib/http';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
 import { LocalStateInputError } from '@/lib/dataflow';
-import {DatasetError} from '@/lib/datasets/errors';
+import {DatasetError} from '@/lib/datasets';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /**

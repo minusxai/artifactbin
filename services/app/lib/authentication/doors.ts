@@ -6,8 +6,8 @@
  * resolve never falls back to a cookie identity. The operator's secret is
  * lib/admin-auth's, with its own uniform 404.
  */
-import { isCrossSiteRequest, json, unauthorized } from '../http/http';
-import type { Harness } from '@/lib/platform';
+import { isCrossSiteRequest, json, unauthorized } from '../http';
+import type { Harness } from '@/lib/accounts';
 import { matchesWorkspaceAccount, type RequestIdentity, type TokenHoldingActor } from '@/lib/accounts';
 import { isCookieCredential, resolveRequestIdentity, requestOrSessionActor, sessionActor } from './request-identity';
 

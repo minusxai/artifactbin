@@ -7,9 +7,9 @@ import type {UploadContext} from '@artifactbin/contracts';
  * lib/compiled-page. The in-place editing and annotation messages are lib/edit-protocol's.
  */
 import type { JsxNode } from '@/lib/jsx';
-import type { GlyphMap } from '@/lib/story-ui/icon-contract';
+import type { GlyphMap } from '@/lib/story-ui';
 import type { RefDataMap, DataflowState, Scalar } from '@/lib/dataflow';
-import type { StoryDesignName } from '@/lib/validation/story-theme-names';
+import type { StoryDesignName } from '@/lib/validation';
 import type { DocumentGraph, PersonCard, StoredMermaidImage } from '@artifactbin/contracts';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */

@@ -7,11 +7,10 @@
  * `sse_connect` is not a moment anyone cares about, so it emits nothing.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { overrideRequestHeaders } from '@/lib/platform/request-context';
+import { overrideRequestHeaders, setServices } from '@/lib/platform';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/analytics';
-import { setServices } from '@/lib/platform';
 
 const harness = useAppHarness();
 

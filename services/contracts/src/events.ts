@@ -20,7 +20,7 @@ export type EventSource = 'app' | 'auth' | 'proxy';
 
 /** Nothing to say beyond the sentence itself. */
 type EmptyPayload = Record<string, never>;
-/** Who touched an artifact, as far as telemetry may know it: the client guess (lib/client-identity) and the account when signed in. */
+/** Who touched an artifact, as far as telemetry may know it: the client guess (lib/accounts/client-identity) and the account when signed in. */
 interface ArtifactActorPayload { client?: string | null; user_id?: string | null }
 /** A create also says WHERE, so a folder create and a filed create read as themselves in the log. Null/absent = the root. */
 interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id?: string | null }

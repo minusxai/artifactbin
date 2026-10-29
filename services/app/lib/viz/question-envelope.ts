@@ -16,7 +16,7 @@
  * namespaces on the way back, so an edit cannot smuggle unsupported keys into a
  * stored artifact.
  */
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 import { isBlankSpec } from './encoding-edit';
 import type { VizColumnKind } from './types';
 

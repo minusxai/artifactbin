@@ -6,7 +6,7 @@
  */
 import type { DatasetColumn, Row } from "@/lib/dataflow";
 import { keyedRowsError } from "@/lib/story-ui/row-key";
-import type { SortSpec } from "@/lib/story-ui/data-table";
+import type { SortSpec } from "@/lib/story-ui";
 export interface TableData {
   rows: Row[];
   columns: DatasetColumn[];

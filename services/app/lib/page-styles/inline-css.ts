@@ -1,4 +1,4 @@
-import * as cssTree from '@/lib/mermaid-images/css-parser';
+import { cssTree } from '@/lib/mermaid-images';
 import { sha256Hex } from '@artifactbin/utils/sha256';
 import type { JsxNode } from '@/lib/jsx';
 

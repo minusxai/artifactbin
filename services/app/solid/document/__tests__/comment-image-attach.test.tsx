@@ -9,7 +9,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { COMMENT_IMAGE_LIMITS } from '../../../../contracts/src/comment-image';
 import { fireEvent } from '../../__tests__/helpers';
 import { preloadCommentField } from '../LazyCommentField';

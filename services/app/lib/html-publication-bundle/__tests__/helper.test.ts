@@ -6,7 +6,7 @@ it('runs the installed native helper with Node alone and refuses project symlink
  try{
   await mkdir(join(dir,'scripts'));await mkdir(join(dir,'project'));
   for(const script of ['publication-bundle.mjs','publish.mjs'])await copyFile(new URL('../../../skills/artifactbin/scripts/'+script,import.meta.url),join(dir,'scripts',script));
-  const {buildPreviewParser}=await import('../../skills/preview-assets.server');
+  const {buildPreviewParser}=await import('../../skills');
   await writeFile(join(dir,'scripts/preview-html.mjs'),await buildPreviewParser(await readFile(new URL('../../../skills/artifactbin/scripts/preview-html.mjs',import.meta.url),'utf8')));
   await writeFile(join(dir,'project','index.html'),'<img src="./logo.svg"><script type="module">import "./main.js";</script>');await writeFile(join(dir,'project','logo.svg'),'<svg/>');
   await writeFile(join(dir,'project','main.js'),'export const lazy=()=>import("./chunk.js");');await writeFile(join(dir,'project','chunk.js'),'export const value=42;');

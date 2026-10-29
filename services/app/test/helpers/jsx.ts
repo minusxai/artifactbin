@@ -18,10 +18,9 @@
  * `parsed.nodes` reads unchanged — only the guard line goes.
  */
 import { expect } from 'vitest';
-import { parseJsx, validateJsxSource } from '@/lib/jsx';
+import { parseJsx, validateJsxSource, type ParseResult } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
-import type { ParseResult } from '@/lib/jsx/types';
 
 /** The success branch: `{ ok: true; nodes: JsxNode[] }`. */
 type ParsedJsx = Extract<ParseResult, { ok: true }>;

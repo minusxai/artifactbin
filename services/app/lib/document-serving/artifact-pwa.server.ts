@@ -1,10 +1,7 @@
 import sharp from 'sharp';
-import {htmlPwaSettings} from '@/lib/html-page';
-import type {HtmlPwaSettings} from '@/lib/html-page';
-import { loadImage } from '@/lib/object-store/image-store';
-import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
-import { getArtifactById } from '@/lib/artifacts';
-import { unservable } from '@/lib/artifacts';
+import {htmlPwaSettings, type HtmlPwaSettings} from '@/lib/html-page';
+import { loadImage } from '@/lib/object-store';
+import { canReadArtifact, type ArtifactRow, getArtifactById, unservable } from '@/lib/artifacts';
 import { referencedArtifactForRow } from '@/lib/document-data';
 import { sessionActor } from '@/lib/authentication';
 import { escapeAttr } from '@artifactbin/utils/escape';

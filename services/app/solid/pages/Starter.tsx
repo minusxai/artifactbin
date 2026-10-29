@@ -15,7 +15,7 @@ import { chooseTheme } from '@/lib/story-runtime/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
-import type { StoryThemeName } from '@/lib/validation/story-theme-names';
+import type { StoryThemeName } from '@/lib/validation';
 import { loginHref } from '@/lib/http/login-href';
 import { replaceDocument } from '../lib/document-navigation';
 import { useSession } from '../lib/session';

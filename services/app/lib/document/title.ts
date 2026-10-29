@@ -10,7 +10,7 @@
  */
 
 import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
-import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { markdownContent, markdownSource } from '@/lib/markdown';
 import { rowTitle } from './display-title';
 export { UNTITLED } from './display-title';
 

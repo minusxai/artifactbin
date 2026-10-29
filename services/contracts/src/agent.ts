@@ -2,7 +2,7 @@
  * WHICH HARNESS AN HTTP AGENT MAY DECLARE — the `Artifactbin-Agent` allowlist, in ONE place.
  *
  * It lives in contracts because BOTH sides read it and neither owns it: the app maps a declaration to
- * its display identity (`lib/client-identity`) for attribution and copy.
+ * its display identity (`lib/accounts/client-identity`) for attribution and copy.
  *
  * Only the EXPLICIT declarations belong here. The app's wider `Harness` union also carries UA GUESSES
  * (`curl`, `browser`, `script`, `unknown`) — those are inferences about a runtime, never something a

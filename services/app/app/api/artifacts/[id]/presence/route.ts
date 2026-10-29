@@ -3,8 +3,7 @@ import {getArtifactAccessById,canReadArtifact} from '@/lib/artifacts';
 import { sessionActor } from '@/lib/authentication';
 import { authorHandle } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import {publishPresence} from '@/lib/html-presence/publish.server';
-import {presenceChannel} from '@/lib/html-presence/channel.server';
+import {publishPresence, presenceChannel} from '@/lib/html-presence';
 /** The access columns only: a heartbeat never ships the document. */
 async function access(request:Request,id:string){const [row,actor]=await Promise.all([getArtifactAccessById(id),sessionActor(request)]);return row?.format==='html'&&await canReadArtifact(row,actor)?{row,actor}:null;}
 /** Account authority stays on the platform (lib/html-presence/publish.server). */

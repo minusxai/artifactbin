@@ -1,6 +1,6 @@
 import type {DatasetPerson,PersonCard} from '@artifactbin/contracts';
 import type {DatasetSnapshot} from './types';
-import type {DatasetTable} from '@/lib/datasets/types';
+import type {DatasetTable} from '@/lib/datasets';
 export interface DatasetPeopleReadPort {
  rows(table:DatasetTable):Promise<readonly Record<string,unknown>[]>;
  cards(ids:string[]):Promise<Record<string,PersonCard>>;

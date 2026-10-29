@@ -9,7 +9,7 @@
  */
 import sheets from './story-system-sheets.json';
 import fontManifest from './story-font-manifest.json';
-import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation/story-system-names';
+import { STORY_SYSTEM_NAMES, type StorySystemName } from '@/lib/validation';
 
 interface StorySystemSheet {
   /** `@font-face` rules for every family, weight and style the type roles use, served from /fonts. */

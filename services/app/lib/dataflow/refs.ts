@@ -17,7 +17,7 @@ import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from './field-refs';
 import { IMPORT_TAG, QUERY_TAG, NOTIFY_TAG, parseNotifyDecl, carriesRef, parseImportDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './dataset-shape';
-import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
+import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';

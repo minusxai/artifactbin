@@ -1,0 +1,495 @@
+{
+  "$comment": "Written by node scripts/ci/module-graph.mjs --write-allowed-tests. White-box tests (an unexported helper, a namespace to spy on) and the test harness and setup, which keep deep platform paths so a test file's vi.mock of them reaches the index: test file -> other modules' internal files it imports. The list only shrinks.",
+  "testImports": {
+    "scripts/__tests__/postgres-notification-fixture.test.mjs": [
+      "../../services/app/lib/datasets/sql"
+    ],
+    "scripts/__tests__/reserved-ids-postgres-proof.ts": [
+      "@/lib/artifacts/identities"
+    ],
+    "scripts/fixtures/component-baseline/__tests__/interaction-components.test.mjs": [
+      "../../../../services/app/lib/html-components/data-table",
+      "../../../../services/app/lib/html-components/select"
+    ],
+    "services/app/__tests__/acl-holes.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/after-commit.test.ts": [
+      "@/lib/artifacts/after-commit"
+    ],
+    "services/app/__tests__/analytics.test.ts": [
+      "@/lib/accounts/users",
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/annotation-changes.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/annotation-list-volume.test.ts": [
+      "@/lib/artifacts/document"
+    ],
+    "services/app/__tests__/artifact-header.test.ts": [
+      "@/lib/artifacts/rows"
+    ],
+    "services/app/__tests__/asset-byte-quota.test.ts": [
+      "@/lib/artifacts/asset-quota"
+    ],
+    "services/app/__tests__/bound-image-publish.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/comment-images.test.ts": [
+      "@/lib/artifacts/asset-quota"
+    ],
+    "services/app/__tests__/content-preparation.test.ts": [
+      "@/lib/publish/prepared/prepare-content"
+    ],
+    "services/app/__tests__/data-journey.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/dataset-grants.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/dataset-policies.test.ts": [
+      "@/lib/artifacts/sharing",
+      "@/lib/dataset-graphql/retained",
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/dataset-secret-boundary.test.ts": [
+      "@/lib/datasets/postgres",
+      "@/lib/operations/datasets"
+    ],
+    "services/app/__tests__/deep-fork.test.ts": [
+      "@/lib/artifacts/store"
+    ],
+    "services/app/__tests__/doc-assets-route.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/document-help-route.test.ts": [
+      "@/lib/agent-copy/agent-discovery"
+    ],
+    "services/app/__tests__/document-operations.test.ts": [
+      "@/lib/document/document-node-codec",
+      "@/lib/document/document-patch"
+    ],
+    "services/app/__tests__/document-revalidation.test.ts": [
+      "@/lib/document-serving/native-html.server",
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/document-serving-headers.test.ts": [
+      "@/lib/object-store/image-store",
+      "@/lib/object-store/pdf-store"
+    ],
+    "services/app/__tests__/document-trust.test.ts": [
+      "@/lib/trust/document-trust"
+    ],
+    "services/app/__tests__/editable-table-feature.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/email-auth-policy.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/engagement-pages.test.ts": [
+      "@/lib/accounts/users"
+    ],
+    "services/app/__tests__/export-assets.test.ts": [
+      "@/lib/export/assets"
+    ],
+    "services/app/__tests__/export-cache.test.ts": [
+      "@/lib/export/cache"
+    ],
+    "services/app/__tests__/feedback-images.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/file-assets.test.ts": [
+      "@/lib/artifacts/asset-quota"
+    ],
+    "services/app/__tests__/folder-children.test.ts": [
+      "@/lib/artifacts/sharing",
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/folder-page.test.ts": [
+      "@/lib/artifacts/sharing"
+    ],
+    "services/app/__tests__/folders.test.ts": [
+      "@/lib/artifacts/sharing"
+    ],
+    "services/app/__tests__/fork.test.ts": [
+      "@/lib/artifacts/store"
+    ],
+    "services/app/__tests__/groups-ownership.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/harness-request.test.ts": [
+      "@/lib/accounts/agent-session"
+    ],
+    "services/app/__tests__/harness.ts": [
+      "@/lib/accounts/agent-session",
+      "@/lib/datasets/postgres",
+      "@/lib/document-serving/render-cache",
+      "@/lib/export/exporter",
+      "@/lib/platform/ids",
+      "@/lib/platform/schema"
+    ],
+    "services/app/__tests__/home-progressive.test.ts": [
+      "@/lib/workspace/analytics"
+    ],
+    "services/app/__tests__/html-shared-events.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/identity-workflow.test.ts": [
+      "@/lib/platform/ids"
+    ],
+    "services/app/__tests__/identity.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/inbox-volume.ts": [
+      "@/lib/notifications/authority"
+    ],
+    "services/app/__tests__/lambda-operations.test.ts": [
+      "@/lib/document-data/dataset-policy",
+      "@/lib/runner/operations"
+    ],
+    "services/app/__tests__/live-data-events.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/live-events-open-race.test.ts": [
+      "@/lib/authentication/request-identity",
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/live-events.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/live-frame.test.ts": [
+      "@/lib/publish/data/frame",
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/media-headers.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/media.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/mutate-edges.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/mutate-routes.test.ts": [
+      "@/lib/document-data/dataset-mutate"
+    ],
+    "services/app/__tests__/mutation-context.test.ts": [
+      "@/lib/document-data/mutation-operation"
+    ],
+    "services/app/__tests__/native-file-links.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/native-file-upload.test.ts": [
+      "@/lib/html-runtime/upload",
+      "@/lib/story-runtime/frame-bridge/upload"
+    ],
+    "services/app/__tests__/native-html-core.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/native-html-publication-bundle.test.ts": [
+      "@/lib/document-serving/native-html-assets.server",
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/native-html-serving.test.ts": [
+      "@/lib/document-serving/native-html-structural-wrapper",
+      "@/lib/document-serving/native-html.server",
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/native-runtime-bridge.test.ts": [
+      "@/lib/native-runtime-bridge/pdf-source"
+    ],
+    "services/app/__tests__/notification-authority.test.ts": [
+      "@/lib/notifications/authority"
+    ],
+    "services/app/__tests__/notification-inbox.test.ts": [
+      "@/lib/notifications/authority"
+    ],
+    "services/app/__tests__/notification-jobs.test.ts": [
+      "@/lib/operations/testuser-erase"
+    ],
+    "services/app/__tests__/pages-origin-host.test.ts": [
+      "@/lib/accounts/pages-sessions",
+      "@/lib/document-serving/native-html.server",
+      "@/lib/http/pages-origin",
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/parsed-metadata.test.ts": [
+      "@/lib/document/parsed-artifact-metadata"
+    ],
+    "services/app/__tests__/pdf-tier.test.ts": [
+      "@/lib/artifacts/asset-quota",
+      "@/lib/artifacts/store",
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/policy-dataset-replace.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/__tests__/postgres-catalog-permissions.test.ts": [
+      "@/lib/datasets/postgres"
+    ],
+    "services/app/__tests__/postgres-fork-security.test.ts": [
+      "@/lib/datasets/postgres"
+    ],
+    "services/app/__tests__/profile-sync.test.ts": [
+      "@/lib/accounts/profiles"
+    ],
+    "services/app/__tests__/quota.test.ts": [
+      "@/lib/artifacts/store",
+      "@/lib/workspace/trash"
+    ],
+    "services/app/__tests__/refresh-asset.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/render-cache-serving.test.ts": [
+      "@/lib/document-serving/native-html.server",
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/__tests__/roles.test.ts": [
+      "@/lib/accounts/users",
+      "@/lib/artifacts/access"
+    ],
+    "services/app/__tests__/shared-cache-execute.test.ts": [
+      "@/lib/datasets/postgres"
+    ],
+    "services/app/__tests__/shared-result-cache.test.ts": [
+      "@/lib/datasets/result-cache"
+    ],
+    "services/app/__tests__/speedup-metadata-reuse.test.ts": [
+      "@/lib/document/parsed-artifact-metadata"
+    ],
+    "services/app/__tests__/testusers-erase.test.ts": [
+      "@/lib/artifacts/store",
+      "@/lib/operations/testuser-erase"
+    ],
+    "services/app/__tests__/token-lifecycle.test.ts": [
+      "@/lib/accounts/agent-session"
+    ],
+    "services/app/__tests__/visibility.test.ts": [
+      "@/lib/publish/realtime/live"
+    ],
+    "services/app/__tests__/web-assets.test.ts": [
+      "@/lib/artifacts/asset-quota",
+      "@/lib/publish/assets/web-assets",
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/__tests__/welcome-pending.test.ts": [
+      "@/lib/operations/testuser-erase"
+    ],
+    "services/app/__tests__/workspace-analytics.test.ts": [
+      "@/lib/workspace/analytics"
+    ],
+    "services/app/lib/__tests__/agent-cookie-name.test.ts": [
+      "@/lib/accounts/agent-session"
+    ],
+    "services/app/lib/__tests__/agent-session-without.test.ts": [
+      "@/lib/accounts/agent-session"
+    ],
+    "services/app/lib/__tests__/agent-starter-consistency.test.ts": [
+      "@/lib/agent-copy/agent-discovery",
+      "@/lib/artifacts/monitoring-guidance"
+    ],
+    "services/app/lib/__tests__/app-page-csp.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/lib/__tests__/custom-domains.test.ts": [
+      "@/lib/operations/testuser-erase"
+    ],
+    "services/app/lib/__tests__/mutation-operation.test.ts": [
+      "@/lib/document-data/mutation-operation"
+    ],
+    "services/app/lib/__tests__/native-html-structural-wrapper.test.ts": [
+      "../document-serving/native-html-structural-wrapper"
+    ],
+    "services/app/lib/__tests__/pages-origin.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/lib/__tests__/shared-skill-delivery.test.ts": [
+      "../skills/__tests__/platform-origin",
+      "../skills/public-surface"
+    ],
+    "services/app/lib/__tests__/skill-code-shape.test.ts": [
+      "../skills/assets"
+    ],
+    "services/app/lib/__tests__/skill-first-onboarding.test.ts": [
+      "@/lib/agent-copy/agent-discovery"
+    ],
+    "services/app/lib/__tests__/skill-tree.test.ts": [
+      "../skills/assets"
+    ],
+    "services/app/lib/artifact-backend/__tests__/browser-artifact-write.test.ts": [
+      "../../document/document-graph-patch"
+    ],
+    "services/app/lib/artifacts/__tests__/write-ownership.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/lib/data-ingest/__tests__/csv-url.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/lib/data/story/__tests__/story-systems.test.ts": [
+      "@/lib/page-styles/document-styles",
+      "@/lib/page-styles/story-base-css"
+    ],
+    "services/app/lib/dataflow/__tests__/compile-dataflow.test.ts": [
+      "@/lib/document/local-validation"
+    ],
+    "services/app/lib/dataset-graphql/__tests__/retained.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/lib/document-data/__tests__/dataset-mutate-commit.test.ts": [
+      "@/lib/artifacts/after-commit"
+    ],
+    "services/app/lib/document-data/__tests__/dataset-mutate.test.ts": [
+      "@/lib/artifacts/after-commit"
+    ],
+    "services/app/lib/document-serving/__tests__/artifact-page.test.ts": [
+      "@/lib/http/pages-origin"
+    ],
+    "services/app/lib/editor-engine/__tests__/history.test.ts": [
+      "@/lib/document/splice"
+    ],
+    "services/app/lib/frame-edit/__tests__/annotate-live-morph.ui.test.ts": [
+      "@/lib/islands/morph/engine"
+    ],
+    "services/app/lib/frame-edit/__tests__/dom-mounter.ui.test.tsx": [
+      "@/lib/islands/morph/engine"
+    ],
+    "services/app/lib/frame-edit/__tests__/session.ui.test.ts": [
+      "@/lib/islands/morph/engine"
+    ],
+    "services/app/lib/html-components/data-table.test.ts": [
+      "@/lib/page-styles/chrome-css"
+    ],
+    "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
+      "../../html-components/file-upload"
+    ],
+    "services/app/lib/html-runtime/__tests__/range.ui.test.ts": [
+      "../../frame-edit/selection-range",
+      "../../html-bridge/range"
+    ],
+    "services/app/lib/html-runtime/__tests__/upload.test.ts": [
+      "../../story-runtime/frame-bridge/upload"
+    ],
+    "services/app/lib/islands/__tests__/kit-mermaid.test.tsx": [
+      "@/lib/mermaid-images/mermaid-render"
+    ],
+    "services/app/lib/islands/__tests__/kit-tooltip-tokens.test.ts": [
+      "@/lib/data/story/story-css.server"
+    ],
+    "services/app/lib/jsx/__tests__/component-aliases.test.ts": [
+      "@/lib/document/document-node-codec",
+      "@/lib/document/node-ids"
+    ],
+    "services/app/lib/libraries/__tests__/import-map.test.ts": [
+      "../../html-runtime/build.server"
+    ],
+    "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
+      "../../html-components/markdown"
+    ],
+    "services/app/lib/markdown/__tests__/content.test.ts": [
+      "@/lib/document/local-validation"
+    ],
+    "services/app/lib/markdown/__tests__/editor.ui.test.ts": [
+      "@/lib/frame-edit/markdown-regions",
+      "@/lib/frame-edit/selection-range"
+    ],
+    "services/app/lib/native-ancillary-folders/__tests__/folders.test.ts": [
+      "@/lib/native-history-import/catalog-digest"
+    ],
+    "services/app/lib/native-history-import/__tests__/catalog-publication.test.ts": [
+      "@/lib/page-graphql/registered-queries"
+    ],
+    "services/app/lib/page-graphql/__tests__/registered-mutations.test.ts": [
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/lib/page-styles/__tests__/first-screen-fonts.test.ts": [
+      "@/lib/data/story/story-fonts"
+    ],
+    "services/app/lib/page-styles/__tests__/story-css-split.test.ts": [
+      "@/lib/data/story/story-css.server"
+    ],
+    "services/app/lib/publish/__tests__/display-title.test.ts": [
+      "../../document/title"
+    ],
+    "services/app/lib/publish/ingest/__tests__/image.test.ts": [
+      "@/lib/web-ingest/fetch"
+    ],
+    "services/app/lib/registered-page-mutations/__tests__/rebind-on-save.test.ts": [
+      "@/lib/artifacts/registered-repair",
+      "@/lib/document-data/dataset-policy"
+    ],
+    "services/app/lib/registered-page-mutations/__tests__/registry.test.ts": [
+      "@/lib/page-graphql/registered-mutations"
+    ],
+    "services/app/lib/registered-page-mutations/__tests__/retained-integration.test.ts": [
+      "@/lib/document-data/dataset-policy",
+      "@/lib/page-graphql/registered-mutations"
+    ],
+    "services/app/lib/registered-page-mutations/__tests__/retained.test.ts": [
+      "@/lib/page-graphql/registered-mutations"
+    ],
+    "services/app/lib/registered-page-queries/__tests__/adapter.test.ts": [
+      "@/lib/page-graphql/registered-queries",
+      "@/lib/page-operations/backend"
+    ],
+    "services/app/lib/registered-page-queries/__tests__/fence-reads.test.ts": [
+      "@/lib/page-graphql/registered-queries"
+    ],
+    "services/app/lib/registered-page-queries/__tests__/members.test.ts": [
+      "@/lib/page-graphql/registered-queries"
+    ],
+    "services/app/lib/registered-page-queries/__tests__/rebind-on-save.test.ts": [
+      "@/lib/artifacts/registered-repair"
+    ],
+    "services/app/lib/registered-page-queries/__tests__/retained.test.ts": [
+      "@/lib/page-graphql/registered-queries"
+    ],
+    "services/app/lib/skills/__tests__/font-delivery.test.ts": [
+      "../../data/story/story-system-sheets"
+    ],
+    "services/app/lib/skills/__tests__/production-image.test.ts": [
+      "../../libraries/components.server"
+    ],
+    "services/app/lib/story-runtime/__tests__/anchor-entry-scroll.ui.test.ts": [
+      "@/lib/islands/page"
+    ],
+    "services/app/lib/story-surface/__tests__/reading-css.test.ts": [
+      "@/lib/page-styles/chrome-css",
+      "@/lib/page-styles/story-base-css"
+    ],
+    "services/app/server/__tests__/bootstrap.test.ts": [
+      "@/lib/data/story/story-fonts"
+    ],
+    "services/app/server/__tests__/public-assets-host.test.ts": [
+      "@/lib/export/assets"
+    ],
+    "services/app/solid/__tests__/live-edits.test.tsx": [
+      "@/lib/document/document-graph-patch"
+    ],
+    "services/app/solid/document/__tests__/annotation-composer.test.tsx": [
+      "@/lib/artifact-backend/retrying"
+    ],
+    "services/app/solid/document/__tests__/annotations.test.tsx": [
+      "@/lib/artifact-backend/retrying"
+    ],
+    "services/app/solid/document/__tests__/retrying-reads.test.tsx": [
+      "@/lib/http/__tests__/retrying-read"
+    ],
+    "services/app/solid/lib/__tests__/retrying-reads.test.tsx": [
+      "@/lib/http/__tests__/retrying-read"
+    ],
+    "services/app/solid/pages/__tests__/retrying-local-title.test.tsx": [
+      "@/lib/http/__tests__/retrying-read"
+    ],
+    "services/app/solid/pages/__tests__/retrying-reads.test.tsx": [
+      "@/lib/http/__tests__/retrying-read"
+    ],
+    "services/app/test/helpers/artifact-backend.ts": [
+      "@/lib/artifact-backend/types"
+    ],
+    "services/app/test/setup/vitest.setup.ts": [
+      "@/lib/platform/event-outbox",
+      "@/lib/platform/request-context"
+    ]
+  }
+}

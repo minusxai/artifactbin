@@ -5,7 +5,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
-import {publicCatalogOf} from '../datasets/catalog';
+import {publicCatalogOf} from '../datasets';
 
 interface ReadableArtifact<T extends ArtifactHeader> { row:T; role:ArtifactRole }
 /** Share one admission policy across full content and source-free metadata reads. */

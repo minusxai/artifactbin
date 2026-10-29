@@ -3,7 +3,7 @@
  * document, its stored bytes, the runtime it loads and the app pages around it. A shared cache may hold only what
  * everyone may read; anything that depends on who asks, and every refusal, is never kept.
  */
-import { REVALIDATE } from '@/lib/http/revalidation';
+import { REVALIDATE } from '@/lib/http';
 
 /** Never kept: an answer that depends on who asks, a refusal, or a failure. */
 export const NO_STORE = 'no-store';

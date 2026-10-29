@@ -10,8 +10,7 @@
  */
 import type { CommentViewState, HtmlNodeAnchor } from '@artifactbin/contracts';
 import type { AnnotationRange } from '@/lib/document';
-import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine/bookmark';
-import type { BlockEdit } from '@/lib/editor-engine/block-edit';
+import type { EditorBookmark, EditorSelectionChange, BlockEdit } from '@/lib/editor-engine';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * IN-PLACE EDITING — edit mode is a mode the runtime enters, in the frame the

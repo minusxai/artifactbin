@@ -1,19 +1,11 @@
 import { getDb, generateInternalId, ID_RE, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform';
-import type { ArtifactRow } from '@/lib/artifacts';
-import { getArtifactById } from '@/lib/artifacts';
+import { type ArtifactRow, getArtifactById, effectiveRole, liveAccessFacts, grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import {effectiveRole,liveAccessFacts} from '@/lib/artifacts';
 import {canEdit,type HtmlPageLink} from '@artifactbin/contracts';
-import { catalogOf } from '@/lib/datasets/catalog';
-import { grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifacts';
-import { DatasetError } from '@/lib/datasets/errors';
-import { imageInsertAllowed } from '@/lib/datasets/image-upload-policy';
-import { storeImageContent } from '@/lib/datasets/data-tiers';
-import { objectStore } from '@/lib/object-store';
-import { IMAGE_CONTENT_TYPES } from '@/lib/object-store/image-store';
+import { catalogOf, DatasetError, imageInsertAllowed, storeImageContent, uploadedSha256, storeFileContent } from '@/lib/datasets';
+import { objectStore, IMAGE_CONTENT_TYPES } from '@/lib/object-store';
 import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
-import { uploadedSha256, storeFileContent } from '@/lib/datasets/file-store';
 
 const MAX_DATASET_FILES = 1000;
 const MAX_DATASET_FILE_BYTES = 500_000_000;

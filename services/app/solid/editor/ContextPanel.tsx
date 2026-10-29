@@ -5,7 +5,7 @@
  */
 import { createResource, createSignal, Show, type JSX } from 'solid-js';
 import ExternalLink from 'lucide-solid/icons/external-link';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/document-serving/document-frame';
 import { LINK } from '../ui/ui';
 import { contextDocumentId } from '@/lib/document/context';

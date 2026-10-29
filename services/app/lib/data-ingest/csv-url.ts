@@ -10,8 +10,7 @@
  * load-bearing refusal is the html sniff — a login page or a 404 body stored
  * verbatim as a "dataset" is the silent failure this door must never take.
  */
-import { fetchWebResource } from '@/lib/web-ingest/fetch';
-import { WebIngestError } from '@/lib/web-ingest/guard';
+import { fetchWebResource, WebIngestError } from '@/lib/web-ingest';
 import { IngestError, MAX_DATASET_BYTES } from './types';
 
 export async function fetchCsvFromUrl(url: string): Promise<string> {

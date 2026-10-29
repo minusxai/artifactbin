@@ -43,7 +43,7 @@ describe('sessionActor', () => {
   it('a correctly signed header alone is nobody: the fallback is gone', async () => {
     const secret = 's'.repeat(32);
     vi.stubEnv('CONTRACT__ACTOR_SECRET', secret); vi.resetModules();
-    const { sessionActor: fresh } = await import('@/lib/authentication/request-identity');
+    const { sessionActor: fresh } = await import('@/lib/authentication');
     const req = new Request('http://x/api/page/session', {
       headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: 'usr_header', email: 'h@example.com', emailVerified: true }, secret) },
     });

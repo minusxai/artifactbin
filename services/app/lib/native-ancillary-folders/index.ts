@@ -1,6 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
 import type {Queryable} from '@artifactbin/contracts';
-import type {NativeIdentityPlan} from '@/lib/native-identity-import/contracts';
+import type {NativeIdentityPlan} from '@/lib/native-identity-import';
 import type {NativeAncillaryFolderRecipe,NativePreparedAncillaryFolders} from './contracts';
 import {verifyAncillaryRecipe} from './projection';
 export type {NativeAncillaryFolderRecipe,NativePreparedAncillaryFolders} from './contracts';

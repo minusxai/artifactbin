@@ -1,11 +1,8 @@
 import {createHash} from 'node:crypto';
 import type {DatasetSourceInfo} from '@artifactbin/contracts';
 import {artifactState,durableMutation,type ArtifactRow} from '@/lib/artifacts';
-import {catalogOf} from '@/lib/datasets/catalog';
-import {executeCatalog} from '@/lib/datasets/execute';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {catalogOf, executeCatalog, loadDatasetRows, people} from '@/lib/datasets';
 import {getDb} from '@/lib/platform';
-import {people} from '@/lib/datasets/user-fields';
 import {readDatasetPeople} from './people';
 import {objectStore} from '@/lib/object-store';
 import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '@/lib/document-data';

@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 /** People a comment draft can mention; keyboard focus remains in the composer. */
 import { createEffect, createSignal, createUniqueId, onCleanup, onMount, Show, type JSX } from 'solid-js';
-import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend, MemberPerson } from '@/lib/artifact-backend';
 import { personMention } from '@/lib/document/person-mentions';
 import { ComboboxList, createListNavigation } from '../ui/Combobox';
 import { Panel } from '../ui/Panel';

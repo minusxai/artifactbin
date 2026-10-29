@@ -1,13 +1,10 @@
-import { getArtifactById, effectiveRole } from '@/lib/artifacts';
-import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish/publish';
-import { forkOwner } from '@/lib/operations/registry';
-import { capabilityGuard } from '@/lib/artifacts';
+import { getArtifactById, effectiveRole, capabilityGuard } from '@/lib/artifacts';
+import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish';
+import { forkOwner } from '@/lib/operations';
 import { browserActor } from '@/lib/authentication';
 import { canRead } from '@artifactbin/contracts';
-import { ensureUserToken } from '@/lib/accounts';
-import { ownerUsername } from '@/lib/accounts';
-import { canonicalArtifactPath } from '@/lib/http';
-import { SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
+import { ensureUserToken, ownerUsername } from '@/lib/accounts';
+import { canonicalArtifactPath, SMALL_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/fork — "make this mine", from the PAGE.

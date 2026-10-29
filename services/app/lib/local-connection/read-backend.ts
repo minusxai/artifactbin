@@ -1,5 +1,5 @@
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
-import type {ArtifactBackend} from '@/lib/artifact-backend/types';
+import type {ArtifactBackend} from '@/lib/artifact-backend';
 /** Closed comment-reader port: anonymous read/live/presence transport only; no account or authoring methods. */
 export function createLocalReadBackend(id:string):ArtifactBackend {
  const denied=():never=>{throw Error('Downloaded files are read-only. Open original to make changes.');};

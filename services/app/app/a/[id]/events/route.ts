@@ -2,7 +2,7 @@
  * GET /a/:id/events — the document's live stream (lib/publish/realtime/document-events), as Server-Sent Events.
  * Anyone who may read the page may watch it change; everyone else gets the uniform 404.
  */
-import { openDocumentEvents } from '@/lib/publish/realtime/document-events';
+import { openDocumentEvents } from '@/lib/publish';
 
 const SSE_HEADERS = {
   'Content-Type': 'text/event-stream; charset=utf-8',

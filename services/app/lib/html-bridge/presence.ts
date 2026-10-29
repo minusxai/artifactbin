@@ -1,4 +1,4 @@
-import type {PresenceGeometry,PresencePaint} from '../html-presence/contract';
+import type {PresenceGeometry,PresencePaint} from '../html-presence';
 import {captureSelection,paintSelections} from './presence-selection';
 import {PRESENCE_POINTER_THROTTLE_MS} from '../html-presence/model';
 /** Owns only ephemeral geometry and inert overlays; no credentials, viewer storage or app state. */

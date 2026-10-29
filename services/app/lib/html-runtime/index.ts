@@ -1,5 +1,5 @@
-import {isRuntimeCoreSrc} from '../html-page/core-script';
-import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies/contracts';
+import {isRuntimeCoreSrc, htmlAppearance} from '../html-page';
+import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies';
 import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {portableRenderedDigest} from './portable-source';
 import { portableScript } from './portable';
@@ -7,7 +7,6 @@ import { parse, parseFragment, serialize, type DefaultTreeAdapterMap } from 'par
 import { assertStorable } from './apollo/storable';
 import type { HtmlJsonObject } from '@artifactbin/contracts';
 import type { HtmlAssemblyInput } from './contract';
-import { htmlAppearance } from '../html-page/design-system';
 export type { HtmlAssemblyInput, HtmlRuntimeConfig } from './contract';
 export { createClient, createLocalStore, gql, assertStorable, decodeState, encodeState, readStateFragment, stateUrl } from './apollo/client';
 export type { AfClient, StatePort, RemotePort } from './apollo/apollo-contracts';
@@ -109,3 +108,12 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
 }
 /** Downloads use the same native renderer, with no platform origin or remote capability. */
 export const downloadableHtml = (input: HtmlAssemblyInput): string => assembleHtmlPage({ ...input, offline: true });
+export { createRuntimeAssetRetention } from './asset-retention';
+export type { RuntimeAssetRetention } from './asset-retention-contract';
+export { retainedRuntimeAssets } from './asset-retention.server';
+export { buildHtmlAssets } from './build.server';
+export { LIVE_VERSION_HEADER } from './live-morph-contract';
+export type {
+  PortableChromeHandle, PortableChromeIdentity, PortableChromeOptions, PortableChromeUpdate, PortablePreviewStatus, SavePortableOptions,
+} from './portable-chrome-contract';
+export type { SourceRelationshipState } from './source-relationship-contract';

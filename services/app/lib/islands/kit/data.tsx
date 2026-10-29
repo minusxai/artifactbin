@@ -30,7 +30,7 @@ import { personFaceBackground, personInitial } from '../person-face';
 import type { PersonCard } from '@artifactbin/contracts';
 export { Select } from './select';
 import { questionEnvelope } from '@/lib/viz/chart-envelope';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 import type { IslandChart, IslandChartModule } from '../contract';
 import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';

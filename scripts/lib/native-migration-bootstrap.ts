@@ -1,5 +1,5 @@
-import {createNativeLocalObjectSink} from '../../services/app/lib/native-history-import/catalog-staging';
-import {prepareNativeIdentityAvatars} from '../../services/app/lib/native-identity-import/avatars';
+import {createNativeLocalObjectSink} from '../../services/app/lib/native-history-import';
+import {prepareNativeIdentityAvatars, authorizeNativeIdentityTransaction, writeNativeIdentities, type NativeIdentityImport} from '../../services/app/lib/native-identity-import';
 /** Shared actual host composition. Converter projection is the only injected source adapter. */
 import type {PGlite} from '@electric-sql/pglite';
 import {readFile,writeFile,mkdir,realpath} from 'node:fs/promises';
@@ -9,11 +9,9 @@ import {isDeepStrictEqual} from 'node:util';
 import {prepareNativeAncillaryFolders,type NativeAncillaryFolderRecipe,type NativePreparedAncillaryFolders} from '../../services/app/lib/native-ancillary-folders';
 import { identityForUser } from '@/lib/accounts';
 import { LOCAL_OBJECT_DIR, S3_URL } from '../../services/app/lib/platform';
-import {authorizeNativeIdentityTransaction,writeNativeIdentities} from '../../services/app/lib/native-identity-import';
-import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
-import {htmlCommentNodes} from '../../services/app/lib/annotations/html-anchor';
+import {htmlCommentNodes} from '../../services/app/lib/annotations';
 import {canonicalizeHtmlPage} from '../../services/app/lib/html-page';
-import {prepareRegisteredQueryBackend,registeredPlan} from '../../services/app/lib/registered-page-queries/registry';
+import {prepareRegisteredQueryBackend,registeredPlan} from '../../services/app/lib/registered-page-queries';
 import {prepareRegisteredMutationBackend,registeredMutationPlan} from '../../services/app/lib/registered-page-mutations';
 import {createNativeMigrationHost,readNativeMigrationHostInputs} from './native-migration-host.mjs';
 import {prepareNativeMigrationSnapshot} from './native-migration-snapshot.mjs';

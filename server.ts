@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   }
   if (!BROWSER_SERVICE_URL) {
     const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
-    const { sessionBridge } = await import('@/lib/runtime/session-bridge');
+    const { sessionBridge } = await import('@/lib/runtime');
     // `app` is composed below; the hop is chosen once, on the first page a session opens.
     let hop: ReturnType<typeof sessionBridge> | undefined;
     setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL,
@@ -208,11 +208,11 @@ async function main(): Promise<void> {
    * above. Started here, by the root, never on import — publishing never waits
    * on it, and a browser that is down only means readers draw with the engine.
    */
-  const { startMermaidHarvester } = await import('@/lib/publish/assets/mermaid-harvester');
+  const { startMermaidHarvester } = await import('@/lib/publish');
   const stopHarvester = startMermaidHarvester();
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.
-  const { startAppBackgroundTasks } = await import('@/lib/runtime/app-background-tasks');
+  const { startAppBackgroundTasks } = await import('@/lib/runtime');
   const stopBackgroundTasks = await startAppBackgroundTasks(db);
 
   const app = createAppServer({
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
     console.error('[boot] listener failed:', error);
     process.exit(1);
   });
-  const { installShutdown } = await import('@/lib/runtime/shutdown');
+  const { installShutdown } = await import('@/lib/runtime');
   installShutdown({ steps: [
     closeRunner,
     stopBackgroundTasks,

@@ -2,7 +2,7 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {expect,it} from 'vitest';
 import {HTML_SYSTEM_NAMES,PLATFORM_FONTS_PATH,htmlSystemFontPaths,htmlSystemsCss,isHtmlSystem,platformFontName} from '../index';
-import manifest from '../../data/story/story-font-manifest.json';
+import { storyFontManifest as manifest } from '../../data';
 
 it('carries every system keyed by its root attribute, with dark values, type roles and highlight tokens',()=>{
  const css=htmlSystemsCss();

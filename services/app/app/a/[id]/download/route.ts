@@ -1,8 +1,8 @@
 import {designSystemChoice} from '@/lib/html-systems';
-import {withOfflineSystemStyle} from '@/lib/html-systems/offline.server';
+import {withOfflineSystemStyle} from '@/lib/html-systems/server';
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
-import {referencedLibraryResources} from '@/lib/libraries/assets.server';
+import {referencedLibraryResources} from '@/lib/libraries/server';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
  * network and pass on. Assembly and access live in lib/offline/assemble.server
@@ -10,7 +10,7 @@ import {referencedLibraryResources} from '@/lib/libraries/assets.server';
  * the caller may not learn about is the uniform 404 every read door gives.
  */
 import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
-import {loadImage} from '@/lib/object-store/image-store';
+import {loadImage} from '@/lib/object-store';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';

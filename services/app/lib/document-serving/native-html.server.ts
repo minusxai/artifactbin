@@ -1,20 +1,15 @@
-import {hasImportedSourceObservation} from '../html-bridge/imported-observation';
-import {createRuntimeAssetRetention} from '@/lib/html-runtime/asset-retention';
-import {retainedRuntimeAssets} from '@/lib/html-runtime/asset-retention.server';
-import type {RuntimeAssetRetention} from '@/lib/html-runtime/asset-retention-contract';
+import {hasImportedSourceObservation} from '../html-bridge';
+import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml, buildHtmlAssets} from '@/lib/html-runtime';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { etagOf, matchingTag, publicRevalidatedResponse } from '@/lib/http/revalidation';
+import { etagOf, matchingTag, publicRevalidatedResponse } from '@/lib/http';
 import { PUBLIC_IMMUTABLE } from './cache-control';
 const JS='application/javascript; charset=utf-8';
 import type { ArtifactRow } from '@/lib/artifacts';
-import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
-import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
 import { scriptFingerprint } from '@/lib/html-autofix';
-import { buildHtmlAssets } from '@/lib/html-runtime/build.server';
 import type { HtmlPageLink } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 

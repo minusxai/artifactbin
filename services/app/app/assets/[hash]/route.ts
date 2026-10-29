@@ -27,11 +27,10 @@
  * unknown hash is a 404 because this is a read
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
-import { objectStore } from '@/lib/object-store';
-import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
+import { objectStore, pdfFilename } from '@/lib/object-store';
+import { VARIANT_CONTENT_TYPE } from '@/lib/images';
 import { fileNameFromUrl } from '@/lib/islands';
-import { pdfFilename } from '@/lib/object-store/pdf-store';
-import { webAssetByHash } from '@/lib/publish/assets/web-assets';
+import { webAssetByHash } from '@/lib/publish';
 
 /** Every asset response carries these, whatever the asset turns out to be. */
 export const ASSET_HEADERS: Readonly<Record<string, string>> = {

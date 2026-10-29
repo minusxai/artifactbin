@@ -5,7 +5,7 @@ import StepHeader from './StepHeader';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Panel } from '../ui/Panel';
-import type { DiscoveredTable } from '@/lib/datasets/types';
+import type { DiscoveredTable } from '@/lib/datasets';
 
 export type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[]; modelCellId?: string; stale?: boolean };
 

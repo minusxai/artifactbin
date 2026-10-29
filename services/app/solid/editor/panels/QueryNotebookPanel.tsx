@@ -22,7 +22,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show, type JSX } from '
 import type { BoundEmbed, QueryCell } from '@/lib/document/query-notebook';
 import type { TableResult } from '@/lib/dataflow';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { formatCount } from '../../lib/format';
 import { Button } from '@/solid/ui/Button';
 import { Textarea } from '@/solid/ui/Field';

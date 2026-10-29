@@ -17,7 +17,7 @@
  * (the caller then ships the whole graph) when it does not: this form never has to be trusted, only checked.
  */
 import {GRAPH_ROOT,createDocumentGraph,type DocumentGraph,type GraphAstNode} from './document-graph';
-import {parseJsx} from '../jsx/parse';
+import {parseJsx} from '../jsx';
 
 export interface PackedDocumentGraph {
   packed:1;

@@ -10,16 +10,16 @@ import {
   prepareRegisteredQueryBackend,
   pageSourceDigest,
   registeredPlan,
-} from "@/lib/registered-page-queries/registry";
+} from "@/lib/registered-page-queries";
 import {
   prepareRegisteredMutationBackend,
   registeredMutationPlan,
 } from "@/lib/registered-page-mutations";
 import type { NativeHistoryImport, NativeHistoryRevision } from "../contracts";
-import { listAnnotationsFor } from "@/lib/annotations/store";
+import { listAnnotationsFor } from "@/lib/annotations";
 import { prepareNativeHistoryRelations } from "../relations";
 import { importNativeHistory, writeNativeHistory } from "../index";
-import { artifactPageAnswer } from "@/lib/document-serving/artifact-page";
+import { artifactPageAnswer } from "@/lib/document-serving";
 useAppHarness();
 it("writes a large latest-only lifetime ledger in bounded statements and verifies every reservation on replay", async () => {
   const {db,input} = await fixture();
@@ -467,7 +467,7 @@ it("the declared migration relaxes legacy creator-token constraints without chan
  const {createArtifact}=await import("@/lib/artifacts");
  const old=await createArtifact(input.owner.tokenId,input.owner.userId,{format:"html",source:"<html><body>Legacy</body></html>",meta:{}});
  await db.query("ALTER TABLE artifacts ALTER COLUMN token_id SET NOT NULL");
- const {SCHEMA_STATEMENTS}=await import("@/lib/platform/schema");
+ const {SCHEMA_STATEMENTS}=await import("@/lib/platform");
  const relax=SCHEMA_STATEMENTS.find(sql=>/ALTER TABLE artifacts ALTER COLUMN token_id DROP NOT NULL/.test(sql));expect(relax).toBeDefined();
  await db.query(relax!);await db.query(relax!);
  expect((await db.query("SELECT token_id FROM artifacts WHERE id=$1",[old.id])).rows).toEqual([{token_id:input.owner.tokenId}]);

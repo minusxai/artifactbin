@@ -50,7 +50,7 @@ describe('the lab run', () => {
 describe('native workload behavior', () => {
   it('draws dashboard charts from client state and filters their data when the region changes', async () => {
     const {JSDOM}=await import('jsdom');
-    const {createClient,createLocalStore,gql}=await import('../../services/app/lib/html-runtime/apollo/client.ts');
+    const {createClient,createLocalStore,gql}=await import('../../services/app/lib/html-runtime/index.ts');
     const bodies=[];
     await publishPageSpeedFixtures(async body=>{bodies.push(body);return {id:`id${bodies.length}`};});
     const html=bodies.find(body=>body.title==='Perf C dashboard').html;

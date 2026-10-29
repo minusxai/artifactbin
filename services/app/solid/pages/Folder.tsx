@@ -4,9 +4,8 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } fro
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import type { GroupSummary } from '@artifactbin/contracts';
-import type { FolderPage as FolderData } from '@/lib/workspace/folders';
+import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import { type ArtifactRole, canEdit } from '@artifactbin/contracts';
-import type { AccountWorkspace } from '@/lib/workspace/dashboard';
 import { openLiveStream } from '@/lib/http/live-stream';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { pageDataChanged } from '@/solid/lib/page-data-events';

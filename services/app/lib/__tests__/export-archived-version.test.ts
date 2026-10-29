@@ -24,8 +24,7 @@ import { EXPORT_PNG } from '@/__tests__/export-helpers';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import {artifactState} from '@/lib/artifacts/state';
-import { getArtifactById } from '@/lib/artifacts';
+import {artifactState, getArtifactById} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 
 useAppHarness();

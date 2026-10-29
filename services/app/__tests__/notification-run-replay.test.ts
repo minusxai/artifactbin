@@ -6,11 +6,10 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {notificationMutationFixture} from './notification-mutation-fixture';
 import {nativeHtml} from './native-html-fixture';
 import {getArtifactById} from '@/lib/artifacts';
-import {getDb} from '@/lib/platform';
+import {getDb, services, setServices} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {services,setServices} from '@/lib/platform';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import {newEditId} from '@/lib/document/splice';
+import {loadDatasetRows} from '@/lib/datasets';
+import {newEditId} from '@/lib/document';
 
 useAppHarness();
 async function fixture(predicate=''){

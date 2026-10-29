@@ -1,24 +1,22 @@
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import type {ContentObjects} from '@/lib/object-store';
 /** Shared JSON content admission for original artifact create/replace routes.
  * Native pages use `html`: complete HTML, canonicalized under the publication
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
-import {nativeCspDeclarations} from '@/lib/trust/native-csp';
-import { json, thrownMessage } from '../../http/http';
-import {socialPreviewImage,socialPreviewImageValue} from '@/lib/document';
+import {nativeCspDeclarations} from '@/lib/trust';
+import { json, thrownMessage } from '../../http';
+import {socialPreviewImage, socialPreviewImageValue, type StoredContent} from '@/lib/document';
 import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
-import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/lib/datasets/data-tiers';
-import { publishFile } from '@/lib/datasets/file-store';
+import { publishDataset, publishVizRecipe, publishImage, publishPdf, publishFile } from '@/lib/datasets';
 
 
 import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
-import type { SourceRepair } from '@/lib/jsx/repair';
+import type { SourceRepair } from '@/lib/jsx';
 
-import type { StoredContent } from '@/lib/document';
 
 function tooLarge(value: string): Response | null {
   if (Buffer.byteLength(value, 'utf8') > MAX_DOCUMENT_BYTES) {
@@ -56,7 +54,7 @@ export interface ContentInputCtx {
    */
   creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
-  loadRef?: import('@/lib/datasets/schema-loader').ServerRefLoader;
+  loadRef?: import('@/lib/datasets').ServerRefLoader;
   /**
    * "Is the caller already over their stored-byte quota?" — asked BEFORE a
    * tier stores something large, and answered by lib/asset-quota under the

@@ -5,7 +5,7 @@
  * and filtered like any other rows. `<DeckGL>`'s GeoJsonLayer reads that column
  * back (lib/jsx/deck-spec GEOMETRY_COLUMN). Pure: the CLI ingests with it.
  */
-import { GEOMETRY_COLUMN } from '@/lib/jsx/deck-spec';
+import { GEOMETRY_COLUMN } from '@/lib/jsx';
 
 type Row = Record<string, unknown>;
 interface Feature { type: 'Feature'; properties: Row | null; geometry: unknown }

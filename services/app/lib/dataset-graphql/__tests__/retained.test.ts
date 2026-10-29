@@ -6,7 +6,7 @@ import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {getArtifactById,durableMutation} from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/authentication';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '../retained';
 import {datasetSchema} from '../index';
 useAppHarness();

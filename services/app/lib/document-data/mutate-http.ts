@@ -7,7 +7,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, ownsArtifact, parseExpectedVersion, readableArtifact, type MutationReceipt } from '@/lib/artifacts';
 import { bindParams, bindTypes, parseMutationRequest, platformValues, type Scalar } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
-import { json } from '@/lib/http/http';
+import { json } from '@/lib/http';
 import { runDocumentMutation } from './dataflow';
 import { canWriteDataset } from './dataset-policy';
 import { isMutationRefused, mutateDataset } from './dataset-mutate';

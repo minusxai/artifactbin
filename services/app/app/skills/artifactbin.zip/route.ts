@@ -1,10 +1,7 @@
 import {createHash} from 'node:crypto';
-import {baseUrl} from '@/lib/http';
-import {matchingTag} from '@/lib/http/revalidation';
+import {baseUrl, matchingTag} from '@/lib/http';
 import { ALIAS_ORIGINS, IS_DEV, PUBLIC_BASE_URL } from '@/lib/platform';
-import {skillTree} from '@/lib/skills';
-import {buildPreviewParser,buildPreviewDatasets,buildToolboxPlatform} from '@/lib/skills/preview-assets.server';
-import {skillPackageFiles,skillZip} from '@/lib/skills/package';
+import {skillTree, buildPreviewParser, buildPreviewDatasets, buildToolboxPlatform, skillPackageFiles, skillZip} from '@/lib/skills';
 /** The public HTTP author skill; the recipient chooses their harness directory. Only what agents read and run ships (D20):
  * no fonts (D16), compiled components or runtime/library bundles — pages and the local preview load those from the
  * platform (/af/fonts/, /af/components/, /af/*.js, /libraries/). */

@@ -1,8 +1,8 @@
-import type {ArtifactBackend} from '@/lib/artifact-backend/types';
+import type {ArtifactBackend} from '@/lib/artifact-backend';
 import {createEffect,createSignal,on,onCleanup,type Accessor} from 'solid-js';
 import type {startReaderPresence} from './reader-presence-engine';
 import {readerPreferences} from '@/lib/html-presence/preferences';
-import type {PresenceFrame,PresenceViewer,ReaderPreferences} from '@/lib/html-presence/contract';
+import type {PresenceFrame,PresenceViewer,ReaderPreferences} from '@/lib/html-presence';
 import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
 /** Presence starts only after the document bridge is ready; its geometry/session engine is an intentional lazy browser chunk. */
 export type ReaderPresenceLoader=()=>Promise<{startReaderPresence:typeof startReaderPresence}>;

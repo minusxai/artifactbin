@@ -1,8 +1,8 @@
 import {getDeploymentState} from '@/lib/deployment';
-import { advertisedCliVersion, cliRetirementEnabled, PUBLIC_BASE_URL, ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN } from '@/lib/platform';
+import { advertisedCliVersion, cliRetirementEnabled, PUBLIC_BASE_URL, ID_RE, measureQueries, runWithRequest, ASSETS_ORIGIN, setEventProjection } from '@/lib/platform';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
-import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead } from '@/lib/document-serving';
-import { loginRedirectTarget } from '@/lib/http';
+import { artifactAppAsset, artifactAppPath, readableApp, withArtifactAppHead, publicRefAssetResponse, artifactPageAnswer, type ArtifactPageAnswer, DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame, cachedShell } from '@/lib/document-serving';
+import { loginRedirectTarget, artifactViewPath, canonicalArtifactPath, parsePrettyPath, spaPaths, APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild, GITHUB_EXTERNAL_URL, pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
@@ -25,37 +25,22 @@ import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import { setEventProjection } from '@/lib/platform';
-import { verifyExportKey } from '@/lib/export';
+import { verifyExportKey, exportAssetResponse } from '@/lib/export';
 import { projectNotifications } from '@/lib/notifications';
-import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-import { spaPaths } from '@/lib/http/app-pages';
-import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, ownerUsername, AGENT_COOKIE } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
-import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
-import { exportAssetResponse } from '@/lib/export/assets';
-import { publicRefAssetResponse } from '@/lib/document-serving';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
-import { GITHUB_EXTERNAL_URL } from '@/lib/http';
 import { createListingPreloader, listingPage } from './reader-preloads';
-import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/document-serving';
-import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/document-serving';
 import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
-import { cachedShell } from '@/lib/document-serving';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
-import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
-import { linkedStylesheets } from '@/lib/custom-domains';
-import { THEME_BOOTSTRAP_HASH } from '@/lib/page-styles';
-import { canonicalDocumentUrl } from '@/lib/custom-domains';
-import { APP_SHELL_FONT_PRELOADS } from '@/lib/page-styles';
-import { fontPreloadTags } from '@/lib/page-styles';
+import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/custom-domains';
+import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's

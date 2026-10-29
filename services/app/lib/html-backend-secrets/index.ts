@@ -17,3 +17,4 @@ export async function readPinnedBackendSecret(backend:PinnedBackendSecretScope,n
  if(!row)throw Error('backend_secret_unavailable');
  try{return backendSecretCipher.open(row.ciphertext,{ownerId:backend.ownerId,backendId:backend.backendId},name);}catch{throw Error('backend_secret_unavailable');}
 }
+export { secretBindingNames } from './contracts';

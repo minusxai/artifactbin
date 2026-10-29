@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ClaimBanner from '@/solid/components/ClaimBanner';
 import SharedWithYou from '@/solid/components/SharedWithYou';
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
-import type { WorkspaceSharedItem } from '@/lib/workspace/dashboard';
+import type { WorkspaceSharedItem } from '@/lib/workspace';
 
 const shared = (id: string, role: WorkspaceSharedItem['role'] = 'viewer'): WorkspaceSharedItem => ({ id, title: `doc ${id}`, description: null, format: 'markup', role, version: 1, visibility: 'private', updated_at: '2026-08-01T00:00:00.000Z', owner_username: 'alice' });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

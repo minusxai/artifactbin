@@ -14,18 +14,15 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  * naming the token.
  */
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
-import { json } from '@/lib/http/http';
+import {type ContentObjects, storeImage, IMAGE_CONTENT_TYPES, type ImageMeta, PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta} from '@/lib/object-store';
+import { json } from '@/lib/http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform';
 import { storeDatasetRows } from './dataset-store';
-import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from '@/lib/object-store/image-store';
 import { uploadedSha256 } from './file-store';
-import { sniffImageType } from '@/lib/web-ingest/sniff';
-import { optimiseImage } from '@/lib/images/optimise';
-import { PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta } from '@/lib/object-store/pdf-store';
-import { sniffAssetType } from '@/lib/web-ingest/sniff';
+import { sniffImageType, sniffAssetType } from '@/lib/web-ingest';
+import { optimiseImage } from '@/lib/images';
 import type { StoredContent } from '@/lib/document';
-import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
+import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation';
 
 import { inferColumns, type ColumnType, type DatasetColumn } from '@/lib/dataflow';
 

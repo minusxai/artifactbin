@@ -1,4 +1,4 @@
-import type { NativeIdentityPlan } from "../native-identity-import/contracts";
+import type { NativeIdentityPlan } from "../native-identity-import";
 import type { NativeHistoryImport, NativeImportRelations } from "./contracts";
 /** Exact captured current relation rows; no inferred owner participation or grants. */
 export interface NativeArtifactRelationRow {

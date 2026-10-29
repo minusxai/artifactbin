@@ -21,7 +21,7 @@ import type { CommentChangesPage, CommentFeedEvent, CommentReactionKind } from '
 import type { AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
+import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish';
 import { commentChangeEvent, reactionChangeEvents } from '@artifactbin/utils/comment-watch';
 
 export class InvalidCommentCursor extends Error {}

@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import {useAppHarness,mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {nativeCatalogBytes,nativeCatalogDigest as digest} from '@/lib/native-history-import/catalog-digest';
-import type {NativeIdentityPlan} from '@/lib/native-identity-import/contracts';
+import type {NativeIdentityPlan} from '@/lib/native-identity-import';
 import type {NativeAncillaryFolderRecipe} from '../contracts';
 import {prepareNativeAncillaryFolders} from '../index';
 useAppHarness();

@@ -5,7 +5,8 @@
  * Every allowance takes its clock as `now` (milliseconds; default `Date.now()`), so a caller or a test decides
  * what time it is. One bucket map serves all three, bounded by a sweep.
  */
-import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR, forwardedFor } from '../platform';
+import { forwardedFor } from '../accounts';
+import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR } from '../platform';
 
 // ── Web-ingest allowance ─────────────────────────────────────────────────────
 // Importing an asset makes THIS SERVER fetch a URL, so an identity gets a

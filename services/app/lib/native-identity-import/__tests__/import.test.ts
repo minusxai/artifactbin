@@ -1,6 +1,6 @@
 import { it, expect, beforeAll, beforeEach } from "vitest";
 import {createHumanAuth,type HumanAuth} from "@artifactbin/auth";
-import {syncProfile} from "@/lib/accounts/profiles";
+import {syncProfile} from "@/lib/accounts";
 import { createHash } from "node:crypto";
 import { useAppHarness } from "@/__tests__/harness";
 import { getDb } from "@/lib/platform";

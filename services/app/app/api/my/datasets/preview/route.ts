@@ -1,10 +1,7 @@
-import {datasetResponse} from '@/lib/datasets/http';
+import {datasetResponse, prepareCatalog, catalogOf, executeCatalog, DatasetError} from '@/lib/datasets';
 import {requestActor} from '@/lib/authentication';
-import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
-import {executeCatalog} from '@/lib/datasets/execute';
 import {getArtifactFor} from '@/lib/artifacts';
 import {readJson,json} from '@/lib/http';
-import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 export async function POST(request:Request){
  const actor=await requestActor(request);if(actor instanceof Response)return actor;

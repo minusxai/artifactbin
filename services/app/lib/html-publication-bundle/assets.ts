@@ -3,7 +3,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {requestOrSessionActor} from '@/lib/authentication';
 import {archivedVersionFor,canReadArtifact,getArtifactById,writerFor} from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
-import {serveStoredFile} from '@/lib/datasets/file-store';
+import {serveStoredFile} from '@/lib/datasets';
 import type {BundleReceipt} from './execute';
 interface Admission {delegator:AccessActor;version:number;receipts:BundleReceipt[]}
 async function admission(request:Request,actor:AccessActor,pageId:string):Promise<Admission|null>{

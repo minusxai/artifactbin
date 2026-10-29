@@ -1,4 +1,4 @@
-import {createDatasetSecret} from '@/lib/datasets/secrets';
+import {createDatasetSecret} from '@/lib/datasets';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';

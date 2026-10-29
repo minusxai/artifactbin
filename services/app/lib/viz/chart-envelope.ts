@@ -3,7 +3,7 @@ import type { TableResult, RefDataMap } from '@/lib/dataflow';
 import { columnVizKind } from '@/lib/dataflow/dataset-shape';
 import { materializeFileRecipe } from '@/lib/viz/recipe-file';
 import type { VizResultColumn } from '@/lib/viz/types';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope } from '@/lib/validation';
 
 const envelope = (source: VizEnvelope['source']): VizEnvelope => ({
   version: 2, source, dataBindings: null, viewParams: null, interactions: null, assets: null,

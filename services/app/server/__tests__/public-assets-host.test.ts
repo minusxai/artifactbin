@@ -12,7 +12,7 @@ import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
 import { mintToken } from '@/lib/accounts';
 import {createArtifact} from '@/lib/artifacts';
-import {storeFileContent} from '@/lib/datasets/file-store';
+import {storeFileContent} from '@/lib/datasets';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
 import {withHttpServer} from '@artifactbin/test-support/net';
 import {getRequestListener} from '@hono/node-server';

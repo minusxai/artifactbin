@@ -13,18 +13,20 @@
  *   2. a package imports only `pkg/contracts`, `pkg/utils` and itself;
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
  *      edge still is one — the list only shrinks, and a new back edge is a reviewed edit to it;
- *   4. a deep module (DEEP_MODULES below) is entered from outside only through its listed entries,
+ *   4. a lib module is entered from outside only through its index, or, with a row in DEEP_MODULES below, its listed entries
+ *      (and downstream paths a deployment imports by path, which need no importer here),
  *      and from listed browser-bundled code also through listed leaves; browserLeavesOnly rows (lib/islands,
  *      lib/document) are stricter (server code uses an entry, browser code a leaf). Browser-bundled code may
  *      always import TYPES from an entry: types are erased, so a type-only import cannot change a bundle.
  *      A serverOnly entry (lib/reader-chrome's index) is refused to every row's browser importers for
  *      values. A new deep import is a reviewed edit to the table, and every listed entry and leaf must
- *      still be imported, so the lists only shrink.
+ *      still be imported, so the lists only shrink. Tests and harnesses are held to rule 4 alone: their own module freely,
+ *      another module through its entries and leaves, or a white-box import recorded in module-graph.allowed-test-imports.json.
  *
  * Three layers, separable: `scanImports` (files → imports), `buildModuleGraph` (imports → module
  * edges), `checkModuleGraph` (graph + allow-list → violations). Nothing is cached on disk.
  *
- *   node scripts/ci/module-graph.mjs [--root <dir>] [--allowed <file>] [--write-allowed]
+ *   node scripts/ci/module-graph.mjs [--root <dir>] [--allowed <file>] [--allowed-tests <file>] [--write-allowed] [--write-allowed-tests]
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -170,8 +172,141 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
 const DOCUMENT_SERVING_BROWSER_LEAVES = ['artifact-pwa', 'document-frame'];
 const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-installers'];
 /**
+ * Every other lib module's browser leaves. A lib module without a DEEP_MODULES row is entered only through its index;
+ * these rows add the leaf files browser- and archive-bundled code imports values from, because both bundlers keep a
+ * barrel's re-exported files (rows 40.1 and 40.2). BUNDLED_IMPORTERS is that code: the browser directories, then every
+ * other file a browser build reaches by value (the app, the islands and frame editor, the native reader and its live
+ * morph, the Lambda page runtime, the hosted components and the skill's preview parser). Server code and type imports
+ * use the index.
+ */
+const BUNDLED_IMPORTERS = [
+  'services/app/solid/', 'services/app/web/', 'services/app/lib/islands/', 'services/app/lib/frame-edit/', 'services/app/lib/html-components/', 'services/app/skills/',
+  'services/app/lib/agent-copy/agent-copy.ts',
+  'services/app/lib/agent-copy/getting-started.ts',
+  'services/app/lib/annotations/markdown-lite.ts',
+  'services/app/lib/annotations/pages.ts',
+  'services/app/lib/annotations/remote-reply.ts',
+  'services/app/lib/artifact-backend/reader-http.ts',
+  'services/app/lib/artifact-backend/retrying.ts',
+  'services/app/lib/data/story/jsx-edit.ts',
+  'services/app/lib/data/story/story-systems.ts',
+  'services/app/lib/data/story/story-themes.ts',
+  'services/app/lib/data/story/typography.ts',
+  'services/app/lib/dataflow/image-source.ts',
+  'services/app/lib/dataflow/ref-name-uses.ts',
+  'services/app/lib/dataflow/refs.ts',
+  'services/app/lib/dataset-graphql/local-files.ts',
+  'services/app/lib/dataset-graphql/local-preview.ts',
+  'services/app/lib/document-serving/document-frame.ts',
+  'services/app/lib/document/annotation-range.ts',
+  'services/app/lib/document/document-graph-scope.ts',
+  'services/app/lib/document/document-graph-source.ts',
+  'services/app/lib/document/document-graph.ts',
+  'services/app/lib/document/document-node-codec.ts',
+  'services/app/lib/document/document-operation.ts',
+  'services/app/lib/document/document-update-client.ts',
+  'services/app/lib/document/edit-compose.ts',
+  'services/app/lib/document/local-validation.ts',
+  'services/app/lib/document/nesting.ts',
+  'services/app/lib/document/pwa-settings.ts',
+  'services/app/lib/document/query-notebook.ts',
+  'services/app/lib/document/source-changes.ts',
+  'services/app/lib/document/splice.ts',
+  'services/app/lib/document/update-parts.ts',
+  'services/app/lib/editor-engine/block-edit.ts',
+  'services/app/lib/editor-engine/clipboard-ast.ts',
+  'services/app/lib/editor-engine/clipboard.ts',
+  'services/app/lib/editor-engine/indent.ts',
+  'services/app/lib/editor-engine/links.ts',
+  'services/app/lib/editor-engine/model.ts',
+  'services/app/lib/editor-engine/source-edit.ts',
+  'services/app/lib/editor-engine/source-edits.ts',
+  'services/app/lib/html-autofix/index.ts',
+  'services/app/lib/html-bridge/presence-selection.ts',
+  'services/app/lib/html-bridge/presence.ts',
+  'services/app/lib/html-page/design-system.ts',
+  'services/app/lib/html-runtime/browser-client.ts',
+  'services/app/lib/html-runtime/browser-portable.ts',
+  'services/app/lib/html-runtime/browser-reader.ts',
+  'services/app/lib/html-runtime/portable-session.ts',
+  'services/app/lib/html-runtime/portable-source.ts',
+  'services/app/lib/html-systems/index.ts',
+  'services/app/lib/jsx/validate.ts',
+  'services/app/lib/libraries/index.ts',
+  'services/app/lib/local-connection/read-backend.ts',
+  'services/app/lib/mermaid-images/mermaid-render.ts',
+  'services/app/lib/reader-chrome/outline.ts',
+  'services/app/lib/reader-chrome/script-mount.ts',
+  'services/app/lib/story-runtime/anchor.ts',
+  'services/app/lib/story-ui/compare.ts',
+  'services/app/lib/story-ui/host-classify.ts',
+  'services/app/lib/story-ui/interpreter-primitives.ts',
+  'services/app/lib/validation/atlas-schemas.ts',
+  'services/app/lib/viz/deck-engine-core.ts',
+  'services/app/lib/viz/geo-assets.ts',
+  'services/app/lib/viz/theme.ts',
+];
+const BUNDLED_LEAVES = {
+  'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'remote-reply'],
+  'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http'],
+  'lib/author-script': ['contract'],
+  'lib/capture': ['contract', 'png', 'screen'],
+  'lib/chart': ['chart-theme'],
+  'lib/data': [
+    'html/html-system-modes', 'html/html-systems', 'story/jsx-edit', 'story/link-edit', 'story/question-height',
+    'story/story-css', 'story/story-number', 'story/story-systems', 'story/story-themes', 'story/typography',
+  ],
+  'lib/data-ingest': ['coerce', 'csv', 'types'],
+  'lib/datasets': ['dataset-usage', 'definition'],
+  'lib/editor-engine': [
+    'annotation-map', 'block-edit', 'block-selection', 'bookmark', 'clipboard', 'flow-view', 'history', 'links', 'model',
+    'node-chrome', 'selection-presentation', 'source-edit', 'source-edits',
+  ],
+  'lib/html-bridge': [
+    'annotations', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'selection',
+  ],
+  'lib/html-components': ['hosted.json'],
+  'lib/html-page': ['core-script', 'design-system', 'html-source'],
+  'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
+  'lib/html-runtime': [
+    'browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source',
+    'source-relationship',
+  ],
+  'lib/http': [
+    'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
+    'shared-request', 'urls',
+  ],
+  'lib/jsx': [
+    'boundary-ids', 'comparison', 'component-names', 'components', 'deck-spec', 'immutable-set', 'isometric-spec',
+    'mermaid-source', 'parse', 'parse-shared', 'reactive', 'reactive-eval', 'repair', 'row-scope', 'serialize',
+    'spec-digest', 'syntax-error', 'template', 'template-attrs', 'url-attrs', 'validate',
+  ],
+  'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
+  'lib/markdown': ['content', 'editor', 'styles'],
+  'lib/mermaid-images': ['reader-draw'],
+  'lib/page-operations': ['namespaces'],
+  'lib/remote': ['session-mentions'],
+  'lib/skills': ['agent-discovery', 'setup-instructions'],
+  'lib/source-editor': ['codemirror'],
+  'lib/story-surface': ['bare-typography'],
+  'lib/story-ui': [
+    'ast-path', 'comment-target', 'compare', 'data-table', 'edit-bar', 'file-glyphs', 'grid-css', 'grid-layout',
+    'host-classify', 'icon-contract', 'isometric', 'node-names', 'repeat-identity', 'row-key', 'scroll-anchor',
+  ],
+  'lib/validation': ['atlas-schemas', 'story-system-names', 'story-theme-names'],
+  'lib/viz': [
+    'basemap', 'chart-envelope', 'chart-tokens', 'deck-chrome', 'deck-engine-core', 'deck-height', 'encoding-edit',
+    'geo-assets', 'query-data', 'question-envelope', 'render-readiness', 'render-vega', 'spark-markup',
+    'vega-tooltip-handler',
+  ],
+  'lib/workspace': ['artifact-starters', 'breadcrumb', 'format-jsx-preview', 'shelf', 'visibility-icons'],
+};
+const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS, browserLeaves: BUNDLED_LEAVES[module] });
+/**
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
- * module directory without extension; `''` is the index), and optionally `browserImporters` (path
+ * module directory without extension; `''` is the index; a module without a row has only its index), optionally
+ * `downstream` (paths minusxai/artifactbin-server imports, pinned by __tests__/downstream-exports.test.ts: importable
+ * like entries, never stale), and optionally `browserImporters` (path
  * prefixes ending in `/`, or exact files) with the `browserLeaves` only they may import.
  * `browserLeavesOnly` (lib/islands, lib/document) also refuses entries to browser-bundled code for values.
  * `serverOnly` lists entries no browser-bundled file (any row's browserImporters) may import for values.
@@ -179,9 +314,10 @@ const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-insta
  * A listed index is never stale: it is the module's door even while nothing outside uses it.
  */
 export const DEEP_MODULES = {
+  ...Object.fromEntries(Object.keys(BUNDLED_LEAVES).map(module => [module, bundled(module)])),
   'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/artifacts': { entries: ['', 'table'], serverOnly: ['', 'table'] },
+  'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'] },
   'lib/document-data': { entries: [''], serverOnly: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
@@ -195,7 +331,7 @@ export const DEEP_MODULES = {
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
   'lib/notifications': { entries: [''], serverOnly: [''] },
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
-  'lib/platform': { entries: [''], serverOnly: [''] },
+  'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''] },
   'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
   'lib/custom-domains': { entries: [''], serverOnly: [''] },
   'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
@@ -204,8 +340,22 @@ export const DEEP_MODULES = {
   'lib/avatars': { entries: [''], serverOnly: [''] },
   'lib/social': { entries: [''], serverOnly: [''] },
   'lib/allowances': { entries: [''], serverOnly: [''] },
+  'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'] },
+  'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
+  // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.
+  'lib/html-systems': { entries: ['', 'server'], serverOnly: ['server'] },
+  'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
+  // Loaded by file path, outside the app's `@/` resolution: model from a target checkout
+  // (scripts/lib/native-migration-disposable-provider.ts), url by the plain-Node migration CLI.
+  'lib/native-identity-import': { entries: ['', 'model'] },
+  'lib/object-store': { entries: ['', 'url'] },
+  // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
+  'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
 };
+/** A lib module without a row: entered only through its index (rule 4's default). */
+const INDEX_ONLY = Object.freeze({ entries: [''] });
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
+const DEFAULT_TEST_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-test-imports.json', import.meta.url));
 
 /** The module a repository-relative path belongs to, or null (outside services/scripts/server.ts). */
 export function moduleOf(file) {
@@ -229,11 +379,11 @@ const isTest = file => /\.test\.(ts|tsx|mjs)$/.test(file) || /(^|\/)__tests__\//
 const isHarness = file => file.startsWith('scripts/fixtures/') || file.startsWith('services/app/test/')
   || (/\/(test|fixtures)\//.test(file) && !file.startsWith('services/test-support/'));
 
-/** Non-test source files the graph is drawn from: tracked and untracked-but-not-ignored. */
-function listSourceFiles(root) {
+/** Source files, tracked and untracked-but-not-ignored: non-test source (the graph), or tests and harnesses (`tests`). */
+function listSourceFiles(root, tests = false) {
   const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'services', 'scripts', 'server.ts'], { cwd: root, maxBuffer: 1 << 28 }).toString();
   return [...new Set(out.split('\n'))].filter(file => /\.(ts|tsx|mjs|js)$/.test(file) && !/\.d\.ts$/.test(file)
-    && !/(^|\/)(node_modules|dist|generated)\//.test(file) && !isTest(file) && !isHarness(file)
+    && !/(^|\/)(node_modules|dist|generated)\//.test(file) && (isTest(file) || isHarness(file)) === tests
     && fs.existsSync(path.join(root, file)));
 }
 
@@ -309,8 +459,10 @@ const matchesImporter = (importers, file) => importers.some(entry => (entry.ends
 function deepModuleViolations(graph, table) {
   const violations = [];
   const bundled = Object.values(table).flatMap(row => row.browserImporters ?? []);
-  for (const [module, { entries, serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false }] of Object.entries(table)) {
+  const modules = [...new Set([...Object.keys(table), ...[...graph.keys()].filter(module => module.startsWith('lib/'))])].sort();
+  for (const module of modules) {
     if (!graph.has(module)) continue;
+    const { entries, downstream = [], serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false } = table[module] ?? INDEX_ONLY;
     const dir = `services/app/${module}`;
     const refused = [], serverRefused = [], used = new Set(), usedLeaves = new Set();
     for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
@@ -318,7 +470,7 @@ function deepModuleViolations(graph, table) {
       for (const { file, specifier, typeOnly } of edges.get(module) ?? []) {
         const base = importPath(file, specifier).replace(/\/$/, '');
         const rel = base === dir ? '' : base.slice(dir.length + 1);
-        const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel), leaf = browser && browserLeaves.includes(rel);
+        const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel) || downstream.includes(rel), leaf = browser && browserLeaves.includes(rel);
         if (entry && !typeOnly && serverOnly.includes(rel) && matchesImporter(bundled, file)) {
           used.add(rel);
           serverRefused.push(`  ${file} imports ${specifier} (${rel ? `entry ${rel}` : 'the index'} is server-only)`);
@@ -336,7 +488,8 @@ function deepModuleViolations(graph, table) {
     const lists = browserLeavesOnly ? `${constantPrefix(module)}_BROWSER_IMPORTERS, ${constantPrefix(module)}_BROWSER_LEAVES` : `DEEP_MODULES['${module}']`;
     if (refused.length) violations.push(browserLeavesOnly
       ? `${module} is entered through @/${module} from server code and through a listed leaf from listed browser-bundled code (${lists} in scripts/ci/module-graph.mjs). Re-export a server-safe name from ${module}/index.ts, or list the browser use as a reviewed edit:`
-      : `${module} is entered from outside only through its entries, and from its browser importers also through its browser leaves (${lists} in scripts/ci/module-graph.mjs): re-export the name from ${dir}/index.ts or list the path as a reviewed edit in DEEP_MODULES:`, ...refused);
+      : table[module] ? `${module} is entered from outside only through its entries, and from its browser importers also through its browser leaves (${lists} in scripts/ci/module-graph.mjs): re-export the name from ${dir}/index.ts or list the path as a reviewed edit in DEEP_MODULES:`
+        : `${module} has no DEEP_MODULES row, so code outside it imports only its index (rule 4's default, scripts/ci/module-graph.mjs): re-export the name from ${dir}/index.ts, or give the module a row listing the path as a reviewed edit:`, ...refused);
     const staleEntries = entries.filter(entry => entry !== '' && !used.has(entry));
     const staleLeaves = browserLeaves.filter(leaf => !usedLeaves.has(leaf));
     if (browserLeavesOnly) {
@@ -347,6 +500,47 @@ function deepModuleViolations(graph, table) {
     }
   }
   return violations;
+}
+/**
+ * Rule 4 for tests and harnesses: a test may import any file of its own module, and another module only through a
+ * listed entry, downstream path or browser leaf (tests are never bundled, so no importer list or server-only entry applies).
+ * The white-box exceptions (a test reaching another module's internals: an unexported helper, a namespace to spy on) are
+ * recorded per file in module-graph.allowed-test-imports.json; the list only shrinks, like the cycle list.
+ */
+function unlistedTestImports(tests, table) {
+  const found = [];
+  for (const [, edges] of [...tests].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [module, list] of [...edges].sort(([a], [b]) => a.localeCompare(b))) {
+      if (!module.startsWith('lib/')) continue;
+      const { entries, downstream = [], browserLeaves = [] } = table[module] ?? INDEX_ONLY;
+      const dir = `services/app/${module}`;
+      for (const { file, specifier } of list) {
+        const base = importPath(file, specifier).replace(/\/$/, '');
+        const rel = base === dir ? '' : base.slice(dir.length + 1);
+        if (![...entries, ...downstream, ...browserLeaves].includes(rel)) found.push({ file, specifier, rel, module });
+      }
+    }
+  }
+  return found;
+}
+function testDeepModuleViolations(tests, table, recorded = {}) {
+  const seen = new Set(), refused = [];
+  for (const { file, specifier, rel, module } of unlistedTestImports(tests, table)) {
+    if (recorded[file]?.includes(specifier)) seen.add(`${file}\0${specifier}`);
+    else refused.push(`  ${file} imports ${specifier} (${rel} is not an entry or leaf of ${module})`);
+  }
+  const stale = Object.entries(recorded).flatMap(([file, specifiers]) => specifiers.filter(specifier => !seen.has(`${file}\0${specifier}`)).map(specifier => `  ${file} imports ${specifier}`));
+  return [
+    ...(refused.length ? ['Tests import their own module\'s files freely and other modules only through listed entries or leaves (DEEP_MODULES in scripts/ci/module-graph.mjs). Import the name from the module\'s index, or move a test of its internals into the module\'s __tests__; recording it in scripts/ci/module-graph.allowed-test-imports.json is a reviewed decision:', ...refused] : []),
+    ...(stale.length ? ['Recorded white-box test import(s) no longer made; remove them from scripts/ci/module-graph.allowed-test-imports.json:', ...stale] : []),
+  ];
+}
+
+/** Today's white-box test imports as their allow-list: test file → the other modules' internal specifiers it imports. */
+export function recordTestImports(graph, table = DEEP_MODULES) {
+  const testImports = {};
+  for (const { file, specifier } of unlistedTestImports(graph.tests, table)) if (!(testImports[file] ??= []).includes(specifier)) testImports[file].push(specifier);
+  return { testImports: Object.fromEntries(Object.keys(testImports).sort().map(file => [file, testImports[file].sort()])) };
 }
 const constantPrefix = module => module.slice('lib/'.length).toUpperCase().replace(/-/g, '_');
 
@@ -367,7 +561,10 @@ function buildModuleGraph(imports) {
   return graph;
 }
 
-export const scanModuleGraph = root => buildModuleGraph(scanImports(root, listSourceFiles(root)));
+/** The source graph; its `tests` property is the same graph drawn from tests and harnesses, checked by rule 4 alone. */
+export const scanModuleGraph = root => Object.assign(buildModuleGraph(scanImports(root, listSourceFiles(root))), {
+  tests: buildModuleGraph(scanImports(root, listSourceFiles(root, true))),
+});
 
 /** Strongly connected components with more than one module (Tarjan), each sorted. */
 function cyclesOf(graph) {
@@ -428,6 +625,7 @@ export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY, deepMo
     if (outside.length) violations.push(`Package ${from} may import only ${PACKAGE_FLOOR.join(', ')} and itself:`, ...outside.map(to => describeEdge(graph, from, to)));
   }
   violations.push(...deepModuleViolations(graph, deepModules));
+  if (graph.tests) violations.push(...testDeepModuleViolations(graph.tests, deepModules, allowed.testImports));
   return { violations };
 }
 
@@ -447,6 +645,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const option = name => { const at = args.indexOf(name); return at < 0 ? undefined : args[at + 1]; };
   const root = path.resolve(option('--root') ?? '.');
   const allowedPath = path.resolve(option('--allowed') ?? DEFAULT_ALLOWED);
+  const testAllowedPath = path.resolve(option('--allowed-tests') ?? DEFAULT_TEST_ALLOWED);
   const started = performance.now();
   try {
     const graph = scanModuleGraph(root);
@@ -455,8 +654,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const recorded = recordAllowedCycles(graph);
       fs.writeFileSync(allowedPath, `${JSON.stringify({ $comment: 'Written by node scripts/ci/module-graph.mjs --write-allowed. Every edge inside a module cycle; the list only shrinks.', ...recorded }, null, 2)}\n`);
       console.log(`[module graph] recorded ${recorded.cycles.map(cycle => `a cycle of ${cycle.modules.length} modules (${cycle.edges.length} edges)`).join(', ') || 'no cycles'} in ${elapsed()}.`);
+    } else if (args.includes('--write-allowed-tests')) {
+      const recorded = recordTestImports(graph);
+      fs.writeFileSync(testAllowedPath, `${JSON.stringify({ $comment: 'Written by node scripts/ci/module-graph.mjs --write-allowed-tests. White-box tests (an unexported helper, a namespace to spy on) and the test harness and setup, which keep deep platform paths so a test file\'s vi.mock of them reaches the index: test file -> other modules\' internal files it imports. The list only shrinks.', ...recorded }, null, 2)}\n`);
+      console.log(`[module graph] recorded ${Object.values(recorded.testImports).flat().length} white-box test imports in ${elapsed()}.`);
     } else {
-      const { violations } = checkModuleGraph(graph, JSON.parse(fs.readFileSync(allowedPath, 'utf8')));
+      const { violations } = checkModuleGraph(graph, { ...JSON.parse(fs.readFileSync(allowedPath, 'utf8')), ...JSON.parse(fs.readFileSync(testAllowedPath, 'utf8')) });
       if (violations.length) { console.error(`[module graph] ${violations.join('\n')}`); process.exitCode = 1; }
       else console.log(`[module graph] ${graph.size} modules, rules hold (${elapsed()}).`);
     }

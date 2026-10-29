@@ -3,20 +3,16 @@
  * fallback), and its dataflow as the compiler answers it under the author's own reach. Below
  * store and dataflow, so the write path can store the compiled record and the runs can read it.
  */
-import type { AccessActor } from '@/lib/accounts';
-import { identityForUser } from '@/lib/accounts';
+import { type AccessActor, identityForUser } from '@/lib/accounts';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { EMPTY_COMPILED_DATAFLOW, EMPTY_DATAFLOW, initialTables, initialValues, isEmptyDataflow, type CompiledDataflow, type DatasetColumn, type QueryDecl, type Scalar } from '@/lib/dataflow';
 import { compileWithLoader, type CompileResult } from '@/lib/dataflow/server';
-import { executeCatalog } from '@/lib/datasets/execute';
-import { catalogOf } from '@/lib/datasets/catalog';
-import { DatasetError } from '@/lib/datasets/errors';
-import { schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets/schema-loader';
+import { executeCatalog, catalogOf, DatasetError, schemaLoaderFor, type ServerRef, type ServerRefLoader } from '@/lib/datasets';
 import { declarationsOf } from '../document';
 import { readCompiledDataflow } from '@/lib/document/server';
 import type { ValidationError } from '@/lib/jsx';
-import { sqlExtensions } from '@/lib/sql/extensions';
+import { sqlExtensions } from '@/lib/sql';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { CHILDREN_COLUMNS } from './placement';
 import { getArtifact, getArtifactFor, getLinkReadableArtifact } from './rows';

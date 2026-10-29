@@ -105,7 +105,7 @@ describe('actual fixture publication payloads',()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const skillArchive=await candidateArchive();
     const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
-    const {publishBundleDependencies}=await import('../../services/app/lib/html-publication-bundle/execute.ts');
+    const {publishBundleDependencies}=await import('../../services/app/lib/html-publication-bundle/index.ts');
     const bodies=[],keys=new Set();let created=0,reused=0;
     await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);

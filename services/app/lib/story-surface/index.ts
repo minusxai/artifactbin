@@ -18,3 +18,6 @@ export const STORY_ROOT_ATTR = 'data-mx-story-root';
  * root wraps (lib/compiled-page/story-element), so stored pages need no new field.
  */
 export const STORY_STYLED_ATTR = 'data-mx-styled';
+export { STORY_BARE_CONTROLS_CSS } from './bare-controls';
+export { STORY_BARE_TEXT_CSS, STORY_BARE_TYPOGRAPHY_CSS } from './bare-typography';
+export { STORY_TASK_CHECKBOX_CSS } from './task-checkbox-css';

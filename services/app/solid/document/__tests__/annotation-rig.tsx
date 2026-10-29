@@ -10,9 +10,9 @@
  */
 import { beforeAll, vi } from 'vitest';
 import { createSignal, type JSX } from 'solid-js';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { AnnotationWire } from '@/lib/annotations';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { type StoryController } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { screen } from '@testing-library/dom';

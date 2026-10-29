@@ -7,11 +7,10 @@ import {notificationMutationFixture} from './notification-mutation-fixture';
 import {nativeHtml} from './native-html-fixture';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import { evaluateNotificationQuery } from '@/lib/document-data';
-import {getDb} from '@/lib/platform';
-import {services,setServices} from '@/lib/platform';
+import {getDb, services, setServices} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createNotificationWorker,membershipInbox,notificationJobStore} from '@/lib/notifications';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 
 useAppHarness();
 

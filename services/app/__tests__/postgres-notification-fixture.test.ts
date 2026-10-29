@@ -2,17 +2,16 @@
  * Native author notification declarations are not exposed; only the external SQL adapter is deterministic. */
 import {expect,it} from 'vitest';
 import type {Actor} from '@artifactbin/contracts';
-import {request,useAppHarness} from './harness';
+import {request, useAppHarness, mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/my/artifacts/route';
 import {POST as membership} from '@/app/api/my/artifacts/[id]/members/route';
 import {PUT as sharing} from '@/app/api/my/artifacts/[id]/sharing/route';
 import {notificationMutationFixture} from './notification-mutation-fixture';
-import {mintAccountToken} from './harness';
 import {GET as jobs} from '@/app/api/notification-runs/[runId]/jobs/route';
 import {GET as inbox} from '@/app/api/my/people/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { evaluateNotificationQuery } from '@/lib/document-data';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 import { createUser } from '@/lib/accounts';
 import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {createNotificationWorker,notificationJobStore} from '@/lib/notifications';

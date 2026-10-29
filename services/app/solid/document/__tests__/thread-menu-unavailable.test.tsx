@@ -7,8 +7,8 @@ import { expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { render } from '../../__tests__/helpers';
 import { AnnotationThread } from '../AnnotationThread';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import type { AnnotationWire } from '@/lib/annotations/store';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
+import type { AnnotationWire } from '@/lib/annotations';
 
 vi.mock('../../ui/Menu', () => { throw new TypeError('Failed to fetch dynamically imported module: /bundle/Menu.js'); });
 

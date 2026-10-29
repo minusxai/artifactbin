@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { mintAccountToken, useAppHarness } from '@/__tests__/harness';
 import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
 import { liveTokenSql } from '@/lib/accounts';
-import { notificationPrincipal } from '@/lib/notifications/authority';
+import { notificationPrincipal } from '@/lib/notifications';
 import { getDb } from '@/lib/platform';
 import type { Queryable } from '@artifactbin/contracts';
 

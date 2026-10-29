@@ -1,12 +1,11 @@
 import { editorScope, notifyArtifactSql, ownerScope, type ArtifactRow, type Scope } from './table';
-import { identityForUser } from '@/lib/accounts';
-import type { AccessActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
 import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
 import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
-import { catalogOf } from '@/lib/datasets/catalog';
+import { catalogOf } from '@/lib/datasets';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
 

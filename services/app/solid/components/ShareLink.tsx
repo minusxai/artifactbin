@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createMemo, createSignal, For, onMount, Show, type JSX } from 'solid-js';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import type { DatasetAccess, ShareEntry, ShareRole, SharingPatch, Visibility } from '@artifactbin/contracts';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';

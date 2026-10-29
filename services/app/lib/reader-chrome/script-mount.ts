@@ -5,7 +5,7 @@
  * keeps that fallback out of inline editing (lib/frame-edit/dom-mounter). One definition for all three, free of the
  * compiler's graph so the editor chunk can read it.
  */
-import type { JsxNode } from '@/lib/jsx/types';
+import type { JsxNode } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 
 const REGISTERED_COMPONENTS: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);

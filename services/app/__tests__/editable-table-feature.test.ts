@@ -2,9 +2,9 @@
 import {describe,it,expect} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
 import { identityForUser } from '@/lib/accounts';
-import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
+import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 import {getArtifactById} from '@/lib/artifacts';
 import {useAppHarness,request,mintAccountToken} from './harness';
 useAppHarness();

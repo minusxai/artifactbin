@@ -2,7 +2,7 @@ import { expect,it } from 'vitest';
 import { parseJsx,validateJsx } from '@/lib/jsx';
 import { collectRefNameUses } from '@/lib/dataflow';
 import { keyedRowsError, validRowKey } from '../repeat-identity';
-import { stampNodeIds } from '@/lib/document/node-ids';
+import { stampNodeIds } from '@/lib/document';
 const source='<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>';
 function nodes(source:string){const p=parseJsx(source);if(!p.ok)throw new Error(p.error);return p.nodes;}
 it('validates For as inert table dependency and preserves source identity through save/load',()=>{

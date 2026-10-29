@@ -1,11 +1,7 @@
-import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders/contracts';
+import type {NativeAncillaryFolderRecipe} from '../../services/app/lib/native-ancillary-folders';
 import type { Queryable } from '../../services/app/lib/platform';
-import type {NativeHistoryImport} from '../../services/app/lib/native-history-import/contracts';
-import type {NativeRelationProjection} from '../../services/app/lib/native-history-import/relation-contracts';
-import type {NativeArtifactRelationsInput} from '../../services/app/lib/native-history-import/artifact-relation-contracts';
-import type {NativeIdentityImport,NativeIdentityMigrationSchemas} from '../../services/app/lib/native-identity-import/contracts';
-import type {NativeCatalogProjection} from '../../services/app/lib/native-history-import/catalog-contracts';
-import type {canonicalNativeObjectSource} from '../../services/app/lib/native-history-import/catalog-source';
+import type {NativeHistoryImport, NativeRelationProjection, NativeArtifactRelationsInput, NativeCatalogProjection, canonicalNativeObjectSource} from '../../services/app/lib/native-history-import';
+import type {NativeIdentityImport,NativeIdentityMigrationSchemas} from '../../services/app/lib/native-identity-import';
 /** Converter-produced projections are private inputs, never inferred from page names or IDs. */
 export interface NativeProductImportRecipe {
  revisionScope:'latest';history:NativeHistoryImport;

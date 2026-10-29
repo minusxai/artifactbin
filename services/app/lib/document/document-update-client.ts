@@ -2,7 +2,7 @@ import {isPersonMentionHref} from './person-mentions';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {parseJsx} from '../jsx/parse';
 import {canonicalText} from './annotation-range';
-import type {JsxNode} from '../jsx/types';
+import type {JsxNode} from '../jsx';
 import {parseAnnotationOperations} from './annotation-edits';
 /** Trusted authoring boundary shared by browser and CLI. Pure and browser-safe:
  * validation/normalization happens before submission, not under a database lock.

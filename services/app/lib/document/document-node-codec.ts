@@ -1,6 +1,6 @@
 /** Ordered literal packing shared by legacy trees and normalized graph nodes. */
 import {parseJsx} from '../jsx/parse';
-import type {JsxNode} from '../jsx/types';
+import type {JsxNode} from '../jsx';
 import {canonicalNodes} from '../jsx/component-names';
 type Packed = ['value', unknown] | ['string16', string] | ['array', Packed[]] | ['object', Array<[string | Packed, Packed]>];
 import type {DocumentTree as StoredTree} from '@artifactbin/contracts';

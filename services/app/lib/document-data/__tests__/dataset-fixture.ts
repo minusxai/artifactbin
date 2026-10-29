@@ -4,8 +4,8 @@ import {mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import {createArtifactFromBody} from '@/lib/publish/publish/requests';
+import {loadDatasetRows} from '@/lib/datasets';
+import {createArtifactFromBody} from '@/lib/publish';
 import {isMutationRefused,mutateDataset} from '@/lib/document-data';
 
 export type Db=Awaited<ReturnType<typeof getDb>>;

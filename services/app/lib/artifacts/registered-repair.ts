@@ -5,8 +5,8 @@
  * namespaces; an already valid or unregistered page is left untouched.
  */
 import type { Queryable } from '@artifactbin/contracts';
-import { planRegisteredMutationRepair } from '../registered-page-mutations/registry';
-import { planRegisteredQueryRepair, type RegisteredRepair, type RepairableHead } from '../registered-page-queries/registry';
+import { planRegisteredMutationRepair } from '../registered-page-mutations';
+import { planRegisteredQueryRepair, type RegisteredRepair, type RepairableHead } from '../registered-page-queries';
 
 async function repairHead(tx: Queryable, pageId: string, plan: (tx: Queryable, head: RepairableHead) => Promise<RegisteredRepair | null>): Promise<string[]> {
   const head = (await tx.query<Omit<RepairableHead, 'source'> & { source: string | null; format: string }>(

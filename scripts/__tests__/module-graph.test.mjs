@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkModuleGraph, DEEP_MODULES, ISLANDS_BROWSER_IMPORTERS, moduleOf, recordAllowedCycles, scanModuleGraph } from '../ci/module-graph.mjs';
+import { checkModuleGraph, DEEP_MODULES, ISLANDS_BROWSER_IMPORTERS, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'module-graph.mjs');
@@ -26,8 +26,8 @@ function tree(files) {
 }
 
 const libCycle = {
-  'services/app/lib/a/index.ts': "import { b } from '../b';\nexport const a = 1;\n",
-  'services/app/lib/b/index.ts': "import type { A } from '@/lib/a/types';\nexport const b = 2;\n",
+  'services/app/lib/a/index.ts': "import { b } from '../b';\nexport const a = 1;\nexport type { A } from './types';\n",
+  'services/app/lib/b/index.ts': "import type { A } from '@/lib/a';\nexport const b = 2;\n",
   'services/app/lib/a/types.ts': 'export type A = 1;\n',
 };
 const allowList = cycles => ({ cycles });
@@ -47,7 +47,7 @@ describe('module graph', () => {
     const root = tree({ ...libCycle, 'services/app/lib/b/__tests__/x.test.ts': "import '@/solid/y';\n", 'services/app/lib/b/z.test.ts': "import '@/solid/y';\n" });
     const graph = scanModuleGraph(root);
     expect([...graph.get('lib/b').keys()]).toEqual(['lib/a']);
-    expect(graph.get('lib/b').get('lib/a')[0]).toEqual({ file: 'services/app/lib/b/index.ts', specifier: '@/lib/a/types', typeOnly: true });
+    expect(graph.get('lib/b').get('lib/a')[0]).toEqual({ file: 'services/app/lib/b/index.ts', specifier: '@/lib/a', typeOnly: true });
   });
 
   it('records whether an import is type-only: a type clause, every named specifier typed, or an import() type', () => {
@@ -79,7 +79,7 @@ describe('module graph', () => {
   it('fails a library cycle that the allow-list does not record, naming the edges', () => {
     const { violations } = checkModuleGraph(scanModuleGraph(tree(libCycle)), allowList([]));
     expect(violations.join('\n')).toContain('lib/a -> lib/b');
-    expect(violations.join('\n')).toContain('lib/b -> lib/a (services/app/lib/b/index.ts imports @/lib/a/types)');
+    expect(violations.join('\n')).toContain('lib/b -> lib/a (services/app/lib/b/index.ts imports @/lib/a)');
   });
 
   it('passes a recorded cycle and fails a new back edge into it', () => {
@@ -208,7 +208,7 @@ describe('module graph', () => {
       expect(run({
         'services/app/lib/publish/a.ts': "import { getArtifactById } from '@/lib/artifacts';\n",
         'services/app/lib/runner/b.ts': "import type { ArtifactRow } from '../artifacts';\n",
-        'services/app/lib/workspace/t.ts': "import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';\n",
+        'services/app/lib/listings/t.ts': "import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';\n",
       })).toBe('');
       const violations = run({
         'services/app/lib/serving/c.ts': "import { getArtifactById } from '@/lib/artifacts/store';\n",
@@ -242,7 +242,7 @@ describe('module graph', () => {
     const accounts = {
       'services/app/lib/accounts/index.ts': '', 'services/app/lib/accounts/tokens.ts': '', 'services/app/lib/accounts/viewer.ts': '', 'services/app/lib/accounts/actors.ts': '',
       'services/app/lib/serving/a.ts': "import { sessionActor, type TokenActor } from '@/lib/accounts';\n",
-      'services/app/lib/workspace/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",
+      'services/app/lib/listings/b.ts': "import { LIVE_TOKEN_SQL } from '../accounts/tokens';\n",
       'services/app/solid/pages/Profile.tsx': "import type { ProfileSocial } from '@/lib/accounts';\n",
     };
 
@@ -355,6 +355,59 @@ describe('module graph', () => {
     });
   });
 
+
+  describe('index-only default (rule 4, a lib module without a row)', () => {
+    const base = { 'services/app/lib/ledger/index.ts': "export { post } from './post';\n", 'services/app/lib/ledger/post.ts': 'export const post = 1;\n' };
+    const check = (files, allowed = allowList([])) => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowed).violations.join('\n');
+
+    it('passes the index, by alias or relative path, and imports inside the module', () => {
+      expect(check({
+        'services/app/lib/billing/a.ts': "import { post } from '@/lib/ledger';\nexport type P = import('../ledger/index.ts').P;\n",
+        'services/app/app/api/b.ts': "import { post } from '../../lib/ledger';\n",
+        'services/app/lib/ledger/c.ts': "import { post } from './post';\n",
+      })).toBe('');
+    });
+
+    it('refuses any other path, value or type, naming the file, the specifier and the index to re-export from', () => {
+      const violations = check({
+        'services/app/lib/billing/a.ts': "import { post } from '@/lib/ledger/post';\n",
+        'services/app/solid/Ledger.tsx': "import type { Post } from '../lib/ledger/post.ts';\n",
+      });
+      expect(violations).toContain('lib/ledger has no DEEP_MODULES row, so code outside it imports only its index');
+      expect(violations).toContain('re-export the name from services/app/lib/ledger/index.ts');
+      expect(violations).toContain('services/app/lib/billing/a.ts imports @/lib/ledger/post (post is not an entry of lib/ledger)');
+      expect(violations).toContain('services/app/solid/Ledger.tsx imports ../lib/ledger/post.ts');
+    });
+
+    it('lets a test import its own module freely and another module only through its index, or as a recorded white-box import', () => {
+      const tests = {
+        'services/app/lib/ledger/__tests__/post.test.ts': "import { post } from '../post';\n",
+        'services/app/lib/billing/__tests__/bill.test.ts': "import { post } from '@/lib/ledger';\n",
+      };
+      expect(check(tests)).toBe('');
+      const deep = { ...tests, 'services/app/__tests__/ledger.test.ts': "import { post } from '@/lib/ledger/post';\n" };
+      expect(check(deep)).toContain('services/app/__tests__/ledger.test.ts imports @/lib/ledger/post (post is not an entry or leaf of lib/ledger)');
+      const recorded = { 'services/app/__tests__/ledger.test.ts': ['@/lib/ledger/post'] };
+      expect(check(deep, { cycles: [], testImports: recorded })).toBe('');
+      expect(recordTestImports(scanModuleGraph(tree({ ...base, ...deep }))).testImports).toEqual(recorded);
+      expect(check(tests, { cycles: [], testImports: recorded })).toMatch(/no longer made[^\n]*\n {2}services\/app\/__tests__\/ledger\.test\.ts imports @\/lib\/ledger\/post/);
+    });
+  });
+
+  it('lists every deep path the downstream deployment imports as an entry or downstream path of its row', () => {
+    const pinned = fs.readFileSync(path.join(ROOT, 'services/app/__tests__/downstream-exports.test.ts'), 'utf8');
+    const deep = [...new Set([...pinned.matchAll(/'@\/(lib\/[^/']+)\/([^']+)'/g)].map(([, module, rel]) => `${module} ${rel}`))];
+    expect(deep.length).toBeGreaterThan(0);
+    for (const line of deep) {
+      const [module, rel] = line.split(' ');
+      expect([...(DEEP_MODULES[module]?.entries ?? []), ...(DEEP_MODULES[module]?.downstream ?? [])], line).toContain(rel);
+    }
+    // A downstream path is never stale: nothing in this tree need import it.
+    const files = { 'services/app/lib/operations/index.ts': '', 'services/app/lib/operations/http.ts': '', 'services/app/lib/runner/a.ts': "import '@/lib/operations';\n" };
+    expect(checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations).toEqual([]);
+    // And it stays importable here, like an entry.
+    expect(checkModuleGraph(scanModuleGraph(tree({ ...files, 'services/app/lib/runner/b.ts': "import '@/lib/operations/http';\n" })), allowList([])).violations).toEqual([]);
+  });
 
   it('records today\'s library cycles as the allow-list', () => {
     expect(recordAllowedCycles(scanModuleGraph(tree(libCycle))).cycles).toEqual([ab]);

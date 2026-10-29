@@ -8,3 +8,13 @@ export { decodePage, encodeCursor } from './pagination';
 export { internalRedirectTarget, loginRedirectTarget } from './safe-redirect';
 export { forgetShared, primeShared, sharedRequest } from './shared-request';
 export { GITHUB_EXTERNAL_URL, REPO_URL, artifactViewPath, canonicalArtifactPath, domainPostPath, parsePrettyPath, titleSlug } from './urls';
+export { spaPaths } from './app-pages';
+export {
+  GUEST_TICKET, PAGES_TICKET_PARAM, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, pagesCookieName, pagesFrameUrl,
+  pagesOriginFor, pagesRequestOf, pagesSite, withoutPagesTicket,
+} from './pages-origin';
+export type { PagesSite } from './pages-origin';
+export { parseQueryRequest } from './query-request';
+export type { QueryRequest } from './query-request';
+export type { RetryOptions } from './retry';
+export { REVALIDATE, etagOf, matchingTag, notModified, publicRevalidatedResponse, revalidationHeaders, withEncoding } from './revalidation';

@@ -1,14 +1,13 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
-import { markdownContent, markdownSource } from '@/lib/markdown/content';
+import { markdownContent, markdownSource } from '@/lib/markdown';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {commentMentions} from './saved-mentions';
-import {MembershipError} from '@/lib/artifacts';
+import {MembershipError, completeMutationReceipt, type MutationReceipt, readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
-import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
-import type { CommentTarget } from '@/lib/story-ui/comment-target';
+import type { CommentTarget } from '@/lib/story-ui';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -22,7 +21,6 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { readableArtifactHeader, reactionScope, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,

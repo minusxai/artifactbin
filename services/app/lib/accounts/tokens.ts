@@ -8,7 +8,8 @@ import {canUseDeploymentIdentity} from '../deployment';
  * creates inherit that owner at publish time.
  */
 import crypto from 'crypto';
-import { getDb, Queryable, emit, generateTokenId, currentRequest, type Harness } from '../platform';
+import { getDb, Queryable, emit, generateTokenId, currentRequest } from '../platform';
+import type { Harness } from './client-identity';
 import { canAuthenticateUser } from '../user-kinds';
 import type { AccessActor } from './actors';
 

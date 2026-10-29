@@ -1,4 +1,4 @@
-import type {SourceRelationshipState} from '@/lib/html-runtime/source-relationship-contract';
+import type {SourceRelationshipState} from '@/lib/html-runtime';
 /** A short collapsed summary; full evidence remains available in existing controls. */
 export interface LocalSourceStatus {summary:string;details:string}
 export function localSourceStatus(state:SourceRelationshipState):LocalSourceStatus {

@@ -1,5 +1,5 @@
 import { refusesCrossSite, requestOrSessionActor } from '@/lib/authentication';
-import {json} from '@/lib/http/http';
+import {json} from '@/lib/http';
 import {runOperation} from './http';
 
 /** Browser sessions and bearer clients share repository authorization; cookie writes retain CSRF checks. */

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { InboxProvider } from '@/solid/lib/notifications';
 import { ArtifactDataPage, type DataAnswer } from '@/solid/pages/ArtifactData';
 import type { DatasetAccessPolicy } from '@artifactbin/contracts';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null; closed: boolean }> = [];

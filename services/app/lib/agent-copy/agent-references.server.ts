@@ -1,9 +1,5 @@
 /** Public reference rendering for /llms.txt and /llms/<topic>. */
-import {isPublicSkillTopic} from '../skills/public-surface';
-import {buildSkillTree,loadSkillSources,type SkillTree} from '../skills/tree';
-import {renderSkill} from '../skills/render';
-import {skillTree} from '../skills';
-import {projectSkillLinks} from '../skills/serve';
+import {isPublicSkillTopic, buildSkillTree, loadSkillSources, type SkillTree, renderSkill, skillTree, projectSkillLinks} from '../skills';
 const origin=(base:string)=>base.replace(/\/+$/,'');
 let references:SkillTree|null=null;
 /** Requests select only known skill topics; input never becomes a filesystem path. */

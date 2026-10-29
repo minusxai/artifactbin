@@ -11,7 +11,7 @@ import {useAppHarness,mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { seedOwnerJoin } from '@/lib/social';
-import {createArtifactFromBody} from '@/lib/publish/publish/requests';
+import {createArtifactFromBody} from '@/lib/publish';
 import type {CompiledDataflow} from '@/lib/dataflow';
 import {notificationAuthority,notificationContextSnapshot} from '@/lib/notifications';
 import {evaluateNotificationQuery,mutationInitiator} from '@/lib/document-data';

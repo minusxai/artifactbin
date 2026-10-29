@@ -3,8 +3,7 @@
  * the diagram: its static `code` source and `title`). Pure (client + server safe).
  */
 import { resolveJsxNodeAtPath, updateJsxElementAtPath, setStaticJsxAttr } from './jsx-edit';
-import { parseJsx } from '@/lib/jsx';
-import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
+import { parseJsx, mermaidSourceError } from '@/lib/jsx';
 
 /** What the diagram panel renders from: the `<Mermaid>` at `astPath`, or null if there is none. */
 export interface MermaidEmbed {

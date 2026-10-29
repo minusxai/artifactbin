@@ -1,13 +1,8 @@
 import {z} from 'zod';
 import type {Operation,OpReply} from '@/lib/operations/registry';
-import {createDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
-import {discoverPostgres,queryPostgres} from '@/lib/datasets/postgres';
-import {compileNotebookSql} from '@/lib/datasets/notebook';
-import {DatasetError} from '@/lib/datasets/errors';
-import type {DatasetCatalog,DatasetNotebook} from '@/lib/datasets/types';
+import {createDatasetSecret, resolveDatasetConnection, discoverPostgres, queryPostgres, compileNotebookSql, DatasetError, type DatasetCatalog, type DatasetNotebook, connectionShape, secretTargetShape} from '@/lib/datasets';
 import { getArtifactFor } from '@/lib/artifacts';
 import { withAccountToken } from '@/lib/accounts';
-import {connectionShape,secretTargetShape} from '@/lib/datasets/input';
 const target=secretTargetShape;
 const connection=connectionShape;
 const notebook=z.object({cells:z.array(z.object({id:z.string(),name:z.string(),sql:z.string()}))});

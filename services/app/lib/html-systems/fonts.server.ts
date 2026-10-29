@@ -6,7 +6,7 @@
  */
 import {lstatSync,readFileSync} from 'node:fs';
 import path from 'node:path';
-import manifest from '../data/story/story-font-manifest.json';
+import { storyFontManifest as manifest } from '../data';
 import {PLATFORM_FONTS_PATH,platformFontName} from './index';
 
 const faces=[...Object.values(manifest.families),manifest.app,...Object.values(manifest.systems)].flat() as Array<{url:string}>;

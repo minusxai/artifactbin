@@ -6,7 +6,7 @@ import {GET as component} from '@/app/af/components/[file]/route';
 import {GET as styles} from '@/app/af/styles.css/route';
 import {referencedLibraryResources} from '../assets.server';
 import {packOfflineDependencies} from '../../offline-dependencies';
-import {markupCsp} from '../../page-styles/markup-csp';
+import {markupCsp} from '../../page-styles';
 import hosted from '../../html-components/hosted.json';
 
 const servedFile=(file:string,headers:Record<string,string>={})=>component(new Request('https://app.example/af/components/'+file,{headers}),{params:Promise.resolve({file})});

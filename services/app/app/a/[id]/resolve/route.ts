@@ -1,7 +1,7 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { serveStoredFile } from '@/lib/datasets/file-store';
+import { serveStoredFile } from '@/lib/datasets';
 
 /**
  * Anonymous byte access, scoped by path so each document's CSP stays narrow.

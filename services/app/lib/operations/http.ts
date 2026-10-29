@@ -2,7 +2,7 @@ import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/
 import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, readableArtifact, refusingUnservable, holdsCreatingToken } from '@/lib/artifacts';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
-import {ownedArtifactState} from '@/lib/workspace/trash';
+import {ownedArtifactState} from '@/lib/workspace';
 /**
  * The HTTP half of the operations registry: a bearer route is a TRANSLATION
  * LAYER — it gathers the input (JSON body + path params + the odd query
@@ -11,7 +11,7 @@ import {ownedArtifactState} from '@/lib/workspace/trash';
  * the operation's `run` (which is itself the shared lib/artifact-wire
  * pipeline).
  */
-import { json, baseUrl } from '@/lib/http/http';
+import { json, baseUrl } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 

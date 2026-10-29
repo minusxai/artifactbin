@@ -4,7 +4,7 @@ import { DatasetError } from '@/lib/datasets/errors';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { AccessActor } from '@/lib/accounts';
 import { type CompiledDataflow, importRef, selectQueries, type ImportTables } from '@/lib/dataflow';
-import { runDataflow, type RunDataflowOptions } from '../sql/run-dataflow';
+import { runDataflow, type RunDataflowOptions } from '../sql';
 export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
 interface DocumentQueryOptions extends RunDataflowOptions {

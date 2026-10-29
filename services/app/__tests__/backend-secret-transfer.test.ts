@@ -5,8 +5,8 @@ import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import { identityForUser } from '@/lib/accounts';
 import {backendSecrets,readPinnedBackendSecret} from '@/lib/html-backend-secrets';
-import {transferArtifact} from '@/lib/artifacts/transfer';
-import {localPageBackendCapability} from '@/lib/page-operations/transport';
+import {transferArtifact} from '@/lib/artifacts';
+import {localPageBackendCapability} from '@/lib/page-operations';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({typeDefs:'type Query { ready: Boolean }',compiled:source,secretBindings:['TOKEN']})}));
 const harness=useAppHarness();
 it('revokes immutable former-owner secret access on transfer while preserving code and ordinary store reads',async()=>{

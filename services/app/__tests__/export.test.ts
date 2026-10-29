@@ -187,7 +187,7 @@ describe('readable = exportable includes BEARER-readable', () => {
     // doc, asks for its export, gets refused, and silently falls back to
     // screenshotting local files. The token that can WRITE the doc must be
     // able to export it.
-    const { createUser } = await import('@/lib/accounts/users');
+    const { createUser } = await import('@/lib/accounts');
     const { mintToken } = await import('@/lib/accounts/tokens');
     const user = await createUser({ email: 'exporter@example.com' });
     const owned = await mintToken('agent', user.id);

@@ -1,6 +1,6 @@
 import { lookup, Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { isForbiddenIp } from '@/lib/web-ingest/guard';
+import { isForbiddenIp } from '@/lib/web-ingest';
 
 const DNS_TIMEOUT_MS = 3000;
 let pendingLookups = 0;

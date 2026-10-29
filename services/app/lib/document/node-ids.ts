@@ -1,8 +1,7 @@
-import type { SourceRepair } from '@/lib/jsx/repair';
+import { type SourceRepair, parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 /** Source identity policy only; storage reserves emitted ids in its write transaction. */
 
 import { escapeHtml } from '@artifactbin/utils/escape';
-import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 interface NodeIdEntry { id: string; path: string; node: JsxElement }
 interface NodeIdRepair { path: string; from: string | null; to: string; reason: 'duplicate' | 'invalid' }

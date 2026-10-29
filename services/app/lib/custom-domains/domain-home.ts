@@ -21,8 +21,8 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
 import { personFaceBackground, personInitial } from '@/lib/islands';
-import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace/shelf';
-import { domainPostPath } from '@/lib/http/urls';
+import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace';
+import { domainPostPath } from '@/lib/http';
 import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 
 /** A public file, as the profile page route answers it (`strip()` in app/api/page/profile). */

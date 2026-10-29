@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {selectNewArtifactDestination} from '../groups/destination';
+import {selectNewArtifactDestination} from '../groups';
 const personal={type:'personal'} as const;
 const alpha={type:'group',id:'grp_alpha'} as const;
 const beta={type:'group',id:'grp_beta'} as const;

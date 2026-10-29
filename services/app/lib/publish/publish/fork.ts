@@ -7,16 +7,14 @@ import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
 import { collectRefUses } from '@/lib/dataflow/references';
-import { catalogOf } from '@/lib/datasets/catalog';
-import { DatasetError } from '@/lib/datasets/errors';
+import { catalogOf, DatasetError, type ServerRefLoader } from '@/lib/datasets';
 import { trackEvent } from '@/lib/analytics';
 import { sourceWithoutAnchors } from '@/lib/document';
 import { getDb } from '@/lib/platform';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';
-import { json } from '@/lib/http/http';
-import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
+import { json } from '@/lib/http';
+import { resolveStoredStoryDesign } from '@/lib/data';
 
 /**
  * What a forker may change about the copy AS IT IS MADE — the three fields an

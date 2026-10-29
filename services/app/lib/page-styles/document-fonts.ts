@@ -13,7 +13,7 @@
  * theme's palette, radii and rules and changes only the face.
  */
 import type { HelmetContent } from '@/lib/document';
-import { STORY_FONT_FAMILIES } from '@/lib/data/story/story-fonts';
+import { STORY_FONT_FAMILIES } from '@/lib/data';
 
 /** The three slots a document may override, in the order the head declares them. */
 /** A family name is a css identifier, not free text — it lands in a stylesheet. Browser safe: the lazy

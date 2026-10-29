@@ -1,6 +1,5 @@
-import {getArtifactById} from '@/lib/artifacts';
+import {getArtifactById, artifactState} from '@/lib/artifacts';
 import {nativeHtml} from './native-html-fixture';
-import {artifactState} from '@/lib/artifacts/state';
 import {expect,it,vi} from 'vitest';
 import {request,useAppHarness} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

@@ -142,7 +142,7 @@ it("ships a self-contained installed parser that admits the same runtime adapter
   const { join } = await import("node:path");
   const { execFileSync } = await import("node:child_process");
   const { buildPreviewParser } =
-    await import("../../skills/preview-assets.server");
+    await import("../../skills");
   const directory = await mkdtemp(
     join(tmpdir(), "installed-runtime-module-parser-"),
   );

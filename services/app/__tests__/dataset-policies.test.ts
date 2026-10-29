@@ -1,14 +1,13 @@
 import { getDb } from '@/lib/platform';
-import { identityForUser, createUser } from '@/lib/accounts';
+import { identityForUser, createUser, ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import { setAccessFor } from '@/lib/artifacts/sharing';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
+import { loadDatasetRows } from '@/lib/datasets';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
 import {createDatasetGraphql} from '@/lib/dataset-graphql';
-import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import {randomUUID} from 'node:crypto';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';

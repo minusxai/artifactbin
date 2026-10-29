@@ -1,6 +1,6 @@
-import type {ContentObjects} from '@/lib/object-store/prepared-objects';
+import type {ContentObjects} from '@/lib/object-store';
 import {createHash} from 'node:crypto';
-import {runQueries,isQueryFailure} from '@/lib/sql/engine';
+import {runQueries,isQueryFailure} from '@/lib/sql';
 import type { Scalar, TableResult } from '@/lib/dataflow';
 import {compileDatasetSql} from './sql';
 import { datasetSqlParams } from '@/lib/dataflow/server';

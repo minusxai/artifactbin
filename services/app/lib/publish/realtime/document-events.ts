@@ -12,16 +12,13 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
-import {createPresenceRoom} from '@/lib/html-presence/room';
-import {presenceChannel} from '@/lib/html-presence/channel.server';
-import {PRESENCE_EVENT,type PresenceFrame} from '@/lib/html-presence/contract';
-import { getDb } from '@/lib/platform';
+import {createPresenceRoom, presenceChannel, PRESENCE_EVENT, type PresenceFrame} from '@/lib/html-presence';
+import { getDb, ID_RE } from '@/lib/platform';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, getArtifactAccessById, getArtifactById } from '@/lib/artifacts';
 import { authorHandle, ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { ID_RE } from '@/lib/platform';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from './live';

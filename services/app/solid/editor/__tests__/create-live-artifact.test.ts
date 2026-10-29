@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeBackend } from '@/test/helpers/artifact-backend';
-import type { ArtifactBackend } from '@/lib/artifact-backend/types';
+import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { createLiveArtifact } from '../create-live-artifact';
 import { renderHook } from '@/solid/__tests__/helpers';
 

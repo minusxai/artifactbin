@@ -1,7 +1,6 @@
 /** Explicit fixture read → conditional write. Contract tests use request() directly to test missing guards. */
 import {PATCH} from '@/app/api/artifacts/[id]/route';
-import { getArtifactById } from '@/lib/artifacts/rows';
-import {artifactState} from '@/lib/artifacts/state';
+import { getArtifactById, artifactState } from '@/lib/artifacts';
 import {request,type RequestOptions} from './harness';
 export async function observedRequest(path:string,options:RequestOptions):Promise<Request>{
  const match=path.match(/^\/api\/(?:my\/)?artifacts\/([^/?]+)(?:\/revert)?(?:\?.*)?$/);

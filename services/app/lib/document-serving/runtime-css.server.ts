@@ -20,9 +20,8 @@
  * other page never loads the client half and never asks.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { compileStoryCssWithExtras, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
-import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data/story/story-css';
-import { etagOf } from '@/lib/http/revalidation';
+import { compileStoryCssWithExtras, storyCssCompileVersion, isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data';
+import { etagOf } from '@/lib/http';
 import { runtimeCssCacheControl } from './cache-control';
 
 /** The door's parameters: the version, the compile environment the page was served under, the classes (space-separated). */

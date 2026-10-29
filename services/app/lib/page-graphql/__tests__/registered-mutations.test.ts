@@ -5,8 +5,7 @@ import { requestOrSessionActor } from "@/lib/authentication";
 import { getDb, services } from "@/lib/platform";
 import { getArtifactById, changeMembership } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";
-import { catalogOf } from "@/lib/datasets/catalog";
-import { loadDatasetRows } from "@/lib/datasets/dataset-store";
+import { catalogOf, loadDatasetRows } from "@/lib/datasets";
 import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { readHtmlPage } from "@/lib/html-publication";
 import {

@@ -22,12 +22,10 @@ import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById } from '@/lib/artifacts';
 import { setArtifactQuotaForTests } from '@/lib/artifacts/store';
 import { sweepTestUsers } from '@/lib/operations/testuser-erase';
-import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers } from '@/lib/accounts';
-import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { resolveTokenById } from '@/lib/accounts';
+import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers, resolveTokenById, createUser, getUserById } from '@/lib/accounts';
+import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken } from '@/lib/authentication';
-import { createUser, getUserById } from '@/lib/accounts';
 import { count, has, link } from '@/lib/social';
 import { request, useAppHarness } from './harness';
 

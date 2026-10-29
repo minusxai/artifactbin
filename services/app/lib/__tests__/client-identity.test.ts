@@ -4,7 +4,7 @@
  * bare `node`, which names a RUNTIME and not an agent.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ARTIFACTBIN_AGENT_HEADER, identifyClient, describeClient, logClientIdentity } from '@/lib/platform';
+import { ARTIFACTBIN_AGENT_HEADER, identifyClient, describeClient, logClientIdentity } from '@/lib/accounts';
 
 const byUa = (userAgent: string) => identifyClient({ userAgent });
 

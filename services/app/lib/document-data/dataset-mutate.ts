@@ -1,19 +1,13 @@
-import {verifyRegisteredHtmlMutation} from '@/lib/artifacts';
-import { artifactQuery } from '@/lib/artifacts/table';
-import { grantsOf, assertGrantCommit, getArtifactById, type GrantDocument } from '@/lib/artifacts';
-import {validateUserWrites} from '@/lib/datasets/user-fields';
-import {DatasetError} from '@/lib/datasets/errors';
-import { artifactState } from '@/lib/artifacts';
-import { completeMutationReceipt, type MutationReceipt } from '@/lib/artifacts';
+import {verifyRegisteredHtmlMutation, grantsOf, assertGrantCommit, getArtifactById, type GrantDocument, artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted} from '@/lib/artifacts';
+import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import {completeDocumentMutationReceipt} from './mutation-operation';
 import {NotificationExecutionError,lockNotificationExecution,notificationJobStore} from '@/lib/notifications';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
-import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy } from './dataset-policy';
-import {catalogOf,importedTables} from '@/lib/datasets/catalog';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
-import {sqlExtensions} from '@/lib/sql/extensions';
+import {sqlExtensions, isQueryFailure, runMutation, type MutationInput} from '@/lib/sql';
 import {paramSqlName} from '@artifactbin/contracts';
 /**
  * WRITING a dataset — the other half of lib/datasets/dataset-store.
@@ -46,15 +40,9 @@ import {paramSqlName} from '@artifactbin/contracts';
  */
 import { trackEvent } from '@/lib/analytics';
 import { MAX_QUERY_ROWS, getDb } from '@/lib/platform';
-import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { commitDatasetWrite, type ArtifactRow } from '@/lib/artifacts';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type { AccessActor } from '@/lib/accounts';
-import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import type { Scalar } from '@/lib/dataflow';
-import { mutationInvocation } from '@/lib/artifacts';
 import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
-import { emitDatasetCommitted } from '@/lib/artifacts';
 
 /** A CAS miss is an ordinary outcome under concurrency; this bounds the retry, not the correctness. */
 const WRITE_CAS_RETRIES = 8;
@@ -148,7 +136,7 @@ export async function mutateDataset(
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
-    let selected:import('@/lib/datasets/types').DatasetTable;
+    let selected:import('@/lib/datasets').DatasetTable;
     let schema:string;
     try{
       if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
@@ -273,7 +261,7 @@ export async function mutateDataset(
 }
 
 /** The one stored table a direct write names, by SQLite's own analysis of it over the dataset's catalog. */
-async function writtenTable(catalog:import('@/lib/datasets/types').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
+async function writtenTable(catalog:import('@/lib/datasets').DatasetCatalog,sql:string):Promise<{schema:string;table:string}> {
   const relations=catalog.tables.filter(t=>t.objectKey&&t.sql===undefined).map(t=>({schema:t.schema,table:t.name,columns:t.columns}));
   const writes=(await loadSqlite()).analyze(sql,relations,{mode:'write',extensions:sqlExtensions()}).writes;
   const [write]=writes;

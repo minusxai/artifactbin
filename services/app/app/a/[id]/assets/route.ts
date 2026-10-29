@@ -27,10 +27,9 @@ import {serveBundleAsset} from '@/lib/html-publication-bundle';
  * document is admitted through belongs with every other door in the app, and
  * the import bounds belong with the importer.
  */
-import { canReadArtifact, getArtifactById, holdsCreatingToken } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, holdsCreatingToken, resolveImageReference } from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/authentication';
-import {resolveImageReference} from '@/lib/artifacts';
-import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish/assets/web-assets';
+import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/publish';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { verifyExportKey } from '@/lib/export';
 import { publicRefAsset } from '@/lib/document-serving';

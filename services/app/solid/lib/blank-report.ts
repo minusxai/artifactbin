@@ -1,4 +1,4 @@
-import type { ArtifactHead } from '@/lib/artifact-backend/types';
+import type { ArtifactHead } from '@/lib/artifact-backend';
 import { BLANK_REPORT_MARKUP, isStartPlaceholder } from '@artifactbin/contracts';
 import { prepareClientDocumentUpdate } from '@/lib/document/document-update-client';
 

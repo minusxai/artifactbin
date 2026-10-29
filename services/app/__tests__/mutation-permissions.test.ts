@@ -6,7 +6,7 @@ import {objectStore} from '@/lib/object-store';
 import {getDb} from '@/lib/platform';
 import {POST as publishRoute} from '@/app/api/artifacts/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
-import {loadDatasetRows} from '@/lib/datasets/dataset-store';
+import {loadDatasetRows} from '@/lib/datasets';
 import { identityForUser, createUser } from '@/lib/accounts';
 import {patchMetadata} from './conditional-request';
 import {request,useAppHarness,mintAccountToken} from './harness';

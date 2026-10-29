@@ -12,7 +12,7 @@
  * routine 404: the key comes from the caller.
  */
 import { ASSET_HEADERS } from '@/app/assets/[hash]/route';
-import { MERMAID_IMAGE_FILE, mermaidImageBytes } from '@/lib/mermaid-images/store';
+import { MERMAID_IMAGE_FILE, mermaidImageBytes } from '@/lib/mermaid-images';
 
 export async function GET(_request: Request, ctx: { params: Promise<{ file: string }> }) {
   const match = MERMAID_IMAGE_FILE.exec((await ctx.params).file);

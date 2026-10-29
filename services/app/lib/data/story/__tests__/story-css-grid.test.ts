@@ -4,7 +4,7 @@
  * Check emitted CSS as well as candidate extraction so styling cannot vanish silently.
  */
 import { compileStoryCss, STORY_RECIPE_UNION } from '../story-css.server';
-import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
+import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui';
 
 const GRID_CLASSES = [
   'h-[calc(var(--g-rows)*var(--g-rh))]',

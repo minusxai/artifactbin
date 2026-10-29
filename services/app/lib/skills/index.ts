@@ -10,3 +10,9 @@ let cached:SkillTree|null=null;
 export function skillTree():SkillTree{
  return cached??=buildSkillTree(loadSkillSources());
 }
+export { AGENT_HELP_TITLE, agentDiscovery } from './agent-discovery';
+export type { AgentDiscovery } from './agent-discovery';
+export { skillPackageFiles, skillZip } from './package';
+export { buildPreviewDatasets, buildPreviewParser, buildToolboxPlatform } from './preview-assets.server';
+export { isPublicSkillTopic } from './public-surface';
+export type { SetupInstructionOptions } from './setup-instructions';
