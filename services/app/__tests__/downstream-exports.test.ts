@@ -45,6 +45,7 @@ import * as m12 from '@/lib/accounts';
 import * as m13 from '@/lib/accounts/tokens';
 import * as m14 from '@/lib/annotations';
 import * as m15 from '@/lib/artifacts';
+import * as m22 from '@/lib/artifacts/mutation-invocation';
 import * as m16 from '@/lib/datasets/execute';
 import * as m17 from '@/lib/operations/http';
 import * as m18 from '@/lib/operations/registry';
@@ -90,7 +91,7 @@ describe('values the deployment composes from', () => {
     for (const name of ["POST"]) expect(name in m11, name).toBe(true);
   });
   it('@/lib/accounts', () => {
-    for (const name of ["claimToken","createUser","mintToken"]) expect(name in m12, name).toBe(true);
+    for (const name of ["createUser","identityForUser","mintToken"]) expect(name in m12, name).toBe(true);
   });
   it('@/lib/accounts/tokens', () => {
     for (const name of ["MIN_TOKEN_TTL_MS","markRequestAuthority","mintToken"]) expect(name in m13, name).toBe(true);
@@ -100,6 +101,9 @@ describe('values the deployment composes from', () => {
   });
   it('@/lib/artifacts', () => {
     for (const name of ["canReadArtifact","getArtifactById"]) expect(name in m15, name).toBe(true);
+  });
+  it('@/lib/artifacts/mutation-invocation', () => {
+    for (const name of ["mutationInvocation","setMutationInvocation"]) expect(name in m22, name).toBe(true);
   });
   it('@/lib/datasets/execute', () => {
     for (const name of ["overrideCatalogExecutor"]) expect(name in m16, name).toBe(true);
@@ -133,7 +137,7 @@ describe('values the deployment composes from', () => {
 describe('types the deployment composes from', () => {
   it('@/lib/artifacts/mutation-invocation', () => {
     const source = sourceOf('@/lib/artifacts/mutation-invocation');
-    for (const name of ["MutationContext"]) expect(exportsType(source, name), name).toBe(true);
+    for (const name of ["MutationContext","MutationInvocation","MutationInvocationFactory"]) expect(exportsType(source, name), name).toBe(true);
   });
   it('@/lib/platform/db', () => {
     const source = sourceOf('@/lib/platform/db');

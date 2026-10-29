@@ -1,6 +1,7 @@
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { dataflowForRow, holdImport, nameablePeople } from '@/lib/document-data';
-import { ANONYMOUS_ACTOR, type AccessActor, sessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
 import { parseQueryRequest, type QueryRequest } from '@/lib/http/query-request';

@@ -1,4 +1,4 @@
-import {requestOrSessionActor} from '../accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';

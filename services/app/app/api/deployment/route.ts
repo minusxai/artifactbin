@@ -1,4 +1,4 @@
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 import { getDeploymentState } from '@/lib/deployment';
 /** Public deployment status carries no credentials; ownership is session-specific. */

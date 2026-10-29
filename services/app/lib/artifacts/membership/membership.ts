@@ -1,4 +1,5 @@
-import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, testAccountMayReach, type AccessActor, setRelationState } from '@/lib/accounts';
+import { identityForUser, lockMembershipUsers, testAccountMayReach, type AccessActor } from '@/lib/accounts';
+import { JOIN_RELATIONS, setRelationState } from '@/lib/social';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets/errors';

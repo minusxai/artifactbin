@@ -6,7 +6,10 @@ import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, c
 import { artifactQuery } from '@/lib/artifacts/table';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
-import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { setUserEmail } from '@/lib/accounts/users';
+import { setRelationState, has, count, linked, link } from '@/lib/social';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute, POST as create, GET as listArtifactsRoute } from '@/app/api/artifacts/route';

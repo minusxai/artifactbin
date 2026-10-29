@@ -6,7 +6,7 @@ import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {forkArtifact} from '@/lib/publish/publish';
 import {getArtifactById} from '@/lib/artifacts';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {request,useAppHarness,mintAccountToken} from './harness';
 const harness=useAppHarness();
 it('executes a fork with fresh state and keeps mutations isolated from the source',async()=>{

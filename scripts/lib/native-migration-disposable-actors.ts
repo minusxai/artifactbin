@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {realpath} from 'node:fs/promises';
 import { type Db, DATABASE_URL, LOCAL_OBJECT_DIR, S3_URL } from '../../services/app/lib/platform';
-import {mintToken,revokeToken,MIN_TOKEN_TTL_MS,DEFAULT_TOKEN_TTL_MS} from '../../services/app/lib/accounts';
+import { mintToken, revokeToken, MIN_TOKEN_TTL_MS, DEFAULT_TOKEN_TTL_MS } from '@/lib/accounts';
 import {verifyNativeIdentityInput} from '../../services/app/lib/native-identity-import/model';
 import type {NativeIdentityImport} from '../../services/app/lib/native-identity-import/contracts';
 import type {NativeDisposableRuntimeActorPort,NativeDisposableRuntimeActorReceipt} from './native-migration-disposable-actors-contract';

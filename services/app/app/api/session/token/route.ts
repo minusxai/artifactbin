@@ -1,6 +1,7 @@
 /** Legacy bearer-to-browser login is closed. Keep sign-out available to clear
  * old ownership cookies; email login may still adopt their artifacts. */
-import { agentSessionClearCookie, endPagesSessionsFor, sessionActor } from '@/lib/accounts';
+import { agentSessionClearCookie, endPagesSessionsFor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 
 export async function POST(_request: Request) {

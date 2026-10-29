@@ -10,16 +10,11 @@
  * 204 with Set-Cookie: the cookie minus this id, or the cleared cookie when it was the last one.
  * Cross-site requests are refused (403), like claim.
  */
-import {
-  agentSessionClearCookie,
-  agentSessionSetCookie,
-  liveAgentSession,
-  encodeAgentSession,
-  withoutToken,
-} from '@/lib/accounts';
+import { withoutToken } from '@artifactbin/utils';
+import { agentSessionClearCookie, agentSessionSetCookie, liveAgentSession, encodeAgentSession } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson } from '@/lib/http';
 import { revokeHeldToken } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 export async function POST(request: Request): Promise<Response> {
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);

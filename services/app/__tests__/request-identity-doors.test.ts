@@ -1,6 +1,6 @@
 /**
  * THE DOOR TABLE, pinned through real routes: which credential each door admits, and what it does with
- * it. Every identity in the app is resolved once per request (lib/accounts request-identity); the doors
+ * it. Every identity in the app is resolved once per request (lib/authentication request-identity); the doors
  * only choose a policy. These cases hold that policy still while the resolver underneath changes.
  *
  *  - token door   `withTokenAuth`          GET /api/artifacts, POST /api/artifacts/preflight, GET /api/artifacts/:id
@@ -11,13 +11,13 @@ import {afterEach,beforeEach,describe,expect,it} from 'vitest';
 import type {Actor} from '@artifactbin/contracts';
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {nativeHtml} from './native-html-fixture';
-import {setDocumentEditorPolicy} from '@/lib/accounts';
+import { setDocumentEditorPolicy } from '@/lib/authentication';
 import {GET as list} from '@/app/api/artifacts/route';
 import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
 import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from './harness';
-import {sessionActor} from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 
 const harness=useAppHarness();
 const verified=(userId:string,email:string,extra:Partial<Actor>={}):Actor=>({credential:'session',userId,email,emailVerified:true,...extra});

@@ -1,4 +1,4 @@
-import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts';
+import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/lib/authentication';
 import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, readableArtifact, refusingUnservable, holdsCreatingToken } from '@/lib/artifacts';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';

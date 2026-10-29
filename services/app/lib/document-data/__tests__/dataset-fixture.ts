@@ -2,7 +2,7 @@
 import {expect} from 'vitest';
 import {mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {createUser,identityForUser,type AccessActor} from '@/lib/accounts';
+import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {createArtifactFromBody} from '@/lib/publish/publish/requests';

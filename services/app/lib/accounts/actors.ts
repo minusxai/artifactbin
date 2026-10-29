@@ -5,22 +5,11 @@
 import type { Credential } from '@artifactbin/contracts';
 
 /**
- * Verified account claims — the INPUT of the host's document-editor policy (./document-editor) and of
- * nothing else. The request-identity resolver evaluates the policy once, from the claims the door admitted,
- * and records the answer as `AccessActor.documentEditor`; access code never sees a claim.
- */
-export interface VerifiedAccount {
-  userId: string | null;
-  email?: string | null;
-  emailVerified?: boolean;
-}
-
-/**
  * THE ACTOR every access decision reads: ownership, shares, the link, the SQL scopes, dataset grants and
  * notification authority. Every field is REQUIRED (null is a value, absence is a compile error), so a
  * literal that drops one does not compile: pass the resolved identity through instead of rebuilding it.
  *
- * Exactly two constructors: `resolveRequestIdentity` (lib/accounts/request-identity) for a request, and
+ * Exactly two constructors: `resolveRequestIdentity` (lib/authentication request-identity) for a request, and
  * `identityForUser` below for a principal the server rebuilds from its own rows.
  */
 export interface AccessActor {

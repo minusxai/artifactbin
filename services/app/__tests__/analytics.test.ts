@@ -30,7 +30,8 @@ import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';

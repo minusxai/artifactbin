@@ -1,6 +1,7 @@
 import {it,expect,vi,beforeEach} from 'vitest';
 const state=vi.hoisted(()=>({owner:'owner',owned:true,names:[] as string[],writes:[] as unknown[]}));
-vi.mock('@/lib/accounts',()=>({requestOrSessionActor:async()=>({userId:state.owner,tokenId:null}),refusesCrossSite:()=>false,accountOf:(actor:{userId:string})=>actor.userId}));
+vi.mock('@/lib/authentication',()=>({requestOrSessionActor:async()=>({userId:state.owner,tokenId:null}),refusesCrossSite:()=>false}));
+vi.mock('@/lib/accounts',()=>({accountOf:(actor:{userId:string})=>actor.userId}));
 vi.mock('@/lib/artifacts',()=>({getOwnedArtifactFor:async()=>state.owned?{}:null}));
 vi.mock('@/lib/html-backends',()=>({getHtmlBackendVersion:async()=>({ownerId:'owner',backendId:'backend',pageId:'page',secretBindings:['TOKEN']})}));
 vi.mock('@/lib/html-backend-secrets',()=>({backendSecrets:{names:async()=>state.names,put:async(...args:unknown[])=>{state.writes.push(args);state.names=['TOKEN'];},remove:async()=>{state.names=[];}}}));

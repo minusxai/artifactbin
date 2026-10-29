@@ -10,7 +10,8 @@ import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/arti
 import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

@@ -29,9 +29,9 @@ import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
 import { assetUrlFor, canonicalAssetUrl, urlHash, collectExternalAssetUrls } from '@/lib/document';
-import { docAssetImportRateLimited } from '@/lib/accounts';
+import { docAssetImportRateLimited } from '@/lib/allowances';
 import { assetByteQuotaExceeded } from '@/lib/artifacts';
-import { webIngestRateLimited } from '@/lib/accounts';
+import { webIngestRateLimited } from '@/lib/allowances';
 
 /** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */
 export type WebAssetKind = 'image' | 'font' | 'pdf' | 'script' | 'binary';

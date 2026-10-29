@@ -5,7 +5,8 @@ import {GET as sharingGet,PUT as sharingPut} from '@/app/api/my/artifacts/[id]/s
 import {getArtifactById} from '@/lib/artifacts';
 import {createDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import {request,useAppHarness} from './harness';
 const harness=useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});

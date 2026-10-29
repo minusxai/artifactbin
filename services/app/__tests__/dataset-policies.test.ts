@@ -8,7 +8,7 @@ import { setAccessFor } from '@/lib/artifacts/sharing';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
 import {createDatasetGraphql} from '@/lib/dataset-graphql';
-import {ANONYMOUS_ACTOR,type AccessActor} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import {randomUUID} from 'node:crypto';
 import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';

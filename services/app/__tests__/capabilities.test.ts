@@ -13,7 +13,8 @@ import { can } from '@/lib/artifacts';
 import { identityForUser, createTestUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 
 useAppHarness();
 

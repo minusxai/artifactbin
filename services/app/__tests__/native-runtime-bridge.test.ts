@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {useAppHarness,mintAccountToken,request} from './harness';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as asset} from '@/app/a/[id]/assets/route';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {reserveIds} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {importNativeHistory} from '@/lib/native-history-import';

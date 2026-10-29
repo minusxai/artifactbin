@@ -13,7 +13,8 @@ import { createArtifact } from '@/lib/artifacts';
 
 import { revokeToken } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
-import { claimTokenById, createUser } from '@/lib/accounts';
+import { claimTokenById } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 import { agentCookie, request } from './harness';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 

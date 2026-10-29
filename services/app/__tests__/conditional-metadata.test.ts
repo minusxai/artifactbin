@@ -1,4 +1,4 @@
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';

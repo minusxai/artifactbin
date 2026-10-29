@@ -4,7 +4,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {getArtifactById} from '@/lib/artifacts';
-import {requestOrSessionActor} from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import {createRetainedDatasetGraphql} from '@/lib/dataset-graphql/retained';
 import {getDb} from '@/lib/platform';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';

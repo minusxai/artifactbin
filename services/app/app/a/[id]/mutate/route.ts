@@ -2,11 +2,11 @@ import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { runDocumentMutation } from '@/lib/document-data';
-import { refusesCrossSite } from '@/lib/accounts';
+import { refusesCrossSite } from '@/lib/authentication';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { parseMutationRequest } from '@/lib/dataflow';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

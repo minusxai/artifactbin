@@ -6,9 +6,6 @@
  * files, and notifications) is its own module above this one (document data): nothing here imports it.
  */
 
-// Installs the artifacts half of a token claim and a guest merge into lib/accounts (artifact-adoption).
-import './owner-adoption';
-
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
 export { canReadArtifact, documentEditorReaches, holdsCreatingToken, ownsArtifact, effectiveRole } from './access';
 export { commentMonitorScope, reactionScope, annotationScope, editorScope, writerFor } from './table';
@@ -23,6 +20,8 @@ export { recordArtifactView } from './view-admission';
 export { artifactState } from './state';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; after-commit hooks; and the deployment's two seams. */
+/** Token claim and guest merge (lib/authentication), inside the caller's transaction. */
+export { adoptGuestArtifacts, adoptTokenArtifacts } from './owner-adoption';
 export { createArtifact, afterCreated, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
 export type { ArtifactInput } from './store';
 export { updateMetadataFromBody } from './metadata-wire';

@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ImmediateRelationVerb, RelationVerb } from '@artifactbin/contracts';
 import { useAppHarness } from '@/__tests__/harness';
-import { count, createUser, has, link, linked, replaceLinked, unlink } from '@/lib/accounts';
+import { count, has, link, linked, replaceLinked, unlink } from '@/lib/social';
+import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 
 useAppHarness();

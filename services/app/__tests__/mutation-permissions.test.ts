@@ -7,7 +7,7 @@ import {getDb} from '@/lib/platform';
 import {POST as publishRoute} from '@/app/api/artifacts/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
-import {identityForUser,createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import {patchMetadata} from './conditional-request';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {nativeDatasetClient} from './native-dataset-http';

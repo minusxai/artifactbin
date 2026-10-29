@@ -5,10 +5,10 @@
  * the import doors are a port-scanning oracle with a bandwidth bill.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { resetWebIngestRateLimit, webIngestRateLimited } from '@/lib/accounts';
+import { resetAllowances, webIngestRateLimited } from '@/lib/allowances';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
 
-afterEach(() => resetWebIngestRateLimit());
+afterEach(() => resetAllowances());
 
 describe('webIngestRateLimited', () => {
   it('allows exactly the cap, then refuses', () => {
@@ -46,7 +46,7 @@ describe('webIngestRateLimited', () => {
   it('resets for tests', () => {
     for (let i = 0; i < WEB_INGEST_MAX_PER_HOUR; i++) webIngestRateLimited('ingest:tok_e');
     expect(webIngestRateLimited('ingest:tok_e')).toBe(true);
-    resetWebIngestRateLimit();
+    resetAllowances();
     expect(webIngestRateLimited('ingest:tok_e')).toBe(false);
   });
 });

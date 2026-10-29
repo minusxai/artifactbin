@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { mintToken, createUser, resolveToken, sessionActor } from '@/lib/accounts';
+import { mintToken, createUser, resolveToken } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { POST as start } from '@/app/api/start/route';
 import { POST as connect } from '@/app/api/internal/artifact-approval/route';
 import { POST as mint } from '@/app/api/internal/tokens/route';

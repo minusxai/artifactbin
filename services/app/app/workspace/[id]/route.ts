@@ -1,5 +1,5 @@
 /** Released portable files validate /workspace/* replies. Recheck write permissions before opening the hosted document. */
-import {browserActor} from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import {getEditableArtifactFor} from '@/lib/artifacts';
 import {baseUrl,json} from '@/lib/http';
 export async function GET(request:Request,context:{params:Promise<{id:string}>}){

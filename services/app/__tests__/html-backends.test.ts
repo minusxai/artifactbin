@@ -4,7 +4,7 @@ import {POST} from '@/app/api/artifacts/route';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/lib/html-backends';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
  if(source==='bad')throw Error('invalid backend schema');
  return {typeDefs:'type Query { greeting: String }',compiled:source};

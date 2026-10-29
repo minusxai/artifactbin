@@ -11,7 +11,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, setSession } from '@/__tests__/harness';
 
 useAppHarness();

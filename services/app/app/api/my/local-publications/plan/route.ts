@@ -1,5 +1,5 @@
 /** Read-only dependency planning: no reservation, upload, artifact or sharing mutation. */
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { inspectPublicationBundle, type PublicationBundle } from '@/lib/html-publication-bundle';
 import { PUBLISH_BODY_LIMIT, json, readJson } from '@/lib/http';
 export async function POST(request: Request): Promise<Response> {

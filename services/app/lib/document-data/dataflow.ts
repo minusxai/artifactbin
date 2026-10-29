@@ -5,7 +5,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
 import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
 import { executeDocumentQueries, type DocumentQuerySourceMode } from '../datasets/document-queries';
-import { JOIN_RELATIONS } from '../accounts';
+import { JOIN_RELATIONS } from '@/lib/social';
 import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';

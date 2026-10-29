@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
-import {createUser} from '@/lib/accounts';
-import {ANONYMOUS_ACTOR} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import {canReadArtifact,getArtifactAccessById,getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 const harness=useAppHarness();

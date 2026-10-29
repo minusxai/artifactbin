@@ -32,7 +32,7 @@ import { PUT as putSharing } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { setDocAssetImportCapForTests } from '@/lib/accounts';
+import { setDocAssetImportCapForTests } from '@/lib/allowances';
 import { assetUrlFor, urlHash } from '@/lib/document/asset-url';
 import { getDb } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';

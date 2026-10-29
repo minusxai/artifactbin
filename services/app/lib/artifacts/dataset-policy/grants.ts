@@ -2,7 +2,7 @@ import {verifySavedHtmlUpload,type SavedHtmlUploadDocument} from '../saved-html-
 import {verifyRegisteredHtmlMutation} from '../registered-html-mutation';
 import {liveAccessFacts,type AccessFacts} from '@/lib/artifacts/access-facts';
 import {artifactQuery} from '@/lib/artifacts/document';
-import {JOIN_RELATIONS} from '@/lib/accounts';
+import { JOIN_RELATIONS } from '@/lib/social';
 import type { DatasetGrantContext, DatasetGrantPolicy, Queryable } from '@artifactbin/contracts';
 import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow } from '../table';

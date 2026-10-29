@@ -6,10 +6,11 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { createArtifact } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/platform';
-import { link } from '@/lib/accounts';
+import { link } from '@/lib/social';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, type UserRow } from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { type UserRow } from '@/lib/accounts/users';
 
 const harness = useAppHarness();
 const session = (user: { id: string; email: string | null }) => ({ credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true });

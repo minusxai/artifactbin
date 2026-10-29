@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
-import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, createUser, getUserById, setAvatar } from '@/lib/accounts';
+import { AVATAR_MAX_BYTES, AvatarError, avatarPath, avatarUrl, avatarVersion, clearAvatar, setAvatar } from '@/lib/avatars';
+import { createUser, getUserById } from '@/lib/accounts';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 
 useAppHarness();

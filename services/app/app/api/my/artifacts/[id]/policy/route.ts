@@ -1,4 +1,4 @@
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { datasetPolicyRequest } from '@/lib/document-data';
 async function handle(
   request: Request,

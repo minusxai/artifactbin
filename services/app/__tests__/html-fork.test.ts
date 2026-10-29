@@ -3,7 +3,7 @@ import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST} from '@/app/api/artifacts/route';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/lib/html-backends';
-import {identityForUser} from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import {getArtifactById} from '@/lib/artifacts';
 import {backendSecrets} from '@/lib/html-backend-secrets';
 import {forkArtifact} from '@/lib/publish/publish';

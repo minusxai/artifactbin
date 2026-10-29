@@ -13,7 +13,8 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import { DATASET_OPERATIONS } from '@/lib/operations/datasets';
 import { request, useAppHarness } from './harness';
 

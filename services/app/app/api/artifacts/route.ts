@@ -1,5 +1,6 @@
 import { createArtifactFromBody } from '@/lib/publish/publish';
-import { withTokenAuth, type TokenHoldingActor } from '@/lib/accounts';
+import { withTokenAuth } from '@/lib/authentication';
+import { type TokenHoldingActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { PUBLISH_BODY_LIMIT, baseUrl, json, readJson } from '@/lib/http';
 import { readFileUpload } from '@/lib/datasets/file-store';

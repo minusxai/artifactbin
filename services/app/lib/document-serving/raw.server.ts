@@ -22,7 +22,7 @@ import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';
 import {cspExtensionsFor} from '@/lib/trust/document-trust';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
@@ -185,7 +185,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
 
   switch (artifact.format) {
     case 'html': {
-      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
+      const at = domain ? null : await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: byExportKey });
       if (at === 'not_found') return notFound();
       const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
       if(at)policy=await policyFor(row);

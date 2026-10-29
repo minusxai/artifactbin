@@ -16,7 +16,8 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
 import { identityForUser, revokeHeldToken, revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/accounts';
+import { claimToken, claimTokenById } from '@/lib/authentication';
+import { createUser, revokeUserToken } from '@/lib/accounts';
 import { mountRoutes } from '@/server/api';
 
 const harness = useAppHarness();

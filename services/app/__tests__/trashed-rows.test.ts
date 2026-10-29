@@ -24,7 +24,8 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
 import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

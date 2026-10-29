@@ -1,8 +1,8 @@
 /** The in-memory hourly attempt buckets: per-document import ceilings, and the sweep that keeps the map bounded. */
 import { afterEach, describe, expect, it } from 'vitest';
-import { docAssetImportRateLimited, resetRateLimit, setDocAssetImportCapForTests, webIngestBucketCount, webIngestRateLimited } from '@/lib/accounts';
+import { docAssetImportRateLimited, resetAllowances, setDocAssetImportCapForTests, webIngestBucketCount, webIngestRateLimited } from '@/lib/allowances';
 
-afterEach(() => { resetRateLimit(); setDocAssetImportCapForTests(null); });
+afterEach(() => { resetAllowances(); setDocAssetImportCapForTests(null); });
 
 const MINUTE = 60 * 1000, HOUR = 60 * MINUTE;
 
@@ -24,11 +24,11 @@ describe('expiry and sweep', () => {
     expect(webIngestRateLimited('a', t0 + HOUR + 72_000)).toBe(false);
   });
 
-  it('resetRateLimit empties every bucket', () => {
+  it('resetAllowances empties every bucket', () => {
     webIngestRateLimited('a');
     docAssetImportRateLimited('art_1');
     expect(webIngestBucketCount()).toBe(2);
-    resetRateLimit();
+    resetAllowances();
     expect(webIngestBucketCount()).toBe(0);
   });
 });

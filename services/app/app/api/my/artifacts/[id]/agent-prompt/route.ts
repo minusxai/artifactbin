@@ -1,5 +1,5 @@
 import { getArtifactFor } from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { baseUrl, json } from '@/lib/http';
 import { existingPaste } from '@/lib/agent-copy';
 

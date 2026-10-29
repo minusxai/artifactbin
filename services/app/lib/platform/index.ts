@@ -1,7 +1,7 @@
 /**
  * The platform module's interface: the infrastructure every product module stands on (configuration, the
  * database and its schema, identifiers, the event log and its outbox, the request scope, the injected services,
- * query statistics, client identity and handles). Code outside lib/platform enters only here
+ * query statistics and client identity). Code outside lib/platform enters only here
  * (DEEP_MODULES in scripts/ci/module-graph.mjs); config.ts, db.ts and services.ts keep their paths because a
  * downstream deployment imports them directly (__tests__/downstream-exports.test.ts).
  */
@@ -21,7 +21,6 @@ export type { Db, Queryable } from './db';
 export { actorSubject, emit, envelope } from './events';
 export type { EventSubject } from './events';
 export { enqueueEvent, enqueueEvents, recordEvent, setEventProjection, startEventPublisher } from './event-outbox';
-export { RESERVED_HANDLES, reserveHandle } from './handles';
 export { FILE_ID_LENGTH, ID_RE, generateFileId, generateInternalId, generateTokenId } from './ids';
 export { currentHeaders, currentRequest, overrideRequestHeaders, runWithRequest } from './request-context';
 export { measureQueries } from './query-stats';

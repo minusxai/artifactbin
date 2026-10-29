@@ -7,7 +7,7 @@ import {GET as eventsRoute} from '@/app/a/[id]/events/route';
 import {GET as frameRoute} from '@/app/a/[id]/events/frame/route';
 import {getArtifactById} from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
-import {createUser} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 import {mintAccountToken,request,useAppHarness} from './harness';
 const harness=useAppHarness(),params=(id:string)=>({params:Promise.resolve({id})});

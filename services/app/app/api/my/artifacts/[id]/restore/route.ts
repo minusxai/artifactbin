@@ -1,4 +1,4 @@
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 import { restoreArtifactFor } from '@/lib/workspace';
 

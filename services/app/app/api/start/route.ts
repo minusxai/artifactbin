@@ -14,15 +14,16 @@ import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import {artifactStarter} from '@/lib/workspace/artifact-starters';
 import {canUseDeploymentIdentity} from '@/lib/deployment';
-import { canAuthenticateUser } from '@/lib/accounts';
-import { requestOrSessionActor, sessionActor, withAccountToken } from '@/lib/accounts';
+import { canAuthenticateUser } from '@/lib/user-kinds';
+import { requestOrSessionActor, sessionActor } from '@/lib/authentication';
+import { withAccountToken } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
 import {parseArtifactDestination} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 
 export async function POST(request: Request) {
   // A browser session takes precedence over a bearer; both are the original request identity
-  // (lib/accounts request-identity). A session creates through the account's own token, as every browser create does.
+  // (lib/authentication request-identity). A session creates through the account's own token, as every browser create does.
   const session = await sessionActor(request);
   const actor = session.credential === 'session' ? session : await requestOrSessionActor(request);
   const creator = actor.userId ? await withAccountToken(actor) : null;

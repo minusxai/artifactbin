@@ -31,7 +31,8 @@ import { projectNotifications } from '@/lib/notifications';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { spaPaths } from '@/lib/http/app-pages';
-import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
 import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit, isRetiredCliRequest, retiredCliResponse } from '@artifactbin/contracts';
 import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';

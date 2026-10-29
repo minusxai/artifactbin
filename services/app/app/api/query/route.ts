@@ -1,6 +1,6 @@
 import { refLoaderForActor } from '@/lib/artifacts';
 import { datasetResolverForActor, runDocumentDataflow } from '@/lib/document-data';
-import { requestOrSessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/authentication';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';

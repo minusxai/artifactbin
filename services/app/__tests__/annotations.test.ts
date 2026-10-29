@@ -29,7 +29,7 @@ import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { setUsername } from '@/lib/accounts';
 import { countOpenAnnotations } from '@/lib/annotations';
-import { avatarUrl } from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

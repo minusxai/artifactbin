@@ -1,6 +1,7 @@
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
-import { identityForUser, claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import {GET as readImageRoute} from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
 import {POST as stageRoute} from '@/app/api/my/artifacts/[id]/comment-images/route';
 import {getDb} from '@/lib/platform';

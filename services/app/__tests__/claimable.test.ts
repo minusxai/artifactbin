@@ -24,7 +24,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { mintToken, revokeToken } from '@/lib/accounts';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 
 import { POST as claimableRoute } from '@/app/api/tokens/claimable/route';

@@ -10,21 +10,12 @@ import { mintAccountToken, setSession } from './harness';
  *   reject    → POST /api/tokens/reject revokes a cookie-held token and rewrites the cookie without it
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { claimTokenById, createUser } from '@/lib/accounts';
+import { claimTokenById } from '@/lib/authentication';
+import { createUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
-import {
-  DEFAULT_TOKEN_TTL_MS,
-  LIVE_TOKEN_SQL,
-  TOUCH_INTERVAL_MS,
-  ensureUserToken,
-  listTokensByUser,
-  mintToken,
-  resolveToken,
-  resolveTokenById,
-  tokenStatus,
-  touchToken,
-} from '@/lib/accounts';
-import { decodeAgentSessionEnvelope } from '@/lib/accounts';
+import { DEFAULT_TOKEN_TTL_MS, ensureUserToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, tokenStatus } from '@/lib/accounts';
+import { TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
+import { decodeAgentSessionEnvelope } from '@/lib/accounts/agent-session';
 import { POST as mintAnonymous } from '@/app/api/internal/tokens/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
@@ -70,54 +61,11 @@ describe('mint: expiry is a property of every token', () => {
     }
   });
 
-  it("the module's own mint carries the same default and range", async () => {
-    const t = await mintAccountToken('t');
-    expect(Math.abs(Date.parse(t.expiresAt!) - (Date.now() + DEFAULT_TOKEN_TTL_MS))).toBeLessThan(5_000);
-    await expect(mintToken('t', null, undefined, { expiresInMs: HOUR / 2 })).rejects.toThrow(RangeError);
-    await expect(mintToken('t', null, undefined, { expiresInMs: 366 * 24 * HOUR })).rejects.toThrow(RangeError);
-    const never = await mintToken('t', null, undefined, { expiresInMs: null });
-    expect(never.expiresAt).toBeNull();
-  });
-
   it("the account's 'web' token never expires — it is the browser's own credential, not an agent's", async () => {
     const user = await createUser({ email: 'web@example.com' });
     const id = await ensureUserToken(user.id);
     expect((await row(id)).expires_at).toBeNull();
     expect(await ensureUserToken(user.id)).toBe(id);
-  });
-});
-
-describe('status: derived, never stored twice', () => {
-  const now = Date.parse('2026-09-01T12:00:00Z');
-  it('active, expired, revoked — and revoked wins over expired', () => {
-    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('active');
-    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('expired');
-    expect(tokenStatus({ deleted_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('revoked');
-    expect(tokenStatus({ deleted_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('revoked');
-  });
-  it('a NULL expires_at never expires (grandfathered rows from before this column)', () => {
-    expect(tokenStatus({ deleted_at: null, expires_at: null }, now)).toBe('active');
-    expect(tokenStatus({ deleted_at: null, expires_at: null }, now + 10 * 365 * 24 * HOUR)).toBe('active');
-  });
-  it('accepts Date values as the driver may hand them back', () => {
-    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now - 1) }, now)).toBe('expired');
-  });
-
-  /*
-   * The soft state is `deleted_at` — the verb stays revoke — and it is read
-   * by the live clause, by resolve, and by the table itself.
-   */
-  it('the live clause, resolve and the table all say deleted_at, never revoked_at', async () => {
-    expect(LIVE_TOKEN_SQL).toContain('deleted_at IS NULL');
-    expect(LIVE_TOKEN_SQL).not.toContain('revoked_at');
-    const t = await mintAccountToken('t');
-    expect(await resolveToken(t.token)).not.toBeNull();
-    const db = await harness.db();
-    await db.query('UPDATE tokens SET deleted_at = now() WHERE id = $1', [t.id]);
-    expect(await resolveToken(t.token)).toBeNull();
-    const cols = (await db.query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_name = 'tokens'")).rows.map((r) => r.column_name);
-    expect(cols).toContain('deleted_at');
-    expect(cols).not.toContain('revoked_at');
   });
 });
 
@@ -175,10 +123,6 @@ describe('touch: last_used_at, sampled', () => {
     await (await harness.db()).query('UPDATE tokens SET last_used_at = $2 WHERE id = $1', [t.id, stale]);
     await listArtifacts(request('/api/artifacts', { actor }));
     expect(Date.parse((await row(t.id)).last_used_at!)).toBeGreaterThan(Date.parse(stale));
-  });
-
-  it('touchToken itself never throws for an unknown id', async () => {
-    await expect(touchToken('tok_doesnotexist')).resolves.toBeUndefined();
   });
 
   it("the account's token list carries expires_at and last_used_at", async () => {

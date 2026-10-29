@@ -7,7 +7,7 @@ import {createHumanAuth} from '@artifactbin/auth';
 import {useAppHarness} from '@/__tests__/harness';
 import {LOCAL_OBJECT_DIR} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform';
-import {mintToken,revokeToken} from '@/lib/accounts';
+import { mintToken, revokeToken } from '@/lib/accounts';
 import {canonicalizeHtmlPage} from '@/lib/html-page';
 import {pageSourceDigest} from '@/lib/registered-page-queries/registry';
 import {nativeIdentityDigest as digest} from '@/lib/native-identity-import/model';

@@ -11,7 +11,7 @@
  * is the proxy's (`usr_…`) — the same value every artifact, share and token
  * keys on. The row is created LAZILY on the first sight of a credential that
  * CARRIES claims — a cookie session or a bearer token the proxy could name an
- * account for (both resolved in lib/accounts/request-identity), since
+ * account for (both resolved in lib/authentication/request-identity), since
  * a CLI-only person is a person too and `artifact_shares` is matched through
  * this row. There is no boot-time sync: one identity, one row, ids agreeing by
  * construction.

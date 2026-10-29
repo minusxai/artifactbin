@@ -28,7 +28,7 @@ import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
 } from '@/lib/document';
-import { avatarUrl } from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';

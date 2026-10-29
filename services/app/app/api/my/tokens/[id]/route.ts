@@ -7,8 +7,8 @@
  * uniform 404: unknown, revoked and foreign are indistinguishable here.
  */
 import { json, unauthorized } from '@/lib/http';
-import { sessionActor } from '@/lib/accounts';
-import { refusesCrossSite } from '@/lib/accounts';
+import { sessionActor } from '@/lib/authentication';
+import { refusesCrossSite } from '@/lib/authentication';
 import { revokeUserToken } from '@/lib/accounts';
 
 export async function DELETE(request: Request, ctx: { params: Promise<Record<string, string>> }) {

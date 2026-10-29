@@ -26,7 +26,8 @@ import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { updateSharing } from '@/lib/artifacts/sharing';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, setUsername } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
+import { createUser, setUsername } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });

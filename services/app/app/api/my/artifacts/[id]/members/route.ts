@@ -1,4 +1,4 @@
-import { browserActor, sessionActor } from '@/lib/accounts';
+import { browserActor, sessionActor } from '@/lib/authentication';
 import { runOperation } from '@/lib/operations/http';
 import { membershipState, MembershipError } from '@/lib/artifacts';
 import { json, readJson, unauthorized } from '@/lib/http';

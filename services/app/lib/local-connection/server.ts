@@ -1,6 +1,6 @@
 import {createHash,randomBytes} from 'node:crypto';
 import {attachActor} from '@artifactbin/utils';
-import {ANONYMOUS_ACTOR} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import {effectiveRole,getArtifactHeaderById} from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {isCrossSiteRequest,json,readJson,baseUrl} from '@/lib/http';

@@ -1,4 +1,4 @@
-import {hostedCredentialDescriptor} from './tokens';
+import {hostedCredentialDescriptor} from '@/lib/accounts';
 import type {RunnerJson} from '@artifactbin/contracts';
 /** What a request's credential allows; resolved from token identity, never from caller headers. */
 export type HostedOperationAuthorization =

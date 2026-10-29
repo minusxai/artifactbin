@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {nativeHtml} from './native-html-fixture';
 import {artifactState} from '@/lib/artifacts/state';
-import {setDocumentEditorPolicy} from '@/lib/accounts';
+import { setDocumentEditorPolicy } from '@/lib/authentication';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';
@@ -14,7 +14,8 @@ import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route'
 import {getArtifactById} from '@/lib/artifacts';
 import { revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {createUser,claimToken} from '@/lib/accounts';
+import { createUser } from '@/lib/accounts';
+import { claimToken } from '@/lib/authentication';
 import {request,useAppHarness} from './harness';
 
 const harness=useAppHarness();

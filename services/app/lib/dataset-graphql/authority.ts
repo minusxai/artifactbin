@@ -1,4 +1,4 @@
-import type {AccessActor} from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {canReadArtifact,getArtifactById,getVersionFor,writerFor,type ArtifactRow} from '@/lib/artifacts';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import {catalogOf} from '@/lib/datasets/catalog';

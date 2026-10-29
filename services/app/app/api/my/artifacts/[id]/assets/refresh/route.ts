@@ -1,4 +1,4 @@
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { refreshAssetsFor } from '@/lib/publish/publish';
 
 /**

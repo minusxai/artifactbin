@@ -1,12 +1,12 @@
 /** The document fetch quota: anonymous readers are bucketed by client IP, and the in-memory buckets are bounded. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { documentFetchRateLimited, documentFetchReader, resetWebIngestRateLimit, setDocumentFetchCapForTests, webIngestBucketCount } from '@/lib/accounts';
+import { documentFetchRateLimited, documentFetchReader, resetAllowances, setDocumentFetchCapForTests, webIngestBucketCount } from '@/lib/allowances';
 
 const via = (xff?: string) => new Request('http://x.test/a/doc/fetch', { headers: xff ? { 'x-forwarded-for': xff } : {} });
 const guest = { userId: null, tokenId: null };
 
-beforeEach(() => { resetWebIngestRateLimit(); setDocumentFetchCapForTests(2); });
-afterEach(() => { resetWebIngestRateLimit(); setDocumentFetchCapForTests(null); });
+beforeEach(() => { resetAllowances(); setDocumentFetchCapForTests(2); });
+afterEach(() => { resetAllowances(); setDocumentFetchCapForTests(null); });
 
 describe('documentFetchReader', () => {
   it('names the account or token when there is one, else the proxy-observed client IP', () => {

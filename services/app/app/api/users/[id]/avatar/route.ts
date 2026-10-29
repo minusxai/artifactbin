@@ -17,7 +17,7 @@
  * breaking. A replaced picture is therefore asked for at an address no browser
  * has seen.
  */
-import { avatarVersion } from '@/lib/accounts';
+import { avatarVersion } from '@/lib/avatars';
 import { objectStore } from '@/lib/object-store';
 import { getUserById } from '@/lib/accounts';
 

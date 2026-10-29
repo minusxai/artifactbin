@@ -4,7 +4,8 @@
  */
 import { capabilityGuard, getArtifactFor, getSharingFor, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, updateSharingFor } from '@/lib/artifacts';
 import type { SharingPatch } from '@artifactbin/contracts';
-import { browserActor, shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
+import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';
 import { json, readJson } from '@/lib/http';
 import { catalogOf } from '@/lib/datasets/catalog';
 

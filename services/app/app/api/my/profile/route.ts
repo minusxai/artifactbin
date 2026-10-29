@@ -12,7 +12,7 @@
  * and a refused rename leaves the confirmation undone rather than half-applied.
  */
 import { auth } from '@/auth';
-import { avatarUrl } from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { confirmWelcome } from '@/lib/accounts';
 import { ensureUsername, getUserById, setUsername } from '@/lib/accounts';

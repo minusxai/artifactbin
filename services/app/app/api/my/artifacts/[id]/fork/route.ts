@@ -2,7 +2,7 @@ import { getArtifactById, effectiveRole } from '@/lib/artifacts';
 import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish/publish';
 import { forkOwner } from '@/lib/operations/registry';
 import { capabilityGuard } from '@/lib/artifacts';
-import { browserActor } from '@/lib/accounts';
+import { browserActor } from '@/lib/authentication';
 import { canRead } from '@artifactbin/contracts';
 import { ensureUserToken } from '@/lib/accounts';
 import { ownerUsername } from '@/lib/accounts';

@@ -29,10 +29,10 @@ import { verifyExportKey } from '@/lib/export';
 import { baseUrl, json, parseCookie } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
-import {
-  avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
-  issuePagesTicket, ownerUsername, sessionActor,
-} from '@/lib/accounts';
+import { avatarUrl } from '@/lib/avatars';
+import { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from '@/lib/authentication';
+import { count, has } from '@/lib/social';
+import { getUserById, issuePagesTicket, ownerUsername } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import {ARTIFACT_FORMATS, type ArtifactFormat, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
@@ -216,7 +216,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * refusal is this route's own uniform 404, so a reader without history access
    * does not learn the parameter exists.
    */
-  const at = await archivedVersionFor(request, artifact, { capture: exporting });
+  const at = await archivedVersionFor(request, artifact, () => requestOrSessionActor(request), { capture: exporting });
   if (at === 'not_found') return notFound();
   const nativeHtml = artifact.format === 'html';
   const isDoc = nativeHtml;

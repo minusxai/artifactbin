@@ -1,4 +1,4 @@
-import { refusesCrossSite, requestOrSessionActor } from '@/lib/accounts';
+import { refusesCrossSite, requestOrSessionActor } from '@/lib/authentication';
 import {json} from '@/lib/http/http';
 import {runOperation} from './http';
 

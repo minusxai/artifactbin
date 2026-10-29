@@ -1,4 +1,4 @@
-import { isBrowserSessionRequest } from '@/lib/accounts';
+import { isBrowserSessionRequest } from '@/lib/authentication';
 import { json } from '@/lib/http';
 import { fetchBrowserFontResource } from '@/lib/web-ingest/browser-fonts';
 import { WebIngestError } from '@/lib/web-ingest/guard';
