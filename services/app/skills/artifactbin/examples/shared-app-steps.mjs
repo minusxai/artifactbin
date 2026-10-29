@@ -5,9 +5,9 @@
  *   --guest-steps guest.mjs --cleanup-steps cleanup.mjs
  * Gotchas: viewports run at once, each within 8 s: the wide one saves TEST and re-reads it after a
  *   reload (the guest reads it next; cleanup.mjs clears it, even on failure); the narrow one checks
- *   charts, the drill-down and dark mode. Waits are on #status "Loaded…" and the target's own
- *   element (cat-NAME-target). Each check is a step(label) listed as Verified. It fails on
- *   [placeholders] and on stray text outside main.
+ *   charts, the drill-down and dark mode (turned back off after, so nothing stays changed). Waits
+ *   are on #status "Loaded…" and the target's own element (cat-NAME-target). Each check is a
+ *   step(label) listed as Verified. It fails on [placeholders] and on stray text outside main.
  */
 const CATEGORY='Groceries',TEST='457',PLACEHOLDERS_OK=false;
 const open=`[data-af-id="cat-${CATEGORY}-open"]`,target=`[data-af-id="cat-${CATEGORY}-target"]`;
@@ -75,11 +75,14 @@ await step('budgets are set, the trend has spent and budget for every month, in 
 await step(`${CATEGORY} opens its drill-down rows`,async()=>{
   await page.locator(open).click();
   await page.locator('[data-af-id^="row-"]').first().waitFor({timeout:3000});});
-await step('this viewer\'s dark mode survives a reload',async()=>{
-  await page.getByRole('button',{name:/dark mode/i}).click();
-  await page.waitForFunction(()=>document.documentElement.dataset.afDark==='true',null,
-    {timeout:2000});
-  await page.reload();await loaded();
-  if(await page.evaluate(()=>document.documentElement.dataset.afDark)!=='true')
-    throw Error('dark mode not remembered after reload');});
+await step('this viewer\'s dark mode survives a reload, then is turned back off',async()=>{
+  const dark=()=>page.evaluate(()=>document.documentElement.dataset.afDark==='true');
+  const press=async on=>{await page.getByRole('button',{name:/dark mode/i}).click();
+    await page.waitForFunction(on=>(document.documentElement.dataset.afDark==='true')===on,on,
+      {timeout:2000});};
+  await press(true);
+  // Turned back off even when the reload check fails, so the check leaves no change behind.
+  try{await page.reload();await loaded();
+    if(!await dark())throw Error('dark mode not remembered after reload');}
+  finally{if(await dark())await press(false);}});
 return {steps:'narrow'};

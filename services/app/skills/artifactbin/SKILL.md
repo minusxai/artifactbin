@@ -96,11 +96,12 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   DIR` preview needs `--playwright-module`). Never rerun an unchanged failing check; read its step
   timings, change the steps or page, then rerun once. After one clean steps run covering the
   requested behaviour (the summary is your layout evidence; no pixel scripts or re-exports), reply
-  with the link, then stop. Describe testing only by copying check's Tested/Not tested lines as
-  printed; don't add words like 'end to end' or 'fully verified'. Republish only to fix a failed
-  requirement, never for polish, refactors or extra verification. Open screenshots only if your
-  model accepts image input; otherwise the reply says appearance is unverified. For a shared app,
-  the reply also says how others get access: open the link and sign in to edit.
+  with the link, then stop. Describe how it's built only from the starter's Built with line.
+  Describe testing only by copying check's Tested/Not tested lines as printed; don't add words like
+  'end to end' or 'fully verified'. Republish only to fix a failed requirement, never for polish,
+  refactors or extra verification. Open screenshots only if your model accepts image input;
+  otherwise the reply says appearance is unverified. For a shared app, the reply also says how
+  others get access: open the link and sign in to edit.
 - **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then
   `node scripts/publish.mjs page.html`; keep editing and publishing the same file and never
   regenerate the page from scratch. Publish rewrites the file with `data-af-id`s: re-read it before

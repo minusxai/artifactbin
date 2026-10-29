@@ -1,6 +1,7 @@
 /**
  * The deck example's steps (skills/artifactbin/examples/deck-steps.mjs) run against slide DOM: titles may only claim
- * numbers and time words their own slide shows. A stub page hands evaluate() the jsdom document.
+ * numbers and time words their own slide shows, and the ask's milestone starts from the traction chart's last value.
+ * A stub page hands evaluate() the jsdom document; template() renders examples/deck.html itself (charts stubbed).
  */
 import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
@@ -8,23 +9,36 @@ import {afterEach, expect, it} from 'vitest';
 
 const source = readFileSync(new URL('../../../skills/artifactbin/examples/deck-steps.mjs', import.meta.url), 'utf8')
   .replace('SLIDE_COUNT=8,CHART_COUNT=2', 'SLIDE_COUNT=1,CHART_COUNT=1');
-const saved = {document: globalThis.document, NodeFilter: (globalThis as {NodeFilter?: unknown}).NodeFilter};
+const DECK = readFileSync(new URL('../../../skills/artifactbin/examples/deck.html', import.meta.url), 'utf8');
+const saved = {document: globalThis.document, NodeFilter: (globalThis as {NodeFilter?: unknown}).NodeFilter,
+  window: (globalThis as {window?: unknown}).window};
 afterEach(() => Object.assign(globalThis, saved));
 
 /** Runs the steps over one page; returns the first failure, or null when every step passes. */
-async function run(html: string): Promise<string | null> {
-  const dom = new JSDOM(html);
-  Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter});
+async function run(html: string | JSDOM, steps = source): Promise<string | null> {
+  const dom = typeof html === 'string' ? new JSDOM(html) : html;
+  Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter, window: dom.window});
   const locator: unknown = new Proxy({}, {get: (_, key) => key === 'count' ? async () => 1 : key === 'nth' ? () => locator : async () => {}});
   const page = {waitForFunction: async () => {}, evaluate: async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg),
     locator: () => locator, getByRole: () => locator, keyboard: {press: async () => {}}};
   const step = async (_label: string, fn: () => Promise<void>) => fn();
   try {
-    await new (Object.getPrototypeOf(async function () {}).constructor)('page', 'step', source)(page, step);
+    await new (Object.getPrototypeOf(async function () {}).constructor)('page', 'step', steps)(page, step);
     return null;
   } catch (error) {
     return (error as Error).message;
   }
+}
+
+/** Renders examples/deck.html (after edit) in jsdom with Vega stubbed, then runs the steps with placeholders allowed. */
+async function template(edit = (html: string) => html): Promise<string | null> {
+  const html = edit(DECK), [data, app] = [...html.matchAll(/<script type="module"[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]!);
+  const dom = new JSDOM(html.replace(/<script[\s\S]*?<\/script>/g, ''), {runScripts: 'outside-only'});
+  Object.assign(dom.window, {IntersectionObserver: class { observe() {} disconnect() {} }, stubs: {compile: () => ({spec: {}}),
+    vega: {View: class { async runAsync() {} finalize() {} }, parse: () => ({}), expressionInterpreter: {}}}});
+  dom.window.eval(data!);
+  await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs;${app!.replace(/^import .*$/gm, '')}})()`);
+  return run(dom, source.replace('PLACEHOLDERS_OK=false', 'PLACEHOLDERS_OK=true'));
 }
 
 const NAV = '<nav data-af-deck-chrome><button>←</button><button>→</button><span id="count">01 / 01</span></nav>';
@@ -78,4 +92,35 @@ it('treats "in one shift"-style phrases with a time noun as durations, and other
 it('fails on stray text outside the slides and the nav, such as a leftover "-->"', async () => {
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>', BADGE, '-->')).toContain('stray text outside the slides: "-->"');
   expect(await claims('Why buyers switch', '<ul><li>Less manual work</li></ul>')).toBeNull();
+});
+
+it('treats hyphenated and multi- durations as claims: the unit beside a number, or the same compound', async () => {
+  const title = 'Paid per sensor, per month, on a five-year term';
+  expect(await claims(title, '<ul><li>$40 per sensor per month</li></ul>')).toContain("claims 'five-year'");
+  expect(await claims(title, '<ul><li>$40 per sensor per month</li><li>5-year contracts</li></ul>')).toBeNull();
+  const quarters = '<div class="chart"><svg>' + [1, 2, 3, 4, 5, 6].map(q => `<text>Q${q}</text>`).join('') + '</svg></div>';
+  expect(await claims('Pilots become multi-year contracts', quarters)).toContain("claims 'multi-year'");
+  expect(await claims('Pilots become multi-year contracts', quarters + '<p>Multi-year renewals</p>')).toBeNull();
+  expect(await claims('Installs in a two-week window', '<ul><li>Installs in a day</li></ul>')).toContain("claims 'two-week'");
+});
+
+it('counts spelled-out numbers like digits, backed by the value, the word or that many labelled items', async () => {
+  const items = (n: number) => '<ul class="items">' + Array.from({length: n}, (_, i) => `<li>Reason ${String.fromCharCode(65 + i)}</li>`).join('') + '</ul>';
+  expect(await claims('Three reasons buyers switch', items(3))).toBeNull();
+  expect(await claims('Three reasons buyers switch', items(2))).toContain("claims 'three'");
+  expect(await claims('A dozen utilities signed', '<p>12 utilities signed</p>')).toBeNull();
+  expect(await claims('Two hundred sensors live', '<p>200 sensors installed</p>')).toBeNull();
+  expect(await claims('Two hundred sensors live', '<p>120 sensors installed</p>')).toContain("claims 'two hundred'");
+});
+
+it('passes the unedited deck template, whose ask milestone starts from the traction chart', async () => {
+  expect(await template()).toBeNull();
+});
+
+it("fails an ask milestone that doesn't start from the traction chart's last value", async () => {
+  expect(await template(html => html.replace("milestone:'[100 customers]'", "milestone:'12 → 100 customers'")))
+    .toContain('the ask milestone "14 → 12 → 100 customers" does not start from Traction\'s last value 14');
+  expect(await template(html => html.replace("from:'traction', milestone:'[100 customers]'", "milestone:'12 → 100 customers'")))
+    .toContain('does not start from Traction\'s last value 14');
+  expect(await template(html => html.replace("{x:'Q4', y:14}", "{x:'Q4', y:28}"))).toBeNull();
 });
