@@ -16,8 +16,8 @@ Flags: write commands also take --request FILE (exclusive saved journal) and --r
   (default 20). watch --next prints the next comments from someone else (one JSON line each)
   and exits 0; it resumes from .comments-ID.ndjson in the current directory (created on first
   use, or the --output LOG --append / --cursor you pass). --wait caps it in seconds (default 240);
-  then it prints "no new comments; run watch --next again" and exits 0. Common: --server, --json,
-  --help.
+  then it prints "no new comments yet; keep watching: run the same watch --next command again now"
+  and exits 0. Common: --server, --json, --help.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt

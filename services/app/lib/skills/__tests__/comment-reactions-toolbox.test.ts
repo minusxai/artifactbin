@@ -90,7 +90,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},{...options,fetcher:clocked,now:()=>clock});
   expect(calls.slice(before).map(c=>c.wait)).toEqual(['30','30','30','30','30','30','30','25']);
   expect(calls[before]!.after).toBe('c4');
-  expect(printed).toEqual(['no new comments; run watch --next again']);
+  expect(printed).toEqual(['no new comments yet; keep watching: run the same watch --next command again now']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
   expect(calls.filter(c=>c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);
@@ -107,7 +107,7 @@ it('watch --next honours an explicit log and rejects --once',async()=>{
   expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
   expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true});
   expect(afters).toEqual(['now','k1']);
-  expect(delivered.map(v=>typeof v==='string'?v:v.event.event_id)).toEqual(['e1','no new comments; run watch --next again']);
+  expect(delivered.map(v=>typeof v==='string'?v:v.event.event_id)).toEqual(['e1','no new comments yet; keep watching: run the same watch --next command again now']);
   expect((await readFile(output,'utf8')).trim().split('\n').at(-1)).toContain('"cursor":"k2"');
   // A log cut off before its first checkpoint baselines again instead of failing.
   const cut=path.join(root,'cut.ndjson');await writeFile(cut,JSON.stringify({kind:'watch',schema:1,server:'https://example.test',artifact:'PAGE12',stream:'comments'})+'\n');

@@ -108,6 +108,7 @@ for(const event of result.events){if(typeof event.event_id!=='string')throw new 
    if(next&&events>0&&!result.has_more)break;
   }
  }finally{await handle?.close();}
- if(timedOut)await print('no new comments; run watch --next again');
+ if(timedOut)await print(
+  'no new comments yet; keep watching: run the same watch --next command again now');
  return {events,timedOut};
 }
