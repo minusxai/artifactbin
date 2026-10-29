@@ -63,3 +63,4 @@ server tells Vite `allowedHosts: ['.<pages host>', <app host>]` (its DNS-rebindi
 every document is a new one) and `cors: false` (the app's origin gate, not Vite, answers CORS). The browser proof is
 `node scripts/gates/gate-own-origin-script.mjs <base>`; the gate runner's own servers serve the app at `app.lvh.me` and
 documents under `lvh.me` from `dist/server.mjs`.
+
