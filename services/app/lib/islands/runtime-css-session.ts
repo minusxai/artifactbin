@@ -1,5 +1,5 @@
 /**
- * A CLASS THE PAGE'S DATA BRINGS, STYLED (lib/document-serving/runtime-css.server, lib/data/story/story-css RUNTIME CLASSES).
+ * A CLASS THE PAGE'S DATA BRINGS, STYLED (lib/document-serving/runtime-css.server, lib/story-design/story-css RUNTIME CLASSES).
  *
  * A document's Tailwind is compiled from the classes its markup names. A class its rows fill
  * (`className="{$_row.cls}"`) is noted as the kit computes it (./runtime-css `noteClasses`, from lib/islands/row-class and
@@ -22,7 +22,7 @@
  *
  * On the server (the SSR render) nothing is watched and `noteClasses` returns at once.
  */
-import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data/story/story-css';
+import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/story-design/story-css';
 import { ISLAND_DATA_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 import type { IslandPageData } from './contract';
 import { watchClasses, type ClassWatch } from './runtime-css';

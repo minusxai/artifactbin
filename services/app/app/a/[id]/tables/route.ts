@@ -1,4 +1,5 @@
-import {getArtifactById,effectiveRole} from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
 import { canRead, REVALIDATE_ACTOR_HEADER } from '@artifactbin/contracts';
 import { requestOrSessionActor } from '@/lib/authentication';
 import {readJson,json} from '@/lib/http';

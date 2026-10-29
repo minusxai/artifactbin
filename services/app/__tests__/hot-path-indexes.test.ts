@@ -6,7 +6,7 @@
 import { expect, it } from 'vitest';
 import { useAppHarness } from './harness';
 import { getDb } from '@/lib/platform';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 
 useAppHarness();
 

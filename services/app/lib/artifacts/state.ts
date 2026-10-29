@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 
 function ordered(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(ordered);

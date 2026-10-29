@@ -7,7 +7,7 @@ import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {useAppHarness} from '@/__tests__/harness';
 import { seedOwnerJoin } from '@/lib/social';
-import {onDatasetCommitted} from '@/lib/artifacts/after-commit';
+import {onDatasetCommitted} from '@/lib/artifacts';
 import {mutationInitiator,writeDatasetPolicy} from '@/lib/document-data';
 import {account,datasetFixture as fixture,document,refusal,write} from './dataset-fixture';
 

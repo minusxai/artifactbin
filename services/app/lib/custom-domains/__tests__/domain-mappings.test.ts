@@ -1,7 +1,7 @@
 /**
  * WHAT A CUSTOM DOMAIN SERVES, as rules: which request hosts can be one, which owner a host serves, the homepage
  * and exact-path mappings (set, change, clear, refused), what bytes a host may embed, and the canonical address of
- * an artifactbin copy. Attaching, verifying and the re-check are lib/__tests__/custom-domains'; the HTTP around the
+ * an artifactbin copy. Attaching, verifying and the re-check are ./custom-domains'; the HTTP around the
  * settings API and the host itself is server/__tests__/custom-domain-host's.
  */
 import { beforeEach, describe, expect, it } from 'vitest';

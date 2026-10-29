@@ -1,7 +1,7 @@
 /** Link marks: the link at the caret, setting or removing one, and the typing that makes one (a URL or a paste). */
 import { TextSelection, type EditorState, type Transaction } from 'prosemirror-state';
 import type { Mark, ResolvedPos } from 'prosemirror-model';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 import { editorSchema } from './model';
 
 const isLink = (mark: Mark) => mark.type === editorSchema.marks.inline && mark.attrs.tag === 'a';

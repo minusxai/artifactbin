@@ -8,7 +8,7 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
+import { setDatasetPolicy } from '@/__tests__/harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as uploadImage } from '@/app/a/[id]/datasets/[datasetId]/images/route';
 import { GET as readImage } from '@/app/a/[id]/datasets/[datasetId]/images/[imageId]/route';

@@ -20,7 +20,8 @@
  * the rows carrying that stamp. The queries below state the rest.
  */
 import { trackEvent } from '@/lib/analytics';
-import { artifactQuery, LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/table';
+import { artifactQuery } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 import { getDb, actorSubject, emit } from '@/lib/platform';
 import { rerootArtifact, restoreTrashedSubtree, servableDocument, trashSubtree } from '@/lib/artifacts';

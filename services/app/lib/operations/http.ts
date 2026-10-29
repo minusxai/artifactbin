@@ -1,5 +1,6 @@
 import { hostedAuthorization, hostedRefusal, hostedOperationCompleted } from '@/lib/authentication';
-import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, readableArtifact, refusingUnservable, holdsCreatingToken } from '@/lib/artifacts';
+import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
+import { grantsOf, grantsPermitWrite, holdsCreatingToken } from '@/lib/artifact-access';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace';

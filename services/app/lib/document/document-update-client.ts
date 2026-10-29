@@ -17,7 +17,7 @@ import {validateMarkupStructure} from './local-validation';
 import {stampNodeIds,nodeIndex} from './node-ids';
 import {canonicalizeMarkup} from './canonical-source';
 import {repairJsxSource} from '../jsx/repair';
-import {extractClassCandidates} from '../data/story/story-css';
+import {extractClassCandidates} from '../story-design/story-css';
 export interface ClientDocumentSnapshot {document:DocumentGraph;version:number;meta:Record<string,unknown>;title?:string|null;description?:string|null}
 export interface ClientDocumentChange {source?:string;operations?:readonly DocumentOperation[];metadata?:DocumentUpdate['metadata'];whole?:boolean;annotationOps?:DocumentUpdate['annotationOps']}
 /** The whole preparation, pure and synchronous: the update, and the source whose authoring context it needs.

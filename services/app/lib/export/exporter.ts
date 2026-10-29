@@ -11,7 +11,8 @@ import { getDb, ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN, services } from '../platf
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
 import { createHash } from 'node:crypto';
-import { ArtifactRow, getArtifactById, getVersionFor, writerFor, VERSION_PARAM } from '@/lib/artifacts';
+import { ArtifactRow, getArtifactById, getVersionFor, VERSION_PARAM } from '@/lib/artifacts';
+import { writerFor } from '@/lib/artifact-access';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
   type SocialPreviewCrop,

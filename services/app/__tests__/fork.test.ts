@@ -27,7 +27,7 @@ import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { getArtifactById, getSharingFor } from '@/lib/artifacts';
-import { listArtifactsFor } from '@/lib/artifacts/store';
+import { listArtifactsFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';

@@ -221,3 +221,10 @@ describe('resolveParts: re-finding the text on a later DOM', () => {
     expect(range.startOffset).toBe(17);
   });
 });
+
+it('resolves a part ending at a wrapper boundary to the start of the next text node', () => {
+  // The source half of html-bridge/__tests__/range.ui.test.ts's forward-endpoint case: same fixture, same endpoint.
+  const source = document.createElement('p'); source.innerHTML = 'Keep \n <strong>bold</strong> tail';
+  const original = resolveParts(source, [{ rel: '', start: 0, end: 5, text: 'Keep ' }])[0]!;
+  expect(original.endContainer).toBe(source.querySelector('strong')!.firstChild); expect(original.endOffset).toBe(0);
+});

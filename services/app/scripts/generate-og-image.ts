@@ -15,7 +15,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
-import { STORY_FAMILY_ASSETS, storyFontFaceCss } from '../lib/data';
+import { STORY_FAMILY_ASSETS, storyFontFaceCss } from '../lib/story-design';
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const OUT_FILE = path.join(PUBLIC_DIR, 'og.png');

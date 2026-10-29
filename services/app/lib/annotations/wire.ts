@@ -1,11 +1,12 @@
 /**
  * THE ANNOTATION HALF OF THE ARTIFACT WIRE — the reads that inline a document's
- * open threads and the one door that answers a thread. lib/artifacts/wire owns
+ * open threads and the one door that answers a thread. lib/artifact-wire owns
  * the artifact's own shape and takes the open-thread count from its callers;
  * this module sits above it, reads the annotation store, and passes the count
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
-import { MembershipError, type MutationReceipt, type ArtifactRow, artifactToWire, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
+import { MembershipError, type MutationReceipt, type ArtifactRow, snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
+import { artifactToWire } from '@/lib/artifact-wire';
 import type { AccessActor } from '@/lib/accounts';
 import { json } from '../http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';

@@ -7,7 +7,7 @@ import { render } from 'solid-js/web';
 import { MemoryRouter, Route } from '@solidjs/router';
 import { vi } from 'vitest';
 import type { LocalBrokerOptions } from '@/lib/local-connection/broker';
-import { describeRetryingRead } from '@/lib/http/__tests__/retrying-read';
+import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { LocalDocumentPage } from '../LocalDocument';
 
 const captured = vi.hoisted(() => ({ options: null as LocalBrokerOptions | null }));

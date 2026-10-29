@@ -101,12 +101,12 @@ jobs:
       # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
       # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
       # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # public/fonts and the manifest lib/story-design/story-fonts reads, and a build without them
       # serves every document with missing fonts. They derive from node_modules alone, so they
       # belong in the same entry under the same lockfile key; caching node_modules by itself is
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # silent: lib/story-design/__tests__/story-fonts.test.ts reads the manifest and the bytes.
       # The key is the lockfile with workspace versions normalised: a dependency that moved changes it,
       # a workspace version bump does not.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -117,7 +117,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -160,7 +160,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -205,7 +205,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -267,7 +267,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -313,7 +313,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -387,7 +387,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -465,7 +465,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
@@ -626,7 +626,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
+            services/app/lib/story-design/story-font-manifest.json
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci

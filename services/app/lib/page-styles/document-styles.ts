@@ -11,7 +11,7 @@
  */
 import { DOCUMENT_NAV_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from './chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS } from '@/lib/story-surface';
-import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data';
+import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/story-design';
 import { documentFontCss, type DocumentFonts } from './document-fonts';
 
 /** A domain post's one line of attribution (its words: @artifactbin/contracts DOMAIN_FOOTER_TEXT): theme-neutral, it inherits the document's colour and face and only quiets them. */
@@ -20,7 +20,7 @@ const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-wid
 
 
 interface DocumentStylesInput {
-  /** The version's compiled Tailwind (lib/data/story/story-css.server currentStoryCss), or none. */
+  /** The version's compiled Tailwind (lib/story-design/story-css.server currentStoryCss), or none. */
   compiledCss: string | null;
   /** The document draws its own navigation (deck rail, outline, reading column); false for a capture. */
   chrome: boolean;
@@ -31,7 +31,7 @@ interface DocumentStylesInput {
   docFonts: DocumentFonts;
   /**
    * The design system's faces and classes when the document names one (the base-sheet recipe's
-   * `systemCss`, from lib/data/story/story-system-sheets), else empty. The TEXT, as the recipe
+   * `systemCss`, from lib/story-design/story-system-sheets), else empty. The TEXT, as the recipe
    * carries it: this module is reached from the browser and must not import the sheets.
    */
   systemCss: string;

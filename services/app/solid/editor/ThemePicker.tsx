@@ -14,8 +14,8 @@ import { Popover, type PopoverTriggerAttrs } from '../ui/Popover';
 import { Select } from '../ui/Select';
 import { Tooltip } from '../ui/Tooltip';
 import MobileSheet, { isPhoneViewport } from '../ui/MobileSheet';
-import { getStoryTheme, resolveStoryMode } from '@/lib/data/story/story-themes';
-import { STORY_SYSTEMS, getStorySystem } from '@/lib/data/story/story-systems';
+import { getStoryTheme, resolveStoryMode } from '@/lib/story-design/story-themes';
+import { STORY_SYSTEMS, getStorySystem } from '@/lib/story-design/story-systems';
 import type { StoryDesignName } from '@/lib/validation';
 import DesignSystemSpecimen from '../components/DesignSystemSpecimen';
 

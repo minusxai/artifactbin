@@ -7,8 +7,8 @@ import { POST as mint } from '@/app/api/internal/tokens/route';
 import { POST as exchange } from '@/app/api/session/token/route';
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
-import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
-import { testIdentity, agentCookie, request, useAppHarness, createGuestOwner } from './harness';
+import { markPagesRequest } from '@/lib/http';
+import { testIdentity, agentCookie, request, useAppHarness, createGuestOwner, testPagesSite as pagesSiteFor } from './harness';
 
 useAppHarness();
 

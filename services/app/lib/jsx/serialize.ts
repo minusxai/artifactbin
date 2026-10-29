@@ -2,7 +2,7 @@
  * Serialize a static-JSX AST back to jsx text — the inverse of {@link parseJsx}.
  *
  * The `jsx` body of a document file is stored as jsx TEXT, but every edit path works on the
- * parsed AST (the WYSIWYG write-back in lib/data/story/jsx-edit.ts, the block commands in
+ * parsed AST (the WYSIWYG write-back in lib/story-edit/jsx-edit.ts, the block commands in
  * lib/editor-engine), so we need a faithful AST→text serializer. Round-trips with parseJsx:
  * `parseJsx(serializeJsx(parseJsx(src).nodes))` is stable (formatting may normalize, but
  * structure + text/SQL/CSS leaves are preserved).

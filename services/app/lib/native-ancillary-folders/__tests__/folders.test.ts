@@ -1,12 +1,13 @@
 import {expect,it} from 'vitest';
 import {useAppHarness,mintAccountToken} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
-import {nativeCatalogBytes,nativeCatalogDigest as digest} from '@/lib/native-history-import/catalog-digest';
+import {createHash} from 'node:crypto';
+import {nativeCatalogDigest as digest} from '@/lib/native-history-import';
 import type {NativeIdentityPlan} from '@/lib/native-identity-import';
 import type {NativeAncillaryFolderRecipe} from '../contracts';
 import {prepareNativeAncillaryFolders} from '../index';
 useAppHarness();
-const encoded=(value:unknown)=>{const bytes=Buffer.from(JSON.stringify(value));return {encoding:'base64' as const,data:bytes.toString('base64'),sha256:nativeCatalogBytes(bytes)};};
+const encoded=(value:unknown)=>{const bytes=Buffer.from(JSON.stringify(value));return {encoding:'base64' as const,data:bytes.toString('base64'),sha256:createHash('sha256').update(bytes).digest('hex')};};
 const signed=<T extends object>(value:T)=>({...value,sha256:digest(value)});
 async function fixture(){
  const owner=await mintAccountToken('mxmx_test_ancillary_owner'),viewer=await mintAccountToken('mxmx_test_ancillary_viewer'),time='2020-01-02T03:04:05.123456Z';

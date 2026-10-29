@@ -9,7 +9,7 @@ import { createSignal } from 'solid-js';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import NumberEditorPanel from '../NumberEditorPanel';
-import type { NumberEmbedBinding, NumberEmbedEdit } from '@/lib/data/story/story-number';
+import type { NumberEmbedBinding, NumberEmbedEdit } from '@/lib/story-edit/story-number';
 import type { TableChoice } from '@/lib/document/table-catalog';
 
 const COLUMNS = [

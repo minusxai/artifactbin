@@ -9,7 +9,7 @@ import { createSignal, Show, type JSX } from 'solid-js';
 import ThemePicker from '../editor/ThemePicker';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import type { StoryDesignName } from '@/lib/validation';
-import { HTML_SYSTEM_MODES } from '@/lib/data/html/html-system-modes';
+import { HTML_SYSTEM_MODES } from '@/lib/validation/html-system-modes';
 
 /** The mode a system opens in: the viewer's own pick still wins (the page decides). */
 const modeOf = (name: string | null): 'light' | 'dark' => (name && HTML_SYSTEM_MODES[name]) || 'light';

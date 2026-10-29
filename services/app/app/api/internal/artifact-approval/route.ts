@@ -1,7 +1,8 @@
 import { actorOf } from '@artifactbin/utils';
 import { ANONYMOUS, canEdit } from '@artifactbin/contracts';
 import { json, readJson } from '@/lib/http';
-import { effectiveRole, getArtifactById } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
+import { getArtifactById } from '@/lib/artifacts';
 import { mergeGuestUsers, claimTokenById } from '@/lib/authentication';
 import { identityForUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';

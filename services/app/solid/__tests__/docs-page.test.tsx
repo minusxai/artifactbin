@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
-import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
+import { STORY_SYSTEMS } from '@/lib/story-design/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
 import { App } from '@/solid/App';
 import { gettingStarted } from '@/lib/agent-copy/getting-started';

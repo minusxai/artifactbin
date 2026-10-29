@@ -9,7 +9,7 @@
  * from dragging the whole AST-editing machinery — the validator and the
  * component tables with it — into the document's edit chunk.
  *
- * Nothing here reaches for a DOM, and nothing imports upward. `lib/data/story`
+ * Nothing here reaches for a DOM, and nothing imports upward. `lib/story-design`
  * re-exports these so no caller has to learn a second name for them.
  */
 import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
@@ -212,10 +212,18 @@ export function textLockOf(node: JsxNode | null): TextLock | null {
   return null;
 }
 
+/**
+ * A `data-mx-ast` path's indexes: dot-separated decimal indexes, each segment non-empty. Null for anything else
+ * — the empty path included, which `Number('')` would otherwise read as index 0, the first root.
+ */
+export function jsxPathIndexes(path: string): number[] | null {
+  return /^\d+(?:\.\d+)*$/.test(path) ? path.split('.').map(Number) : null;
+}
+
 /** Resolve an interpreter AST path (`data-mx-ast`). Mirrors the interpreter's indexing: ALL JsxNodes count. */
 export function resolveJsxNodeAtPath(roots: JsxNode[], path: string): JsxNode | null {
-  const parts = path.split('.').map(Number);
-  if (parts.length === 0 || parts.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  const parts = jsxPathIndexes(path);
+  if (!parts) return null;
   let list = roots;
   let node: JsxNode | null = null;
   for (const idx of parts) {

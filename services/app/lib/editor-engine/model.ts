@@ -4,7 +4,7 @@ import { Schema, Fragment, Slice, type Node as EditorNode, type Mark, type NodeS
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Root } from 'mdast';
 import { validateClipboardAst } from './clipboard-ast';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 import { fixHtmlNesting } from '@/lib/document/nesting';
 import type { JsxNode, JsxElement, JsxAttribute } from '@/lib/jsx';
 import { reactiveSource } from '@/lib/jsx/reactive';

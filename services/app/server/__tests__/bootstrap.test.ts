@@ -15,7 +15,7 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
-import { STORY_FONT_THEMES } from '@/lib/data/story/story-fonts';
+import { STORY_FONT_THEMES } from '@/lib/story-design/story-fonts';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/page-styles';
 import { useAppHarness } from '@/__tests__/harness';
 

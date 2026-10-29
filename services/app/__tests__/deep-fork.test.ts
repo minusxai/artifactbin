@@ -5,7 +5,7 @@ import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as fork} from '@/app/api/artifacts/[id]/fork/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {setArtifactQuotaForTests} from '@/lib/artifacts/store';
+import {setArtifactQuotaForTests} from '@/lib/artifacts';
 import {getHtmlBackendStore,getHtmlBackendVersion,setHtmlBackendStore} from '@/lib/html-backends';
 const fault=vi.hoisted(()=>({fail:false}));
 vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({compiled:source,typeDefs:'type Query { count:Int }',secretBindings:['TOKEN']})}));

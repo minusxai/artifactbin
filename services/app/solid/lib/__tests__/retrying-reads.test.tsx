@@ -7,7 +7,7 @@
 import { createRoot } from 'solid-js';
 import { render } from 'solid-js/web';
 import { expect, it, vi } from 'vitest';
-import { describeRetryingRead } from '@/lib/http/__tests__/retrying-read';
+import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
 import { retryingFetch } from '@/lib/http/retry-lazily';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { apiFetch } from '../api';

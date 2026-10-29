@@ -1,5 +1,6 @@
 import { getDb, generateInternalId, ID_RE, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform';
-import { type ArtifactRow, getArtifactById, effectiveRole, liveAccessFacts, grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifacts';
+import { type ArtifactRow, getArtifactById } from '@/lib/artifacts';
+import { effectiveRole, liveAccessFacts, grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {canEdit,type HtmlPageLink} from '@artifactbin/contracts';

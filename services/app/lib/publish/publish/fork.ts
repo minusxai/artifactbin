@@ -1,8 +1,10 @@
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
-import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
-import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
+import { grantsOf, grantsPermitRead } from '@/lib/artifact-access';
+import { artifactQuery } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
@@ -14,7 +16,7 @@ import { getDb } from '@/lib/platform';
 import { remapDatasetGrants } from '@artifactbin/utils';
 import { parseContentInput } from '../document/input';
 import { json } from '@/lib/http';
-import { resolveStoredStoryDesign } from '@/lib/data';
+import { resolveStoredStoryDesign } from '@/lib/story-design';
 
 /**
  * What a forker may change about the copy AS IT IS MADE — the three fields an

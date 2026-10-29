@@ -16,7 +16,7 @@
 import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { Input, Textarea } from '@/solid/ui/Field';
 import { mermaidSourceError } from '@/lib/jsx/mermaid-source';
-import type { MermaidEmbed, MermaidEmbedEdit } from '@/lib/data';
+import type { MermaidEmbed, MermaidEmbedEdit } from '@/lib/story-edit';
 
 export interface MermaidEditorPanelProps {
   embed: MermaidEmbed;

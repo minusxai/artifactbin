@@ -8,7 +8,7 @@
 import {getGroupRole} from '@/lib/groups';
 import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser } from './analytics';
 import { count } from '@/lib/social';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import { getDb } from '@/lib/platform';
 import type { SharedArtifactSummary } from './';
 import { workspaceCountsFor, workspaceDocumentsFor } from './inventory';

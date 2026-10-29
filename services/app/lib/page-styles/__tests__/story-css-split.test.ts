@@ -4,8 +4,8 @@
  * because moving a rule would change the cascade. Real compiles, not hand-written sheets.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { compileStoryCss } from '@/lib/data/story/story-css.server';
-import { storyThemeCss } from '@/lib/data/story/story-themes';
+import { compileStoryCss } from '@/lib/story-design/server';
+import { storyThemeCss } from '@/lib/story-design/story-themes';
 import { cssUnits, declaredProperties, isVariantUtility, orderMatters, relatedProperties, variantOf } from '../css-units';
 import { splitStoryCss, storyCssBase, STORY_CSS_SHARDS, type StorySegment, type StoryCssBase } from '../story-css-split';
 

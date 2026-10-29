@@ -41,7 +41,7 @@ const precompressAssets = (): Plugin => {
  * files a story names — rather than Vite /assets copies of those bytes, so a
  * document read inside the app fetches each face once.
  */
-const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/data/story/story-font-manifest.json');
+const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/story-design/story-font-manifest.json');
 const FONT_MARKER = '/* @app-font-faces */';
 const appFontFaces = (): Plugin => ({
   name: 'artifactbin-app-font-faces',

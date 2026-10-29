@@ -13,7 +13,8 @@
  * The same read ACL as the page: a reader who may not read the document gets the uniform 404. Counted
  * per document and reader, like the document's other outbound fetching (lib/allowances).
  */
-import { canReadArtifact, getArtifactById, refusingUnservable, holdsCreatingToken, servedRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, refusingUnservable, servedRow } from '@/lib/artifacts';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { documentFetchRateLimited, documentFetchReader } from '@/lib/allowances';
 import { requestOrSessionActor } from '@/lib/authentication';
 import { json, pagesRequestOf } from '@/lib/http';

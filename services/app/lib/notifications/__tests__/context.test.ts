@@ -6,7 +6,7 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import type {CompiledDataflow,CompiledNotify} from '@/lib/dataflow';
-import {notificationContextSnapshot,notificationRuleSourceIds} from '@/lib/notifications';
+import {NotificationExecutionError,notificationContextSnapshot,notificationQueryContext,notificationRuleSourceIds} from '@/lib/notifications';
 
 const rule=(name:string,sql:string,imports:string[]):CompiledNotify=>({name,on:'change',engine:'sqlite',sql,params:[],reads:{imports,queries:[],values:[],builtins:[]},columns:[{name:'to',type:null},{name:'message',type:'string'}],start:0,end:0});
 const flow:CompiledDataflow={
@@ -43,4 +43,20 @@ it('refuses a job whose snapshot, revision or saved rules no longer agree',()=>{
  refused({...good,rules:good.rules.slice(0,1)});
  refused({...good,rules:good.rules.map(r=>({...r,sql:r.sql+' '}))});
  refused({...good,origin:{...good.origin,mutationName:'other'}});
+});
+
+it('answers a job\'s flow and rules, and refuses a snapshot that is not the one its revision names',()=>{
+ const input=job();
+ expect(notificationQueryContext(input)).toEqual({flow:expect.objectContaining({imports:flow.imports}),rules:flow.notifications});
+ for(const broken of [
+  {...input,contextRevision:'0'.repeat(64)},
+  {...input,contextSnapshot:{...input.contextSnapshot,extra:true}},
+  {...input,rules:input.rules.slice(0,1)},
+  {...input,rules:input.rules.map(rule=>({...rule,sql:'select 1'}))},
+  {...input,origin:{...input.origin,mutationName:'other'}},
+ ]){
+  const thrown=(()=>{try{notificationQueryContext(broken as MutationNotificationJobInput);}catch(error){return error;}})();
+  expect(thrown).toBeInstanceOf(NotificationExecutionError);
+  expect(thrown).toMatchObject({code:'notification_context_invalid',retryable:false,name:'NotificationExecutionError'});
+ }
 });

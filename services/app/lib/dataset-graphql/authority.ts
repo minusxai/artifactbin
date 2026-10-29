@@ -1,5 +1,6 @@
 import type { AccessActor } from '@/lib/accounts';
-import {canReadArtifact,getArtifactById,getVersionFor,writerFor,type ArtifactRow} from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, getVersionFor, type ArtifactRow } from '@/lib/artifacts';
+import { writerFor } from '@/lib/artifact-access';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import {catalogOf} from '@/lib/datasets';
 export class DatasetBindingUnsupportedError extends Error {

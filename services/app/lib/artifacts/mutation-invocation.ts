@@ -1,8 +1,8 @@
 import type {MutationInput,MutationOutcome,SqlService} from '@artifactbin/contracts';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 import type {Db} from '@/lib/platform';
-import type { GrantDocument } from '@/lib/artifacts/dataset-policy/grants';
+import type { GrantDocument } from '@/lib/artifact-access';
 export interface MutationContext {
  dataset:ArtifactRow;
  actor:AccessActor;

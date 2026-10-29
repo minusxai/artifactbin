@@ -18,10 +18,11 @@ import { publicCatalogOf, loadDatasetRows } from '@/lib/datasets';
  * A native HTML document is assembled only on its runner origin. This answer
  * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
-import { archivedVersionFor, servedRow, holdsCreatingToken, UnservableDocument, canReadArtifact, effectiveRole, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { archivedVersionFor, servedRow, UnservableDocument, canReadArtifact, accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor, type ArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
+import { holdsCreatingToken, effectiveRole } from '@/lib/artifact-access';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
-import { resolveStoredStoryDesign } from '@/lib/data';
+import { resolveStoredStoryDesign } from '@/lib/story-design';
 import { verifyExportKey } from '@/lib/export';
 import { baseUrl, json, parseCookie, canonicalArtifactPath, etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';

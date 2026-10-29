@@ -8,7 +8,7 @@ import { createEffect, createSignal, on, Show, untrack, type JSX } from 'solid-j
 import ExternalLink from 'lucide-solid/icons/external-link';
 import Link2Off from 'lucide-solid/icons/link-2-off';
 import Pencil from 'lucide-solid/icons/pencil';
-import { normalizeLinkHref } from '@/lib/data/story/link-edit';
+import { normalizeLinkHref } from '@/lib/story-edit/link-edit';
 import { Button } from '@/solid/ui/Button';
 import { Input } from '@/solid/ui/Field';
 import { Panel } from '@/solid/ui/Panel';

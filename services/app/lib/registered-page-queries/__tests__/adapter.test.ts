@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { createSqliteSql } from "@artifactbin/sql/sqlite";
-import { composePageSchema, executePageOperation } from "@/lib/page-operations";
-import { createBackendCompiler } from "@/lib/page-operations/backend";
+import { compilePageBackend, composePageSchema, executePageOperation } from "@/lib/page-operations";
+import { services, setServices } from "@/lib/platform";
 import {
   prepareRegisteredQueryBackend,
   registeredPlan,
@@ -87,9 +87,11 @@ it("cannot obtain the reserved compiled envelope through ordinary public compila
       output: { typeDefs: prepared.backend.typeDefs },
     }),
   } as unknown as RunnerService;
-  const result = await createBackendCompiler(runner)(
+  const original = services().runner;
+  setServices({ runner });
+  const result = await compilePageBackend(
     `export const typeDefs=${JSON.stringify(prepared.backend.typeDefs)};export default {};`,
-  );
+  ).finally(() => setServices({ runner: original }));
   expect(result.compiled.startsWith("!registered-page-queries-v1")).toBe(false);
   expect(() =>
     registeredPlan(saved, prepared.link, { ...backend, ...result }),

@@ -7,7 +7,7 @@ import { createUser, identityForUser } from '@/lib/accounts';
 import {getVersionFor,updateSharingFor} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import {createRetainedDatasetGraphql} from '../retained';
-import {authorizeDatasetBinding} from '../index';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '../index';
 useAppHarness();
 const signal=new AbortController().signal,anonymous=identityForUser(null);
 async function fixture(visibility:'public'|'private'){
@@ -78,4 +78,13 @@ it('refuses an unsupported live binding on replacement without advancing the sav
  const response=await replacePage(request(`/api/artifacts/${id}`,{method:'PUT',token:f.owner.token,json:{html,expectedVersion:head.version,expectedState:head.state}}),context);
  expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'dataset_stable_identity_unavailable'});
  const unchanged=await(await readPage(request(`/api/artifacts/${id}`,{token:f.owner.token}),context)).json();expect(unchanged.version).toBe(head.version);expect(unchanged.html).toBe(head.html);
+});
+
+it('refuses to bind a dataset without stored row objects, naming the stable identity it lacks',async()=>{
+ const f=await fixture('public');
+ await (await getDb()).query("UPDATE artifacts SET meta='{}'::jsonb WHERE id=$1",[f.id]);
+ const refusal=await authorizeDatasetBinding(f.actor,f.live).catch((error:unknown)=>error);
+ expect(refusal).toBeInstanceOf(DatasetBindingUnsupportedError);
+ expect(refusal).toMatchObject({message:'dataset_stable_identity_unavailable',code:'dataset_stable_identity_unavailable',hint:expect.stringContaining('stored dataset')});
+ await expect(authorizeDatasetBinding(identityForUser(null),{...f.live,datasetId:'missing'})).rejects.toThrow('dataset_not_found');
 });

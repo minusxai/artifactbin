@@ -4,7 +4,7 @@
  * and must not pay for the TypeBox schemas that validate them
  * (lib/__tests__/reader-bundle-hygiene). `lib/validation/atlas-schemas.ts`
  * builds its enum from this list, and the theme registry
- * (`lib/data/story/story-themes.ts`) types its entries against it; a registry
+ * (`lib/story-design/story-themes.ts`) types its entries against it; a registry
  * test asserts one entry per name.
  */
 export const STORY_THEME_NAMES = ['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop'] as const;

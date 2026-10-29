@@ -7,7 +7,8 @@ import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-que
 import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
-import {getArtifactHeaderById,effectiveRole,accessMoved,readableArtifactHeader} from '@/lib/artifacts';
+import { getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,pageOperationKind} from '@/lib/page-operations';
 import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql} from '@/lib/dataset-graphql';

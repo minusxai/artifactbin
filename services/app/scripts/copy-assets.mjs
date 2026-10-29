@@ -20,7 +20,7 @@ const packageDir = (pkg) => path.dirname(require.resolve(`${pkg}/package.json`))
 /*
  * STORY FONTS — from @fontsource packages (the Google Fonts binaries,
  * versioned through package-lock) into content-hashed files under
- * public/fonts, plus a manifest lib/data/story/story-fonts reads. The hash in
+ * public/fonts, plus a manifest lib/story-design/story-fonts reads. The hash in
  * the filename is what makes the app server's `immutable` cache rule on /fonts/* honest;
  * the manifest is generated (gitignored) so the registry can never name a
  * file that does not exist.
@@ -33,7 +33,7 @@ const packageDir = (pkg) => path.dirname(require.resolve(`${pkg}/package.json`))
  *
  * The PROPERTIES this pipeline must preserve (tnum for tabular columns, fvar
  * for weight ranges, per-file content hashes, <300KB) are pinned by
- * lib/data/story/__tests__/story-fonts.test.ts against the produced bytes —
+ * lib/story-design/__tests__/story-fonts.test.ts against the produced bytes —
  * a fontsource upgrade that strips a feature fails there, not on a reader.
  */
 const FONT_FILES = [
@@ -153,7 +153,7 @@ const manifest = { families, app, systems };
 // In the Docker builder this runs from npm ci BEFORE `COPY lib ./lib` — the
 // tree the manifest lives in does not exist yet (writeFileSync creates no
 // directories; the later COPY merges over it without deleting this file).
-mkdirSync('lib/data/story', { recursive: true });
-writeFileSync('lib/data/story/story-font-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+mkdirSync('lib/story-design', { recursive: true });
+writeFileSync('lib/story-design/story-font-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
 
 console.log(`runtime assets copied to public/ (${copied.size} font files)`);

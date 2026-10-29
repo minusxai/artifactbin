@@ -4,7 +4,7 @@
  * credentials and body — and hands back what those call sites read.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createHttpBackend } from '../http';
+import { artifactRequests, createHttpBackend } from '../http';
 import { RETRY_TUNING } from '../retrying';
 import { BackendRequestError } from '../errors';
 
@@ -39,8 +39,23 @@ describe('createHttpBackend', () => {
     expect(calls).toEqual([{ url: '/api/my/artifacts/AbC123', init: undefined }]);
     stubFetch(json({ error: 'not_found' }, 404));
     await expect(backend.load()).resolves.toBeNull();
-    stubFetch(new TypeError('Failed to fetch'));
-    await expect(backend.load()).rejects.toThrow('Failed to fetch');
+    // Unreachable: the read rides out a restart on the shared default policy (five waits inside its 15 s budget),
+    // then rejects with fetch's own error. Fake timers spend that budget without waiting for it.
+    // The policy module loads lazily (lib/http/retry-lazily): settle that import on real time first, so no wait
+    // is scheduled after the fake clock has already been run out.
+    await vi.dynamicImportSettled();
+    vi.useFakeTimers();
+    try {
+      const offline = stubFetch(new TypeError('Failed to fetch'));
+      const started = Date.now();
+      let settled = false;
+      const loading = expect(backend.load().finally(() => { settled = true; })).rejects.toThrow('Failed to fetch');
+      for (let turn = 0; !settled && turn < 20; turn++) await vi.runAllTimersAsync();
+      await loading;
+      expect(offline).toHaveLength(6);
+      expect(Date.now() - started).toBeGreaterThan(7_000);
+      expect(Date.now() - started).toBeLessThanOrEqual(15_000);
+    } finally { vi.useRealTimers(); }
   });
 
   it('loads a companion frame with its own access check and no parent document parameters', async () => {
@@ -346,3 +361,27 @@ describe('comment writes through a restart', () => {
       expect(seen).toEqual([true, false, true, false]);
     });
   });
+
+describe('artifactRequests', () => {
+  it('issues the authoring doors as raw Responses on the encoded id, retrying only the reads', async () => {
+    RETRY_TUNING.policy = { delaysMs: [0], jitter: 0 };
+    try {
+      const requests = artifactRequests('a/b');
+      const reads = stubFetch(json({}, 502), json({ version: 1 }));
+      expect((await requests.head()).status).toBe(200);
+      expect(reads.map((c) => c.url)).toEqual(['/api/my/artifacts/a%2Fb', '/api/my/artifacts/a%2Fb']);
+      stubFetch(json({}, 502), json({ version: 2 }));
+      expect((await requests.version(2)).status).toBe(200);
+      for (const [send, url, method] of [
+        [() => requests.edits({ a: 1 }), '/api/my/artifacts/a%2Fb/edits', 'POST'],
+        [() => requests.htmlUpdate({ a: 1 }), '/api/my/artifacts/a%2Fb', 'PUT'],
+        [() => requests.patch({ a: 1 }), '/api/my/artifacts/a%2Fb', 'PATCH'],
+        [() => requests.revert({ a: 1 }), '/api/my/artifacts/a%2Fb/revert', 'POST'],
+      ] as const) {
+        const calls = stubFetch(json({ error: 'bad_gateway' }, 502));
+        expect((await send()).status).toBe(502);
+        expect(calls).toEqual([{ url, init: { method, headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' } }]);
+      }
+    } finally { delete RETRY_TUNING.policy; }
+  });
+});

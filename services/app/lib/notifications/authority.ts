@@ -2,7 +2,8 @@
 import {getGroupRole} from '@/lib/groups';
 import {notificationRuleSourceIds,notificationRevision as hash} from './context';
 import {explicitNotificationMemberships} from './membership';
-import { grantsOf, grantsPermitRead, readThrough, type ReadRow, liveAccessFacts, preloadAccessFacts, type AccessFacts, type ArtifactRow, documentEditorReaches } from '@/lib/artifacts';
+import { grantsOf, grantsPermitRead, readThrough, type ReadRow, liveAccessFacts, preloadAccessFacts, type AccessFacts, documentEditorReaches } from '@/lib/artifact-access';
+import { type ArtifactRow } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import { identityForUser, liveTokenSql, type AccessActor } from '@/lib/accounts';
 import {catalogOf, resolveDatasetConnection, DatasetError} from '@/lib/datasets';

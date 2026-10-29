@@ -137,7 +137,7 @@ export async function hostsPublishedBy(artifact: TrustQuery['artifact'], viewer:
 
 const SECURE_COOKIE = PUBLIC_BASE_URL.startsWith('https://');
 /** `__Host-` when the cookie can be Secure: no subdomain can plant or overwrite it. */
-export const TRUST_SESSION_COOKIE = SECURE_COOKIE ? '__Host-afbin_trust' : 'afbin_trust';
+const TRUST_SESSION_COOKIE = SECURE_COOKIE ? '__Host-afbin_trust' : 'afbin_trust';
 /** Most recent grants kept; older ones fall off (the cookie must stay small). */
 const MAX_SESSION_ENTRIES = 24;
 

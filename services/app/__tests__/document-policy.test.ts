@@ -1,5 +1,6 @@
 import {nativeHtml} from './native-html-fixture';
-import {artifactState, canReadArtifact, effectiveRole, getArtifactById} from '@/lib/artifacts';
+import { artifactState, canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
 import type {Actor} from '@artifactbin/contracts';
