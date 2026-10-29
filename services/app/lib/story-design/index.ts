@@ -5,7 +5,7 @@
  * stay in the bundle.
  */
 export { RUNTIME_CLASS_LIMIT, isRuntimeClassToken } from './story-css';
-export { STORY_FAMILY_ASSETS, STORY_FONTS_ATTR, getStoryFontCss, storyFontFaceCss } from './story-fonts';
+export { STORY_FAMILY_ASSETS, STORY_FONTS_ATTR, getStoryFontCss, storyFontFaceCss, storyFontManifest } from './story-fonts';
 export type { StoryFontAsset } from './story-fonts';
 export type { StorySystem } from './story-systems';
 export { STORY_THEMES, resolveStoredStoryDesign } from './story-themes';

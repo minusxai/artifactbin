@@ -30,7 +30,7 @@ import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/j
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { immutableSet } from '@/lib/jsx/immutable-set';
-import { isEditableTextHost, isSplicedEmbed, kitTextMarkAllowed, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { isEditableTextHost, isSplicedEmbed, jsxPathIndexes, kitTextMarkAllowed, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /*
  * Classification lives in a leaf module (lib/story-ui/host-classify) so the
@@ -38,7 +38,7 @@ import { isEditableTextHost, isSplicedEmbed, kitTextMarkAllowed, resolveJsxNodeA
  * whole write-back path. Re-exported here because this is where every existing
  * caller already looks for it.
  */
-export { isEditableTextHost, resolveJsxNodeAtPath };
+export { isEditableTextHost };
 
 /** The name this module's own write-back paths use. */
 const resolveByPath = resolveJsxNodeAtPath;
@@ -216,8 +216,8 @@ function locateAnchor(nodes: JsxNode[], anchor: { path: string; nodeId?: string 
     visit(nodes, []);
     return found.length === 1 ? found[0] : null;
   }
-  const parts = anchor.path.split('.').map(Number);
-  if (!anchor.path || parts.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  const parts = jsxPathIndexes(anchor.path);
+  if (!parts) return null;
   const node = resolveByPath(nodes, anchor.path);
   return node?.type === 'element' ? { node, parts } : null;
 }
@@ -460,8 +460,8 @@ export function imageAltInJsx(source: string, target: JsxImageTarget): string | 
 export function removeJsxNodeAtPath(source: string, astPath: string): string {
   const parsed = parseJsx(source);
   if (!parsed.ok) return source;
-  const parts = astPath.split('.').map(Number);
-  if (parts.length === 0 || parts.some(n => !Number.isInteger(n) || n < 0)) return source;
+  const parts = jsxPathIndexes(astPath);
+  if (!parts) return source;
   let list = parsed.nodes;
   for (const idx of parts.slice(0, -1)) {
     const node = list[idx];
@@ -475,25 +475,6 @@ export function removeJsxNodeAtPath(source: string, astPath: string): string {
     && parsed.nodes.filter(n => n.type === 'element').length <= 1;
   if (lastRootElement) return source;
   list.splice(idx, 1);
-  return serializeJsx(parsed.nodes);
-}
-
-/**
- * Attribute-level write-back for the story-embed edit modals: parse `source`, resolve the
- * element at `astPath` (the interpreter's `data-mx-ast` path), verify it is a `<tag>` component,
- * hand it to `mutate` for attribute edits, and re-serialize the whole tree. Returns `source`
- * UNCHANGED when the path doesn't resolve to a matching element, `mutate` returns false (its
- * own staleness guard), or the source doesn't parse — a stale/hostile path must never corrupt
- * a story body.
- */
-export function updateJsxElementAtPath(
-  source: string, astPath: string, tag: string, mutate: (el: JsxElement) => boolean | void,
-): string {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return source;
-  const node = resolveByPath(parsed.nodes, astPath);
-  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== tag) return source;
-  if (mutate(node) === false) return source;
   return serializeJsx(parsed.nodes);
 }
 

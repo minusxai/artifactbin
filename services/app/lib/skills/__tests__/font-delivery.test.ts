@@ -9,7 +9,7 @@ import {platformOrigin} from './platform-origin';
 import {skillZip} from '../package';
 import {planPublicationBundle} from '../../html-publication-bundle/plan';
 import {STORY_SYSTEM_SHEETS} from '@/lib/story-design/server';
-import { storyFontManifest as manifest } from '../../data';
+import { storyFontManifest as manifest } from '@/lib/story-design/story-fonts';
 
 it('packages no font members: the archive is text only',()=>{
  for(const name of ['fonts/example.12345678.woff2','fonts/../secret.woff2','fonts/dm-sans-latin-standard-normal.woff2'])expect(()=>skillZip({[name]:'x'})).toThrow('Unsupported skill member');

@@ -19,7 +19,7 @@ tmp/
 **/lib/build-assets/
 **/lib/story-runtime/dist/
 **/public/fonts/
-**/lib/data/story/story-font-manifest.json
+**/lib/story-design/story-font-manifest.json
 # landing illustration SOURCES — 1254px PNG, ~2.8 MB each, 34 MB for the set.
 # Nothing serves them: the page references only the WebP derived from
 # them, and those ARE committed.

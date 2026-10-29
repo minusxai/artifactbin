@@ -3,7 +3,7 @@
  * it, lib/mermaid-images/sanitize admits it) — its constants, with nothing
  * that loads the subsetter: the read path imports this, never the subsetter.
  */
-import { storyFontManifest as fontManifest } from '@/lib/data';
+import { storyFontManifest as fontManifest } from '@/lib/story-design/story-fonts';
 import { MERMAID_TEXT_RENDERING } from './svg-text';
 import type { FontFile } from './svg-text';
 

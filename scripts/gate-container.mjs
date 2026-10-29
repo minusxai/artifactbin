@@ -243,7 +243,7 @@ async function inside({ servers, gates, buildKey: key }) {
     else
       npm ci --no-audit --no-fund
       rm -rf ${INSIDE.deps}/tree.tmp && mkdir -p ${INSIDE.deps}/tree.tmp
-      cp -a --parents node_modules services/*/node_modules services/app/public/fonts services/app/lib/data/story/story-font-manifest.json ${INSIDE.deps}/tree.tmp/
+      cp -a --parents node_modules services/*/node_modules services/app/public/fonts services/app/lib/story-design/story-font-manifest.json ${INSIDE.deps}/tree.tmp/
       rm -rf ${INSIDE.deps}/tree && mv ${INSIDE.deps}/tree.tmp ${INSIDE.deps}/tree && touch ${INSIDE.deps}/ready
       echo "dependencies installed and saved to the volume"
     fi

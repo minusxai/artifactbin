@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {REPO} from './pages.mjs';
 export function packagedFontFaces(families){
- const manifest=JSON.parse(readFileSync(path.join(REPO,'services/app/lib/data/story/story-font-manifest.json'),'utf8'));
+ const manifest=JSON.parse(readFileSync(path.join(REPO,'services/app/lib/story-design/story-font-manifest.json'),'utf8'));
  return [...new Set(families)].flatMap(family=>{
   const faces=manifest.systems[family];
   if(!faces?.length)throw Error(`Design-system font ${family} is not packaged; run npm ci.`);

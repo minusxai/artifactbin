@@ -10,7 +10,7 @@ import {GET as flatReader,HEAD as flatReaderHead} from '@/app/af/reader.js/route
 import {GET as flatMorph} from '@/app/af/morph.js/route';
 import {GET as font,HEAD as fontHead} from '@/app/af/fonts/[name]/route';
 import {readFileSync} from 'node:fs';
-import { storyFontManifest as manifest } from '@/lib/data';
+import { storyFontManifest as manifest } from '@/lib/story-design/story-fonts';
 import {pagesHost} from '../server/pages-host';
 import {pagesOriginFor,pagesSiteFor} from '@/lib/http/pages-origin';
 import {useAppHarness} from './harness';

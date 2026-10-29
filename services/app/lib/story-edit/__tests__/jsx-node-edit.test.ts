@@ -89,6 +89,13 @@ describe('removeJsxNodeAtPath — element deletion (the editor\'s delete afforda
     expect(removeJsxNodeAtPath(src, '')).toBe(src);
   });
 
+  it('the empty path names no node — it never reads as index 0 and removes the first element', () => {
+    const src = '<h1>first</h1><p>second</p>';
+    expect(removeJsxNodeAtPath(src, '')).toBe(src);
+    expect(removeJsxNodeAtPath(src, '.1')).toBe(src);
+    expect(removeJsxNodeAtPath(src, '0.')).toBe(src);
+  });
+
   it('only elements are deletable — a text-node path is refused', () => {
     const src = '<div><p>some text</p></div>';
     // 0.0.0 is the text node inside the <p>.

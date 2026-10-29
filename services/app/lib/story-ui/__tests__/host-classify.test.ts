@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { JsxElement } from '@/lib/jsx';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { isEditableTextHost, kitTextHost, kitTextMarkAllowed, textHost, textLockOf, textOwnerPath } from '../host-classify';
+import { isEditableTextHost, kitTextHost, kitTextMarkAllowed, resolveJsxNodeAtPath, textHost, textLockOf, textOwnerPath } from '../host-classify';
 
 const element = (source: string): JsxElement => {
   const node = parseJsxOrThrow(source).nodes[0];
@@ -139,5 +139,18 @@ describe('one rule for plain HTML text', () => {
     expect(textOwnerPath(nodes('<div><p>x</p></div>'), '0.0')).toBe('0.0');
     // A container's parts are their own.
     expect(textOwnerPath(nodes('<h1>Status <Badge>live <b>now</b></Badge></h1>'), '0.1.1')).toBe('0.1');
+  });
+});
+
+describe('resolveJsxNodeAtPath', () => {
+  const roots = parseJsxOrThrow('<h1>first</h1><div><p>nested</p></div>').nodes;
+
+  it('walks dot-separated indexes into the tree', () => {
+    expect(resolveJsxNodeAtPath(roots, '1.0')).toMatchObject({ type: 'element', tag: 'p' });
+    expect(resolveJsxNodeAtPath(roots, '9')).toBeNull();
+  });
+
+  it('an empty segment names no node: the empty path is not the first root', () => {
+    for (const path of ['', '.1', '1.', '1..0']) expect(resolveJsxNodeAtPath(roots, path), JSON.stringify(path)).toBeNull();
   });
 });
