@@ -96,7 +96,7 @@ it('keeps a test account to test accounts\' artifacts: read and fork elsewhere, 
   const [inGroup, outGroup] = [await page(test), await page(real)];
   await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [inGroup.id, own.id]);
   await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [outGroup.id, theirs.id]);
-  const row = async (id: string) => (await db.query('SELECT * FROM artifacts WHERE id=$1', [id])).rows[0] as typeof realPage;
+  const row = async (id: string) => (await db.query('SELECT * FROM artifacts WHERE id=$1', [id])).rows[0] as unknown as typeof realPage;
   expect(await can(test, 'comment', await row(inGroup.id))).toBe(true);
   expect(await can(test, 'comment', await row(outGroup.id))).toBe(false);
   const refusal = await capabilityGuard(test, 'comment', realPage.id);
