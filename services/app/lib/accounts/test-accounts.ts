@@ -12,8 +12,9 @@
  *  - no custom domain (lib/serving/custom-domains);
  *  - named shares, artifact invitations and group invitations/members may name only test-domain
  *    addresses or test accounts (shareTargetsRefusal, lib/artifacts/membership, lib/groups);
- *  - on an artifact a non-test user owns it may read and fork, nothing else: no comment, like, share,
- *    `$_me` write (lib/artifacts/capabilities `can`), and it follows only test accounts;
+ *  - on an artifact outside the test accounts' space (isTestOwned) it may read and fork, nothing
+ *    else: no comment, like, share or `$_me` write (lib/artifacts/capabilities `can`), and it
+ *    follows only test accounts;
  *  - nothing it does reaches a non-test person's notifications (lib/notifications/events).
  */
 import { isTestDomainEmail, type Queryable, type ShareEntry } from '@artifactbin/contracts';
@@ -33,6 +34,18 @@ export async function isTestAccount(userId: string | null | undefined, query?: Q
   if (!userId) return false;
   const db = query ?? (await getDb());
   return (await db.query<{ test_account: boolean }>('SELECT test_account FROM users WHERE id = $1', [userId])).rows[0]?.test_account === true;
+}
+
+/**
+ * Is this artifact inside the test accounts' space: owned by a test account, or by a group a test
+ * account created (a test account can bring only test accounts into its groups)?
+ */
+export async function isTestOwned(row: { user_id: string | null; group_id?: string | null }, query?: Queryable): Promise<boolean> {
+  if (row.user_id) return isTestAccount(row.user_id, query);
+  if (!row.group_id) return false;
+  const db = query ?? (await getDb());
+  const creator = (await db.query<{ created_by: string }>('SELECT created_by FROM groups WHERE id = $1', [row.group_id])).rows[0]?.created_by;
+  return isTestAccount(creator, query);
 }
 
 /**

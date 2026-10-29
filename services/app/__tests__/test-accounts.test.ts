@@ -89,6 +89,16 @@ it('keeps a test account to test accounts\' artifacts: read and fork elsewhere, 
   // A real account is unchanged toward test accounts.
   expect(await can(real, 'comment', testPage)).toBe(true);
   expect(await can(real, 'follow', { userId: test.userId })).toBe(true);
+  // A group a test account created is inside; a real account's group is not.
+  const db = await getDb();
+  const own = await createGroup(test.userId, { handle: `tdo${n}${Date.now().toString(36)}`.slice(0, 30), name: 'Own' });
+  const theirs = await createGroup(real.userId, { handle: `tdr${n}${Date.now().toString(36)}`.slice(0, 30), name: 'Theirs' });
+  const [inGroup, outGroup] = [await page(test), await page(real)];
+  await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [inGroup.id, own.id]);
+  await db.query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [outGroup.id, theirs.id]);
+  const row = async (id: string) => (await db.query('SELECT * FROM artifacts WHERE id=$1', [id])).rows[0] as typeof realPage;
+  expect(await can(test, 'comment', await row(inGroup.id))).toBe(true);
+  expect(await can(test, 'comment', await row(outGroup.id))).toBe(false);
   const refusal = await capabilityGuard(test, 'comment', realPage.id);
   expect(refusal?.status).toBe(403);
   expect(await refusal?.json()).toMatchObject({ error: 'test_account_restricted' });

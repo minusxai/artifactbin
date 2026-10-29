@@ -49,8 +49,8 @@ Rows the app creates for these addresses are marked `users.test_account`;
 existing rows are never marked. A test account works normally among test
 accounts but: cannot add a custom domain; shares only with addresses at
 `TEST_DOMAIN`; invites only test accounts to artifacts and groups (group
-invitations by email only to `TEST_DOMAIN`); on an artifact a non-test user owns
-can only read and fork (no comments, likes, shares or `$_me` writes); follows
+invitations by email only to `TEST_DOMAIN`); on an artifact that is not owned by
+a test account or by a group a test account created, can only read and fork (no comments, likes, shares or `$_me` writes); follows
 only test accounts; and never creates notifications for non-test users.
 Deleting old test accounts and their artifacts is a planned follow-up; the
 marking exists so that cleanup can select exactly these rows.

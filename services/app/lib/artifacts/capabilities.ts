@@ -27,8 +27,8 @@
  * `sandbox_only` refusal below names.
  *
  * A TEST ACCOUNT (`users.test_account`, lib/accounts/test-accounts) is an
- * ACCOUNT among test accounts and their artifacts; on an artifact a non-test
- * user owns it may read and fork and nothing else, and it follows only test
+ * ACCOUNT among test accounts and their artifacts (and their groups'); on any
+ * other artifact it may read and fork and nothing else, and it follows only test
  * accounts (`test_account_restricted`).
  */
 import type { Capability } from '@artifactbin/contracts';
@@ -37,7 +37,7 @@ import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './table';
 import { getArtifactById } from './rows';
-import { isTestAccount, TEST_ACCOUNT_RESTRICTED, userKindOf, type AccessActor } from '../accounts';
+import { isTestAccount, isTestOwned, TEST_ACCOUNT_RESTRICTED, userKindOf, type AccessActor } from '../accounts';
 
 /** A user target (follow) rather than a document one. */
 interface UserTarget { userId: string }
@@ -99,7 +99,7 @@ export async function can(actor: AccessActor, capability: Capability, target?: C
 
   // A test account keeps to test accounts' artifacts; a fork is a copy into its own space.
   if (kind === 'account' && capability !== 'fork' && !ownsArtifact(target, actor)
-    && await isTestAccount(actor.userId) && !(await isTestAccount(target.user_id))) return false;
+    && await isTestAccount(actor.userId) && !(await isTestOwned(target))) return false;
 
   // The owner of a draft may always work on it — including the anonymous token
   // that created it, which has no account to be judged by.

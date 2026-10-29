@@ -6,7 +6,12 @@
 import {PGlite} from '@electric-sql/pglite';
 import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
 import {isTestDomainEmail,parseTestDomainSignIn} from '@artifactbin/contracts';
-import {createHumanAuth,type HumanAuth,type OutgoingMail} from '../src/auth/human';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {dirname,join} from 'node:path';
+import {Kysely} from 'kysely';
+import {createHumanAuth,humanAuthOptions,type HumanAuth,type OutgoingMail} from '../src/auth/human';
+import {pgliteDialect} from '../src/auth/pglite';
 import {testDomainSignInOf} from '../src/config';
 
 const DOMAIN = 'test.example.dev';
@@ -44,6 +49,25 @@ describe('settings', () => {
     for (const email of [`x@evil-${DOMAIN}`, `x@${DOMAIN}.evil.com`, `x@sub.${DOMAIN}`, `@${DOMAIN}`, `a@b@${DOMAIN}`, DOMAIN, `x@example.dev`]) {
       expect(isTestDomainEmail(email, DOMAIN), email).toBe(false);
     }
+  });
+});
+
+describe('the constant-time path', () => {
+  it('verifies the fixed code through Better Auth\'s decrypt branch, which compares with constantTimeEqual', async () => {
+    const pg = new PGlite();
+    const db = new Kysely<Record<string, unknown>>({dialect: pgliteDialect(pg)});
+    const options = humanAuthOptions({secret: 's'.repeat(32), baseURL: BASE, mail: {send: async () => {}}, testDomain: {domain: DOMAIN, code: CODE}}, db);
+    const plugin = (options.plugins ?? []).find(p => p.id === 'email-otp') as unknown as {options: {storeOTP: {encrypt(o: string): Promise<string>; decrypt(v: string): Promise<string>}}};
+    const store = plugin.options.storeOTP;
+    const marker = await store.encrypt(CODE);
+    expect(marker).not.toContain(CODE);
+    expect(await store.decrypt(marker)).toBe(CODE);
+    expect(await store.encrypt('123456')).toBe('123456');
+    // Better Auth 1.7.7 (pinned) verifies a decrypt-stored code as constantTimeEqual(await decrypt(stored), submitted).
+    const require = createRequire(import.meta.url);
+    const dist = join(dirname(require.resolve('better-auth')), 'plugins/email-otp/otp-token.mjs');
+    expect(readFileSync(dist, 'utf8')).toMatch(/"decrypt" in opts\.storeOTP\) return constantTimeEqual\(await opts\.storeOTP\.decrypt\(storedOtp\), otp\)/);
+    await pg.close();
   });
 });
 
