@@ -14,10 +14,11 @@ Usage: node scripts/comment.mjs list ID|URL [--status open|resolved|all] [--limi
 Flags: write commands also take --request FILE (exclusive saved journal) and --resume FILE
   (replay it exactly; nothing else may change). list --status defaults to open; --limit 1-100
   (default 20). watch --next prints the next comments from someone else (one JSON line each) and
-  exits 0; it resumes from watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or
-  ~/.artifactbin; created on first use), or the --output LOG --append / --cursor you pass. --wait
-  caps it in seconds (default 240); then it prints "no new comments yet; keep watching: run the same
-  watch --next command again now" and exits 0. Common: --server, --json, --help.
+  exits 0; a first call also prints threads still waiting for your answer. It resumes from
+  watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin; created on
+  first use), or the --output LOG --append / --cursor you pass. --wait caps it in seconds (default
+  240); then it prints "no new comments yet; keep watching: run the same watch --next command again
+  now" and exits 0. Common: --server, --json, --help.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt

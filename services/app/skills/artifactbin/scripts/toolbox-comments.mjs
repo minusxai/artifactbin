@@ -49,7 +49,8 @@ return {...page,annotations:page.annotations.map(annotation=>({...annotation,thr
 }
 /** Streams the feed into a log, stdout or deliver. With values.next it stops after the first batch
  * holding someone else's event (own events are logged, never printed) or when values.wait seconds
- * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off), and returns
+ * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off; a first call
+ * replays history and prints unanswered threads), and returns
  * {events,timedOut}; requests never overlap. */
 export async function watchComments(client,id,values,{signal,deliver,now=Date.now}={}){
  const server=client.server,seen=new Set(),next=Boolean(values.next);let cursor;
@@ -65,7 +66,7 @@ const raw=await readFile(values.output,'utf8');let records;try{records=raw.trim(
     'Existing NDJSON log is malformed.',2);}
 if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError('log_mismatch',
     'Log belongs to another origin, artifact or stream.',2);
-  // A log cut off before its first checkpoint (a killed baseline) starts over from "now".
+  // A log cut off before its first checkpoint (a killed first call) starts over.
   const previous=records.some(record=>record.kind==='checkpoint'||record.kind===
     'comment-checkpoint')?await checkpointInput(values.output,server,id):{cursor,eventIds:records
     .filter(record=>record.kind==='event').map(record=>record.event?.event_id)};
@@ -81,14 +82,18 @@ if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError
  const emit=async(value,show=true)=>{if(handle){await handle.writeFile(JSON.stringify(value)+'\n');
    await handle.sync();}if(next?show&&value.kind==='event':!handle)await print(value);};
  let failures=0,events=0,timedOut=false;
+ // A first --next call replays the page's history once instead of starting at "now", so a comment
+ // posted while the agent was still publishing is not lost: it prints each thread whose latest
+ // comment is someone else's (the unanswered ones), then waits as usual.
+ let replay=next&&!cursor;const latest=new Map();
  const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  try{
   while(!signal?.aborted){
    if(next&&cursor&&remaining()<=0){timedOut=true;break;}
    let result;
 try{result=await client.request(`/api/artifacts/${id}/annotations/changes?`+new URLSearchParams({
-     after:cursor??'now',wait:values.once||!cursor?'0':String(next?Math.min(30,remaining()):30),
-     limit:'100'}),{timeoutMs:40000,signal});failures=0;}
+     after:cursor??(replay?'start':'now'),limit:'100',wait:values.once||!cursor||replay?'0':
+     String(next?Math.min(30,remaining()):30)}),{timeoutMs:40000,signal});failures=0;}
    catch(error){
     if(signal?.aborted)break;
 if(values.once||error.exit===3||!['network_unavailable','http_429','too_many_comment_waits',
@@ -99,12 +104,16 @@ if(typeof result.next_cursor!=='string'||!Array.isArray(result.events))throw new
      'invalid_feed','Comment feed returned no valid checkpoint.',1);
 for(const event of result.events){if(typeof event.event_id!=='string')throw new ToolError(
      'invalid_feed','Comment event has no event ID.',1);if(!seen.has(event.event_id)){
-     const own=event.author?.you===true||event.reactor?.you===true;if(!own)events++;
-     await emit({kind:'event',server,artifact:id,stream,event},!own);seen.add(event.event_id);}}
+     const own=event.author?.you===true||event.reactor?.you===true;if(!own&&!replay)events++;
+     if(replay&&event.type==='artifactbin.comment')latest.set(event.annotation_id,event);
+     await emit({kind:'event',server,artifact:id,stream,event},!own&&!replay);
+     seen.add(event.event_id);}}
    // Accept the next cursor only after all event records have been delivered and flushed.
    cursor=result.next_cursor;
     await emit({kind:'checkpoint',schema:1,server,artifact:id,stream,cursor});
    if(values.once&&!result.has_more)break;
+   if(replay&&!result.has_more){replay=false;for(const event of latest.values())if(event.author?.you
+    !==true){events++;await print({kind:'event',server,artifact:id,stream,event});}}
    if(next&&events>0&&!result.has_more)break;
   }
  }finally{await handle?.close();}

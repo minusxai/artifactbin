@@ -86,7 +86,8 @@ export async function readCommentChangesFor(actor: AccessActor, id: string, opti
   const db = await getDb();
   const scope = commentMonitorScope(actor);
   const identity = cursorScope(actor, id);
-  let position = options.after === 'now' ? '0' : decode(options.after, identity);
+  // `start` replays the page's whole feed: a first watcher's view of comments made before it began.
+  let position = options.after === 'now' || options.after === 'start' ? '0' : decode(options.after, identity);
   const authorized = async () => (await db.query(`SELECT id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id, scope.val])).rows.length > 0;
   const checkAbort = () => options.signal.throwIfAborted();
   const page = (events: CommentFeedEvent[], has_more: boolean): CommentChangesPage => ({ events, has_more, next_cursor: encode({v: 1, scope: identity, seq: position}) });

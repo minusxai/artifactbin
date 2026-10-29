@@ -74,7 +74,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
  try{
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);
   // One after=now baseline, then long polls from each checkpoint; the own event is logged but not printed.
-  expect(calls).toEqual([{after:'now',wait:'0'},{after:'c1',wait:'30'},{after:'c2',wait:'30'}]);
+  expect(calls).toEqual([{after:'start',wait:'0'},{after:'c1',wait:'30'},{after:'c2',wait:'30'}]);
   expect(printed.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['e_theirs']);
   expect(printed.at(-1)).toMatch(/^next: answer each comment above now; a requested change to the page is part of your task .* only then run watch --next again$/);
   const records=(await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line));
@@ -94,7 +94,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   expect(calls[before]!.after).toBe('c4');
   expect(printed).toEqual(['no new comments yet; keep watching: run the same watch --next command again now']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
-  expect(calls.filter(c=>c.after==='now')).toHaveLength(1);
+  expect(calls.filter(c=>c.after==='start'||c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -108,13 +108,28 @@ it('watch --next honours an explicit log and rejects --once',async()=>{
   const delivered:any[]=[];
   expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
   expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true});
-  expect(afters).toEqual(['now','k1']);
+  expect(afters).toEqual(['start','k1']);
   expect(delivered.map(v=>typeof v==='string'?v.split(' ')[0]:v.event.event_id)).toEqual(['e1','next:','no']);
   expect((await readFile(output,'utf8')).trim().split('\n').at(-1)).toContain('"cursor":"k2"');
   // A log cut off before its first checkpoint baselines again instead of failing.
   const cut=path.join(root,'cut.ndjson');await writeFile(cut,JSON.stringify({kind:'watch',schema:1,server:'https://example.test',artifact:'PAGE12',stream:'comments'})+'\n');
   await watchComments(client,'PAGE12',{next:true,output:cut,append:true,wait:'0'},{deliver:async()=>{}});
-  expect(afters).toEqual(['now','k1','now']);
+  expect(afters).toEqual(['start','k1','start']);
   await expect(watchComments(client,'PAGE12',{next:true,once:true})).rejects.toMatchObject({code:'invalid_invocation',exit:2});
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('a first watch --next prints threads still waiting on an answer, from before it began',async()=>{
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const other=(id:string,thread:string,body:string)=>({type:'artifactbin.comment',event_id:id,annotation_id:thread,author:{kind:'human',you:false},body});
+ const mine=(id:string,thread:string)=>({type:'artifactbin.comment',event_id:id,annotation_id:thread,author:{kind:'agent',you:true},body:'Done'});
+ // History: thread A answered by us, thread B still waiting (posted while the agent was publishing).
+ const pages=[{events:[other('a1','A','Fix the date'),mine('a2','A')],has_more:true},{events:[other('b1','B','Add a closing line')],has_more:false}];
+ const afters:string[]=[];let n=0;
+ const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);const page=pages[n]??{events:[],has_more:false};n++;return {...page,next_cursor:'p'+n};}};
+ const delivered:any[]=[];
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
+ expect(afters).toEqual(['start','p1']);
+ expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
+ expect(delivered.at(-1)).toMatch(/^next: answer each comment above now/);
 });
