@@ -6,6 +6,7 @@ import {createFileUploader} from './upload';
 import {createUploadRelay} from './upload-relay';
 import {createQueryReadiness} from './query-readiness';
 import { createLocalDatasetTransport } from './browser-local-datasets';
+import { createDomainReadTransport } from './domain-reads';
 import { createHtmlSelectionActions } from './selection-actions';
 import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
 import type {HtmlCommentViewCommand} from '../html-bridge/comment-view-contract';
@@ -33,6 +34,7 @@ function sourceNamespaces(document:Document):{names:string[];bindings:Record<str
  return {names,bindings};
 }
 if(!config.backends.length)config.backends=sourceNamespaces(document).names;
+const domain=config.domainReads&&window.parent===window?createDomainReadTransport(config,location,fetch.bind(window)):undefined;
 const preview=config.localPreview?createLocalDatasetTransport({privatePreview:document.documentElement.hasAttribute('data-af-private-preview'),endpoint:config.localPreview.endpoint},location,fetch):undefined;
 function pendingPortableConnection():boolean {
  if(!config.offline||document.documentElement.hasAttribute('data-af-private-preview'))return false;
@@ -41,7 +43,7 @@ function pendingPortableConnection():boolean {
 const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
   subscribe(listener){const subscription=onBackendChange((_names,reason)=>listener(reason));return()=>subscription.unsubscribe();},
-  online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
+  online: () => portableReadiness.online() || preview?.online()===true || !!domain || !config.offline && !!config.appOrigin && window.parent !== window,
   whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
@@ -84,6 +86,7 @@ let connectedBefore=false;
 remote.execute = async (request) => {
   if(portableReadiness.online())return portableReadiness.execute(request);
   if(preview?.online())return preview.execute(request);
+  if(domain)return domain.execute(request);
   if (!relay) await new Promise<void>((resolve, reject) => {
     const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
     const timer = setTimeout(() => { relayWaiters.delete(ready); reject(new RemoteUnreachable('Page connection did not attach')); }, 3000);

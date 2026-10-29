@@ -32,6 +32,9 @@ import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
+import { createRunner } from '@artifactbin/runner/local';
+import { localPageBackendCapability } from '@/lib/page-operations';
+import { DOMAIN_READ_ONLY_MESSAGE } from '@artifactbin/contracts/domain-footer';
 import { createAppServer } from '../app';
 
 const harness = useAppHarness();
@@ -357,6 +360,122 @@ describe('an interactive post\'s runtime on a verified host', () => {
       expect((await app().request(`${HOST}${path}`)).status, path).toBe(404);
     }
   });
+});
+
+/** A page backend: a shared count, readable by anyone; one write with sign-in, one without (the domain refuses both). */
+const COUNTER_BACKEND = 'export const typeDefs="type Query { count:Int! signedIn:Boolean! } type Mutation { add:Int! bump:Int! @auth(signedIn:true) }";'
+  + 'const add=async(a,p,c)=>{const s=await c.store.get();await c.store.set({count:(s.value?.count??0)+1},{expected:s.version});return 1;};'
+  + 'export default {count:async(a,p,c)=>(await c.store.get()).value?.count??0,signedIn:(a,p)=>p?.subject!=null,add,bump:add};';
+const dataPage = (dataset: string, title: string) => `<!doctype html><html><head><title>${title}</title>`
+  + `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><link rel="af-backend" data-af-name="counter" href="./counter.ts"></head>`
+  + `<body><h1>${title}</h1></body></html>`;
+const SCHEMA = '{sales{schema{tables{id columns{id label}}}}}';
+const ROWS = 'query Rows($t:ID!){sales{rows(tableId:$t,first:10){rows{cells{columnId value{string number}}}}}}';
+
+describe('a served page\'s data reads on a verified host', () => {
+  let runner: Awaited<ReturnType<typeof createRunner>> | null = null;
+  beforeEach(async () => {
+    runner = await createRunner({ db: await harness.db(), capabilities: (context, operation, args) => localPageBackendCapability(context.request, operation, args) });
+    setServices({ runner });
+  });
+  afterEach(async () => { setServices({}); await runner?.close(); runner = null; });
+
+  async function dataWorld() {
+    const vivek = await owner('vivek');
+    const other = await owner('stranger');
+    const sales = await create(vivek.token, { dataset: [{ region: 'North', amount: 12 }, { region: 'South', amount: 30 }], visibility: 'public' });
+    const page = await create(vivek.token, { html: dataPage(sales.id, 'Sales'), backendSources: { counter: COUNTER_BACKEND }, title: 'Sales', visibility: 'public' });
+    const unlisted = await create(vivek.token, { html: dataPage(sales.id, 'Quiet sales'), backendSources: { counter: COUNTER_BACKEND }, title: 'Quiet sales', visibility: 'unlisted' });
+    const secret = await create(vivek.token, { html: dataPage(sales.id, 'Secret sales'), backendSources: { counter: COUNTER_BACKEND }, title: 'Secret sales', visibility: 'private' });
+    const theirsData = await create(other.token, { dataset: [{ region: 'East', amount: 99 }], visibility: 'public' });
+    const theirs = await create(other.token, { html: dataPage(theirsData.id, 'Their sales'), backendSources: { counter: COUNTER_BACKEND }, title: 'Their sales', visibility: 'public' });
+    await verified(vivek.userId);
+    return { vivek, other, sales, page, unlisted, secret, theirs };
+  }
+  /** The same POST the page's runtime sends (html-runtime/domain-reads): text/plain, no credentials. */
+  const read = (origin: string, id: string, body: Record<string, unknown>, headers: Record<string, string> = {}) => app().request(`${origin}/api/artifacts/${id}/graphql`, {
+    method: 'POST', headers: { 'content-type': 'text/plain;charset=UTF-8', origin: 'null', ...headers }, body: JSON.stringify({ revision: '1', ...body }),
+  });
+
+  it('serves the post with its data reads switched on, and a policy that lets it reach exactly this host\'s reads door', async () => {
+    const w = await dataWorld();
+    const post = await app().request(`${HOST}/${w.page.id}`, { headers: { accept: 'text/html' } });
+    expect(post.status).toBe(200);
+    expect(await post.text()).toContain('"domainReads":true');
+    const connect = /connect-src ([^;]+)/.exec(post.headers.get('content-security-policy') ?? '')?.[1]?.split(' ') ?? [];
+    expect(connect).toContain(`${HOST}/api/artifacts/${w.page.id}/graphql`);
+    expect(connect.filter((source) => source.includes('/api/'))).toEqual([`${HOST}/api/artifacts/${w.page.id}/graphql`]);
+    // The app's own copy is unchanged: no direct reads, no reads door in its policy.
+    const onApp = await app().request(`${APP}/a/${w.page.id}/raw`, { headers: { accept: 'text/html' } });
+    expect(await onApp.text()).not.toContain('domainReads');
+    expect(onApp.headers.get('content-security-policy')).not.toContain('/graphql');
+  });
+
+  it('answers dataset rows and backend reads exactly as a signed-out reader on the app gets them, to any origin, with no cookie', async () => {
+    const w = await dataWorld();
+    const schema = await read(HOST, w.page.id, { query: SCHEMA, operation: 'query' }, { cookie: 'mx_session=anything' });
+    expect(schema.status).toBe(200);
+    expect(schema.headers.get('access-control-allow-origin')).toBe('*');
+    expect(schema.headers.get('access-control-allow-credentials')).toBeNull();
+    noCookie(schema);
+    const schemaBody = await schema.json() as { data: { sales: { schema: { tables: Array<{ id: string; columns: Array<{ id: string; label: string }> }> } } } };
+    expect(schemaBody).toEqual(await (await read(APP, w.page.id, { query: SCHEMA })).json());
+    const table = schemaBody.data.sales.schema.tables[0]!;
+    const rows = await read(HOST, w.page.id, { query: ROWS, variables: { t: table.id }, operationName: 'Rows' });
+    expect(rows.status).toBe(200);
+    const rowsBody = await rows.json() as { data: { sales: { rows: { rows: Array<{ cells: Array<{ columnId: string; value: { string: string | null; number: number | null } }> }> } } } };
+    expect(rowsBody).toEqual(await (await read(APP, w.page.id, { query: ROWS, variables: { t: table.id }, operationName: 'Rows' })).json());
+    const region = table.columns.find((column) => column.label === 'region')!.id;
+    expect(rowsBody.data.sales.rows.rows.map((row) => row.cells.find((cell) => cell.columnId === region)?.value.string).sort()).toEqual(['North', 'South']);
+    const backend = await read(HOST, w.page.id, { query: '{counter{count signedIn}}' });
+    expect(backend.status).toBe(200);
+    expect(await backend.json()).toEqual({ data: { counter: { count: 0, signedIn: false } } });
+    // The owner's own credentials change nothing: the reader is a guest here (on the app, the same token signs in).
+    const owned = { cookie: 'mx_session=anything', authorization: `Bearer ${w.vivek.token}` };
+    expect(await (await read(APP, w.page.id, { query: '{counter{signedIn}}' }, { authorization: owned.authorization })).json()).toEqual({ data: { counter: { signedIn: true } } });
+    expect(await (await read(HOST, w.page.id, { query: '{counter{signedIn}}' }, owned)).json()).toEqual({ data: { counter: { signedIn: false } } });
+  }, 30000);
+
+  it('refuses every write with the sign-in message, whatever the body claims, and nothing is written', async () => {
+    const w = await dataWorld();
+    const schema = await (await read(HOST, w.page.id, { query: SCHEMA })).json() as { data: { sales: { schema: { tables: Array<{ id: string }> } } } };
+    for (const body of [
+      { query: 'mutation { counter { add } }', operation: 'mutation' },
+      { query: 'mutation { counter { add } }', operation: 'query' },
+      { query: 'mutation { counter { bump } }' },
+      { query: 'query R { counter { count } } mutation W { counter { add } }', operationName: 'W' },
+      { query: 'mutation($t:ID!){sales{writeRows(tableId:$t,expectedRevision:"1",changes:[],requestId:"r1"){outcome}}}', variables: { t: schema.data.sales.schema.tables[0]!.id } },
+    ]) {
+      const res = await read(HOST, w.page.id, body);
+      expect(res.status, JSON.stringify(body)).toBe(403);
+      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+      noCookie(res);
+      expect(await res.json()).toEqual({ data: null, errors: [{ message: DOMAIN_READ_ONLY_MESSAGE }] });
+    }
+    for (const body of [{ query: 'subscription { counter { count } }' }, { query: 'not graphql' }, {}]) {
+      expect((await read(HOST, w.page.id, body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(await (await read(HOST, w.page.id, { query: '{counter{count}}' })).json()).toEqual({ data: { counter: { count: 0 } } });
+  }, 30000);
+
+  it('reaches no unlisted, private or other owner\'s page, no other method and no other artifacts API', async () => {
+    const w = await dataWorld();
+    for (const id of [w.unlisted.id, w.secret.id, w.theirs.id, w.sales.id, 'nope', '..']) {
+      const res = await read(HOST, id, { query: '{counter{count}}' });
+      expect(res.status, id).toBe(404);
+      noCookie(res);
+    }
+    // The unlisted page answers a signed-out reader on the app; the domain does not widen to it.
+    expect((await read(APP, w.unlisted.id, { query: '{counter{count}}' })).status).toBe(200);
+    for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
+      expect((await app().request(`${HOST}/api/artifacts/${w.page.id}/graphql`, { method })).status, method).toBe(404);
+    }
+    for (const path of [`/api/artifacts/${w.page.id}`, `/api/artifacts/${w.page.id}/datasets`, `/api/artifacts/${w.page.id}/mutate`, `/api/artifacts/${w.page.id}/query`,
+      `/api/artifacts/${w.page.id}/graphql/extra`, `/api/artifacts/${w.sales.id}/content`, '/api/artifacts', '/api/my/artifacts', '/api/auth/session', '/api/auth/sign-in/email-otp', '/oauth/token', '/mcp']) {
+      expect((await app().request(`${HOST}${path}`)).status, path).toBe(404);
+      expect((await app().request(`${HOST}${path}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ query: '{counter{count}}', revision: '1' }) })).status, `POST ${path}`).toBe(404);
+    }
+  }, 30000);
 });
 
 describe('everything else on a verified host is 404', () => {
