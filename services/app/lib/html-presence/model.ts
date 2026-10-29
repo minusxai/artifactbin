@@ -1,5 +1,11 @@
 import type { PresenceCursor, PresenceGeometry, PresenceRange, PresenceViewer } from './contract';
-export const PRESENCE_TTL_MS = 15_000;
+/** A reader announces itself every heartbeat; it stays on the roster for three, so two lost beats never drop it. */
+export const PRESENCE_HEARTBEAT_MS = 15_000;
+export const PRESENCE_TTL_MS = 45_000;
+/** Pointer and selection changes are coalesced to one publication per window; the painter interpolates between them. */
+export const PRESENCE_POINTER_THROTTLE_MS = 250;
+/** A room re-authorizes at once on an ACL wakeup; this interval is only the safety net for a missed one. */
+export const PRESENCE_REAUTHORIZE_MS = 60_000;
 const nodeId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
 /** Pagegi presence semantics: normalized node-relative cursors, exact fingerprinted text offsets and a short TTL. */
 export function presenceGeometry(input: unknown): PresenceGeometry {

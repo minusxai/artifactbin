@@ -1,5 +1,5 @@
 import type {PresenceGeometry,PresencePaint,PresencePublication,PresenceViewer,ReaderPreferences} from './contract';
-import {presenceGeometry,presenceRoster} from './model';
+import {PRESENCE_HEARTBEAT_MS,PRESENCE_POINTER_THROTTLE_MS,presenceGeometry,presenceRoster} from './model';
 export interface ReaderPresencePorts {
  session:string; revision:string; nonce:string;
  readPreferences():ReaderPreferences;
@@ -18,7 +18,7 @@ export function createReaderPresenceSession(ports:ReaderPresencePorts){
  const paint=()=>{const current=presenceRoster(viewers,ports.revision,ports.clock.now()).filter(viewer=>viewer.id!==ownId);ports.changed(current);ports.paint({viewers:ownId?current:[],preferences:ports.readPreferences()});};
  const publish=async()=>{if(closed)return;if(busy){pending=true;return;}busy=true;const prefs=ports.readPreferences();try{const id=await ports.publish({session:ports.session,revision:ports.revision,visible:prefs.visible&&ports.active(),cursor:prefs.visible&&prefs.shareCursor&&ports.active()?geometry.cursor:null,selection:prefs.visible&&prefs.shareSelection&&ports.active()?geometry.selection:null});if(!closed&&id){ownId=id;paint();}}catch{/* Ephemeral state heals on the next heartbeat, never replays a mutation. */}finally{busy=false;if(closed){hide();return;}if(pending&&!closed){pending=false;void publish();}}};
  const disconnect=ports.connect(next=>{if(closed)return;viewers=next;paint();});
- const timer=ports.clock.setInterval(()=>{paint();void publish();},3000);
+ const timer=ports.clock.setInterval(()=>{paint();void publish();},PRESENCE_HEARTBEAT_MS);
  void publish();
- return {receive:(event:unknown)=>{const raw=event as {type?:string;nonce?:string;geometry?:unknown};if(raw?.type!=='mx:presence'||raw.nonce!==ports.nonce)return;geometry=presenceGeometry(raw.geometry);if(scheduled===undefined)scheduled=ports.clock.setTimeout(()=>{scheduled=undefined;void publish();},75);},preferencesChanged:()=>{paint();void publish();},activeChanged:()=>void publish(),dispose:()=>{if(closed)return;closed=true;disconnect();ports.clock.clearInterval(timer);ports.clock.clearTimeout(scheduled);ports.paint({viewers:[],preferences:ports.readPreferences()});if(!busy)hide();}};
+ return {receive:(event:unknown)=>{const raw=event as {type?:string;nonce?:string;geometry?:unknown};if(raw?.type!=='mx:presence'||raw.nonce!==ports.nonce)return;geometry=presenceGeometry(raw.geometry);if(scheduled===undefined)scheduled=ports.clock.setTimeout(()=>{scheduled=undefined;void publish();},PRESENCE_POINTER_THROTTLE_MS);},preferencesChanged:()=>{paint();void publish();},activeChanged:()=>void publish(),dispose:()=>{if(closed)return;closed=true;disconnect();ports.clock.clearInterval(timer);ports.clock.clearTimeout(scheduled);ports.paint({viewers:[],preferences:ports.readPreferences()});if(!busy)hide();}};
 }

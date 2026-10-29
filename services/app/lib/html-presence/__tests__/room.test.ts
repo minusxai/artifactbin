@@ -24,3 +24,18 @@ it('revalidates after both subscriptions before sending the initial roster',asyn
  await createPresenceRoom({revision:'1',authorize:async()=>false,subscribe:async()=>async()=>{dropped++;},subscribeAcl:async()=>async()=>{dropped++;},send:()=>{sent++;},close:()=>{closed++;},clock:{now:()=>0,setTimeout:()=>{scheduled++;return 1;},clearTimeout:()=>{},setInterval:()=>{scheduled++;return 2;},clearInterval:()=>{}}});
  expect(closed).toBe(1);expect(dropped).toBe(2);expect(sent).toBe(0);expect(scheduled).toBe(0);
 });
+it('re-authorizes at once on an ACL wakeup and otherwise only on the 60s safety interval, closing on either refusal',async()=>{
+ const harness=()=>{const state={allowed:true,checks:0,closed:0,every:0,tick:()=>{},acl:()=>{}};return {state,ports:{revision:'1',authorize:async()=>{state.checks++;return state.allowed;},
+  subscribe:async()=>async()=>{},subscribeAcl:async(changed:()=>void)=>{state.acl=changed;return async()=>{};},send:()=>{},close:()=>{state.closed++;},
+  clock:{now:()=>0,setTimeout:()=>1,clearTimeout:()=>{},setInterval:(work:()=>void,ms:number)=>{state.tick=work;state.every=ms;return 2;},clearInterval:()=>{}}}};};
+ const settle=async()=>{for(let i=0;i<5;i++)await Promise.resolve();};
+ // Revocation by ACL change: no timer needs to fire.
+ const byAcl=harness();await createPresenceRoom(byAcl.ports);
+ expect(byAcl.state.every).toBe(60_000);expect(byAcl.state.checks).toBe(1);
+ byAcl.state.allowed=false;byAcl.state.acl();await settle();expect(byAcl.state.checks).toBe(2);expect(byAcl.state.closed).toBe(1);
+ // Revocation nothing announced: the safety interval is what closes the room.
+ const bySafety=harness();await createPresenceRoom(bySafety.ports);
+ bySafety.state.tick();await settle();expect(bySafety.state.checks).toBe(2);expect(bySafety.state.closed).toBe(0);
+ bySafety.state.allowed=false;await settle();expect(bySafety.state.closed).toBe(0);
+ bySafety.state.tick();await settle();expect(bySafety.state.closed).toBe(1);
+});
