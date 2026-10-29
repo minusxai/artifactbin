@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { installHtmlReaderCommands } from '../reader';
+import { applyHtmlReaderAppearance, installHtmlReaderCommands } from '../reader';
 
 it('refuses synthetic reader commands even with a forged parent and platform origin', () => {
   const stop = installHtmlReaderCommands(window, 'https://platform.example');
@@ -95,4 +95,18 @@ it('switches the design system live on the owner command, keeping the given mode
   expect(mock.root.getAttribute('data-af-design-system')).toBe('nocturne');
   expect(mock.root.getAttribute('data-af-dark')).toBe('true');
   stop();
+});
+
+it('applies only well-formed reader modes and design-system names, refusing everything else untouched', () => {
+  const root = document.documentElement;
+  root.removeAttribute('data-af-dark'); root.removeAttribute('data-af-design-system'); root.style.colorScheme = '';
+  expect(applyHtmlReaderAppearance(document, { type: 'mx:reader-mode', mode: 'dark' })).toBe(true);
+  expect(root.getAttribute('data-af-dark')).toBe('true'); expect(root.style.colorScheme).toBe('dark');
+  expect(applyHtmlReaderAppearance(document, { type: 'mx:design-system', name: 'paper-2', mode: 'light' })).toBe(true);
+  expect(root.getAttribute('data-af-design-system')).toBe('paper-2'); expect(root.getAttribute('data-af-dark')).toBe('false');
+  for (const command of [null, 'dark', { type: 'mx:reader-mode', mode: 'sepia' }, { type: 'mx:reader-mode' }, { type: 'other', mode: 'dark' },
+    { type: 'mx:design-system', name: 'Paper', mode: 'dark' }, { type: 'mx:design-system', name: '1paper', mode: 'dark' },
+    { type: 'mx:design-system', name: 'a'.repeat(65), mode: 'dark' }, { type: 'mx:design-system', name: 'x"]{}', mode: 'dark' }, { type: 'mx:design-system', mode: 'dark' }])
+    expect(applyHtmlReaderAppearance(document, command)).toBe(false);
+  expect(root.getAttribute('data-af-design-system')).toBe('paper-2'); expect(root.getAttribute('data-af-dark')).toBe('false');
 });

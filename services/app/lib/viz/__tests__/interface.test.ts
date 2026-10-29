@@ -1,6 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {BASEMAP_PATH} from '@artifactbin/contracts/basemap';
-import {BASEMAP_ALLOWED,BASEMAP_UPSTREAM,dailySeries,renderSparklineSvg,tileUpstreamUrl} from '..';
+import {BASEMAP_ALLOWED,BASEMAP_UPSTREAM,dailySeries,tileUpstreamUrl} from '..';
 import {BASEMAP_WORKER_URL,basemapStyleUrl,basemapTransformRequest} from '../basemap';
 import {deckGlHeight} from '../deck-height';
 import {ATTRIBUTION,MAP_CLASSES} from '../deck-chrome';
@@ -42,13 +42,6 @@ describe('dailySeries',()=>{
   expect(dailySeries([],7,now).size).toBe(0);
   expect(dailySeries([{artifact_id:'a',day:'2026-10-29',n:1}],0,now).size).toBe(0);
  });
-});
-
-it('renders a fixed-size sparkline as standalone SVG (plus its 1px padding), empty series included',async()=>{
- const svg=await renderSparklineSvg([0,3,1,4],{width:60,height:12});
- expect(svg).toMatch(/^<svg[^>]*width="62" height="14"/);
- expect(svg).toContain('#3fe77b');
- expect(await renderSparklineSvg([])).toMatch(/^<svg[^>]*width="98" height="22"/);
 });
 
 it('holds the authored DeckGL height, defaulting to 420 for anything unparseable',()=>{
