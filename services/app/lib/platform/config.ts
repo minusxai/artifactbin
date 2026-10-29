@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
-import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins, parseTestDomainSignIn } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -20,6 +20,8 @@ import { DEFAULT_UPLOAD_MAX_BYTES, parseAliasOrigins } from '@artifactbin/contra
  * included, refuses without APP__PAGES_HOST (PAGES_HOST below).
  * Two deliberate exceptions, because they are conventions every host and
  * pooler documents: `DATABASE_URL` and `S3_URL`. `NODE_ENV` is the runtime's.
+ * `TEST_DOMAIN` + `TEST_DOMAIN_OTP` are the test-domain sign-in pair the identity
+ * service, the eval harness and CI secrets share (TEST_DOMAIN below).
  * Guarded by lib/__tests__/env-namespacing.test.ts.
  */
 
@@ -166,6 +168,17 @@ export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('HTTP', 'TRU
  * external service — the same promise PGLite makes for the database.
  */
 export const S3_URL = process.env.S3_URL;
+
+/**
+ * TEST-DOMAIN SIGN-IN (contracts `parseTestDomainSignIn`; the identity service owns the code). The app
+ * keeps only the DOMAIN, and only when the whole pair is valid, so the feature is on here exactly when
+ * it is on at login: new `users` rows for an address at it are marked `test_account`
+ * (lib/accounts/test-accounts), and those accounts stay away from everyone else. Unset = off.
+ */
+export let TEST_DOMAIN: string | undefined = (() => {
+  const parsed = parseTestDomainSignIn(process.env.TEST_DOMAIN, process.env.TEST_DOMAIN_OTP);
+  return parsed.state === 'on' ? parsed.value.domain : undefined;
+})();
 
 /**
  * Rows kept from a data source. A 200k-row sheet imports fine and then makes an
@@ -446,6 +459,7 @@ export function cliReleaseVersion(): string {
 const SETTING_DEFAULTS = {
   publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, customDomainsTarget: CUSTOM_DOMAINS_TARGET,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
+  testDomain: TEST_DOMAIN,
 };
 type ConfigOverrides = { [K in keyof typeof SETTING_DEFAULTS]?: (typeof SETTING_DEFAULTS)[K] };
 export function overrideConfig(settings: ConfigOverrides, environment: Record<string, string | undefined> = {}): void {
@@ -457,12 +471,14 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('internalServiceSecret' in settings) INTERNAL_SERVICE_SECRET = settings.internalServiceSecret;
   if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
   if ('eventsServiceUrl' in settings) EVENTS_SERVICE_URL = settings.eventsServiceUrl;
+  if ('testDomain' in settings) TEST_DOMAIN = settings.testDomain;
   for (const [key, value] of Object.entries(environment)) envOverrides.set(key, value);
 }
 export function resetConfigOverrides(): void {
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
   CUSTOM_DOMAINS_TARGET = SETTING_DEFAULTS.customDomainsTarget; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
+  TEST_DOMAIN = SETTING_DEFAULTS.testDomain;
   envOverrides.clear();
 }
 

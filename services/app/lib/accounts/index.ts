@@ -15,6 +15,7 @@ export { JOIN_RELATIONS, dismissPendingRelations, seedOwnerJoin, setRelationStat
 export { count, has, link, linked, replaceLinked, unlink } from './relations';
 export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';
 export { auth, overrideSession, type Session } from './session';
+export { TEST_ACCOUNT_RESTRICTED, isTestAccount, shareTargetsRefusal, testAccountMayReach } from './test-accounts';
 export { closeTestUserSessions, forgetTestUserSession, noteTestUserSession, testUserSessionCount } from './testuser-sessions';
 export { createTestUser, getTestUserRow, listTestUsers, resolveTestUser } from './testusers';
 export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, TOUCH_INTERVAL_MS, ensureUserToken, withAccountToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken } from './tokens';

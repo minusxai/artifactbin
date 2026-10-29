@@ -7,6 +7,7 @@ export * from './sql-functions';
 export * from './browser';
 export * from './browser-sessions';
 export * from './testusers';
+export * from './test-domain';
 export * from './mx';
 export * from './events';
 export * from './relations';

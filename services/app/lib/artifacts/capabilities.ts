@@ -25,6 +25,11 @@
  * The one door from the real world into the sandbox is an account FORKING one
  * of its readable artifacts `as` one of its test users, which is what the
  * `sandbox_only` refusal below names.
+ *
+ * A TEST ACCOUNT (`users.test_account`, lib/accounts/test-accounts) is an
+ * ACCOUNT among test accounts and their artifacts; on an artifact a non-test
+ * user owns it may read and fork and nothing else, and it follows only test
+ * accounts (`test_account_restricted`).
  */
 import type { Capability } from '@artifactbin/contracts';
 import { json } from '../http/http';
@@ -32,7 +37,7 @@ import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './table';
 import { getArtifactById } from './rows';
-import { userKindOf, type AccessActor } from '../accounts';
+import { isTestAccount, TEST_ACCOUNT_RESTRICTED, userKindOf, type AccessActor } from '../accounts';
 
 /** A user target (follow) rather than a document one. */
 interface UserTarget { userId: string }
@@ -78,7 +83,7 @@ export async function can(actor: AccessActor, capability: Capability, target?: C
 
   if (capability === 'follow') {
     if (isArtifact(target)) return false;
-    if (kind === 'account') return true;
+    if (kind === 'account') return !(await isTestAccount(actor.userId)) || isTestAccount(target.userId);
     // A test user is a full person toward the other people in the sandbox.
     if (kind === 'testuser') return (await userKindOf(target.userId)) === 'testuser';
     return false;
@@ -91,6 +96,10 @@ export async function can(actor: AccessActor, capability: Capability, target?: C
   // outside the sandbox, and a share can never name either of them because
   // neither has an address. One definition of readability, not two.
   if (capability === 'read') return canRead(await effectiveRole(target, actor));
+
+  // A test account keeps to test accounts' artifacts; a fork is a copy into its own space.
+  if (kind === 'account' && capability !== 'fork' && !ownsArtifact(target, actor)
+    && await isTestAccount(actor.userId) && !(await isTestAccount(target.user_id))) return false;
 
   // The owner of a draft may always work on it — including the anonymous token
   // that created it, which has no account to be judged by.
@@ -128,6 +137,9 @@ export interface CapabilityRefusal { status: number; body: { error: string; hint
  * what was being attempted, and a refusal that repeats it reads as a lecture.
  */
 export async function refusalFor(actor: AccessActor, artifactId?: string): Promise<CapabilityRefusal> {
+  if (await isTestAccount(actor.userId)) {
+    return { status: 403, body: { error: TEST_ACCOUNT_RESTRICTED, hint: 'a test account acts only on artifacts test accounts own, and follows only test accounts' } };
+  }
   if ((await kindOfActor(actor)) === 'testuser') {
     const target = artifactId ?? '<id>';
     return {

@@ -18,7 +18,10 @@ export async function notificationsChanged(tx:Queryable,recipientId:string,chang
  // NOTIFY is only a wakeup pointer (lib/platform/db listen): subscribers re-read, whatever the payload.
  await tx.query('SELECT pg_notify($1,$2)',[notificationChannel(recipientId),first.id]);
 }
+/** A test account (lib/accounts/test-accounts) never reaches the notifications of a user who is not one. */
+const TEST_SENDER_TO_OTHERS_SQL='SELECT 1 FROM users s WHERE s.id=$1 AND s.test_account AND NOT EXISTS(SELECT 1 FROM users r WHERE r.id=$2 AND r.test_account)';
 export async function recordNotification(tx:Queryable,n:NotificationInput):Promise<void>{
+ if((await tx.query(TEST_SENDER_TO_OTHERS_SQL,[n.senderId,n.recipientId])).rows.length)return;
  const result=await tx.query<{revision:number}>(`INSERT INTO member_notifications(id,artifact_id,user_id,recipient_id,sender_id,kind,source,revision,first_update_id,source_event_id,agent_label)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) ${n.once?'DO NOTHING':`DO UPDATE SET agent_label=EXCLUDED.agent_label,source_event_id=EXCLUDED.source_event_id,first_update_id=CASE WHEN member_notifications.read_at IS NULL THEN coalesce(member_notifications.first_update_id,EXCLUDED.first_update_id) ELSE EXCLUDED.first_update_id END,kind=CASE WHEN EXCLUDED.kind='resolved' AND member_notifications.kind IN ('reply','reply_resolved') AND member_notifications.read_at IS NULL THEN 'reply_resolved' ELSE EXCLUDED.kind END,sender_id=EXCLUDED.sender_id,revision=${n.revision?'EXCLUDED.revision':'member_notifications.revision+1'},read_at=NULL,created_at=now()`} RETURNING revision`,[n.id,n.artifactId,n.userId??n.recipientId,n.recipientId,n.senderId,n.kind,n.source??null,n.revision??1,n.firstUpdateId??null,n.sourceEventId??null,n.agentLabel??null]);
  if(result.rows[0])await notificationChanged(tx,n.id,n.recipientId,result.rows[0].revision,'updated');

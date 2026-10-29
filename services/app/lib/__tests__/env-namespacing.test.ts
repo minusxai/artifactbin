@@ -12,10 +12,10 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('lib/config.ts', () => {
-  it('reads every env through env(), except DATABASE_URL, S3_URL and NODE_ENV', () => {
+  it('reads every env through env(), except DATABASE_URL, S3_URL, NODE_ENV and the test-domain pair', () => {
     const src = readFileSync(new URL('../platform/config.ts', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     const direct = [...src.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((m) => m[1]);
-    const allowed = new Set(['DATABASE_URL', 'S3_URL', 'NODE_ENV']);
+    const allowed = new Set(['DATABASE_URL', 'S3_URL', 'NODE_ENV', 'TEST_DOMAIN', 'TEST_DOMAIN_OTP']);
     expect(direct.filter((n) => !allowed.has(n))).toEqual([]);
   });
 

@@ -14,7 +14,7 @@ import { CustomDomainPaths } from './CustomDomainPaths';
 
 interface Domain { hostname: string; status: 'pending' | 'verified'; txtName: string; txtValue: string; target: string | null; verifiedAt: string | null; missingSince: string | null; homepageArtifactId: string | null; pathOverrides: Array<{ path: string; artifactId: string }> }
 interface DomainSettings { enabled: boolean; target: string | null; targetAddresses: string[]; domain: Domain | null; homepageOptions?: Array<{ id: string; title: string }> }
-const ATTACH_REFUSALS: Record<string, string> = { invalid_hostname: 'enter a domain name like blog.example.com — no https://, path or port, and not an artifactbin address', taken: 'another account already uses that domain', limit: 'an account holds one domain — remove this one first', disabled: 'custom domains are not available on this server right now' };
+const ATTACH_REFUSALS: Record<string, string> = { invalid_hostname: 'enter a domain name like blog.example.com — no https://, path or port, and not an artifactbin address', taken: 'another account already uses that domain', limit: 'an account holds one domain — remove this one first', disabled: 'custom domains are not available on this server right now', test_account_restricted: 'test accounts cannot use custom domains' };
 function verifyRefusal(error: string, domain: Domain, target: string | null): string {
   switch (error) {
     case 'txt_missing': return `The TXT record at ${domain.txtName} with the value shown was not found yet. DNS changes can take a few minutes to appear.`;
@@ -22,6 +22,7 @@ function verifyRefusal(error: string, domain: Domain, target: string | null): st
     case 'caa_blocks': return `A CAA record on ${domain.hostname} does not allow Let's Encrypt, which issues its certificate. Add a CAA record: 0 issue "letsencrypt.org".`;
     case 'taken': return `Another account has already verified ${domain.hostname}.`;
     case 'disabled': return 'Verification is paused on this server right now; your domain will wait.';
+    case 'test_account_restricted': return 'Test accounts cannot use custom domains.';
     default: return 'Could not verify that domain.';
   }
 }

@@ -30,6 +30,31 @@ running server as `[dev-mail] otp email=… code=…` and appended to
 the source development outbox at `.artifactbin/dev-mail.jsonl`; read it with
 `npm run dev:otp -- EMAIL` (for `npm run dev` only).
 
+### Test-domain accounts
+
+Automated runs (the agent evals) create disposable accounts with
+`TEST_DOMAIN` (for example `test.example.com`) and `TEST_DOMAIN_OTP` (a random
+code of 32 to 128 letters, digits, `-` or `_`; for example
+`openssl rand -hex 32`). With both set, any address whose domain is exactly
+`TEST_DOMAIN` signs in with that code through the normal login flow (the author
+skill's `auth.mjs` or the login page), and nothing is mailed to that domain.
+Subdomains and look-alike names (`x@sub.test.example.com`,
+`x@test.example.com.other.net`) are ordinary addresses. Either name unset turns
+the feature off; an invalid pair also leaves it off and logs why at boot. The
+code is checked the way every login code is: single use, five attempts, and the
+deployment's usual rate limits. Both the identity service and the app read the
+pair; in a split deployment give both the same values.
+
+Rows the app creates for these addresses are marked `users.test_account`;
+existing rows are never marked. A test account works normally among test
+accounts but: cannot add a custom domain; shares only with addresses at
+`TEST_DOMAIN`; invites only test accounts to artifacts and groups (group
+invitations by email only to `TEST_DOMAIN`); on an artifact a non-test user owns
+can only read and fork (no comments, likes, shares or `$_me` writes); follows
+only test accounts; and never creates notifications for non-test users.
+Deleting old test accounts and their artifacts is a planned follow-up; the
+marking exists so that cleanup can select exactly these rows.
+
 See [serving and security](serving-and-security.md) for trust boundaries.
 
 The OSS host includes authentication, authorization, the reader/editor,

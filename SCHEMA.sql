@@ -819,6 +819,7 @@ CREATE TABLE IF NOT EXISTS app.users (
   image_key TEXT,
   auto_accept_mentions BOOLEAN NOT NULL DEFAULT true,
   welcome_pending BOOLEAN NOT NULL DEFAULT false,
+  test_account BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
 );
@@ -844,6 +845,8 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS image_key TEXT;
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS auto_accept_mentions BOOLEAN NOT NULL DEFAULT true;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS test_account BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 

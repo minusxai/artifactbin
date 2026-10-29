@@ -30,7 +30,7 @@ import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLI
 import { urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
-import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, isTestAccount, ownerUsername } from '@/lib/accounts';
 
 type DomainStatus = 'pending' | 'verified';
 /** One CAA property, as `tag value` (`issue letsencrypt.org`). `critical` is the issuer-critical flag. */
@@ -58,8 +58,9 @@ interface AttachedDomain {
   homepageArtifactId: string | null;
   pathOverrides: Array<{ path: string; artifactId: string }>;
 }
-type AttachRefusal = 'disabled' | 'invalid_hostname' | 'taken' | 'limit';
-type VerifyRefusal = 'disabled' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
+/** `test_account_restricted`: a disposable test-domain account never serves at a custom domain (lib/accounts/test-accounts). */
+type AttachRefusal = 'disabled' | 'test_account_restricted' | 'invalid_hostname' | 'taken' | 'limit';
+type VerifyRefusal = 'disabled' | 'test_account_restricted' | 'not_found' | 'taken' | 'txt_missing' | 'not_pointing' | 'caa_blocks';
 
 /** The TXT record's label; the name we ask for is `_artifactbin.<hostname>`. */
 const TXT_LABEL = '_artifactbin';
@@ -172,6 +173,7 @@ export async function domainOf(userId: string): Promise<AttachedDomain | null> {
  */
 export async function attachDomain(userId: string, hostname: string): Promise<AttachedDomain | { error: AttachRefusal }> {
   if (!CUSTOM_DOMAINS_TARGET) return { error: 'disabled' };
+  if (await isTestAccount(userId)) return { error: 'test_account_restricted' };
   const host = normalizeHostname(hostname);
   if (!host || isOwnHost(host)) return { error: 'invalid_hostname' };
   const settle = async (): Promise<AttachedDomain | { error: AttachRefusal }> => {
@@ -226,6 +228,7 @@ async function holdsToken(row: Pick<DomainRow, 'hostname' | 'token'>, resolver: 
 export async function verifyDomain(userId: string, hostname: string, resolver: DomainResolver): Promise<AttachedDomain | { error: VerifyRefusal }> {
   const target = CUSTOM_DOMAINS_TARGET;
   if (!target) return { error: 'disabled' };
+  if (await isTestAccount(userId)) return { error: 'test_account_restricted' };
   const host = normalizeHostname(hostname);
   const row = host ? await rowForUser(userId) : null;
   if (!row || row.hostname !== host) return { error: 'not_found' };

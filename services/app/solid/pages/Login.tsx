@@ -82,7 +82,7 @@ export function LoginPage(props:{onAuthenticated?:()=>void;callbackUrl?:string|n
       <Show when={!sent()} fallback={<>
         <PageHeader title="Log in to artifactbin" description={<>{delivery() === 'email' ? 'We emailed a code to ' : 'A login code was generated for '}<span class="text-fg">{email()}</span>. It expires in 10 minutes.<Show when={delivery() === 'operator_outbox'}> Ask the server operator for the code from the protected local outbox or server output.</Show></>} />
         <form class="mt-6 flex flex-col gap-3" onSubmit={event => { event.preventDefault(); void verify(); }}>
-          <Field label="Verification code"><Input type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={6} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} /></Field>
+          <Field label="Verification code"><Input type="text" autofocus inputMode="numeric" autocomplete="one-time-code" maxLength={128} aria-label="Login code" placeholder="6-digit code" value={code()} onInput={event => setCode(event.currentTarget.value)} /></Field>
           <Button type="submit" aria-label="Verify code" disabled={busy() || !code()}>{busy() ? 'Checking…' : 'Log in'}</Button>
         </form>
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted"><Button variant="link" type="button" aria-label="Change email" class="min-h-11" onClick={() => { setSent(false); setCode(''); setError(null); writeProgress(progressKey, '', false); }}>Change email</Button><Button variant="link" type="button" aria-label="Resend code" class="min-h-11" disabled={busy()} onClick={() => void requestCode()}>Resend code</Button></div>
