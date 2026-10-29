@@ -4,7 +4,7 @@ import {POST} from '@/app/api/artifacts/route';
 import { identityForUser } from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {getArtifactById,changeMembership} from '@/lib/artifacts';
-import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
+import { setDatasetPolicy } from '@/__tests__/harness';
 import {catalogOf, loadDatasetRows} from '@/lib/datasets';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';

@@ -5,10 +5,10 @@
  * along, and the JSON door's cache policy and node validator. The app page (server/app) only draws this answer.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mintAccountToken, setSession, useAppHarness } from '@/__tests__/harness';
+import { mintAccountToken, setSession, useAppHarness, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { createArtifact, setMetadataFor } from '@/lib/artifacts';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
+import { GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor } from '@/lib/http';
 import { artifactPageAnswer, artifactPageResponse, readableApp } from '@/lib/document-serving';
 
 useAppHarness();

@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {createHash} from 'node:crypto';
-import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
+import { setDatasetPolicy } from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';

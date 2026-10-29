@@ -8,7 +8,7 @@ import { identityForUser } from '@/lib/accounts';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDataset } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
+import { setDatasetPolicy } from '@/__tests__/harness';
 import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 

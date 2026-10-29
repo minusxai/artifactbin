@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { AGENT_COOKIE } from '@/lib/accounts';
-import { decodeAgentSessionEnvelope } from '@/lib/accounts/agent-session';
+import { decodeAgentSession } from '@artifactbin/utils';
+import { AUTH_SECRET } from '@/lib/platform';
+const decodeAgentSessionEnvelope = async (value: string | null | undefined) => decodeAgentSession(value, AUTH_SECRET);
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { agentCookie, cookieValue, request, useAppHarness } from './harness';
 

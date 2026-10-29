@@ -12,8 +12,8 @@ import {GET as font,HEAD as fontHead} from '@/app/af/fonts/[name]/route';
 import {readFileSync} from 'node:fs';
 import { storyFontManifest as manifest } from '@/lib/story-design/story-fonts';
 import {pagesHost} from '../server/pages-host';
-import {pagesOriginFor,pagesSiteFor} from '@/lib/http/pages-origin';
-import {useAppHarness} from './harness';
+import {pagesOriginFor} from '@/lib/http';
+import {useAppHarness,testPagesSite as pagesSiteFor} from './harness';
 useAppHarness();
 it('serves the documented public core with credential-free conditional GET and HEAD',async()=>{
  const request=new Request('https://app.example.test/af/core.js',{headers:{authorization:'Bearer ignored-test-value',cookie:'ignored=test'}});const get=await GET(request);expect(get.status).toBe(200);expect(get.headers.get('content-type')).toContain('javascript');expect(get.headers.get('set-cookie')).toBeNull();expect(get.headers.get('cache-control')).toBe('no-cache');const source=await get.text();expect(source).toContain('@afbin/apollo');expect(()=>new Function(source)).not.toThrow();const tag=get.headers.get('etag')!;expect(tag).toBeTruthy();

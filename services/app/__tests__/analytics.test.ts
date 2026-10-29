@@ -219,7 +219,7 @@ describe('read events', () => {
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    const { username } = await (await import('@/lib/accounts/users')).ensureUsername(owner);
+    const { username } = await (await import('@/lib/accounts')).ensureUsername(owner);
     const rendered = await outcome(
       UserPage(`@${username}`, [`${doc.id}-secret`]),
     );

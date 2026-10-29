@@ -10,7 +10,6 @@ import { linkRoleOf } from '@/lib/artifact-access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, createUser, ensureUsername } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
-import { setUserEmail } from '@/lib/accounts/users';
 import { setRelationState, has, count, linked, link } from '@/lib/social';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -29,6 +28,8 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { getDb } from '@/lib/platform';
+/** A user's sign-in email changing underneath their grants (the identity store's own write). */
+const setUserEmail = async (userId: string, email: string) => { await (await getDb()).query('UPDATE users SET email = $2 WHERE id = $1', [userId, email]); };
 import { hasExplicitNotificationMembership, membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 
