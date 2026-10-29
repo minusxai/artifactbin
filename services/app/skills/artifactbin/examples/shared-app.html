@@ -3,15 +3,15 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="artifactbin:design-system" content="almanac">
-<title>Shared dashboard</title>
+<title>[Household budget]</title><!-- must match APP.title, the app name -->
 <link rel="af-dataset" data-af-name="transactions" href="ref:DATASET_ID" data-af-mode="live">
 <link rel="af-backend" data-af-name="budget" href="./garden.ts">
 <script type="module" id="app-config">
 // KPIs, category targets, a month trend, payers, drill-down, dark mode, a shared target editor.
 // Usage: copy it as index.html with garden.ts, gen-transactions.mjs and shared-app-steps, -guest
 //   and -cleanup .mjs (as steps, guest, cleanup.mjs); run the generator once, publish its CSV
-//   (--type dataset), put the ID after ref:; edit only APP (defaultTargets: plausible monthly
-//   amounts) and garden.ts's names; then node scripts/publish.mjs index.html && node
+//   (--type dataset), put the ID after ref:; edit only APP, <title> (defaultTargets: plausible
+//   monthly amounts) and garden.ts's names; then node scripts/publish.mjs index.html && node
 //   scripts/check.mjs index.html --steps steps.mjs --guest-steps guest.mjs --cleanup-steps
 //   cleanup.mjs. Gotchas: the dataset and backend need different data-af-name values; never
 //   publish the ref: placeholder. The comment at the top may stay as it is.

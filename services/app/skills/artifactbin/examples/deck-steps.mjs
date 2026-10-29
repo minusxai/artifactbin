@@ -120,6 +120,21 @@ await step("the ask's milestone starts from the traction chart's last value",asy
       `the ask milestone "${stat}" does not start from ${chart.label}'s last value `+
       `${+last.toFixed(dp)}: set only the target in milestone`;});
   if(off)throw Error(off);});
+await step('the HTML title matches the page name',async()=>{
+  // Link previews, search and the platform's og:title read the published <title>, not the one the
+  // script sets: read the served source (hosted: /a/ID/raw, fetched from the app page).
+  const url=new URL(page.url()),id=url.pathname.match(/^\/(?:a|@[^/]+)\/([A-Za-z0-9]+)/)?.[1];
+  const src=/^(127\.0\.0\.1|localhost|\[::1\])$/.test(url.hostname)||!id?url.href:
+    `${url.origin}/a/${id}/raw`;
+  const served=await page.mainFrame().evaluate(async src=>{const res=await fetch(src,
+    {cache:'no-store'});return res.ok?new DOMParser().parseFromString(await res.text(),
+    'text/html').title:`(served page: HTTP ${res.status})`;},src);
+  const name=await page.evaluate(()=>document.title),tag=name.replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;');
+  // A [bracketed] or older starter title is still the template's.
+  if(served!==name||!PLACEHOLDERS_OK&&/\[|^Pitch deck$/.test(served))
+    throw Error(`the HTML title is "${served}" but the page is named "${name}": `+
+      `set <title>${tag}</title> in index.html`);});
 await step('next button, ArrowRight, End, Home and a dot move between slides',async()=>{
   await page.getByRole('button',{name:'Next slide'}).click();await at(2);
   await page.keyboard.press('ArrowRight');await at(3);

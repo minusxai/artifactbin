@@ -11,15 +11,24 @@ const source = readFileSync(new URL('../../../skills/artifactbin/examples/deck-s
   .replace('SLIDE_COUNT=8,CHART_COUNT=2', 'SLIDE_COUNT=1,CHART_COUNT=1');
 const DECK = readFileSync(new URL('../../../skills/artifactbin/examples/deck.html', import.meta.url), 'utf8');
 const saved = {document: globalThis.document, NodeFilter: (globalThis as {NodeFilter?: unknown}).NodeFilter,
-  window: (globalThis as {window?: unknown}).window};
+  window: (globalThis as {window?: unknown}).window, fetch: globalThis.fetch,
+  DOMParser: (globalThis as {DOMParser?: unknown}).DOMParser};
 afterEach(() => Object.assign(globalThis, saved));
+/** The URLs the title step fetched its served source from. */
+const fetched: string[] = [];
 
-/** Runs the steps over one page; returns the first failure, or null when every step passes. */
-async function run(html: string | JSDOM, steps = source): Promise<string | null> {
+/**
+ * Runs the steps over one page; returns the first failure, or null when every step passes. served is the published
+ * source the title step reads (by default one whose <title> is the page's document.title); url is the checked page.
+ */
+async function run(html: string | JSDOM, steps = source, served?: string, url = 'http://127.0.0.1:4100/index.html'): Promise<string | null> {
   const dom = typeof html === 'string' ? new JSDOM(html) : html;
-  Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter, window: dom.window});
+  const body = served ?? `<title>${dom.window.document.title.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</title>`;
+  Object.assign(globalThis, {document: dom.window.document, NodeFilter: dom.window.NodeFilter, window: dom.window,
+    DOMParser: dom.window.DOMParser, fetch: async (src: string) => { fetched.push(src); return {ok: true, text: async () => body}; }});
   const locator: unknown = new Proxy({}, {get: (_, key) => key === 'count' ? async () => 1 : key === 'nth' ? () => locator : async () => {}});
-  const page = {waitForFunction: async () => {}, evaluate: async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg),
+  const evaluate = async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg);
+  const page = {waitForFunction: async () => {}, evaluate, url: () => url, mainFrame: () => ({evaluate}),
     locator: () => locator, getByRole: () => locator, keyboard: {press: async () => {}}};
   const step = async (_label: string, fn: () => Promise<void>) => fn();
   try {
@@ -38,7 +47,7 @@ async function template(edit = (html: string) => html): Promise<string | null> {
     vega: {View: class { async runAsync() {} finalize() {} }, parse: () => ({}), expressionInterpreter: {}}}});
   dom.window.eval(data!);
   await dom.window.eval(`(async()=>{const vega=stubs.vega,{compile}=stubs;${app!.replace(/^import .*$/gm, '')}})()`);
-  return run(dom, source.replace('PLACEHOLDERS_OK=false', 'PLACEHOLDERS_OK=true'));
+  return run(dom, source.replace('PLACEHOLDERS_OK=false', 'PLACEHOLDERS_OK=true'), html);
 }
 
 const NAV = '<nav data-af-deck-chrome><button>←</button><button>→</button><span id="count">01 / 01</span></nav>';
@@ -123,4 +132,22 @@ it("fails an ask milestone that doesn't start from the traction chart's last val
   expect(await template(html => html.replace("from:'traction', milestone:'[100 customers]'", "milestone:'12 → 100 customers'")))
     .toContain('does not start from Traction\'s last value 14');
   expect(await template(html => html.replace("{x:'Q4', y:14}", "{x:'Q4', y:28}"))).toBeNull();
+});
+
+it('fails while the served <title> is not the page name, saying exactly what to set', async () => {
+  const named = (html: string) => html.replace("label:'Problem · [Company]'", "label:'Problem · Tidewater'");
+  expect(await template(named)).toContain('the HTML title is "[Company] pitch deck" but the page is named "Tidewater pitch deck": ' +
+    'set <title>Tidewater pitch deck</title> in index.html');
+  expect(await template(html => named(html).replace('<title>[Company] pitch deck</title>', '<title>Pitch deck</title>')))
+    .toContain('set <title>Tidewater pitch deck</title> in index.html');
+  expect(await template(html => named(html).replace('<title>[Company] pitch deck</title>', '<title>Tidewater pitch deck</title>')))
+    .toBeNull();
+});
+
+it('reads a hosted page\'s source from /a/ID/raw and still fails the older starter title outside template mode', async () => {
+  const page = `<title>Pitch deck</title><main><section data-af-slide data-af-id="slide-a"><h2>Why buyers switch</h2>${BADGE}</section></main>${NAV}`;
+  fetched.length = 0;
+  expect(await run(page, source, undefined, 'https://app.artifactbin.dev/a/Ab12Cd34')).toContain('set <title>Pitch deck</title>');
+  expect(fetched).toEqual(['https://app.artifactbin.dev/a/Ab12Cd34/raw']);
+  expect(await run(page.replace(/Pitch deck/, 'Tidewater pitch deck'))).toBeNull();
 });

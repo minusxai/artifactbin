@@ -77,6 +77,7 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   | `signout` | Utilitarian | Booking apps, intake forms, rosters, inventories |
   | `sorbet` | Fun | Consumer apps, launches, kids and food, celebrations, playful data |
   | `arcade` | Fun | Games, launches, leaderboards, playful dashboards, teaching |
+  - Set `<title>` to the page's name (decks: the company's deck name; apps: APP.title).
   - Design: start from the reader's decision; give the opening a concrete point and let typography
     set the hierarchy (no identical cards for every paragraph). Use real data in charts, label
     assumptions, keep lines under about 80 characters and controls keyboard-usable.
