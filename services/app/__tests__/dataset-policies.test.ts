@@ -4,7 +4,6 @@ import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { artifactState, getArtifactById, replaceArtifactFor, updateSharingFor } from '@/lib/artifacts';
-import { setAccessFor } from '@/lib/artifacts/sharing';
 import { loadDatasetRows } from '@/lib/datasets';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
 import {createDatasetGraphql} from '@/lib/dataset-graphql';
@@ -67,7 +66,7 @@ it('applies one data policy to everyone with view access', async () => {
   expect((await f.write('remove')).outcome).toBe('rejected');
   expect((await f.write('add', -1)).outcome).toBe('rejected');
   expect((await getArtifactById(f.ds))?.version).toBe(2);
-  await setAccessFor(f.actor, f.ds, 'read');
+  await updateSharingFor(f.actor, f.ds, { access: 'read' });
   expect((await f.write()).outcome).toBe('rejected');
 });
 it('fences administration by edit access and revision, and removing a policy revokes viewer writes', async () => {

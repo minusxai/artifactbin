@@ -1,6 +1,7 @@
 import type {HtmlPageVersion,HtmlBackendLink,Queryable} from '@artifactbin/contracts';
 import { liveTokenSql, type AccessActor } from '@/lib/accounts';
-import {getArtifactById,getArtifactFor,writerFor,grantsOf,grantContext,canReadArtifact,can,durableMutation,pinMutationContext,attestRegisteredHtmlMutation,artifactState,type ArtifactRow,type MutationReceipt} from '@/lib/artifacts';
+import { getArtifactById, getArtifactFor, canReadArtifact, durableMutation, pinMutationContext, artifactState, type ArtifactRow, type MutationReceipt } from '@/lib/artifacts';
+import { writerFor, grantsOf, grantContext, can, attestRegisteredHtmlMutation } from '@/lib/artifact-access';
 import {canWriteDataset,mutateDataset,isMutationRefused} from '@/lib/document-data';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion,type HtmlBackendVersionRecord} from '@/lib/html-backends';

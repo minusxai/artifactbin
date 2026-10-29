@@ -1,11 +1,53 @@
-import {grantsOf,grantsPermitRead} from '@/lib/artifacts/dataset-policy/grants';
-import { effectiveRole } from './access';
-import { type ArtifactRow } from './table';
+/**
+ * READER ADMISSION: the one read decision every serving path makes, the readable row with the reader's role, the
+ * snapshot a reader is answered with, and the route gate for a capability. Decided by the access rule
+ * (@/lib/artifact-access) over the rows this module reads.
+ */
+import { can, capabilityRefusal, effectiveRole, grantsOf, grantsPermitRead, type ArtifactRow } from '@/lib/artifact-access';
+import type { Capability } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactHeaderById, getArtifactIdentityById, getEditableArtifactFor, type ArtifactHeader, type ArtifactIdentity } from './rows';
 import {servableDocument} from './servable';
+import {publicCatalogOf} from '@/lib/datasets';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
-import {publicCatalogOf} from '../datasets';
+
+/**
+ * The ONE read-access decision, made by every public serving path before any
+ * bytes leave. Fail closed: an unresolvable session is just a null viewer.
+ */
+export async function canReadArtifact(
+  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
+  actor: AccessActor,
+): Promise<boolean> {
+  // Bare-token ownership is not consulted here — sound because `private` requires an account to anchor its
+  // ACL (getSharingFor's canPrivate), so a token-owned document is never private. The reader is the account.
+  const reader: AccessActor = { ...actor, tokenId: null };
+  if(row.format==='dataset'||row.format===undefined){
+    // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
+    const dataset=await getArtifactHeaderById(row.id);
+    if(!dataset)return false;
+    if(grantsOf(dataset))return grantsPermitRead(dataset,reader);
+  }
+  // One decision, asked one way: reading is simply the bottom of the lattice.
+  return canRead(await effectiveRole({ ...row, token_id: '' }, reader));
+}
+
+/**
+ * THE ROUTE-LEVEL GATE, for the doors that hold an id rather than a row: the
+ * refusal to answer, or null to carry on.
+ *
+ * An id this actor cannot READ answers `null` on purpose — including one that
+ * names nothing. "Does it exist" is the caller's own question and its own
+ * uniform 404, and a capability refusal must never become the door that tells a
+ * stranger an id is real: the gate speaks only to someone the artifact is
+ * already visible to.
+ */
+export async function capabilityGuard(actor: AccessActor, capability: Capability, artifactId: string): Promise<Response | null> {
+  const row = await getArtifactById(artifactId);
+  if (!row || !(await can(actor, 'read', row))) return null;
+  return (await can(actor, capability, row)) ? null : capabilityRefusal(actor, artifactId);
+}
+
 
 interface ReadableArtifact<T extends ArtifactHeader> { row:T; role:ArtifactRole }
 /** Share one admission policy across full content and source-free metadata reads. */

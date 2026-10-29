@@ -1,31 +1,13 @@
-import { getArtifactHeaderById } from './rows';
-import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
-import type { AccessActor } from '@/lib/accounts';
-import { isLinkOnlyKind } from '../user-kinds';
-import { liveAccessFacts, type AccessFacts } from './access-facts';
-import type { ArtifactRow } from './table';
-import { ANONYMOUS_CEILING, canRead, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts';
-
 /**
- * The ONE read-access decision, made by every public serving path before any
- * bytes leave. Fail closed: an unresolvable session is just a null viewer.
+ * THE ACCESS RULE IN JAVASCRIPT: ownership, the role lattice and the host's document-editor grant, decided from a row
+ * and the facts (./access-facts). `./scopes` is the same rule in SQL; lib/artifacts `canReadArtifact` is the one
+ * read decision every serving path makes with it.
  */
-export async function canReadArtifact(
-  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
-  actor: AccessActor,
-): Promise<boolean> {
-  // Bare-token ownership is not consulted here — sound because `private` requires an account to anchor its
-  // ACL (getSharingFor's canPrivate), so a token-owned document is never private. The reader is the account.
-  const reader: AccessActor = { ...actor, tokenId: null };
-  if(row.format==='dataset'||row.format===undefined){
-    // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
-    const dataset=await getArtifactHeaderById(row.id);
-    if(!dataset)return false;
-    if(grantsOf(dataset))return grantsPermitRead(dataset,reader);
-  }
-  // One decision, asked one way: reading is simply the bottom of the lattice.
-  return canRead(await effectiveRole({ ...row, token_id: '' }, reader));
-}
+import type { AccessActor } from '@/lib/accounts';
+import { isLinkOnlyKind } from '@/lib/user-kinds';
+import { liveAccessFacts, type AccessFacts } from './access-facts';
+import type { ArtifactRow } from './scopes';
+import { ANONYMOUS_CEILING, capRole, maxRole, type ArtifactRole } from '@artifactbin/contracts';
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
 export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
@@ -86,7 +68,7 @@ export async function roleWithoutLink(
  *   - a named share   — artifact_shares, by resolved user id or unresolved email;
  *   - the LINK        — what a stranger holding the address gets.
  *
- * `facts` is where the decision reads groups, kinds and shares (lib/artifacts/access-facts): the
+ * `facts` is where the decision reads groups, kinds and shares (lib/artifact-access access facts): the
  * database, one lookup at a time, unless a caller deciding many rows preloaded them.
  */
 export async function effectiveRole(
@@ -121,7 +103,7 @@ async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: Access
 
 /**
  * THE HOST'S DOCUMENT-EDITOR GRANT (production: ADMIN__EMAILS), decided once per request by the resolver
- * (`actor.documentEditor`) and applied HERE and in the SQL scopes (lib/artifacts/table `scopeAtLeast`) by
+ * (`actor.documentEditor`) and applied HERE and in the SQL scopes (./scopes `scopeAtLeast`) by
  * one rule: it reaches exactly what a link could reach — a page document that is not private — and makes
  * the holder its editor. Never a private artifact of any kind, never a dataset, never ownership (delete,
  * sharing). Like the link, it lists nothing: a listing reads `roleWithoutLink`, which this is not part of.

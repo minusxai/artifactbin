@@ -1,5 +1,7 @@
 import {notificationJobOperations} from './notification-jobs';
-import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire, holdsCreatingToken, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
+import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
 import { notificationJobStore } from '@/lib/notifications';
 import { MEMBERSHIP_OPERATIONS } from './membership';

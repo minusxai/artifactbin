@@ -1,7 +1,8 @@
 import {pinPublicationAssetUrls} from './plan';
 import type { AccessActor } from '@/lib/accounts';
 import {requestOrSessionActor} from '@/lib/authentication';
-import {archivedVersionFor,canReadArtifact,getArtifactById,writerFor} from '@/lib/artifacts';
+import { archivedVersionFor, canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { writerFor } from '@/lib/artifact-access';
 import { getDb } from '@/lib/platform';
 import {serveStoredFile} from '@/lib/datasets';
 import type {BundleReceipt} from './execute';

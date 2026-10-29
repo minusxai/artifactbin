@@ -11,7 +11,7 @@ export interface VerifiedAccount {
 
 /**
  * The host's optional grant for editing page documents (production: ADMIN__EMAILS), read from VERIFIED
- * account claims. Never ownership, never dataset writes, never a private artifact (lib/artifacts access).
+ * account claims. Never ownership, never dataset writes, never a private artifact (lib/artifact-access).
  */
 export type DocumentEditorPolicy = (account: VerifiedAccount) => boolean;
 let policy: DocumentEditorPolicy | undefined;

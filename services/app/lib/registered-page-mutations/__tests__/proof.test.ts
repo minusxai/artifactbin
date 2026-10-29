@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import type {Queryable} from '@artifactbin/contracts';
-import {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from '@/lib/artifacts';
+import { attestRegisteredHtmlMutation, verifyRegisteredHtmlMutation } from '@/lib/artifact-access';
 it('registered HTML proof is process-local and binds exact page/edit with a transaction recheck',async()=>{
  const calls:Queryable[]=[],tx={} as Queryable,proof=attestRegisteredHtmlMutation('page','edit',async transaction=>{calls.push(transaction);});
  expect(await verifyRegisteredHtmlMutation({id:'page',editId:'edit',registeredHtml:proof},tx)).toBe(true);expect(calls).toEqual([tx]);
@@ -8,7 +8,7 @@ it('registered HTML proof is process-local and binds exact page/edit with a tran
  const revoked=attestRegisteredHtmlMutation('page','edit',async()=>{throw Error('source_changed');});await expect(verifyRegisteredHtmlMutation({id:'page',editId:'edit',registeredHtml:revoked},tx)).rejects.toThrow('source_changed');
 });
 it('original grant context preserves markup and refuses ordinary or serialized-proof HTML',async()=>{
- const {grantContext}=await import('@/lib/artifacts');
+ const {grantContext}=await import('@/lib/artifact-access');
  const actor={userId:null,tokenId:'creator',email:null,documentEditor:false};
  const base={id:'page',edit_id:'edit',format:'markup',user_id:null,token_id:'creator',group_id:null,visibility:'private',meta:{}};
  const dataset={id:'dataset',user_id:null,token_id:'creator',group_id:null} as unknown as import('@/lib/artifacts').ArtifactRow;

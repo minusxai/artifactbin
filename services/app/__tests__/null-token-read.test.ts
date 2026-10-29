@@ -9,7 +9,8 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as exportRoute } from '@/app/a/[id]/export/route';
 import { GET as downloadRoute } from '@/app/a/[id]/download/route';
 import { createUser } from '@/lib/accounts';
-import { createArtifact, holdsCreatingToken } from '@/lib/artifacts';
+import { createArtifact } from '@/lib/artifacts';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { artifactPageResponse, readableApp } from '@/lib/document-serving';
 
 useAppHarness();

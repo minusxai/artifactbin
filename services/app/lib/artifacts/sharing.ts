@@ -1,33 +1,13 @@
-import { editorScope, notifyArtifactSql, ownerScope, type ArtifactRow, type Scope } from './table';
-import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { editorScope, grantsOf, type ArtifactRow } from '@/lib/artifact-access';
+import { notifyArtifactSql } from './table';
+import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
 import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
-import { grantsOf } from '@/lib/artifacts/dataset-policy/grants';
 import { catalogOf } from '@/lib/datasets';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch, type Visibility } from '@artifactbin/contracts';
-
-/**
- * Open (or close) a dataset for writes — metadata only, exactly like a folder
- * move: no version bump, no edit-log row, no content change. The rows are not
- * touched; only who may change them from here on. Closing is always safe for
- * the data (every mutate call re-checks), it only stops the documents that
- * write — which is why the share menu names them first.
- */
-export function setAccessFor(actor: AccessActor, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
-  return setAccessScoped(ownerScope(actor), id, access);
-}
-
-async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  const r = await artifactQuery<ArtifactRow>(db,
-    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, ${notifyArtifactSql('id', 'edit_id')}`,
-    [id, scope.val, access],
-  );
-  return r.rows[0] ?? null;
-}
 
 // ── Sharing (the private tier's ACL surface) ─────────────────────────────────
 
@@ -125,9 +105,4 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
     link_role: patch.linkRole ?? null,
   });
   return (await getSharingFor(actor, id)) ?? done;
-}
-
-
-export async function updateSharing(userId: string, id: string, patch: SharingPatch): Promise<SharingState | null> {
-  return updateSharingFor(identityForUser(userId), id, patch);
 }

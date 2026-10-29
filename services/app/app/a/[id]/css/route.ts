@@ -10,7 +10,8 @@
  */
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { requestOrSessionActor } from '@/lib/authentication';
-import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow, holdsCreatingToken } from '@/lib/artifacts';
+import { archivedVersionForActor, canReadArtifact, getArtifactById, refusingUnservable, servedRow } from '@/lib/artifacts';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { json, matchingTag } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { parseRuntimeCssRequest, runtimeCssAnswer } from '@/lib/document-serving';

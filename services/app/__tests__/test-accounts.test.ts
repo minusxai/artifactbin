@@ -4,7 +4,8 @@
  */
 import { expect, it } from 'vitest';
 import { useAppHarness, mintAccountToken } from './harness';
-import { can, capabilityGuard, changeMembership, createArtifact } from '@/lib/artifacts';
+import { can } from '@/lib/artifact-access';
+import { capabilityGuard, changeMembership, createArtifact } from '@/lib/artifacts';
 import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser, isTestAccount, shareTargetsRefusal, syncProfile } from '@/lib/accounts';
 import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/lib/groups';

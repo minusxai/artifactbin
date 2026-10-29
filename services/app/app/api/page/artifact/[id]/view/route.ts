@@ -1,4 +1,4 @@
-import { recordArtifactView } from '@/lib/artifacts';
+import { recordArtifactView } from '@/lib/artifact-wire';
 import { sessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 

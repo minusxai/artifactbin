@@ -1,16 +1,17 @@
 import { identityForUser, lockMembershipUsers, testAccountMayReach, type AccessActor } from '@/lib/accounts';
 import { JOIN_RELATIONS, setRelationState } from '@/lib/social';
-import {artifactQuery} from '@/lib/artifacts/document';
+import {artifactQuery} from '../document';
 import {recordEvent, getDb} from '@/lib/platform';
 import {DatasetError} from '@/lib/datasets';
-import { readThrough } from '@/lib/artifacts/dataset-policy/grants';
+import { readThrough } from '@/lib/artifact-access';
 import type { ArtifactMember, MembershipInput, MembershipState, MembershipDirection, MembershipStatus, Queryable } from '@artifactbin/contracts';
 import { PENDING_MEMBERSHIP_LIMIT } from '@artifactbin/contracts';
-import { effectiveRole } from '../access';
-import { notifyArtifactSql, type ArtifactRow } from '../table';
+import { effectiveRole } from '@/lib/artifact-access';
+import { notifyArtifactSql } from '../table';
+import { type ArtifactRow } from '@/lib/artifact-access';
 import { getArtifactById, getArtifactHeaderById } from '../rows';
 import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
-import { can } from '../capabilities';
+import { can } from '@/lib/artifact-access';
 
 export class MembershipError extends DatasetError {
   constructor(message: string, status = 403) { super(message,status); }

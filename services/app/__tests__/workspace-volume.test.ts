@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GET as homeRoute } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts';
-import { artifactSummaryToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listDraftsByTokenIds, listOwnedArtifacts } from '@/lib/workspace';
 import { ensureEventsSchema } from '@artifactbin/events/local';

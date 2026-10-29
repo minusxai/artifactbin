@@ -17,7 +17,8 @@
  */
 import {designSystemChoice} from '@/lib/html-systems';
 import { LIVE_VERSION_HEADER } from '@/lib/html-runtime';
-import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, holdsCreatingToken, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, archivedVersionFor, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, servedRow, VERSION_PARAM } from '@/lib/artifacts';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { recordView } from '@/lib/analytics';
 import { verifyExportKey } from '@/lib/export';
 import {storedCspExtensions} from '@/lib/document';

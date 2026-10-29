@@ -13,7 +13,7 @@
  *  - named shares, artifact invitations and group invitations/members may name only test-domain
  *    addresses or test accounts (shareTargetsRefusal, lib/artifacts/membership, lib/groups);
  *  - on an artifact outside the test accounts' space (isTestOwned) it may read and fork, nothing
- *    else: no comment, like, share or `$_me` write (lib/artifacts/capabilities `can`), and it
+ *    else: no comment, like, share or `$_me` write (lib/artifact-access `can`), and it
  *    follows only test accounts;
  *  - nothing it does reaches a non-test person's notifications (lib/notifications/events).
  */

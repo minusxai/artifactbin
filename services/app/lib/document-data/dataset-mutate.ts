@@ -1,5 +1,7 @@
-import {verifyRegisteredHtmlMutation, grantsOf, assertGrantCommit, getArtifactById, type GrantDocument, artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted} from '@/lib/artifacts';
-import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { verifyRegisteredHtmlMutation, grantsOf, assertGrantCommit, type GrantDocument } from '@/lib/artifact-access';
+import { getArtifactById, artifactState, completeMutationReceipt, type MutationReceipt, commitDatasetWrite, type ArtifactRow, mutationInvocation, emitDatasetCommitted } from '@/lib/artifacts';
+import { artifactQuery } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import {completeDocumentMutationReceipt} from './mutation-operation';
 import {NotificationExecutionError,lockNotificationExecution,notificationJobStore} from '@/lib/notifications';

@@ -319,6 +319,9 @@ export const DEEP_MODULES = {
   'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'] },
+  // The access rule below the store and the routes' wire above it: server code, like the store they stand beside.
+  'lib/artifact-access': { entries: [''], serverOnly: [''] },
+  'lib/artifact-wire': { entries: [''], serverOnly: [''] },
   'lib/document-data': { entries: [''], serverOnly: [''] },
   'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
   'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },

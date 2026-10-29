@@ -8,11 +8,9 @@ import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
 import { mintToken } from '@/lib/accounts/tokens';
-import {
-  artifactState, canReadArtifact, createArtifact, effectiveRole, getArtifactById, getArtifactFor, getArtifactsFor,
-  getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor,
-  ownsArtifact, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor, type ArtifactRow,
-} from '@/lib/artifacts';
+import { artifactState, createArtifact, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getOwnedArtifactFor, isVersionConflict, listArtifactPageFor, listVersionsFor, replaceArtifactFor, revertArtifactFor, trashSubtree, updateSharingFor } from '@/lib/artifacts';
+import { canReadArtifact } from '../read-access';
+import { effectiveRole, ownsArtifact, type ArtifactRow } from '@/lib/artifact-access';
 
 const harness = useAppHarness();
 const page = (title: string, extra: Record<string, unknown> = {}) => ({ format: 'html' as const, source: nativeHtml(`<p>${title}</p>`), meta: {}, title, ...extra });

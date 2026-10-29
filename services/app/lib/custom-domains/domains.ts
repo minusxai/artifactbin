@@ -1,6 +1,7 @@
 import {htmlAssetLinks} from '@/lib/html-page';
 import { type ArtifactRow, canReadArtifact } from '@/lib/artifacts';
-import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { artifactQuery } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 /**
  * CUSTOM DOMAINS — one hostname an ACCOUNT serves its public documents at.
  *

@@ -14,9 +14,6 @@
     "services/app/__tests__/acl-holes.test.ts": [
       "@/lib/publish/realtime/live"
     ],
-    "services/app/__tests__/after-commit.test.ts": [
-      "@/lib/artifacts/after-commit"
-    ],
     "services/app/__tests__/analytics.test.ts": [
       "@/lib/accounts/users",
       "@/lib/publish/realtime/live"
@@ -24,20 +21,8 @@
     "services/app/__tests__/annotation-changes.test.ts": [
       "@/lib/publish/realtime/live"
     ],
-    "services/app/__tests__/annotation-list-volume.test.ts": [
-      "@/lib/artifacts/document"
-    ],
-    "services/app/__tests__/artifact-header.test.ts": [
-      "@/lib/artifacts/rows"
-    ],
-    "services/app/__tests__/asset-byte-quota.test.ts": [
-      "@/lib/artifacts/asset-quota"
-    ],
     "services/app/__tests__/bound-image-publish.test.ts": [
       "@/lib/web-ingest/fetch"
-    ],
-    "services/app/__tests__/comment-images.test.ts": [
-      "@/lib/artifacts/asset-quota"
     ],
     "services/app/__tests__/data-journey.test.ts": [
       "@/lib/document-data/dataset-policy"
@@ -46,16 +31,12 @@
       "@/lib/document-data/dataset-policy"
     ],
     "services/app/__tests__/dataset-policies.test.ts": [
-      "@/lib/artifacts/sharing",
       "@/lib/dataset-graphql/retained",
       "@/lib/document-data/dataset-policy"
     ],
     "services/app/__tests__/dataset-secret-boundary.test.ts": [
       "@/lib/datasets/postgres",
       "@/lib/operations/datasets"
-    ],
-    "services/app/__tests__/deep-fork.test.ts": [
-      "@/lib/artifacts/store"
     ],
     "services/app/__tests__/doc-assets-route.test.ts": [
       "@/lib/web-ingest/fetch"
@@ -87,21 +68,8 @@
     "services/app/__tests__/feedback-images.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
-    "services/app/__tests__/file-assets.test.ts": [
-      "@/lib/artifacts/asset-quota"
-    ],
     "services/app/__tests__/folder-children.test.ts": [
-      "@/lib/artifacts/sharing",
       "@/lib/publish/realtime/live"
-    ],
-    "services/app/__tests__/folder-page.test.ts": [
-      "@/lib/artifacts/sharing"
-    ],
-    "services/app/__tests__/folders.test.ts": [
-      "@/lib/artifacts/sharing"
-    ],
-    "services/app/__tests__/fork.test.ts": [
-      "@/lib/artifacts/store"
     ],
     "services/app/__tests__/groups-ownership.test.ts": [
       "@/lib/publish/realtime/live"
@@ -197,8 +165,6 @@
       "@/lib/document/parsed-artifact-metadata"
     ],
     "services/app/__tests__/pdf-tier.test.ts": [
-      "@/lib/artifacts/asset-quota",
-      "@/lib/artifacts/store",
       "@/lib/web-ingest/fetch"
     ],
     "services/app/__tests__/policy-dataset-replace.test.ts": [
@@ -214,7 +180,6 @@
       "@/lib/accounts/profiles"
     ],
     "services/app/__tests__/quota.test.ts": [
-      "@/lib/artifacts/store",
       "@/lib/workspace/trash"
     ],
     "services/app/__tests__/refresh-asset.test.ts": [
@@ -225,8 +190,7 @@
       "@/lib/http/pages-origin"
     ],
     "services/app/__tests__/roles.test.ts": [
-      "@/lib/accounts/users",
-      "@/lib/artifacts/access"
+      "@/lib/accounts/users"
     ],
     "services/app/__tests__/shared-cache-execute.test.ts": [
       "@/lib/datasets/postgres"
@@ -238,7 +202,6 @@
       "@/lib/document/parsed-artifact-metadata"
     ],
     "services/app/__tests__/testusers-erase.test.ts": [
-      "@/lib/artifacts/store",
       "@/lib/operations/testuser-erase"
     ],
     "services/app/__tests__/token-lifecycle.test.ts": [
@@ -260,8 +223,7 @@
       "@/lib/accounts/agent-session"
     ],
     "services/app/lib/__tests__/agent-starter-consistency.test.ts": [
-      "@/lib/agent-copy/agent-discovery",
-      "@/lib/artifacts/monitoring-guidance"
+      "@/lib/agent-copy/agent-discovery"
     ],
     "services/app/lib/__tests__/app-page-csp.test.ts": [
       "@/lib/http/pages-origin"
@@ -295,12 +257,6 @@
     ],
     "services/app/lib/dataset-graphql/__tests__/retained.test.ts": [
       "@/lib/document-data/dataset-policy"
-    ],
-    "services/app/lib/document-data/__tests__/dataset-mutate-commit.test.ts": [
-      "@/lib/artifacts/after-commit"
-    ],
-    "services/app/lib/document-data/__tests__/dataset-mutate.test.ts": [
-      "@/lib/artifacts/after-commit"
     ],
     "services/app/lib/document-serving/__tests__/artifact-page.test.ts": [
       "@/lib/http/pages-origin"
@@ -357,14 +313,12 @@
       "../../document/title"
     ],
     "services/app/lib/publish/__tests__/web-assets.test.ts": [
-      "@/lib/artifacts/asset-quota",
       "@/lib/web-ingest/fetch"
     ],
     "services/app/lib/publish/ingest/__tests__/image.test.ts": [
       "@/lib/web-ingest/fetch"
     ],
     "services/app/lib/registered-page-mutations/__tests__/rebind-on-save.test.ts": [
-      "@/lib/artifacts/registered-repair",
       "@/lib/document-data/dataset-policy"
     ],
     "services/app/lib/registered-page-mutations/__tests__/registry.test.ts": [
@@ -385,9 +339,6 @@
     ],
     "services/app/lib/registered-page-queries/__tests__/members.test.ts": [
       "@/lib/page-graphql/registered-queries"
-    ],
-    "services/app/lib/registered-page-queries/__tests__/rebind-on-save.test.ts": [
-      "@/lib/artifacts/registered-repair"
     ],
     "services/app/lib/registered-page-queries/__tests__/retained.test.ts": [
       "@/lib/page-graphql/registered-queries"

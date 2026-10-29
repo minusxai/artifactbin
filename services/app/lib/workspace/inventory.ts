@@ -1,7 +1,7 @@
 /** Account inventory queries: shelf limits never determine account totals or asset reachability. */
 import { getDb } from '@/lib/platform';
 import { type ArtifactSummary } from '@/lib/artifacts';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import { viewTotalsFor } from '@/lib/analytics';
 
 export interface WorkspaceStats { artifacts: number; assets: number; views: number }

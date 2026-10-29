@@ -1,6 +1,5 @@
 import {monitoringGuidance} from './monitoring-guidance';
 import {parseSharingEntries} from '@artifactbin/utils';
-import {artifactState} from './state';
 import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
@@ -13,17 +12,14 @@ import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
  * shared behaviour is the module, so both paths validate the same fields and
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
-import { type ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
-import { type ArtifactSummary, type ReplaceOpts } from './store';
-import { declarationsForRow } from './row-compile';
+import { PARENT_REFUSED, artifactState, declarationsForRow, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
 import type { SourceRepair } from '@/lib/jsx';
 import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
 import { resolveStoredStoryDesign } from '@/lib/story-design';
 import { json } from '@/lib/http';
-import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from './placement';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -282,7 +278,7 @@ export function parseVisibilityValue(v: unknown, canPrivate: boolean): Visibilit
  * that has never been set reads as `viewer`).
  *
  * Accepted while `private`, deliberately: visibility gates it at read time
- * (lib/artifacts linkRoleOf), so storing it there costs nothing and means a
+ * (lib/artifact-access linkRoleOf), so storing it there costs nothing and means a
  * trip through `private` and back RESTORES the owner's choice rather than
  * silently resetting it to `viewer`. Refusing it would make the dialog's two
  * controls order-dependent, which is exactly the kind of rule nobody remembers.
@@ -425,3 +421,9 @@ async function declaredDatasetMutations(row: ArtifactRow): Promise<Array<{ name:
   });
 }
 
+
+/** One archived version on the wire: an HTML page's bytes ride `html`, every other format's `markup`. */
+export function versionToWire(row: VersionContent): Record<string, unknown> {
+  const { source, ...rest } = row;
+  return { ...rest, ...(row.format==='html'?{html:source}:{markup:source}) };
+}

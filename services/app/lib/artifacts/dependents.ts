@@ -11,7 +11,7 @@ import { getDb } from '../platform';
 import { artifactQuery } from './document';
 import { compiledForRow } from './row-compile';
 import { getArtifactById } from './rows';
-import { ownerScope, type ArtifactRow, type Scope } from './table';
+import { ownerScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 
 /**
  * The documents in the owner's scope that WRITE this dataset, with the

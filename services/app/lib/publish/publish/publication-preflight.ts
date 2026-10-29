@@ -1,6 +1,7 @@
 /** Read-only validation against real artifact identities and existing permissions. */
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
-import { findDependentsFor, getArtifactFor, getOwnedArtifactFor, updateMetadataFromBody } from '@/lib/artifacts';
+import { findDependentsFor, getArtifactFor, getOwnedArtifactFor } from '@/lib/artifacts';
+import { updateMetadataFromBody } from '@/lib/artifact-wire';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
 import type { TokenHoldingActor } from '@/lib/accounts';
 import {json,baseUrl} from '@/lib/http';

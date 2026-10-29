@@ -24,8 +24,7 @@ import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
-import { getArtifactById, childrenTableFor } from '@/lib/artifacts';
-import { updateSharing } from '@/lib/artifacts/sharing';
+import { getArtifactById, childrenTableFor, updateSharingFor } from '@/lib/artifacts';
 import { subscribeToArtifact } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
@@ -133,7 +132,7 @@ describe('the children table', () => {
     const { o, f, pub, priv, sub } = await world();
     const guest = await createUser({ email: 'guest@example.com' });
     const bystander = await createUser({ email: 'bystander@example.com' });
-    await updateSharing(o.userId, priv.id, { shares: [{ email: 'guest@example.com', role: 'viewer' }] });
+    await updateSharingFor(identityForUser(o.userId), priv.id, { shares: [{ email: 'guest@example.com', role: 'viewer' }] });
     const seen = async (u: { id: string; email: string }) =>
       (await tableFor(f.id, identityForUser(u.id, null, u.email))).rows.map((r) => r.id).sort();
     expect(await seen(guest)).toEqual([priv.id, pub.id, sub.id].sort());

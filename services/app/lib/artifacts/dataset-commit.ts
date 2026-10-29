@@ -9,12 +9,15 @@
  *  - archives the previous state, coalesced on the edit protocol's window;
  *  - notifies the dataset's live channel with the new edit id.
  * No row is a lost compare-and-swap or revoked access, both of which the caller handles by re-reading.
+ *
+ * And a dataset POLICY's commit, the guarded statement behind lib/document-data/dataset-policy.
  */
 import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
 import { newEditId } from '../document';
 import { artifactQuery } from './document';
-import { LIVE_ARTIFACT_SQL, editorScope, groupMemberPredicate, headBumpSql, notifyArtifactSql, policyReaderSql, type ArtifactRow } from './table';
+import { LIVE_ARTIFACT_SQL, editorScope, groupMemberPredicate, policyReaderSql, type ArtifactRow } from '@/lib/artifact-access';
+import { headBumpSql, notifyArtifactSql } from './table';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -83,4 +86,26 @@ export async function commitDatasetWrite(q: Queryable, commit: DatasetCommit): P
     ],
   );
   return result.rows[0];
+}
+
+/**
+ * Store a validated dataset policy on the head `row` the caller read: only while the row is still exactly
+ * that head (version, edit id, sharing revision), its policy revision is still `revision`, and the actor
+ * still reaches it as an editor. Bumps the policy revision, audits the actor and notifies the row's channel;
+ * null when any of that no longer holds (a conflict for the caller to answer).
+ */
+export async function commitDatasetPolicy(q: Queryable, actor: AccessActor, row: ArtifactRow, policy: unknown, revision: number): Promise<number | null> {
+  const scope = editorScope(actor);
+  const result = await q.query<{ policy_revision: number }>(
+    `WITH updated AS (
+ UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1
+ WHERE id=$1 AND ${scope.where('$2')} AND policy_revision=$4 AND deleted_at IS NULL
+ AND version=$7 AND edit_id=$8 AND sharing_revision=$9
+ RETURNING *), audit AS (
+ INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
+ SELECT id,policy_revision,dataset_policy,$5,$6 FROM updated)
+ SELECT policy_revision,${notifyArtifactSql('id', 'edit_id')} FROM updated`,
+    [row.id, scope.val, JSON.stringify(policy), revision, actor.userId, actor.tokenId, row.version, row.edit_id, row.sharing_revision ?? 0],
+  );
+  return result.rows[0]?.policy_revision ?? null;
 }

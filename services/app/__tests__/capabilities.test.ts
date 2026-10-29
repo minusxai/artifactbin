@@ -9,7 +9,7 @@
  */
 import { expect, it } from 'vitest';
 import { useAppHarness, createGuestOwner } from './harness';
-import { can } from '@/lib/artifacts';
+import { can } from '@/lib/artifact-access';
 import { identityForUser, createTestUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';

@@ -6,7 +6,7 @@
 import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
 import { ancestorsForMove } from './placement';
-import { LIVE_ARTIFACT_SQL, ownerPredicate } from './table';
+import { LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifact-access';
 
 /** The row and everything under it — a document matches only itself. */
 const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
