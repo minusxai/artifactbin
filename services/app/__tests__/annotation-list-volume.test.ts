@@ -11,7 +11,7 @@ import { listAnnotationPageFor, listAnnotationsFor } from '@/lib/annotations';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { GET as myListAnnotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { getDb, measureQueries } from '@/lib/platform';
-import { artifactQuery } from '@/lib/artifacts/document';
+import { artifactQuery } from '@/lib/artifacts/table';
 import { createDocumentGraph } from '@/lib/document';
 
 useAppHarness();

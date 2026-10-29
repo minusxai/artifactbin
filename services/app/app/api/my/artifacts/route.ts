@@ -11,7 +11,7 @@
 import { browserActor } from '@/lib/authentication';
 import { withAccountToken } from '@/lib/accounts';
 import { listOwnedArtifacts } from '@/lib/workspace';
-import { artifactSummaryToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { ensureUserToken } from '@/lib/accounts';
 import { createArtifactFromRequest } from '@/app/api/artifacts/route';
 import { baseUrl, json, unauthorized } from '@/lib/http';

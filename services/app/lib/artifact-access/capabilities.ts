@@ -32,11 +32,10 @@
  * accounts (`test_account_restricted`).
  */
 import type { Capability } from '@artifactbin/contracts';
-import { json } from '../http';
+import { json } from '@/lib/http';
 import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
-import { type ArtifactRow } from './table';
-import { getArtifactById } from './rows';
+import { type ArtifactRow } from './scopes';
 import { isTestAccount, TEST_ACCOUNT_RESTRICTED, type AccessActor, isTestOwned } from '@/lib/accounts';
 import { userKindOf } from '@/lib/user-kinds';
 
@@ -158,20 +157,4 @@ export async function refusalFor(actor: AccessActor, artifactId?: string): Promi
 export async function capabilityRefusal(actor: AccessActor, artifactId?: string): Promise<Response> {
   const refusal = await refusalFor(actor, artifactId);
   return json(refusal.body, refusal.status);
-}
-
-/**
- * THE ROUTE-LEVEL GATE, for the doors that hold an id rather than a row: the
- * refusal to answer, or null to carry on.
- *
- * An id this actor cannot READ answers `null` on purpose — including one that
- * names nothing. "Does it exist" is the caller's own question and its own
- * uniform 404, and a capability refusal must never become the door that tells a
- * stranger an id is real: the gate speaks only to someone the artifact is
- * already visible to.
- */
-export async function capabilityGuard(actor: AccessActor, capability: Capability, artifactId: string): Promise<Response | null> {
-  const row = await getArtifactById(artifactId);
-  if (!row || !(await can(actor, 'read', row))) return null;
-  return (await can(actor, capability, row)) ? null : capabilityRefusal(actor, artifactId);
 }

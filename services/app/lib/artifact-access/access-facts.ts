@@ -10,9 +10,9 @@
  *    role read performs, is deferred to `settle()` and applied in one statement.
  */
 import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKind } from '@artifactbin/contracts';
-import { getGroupRole } from '../groups';
-import { userKindOf } from '../user-kinds';
-import { getDb } from '../platform';
+import { getGroupRole } from '@/lib/groups';
+import { userKindOf } from '@/lib/user-kinds';
+import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 
 export interface AccessFacts {

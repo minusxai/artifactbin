@@ -20,7 +20,7 @@ import { POST as forkOperation } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById } from '@/lib/artifacts';
-import { setArtifactQuotaForTests } from '@/lib/artifacts/store';
+import { setArtifactQuotaForTests } from '@/lib/artifacts';
 import { sweepTestUsers } from '@/lib/operations/testuser-erase';
 import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers, resolveTokenById, createUser, getUserById } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets';

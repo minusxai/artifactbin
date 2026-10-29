@@ -7,9 +7,9 @@ import type { AccessActor } from '@/lib/accounts';
 import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { getDb } from '../platform';
 import { artifactQuery, loadArtifactDocument } from './document';
-import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
+import { grantsOf, grantsPermitRead } from '@/lib/artifact-access';
 import { servableDocument } from './servable';
-import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, type ArtifactRow, type Scope } from './table';
+import { LIVE_ARTIFACT_SQL, editorScope, ownerScope, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 
 /** A row without its content: every column but the two that carry it, `document` and `source`. */
 export type ArtifactHeader = Omit<ArtifactRow, 'document' | 'source'>;
@@ -50,7 +50,7 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
   return (await db.query<ArtifactHeader>(`SELECT ${HEADER_SELECT} FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id])).rows[0] ?? null;
 }
 
-/** The columns a read-access decision consults (lib/artifacts/access canReadArtifact) plus the revision: no content, no metadata. */
+/** The columns a read-access decision consults (./read-access canReadArtifact) plus the revision: no content, no metadata. */
 const ARTIFACT_ACCESS_COLUMNS = ['id', 'token_id', 'user_id', 'group_id', 'visibility', 'link_role', 'format', 'version'] as const satisfies readonly (keyof ArtifactHeader)[];
 export type ArtifactAccessRow = Pick<ArtifactHeader, typeof ARTIFACT_ACCESS_COLUMNS[number]>;
 /**

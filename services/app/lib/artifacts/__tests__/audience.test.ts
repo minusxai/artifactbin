@@ -10,7 +10,7 @@ import {
   MembershipError, accountProfile, changeMembership, getSharingFor, invitePeople, membershipState, mentionCandidates, updateAccountProfile,
   updateSharingFor,
 } from '@/lib/artifacts';
-import { account, dataset, head, mine, personOfKind } from './fixtures';
+import { account, dataset, head, mine, personOfKind } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 async function person(name: string) {

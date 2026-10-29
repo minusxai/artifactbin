@@ -12,7 +12,7 @@ import {
   commitRegisteredQueryBackend,
   registeredPlan,
 } from "../registry";
-import { repairRegisteredQueryHead } from "@/lib/artifacts/registered-repair";
+import { repairRegisteredQueryHead } from "@/lib/artifacts";
 vi.mock("@/lib/page-operations", async (original) => ({
   ...(await original<typeof import("@/lib/page-operations")>()),
   compilePageBackend: async (source: string) => ({

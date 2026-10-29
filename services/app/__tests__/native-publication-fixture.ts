@@ -1,4 +1,4 @@
-import type {ArtifactRow} from '@/lib/artifacts/table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 import {artifactState} from '@/lib/artifacts';
 /** Explicit native source fixture; credentials and request creation stay in the app harness. */
 export function nativeSource(content:string):string{return /^\s*<!doctype html>/i.test(content)?content:`<!doctype html><html><head><title>Fixture</title></head><body>${content}</body></html>`;}

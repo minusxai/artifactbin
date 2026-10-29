@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import { getDb } from '../platform';
 import type {Queryable} from '@artifactbin/contracts';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 import { accountOf, matchesWorkspaceAccount } from '@/lib/accounts';
 

@@ -2,7 +2,8 @@
  * Ownership is independent of the share list. Deletion/restoration retain their
  * owner-only routes. The domain transaction rechecks authorization under a lock.
  */
-import { capabilityGuard, getArtifactFor, getSharingFor, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, updateSharingFor } from '@/lib/artifacts';
+import { capabilityGuard, getArtifactFor, getSharingFor, updateSharingFor } from '@/lib/artifacts';
+import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
 import type { SharingPatch } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/authentication';
 import { shareTargetsRefusal, TEST_ACCOUNT_RESTRICTED } from '@/lib/accounts';

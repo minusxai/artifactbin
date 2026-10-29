@@ -13,7 +13,7 @@ import { refusesCrossSite } from '@/lib/authentication';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/social';
 import { getUserById } from '@/lib/accounts';
-import { can, capabilityRefusal } from '@/lib/artifacts';
+import { can, capabilityRefusal } from '@/lib/artifact-access';
 import { userKindOf } from '@/lib/user-kinds';
 import { sessionActor } from '@/lib/authentication';
 import { type AccessActor } from '@/lib/accounts';

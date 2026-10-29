@@ -2,7 +2,8 @@
 import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { createArtifact, type ArtifactRow } from '@/lib/artifacts';
+import { createArtifact } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifact-access';
 
 export type Account = AccessActor & { userId: string };
 export async function account(email: string): Promise<Account> {

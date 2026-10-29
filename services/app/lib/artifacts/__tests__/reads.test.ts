@@ -6,14 +6,9 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken } from '@/lib/accounts';
-import { flushViews } from '@/lib/analytics';
-import {
-  VERSION_PARAM, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById,
-  getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts,
-  getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, recordArtifactView, refusingUnservable,
-  replaceArtifactFor, resolveImageReference, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor, type ArtifactRow,
-} from '@/lib/artifacts';
-import { account, dataset, head, mine, page, sql } from './fixtures';
+import { VERSION_PARAM, canReadArtifact, capabilityGuard, UnservableDocument, accessMoved, archivedVersionFor, archivedVersionForActor, createArtifact, getArtifact, getArtifactAccessById, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor, readableArtifact, readableArtifactHeader, readableArtifactIdentity, refusingUnservable, replaceArtifactFor, servableDocument, servedRow, snapshotForReader, snapshotHeadFor, unservable, updateSharingFor } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifact-access';
+import { account, dataset, mine, page, sql } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 
@@ -81,6 +76,23 @@ describe('row lookups', () => {
 });
 
 describe('reader admission', () => {
+  it('canReadArtifact decides as the account (bare-token ownership never reads a private row); the gate speaks only to readers', async () => {
+    const owner = await account('owner@example.test');
+    const stranger = await account('stranger@example.test');
+    const guest = { ...identityForUser(null, null) };
+    const row = await mine(owner);
+    expect(await canReadArtifact(row, owner)).toBe(true);
+    expect(await canReadArtifact(row, stranger)).toBe(false);
+    expect(await canReadArtifact({ ...row, format: 'dataset' }, owner)).toBe(true);
+    expect(await canReadArtifact({ ...row, id: 'missing', format: undefined }, owner)).toBe(false);
+    expect(await capabilityGuard(stranger, 'comment', row.id)).toBeNull();
+    expect(await capabilityGuard(owner, 'edit', row.id)).toBeNull();
+    await updateSharingFor(owner, row.id, { visibility: 'unlisted' });
+    expect((await capabilityGuard(guest, 'comment', row.id))!.status).toBe(401);
+    expect(await capabilityGuard(stranger, 'comment', row.id)).toBeNull();
+    expect(await capabilityGuard(guest, 'comment', 'missing')).toBeNull();
+  });
+
   it('a readable row carries the reader\'s role; a dataset grant admits a reader with no role', async () => {
     const owner = await account('owner@example.test');
     const stranger = await account('stranger@example.test');
@@ -154,26 +166,5 @@ describe('what is served', () => {
     const archived = await archivedVersionForActor(owner, v2, 1);
     expect(servedRow(v2, archived === 'not_found' ? null : archived)).toMatchObject({ id: v1.id, title: 'First', source: v1.source, version: 2 });
     expect(servedRow(v2, null)).toBe(v2);
-  });
-
-  it('an image reference resolves for its readers only; a view is admitted for a readable page', async () => {
-    const owner = await account('owner@example.test');
-    const stranger = await account('stranger@example.test');
-    const image = await createArtifact(null, owner.userId, { format: 'image', source: null, meta: { width: 4, height: 3 }, title: 'Pic', visibility: 'private' });
-    expect(await resolveImageReference(`ref:${image.id}`, owner)).toMatchObject({ kind: 'image', width: 4, height: 3 });
-    expect(await resolveImageReference(`ref:${image.id}`, stranger)).toBeNull();
-    expect(await resolveImageReference(image.id, owner)).toBeNull();
-    const doc = await mine(owner);
-    expect(await resolveImageReference(`ref:${doc.id}`, owner)).toBeNull();
-    const view = (id: string, headers: Record<string, string> = {}, query = '') => new Request(`https://app.test/api/page/artifact/${id}/view${query}`, { method: 'POST', headers });
-    const views = async () => { await flushViews(); return (await sql<{ n: number }>("SELECT count(*)::int AS n FROM analytics_events WHERE event='view'"))[0]!.n; };
-    expect(await recordArtifactView(view(doc.id, { 'sec-fetch-site': 'cross-site' }), doc.id, async () => owner)).toBe('forbidden');
-    expect(await recordArtifactView(view(doc.id), doc.id, async () => stranger)).toBe('not_found');
-    expect(await recordArtifactView(view(image.id), image.id, async () => owner)).toBe('not_found');
-    expect(await recordArtifactView(view(doc.id, {}, '?key=capture'), doc.id, async () => owner)).toBe('accepted');
-    expect(await views()).toBe(0);
-    expect(await recordArtifactView(view(doc.id), doc.id, async () => owner)).toBe('accepted');
-    expect(await views()).toBe(1);
-    expect((await head(doc.id)).id).toBe(doc.id);
   });
 });

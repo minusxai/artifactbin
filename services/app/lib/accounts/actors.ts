@@ -1,5 +1,5 @@
 /**
- * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifacts access,
+ * THE ACTOR TYPES: who is asking, as identity knows it. Resource policy (lib/artifact-access,
  * grants, membership) reads `AccessActor`; nothing here decides what an actor may do.
  */
 import type { Credential } from '@artifactbin/contracts';
@@ -19,13 +19,13 @@ export interface AccessActor {
   tokenId: string | null;
   /**
    * The address this credential carries. Consulted ONLY to match a share that is still unresolved
-   * (lib/artifacts/access-facts `sessionEmail`) — the moment one matches it is stamped with the user id
+   * (lib/artifact-access/access-facts `sessionEmail`) — the moment one matches it is stamped with the user id
    * and matched by that forever after. Email is an attribute, never an identity key.
    */
   email: string | null;
   /**
    * The host's document-editor grant (production: ADMIN__EMAILS), decided ONCE by the resolver from
-   * verified claims. It reaches only page documents that are not private (lib/artifacts access).
+   * verified claims. It reaches only page documents that are not private (lib/artifact-access).
    */
   documentEditor: boolean;
   /** Server-only saved artifact owner, for author reference resolution. Never request input. */

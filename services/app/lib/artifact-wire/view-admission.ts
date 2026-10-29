@@ -3,8 +3,7 @@
  * this result to HTTP. Both anonymous and signed-in readers are admitted.
  */
 import { trackEvent } from '@/lib/analytics';
-import { canReadArtifact } from './access';
-import { getArtifactHeaderById } from './rows';
+import { canReadArtifact, getArtifactHeaderById } from '@/lib/artifacts';
 import { isCrossSiteRequest } from '@/lib/http';
 import type { AccessActor } from '@/lib/accounts';
 

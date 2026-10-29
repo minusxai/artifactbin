@@ -4,7 +4,8 @@ import {notifyParent,parentOf} from './placement';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import {DatasetError, catalogOf} from '../datasets';
-import { notifyArtifactSql, ownerPredicate, type ArtifactRow } from './table';
+import { notifyArtifactSql } from './table';
+import { ownerPredicate, type ArtifactRow } from '@/lib/artifact-access';
 import {getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
 

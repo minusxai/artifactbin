@@ -1,4 +1,5 @@
-import { canReadArtifact, ownsArtifact, type ArtifactHeader, type ArtifactRow, writerFor, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts, compileErrorText, compileResultForRow, compiledForRow, declarationsForRow, grantContext, grantsOf, grantsPermitRead, can, refusalFor, type CapabilityRefusal, pinMutationContext, type MutationReceipt, childrenTableFor } from '@/lib/artifacts';
+import { canReadArtifact, type ArtifactHeader, type ArtifactRow, getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts, compileErrorText, compileResultForRow, compiledForRow, declarationsForRow, pinMutationContext, type MutationReceipt, childrenTableFor } from '@/lib/artifacts';
+import { ownsArtifact, writerFor, grantContext, grantsOf, grantsPermitRead, can, refusalFor, type CapabilityRefusal } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { executeDocumentQueries, type DocumentQuerySourceMode } from '../datasets';
 import { JOIN_RELATIONS } from '@/lib/social';

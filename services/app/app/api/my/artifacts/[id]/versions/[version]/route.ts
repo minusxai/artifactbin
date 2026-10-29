@@ -1,4 +1,5 @@
-import { getVersionFor, refusingUnservable, versionToWire } from '@/lib/artifacts';
+import { getVersionFor, refusingUnservable } from '@/lib/artifacts';
+import { versionToWire } from '@/lib/artifact-wire';
 import { browserActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 

@@ -16,7 +16,7 @@ import {
   commitRegisteredMutationBackend,
   registeredMutationPlan,
 } from "../registry";
-import { repairRegisteredMutationHead } from "@/lib/artifacts/registered-repair";
+import { repairRegisteredMutationHead } from "@/lib/artifacts";
 import { registeredMutationDescriptor } from "../namespace";
 import type { MutationProgram } from "../contracts";
 vi.mock("@/lib/page-operations", async (original) => ({

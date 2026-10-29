@@ -23,7 +23,7 @@
  * exists.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { can, capabilityRefusal } from '@/lib/artifacts';
+import { can, capabilityRefusal } from '@/lib/artifact-access';
 import { refusesCrossSite } from '@/lib/authentication';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/social';

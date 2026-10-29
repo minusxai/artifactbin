@@ -4,7 +4,9 @@
  * refusal shapes the routes and the CLI read.
  */
 import type { AccessActor } from '@/lib/accounts';
-import { canReadArtifact, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, ownsArtifact, parseExpectedVersion, readableArtifact, type MutationReceipt } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, getArtifactFor, readableArtifact, type MutationReceipt } from '@/lib/artifacts';
+import { grantsOf, grantsPermitWrite, ownsArtifact } from '@/lib/artifact-access';
+import { parseExpectedVersion } from '@/lib/artifact-wire';
 import { bindParams, bindTypes, parseMutationRequest, platformValues, type Scalar } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
 import { json } from '@/lib/http';

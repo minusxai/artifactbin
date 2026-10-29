@@ -9,7 +9,7 @@ import {
   CreationReplay, completeMutationReceipt, createArtifact, creationOperation, durableMutation, lookupCreation, mutationInvocation, pinMutationContext,
   recoverCreationIds, reserveArtifactIds, reserveIds, setMutationInvocation, type MutationReceipt,
 } from '@/lib/artifacts';
-import { account, page, sql } from './fixtures';
+import { account, page, sql } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const ORIGIN = 'https://app.test/api/artifacts';

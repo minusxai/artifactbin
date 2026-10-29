@@ -16,7 +16,7 @@ import { sqlExtensions } from '@/lib/sql';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { CHILDREN_COLUMNS } from './placement';
 import { getArtifact, getArtifactFor, getLinkReadableArtifact } from './rows';
-import { writerFor, type ArtifactRow } from './table';
+import { writerFor, type ArtifactRow } from '@/lib/artifact-access';
 
 export function refLoaderForActor(actor: AccessActor): ServerRefLoader {
   if(actor.groupId)return async id=>{const own=await getArtifactFor(actor,id);const row=own??await getLinkReadableArtifact(id);return row?rowToResolvedRef(row,!!own):null;};

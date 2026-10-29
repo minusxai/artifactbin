@@ -7,11 +7,9 @@ import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { identityForUser } from '@/lib/accounts';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
-import {
-  commitDatasetPolicy, commitDatasetWrite, compileErrorText, compileResultForRow, compiledForRow, createArtifact, declarationsForRow, findDependentsFor,
-  getArtifactById, getSharingFor, refLoaderForActor, rowToResolvedRef, updateSharingFor, type ArtifactRow,
-} from '@/lib/artifacts';
-import { account, head, mine } from './fixtures';
+import { commitDatasetPolicy, commitDatasetWrite, compileErrorText, compileResultForRow, compiledForRow, createArtifact, declarationsForRow, findDependentsFor, getArtifactById, getSharingFor, refLoaderForActor, rowToResolvedRef, updateSharingFor } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifact-access';
+import { account, head, mine } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 

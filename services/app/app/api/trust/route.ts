@@ -23,7 +23,8 @@
  * "Once" lives in the browser session (a signed session cookie), so any reader may use it; Always and
  * a stored Never belong to an account (401 otherwise) — a signed-out Never is kept for the session.
  */
-import { canReadArtifact, getArtifactById, type ArtifactRow, holdsCreatingToken } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { holdsCreatingToken } from '@/lib/artifact-access';
 import { refusesCrossSite, sessionActor } from '@/lib/authentication';
 import { type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';

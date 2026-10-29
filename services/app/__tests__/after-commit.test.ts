@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
-import { emitDatasetCommitted, emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts/after-commit';
+import { emitDatasetCommitted, emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

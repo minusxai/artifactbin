@@ -1,4 +1,5 @@
-import { getArtifactById, effectiveRole, capabilityGuard } from '@/lib/artifacts';
+import { getArtifactById, capabilityGuard } from '@/lib/artifacts';
+import { effectiveRole } from '@/lib/artifact-access';
 import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish';
 import { forkOwner } from '@/lib/operations';
 import { browserActor } from '@/lib/authentication';

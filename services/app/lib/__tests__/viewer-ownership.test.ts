@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { NO_IDENTITY } from '@/lib/accounts';
-import { ownsArtifact } from '@/lib/artifacts';
+import { ownsArtifact } from '@/lib/artifact-access';
 import { testIdentity } from '@/__tests__/harness';
 
 const account = (userId: string, tokenId: string | null = null) => testIdentity('session', { userId, tokenId });

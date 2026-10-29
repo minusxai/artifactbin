@@ -1,19 +1,16 @@
 /**
  * THE WRITE PATH through the interface: creation (own transaction or the caller's, reserved ids, the post-commit
- * effects), replace and revert under the edit protocol, metadata writes without a content version, the version
- * history pages, the quotas, the observed state and the after-commit hooks.
+ * effects), replace and revert under the edit protocol, metadata writes without a content version, the quotas, the
+ * observed state and the after-commit hooks.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { mintToken } from '@/lib/accounts';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { artifactChannel } from '@artifactbin/contracts';
-import {
-  afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted,
-  emitHeadCommitted, getArtifactById, getVersionFor, isVersionConflict, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, listVersionsFor,
-  replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor, type ArtifactRow,
-} from '@/lib/artifacts';
-import { account, dataset, head, mine, page, sql } from './fixtures';
+import { afterCreated, artifactQuotaExceeded, artifactState, assetByteQuotaExceeded, assetByteQuotaLimit, byteQuotaFor, createArtifact, emitDatasetCommitted, emitHeadCommitted, getArtifactById, ARTIFACT_HEADER_COLUMNS, assetBytesForToken, getArtifactHeaderById, listArtifactsFor, onDatasetCommitted, onHeadCommitted, repairRegisteredMutationHead, repairRegisteredQueryHead, setArtifactQuotaForTests, setAssetByteQuotaForTests, isVersionConflict, isVersionNotArchived, replaceArtifactFor, reserveArtifactIds, revertArtifactFor, setMetadataFor, updateSharingFor } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifact-access';
+import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = []) =>
@@ -143,42 +140,6 @@ describe('metadata', () => {
   });
 });
 
-describe('history and listings', () => {
-  it('versions list newest first; pages filter by author and bound; content reads stay in the editor scope', async () => {
-    const owner = await account('owner@example.test');
-    const stranger = await account('stranger@example.test');
-    const v1 = await mine(owner, 'One');
-    let current = v1;
-    for (const title of ['Two', 'Three']) current = await replaceArtifactFor(owner, v1.id, page(title), { expectedVersion: current.version }) as ArtifactRow;
-    expect((await listVersionsFor(owner, v1.id))!.map(v => v.version)).toEqual([2, 1]);
-    expect(await listVersionsFor(stranger, v1.id)).toBeNull();
-    const first = (await listVersionPageFor(owner, v1.id, 2))!;
-    expect(first).toMatchObject({ rows: [{ version: 3, title: 'Three' }, { version: 2 }], next: 2 });
-    expect((await listVersionPageFor(owner, v1.id, 5, first.next))!.rows.map(r => r.version)).toEqual([1]);
-    expect((await listVersionPageFor(owner, v1.id, 5, undefined, 2))!.rows.map(r => r.version)).toEqual([2, 1]);
-    expect((await listVersionPageFor(owner, v1.id, 5, undefined, undefined, { author: 'nobody' }))!.rows).toEqual([]);
-    expect(await listVersionPageFor(stranger, v1.id, 5)).toBeNull();
-    expect(await getVersionFor(owner, v1.id, 1)).toMatchObject({ version: 1, title: 'One', source: v1.source });
-    expect(await getVersionFor(owner, v1.id, 3)).toBeNull();
-    expect(await getVersionFor(stranger, v1.id, 1)).toBeNull();
-  });
-
-  it('the collection page filters by type, visibility and parent, and a token lists its own', async () => {
-    const owner = await account('owner@example.test');
-    const box = await folder(owner);
-    const inside = await mine(owner, 'Inside', { ancestor_ids: [box.id] });
-    const data = await dataset(owner);
-    const ids = async (filters: Parameters<typeof listArtifactPageFor>[3]) => (await listArtifactPageFor(owner, 10, undefined, filters)).rows.map(r => r.id);
-    expect(await ids({ type: 'folder' })).toEqual([box.id]);
-    expect(await ids({ type: 'dataset' })).toEqual([data.id]);
-    expect(await ids({ visibility: 'unlisted' })).toEqual([data.id]);
-    expect(await ids({ parent_id: box.id })).toEqual([inside.id]);
-    const loose = await mintToken('loose', null);
-    const tokenRow = await createArtifact(loose.id, null, page('Token'));
-    expect((await listArtifactPageFor({ userId: null, tokenId: loose.id, email: null, documentEditor: false }, 10)).rows.map(r => r.id)).toEqual([tokenRow.id]);
-  });
-});
-
 describe('quotas, state and after-commit', () => {
   it('the row cap counts trashed rows; the byte cap charges the account; the observed state ignores derived caches', async () => {
     const owner = await account('owner@example.test');
@@ -202,8 +163,62 @@ describe('quotas, state and after-commit', () => {
     expect(artifactState({ ...doc, sharing_revision: 9 })).not.toBe(artifactState(doc));
   });
 
-  it('after-commit emitters never throw into the write that emitted', () => {
-    expect(() => emitHeadCommitted('id', undefined, { renderingChanged: true })).not.toThrow();
-    expect(() => emitDatasetCommitted('id')).not.toThrow();
+  it('test caps replace the configured ones; bytes count images, web assets and comment images of the account', async () => {
+    const owner = await account('owner@example.test');
+    const loose = await mintToken('loose', null);
+    try {
+      setArtifactQuotaForTests(1);
+      expect(await artifactQuotaExceeded(loose.id)).toBe(false);
+      await createArtifact(loose.id, null, page('One'));
+      expect(await artifactQuotaExceeded(loose.id)).toBe(true);
+      setArtifactQuotaForTests(0);
+      expect(await artifactQuotaExceeded(loose.id, 50)).toBe(false);
+      await createArtifact(null, owner.userId, { format: 'image', source: null, meta: { bytes: 40 }, title: 'Pic' });
+      await createArtifact(loose.id, null, { format: 'image', source: null, meta: { bytes: 2 }, title: 'Anon pic' });
+      expect([await assetBytesForToken(null, owner.userId), await assetBytesForToken(loose.id)]).toEqual([40, 2]);
+      setAssetByteQuotaForTests(40);
+      expect([assetByteQuotaLimit(), await assetByteQuotaExceeded(null, owner.userId), await assetByteQuotaExceeded(loose.id)]).toEqual([40, true, false]);
+      setAssetByteQuotaForTests(null);
+      expect(await assetByteQuotaExceeded(null, owner.userId)).toBe(false);
+    } finally { setArtifactQuotaForTests(null); setAssetByteQuotaForTests(undefined as never); }
+  });
+
+  it('after-commit: listeners run in order, a throwing one never reaches the write, a disposed one hears nothing', async () => {
+    const heard: string[] = [];
+    const stopBad = onHeadCommitted(() => { throw new Error('listener'); });
+    const stopHead = onHeadCommitted((id, row, change) => heard.push(`head:${id}:${row?.id ?? '-'}:${change?.renderingChanged ?? false}`));
+    const stopData = onDatasetCommitted(id => heard.push(`data:${id}`));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => emitHeadCommitted('a', undefined, { renderingChanged: true })).not.toThrow();
+    emitDatasetCommitted('d');
+    stopBad(); stopHead(); stopData();
+    emitHeadCommitted('b');
+    emitDatasetCommitted('e');
+    expect(heard).toEqual(['head:a:-:true', 'data:d']);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // A markup creation emits its head after commit.
+    const stop = onHeadCommitted(id => heard.push(`created:${id}`));
+    const owner = await account('owner@example.test');
+    const doc = await createArtifact(null, owner.userId, { format: 'markup', source: '<p>x</p>', meta: {}, title: 'M' });
+    stop();
+    expect(heard.at(-1)).toBe(`created:${doc.id}`);
+    warn.mockRestore();
+  });
+
+  it('the owner\'s listing and the header columns; a registered-program repair leaves an unregistered page alone', async () => {
+    const owner = await account('owner@example.test');
+    const editor = await account('editor@example.test');
+    const a = await mine(owner, 'A');
+    await updateSharingFor(owner, a.id, { shares: [{ email: 'editor@example.test', role: 'editor' }] });
+    expect((await listArtifactsFor(owner)).map(r => r.id)).toEqual([a.id]);
+    expect(await listArtifactsFor(editor)).toEqual([]);
+    const header = (await getArtifactHeaderById(a.id))!;
+    expect(Object.keys(header).sort()).toEqual([...ARTIFACT_HEADER_COLUMNS].sort());
+    const db = await harness.db();
+    expect(await db.transaction(tx => repairRegisteredQueryHead(tx, a.id))).toEqual([]);
+    expect(await db.transaction(tx => repairRegisteredMutationHead(tx, a.id))).toEqual([]);
+    await expect(db.transaction(tx => repairRegisteredQueryHead(tx, 'missing'))).rejects.toThrow('page_unavailable');
+    const data = await dataset(owner);
+    await expect(db.transaction(tx => repairRegisteredMutationHead(tx, data.id))).rejects.toThrow('page_unavailable');
   });
 });

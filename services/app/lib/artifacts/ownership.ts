@@ -5,7 +5,7 @@ import {getAccountPreferences, getGroupRole, selectNewArtifactDestination} from 
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
 import { getDb, type Queryable } from '../platform';
 import {DatasetError} from '../datasets';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 
 export function parseArtifactDestination(value:unknown):ArtifactDestination|undefined {
  if(value===undefined)return undefined;

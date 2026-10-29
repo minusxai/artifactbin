@@ -23,11 +23,10 @@ import { PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { updateSharing } from '@/lib/artifacts/sharing';
+import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken } from '@/lib/authentication';
-import { createUser, setUsername } from '@/lib/accounts';
+import { createUser, identityForUser, setUsername } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -176,7 +175,7 @@ describe('the folder page bootstrap', () => {
   it('answers an EDITOR of the folder the whole shelf, with the numbers', async () => {
     const { o, f, priv } = await world();
     const editor = await owner('foldereditor');
-    await updateSharing(o.userId, f.id, { shares: [{ email: editor.email, role: 'editor' }] });
+    await updateSharingFor(identityForUser(o.userId), f.id, { shares: [{ email: editor.email, role: 'editor' }] });
     const r = await pageAs(f.id, editor.actor);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.role).toBe('editor');

@@ -6,8 +6,9 @@
 import {getGroupById} from '@/lib/groups';
 import { getDb } from '@/lib/platform';
 import { canRead } from '@artifactbin/contracts';
-import { effectiveRole, type ArtifactRow } from '@/lib/artifacts';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
+import { effectiveRole } from '@/lib/artifact-access';
+import { type ArtifactRow } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { selectChildren } from '@/lib/artifacts';
 import type { ShelfRow } from './shelf';

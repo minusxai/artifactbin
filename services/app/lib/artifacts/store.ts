@@ -10,7 +10,8 @@ import {scriptFingerprint} from '../html-autofix';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, headBumpSql, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { headBumpSql } from './table';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { queueMermaidHarvest } from '../mermaid-images';
@@ -428,7 +429,7 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
   return r.rows;
 }
 
-interface VersionContent extends VersionSummary {
+export interface VersionContent extends VersionSummary {
   document?: DocumentGraph | null;
   source: string | null;
   meta: Record<string, unknown>;
@@ -450,12 +451,6 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
     [id, version],
   );
   return row && servableDocument(row);
-}
-
-/** One archived version on the wire: `markup` carries the source. */
-export function versionToWire(row: VersionContent): Record<string, unknown> {
-  const { source, ...rest } = row;
-  return { ...rest, ...(row.format==='html'?{html:source}:{markup:source}) };
 }
 
 /**

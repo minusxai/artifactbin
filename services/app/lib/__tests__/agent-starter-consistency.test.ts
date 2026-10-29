@@ -3,7 +3,7 @@
  * Retired endpoints/brands remain forbidden on every surface. */
 import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
-import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
+import { monitoringGuidance } from '@/lib/artifact-wire';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';

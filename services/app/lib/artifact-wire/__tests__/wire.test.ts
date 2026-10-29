@@ -6,12 +6,11 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
-import {
-  SUMMARY_META_FIELDS, artifactState, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createArtifact, createdArtifactWire, getArtifactFor,
-  listArtifactPageFor, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor,
-  replacedArtifactWire, sourceRepairsEcho, updateMetadataFromBody, updateSharingFor, versionToWire, getVersionFor, replaceArtifactFor, type ArtifactRow,
-} from '@/lib/artifacts';
-import { account, dataset, head, mine, page } from './fixtures';
+import { flushViews } from '@/lib/analytics';
+import { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, monitoringGuidance, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, recordArtifactView, replacedArtifactWire, resolveImageReference, sourceRepairsEcho, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
+import { artifactState, createArtifact, getArtifactFor, listArtifactPageFor, updateSharingFor, getVersionFor, replaceArtifactFor } from '@/lib/artifacts';
+import { type ArtifactRow } from '@/lib/artifact-access';
+import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
 
 useAppHarness();
 const BASE = 'https://app.test';
@@ -50,6 +49,8 @@ describe('body parsers', () => {
     expect(sourceRepairsEcho([{ kind: 'x' } as never])).toEqual({ source_repairs: [{ kind: 'x' }] });
     expect(committedOpenAnnotations({ open_annotations: 3 } as ArtifactRow)).toBe(3);
     expect(committedOpenAnnotations({} as ArtifactRow)).toBe(0);
+    expect(monitoringGuidance('https://app.test/', 'Abc123', 'image')).toEqual({});
+    expect(monitoringGuidance('https://app.test/', 'Abc123', 'markup')).toMatchObject({ monitoring: { artifact_url: 'https://app.test/a/Abc123', guide: 'https://app.test/llms/monitoring', http: expect.stringContaining('/api/artifacts/Abc123/annotations/changes') } });
   });
 
   it('placement from a wire parent: absent leaves it, a non-owner is refused, a folder files', async () => {
@@ -100,6 +101,29 @@ describe('echoes', () => {
     const version = (await getVersionFor(owner, row.id, 1))!;
     expect(versionToWire(version)).toMatchObject({ version: 1, html: row.source });
     expect(versionToWire({ ...version, format: 'markup' })).toMatchObject({ markup: row.source });
+  });
+});
+
+describe('route adapters', () => {
+  it('an image reference resolves for its readers only; a view is admitted for a readable page', async () => {
+    const owner = await account('owner@example.test');
+    const stranger = await account('stranger@example.test');
+    const image = await createArtifact(null, owner.userId, { format: 'image', source: null, meta: { width: 4, height: 3 }, title: 'Pic', visibility: 'private' });
+    expect(await resolveImageReference(`ref:${image.id}`, owner)).toMatchObject({ kind: 'image', width: 4, height: 3 });
+    expect(await resolveImageReference(`ref:${image.id}`, stranger)).toBeNull();
+    expect(await resolveImageReference(image.id, owner)).toBeNull();
+    const doc = await mine(owner);
+    expect(await resolveImageReference(`ref:${doc.id}`, owner)).toBeNull();
+    const view = (id: string, headers: Record<string, string> = {}, query = '') => new Request(`https://app.test/api/page/artifact/${id}/view${query}`, { method: 'POST', headers });
+    const views = async () => { await flushViews(); return (await sql<{ n: number }>("SELECT count(*)::int AS n FROM analytics_events WHERE event='view'"))[0]!.n; };
+    expect(await recordArtifactView(view(doc.id, { 'sec-fetch-site': 'cross-site' }), doc.id, async () => owner)).toBe('forbidden');
+    expect(await recordArtifactView(view(doc.id), doc.id, async () => stranger)).toBe('not_found');
+    expect(await recordArtifactView(view(image.id), image.id, async () => owner)).toBe('not_found');
+    expect(await recordArtifactView(view(doc.id, {}, '?key=capture'), doc.id, async () => owner)).toBe('accepted');
+    expect(await views()).toBe(0);
+    expect(await recordArtifactView(view(doc.id), doc.id, async () => owner)).toBe('accepted');
+    expect(await views()).toBe(1);
+    expect((await head(doc.id)).id).toBe(doc.id);
   });
 });
 

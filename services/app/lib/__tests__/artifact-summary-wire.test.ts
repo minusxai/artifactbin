@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { artifactSummaryToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire } from '@/lib/artifact-wire';
 
 const summary = (format: 'markup' | 'dataset' | 'viz' | 'image', meta: Record<string, unknown>) => ({
   id: 'Ab3xK9',

@@ -1,7 +1,7 @@
 /** Transfer safety without loading unrelated users' document graphs into the app. */
 import type { Queryable } from '../platform';
 import {DatasetError} from '../datasets';
-import type { ArtifactRow } from './table';
+import type { ArtifactRow } from '@/lib/artifact-access';
 
 const dependencies=(row:ArtifactRow):string[]=>[
  ...((row.meta.refs as Array<{id:string}>|undefined)??[]).map(ref=>ref.id),

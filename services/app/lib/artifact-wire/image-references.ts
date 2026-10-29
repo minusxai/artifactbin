@@ -1,7 +1,7 @@
 /** Runtime reference resolution never inherits the containing document's ownership. */
-import { ownsArtifact,canReadArtifact } from './access';
+import { ownsArtifact } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
-import { getArtifactById } from './rows';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { imageReferenceId, imageRefData, type ImageRefData } from '@/lib/dataflow';
 
 export async function resolveImageReference(value:string,actor:AccessActor,capture=false):Promise<ImageRefData|null> {
