@@ -87,31 +87,6 @@ bounds responses, and records request metadata and provider usage. Blank AI keys
 are supported. Cost and unavailable measurements are **null**, not fabricated
 zeroes. Generic external network access is deliberately not enabled in this release.
 
-## OSS and hosted deployments
-
-| Shared/OSS | Hosted opt-in |
-| --- | --- |
-| Runner interface, local and HTTP execution, Pi library support, receipts, scheduler | Managed default agent, session/comment integration and conversation coordination |
-| Operator-selected OpenAI endpoint/key | Production selects its internal endpoint/key |
-| Existing artifact operation ACLs | Same ACLs with a fresh signed user identity attached by the host |
-
-`createAppHost({hostedAgent: factory})` installs a deployment-owned managed agent.
-The factory receives app storage, the runner contract and operation schemas, and
-returns `{agent, tick, close?}`. The open-source package contains no default prompt,
-conversation coordinator or provider-specific allocator.
-
-Self-hosted operators may instead configure `HOSTED_AGENT__SERVICE_URL` plus
-`CONTRACT__ACTOR_SECRET`. The URL wins over injected implementations; a missing
-secret fails closed. Unconfigured installations retain locally connected user
-agents and have no managed default agent.
-
-The optional service accepts signed Actor requests at `POST /v1/agents/ensure`,
-`view`, `input`, `stop`, and `operation`. The owner comes only from the verified
-Actor, never from JSON. Managed session IDs use `hostedAgentSessionId(owner)`;
-IDs are routing identifiers, not credentials. View/input/stop preserve the existing
-remote terminal protocol. Deployment implementations own job/state storage and
-must enforce owner checks on every request.
-
 ## Production controller
 
 On a dedicated Linux host with Docker:
@@ -208,7 +183,7 @@ Fast checks:
 
 ```sh
 npm run validate
-npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/server/__tests__/hosted-boundary.test.ts services/utils/__tests__/hosted-agent-client.test.ts services/app/__tests__/runner-api.test.ts
+npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/runner-api.test.ts
 ```
 
 The runner CI repeats these against the production worker image and checks OS

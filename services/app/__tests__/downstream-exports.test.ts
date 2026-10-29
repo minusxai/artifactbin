@@ -126,7 +126,7 @@ describe('values the deployment composes from', () => {
     for (const name of ["ACTOR_HEADER","ANONYMOUS","FORWARDED_FOR","FORWARDED_HOST","FORWARDED_PROTO","SERVICE_AUTH_HEADER","denyResponse","eventName","isInternalApiPath"]) expect(name in m29, name).toBe(true);
   });
   it('@artifactbin/utils', () => {
-    for (const name of ["actorOf","actorReceiver","assemble","attachActor","buildAssetRequest","buildAssetResponse","createEnv","createTokenReader","envelope","eventsClient","fakeEvents","hostedAgentCallbackKey","hostedAgentDeliveryKey","hostedAgentSessionId","httpClient","inProcess","isPublicAssetRequest","log","noopEvents","overHttp","parseAssetsOrigin","parseDatasetPolicy","publicAssetResponse","runnerClient","serve","serviceSecretForServer","signActor","verifyActor"]) expect(name in m30, name).toBe(true);
+    for (const name of ["actorOf","actorReceiver","assemble","attachActor","buildAssetRequest","buildAssetResponse","createEnv","createTokenReader","envelope","eventsClient","fakeEvents","httpClient","inProcess","isPublicAssetRequest","log","noopEvents","overHttp","parseAssetsOrigin","parseDatasetPolicy","publicAssetResponse","runnerClient","serve","serviceSecretForServer","signActor","verifyActor"]) expect(name in m30, name).toBe(true);
   });
 });
 
@@ -141,7 +141,7 @@ describe('types the deployment composes from', () => {
   });
   it('@artifactbin/contracts', () => {
     const source = sourceOf('@artifactbin/contracts');
-    for (const name of ["Actor","DatasetPolicy","EventEnvelope","EventPayload","EventVerb","EventsService","HostedAgentComment","HostedCredentialDescriptor","HostedOperationAuthorization","HostedRemoteAgent","ObjectKind","Part","Queryable","RunLookup","RunReceipt","RunSnapshot","RunStart","RunStatus","RunnerJson","RunnerLimits","RunnerService","TokenReader","Upstream"]) expect(exportsType(source, name), name).toBe(true);
+    for (const name of ["Actor","DatasetPolicy","EventEnvelope","EventPayload","EventVerb","EventsService","ObjectKind","Part","Queryable","RunLookup","RunReceipt","RunSnapshot","RunStart","RunStatus","RunnerJson","RunnerLimits","RunnerService","TokenReader","Upstream"]) expect(exportsType(source, name), name).toBe(true);
   });
   it('@artifactbin/utils', () => {
     const source = sourceOf('@artifactbin/utils');
