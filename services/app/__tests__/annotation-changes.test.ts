@@ -23,6 +23,8 @@ it('resumes from a checkpoint and delivers a human reply on an older thread exac
  const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('intro'),edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
  const read=(after:string)=>changes(request(`/api/artifacts/${doc.id}/annotations/changes?after=${encodeURIComponent(after)}&wait=0`,{token:t.token}),params({id:doc.id}));
  const baseline=await read('now');expect(baseline.status).toBe(200);const start=await baseline.json();expect(start.events).toEqual([]);expect(start.next_cursor).toEqual(expect.any(String));
+ // `start` replays what came before any baseline: the older root a first watcher must still see.
+ expect((await (await read('start')).json()).events.map((e:any)=>e.body)).toEqual(['Older root']);
  const posted=await reply(request(`/api/my/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',actor,json:{reply:'New human reply'}}),params({id:doc.id,annId:thread.id}));expect(posted.status).toBe(200);
  const next=await read(start.next_cursor);expect(next.status).toBe(200);const page=await next.json();expect(page.events).toHaveLength(1);expect(page.events[0]).toMatchObject({type:'artifactbin.comment',annotation_id:thread.id,body:'New human reply'});
  expect((await (await read(page.next_cursor)).json()).events).toEqual([]);

@@ -61,7 +61,7 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   stylesheet and fonts). Keep state through `client` from `@afbin/apollo`
   ([runtime](references/runtime.md)). `node scripts/publish.mjs index.html` autofixes the page and
   prints an `autofix:` report to read (`node scripts/autofix.mjs FILE` only for a file you aren't
-  publishing). Share the returned URL; a URL-only request gets the URL alone.
+  publishing). Share the returned URL (a URL-only request gets the URL alone), then watch (below).
   | Name | Mood | Fits |
   |---|---|---|
   | `volta` | Loud | Data products, dashboards, launch pages |
@@ -105,12 +105,12 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   otherwise the reply says appearance is unverified. For a shared app, the reply also says how
   others get access: open the link and sign in to edit.
 - **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then
-  `node scripts/publish.mjs page.html`; keep editing and publishing the same file and never
-  regenerate the page from scratch. Publish rewrites the file with `data-af-id`s: re-read it before
-  editing and match on short anchors, not whole lines. Keep every existing `data-af-id`; new static
-  elements may omit it. Elements your script creates (list rows, cards, table rows, labels) each
-  need a `data-af-id` that is unique on the page and identical on every render, built as
-  `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id;
+  `node scripts/publish.mjs page.html`, then watch (below); keep editing and publishing the same
+  file and never regenerate the page from scratch. Publish rewrites the file with `data-af-id`s:
+  re-read it before editing and match on short anchors, not whole lines. Keep every existing
+  `data-af-id`; new static elements may omit it. Elements your script creates (list rows, cards,
+  table rows, labels) each need a `data-af-id` that is unique on the page and identical on every
+  render, built as `<list>-<record id>-<role>`: `item.dataset.afId='budget-row-'+tx.id;
   amount.dataset.afId='budget-row-'+tx.id+'-amount'`. Use a distinct prefix per list and role; never
   an array index, display text, sort order or random value; never reuse a saved or deleted ID; mount
   them under a container present in the saved HTML ([dynamic
@@ -120,7 +120,13 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   `--resolve --expected-revision R` when done). Anchors are described at the top of
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
-- **Monitor.** `node scripts/comment.mjs watch ID` streams new comments.
+- **Watch, always.** After every publish and every edit, write your full reply (link, Built with,
+  Tested) as message text in the same turn, then call `node scripts/comment.mjs watch ID --next`
+  right after it: the user reads the reply while you watch. Run it in the foreground, never with
+  `&`, `timeout` or a shorter `--wait` (it waits up to 4 minutes; give your shell 5). Answer each
+  comment it prints before watching again: a requested change to the page is part of your task, so
+  edit and publish it, then `comment.mjs reply`. "No new comments" means run it again: keep looping
+  until the user stops you. Watching is part of the task.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or
