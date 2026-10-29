@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { mountCompiledEditRegions, runSlice, sameNodes, withRegionBreaks } from '../dom-mounter';
+import { EDIT_REGION_ATTR, mountCompiledEditRegions, runSlice, sameNodes, withRegionBreaks } from '../dom-mounter';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { TextSelection } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
@@ -82,7 +82,8 @@ describe('compiled DOM edit mounter', () => {
     };
     const root = setup();
     const mounted = mountCompiledEditRegions(root, parseJsxOrThrow(source).nodes, { onFlow: vi.fn() });
-    const editors = () => root.querySelectorAll('[data-mx-edit-region]').length;
+    expect(EDIT_REGION_ATTR).toBe('data-mx-edit-region');
+    const editors = () => root.querySelectorAll(`[${EDIT_REGION_ATTR}]`).length;
     const onScreen = editors();
     expect(onScreen).toBeGreaterThan(0);
     // Off-screen blocks still read as compiled until their slice mounts them.

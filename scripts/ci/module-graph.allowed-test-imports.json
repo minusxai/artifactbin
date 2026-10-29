@@ -193,9 +193,6 @@
       "@/lib/http/pages-origin",
       "@/lib/web-ingest/fetch"
     ],
-    "services/app/__tests__/parsed-metadata.test.ts": [
-      "@/lib/document/parsed-artifact-metadata"
-    ],
     "services/app/__tests__/pdf-tier.test.ts": [
       "@/lib/artifacts/asset-quota",
       "@/lib/artifacts/store",
@@ -290,9 +287,6 @@
     "services/app/lib/data-ingest/__tests__/csv-url.test.ts": [
       "@/lib/web-ingest/fetch"
     ],
-    "services/app/lib/dataflow/__tests__/compile-dataflow.test.ts": [
-      "@/lib/document/local-validation"
-    ],
     "services/app/lib/dataset-graphql/__tests__/retained.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
@@ -304,9 +298,6 @@
     ],
     "services/app/lib/document-serving/__tests__/artifact-page.test.ts": [
       "@/lib/http/pages-origin"
-    ],
-    "services/app/lib/editor-engine/__tests__/history.test.ts": [
-      "@/lib/document/splice"
     ],
     "services/app/lib/frame-edit/__tests__/annotate-live-morph.ui.test.ts": [
       "@/lib/islands/morph/engine"
@@ -333,19 +324,8 @@
     "services/app/lib/islands/__tests__/kit-mermaid.test.tsx": [
       "@/lib/mermaid-images/mermaid-render"
     ],
-    "services/app/lib/jsx/__tests__/component-aliases.test.ts": [
-      "@/lib/document/document-node-codec",
-      "@/lib/document/node-ids"
-    ],
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
-    ],
-    "services/app/lib/markdown/__tests__/content.test.ts": [
-      "@/lib/document/local-validation"
-    ],
-    "services/app/lib/markdown/__tests__/editor.ui.test.ts": [
-      "@/lib/frame-edit/markdown-regions",
-      "@/lib/frame-edit/selection-range"
     ],
     "services/app/lib/native-history-import/__tests__/catalog-publication.test.ts": [
       "@/lib/page-graphql/registered-queries"

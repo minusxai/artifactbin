@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
-import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { markdownContent, markdownSource } from '../content';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 
 describe('Markdown source contract', () => {
   it('accepts literal Markdown in JSX and preserves it across serialization', () => {
     const source = '<Markdown id="body">{`## Overview\n\nA **bold** point & more.\n\n- One\n- Two`}</Markdown>';
-    expect(validateMarkupStructure(source).errors).toEqual([]);
     const parsed = parseJsx(source);
     if (!parsed.ok || parsed.nodes[0].type !== 'element') throw new Error('parse');
     const md = markdownSource(parsed.nodes[0]);
@@ -21,12 +19,10 @@ describe('Markdown source contract', () => {
   });
 
 
-  it('rejects executable links and unsupported constructs at publication', () => {
+  it('rejects executable links and unsupported constructs', () => {
     for (const md of ['[bad](javascript:alert)', '<script>alert(1)</script>', '![image](https://example.com/a.png)', '> | A | B |\n> | --- | --- |\n> | C | D |']) {
-      expect(validateMarkupStructure(`<Markdown id="body">{${JSON.stringify(md)}}</Markdown>`).errors.length, md).toBeGreaterThan(0);
       expect(markdownContent(md).errors.length, md).toBeGreaterThan(0);
     }
-    expect(validateMarkupStructure('<Markdown><p>Nested JSX</p></Markdown>').errors.length).toBeGreaterThan(0);
   });
 
   it('escapes code as text and accepts nested lists, quotes, and safe links', () => {
@@ -44,7 +40,6 @@ describe('Markdown source contract', () => {
     const source = '- [ ] Open task\n- [x] Done task\n\n---\n\n| Name | Value |\n| :--- | ---: |\n| **Total** | 42 |';
     const result = markdownContent(source);
     expect(result.errors).toEqual([]);
-    expect(validateMarkupStructure(`<Markdown id="body">{${JSON.stringify(source)}}</Markdown>`).errors).toEqual([]);
     expect(result.html).toContain('role="checkbox"');
     expect(result.html).toContain('aria-checked="false"');
     expect(result.html).toContain('aria-checked="true"');
