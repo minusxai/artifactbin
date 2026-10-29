@@ -103,7 +103,7 @@ export interface CreateAnnotationInput {
 
 type CreateAnnotationRefusal =
   | { refused: 'not_markup' }
-  | { refused: 'bad_path' | 'invalid_attachment' | 'bad_view_state' }
+  | { refused: 'bad_path' | 'invalid_attachment' | 'bad_view_state' | 'invalid_annotation_revision' }
   | { refused: 'quote_not_found' | 'ambiguous_quote' }
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
@@ -348,6 +348,7 @@ export async function createAnnotationFor(
     if (row.format === 'html') {
       const anchor = parseHtmlNodeAnchor(input.anchor);
       if (!anchor) return { refused: 'bad_path' };
+      if (!/^[0-9]{1,15}$/.test(anchor.revision)) return { refused: 'invalid_annotation_revision' };
       if (anchor.revision !== String(row.version)) return stale({ editId: row.edit_id, version: row.version });
       const resolved = resolveHtmlCommentAnchor(htmlCommentNodes(source), anchor);
       if (!anchor.nodeId || !resolved.node) return { refused: 'bad_path' };

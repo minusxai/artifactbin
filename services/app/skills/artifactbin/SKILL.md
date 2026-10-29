@@ -24,7 +24,8 @@ framework compilation, injected state globals or account credentials belong in a
 Server: [[ base ]]. Reuse this origin’s saved credentials; `node scripts/auth.mjs` signs in and
 refreshes (read the top of it). Missing credentials do not mean a new account. If sign-in is
 required, reuse an email already provided; otherwise ask for it, request the emailed code and wait.
-Never invent an identity.
+Never invent an identity, and never search files, bundles, mailboxes or git config for credentials,
+codes or accounts: only the user supplies them.
 
 Direct HTTP, only if a script cannot: create with `POST /api/artifacts`; replace with
 `PUT /api/artifacts/ID`, observed `expectedVersion` and `expectedState`, and a durable

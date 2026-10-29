@@ -129,8 +129,18 @@ throw new ToolError(code,`Request refused (HTTP ${response.status}).`,[401,403,4
 const transient=error=>!(error instanceof ToolError)&&
   /fetch failed|ECONN|ETIMEDOUT|EAI_AGAIN|socket|network|timed? ?out|\b5\d\d\b/i.test(String(
   error?.message)+' '+String(error?.cause?.code??''));
+/** A lapsed sign-in, whichever layer noticed it (a refused refresh throws a plain Error whose text
+ * starts `auth_required`). A missing grant keeps its own message: nothing lapsed. */
+const authLapse=error=>(error?.code==='auth_required'||/^auth_required\b/.test(String(
+  error?.message)))&&!(error instanceof ToolError&&/^No saved grant/.test(error.message));
+/** The process exit code for a failure: 3 (auth/access) for a lapsed sign-in. */
+export const toolExit=error=>error?.exit??(authLapse(error)?3:1);
 /** Preserve legacy details while exposing a stable check result on all refusals. */
 export function toolFailure(name,error){
+if(authLapse(error))return {ok:false,code:'auth_required',message:
+  'Sign-in expired: run node scripts/auth.mjs login --email ADDRESS',recovery:
+  'Ask the user for their email, run the command, then ask for the emailed code. Never search '
+  +'for credentials.'};
 // A broken install names the missing module (a path, not a secret), not a generic failure.
 if(error?.code==='ERR_MODULE_NOT_FOUND'){
   const missing=/Cannot find (?:module|package) '([^']+)'/.exec(String(error.message))?.[1];
@@ -181,6 +191,6 @@ if(name==='check'&&parsed?.values.output){try{await exclusive(parsed.values.outp
     process.stderr.write('Could not save check output; existing files were retained.\n');}}
 if(parsed?.values.json)process.stdout.write(JSON.stringify(envelope)+'\n');
     else process.stderr.write(envelope.code+': '+envelope.message+' '+envelope.recovery+'\n');
-    process.exitCode=error.exit??1;
+    process.exitCode=toolExit(error);
  }
 }
