@@ -44,28 +44,12 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
 const { setServices } = await import('@/lib/platform/services');
 const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, resetConfigOverrides } = await import('@/lib/platform/config');
 const { overrideRequestHeaders } = await import('@/lib/platform/request-context');
-const { configureDb, getDb } = await import('@/lib/platform/db');
+const { getDb } = await import('@/lib/platform/db');
 const { createSqliteSql } = await import('@artifactbin/sql/sqlite');
 const { createEvents } = await import('@artifactbin/events/local');
 const { setEventProjection } = await import('@/lib/platform/event-outbox');
 
-/*
- * THE SUITE OWNS ITS DATABASES. Every file opens an in-memory PGLite, whatever the ambient DATABASE_URL says, so a
- * test never touches a data directory or a real server. A worker boots many of them (one per file) from one schema:
- * the first applies the DDL and backfills and dumps the result, and every later one restores that image instead.
- * The image lives on the process global, so it outlives each file's module graph (api-isolated, ui).
- */
-declare global {
-  // eslint-disable-next-line no-var
-  var __artifact_bin_test_schema__: Blob | File | undefined;
-}
-configureDb({
-  target: { engine: 'pglite', dataDir: null },
-  schemaImage: {
-    load: () => globalThis.__artifact_bin_test_schema__,
-    save: (image) => { globalThis.__artifact_bin_test_schema__ = image; },
-  },
-});
+await import('./database');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
