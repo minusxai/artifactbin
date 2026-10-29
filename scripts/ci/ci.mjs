@@ -290,6 +290,7 @@ if (mode === 'plan') {
     if (!response.ok) throw new Error(`download answered ${response.status}`);
     mkdirSync('.ci-cache-key', { recursive: true });
     writeFileSync('.ci-cache-key/tsgo-buildinfo.zip', Buffer.from(await response.arrayBuffer()));
+    mkdirSync(path.dirname(NATIVE_ROOT_BUILD_INFO), { recursive: true });
     execFileSync('unzip', ['-o', '-q', '.ci-cache-key/tsgo-buildinfo.zip', '-d', path.dirname(NATIVE_ROOT_BUILD_INFO)]);
     console.log(`Type check build info from run ${match.workflow_run.id} (${match.workflow_run.head_branch}).`);
   } catch (error) {

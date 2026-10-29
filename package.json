@@ -9,7 +9,6 @@
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "postinstall": "node scripts/ci/prepare-esbuild.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:otp": "node scripts/dev-otp.mjs",
     "dev:app": "node scripts/dev-app.mjs",

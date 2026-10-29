@@ -121,7 +121,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # A WORKFLOW TYPO IS ONLY EXPENSIVE WHEN THE RUNNER FINDS IT. actionlint parses every workflow
       # here (and shellcheck reads every `run:` block) in about a second, in a pinned image anyone can
       # run locally: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color`.
@@ -165,7 +164,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -211,7 +209,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
@@ -274,7 +271,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -321,7 +317,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # THE SAME SOURCES BUILD THE SAME BYTES. The key hashes git's object ids for every build input
       # (scripts/lib/ci-plan.mjs `isBuildInput`: not tests, gates, workflows or prose), so a push that
       # changed only those restores the last build of these sources and skips the ~75s below. No
@@ -396,7 +391,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # The export tests drive real headless Chromium (lib/export.ts). The
       # browser download is the slow half of the install; cache it on what pins
       # the browser (playwright-core's browsers.json), as the gates do — keyed on
@@ -475,7 +469,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # A BUILD OF THESE EXACT SOURCES ALREADY CACHED (see the `build` job) means there is nothing to
       # build: the shard restores it and starts its gates at once. Restore only — the entry is written by
       # `build`, never by a shard.
@@ -637,7 +630,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       # The root type check's incremental build info, which pr-fast.yml's `types` job starts from so a pull
       # request re-checks only what it changed (scripts/ci/ci.mjs `type-info` finds the newest upload). The same
       # command as that job, so the same compiler writes it (scripts/lib/type-check.mjs).

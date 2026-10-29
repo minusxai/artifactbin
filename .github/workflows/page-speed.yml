@@ -86,7 +86,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - run: node scripts/ci/prepare-esbuild.mjs
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
@@ -182,8 +181,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'design-systems/font-assets/**', 'design-systems/lib/font-assets.mjs') }}
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true' && steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
-        run: node scripts/ci/prepare-esbuild.mjs
       - if: needs.scope.outputs.relevant == 'true' && steps.base.outputs.found != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright

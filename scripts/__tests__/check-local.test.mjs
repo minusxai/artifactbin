@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runCheck } from '../lib/check-evidence.mjs';
 import { NATIVE_ROOT_BUILD_INFO, typeCheckCommands } from '../lib/type-check.mjs';
-import { sdkVersion as esbuildGo } from '../lib/esbuild-toolchain.mjs';
+const minimumCompilerGo = 'go1.27.3';
 
 async function fixture(test) {
   const root = mkdtempSync(path.join(tmpdir(), 'check-evidence-'));
@@ -132,11 +132,11 @@ describe('validate type-checker', () => {
     return bytes.subarray(offset, offset + length).toString('latin1');
   };
   const goRelease = version => (/^go(\d+)\.(\d+)(?:\.(\d+))?/.exec(version) ?? []).slice(1).map(part => Number(part ?? 0));
-  it.skipIf(!process.env.CI && native === process.execPath)('bundles a Go toolset no older than the one esbuild is built with', () => {
-    const bundled = goRelease(goVersion(readFileSync(native))), pinned = goRelease(esbuildGo);
+  it.skipIf(!process.env.CI && native === process.execPath)('bundles Go 1.27.3 or newer', () => {
+    const bundled = goRelease(goVersion(readFileSync(native))), pinned = goRelease(minimumCompilerGo);
     expect(bundled).toHaveLength(3); expect(pinned).toHaveLength(3);
     const order = bundled.map((part, i) => part - pinned[i]).find(diff => diff !== 0) ?? 0;
-    expect(order, `${goVersion(readFileSync(native))} is older than ${esbuildGo}`).toBeGreaterThanOrEqual(0);
+    expect(order, `${goVersion(readFileSync(native))} is older than ${minimumCompilerGo}`).toBeGreaterThanOrEqual(0);
   });
   // CI installs the binary (linux-x64): there a missing one fails here instead of silently checking with tsc 5.
   it.skipIf(!process.env.CI && native === process.execPath)('reports the same errors at the same file:line as tsc 5, including after an incremental edit', () => {
