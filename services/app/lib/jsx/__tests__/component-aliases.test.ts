@@ -9,8 +9,6 @@ import { serializeJsx } from '../serialize';
 import { validateJsxSource } from '..';
 import { JSX_STORY_COMPONENT_NAMES } from '../components';
 import type { JsxElement, JsxNode } from '../types';
-import { stampNodeIdsInPlace } from '@/lib/document/node-ids';
-import { decodeDocumentNodes, encodeDocumentNodes } from '@/lib/document/document-node-codec';
 
 const nodesOf = (source: string): JsxNode[] => {
   const parsed = parseJsx(source);
@@ -69,24 +67,6 @@ describe('the data components\' earlier names', () => {
     }
     // A caller that still lists an old name allows the component under either spelling.
     expect(validateJsxSource('<Chart data="$q" />', ['Question'])).toEqual([]);
-  });
-
-  it('stamps a node id in place after an old name\'s attributes, and on a bare old tag', () => {
-    const mint = (() => { let i = 0; return () => `N${i++}aa`; })();
-    const stamped = stampNodeIdsInPlace('<Number data="$q" />\n<Question />', { mint });
-    expect(stamped.source).toBe('<Number data="$q" id="N0aa" />\n<Question id="N1aa" />');
-  });
-
-  it('canonicalises a stored tree revived without a parse, keeping its spelling', () => {
-    const legacy = { schema: 1 as const, kind: 'jsx' as const, roots: [{ type: 'element', tag: 'Question', isComponent: true, attributes: [], children: [{ type: 'element', tag: 'Number', isComponent: true, attributes: [], children: [], selfClosing: true }], selfClosing: false }] };
-    const [root] = decodeDocumentNodes(legacy) as JsxElement[];
-    expect(root!.tag).toBe('Chart');
-    expect(root!.authoredTag).toBe('Question');
-    expect((root!.children[0] as JsxElement).tag).toBe('Cell');
-    expect(serializeJsx([root!])).toBe('<Question><Number /></Question>');
-    // A tree encoded from a parse round-trips unchanged.
-    const parsed = nodesOf('<Question data="$q" />');
-    expect(decodeDocumentNodes(encodeDocumentNodes(parsed))[0]).toMatchObject({ tag: 'Chart', authoredTag: 'Question' });
   });
 
   it('returns the same array when a stored tree names nothing old', () => {

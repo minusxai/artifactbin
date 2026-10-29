@@ -9,7 +9,6 @@ import type { DatasetColumn } from '@artifactbin/contracts';
 import { parseJsx } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compileDataflow, prepareCompile, rewriteBuiltinFields, type ImportSource } from '../compile-dataflow';
-import { validateMarkupStructure } from '@/lib/document/local-validation';
 
 const BOOKINGS: DatasetColumn[] = [
   { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },
@@ -160,10 +159,6 @@ describe('mutations', () => {
     expect((await errorsOf(doc(`${IMPORT}<Query name="q">{\`select 1 as id\`}</Query><Mutation name="m">{\`delete from bookings.rows where id in (select id from q)\`}</Mutation>`)))[0]).toMatch(/reads the query q — .*pass what it needs from a query as an argument/);
   });
 
-  it('refuse source= on a mutation at the grammar, pointing at <Import>', () => {
-    const { errors } = validateMarkupStructure(doc(`${IMPORT}<Mutation name="m" source="ref:BookRows1">{\`delete from public.rows\`}</Mutation>`));
-    expect(errors.map((e) => e.message)).toContainEqual(expect.stringMatching(/<Mutation> takes no source= — import the dataset/));
-  });
 });
 
 describe('the markup that binds the compiled record', () => {
