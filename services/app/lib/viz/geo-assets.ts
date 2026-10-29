@@ -60,7 +60,7 @@ const DEFAULT_GEO_ASSET: GeoAssetId = 'us-states';
 
 /** Whether `id` is an allowlisted boundary asset. */
 function isGeoAsset(id: unknown): id is GeoAssetId {
-  return typeof id === 'string' && id in GEO_ASSETS;
+  return typeof id === 'string' && Object.hasOwn(GEO_ASSETS, id);
 }
 
 /** Resolve `id` to a known asset, falling back to the default for unknown ids. */

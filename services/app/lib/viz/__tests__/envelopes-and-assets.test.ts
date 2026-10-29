@@ -51,10 +51,7 @@ describe('geo boundaries',()=>{
   for(const id of ['nowhere',undefined,42,''])expect(resolveGeoAsset(id)).toBe('us-states');
   expect(GEO_BOUNDARY_DATASET).toBe('__mx_geo_boundary');
  });
- // BUG: isGeoAsset uses `id in GEO_ASSETS`, which also sees Object.prototype keys, so an authored
- // mapName of "__proto__" or "toString" resolves to itself (and boundaryFile/loadGeoFeatures read a
- // file named "undefined") instead of falling back to the default boundary set.
- it.fails('never resolves an inherited object key as a boundary asset',()=>{
+ it('never resolves an inherited object key as a boundary asset',()=>{
   for(const id of ['__proto__','toString','constructor'])expect(resolveGeoAsset(id)).toBe('us-states');
  });
  it('loads a boundary once from its public file and refuses unknown ids and failed loads',async()=>{
