@@ -13,10 +13,10 @@
   "dependencies": {
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
-    "better-auth": "1.7.7",
-    "hono": "4.13.13",
+    "better-auth": "1.7.14",
+    "hono": "4.13.14",
     "kysely": "0.28.17",
-    "nodemailer": "10.1.4",
+    "nodemailer": "10.2.1",
     "pg": "8.23.0"
   },
   "devDependencies": {

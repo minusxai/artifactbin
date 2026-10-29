@@ -63,10 +63,10 @@ describe('the constant-time path', () => {
     expect(marker).not.toContain(CODE);
     expect(await store.decrypt(marker)).toBe(CODE);
     expect(await store.encrypt('123456')).toBe('123456');
-    // Better Auth 1.7.7 (pinned) verifies a decrypt-stored code as constantTimeEqual(await decrypt(stored), submitted).
+    // Better Auth 1.7.14 (pinned) verifies a decrypt-stored code as constantTimeEqual(await decrypt(stored), submitted).
     const require = createRequire(import.meta.url);
     const dist = join(dirname(require.resolve('better-auth')), 'plugins/email-otp/otp-token.mjs');
-    expect(readFileSync(dist, 'utf8')).toMatch(/"decrypt" in opts\.storeOTP\) return constantTimeEqual\(await opts\.storeOTP\.decrypt\(storedOtp\), otp\)/);
+    expect(readFileSync(dist, 'utf8')).toMatch(/"decrypt" in opts\.storeOTP\) \{\s*const decryptedOtp = await opts\.storeOTP\.decrypt\(storedOtp\);\s*return constantTimeEqual\(decryptedOtp, otp\);\s*\}/);
     await pg.close();
   });
 });

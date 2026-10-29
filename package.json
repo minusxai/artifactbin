@@ -39,9 +39,9 @@
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
     "@electric-sql/pglite": "0.4.6",
-    "@hono/node-server": "2.1.1",
-    "better-auth": "1.7.7",
-    "hono": "4.13.13",
+    "@hono/node-server": "2.1.5",
+    "better-auth": "1.7.14",
+    "hono": "4.13.14",
     "kysely": "0.28.17",
     "pg": "8.17.1",
     "@artifactbin/runner": "0.1.0"
@@ -88,9 +88,10 @@
     "docs/proposals/runner-validation"
   ],
   "overrides": {
-    "seroval": "1.6.8",
-    "seroval-plugins": "1.6.8",
+    "seroval": "1.7.3",
+    "seroval-plugins": "1.7.3",
     "katex": "0.18.2",
-    "lodash-es": "4.18.1"
+    "lodash-es": "4.18.1",
+    "undici": "8.12.3"
   }
 }
