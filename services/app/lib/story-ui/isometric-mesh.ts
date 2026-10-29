@@ -1,5 +1,5 @@
 /** Shape construction only. Authored specs never contain generated vertices or executable code. */
-import type { IsometricShape, IsoPoint, IsoTone } from '@/lib/jsx';
+import type { IsometricShape, IsoPoint, IsoTone } from '@/lib/jsx/isometric-spec';
 import { partOutline } from './isometric-geometry';
 export const add = (a: IsoPoint, b: IsoPoint): IsoPoint => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 export const sub = (a: IsoPoint, b: IsoPoint): IsoPoint => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

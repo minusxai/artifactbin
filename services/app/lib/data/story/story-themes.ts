@@ -30,7 +30,7 @@
  * package + one FONT_FILES entry in copy-assets; families outside the catalog fall back to
  * the closest packaged one (documented per theme below).
  */
-import type { StoryThemeName, StoryDesignName } from '@/lib/validation';
+import type { StoryThemeName, StoryDesignName } from '@/lib/validation/story-theme-names';
 import { STORY_THEME_NAMES } from '@/lib/validation/story-theme-names';
 import { STORY_SYSTEMS, getStorySystem } from './story-systems';
 

@@ -1,4 +1,4 @@
-import type { IsometricShape, IsoPlanPoint, IsoPoint } from '@/lib/jsx';
+import type { IsometricShape, IsoPlanPoint, IsoPoint } from '@/lib/jsx/isometric-spec';
 
 export type Projection = {
   right: IsoPoint;

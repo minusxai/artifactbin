@@ -13,7 +13,7 @@ import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { GET as systemsSheet, HEAD as systemsHead } from '@/app/af/styles.css/route';
 import { PLATFORM_STYLES_PATH } from '@/lib/html-systems';
-import { buildHtmlAssets } from '@/lib/html-runtime';
+import { buildHtmlAssets } from '@/lib/html-runtime/server';
 import { artifactPageAnswer, framedDocumentSrc } from '@/lib/document-serving';
 import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
 useAppHarness();

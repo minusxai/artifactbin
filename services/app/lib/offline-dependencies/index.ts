@@ -85,4 +85,3 @@ export async function packOfflineDependencies(input:OfflineDependencyInput):Prom
  }
  return {html,embeddedUrls:[...used]};
 }
-export { OFFLINE_MODULES_BLOCK } from './contracts';

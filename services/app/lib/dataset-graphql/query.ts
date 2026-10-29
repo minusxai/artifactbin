@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import type {DatasetColumn,DatasetColumnDescriptor,DatasetGraphqlRow,DatasetQueryRequest,DatasetReadRequest} from '@artifactbin/contracts';
-import type {DatasetTable} from '@/lib/datasets';
+import type {DatasetTable} from '@/lib/datasets/types';
 import type {DatasetStatement} from './types';
 import {columnIdentity,compileDatasetFilters,descriptors,quote,tableIdentity,typedCell} from './model';
 /** Named values are resolved before source-column type validation. No page text is compiled as SQL. */

@@ -1,5 +1,6 @@
-import {isRuntimeCoreSrc, htmlAppearance} from '../html-page';
-import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies';
+import {isRuntimeCoreSrc} from '../html-page/core-script';
+import {htmlAppearance} from '../html-page/design-system';
+import {OFFLINE_MODULES_BLOCK} from '../offline-dependencies/contracts';
 import {admitInitialInlineScripts,INLINE_SCRIPT_POLICY} from './inline-scripts';
 import {portableRenderedDigest} from './portable-source';
 import { portableScript } from './portable';
@@ -108,10 +109,6 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
 }
 /** Downloads use the same native renderer, with no platform origin or remote capability. */
 export const downloadableHtml = (input: HtmlAssemblyInput): string => assembleHtmlPage({ ...input, offline: true });
-export { createRuntimeAssetRetention } from './asset-retention';
-export type { RuntimeAssetRetention } from './asset-retention-contract';
-export { retainedRuntimeAssets } from './asset-retention.server';
-export { buildHtmlAssets } from './build.server';
 export { LIVE_VERSION_HEADER } from './live-morph-contract';
 export type {
   PortableChromeHandle, PortableChromeIdentity, PortableChromeOptions, PortableChromeUpdate, PortablePreviewStatus, SavePortableOptions,

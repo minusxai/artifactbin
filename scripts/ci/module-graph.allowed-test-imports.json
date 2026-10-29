@@ -402,9 +402,6 @@
     "services/app/lib/page-graphql/__tests__/registered-mutations.test.ts": [
       "@/lib/document-data/dataset-policy"
     ],
-    "services/app/lib/page-styles/__tests__/first-screen-fonts.test.ts": [
-      "@/lib/data/story/story-fonts"
-    ],
     "services/app/lib/page-styles/__tests__/story-css-split.test.ts": [
       "@/lib/data/story/story-css.server"
     ],
@@ -456,9 +453,6 @@
     "services/app/lib/story-surface/__tests__/reading-css.test.ts": [
       "@/lib/page-styles/chrome-css",
       "@/lib/page-styles/story-base-css"
-    ],
-    "services/app/server/__tests__/bootstrap.test.ts": [
-      "@/lib/data/story/story-fonts"
     ],
     "services/app/server/__tests__/public-assets-host.test.ts": [
       "@/lib/export/assets"

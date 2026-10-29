@@ -17,7 +17,7 @@
  * Framework-free on purpose: this ships in anchor-entry (~1.5 KB, loaded by every
  * document, hydrating or not) and is also imported by the runtime entry.
  */
-import type { ScrollAnchor } from '@/lib/story-ui';
+import type { ScrollAnchor } from '@/lib/story-ui/scroll-anchor';
 import { readerModeOf, THEME_KEY, withReaderMode } from './contract';
 
 const DOC_STATE_PREFIX = 'mx:doc:';

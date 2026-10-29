@@ -7,7 +7,7 @@
 import {REFERENCE_POSITIONS} from './reference-positions';
 import {ARTIFACT_REFERENCE_PATTERN} from '@artifactbin/contracts';
 const refId=(value:string)=>ARTIFACT_REFERENCE_PATTERN.exec(value)?.[1]??null;
-import type { VizRecipeContent } from '@/lib/validation';
+import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 
 /**
  * Recipes and images only: a DATASET is never page data — it is read through a

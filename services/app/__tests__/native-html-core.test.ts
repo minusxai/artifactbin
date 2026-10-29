@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {retainedRuntimeAssets, buildHtmlAssets} from '@/lib/html-runtime';
+import {retainedRuntimeAssets, buildHtmlAssets} from '@/lib/html-runtime/server';
 import {GET as apollo} from '@/app/af/v1/apollo/[digest]/route';
 import {expect,it} from 'vitest';
 import {Hono} from 'hono';

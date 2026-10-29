@@ -1,5 +1,6 @@
 import {hasImportedSourceObservation} from '../html-bridge';
-import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml, buildHtmlAssets} from '@/lib/html-runtime';
+import {type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml} from '@/lib/html-runtime';
+import {createRuntimeAssetRetention, retainedRuntimeAssets, type RuntimeAssetRetention, buildHtmlAssets} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {nativeHtmlStructuralWrapper} from './native-html-structural-wrapper';
 import { createHash, randomUUID } from 'node:crypto';

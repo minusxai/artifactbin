@@ -182,8 +182,6 @@ const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-insta
 const BUNDLED_IMPORTERS = [
   'services/app/solid/', 'services/app/web/', 'services/app/lib/islands/', 'services/app/lib/frame-edit/', 'services/app/lib/html-components/', 'services/app/skills/',
   'services/app/lib/agent-copy/agent-copy.ts',
-  // Server-rendered, but its loading markup is checked in the ui (jsdom) project, which cannot load the skills index.
-  'services/app/lib/agent-copy/agent-discovery.ts',
   'services/app/lib/agent-copy/getting-started.ts',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/annotations/pages.ts',
@@ -256,10 +254,10 @@ const BUNDLED_LEAVES = {
   'lib/chart': ['chart-theme'],
   'lib/data': [
     'html/html-system-modes', 'html/html-systems', 'story/jsx-edit', 'story/link-edit', 'story/question-height',
-    'story/story-css', 'story/story-number', 'story/story-systems', 'story/story-themes', 'story/typography',
+    'story/story-css', 'story/story-fonts', 'story/story-number', 'story/story-systems', 'story/story-themes', 'story/typography',
   ],
   'lib/data-ingest': ['coerce', 'csv', 'types'],
-  'lib/datasets': ['dataset-usage', 'definition'],
+  'lib/datasets': ['dataset-usage', 'definition', 'types'],
   'lib/editor-engine': [
     'annotation-map', 'block-edit', 'block-selection', 'bookmark', 'clipboard', 'flow-view', 'history', 'links', 'model',
     'node-chrome', 'selection-presentation', 'source-edit', 'source-edits',
@@ -269,6 +267,7 @@ const BUNDLED_LEAVES = {
   ],
   'lib/html-components': ['hosted.json'],
   'lib/html-page': ['core-script', 'design-system', 'html-source'],
+  'lib/offline-dependencies': ['contracts'],
   'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
   'lib/html-runtime': [
     'browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source',
@@ -290,10 +289,10 @@ const BUNDLED_LEAVES = {
   'lib/remote': ['session-mentions'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/source-editor': ['codemirror'],
-  'lib/story-surface': ['bare-typography'],
+  'lib/story-surface': ['bare-controls', 'bare-typography', 'task-checkbox-css'],
   'lib/story-ui': [
     'ast-path', 'comment-target', 'compare', 'data-table', 'edit-bar', 'file-glyphs', 'grid-css', 'grid-layout',
-    'host-classify', 'icon-contract', 'isometric', 'node-names', 'repeat-identity', 'row-key', 'scroll-anchor',
+    'host-classify', 'icon-contract', 'isometric', 'node-names', 'recipe-classes', 'repeat-identity', 'row-key', 'scroll-anchor',
   ],
   'lib/validation': ['atlas-schemas', 'story-system-names', 'story-theme-names'],
   'lib/viz': [
@@ -303,7 +302,9 @@ const BUNDLED_LEAVES = {
   ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'format-jsx-preview', 'shelf', 'visibility-icons'],
 };
-const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS, browserLeaves: BUNDLED_LEAVES[module] });
+// Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to
+// pull a module's whole index. BUNDLED_IMPORTERS still marks the browser-bundled code the serverOnly rule guards.
+const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS, browserLeaves: BUNDLED_LEAVES[module], leavesForAll: true });
 /**
  * Rule 4's table: module id (as moduleOf names it, under services/app/lib) → `entries` (paths under the
  * module directory without extension; `''` is the index; a module without a row has only its index), optionally
@@ -346,6 +347,7 @@ export const DEEP_MODULES = {
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.
   'lib/html-systems': { entries: ['', 'server'], serverOnly: ['server'] },
+  'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
   // Loaded by file path, outside the app's `@/` resolution: model from a target checkout
   // (scripts/lib/native-migration-disposable-provider.ts), url by the plain-Node migration CLI.
@@ -464,7 +466,7 @@ function deepModuleViolations(graph, table) {
   const modules = [...new Set([...Object.keys(table), ...[...graph.keys()].filter(module => module.startsWith('lib/'))])].sort();
   for (const module of modules) {
     if (!graph.has(module)) continue;
-    const { entries, downstream = [], serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false } = table[module] ?? INDEX_ONLY;
+    const { entries, downstream = [], serverOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false, leavesForAll = false } = table[module] ?? INDEX_ONLY;
     const dir = `services/app/${module}`;
     const refused = [], serverRefused = [], used = new Set(), usedLeaves = new Set();
     for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
@@ -472,7 +474,7 @@ function deepModuleViolations(graph, table) {
       for (const { file, specifier, typeOnly } of edges.get(module) ?? []) {
         const base = importPath(file, specifier).replace(/\/$/, '');
         const rel = base === dir ? '' : base.slice(dir.length + 1);
-        const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel) || downstream.includes(rel), leaf = browser && browserLeaves.includes(rel);
+        const browser = matchesImporter(browserImporters, file), entry = entries.includes(rel) || downstream.includes(rel), leaf = (browser || leavesForAll) && browserLeaves.includes(rel);
         if (entry && !typeOnly && serverOnly.includes(rel) && matchesImporter(bundled, file)) {
           used.add(rel);
           serverRefused.push(`  ${file} imports ${specifier} (${rel ? `entry ${rel}` : 'the index'} is server-only)`);

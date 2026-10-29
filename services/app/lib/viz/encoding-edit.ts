@@ -7,7 +7,7 @@
  * and everything else in the spec. Composed specs (layer/facet/concat/repeat) are not
  * editable here; they're edited via chat.
  */
-import type { VizEnvelope } from '@/lib/validation';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { VizColumnKind } from './types';
 
 const EDITABLE_CHANNELS = ['x', 'y', 'color', 'theta'] as const;

@@ -204,4 +204,3 @@ export function rewriteHtmlAssetUrls(html:string,replacements:ReadonlyMap<string
  return applyEdits(html,edits);
 }
 export { isRuntimeCoreSrc } from './core-script.ts';
-export { attribute, parseSource } from './html-source.ts';
