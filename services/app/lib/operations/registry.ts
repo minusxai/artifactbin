@@ -1,5 +1,5 @@
 import {notificationJobOperations} from './notification-jobs';
-import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire, canReadArtifact, effectiveRole, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire, holdsCreatingToken } from '@/lib/artifacts';
 import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
@@ -561,7 +561,7 @@ const exportArtifactOp: Operation = {
     // The URL's own rule, readable = exportable, applied to the tool's actor:
     // the publishing token reaches its own document directly; a claimed
     // token's account reaches whatever the account may read.
-    const authorized = ctx.actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, ctx.actor));
+    const authorized = holdsCreatingToken(artifact, ctx.actor) || (await canReadArtifact(artifact, ctx.actor));
     if (!authorized) return reply({ error: 'not_found' }, 404);
     void trackEvent('export', artifact.id, { userId: ctx.actor.userId ?? null });
     const res = await exportImageResponse(artifact, {
@@ -569,7 +569,7 @@ const exportArtifactOp: Operation = {
       ...(typeof input.format === 'string' ? { format: input.format } : {}),
       ...(input.refresh === true ? { refresh: '1' } : typeof input.refresh === 'string' ? { refresh: input.refresh } : {}),
       // Only an editor's refresh re-renders (lib/export): the publishing token is its document's owner.
-      ...(input.refresh !== undefined ? { editor: ctx.actor.tokenId === artifact.token_id || canEdit(await effectiveRole(artifact, ctx.actor)) } : {}),
+      ...(input.refresh !== undefined ? { editor: holdsCreatingToken(artifact, ctx.actor) || canEdit(await effectiveRole(artifact, ctx.actor)) } : {}),
       ...Object.fromEntries(['mode','crop','image','search'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';
@@ -652,7 +652,7 @@ const forkArtifactOp: Operation = {
     // The export operation's rule, for the same reason: the publishing token
     // reaches its own artifact directly, an account reaches whatever it may
     // read. Unreachable and unknown are one answer.
-    if ((!!source.group_id || ctx.actor.tokenId !== source.token_id) && !(await canReadArtifact(source, ctx.actor))) {
+    if ((!!source.group_id || !holdsCreatingToken(source, ctx.actor)) && !(await canReadArtifact(source, ctx.actor))) {
       return reply({ error: 'not_found' }, 404);
     }
 
