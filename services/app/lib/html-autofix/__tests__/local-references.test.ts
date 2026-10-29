@@ -11,10 +11,7 @@ it('collects element sources, posters, object data, link and svg hrefs, srcset c
 <template><img src="later.png"></template>`)).toEqual(['css/site.css','img/a.png','img/a-1x.png','img/a-2x.png','v.mp4','poster.jpg','doc.pdf','sprite.svg','later.png']);
 });
 
-// BUG: the svg `xlink:href` branch never matches. parse5 stores a foreign `xlink:href` as prefix `xlink` and name
-// `href`, and html-source `attribute` refuses prefixed names, so a sprite `<use xlink:href="icons.svg#home">` is not a
-// local reference: preview never serves it and the missing-asset rule never flags it. Reported, not fixed.
-it.fails('collects an svg xlink:href sprite reference',()=>{
+it('collects an svg xlink:href sprite reference',()=>{
  expect(paths('<svg><use xlink:href="icons.svg#home"></use></svg>')).toEqual(['icons.svg']);
 });
 

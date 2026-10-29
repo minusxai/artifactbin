@@ -59,7 +59,10 @@ export function parseSource(source: string): SourceDocument {
 }
 
 export function attribute(element: Element, name: string): string | null {
-  for (const attr of element.attrs) if (attr.name === name && !attr.prefix) return attr.value;
+  // A foreign attribute such as `xlink:href` parses as prefix `xlink` and name `href`: match it only by its qualified name.
+  const colon = name.indexOf(':');
+  const prefix = colon < 0 ? undefined : name.slice(0, colon), local = colon < 0 ? name : name.slice(colon + 1);
+  for (const attr of element.attrs) if (attr.name === local && (attr.prefix || undefined) === prefix) return attr.value;
   return null;
 }
 
