@@ -50,9 +50,7 @@ describe('rel addresses', () => {
     expect(parseRel(rel)).toBeNull();
   });
 
-  // BUG: `+1.` (a trailing dot after the sibling) parses as `+1`, so one address has two spellings, against
-  // formatRel's "the one spelling, so two captures of the same node agree". `0.` is refused; `+1.` should be too.
-  it.fails('refuses a trailing dot after the sibling step, as it does after a child step', () => {
+  it('refuses a trailing dot after the sibling step, as it does after a child step', () => {
     expect(parseRel('+1.')).toBeNull();
   });
 

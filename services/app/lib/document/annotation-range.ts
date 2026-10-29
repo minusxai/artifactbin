@@ -208,7 +208,8 @@ export function parseRel(rel: string): RelAddress | null {
   let sibling = 0;
   if (rest.startsWith('+')) {
     const match = /^\+(\d+)(?:\.(.*))?$/.exec(rest);
-    if (!match) return null;
+    // A dot must introduce child steps: `+1.` would be a second spelling of `+1`, as `0.` would of `0`.
+    if (!match || match[2] === '') return null;
     sibling = Number(match[1]);
     rest = match[2] ?? '';
   }
