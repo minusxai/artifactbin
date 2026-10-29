@@ -78,8 +78,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
   let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
-  let presenceWriting=false,latestPresence:PresenceFrame|null=null;
-  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const frame=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(frame)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
+  // The document frame always opens the stream: a room's immediate first roster waits for it (latest wins meanwhile).
+  let presenceWriting=false,documentSent=false,latestPresence:PresenceFrame|null=null;
+  const writePresence=()=>{if(closed||!documentSent||presenceWriting||!latestPresence)return;const frame=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(frame)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
 
   /**
    * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
@@ -270,6 +271,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       await followDatasets(row);
       await pushHtmlShared(row);
       await send(frame);
+      if(!documentSent){documentSent=true;writePresence();}
       // An edit shifts anchors; annotator connections' pins must follow the document
       // frame that moved them. Plain reader connections are no-ops.
       void pushAnnotations();
