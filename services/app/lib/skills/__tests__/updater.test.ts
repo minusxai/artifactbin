@@ -14,14 +14,16 @@ it('validates release contents without evaluating scripts and rejects corruption
  expect(()=>decodeRelease(Buffer.alloc(32*1024*1024+1),release.manifest)).toThrow();
 });
 
-import {mkdtemp,writeFile,readFile,access,rm,cp,symlink} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,access,rm,cp,symlink,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 it('updates isolated installs once, preserves data and symlinks, and returns promptly with a stalled endpoint',async()=>{
- const {update}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
- const root=await mkdtemp(path.join(tmpdir(),'skill-update-'));
+ const {update,disabled}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
+ const base=await mkdtemp(path.join(tmpdir(),'skill-update-'));
+ expect(disabled([])).toBe(false);
+ const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
  let stalled=false;
  let release:ReturnType<typeof skillRelease>;
  const server=createServer((req,res)=>{if(stalled)return;res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
@@ -30,26 +32,65 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
  const origin=`http://127.0.0.1:${address.port}`;
  const scripts=path.join(root,'scripts');
  await cp(path.dirname(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs')),scripts,{recursive:true});
- const probe=`import {beforeCommand} from './toolbox-update.mjs'; if(!await beforeCommand(import.meta.url,process.argv.slice(2))) console.log(JSON.stringify(process.argv.slice(2).filter(a=>a!=='--no-update')));`;
+ const probe=`import {beforeCommand} from './toolbox-update.mjs'; if(!await beforeCommand(import.meta.url,process.argv.slice(2))) {if(process.argv.includes('fail'))process.exit(7);console.log(JSON.stringify(process.argv.slice(2).filter(a=>a!=='--no-update')));}`;
  await writeFile(path.join(scripts,'probe.mjs'),probe);
  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin,version:'0'.repeat(64)}));
- await writeFile(path.join(root,'personal.txt'),'retain');await symlink(root,root+'-link');
+ await writeFile(path.join(root,'personal.txt'),'retain');await symlink(path.join(base,'artifactbin'),root+'-link');
  release=skillRelease({'SKILL.md':'new skill','scripts/probe.mjs':probe,'scripts/toolbox-update.mjs':await readFile(path.join(scripts,'toolbox-update.mjs'),'utf8')},origin);
- const run=(args:string[],env={})=>new Promise<{out:string,err:string,code:number|null}>(resolve=>{const child=spawn(process.execPath,[path.join(root+'-link','scripts/probe.mjs'),...args],{env:{...process.env,...env}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('exit',code=>resolve({out,err,code}));});
+ const run=(args:string[],env={},old=false)=>new Promise<{out:string,err:string,code:number|null}>(resolve=>{const child=spawn(process.execPath,[path.join(old?root:root+'-link','scripts/probe.mjs'),...args],{env:{...process.env,...env}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('exit',code=>resolve({out,err,code}));});
  try{
   await run(['--no-update']);await run([],{ARTIFACTBIN__NO_UPDATE:'1'});await run(['--help']);
   await expect(access(path.join(root,'.artifactbin-updates'))).rejects.toThrow();
-  expect((await update(root)).status).toBe('staged');
+  expect((await update(root)).status).toBe('activated');
   expect((await update(root)).status).toBe('current');
+  expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('new skill');
   const results=await Promise.all([run(['a b','--literal']),run(['second'])]);
   expect(results[0].out.trim()).toBe('["a b","--literal"]');expect(results.every(r=>r.code===0)).toBe(true);
   expect(await readFile(path.join(root,'personal.txt'),'utf8')).toBe('retain');
   expect((await run(['--no-update'])).err).toBe('');
   expect((await run([],{ARTIFACTBIN__NO_UPDATE:'1'})).err).toBe('');
+  expect((await run(['fail'],{},true)).code).toBe(7);
+  expect((await run(['--no-update'],{},true)).code).toBe(0);
+  expect((await run(['--server','https://other.example'],{},true)).code).toBe(0);
+  const firstVersion=release.manifest.version;
+  release=skillRelease({'SKILL.md':'second skill','scripts/probe.mjs':probe+'\n// second release','scripts/toolbox-update.mjs':await readFile(path.join(scripts,'toolbox-update.mjs'),'utf8')},origin);
+  expect((await update(root,{background:true})).status).toBe('staged');
+  await run(['--server','https://other.example']);
+  await run(['--no-update']);
+  expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('new skill');
+  const simultaneous=await Promise.all([update(root),update(root)]);
+  expect(simultaneous.map(r=>r.status).sort()).toEqual(['activated','current']);
+  expect(await readFile(path.join(base,'artifactbin','SKILL.md'),'utf8')).toBe('second skill');
+  expect(await readFile(path.join(base,'artifactbin','scripts/probe.mjs'),'utf8')).toContain('// second release');
+  expect(await readFile(path.join(scripts,'probe.mjs'),'utf8')).toBe(probe);
+  expect((await update(root,{rollback:true})).status).toBe('rolled-back');
+  expect(JSON.parse(await readFile(path.join(base,'artifactbin','release.json'),'utf8')).version).toBe(firstVersion);
+  await writeFile(path.join(base,'.artifactbin-releases','pending.json'),'{broken');
+  expect((await run(['recovery'])).code).toBe(0);
+  await writeFile(path.join(base,'.artifactbin-releases','pending.json'),JSON.stringify({directory:'release-missing'}));
+  expect((await run(['missing'])).code).toBe(0);
+  await mkdir(path.join(base,'.artifactbin-releases','stage-deadbeef'));
+  await symlink('2147483647',path.join(base,'.artifactbin-releases','lock'));
+  expect((await update(root)).status).toBe('activated');
+  await expect(access(path.join(base,'.artifactbin-releases','stage-deadbeef'))).rejects.toThrow();
+  expect((await run(['--no-update'])).code).toBe(0);
   stalled=true;const start=performance.now();expect((await run(['foreground'])).code).toBe(0);
   const duration=performance.now()-start;console.log('stalled endpoint foreground ms:',duration);expect(duration).toBeLessThan(1500);
   server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
   await expect(update(root)).rejects.toThrow();
   expect((await run(['offline'])).code).toBe(0);
- }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});await rm(root+'-link',{force:true});}
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(base,{recursive:true,force:true});}
+});
+
+it('keeps standalone help offline, rejects unknown flags, and parses boolean opt-outs',async()=>{
+ const script=require.resolve('../../../skills/artifactbin/scripts/update.mjs');
+ const run=(args:string[],value='false')=>new Promise<{code:number|null,out:string}>(resolve=>{
+  const child=spawn(process.execPath,[script,...args],{env:{...process.env,ARTIFACTBIN__NO_UPDATE:value}});let out='';
+  child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>out+=b);child.on('exit',code=>resolve({code,out}));
+ });
+ expect((await run(['--help'])).code).toBe(0);
+ expect((await run(['--unknown'])).code).toBe(2);
+ expect((await run([],'true')).code).toBe(0);
+ expect((await run([],'0')).code).toBe(1);
+ expect((await run([],'false')).out).toContain('Reinstall');
 });

@@ -171,7 +171,7 @@ export async function runTool(name,url,execute,args=process.argv.slice(2)){
  try{
 try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_invocation',
     error.message,2,'Read --help.');}
-  if(parsed.values.help){process.stdout.write(commandHelp(name));return;}
+  if(parsed.values.help){process.stdout.write(commandHelp(name)+"\n--no-update disables update checks and activation.\n");return;}
 if(parsed.values.output&&!parsed.values.append){const destination=await safeParent(
     parsed.values.output);let exists=false;try{await lstat(destination);exists=true;}catch(error){
     if(error.code!=='ENOENT')throw error;}if(exists)throw new ToolError('output_exists',

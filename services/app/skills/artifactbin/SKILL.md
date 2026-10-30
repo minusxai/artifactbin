@@ -7,12 +7,11 @@ description: >-
 ---
 ## Read first
 
-Commands check for releases in the background at most hourly. A verified release runs on a
-later invocation from an immutable directory; existing commands and installation symlinks
-remain valid. When notified, reread the reported SKILL.md before further work.
-`node scripts/update.mjs` explicitly checks and stages updates, reporting failures.
-`--no-update` or `ARTIFACTBIN__NO_UPDATE=1` disables checks and activation; `--help` is offline.
-Credentials and personal files stay untouched.
+Commands stage updates hourly and activate before work. Reread canonical SKILL.md and
+reload your harness when notified. `node scripts/update.mjs` updates immediately;
+`--rollback` restores the prior verified release offline. `--no-update` or
+`ARTIFACTBIN__NO_UPDATE=1` disables updates; `--help` is offline.
+Manual ZIP installs must reinstall with the installer to update. Credentials stay untouched.
 
 Skill map (run `ls <folder>` for the full list; each file's top comment says how to use it):
 
