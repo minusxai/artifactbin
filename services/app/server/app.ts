@@ -531,7 +531,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('/islands/*', async (c, next) => { await next(); if (c.res.status < 400) c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
-  app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });
+  app.use('/assets/*', async (c, next) => {
+    await next();
+    // Signed exports own their grant-bounded private policy, including refusals.
+    if (!c.req.path.startsWith('/assets/export/')) c.header('cache-control', IMMUTABLE);
+  });
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
