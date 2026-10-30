@@ -45,6 +45,32 @@ describe('main validation', () => {
     // One pin mechanism: the old consumer dispatch into the server's update-submodule workflow is gone.
     expect(ci.jobs).not.toHaveProperty('notify-consumer');
   });
+  it('stages the toolkit and capability together while preserving the auth fence', () => {
+    const fixture = mkdtempSync(path.join(directory, 'pin-'));
+    const runGit = (...args) => execFileSync('git', args, {cwd:fixture,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+    runGit('init', '-q'); runGit('config', 'user.name', 'CI fixture'); runGit('config', 'user.email', 'ci@example.test');
+    mkdirSync(path.join(fixture, 'infra'));
+    const old = 'a'.repeat(40), next = 'b'.repeat(40);
+    const capability = {schema:1, authFence:1, toolkit:old, retained:'preserve'};
+    const seed = value => {
+      writeFileSync(path.join(fixture, 'infra/auth-capability.json'), JSON.stringify(value));
+      runGit('add', 'infra/auth-capability.json');
+      runGit('update-index', '--add', '--cacheinfo', `160000,${old},toolkit`);
+      runGit('commit', '-qm', 'fixture');
+      writeFileSync(path.join(fixture, '.git/FETCH_HEAD'), runGit('rev-parse', 'HEAD') + '\n');
+    };
+    const script = workflow('v3-server-pin.yml').jobs.pin.steps[0].run;
+    const staging = script.slice(script.indexOf('git read-tree FETCH_HEAD'), script.indexOf('commit=$(git commit-tree'));
+    const stage = () => execFileSync('bash', ['-euo', 'pipefail', '-c', staging], {cwd:fixture,env:{...process.env,SHA:next},stdio:'pipe'});
+    seed(capability);
+    stage();
+    expect(runGit('rev-parse', ':toolkit')).toBe(next);
+    expect(JSON.parse(runGit('show', ':infra/auth-capability.json'))).toEqual({...capability, toolkit:next});
+    for (const invalid of [{...capability, authFence:0}, {...capability, schema:2}]) {
+      seed(invalid);
+      expect(stage).toThrow();
+    }
+  });
   it('runs the fast lane on main pushes only', () => {
     const step = workflow('ci.yml').jobs.checks.steps.find(candidate => candidate.run === 'node scripts/ci/fast-check.mjs');
     expect(step.if).toBe("github.ref == 'refs/heads/main'");
