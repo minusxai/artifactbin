@@ -32,6 +32,7 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   Results never contain credentials.`;
 
 import path from 'node:path';
+import {logoutGrant} from './auth-logout.mjs';
 import {mkdir, readFile, unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {
@@ -80,31 +81,8 @@ export async function authCommand({sub, values, positionals}, {env = process.env
       expired: saved?.expiresAt ? Date.now() >= saved.expiresAt : null
     };
   }
-  // logout: remove the stored grant under both locks so a concurrent refresh cannot recreate it.
-  if (sub === 'logout') {
-    if(values.local&&values.revoke)throw new ToolError('invalid_logout','Choose --local or --revoke.',2);
-    const location = shared.credentialPaths(server, root);
-    let serverRevoked=false;
-    await shared.withStateLock(root, 'home', () =>
-      shared.withStateLock(root, '@credential-refresh', async()=>{
-        // Read the selected saved grant inside the same locks as refresh/save.
-        // Environment overrides are never sent and this path never refreshes.
-        const saved=await shared.readCredentials(server,root);
-        if(values.revoke){
-          if(!saved?.refreshToken||!saved?.clientId)throw new ToolError('revoke_unavailable','No saved refresh grant to revoke.',3);
-          let response;
-          try{response=await fetcher(new URL('/oauth/revoke',server),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:saved.clientId,token:saved.refreshToken}),redirect:'error',signal:AbortSignal.timeout(30000)});}
-          catch{throw new ToolError('revoke_unavailable','Revocation unavailable; saved grant retained for retry.',1);}
-          if(!response.ok)throw new ToolError('revoke_unavailable','Revocation refused; saved grant retained for retry.',1);
-          serverRevoked=true;
-        }
-        await unlink(location.backingPath).catch(error=>{if(error.code!=='ENOENT')throw error;});
-      })
-    );
-    return {server,localGrantRemoved:true,serverRevoked,
-      environmentGrantStillActive:!!(env.ARTIFACTBIN_URL===server&&env.ARTIFACTBIN_TOKEN),
-      ...(!serverRevoked?{note:'Local logout does not revoke the server grant.'}:{})};
-  }
+  if (sub === 'logout')
+    return {...await logoutGrant({values, server, root, shared, env, fetcher})};
 
   const client = makeClient(server, {env, fetcher});
   // login step 1: email a one-time code and save a private challenge file bound to this origin.
