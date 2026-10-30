@@ -14,7 +14,7 @@ const platform=Object.getOwnPropertyDescriptor(process,'platform')!;
 const saved={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
 const windows=()=>Object.defineProperty(process,'platform',{...platform,value:'win32'});
 /** The directories each PowerShell launch protected, decoded from its script. */
-const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe'&&Buffer.from(call[1][3] as string,'base64').toString('utf16le').includes('SetAccessControl')).map(call=>{
+const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe'&&Buffer.from(call[1][3] as string,'base64').toString('utf16le').includes('[IO.Directory]::SetAccessControl')).map(call=>{
  const script=Buffer.from(call[1][3] as string,'base64').toString('utf16le');
  return [...script.match(/\$paths=@\(((?:'(?:[^']|'')*',?)*)\)/)![1]!.matchAll(/'((?:[^']|'')*)'/g)].map(match=>match[1]!.replace(/''/g,"'"));
 });
@@ -37,6 +37,7 @@ it('protects a fresh Windows directory exactly once and never respawns for the p
  await privateDirectory(path);
  expect(launches()).toEqual([[keyDirectory,path]]);
  const script=Buffer.from(spawn.mock.calls[0]![1][3] as string,'base64').toString('utf16le');
+ expect(script).toContain('$acl.SetOwner($user)');
  expect(script).toContain('SetAccessRuleProtection($true,$false)');expect(script).toContain("S-1-5-18");
  // A persisted DirectorySecurity clears its modified flags and writes nothing to a second path: one per path.
  expect(script).toMatch(/foreach\(\$path in \$paths\) \{ \$acl=New-Object Security\.AccessControl\.DirectorySecurity;[^}]*SetAccessRuleProtection\(\$true,\$false\);.*\[IO\.Directory\]::SetAccessControl\(\$path,\$acl\) \}$/);
@@ -147,7 +148,7 @@ it.skipIf(process.platform==='win32')('keeps every Unix directory of a batch at 
  for(const path of[store,join(store,'locks')])expect((await stat(path)).mode&0o777).toBe(0o700);
  expect(launches()).toEqual([]);
 });
-it('saves a first credential on a fresh Windows home with one launch: store, locks, hosts and backing directory together',async()=>{
+it('saves a first credential on a fresh Windows home with one directory ACL launch: store, locks, hosts and backing directory together',async()=>{
  windows();const store=join(root,'home-store'),server='https://example.test',connection={server,token:'first_token'};
  await saveCredentials(connection,store);
  const {backingDirectory}=credentialPaths(server,store);
@@ -155,7 +156,7 @@ it('saves a first credential on a fresh Windows home with one launch: store, loc
  expect(await readCredentials(server,store)).toEqual(connection);
  await saveCredentials({...connection,token:'second_token'},store);expect(launches()).toHaveLength(1);
 });
-it('keeps a first sign-in to one launch when the store is prepared before its first write',async()=>{
+it('keeps directory protection to one launch when the store is prepared before its first write',async()=>{
  windows();const store=join(root,'sign-in'),server='http://127.0.0.1:5020',connection={server,token:'signed_in'};
  // The CLI's order: the server identity cache write (credential directories first, then the State), the auth
  // lock, the pairing file's directory, then the credential save.
@@ -176,4 +177,26 @@ it('checks current Windows ACLs on reads without trusting a protection record or
  spawn.mockImplementationOnce((...args:unknown[])=>{(args.at(-1) as (error:Error)=>void)(new Error('sensitive provider output'));});
  await expect(verifyPrivatePaths([path],join(path,'missing.env'))).rejects.toThrow('Credential privacy: Windows owner or ACL permissions could not be verified');
  expect(launches()).toHaveLength(1);
+});
+
+it('sets the Windows credential temporary file owner before publishing each replacement',async()=>{
+ windows();const store=join(root,'owner-store'),server='https://example.test';
+ for(const token of ['first_token','second_token']){
+  const start=spawn.mock.calls.length;
+  await saveCredentials({server,token},store);
+  const scripts=spawn.mock.calls.slice(start).map(call=>Buffer.from(call[1][3] as string,'base64').toString('utf16le'));
+  const ownership=scripts.filter(script=>script.includes('[IO.File]::SetAccessControl'));
+  expect(ownership).toHaveLength(1);
+  expect(ownership[0]).toContain('$acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User)');
+  expect(ownership[0]).toMatch(/credentials\.env\.[^']+\.tmp/);
+  expect(await readCredentials(server,store)).toEqual({server,token});
+ }
+});
+
+it.each([[41,'The owner is not the current user.'],[42,'An ACL allows another principal.'],['ENOENT','The Windows security inspection failed to run.']])('reports a bounded Windows inspection diagnostic for %s without repairing',async(code,reason)=>{
+ windows();const path=join(root,'inspection');await mkdir(path);
+ spawn.mockImplementationOnce((...args:unknown[])=>{(args.at(-1) as (error:Error)=>void)(Object.assign(new Error('private provider output'),{code}));});
+ const error=await verifyPrivatePaths([path],join(path,'missing.env')).catch(error=>error);
+ expect(error.message).toContain(reason);expect(error.message).not.toContain('private provider output');
+ expect(launches()).toEqual([]);
 });

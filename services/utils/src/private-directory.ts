@@ -13,7 +13,19 @@ const execute=promisify(execFile);
  * clears its modified flags, so reusing it would silently write nothing to every path after the first. */
 export async function protectWindowsDirectories(paths:readonly string[]):Promise<void>{
  const quoted=paths.map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
- const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $paths=@(${quoted}); foreach($path in $paths) { $acl=New-Object Security.AccessControl.DirectorySecurity; $acl.SetAccessRuleProtection($true,$false); foreach($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User,(New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) { $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'); $acl.AddAccessRule($rule) }; [IO.Directory]::SetAccessControl($path,$acl) }`;
+ const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User; $paths=@(${quoted}); foreach($path in $paths) { $acl=New-Object Security.AccessControl.DirectorySecurity; $acl.SetOwner($user); $acl.SetAccessRuleProtection($true,$false); foreach($sid in @($user,(New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) { $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'); $acl.AddAccessRule($rule) }; [IO.Directory]::SetAccessControl($path,$acl) }`;
+ await execute('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:30000,windowsHide:true});
+}
+
+/** Prepare a new, empty atomic credential file before any secret bytes are written.
+ * A Windows file inherits its parent's DACL, but its owner comes from the creator's token,
+ * whose default owner can be Administrators under elevation. Set the user explicitly;
+ * changing directory ownership alone cannot establish ownership of future files.
+ */
+export async function preparePrivateCredentialFile(path:string):Promise<void>{
+ if(process.platform!=='win32')return;
+ const quoted="'"+path.replace(/'/g,"''")+"'";
+ const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $path=${quoted}; $acl=[IO.File]::GetAccessControl($path); $acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User); [IO.File]::SetAccessControl($path,$acl)`;
  await execute('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:30000,windowsHide:true});
 }
 
@@ -103,7 +115,12 @@ export async function verifyPrivatePaths(directories:readonly string[],file:stri
  if(process.platform!=='win32'||existing.length===0)return;
  const quoted=existing.map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
  // Inspect access rules by SID, not localized account names. Deny rules cannot broaden access.
- const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach($item in @(${quoted})) { $acl=Get-Acl -LiteralPath $item; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $user) { throw 'Unsafe owner' }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.FileSystemRights -ne 0 -and $rule.IdentityReference.Value -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { throw 'Unsafe permissions' } } }`;
+ const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach($item in @(${quoted})) { $acl=Get-Acl -LiteralPath $item; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $user) { exit 41 }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.FileSystemRights -ne 0 -and $rule.IdentityReference.Value -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { exit 42 } } }`;
  try{await execute('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:30000,windowsHide:true});}
- catch{throw new Error('Credential privacy: Windows owner or ACL permissions could not be verified. Restrict the credential store to the current user and SYSTEM, then retry.');}
+ catch(error){
+  // Only report our fixed exit categories, never PowerShell output (which can contain private paths).
+  const code=(error as {code?:unknown}).code;
+  const reason=code===41?'The owner is not the current user.':code===42?'An ACL allows another principal.':'The Windows security inspection failed to run.';
+  throw new Error(`Credential privacy: Windows owner or ACL permissions could not be verified. ${reason} Set the owner to the current user and restrict access to that user and SYSTEM, then retry.`);
+ }
 }

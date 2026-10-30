@@ -32,11 +32,13 @@ async function removeTemporary(path: string): Promise<void> {
 /** Durable replacement in the same filesystem. The caller owns directory creation.
  * reuseIdentical avoids replacing an already published identical object, including
  * across processes. Different bytes still replace atomically; exclusive always refuses overwrite.
+ * prepare establishes caller-specific security on the empty temporary file before writing bytes.
  */
-export async function atomicWrite(path: string, data: string | Uint8Array, options: {mode?: number; exclusive?: boolean; reuseIdentical?: boolean} = {}): Promise<void> {
+export async function atomicWrite(path: string, data: string | Uint8Array, options: {mode?: number; exclusive?: boolean; reuseIdentical?: boolean; prepare?: (temporary: string) => Promise<void>} = {}): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`;
   const handle = await open(temporary, 'wx', options.mode ?? 0o600);
   try {
+    await options.prepare?.(temporary);
     await handle.writeFile(data);
     await handle.sync();
     await handle.close();

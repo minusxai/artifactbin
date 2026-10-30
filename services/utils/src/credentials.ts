@@ -4,7 +4,7 @@ import {lstat,readFile,readlink,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {normalizeOrigin,API_RESOURCE_PATH} from '@artifactbin/contracts';
 import {atomicWrite} from './atomic-file';
-import {privateDirectories,privateDirectory,verifyPrivatePaths} from './private-directory';
+import {privateDirectories,privateDirectory,verifyPrivatePaths,preparePrivateCredentialFile} from './private-directory';
 import {lockDirectory,withStateLock} from './state-lock';
 export interface Credentials {server:string;token:string;refreshToken?:string;clientId?:string;expiresAt?:number}
 export function credentialOrigin(value:string):string{
@@ -83,7 +83,7 @@ async function writeCredentials(connection:Credentials,root:string):Promise<void
  if((profile.credentialAccount as {credential?:string}|undefined)?.credential!==digest(connection.token))delete profile.credentialAccount;
  await atomicWrite(profilePath,JSON.stringify(profile,null,2)+'\n');
  const values={ARTIFACTBIN_URL:paths.origin,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN_CLIENT_ID:connection.clientId,ARTIFACTBIN_EXPIRES_AT:connection.expiresAt};
- await atomicWrite(paths.backingPath,Object.entries(values).filter(([,value])=>value!==undefined).map(([key,value])=>`${key}=${value}\n`).join(''));
+ await atomicWrite(paths.backingPath,Object.entries(values).filter(([,value])=>value!==undefined).map(([key,value])=>`${key}=${value}\n`).join(''),{prepare:preparePrivateCredentialFile});
  await projection(connection.server,root,true);
 }
 export async function observedCredentialAccount(connection:Credentials,root:string):Promise<{account:string;observedAt:string}|null>{
