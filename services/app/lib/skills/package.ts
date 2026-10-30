@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 /** Public HTTP skill folder.
  * Assets are explicit: request input never selects a path or ZIP member. */
 import {loadSkillAssets,skillAssetName,type SkillPackageAssets} from './assets';
@@ -16,7 +17,7 @@ const RETIRED_MEMBERS=new Set(['scripts/preview-runtime.mjs','scripts/preview-li
 export function skillZip(files:SkillArchiveFiles):Uint8Array<ArrayBuffer>{
  const local:Buffer[]=[],central:Buffer[]=[];let offset=0;
  for(const [relative,content] of Object.entries(files).sort(([a],[b])=>a.localeCompare(b))){
-  if(typeof content!=='string'||RETIRED_MEMBERS.has(relative)||!(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
+  if(typeof content!=='string'||RETIRED_MEMBERS.has(relative)||!(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md)$/.test(relative)||skillAssetName(relative)))throw new Error(`Unsupported skill member: ${relative}`);
   const name=Buffer.from(`artifactbin/${relative}`),data=Buffer.from(content);let crc=0xffffffff;
   for(const byte of data){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
   const head=Buffer.alloc(30);head.writeUInt32LE(0x04034b50);head.writeUInt16LE(20,4);head.writeUInt16LE(0x800,6);head.writeUInt16LE(0x21,12);head.writeUInt32LE(crc,14);head.writeUInt32LE(data.length,18);head.writeUInt32LE(data.length,22);head.writeUInt16LE(name.length,26);
@@ -25,4 +26,14 @@ export function skillZip(files:SkillArchiveFiles):Uint8Array<ArrayBuffer>{
  }
  const index=Buffer.concat(central),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(central.length/2,8);end.writeUInt16LE(central.length/2,10);end.writeUInt32LE(index.length,12);end.writeUInt32LE(offset,16);
  return new Uint8Array(Buffer.concat([...local,index,end]));
+}
+
+/** Hash framed, sorted content before adding release metadata: no self-reference. */
+export function skillRelease(files:SkillArchiveFiles,origin:string){
+ if('release.json' in files)throw Error('Release metadata is generated');
+ const server=new URL(origin).origin;
+ const version=createHash('sha256').update(JSON.stringify([server,Object.entries(files).sort(([a],[b])=>a.localeCompare(b))])).digest('hex');
+ const release={schemaVersion:1,origin:server,version};
+ const bytes=skillZip({...files,'release.json':JSON.stringify(release)+'\n'});
+ return {bytes,manifest:{...release,url:server+'/skills/artifactbin.zip',sha256:createHash('sha256').update(bytes).digest('hex')}};
 }

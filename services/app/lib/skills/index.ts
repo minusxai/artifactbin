@@ -14,3 +14,5 @@ export { skillPackageFiles, skillZip } from './package';
 export { buildPreviewDatasets, buildPreviewParser, buildToolboxPlatform } from './preview-assets.server';
 export { isPublicSkillTopic } from './public-surface';
 export type { SetupInstructionOptions } from './setup-instructions';
+
+export {archiveFor,skillServer} from './delivery';
