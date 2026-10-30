@@ -85,6 +85,21 @@ it('uses private origin-bound login challenges and saves grants without exposing
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:false});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('status proves an unexpired saved grant with the server, so a grant revoked elsewhere reads as signed out',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs'),{platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'author-status-')),server='https://example.test';
+ try{
+  const shared=await platform();
+  await shared.saveCredentials({server,token:'synthetic_access',refreshToken:'synthetic_refresh',clientId:'fixture_client',expiresAt:Date.now()+3600_000},root);
+  let revoked=false;const refreshes:string[]=[];
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any)=>{refreshes.push(new URL(url).pathname);return revoked?Response.json({error:'invalid_grant'},{status:400}):Response.json({access_token:'synthetic_access_2',refresh_token:'synthetic_refresh_2',client_id:'fixture_client',expires_in:3600});}};
+  expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:true,source:'private-store',expired:false});
+  expect(refreshes.length).toBe(1);
+  revoked=true;
+  expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:false,refresh:'refused'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 it('distinguishes confirmed receipt persistence failure from unknown transport failure',async()=>{
  const {mkdtemp,mkdir,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {makeClient,createJournal,journalIntent,resumeJournal}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
