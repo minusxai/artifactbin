@@ -4,7 +4,7 @@ It uses an email one-time code.
 Usage: node scripts/auth.mjs status
        node scripts/auth.mjs login --email ADDRESS
        node scripts/auth.mjs login --challenge HANDLE --code-file FILE
-       node scripts/auth.mjs logout [--local | --revoke]
+       node scripts/auth.mjs logout [--local]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
   completes it. Common: --server ORIGIN (default: the archive origin), --json, --output FILE
@@ -19,9 +19,11 @@ Gotchas: use an email the user gave you; never invent an identity, and never sea
   refreshes a due token, so authenticated:false means log in again. Challenges expire after 30
   minutes and are bound to the origin. Credentials live in the private origin store
   (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
-  the selected origin's /llms/http-auth guide. logout defaults to --local:
-  it removes only the saved grant. --revoke ends its server grant before removing it locally;
-  failures keep it for retry. An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
+  the selected origin's /llms/http-auth guide. logout ends the saved grant on the server, then
+  removes it locally; unconfirmed revocation fails with serverRevoked:false and keeps the
+  saved grant for retry. --local only removes the saved grant and leaves the server grant active.
+  --revoke names the default and is kept for compatibility.
+  An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
   Every other script reuses this grant and refreshes an expired access token itself (the refresh
   token is single-use and serialized across processes, so never refresh by hand or copy the
   store). Network errors, 429 and server errors keep the grant: retry later. Missing credentials
@@ -48,8 +50,9 @@ import {
   positional,
   makeClient
 } from './toolbox-client.mjs';
-// Subcommands: status (refreshes a due token to prove the grant works), logout (local grant
-// only), login (two steps: send the code, then exchange it).
+// Subcommands: status (refreshes a due token to prove the grant works), logout (revokes, then
+// removes the saved grant; --local only removes it), login (two steps: send the code, then
+// exchange it).
 export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
   {}) {
   positional(positionals, 0);

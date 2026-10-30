@@ -77,11 +77,11 @@ it('uses private origin-bound login challenges and saves grants without exposing
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'author-auth-')),codeFile=path.join(root,'code.txt'),server='https://example.test';
  try{
-  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});expect(new Headers(init.headers).get('Cookie')).toBe('session=synthetic');return Response.json({access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
+  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_HOME:root},fetcher:async(url:any,init:any)=>{const pathname=new URL(url).pathname;if(pathname==='/oauth/revoke')return Response.json({});if(pathname.endsWith('send-verification-otp'))return Response.json({success:true});if(pathname.endsWith('sign-in/email-otp'))return Response.json({user:{id:'fixture'}},{headers:{'set-cookie':'session=synthetic; HttpOnly'}});expect(new Headers(init.headers).get('Cookie')).toBe('session=synthetic');return Response.json({access_token:'synthetic_access',refresh_token:'synthetic_refresh',client_id:'fixture_client',expires_in:3600});}};
   const challenge=await authCommand({sub:'login',values:{email:'author@example.test'},positionals:[]},options);expect(challenge.challenge).toBeTruthy();await writeFile(codeFile,'123456');
   const result=await authCommand({sub:'login',values:{challenge:challenge.challenge,'code-file':codeFile},positionals:[]},options);expect(JSON.stringify(result)).not.toContain('synthetic_access');
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:true,source:'private-store'});
-  expect(await authCommand({sub:'logout',values:{},positionals:[]},options)).toMatchObject({localGrantRemoved:true,serverRevoked:false});
+  expect(await authCommand({sub:'logout',values:{},positionals:[]},options)).toMatchObject({localGrantRemoved:true,serverRevoked:true});
   expect(await authCommand({sub:'status',values:{},positionals:[]},options)).toMatchObject({authenticated:false});
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -372,7 +372,7 @@ it('does not ask agents to write what the platform adds, and says what each side
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }
 });
-it('revoke logout uses the saved grant without refreshing or revoking environment overrides and retains failures',async()=>{
+it('logout revokes the saved grant by default without refreshing or revoking environment overrides and retains failures',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
  const {platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
@@ -380,19 +380,37 @@ it('revoke logout uses the saved grant without refreshing or revoking environmen
  const saved={server,token:'synthetic-saved',refreshToken:'synthetic-refresh',clientId:'synthetic-client',expiresAt:1};
  try{
   await shared.saveCredentials(saved,root);
-  let calls=0;let success=false;
+  let calls=0,offline=false,reply=()=>new Response('',{status:503});
   const options={env:{ARTIFACTBIN_HOME:root,ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-environment'},fetcher:async(url:string|URL|Request,init:RequestInit={})=>{
    calls++;expect(String(url)).toBe(server+'/oauth/revoke');expect(JSON.parse(init.body as string)).toEqual({client_id:saved.clientId,token:saved.refreshToken});
-   expect(JSON.stringify(init)).not.toContain('synthetic-environment');return Response.json({}, {status:success?200:503});
+   expect(JSON.stringify(init)).not.toContain('synthetic-environment');if(offline)throw new TypeError('fetch failed');return reply();
   }};
-  await expect(authCommand({sub:'logout',values:{revoke:true},positionals:[]},options)).rejects.toMatchObject({code:'revoke_unavailable'});
+  const logout=(values:Record<string,boolean>={})=>authCommand({sub:'logout',values,positionals:[]},options);
+  // Unconfirmed revocation fails nonzero, says the server grant may still be active, and keeps the saved grant for retry.
+  const refused=(reason:string)=>({code:'revoke_unavailable',exit:1,details:{serverRevoked:false,localGrantRemoved:false,reason}});
+  await expect(logout()).rejects.toMatchObject(refused('http_503'));
   expect(await shared.readCredentials(server,root)).toEqual(saved);
-  success=true;const result=await authCommand({sub:'logout',values:{revoke:true},positionals:[]},options);
+  offline=true;await expect(logout()).rejects.toMatchObject(refused('network'));offline=false;
+  reply=()=>Response.json({error:'invalid_request'},{status:400});await expect(logout()).rejects.toMatchObject(refused('invalid_request'));
+  expect(await shared.readCredentials(server,root)).toEqual(saved);expect(calls).toBe(3);
+  reply=()=>Response.json({});const result=await logout();
   expect(result).toMatchObject({serverRevoked:true,localGrantRemoved:true,environmentGrantStillActive:true});
-  expect(JSON.stringify(result)).not.toContain('synthetic');expect(calls).toBe(2);expect(await shared.readCredentials(server,root)).toBeNull();
-  await expect(authCommand({sub:'logout',values:{revoke:true},positionals:[]},options)).rejects.toMatchObject({code:'revoke_unavailable'});
-  expect(calls).toBe(2);
-  expect(await authCommand({sub:'logout',values:{local:true},positionals:[]},options)).toMatchObject({serverRevoked:false,environmentGrantStillActive:true});
-  expect(calls).toBe(2);
+  expect(result).not.toHaveProperty('note');
+  expect(JSON.stringify(result)).not.toContain('synthetic');expect(calls).toBe(4);expect(await shared.readCredentials(server,root)).toBeNull();
+  // A grant the server already ended counts as revoked.
+  for(const error of ['invalid_grant','revoked_token']){
+   await shared.saveCredentials(saved,root);reply=()=>Response.json({error},{status:400});
+   expect(await logout()).toMatchObject({serverRevoked:true,localGrantRemoved:true});expect(await shared.readCredentials(server,root)).toBeNull();
+  }
+  // --revoke stays accepted as the default; --local is the explicit offline removal.
+  await shared.saveCredentials(saved,root);reply=()=>Response.json({});
+  expect(await logout({revoke:true})).toMatchObject({serverRevoked:true,localGrantRemoved:true});expect(calls).toBe(7);
+  await expect(logout({local:true,revoke:true})).rejects.toMatchObject({code:'invalid_logout',exit:2});
+  await shared.saveCredentials(saved,root);
+  expect(await logout({local:true})).toMatchObject({serverRevoked:false,localGrantRemoved:true,environmentGrantStillActive:true,note:expect.stringContaining('not revoke')});
+  expect(await shared.readCredentials(server,root)).toBeNull();
+  // Nothing saved: nothing to revoke, no request, and the result never claims a revocation.
+  expect(await logout()).toMatchObject({serverRevoked:false,localGrantRemoved:true,environmentGrantStillActive:true,note:expect.stringContaining('No saved grant')});
+  expect(calls).toBe(7);
  }finally{await rm(root,{recursive:true,force:true});}
 });
