@@ -72,7 +72,9 @@ export async function ensureAuthSchema(db: Queryable, schema = 'auth'): Promise<
     await db.query(`DROP INDEX IF EXISTS ${schema}.idx_codes_kind_subject`);
   }
   await ensureTable(db, AUTH_TABLES, { schema });
-  // Preserve existing grants and their recorded access membership on upgrade.
+  // Create a durable family fence for existing grants. Admission reads live
+  // membership from retained refresh rows, not this historical payload: an old
+  // writer inserting another member after this statement cannot escape the fence.
   // Tombstones are never overwritten, so reboot cannot resurrect a revoked family.
   await db.query(`INSERT INTO ${schema}.credentials (kind,credential_hash,group_id,payload,expires_at,deleted_at)
     SELECT 'refresh_family',group_id,group_id,

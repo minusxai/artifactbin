@@ -164,3 +164,16 @@ describe('hosted operation authority', () => {
     await expect(hostedOperationCompleted('u', 't', 'op', {}, new Response())).resolves.toBeUndefined();
   });
 });
+
+it('honors the identity owner refusal instead of re-admitting a raw bearer from app storage',async()=>{
+ const t=await mintAccountToken('owner-refused');
+ const response=await withTokenAuth(async()=>Response.json({ok:true}))(request('/api/account/profile',{headers:{authorization:`Bearer ${t.token}`},actor:{credential:'none'}}));
+ expect(response.status).toBe(401);
+});
+
+it('requires matching auth-owner admission for OAuth audience-bound bearers even on a direct app port',async()=>{
+ const t=await mintAccountToken('oauth');await (await getDb()).query('UPDATE tokens SET audience=$2 WHERE id=$1',[t.id,'http://localhost:3000/api']);
+ const door=withTokenAuth(async()=>Response.json({ok:true}));
+ expect((await door(request('/api/account/profile',{token:t.token}))).status).toBe(401);
+ expect((await door(request('/api/account/profile',{headers:{authorization:`Bearer ${t.token}`},actor:{credential:'bearer',tokenId:t.id,userId:t.userId!}}))).status).toBe(200);
+});

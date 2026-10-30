@@ -1,5 +1,5 @@
 export type { Part, Upstream } from './part';
-export { ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type HumanSessionAuthority, type Credential } from './actor';
+export { HUMAN_SESSION_LIVE_PATH, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type HumanSessionAuthority, type Credential } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
 export * from './sql-analysis';

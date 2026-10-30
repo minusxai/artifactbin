@@ -353,6 +353,8 @@ export let CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_
  * Either way the app calls `services().browser.render(...)` and cannot tell.
  */
 export let BROWSER_SERVICE_URL = env('BROWSER', 'SERVICE_URL');
+/** Origin of the owning auth service for split-host human pages sessions. */
+export const AUTH_SERVICE_URL = env('AUTH', 'SERVICE_URL');
 export let INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
 
 /**

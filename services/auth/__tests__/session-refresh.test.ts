@@ -1,4 +1,5 @@
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
+import {humanSessionClient} from '@artifactbin/utils';
 import {PGlite} from '@electric-sql/pglite';
 import {createHumanAuth,type HumanAuth} from '../src/auth/human';
 import {createAuthHost,type AuthApp} from '../src/parts';
@@ -77,8 +78,11 @@ it('the owning session authority follows direct signout and refuses another acco
   return {held,identity:identity!};
  };
  const {held,identity}=await login();
+ const authority=createAuthHost({env:{INTERNAL__SERVICE_SECRET:'test-rpc'},cookieSecret:'test',tokens:noTokens,sessions:auth.sessions,upstream:async()=>new Response('app')});
+ const remote=humanSessionClient(baseURL,{serviceSecret:'test-rpc',fetch:r=>Promise.resolve(authority.fetch(r))});
+ expect(await remote.live(identity.sessionId,identity.userId)).toBe(true);
  expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(true);
  expect(await auth.sessions.live(identity.sessionId,'other-account')).toBe(false);
  const ended=await auth.handler(new Request(`${baseURL}/api/auth/sign-out`,{method:'POST',headers:{cookie:held,origin:baseURL,'content-type':'application/json'},body:'{}'}));
- expect(ended.status).toBe(200);expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(false);
+ expect(ended.status).toBe(200);expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(false);expect(await remote.live(identity.sessionId,identity.userId)).toBe(false);
 });

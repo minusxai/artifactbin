@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { serve } from '@artifactbin/utils';
-import { AUTH_SECRET, BROWSER_SERVICE_URL, SQL_SERVICE_URL, services, getDb } from '@/lib/platform';
+import { AUTH_SERVICE_URL, AUTH_SECRET, BROWSER_SERVICE_URL, SQL_SERVICE_URL, services, getDb } from '@/lib/platform';
 import { installShutdown, startAppBackgroundTasks } from '@/lib/runtime';
 import { createAppServer } from '@/server/app';
+
+if (!AUTH_SERVICE_URL)throw new Error('split app requires AUTH__SERVICE_URL for human session liveness');
 
 if (!SQL_SERVICE_URL || !BROWSER_SERVICE_URL) {
   throw new Error('this image carries no in-process engine or browser — set SQL__SERVICE_URL and BROWSER__SERVICE_URL');

@@ -195,10 +195,11 @@ async function main(): Promise<void> {
     setServices({humanSessions:human.sessions});
 
     /*
-     * THE AUTH BOUNDARY’S ONE READ of the app-owned `tokens` table: an indexed SELECT
-     * with a short cache (utils createTokenReader), never an HTTP call. The
+     * THE AUTH BOUNDARY reads the app-owned `tokens` table using SELECT only:
+     * indexed token lookup (utils createTokenReader) and OAuth family admission. The
      * schema is where the deployment put the app's tables (APP__SCHEMA, public
-     * by default). A revoke is immediate in the app's own reads and ≤ TTL here.
+     * by default). Bearer requests discard the lookup cache and check the durable
+     * auth-owned family fence before the app can admit an OAuth token.
      */
     const appSchema = readEnv(env, 'APP__SCHEMA');
     reader = createTokenReader({ db: queryable, ttlMs: 5000, admitBearer: token => canAuthenticateUser(token.userId), ...(appSchema ? { schema: appSchema } : {}) });

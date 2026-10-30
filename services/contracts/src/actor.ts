@@ -35,3 +35,6 @@ export const ACTOR_TTL_SECONDS = 120;
 
 /** The identity owner revalidates a human session for derived pages sessions. */
 export interface HumanSessionAuthority { live(sessionId:string,userId:string):Promise<boolean> }
+
+/** Auth-owned, service-authenticated POST; body {sessionId,userId}, response {live:boolean}. */
+export const HUMAN_SESSION_LIVE_PATH = '/api/internal/auth/session-live';

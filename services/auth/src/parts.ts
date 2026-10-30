@@ -4,6 +4,7 @@ import type {Hono} from 'hono';
 import {BodyTooLargeError,readBody,assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
+import {sessionAuthority} from './session-authority';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
@@ -13,6 +14,7 @@ export interface SessionInfo {sessionId?:string;userId:string;email?:string;emai
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
+ live?:(sessionId:string,userId:string)=>Promise<boolean>;
  handler?:(request:Request)=>Promise<Response>;
 }
 export interface AuthOptions {
@@ -219,7 +221,8 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
     // Family revocation committed in another process must take effect on this request.
     o.tokens.invalidate();
     const token = await o.tokens.byToken(presented);
-    if (token?.userId && tokenFitsRequest(token, request, o)) {
+    const oauthLive = !token?.audience || (o.identityDb && await createOAuthStore(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth',o.appSchema??readEnv(o.env,'APP__SCHEMA')).accessLive(token.id));
+    if (token?.userId && oauthLive && tokenFitsRequest(token, request, o)) {
       const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
       const identity = token.userId ? await o.sessions.identity?.(token.userId).catch(() => null) : null;
       return identity?.userId === token.userId && identity
@@ -260,6 +263,6 @@ function tokenFitsRequest(token: { audience?: string; scope?: string }, request:
 
 
 export function authParts(o:AuthOptions):Part<AuthEnv>[] {
- return [publicBuildAssets(o),session(o),internalBoundary(),loginRoutes(o),oauthRoutes(o),{name:'application',mount:app=>app.all('*',c=>o.upstream(c.req.raw,c.get('actor')))}];
+ return [sessionAuthority(o),publicBuildAssets(o),session(o),internalBoundary(),loginRoutes(o),oauthRoutes(o),{name:'application',mount:app=>app.all('*',c=>o.upstream(c.req.raw,c.get('actor')))}];
 }
 export const createAuthHost=(o:AuthOptions):AuthApp=>assemble(authParts(o));

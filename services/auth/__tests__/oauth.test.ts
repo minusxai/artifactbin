@@ -472,17 +472,18 @@ describe('grant family revocation', () => {
   fail=false;const pending=rotate();await waiting;
   expect((await post('/oauth/revoke',{client_id:grant.client_id,token:grant.refresh_token})).status).toBe(200);
   release();const response=await pending;expect(response.status).toBe(400);expect(await response.text()).not.toContain('mx_');
-  expect((await testDb().query('SELECT id FROM tokens WHERE deleted_at IS NULL')).rows).toEqual([]);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('rolls back a failed final binding without burning the presented refresh',async()=>{
   const grant=await issue(),options=await optionsOf();const {query}=testDb();let fail=true;
   const host=assemble(authParts({...options,identityDb:{query:async(sql,params)=>{
-   if(fail&&sql.includes("SET payload=jsonb_set(payload,'{access_ids}'")){fail=false;throw new Error('synthetic binding failure');}
+   if(fail&&sql.includes('SET payload=payload')){fail=false;throw new Error('synthetic binding failure');}
    return query(sql,params);
   }}}));
   const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})});
   expect((await rotate()).status).toBe(503);
-  expect((await query('SELECT id FROM tokens WHERE deleted_at IS NULL')).rows).toHaveLength(1);
+  const candidates=(await query<{id:string}>('SELECT id FROM tokens ORDER BY created_at')).rows;
+  expect(await createOAuthStore({query}).accessLive(candidates.at(-1)!.id)).toBe(false);
   expect((await rotate()).status).toBe(200);
  });
  it('backfills durable membership idempotently without reviving revoked families',async()=>{
@@ -497,6 +498,32 @@ describe('grant family revocation', () => {
   const grant=await issue();const body={grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token};
   const results=await Promise.all([post('/oauth/token',body),post('/oauth/token',body)]);
   expect(results.map(r=>r.status).sort()).toEqual([200,400]);
+ });
+ it('revokes both published bearers when overlapping refreshes lose finalization',async()=>{
+  const first=await issue(),options=await optionsOf();let arrived=0,release!:()=>void;
+  const ready=new Promise<void>(r=>{release=r;});
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   const response=await options.upstream(request,actor);
+   if(new URL(request.url).pathname===INTERNAL_MINT_PATH){if(++arrived===2)release();await ready;}
+   return response;
+  }}));
+  const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
+  const responses=await Promise.all([rotate(),rotate()]);expect(responses.map(r=>r.status).sort()).toEqual([200,400]);
+  const published=await responses.find(r=>r.status===200)!.json();
+  for(const bearer of [first.access_token,published.access_token])expect(await(await host.request('/api/artifacts',{headers:{authorization:`Bearer ${bearer}`}})).json()).toMatchObject({credential:'none'});
+ });
+ it('refuses successor publication after direct current-access deletion during mint',async()=>{
+  const first=await issue(),options=await optionsOf();let entered!:()=>void,release!:()=>void;
+  const ready=new Promise<void>(r=>{entered=r;}),blocked=new Promise<void>(r=>{release=r;});
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   const response=await options.upstream(request,actor);
+   if(new URL(request.url).pathname===INTERNAL_MINT_PATH){entered();await blocked;}
+   return response;
+  }}));
+  const pending=host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
+  await ready;await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
+  expect((await pending).status).toBe(400);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
  });
  it('bounds malformed revocation bodies and returns the same answer for unknown proof',async()=>{
   expect((await post('/oauth/revoke',{client_id:'unknown',token:'unknown'})).status).toBe(200);

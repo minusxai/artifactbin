@@ -29,3 +29,4 @@ export { renderConnectionPage } from './connection-page';
 export { tableQueryInput } from './table-query';
 
 export {runnerClient} from "./runner-client";
+export {humanSessionClient} from './human-session';

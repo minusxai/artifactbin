@@ -89,6 +89,8 @@ export interface OAuthStore {
   /** Mint privately, then atomically consume, record membership and publish against the live family. */
   rotateAndMint<T extends {id:string}>(token:string, clientId:string, resources:readonly string[], mint:(grant:RefreshGrant)=>Promise<T>):Promise<{grant:RefreshGrant;minted:T}|null>;
   revokeRefresh(token:string,clientId:string):Promise<void>;
+  /** Fresh auth-owned admission fence; app token storage remains read-only here. */
+  accessLive(tokenId:string):Promise<boolean>;
 }
 
 function identifier(value: string, what: string): string {
@@ -176,25 +178,33 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       await db.query(
         `WITH family AS (
           INSERT INTO ${credentials} (kind, credential_hash, group_id, payload, expires_at)
-          VALUES ('refresh_family', $4, $4, jsonb_build_object('access_ids', jsonb_build_array($7::text)), $6)
+          VALUES ('refresh_family', $4, $4, '{}'::jsonb, $6)
         ) INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(), grant.accessTokenId],
+        [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString()],
       );
       return token;
     },
     async revokeRefresh(token, clientId) {
-      // The family row is the serialization boundary. RETURNING observes the latest
-      // membership even when this UPDATE waited for another process's rotation.
-      await db.query(`WITH ended AS (
-        UPDATE ${credentials} family SET deleted_at=now()
+      // No app-owned writes: a durable tombstone fences every bearer, including
+      // successors invisible to this statement's READ COMMITTED snapshot.
+      await db.query(`UPDATE ${credentials} family SET deleted_at=now()
         WHERE family.kind='refresh_family' AND family.credential_hash=(
           SELECT group_id FROM ${credentials} WHERE kind=$1 AND credential_hash=$2 AND payload->>'client_id'=$3
-        ) RETURNING family.group_id, family.payload
-      ), refreshes AS (
-        UPDATE ${credentials} SET deleted_at=now() WHERE kind=$1 AND group_id IN (SELECT group_id FROM ended)
-      ) UPDATE ${accessTokens} SET deleted_at=now() WHERE id IN (
-        SELECT jsonb_array_elements_text(payload->'access_ids') FROM ended
-      )`, [REFRESH_TOKEN,hash(token),clientId]);
+        )`, [REFRESH_TOKEN,hash(token),clientId]);
+    },
+    async accessLive(tokenId) {
+      // Membership comes from retained refresh rows, never a backfill snapshot.
+      // Unpublished candidates have no membership and are unusable. Any direct
+      // app-owner revocation of a family member ends all derived capabilities.
+      return (await db.query(`SELECT 1 FROM ${credentials} member
+        JOIN ${credentials} family ON family.kind='refresh_family' AND family.credential_hash=member.group_id
+        WHERE member.kind=$1 AND member.payload->>'access_token_id'=$2
+          AND family.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM ${credentials} sibling LEFT JOIN ${accessTokens} access ON access.id=sibling.payload->>'access_token_id'
+            WHERE sibling.kind=$1 AND sibling.group_id=member.group_id
+              AND (sibling.deleted_at IS NOT NULL OR access.id IS NULL OR access.deleted_at IS NOT NULL)
+          )`,[REFRESH_TOKEN,tokenId])).rows.length>0;
     },
     async rotateAndMint(presented, clientId, resources, mint) {
       const resource=resources[0];if(!resource)return null;
@@ -210,12 +220,13 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
         if(replay.rows.length)await this.revokeRefresh(presented,clientId);
         return null;
       }
+      if(!await this.accessLive(String(objectOf(row.payload).access_token_id))){await this.revokeRefresh(presented,clientId);return null;}
       const payload=objectOf(row.payload);if(typeof payload.scope!=='string')return null;
       const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope};
       const minted=await mint(grant);
-      try {
-        const result=await db.query(`WITH family AS (
-          UPDATE ${credentials} SET payload=jsonb_set(payload,'{access_ids}',(payload->'access_ids') || jsonb_build_array($5::text))
+      // Updating the durable family row serializes concurrent finalizers.
+      const result=await db.query(`WITH family AS (
+          UPDATE ${credentials} SET payload=payload
           WHERE kind='refresh_family' AND credential_hash=$3 AND deleted_at IS NULL RETURNING group_id
         ), consumed AS (
           UPDATE ${credentials} SET consumed_at=now() WHERE kind=$1 AND credential_hash=$2
@@ -223,15 +234,20 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
           AND group_id IN (SELECT group_id FROM family) RETURNING subject_id,group_id
         ), inserted AS (
           INSERT INTO ${credentials} (kind,credential_hash,subject_id,group_id,payload,expires_at)
-          SELECT $1,$4,subject_id,group_id,$6::jsonb,$7 FROM consumed RETURNING credential_hash
-        ) SELECT credential_hash FROM inserted`,[REFRESH_TOKEN,hash(presented),row.group_id,hash(grant.token),minted.id,
+          SELECT $1,$4,subject_id,group_id,$5::jsonb,$6 FROM consumed RETURNING credential_hash
+        ) SELECT credential_hash FROM inserted`,[REFRESH_TOKEN,hash(presented),row.group_id,hash(grant.token),
           JSON.stringify({client_id:clientId,resource,scope:grant.scope,access_token_id:minted.id}),new Date(Date.now()+REFRESH_TOKEN_TTL_MS).toISOString()]);
-        if(result.rows.length)return {grant,minted};
-      } catch(error) {
-        await db.query(`UPDATE ${accessTokens} SET deleted_at=now() WHERE id=$1`,[minted.id]);
-        throw error;
-      }
-      await db.query(`UPDATE ${accessTokens} SET deleted_at=now() WHERE id=$1`,[minted.id]);
+        if(result.rows.length){
+          // Fresh statement after publication: direct owner deletion during a
+          // paused mint cannot publish a successor. Admission repeats this fence.
+          if(await this.accessLive(minted.id))return {grant,minted};
+          await this.revokeRefresh(presented,clientId);
+          return null;
+        }
+      // A concurrent winner may have consumed the proof after our initial read.
+      // Apply the identical replay policy used by the failed-lookup path.
+      const replay=await db.query(`SELECT 1 FROM ${credentials} WHERE kind=$1 AND credential_hash=$2 AND consumed_at IS NOT NULL`,[REFRESH_TOKEN,hash(presented)]);
+      if(replay.rows.length)await this.revokeRefresh(presented,clientId);
       return null;
     },
 
