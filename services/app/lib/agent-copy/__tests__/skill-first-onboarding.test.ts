@@ -18,7 +18,10 @@ describe('skill-first HTTP onboarding',()=>{
  it('provides skill installation and actual HTTP authoring and auth contracts',()=>{
   const guide=JSON.stringify(gettingStarted(BASE));
   expect(guide).toContain(`${BASE}/skills/artifactbin.zip`);
-  expect(guide).toContain('unzip -n');
+  expect(guide).toContain('https://artifactbin.dev/#workshop-install');
+  expect(guide).toContain(`${BASE}/skills/artifactbin/latest.json`);
+  expect(guide).toContain('node scripts/update.mjs');
+  expect(guide).not.toContain('unzip -n');
   const brief=llmsText(BASE);
   expect(brief).toContain('POST /api/artifacts');
   expect(brief).toContain('expectedState');

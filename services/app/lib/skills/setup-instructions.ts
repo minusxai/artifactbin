@@ -8,7 +8,7 @@ export function buildSetupInstructions(options:SetupInstructionOptions):string{
  if(options.groupHandle&&!/^[a-z0-9][a-z0-9_-]*$/i.test(options.groupHandle))throw new Error('Setup instructions require a group handle.');
  const group=options.groupHandle;
  const selectDefault=options.setDefault??!!group;
- return `Set up artifactbin for ${origin}${group?` and group ${group}`:''}. Read ${origin}/llms.txt and use the artifactbin author skill for this origin; reuse an installed skill and existing origin-scoped credentials. Download the skill from ${origin}/skills/artifactbin.zip when needed, extract into your harness skill directory, then restart the harness.
+ return `Set up artifactbin for ${origin}${group?` and group ${group}`:''}. Read ${origin}/llms.txt and use the artifactbin author skill for this origin; reuse existing origin-scoped credentials. Check the installed skill’s origin and release before reusing it. Follow ${origin}/getting-started.md for shared installation and updates; the archive is ${origin}/skills/artifactbin.zip. Reload the harness after installing or updating.
 
 Use authenticated HTTP from ${origin}/llms/http-auth: reuse saved credentials, otherwise ask for your actual email, send the OTP and wait for your code. ${group?`GET /api/groups/${encodeURIComponent(group)} and verify your membership. ${selectDefault?'PUT /api/me/preferences with {"default_destination":{"type":"group","id":"<resolved group.id>"}}. ':''}`:selectDefault?'GET /api/me/preferences to verify your account. ':''}Preferences belong to this account on this origin.
 
