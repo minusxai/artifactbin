@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {beforeCommand} from './toolbox-update.mjs';
 /**
  * Internal: the private loopback preview server (startPreview); also a deprecated direct entry,
  * `node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]` (prefer serve.mjs).
@@ -152,6 +153,9 @@ return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Pr
    reject)=>server.close(error=>error?reject(error):done()))};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
+if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
+process.argv=process.argv.filter(arg=>arg!=='--no-update');
+if(process.argv.includes('--help')){console.log('Usage: node preview.mjs ROOT [--port PORT]');process.exit(0);}
 console.error('Deprecated preview.mjs; prefer serve.mjs PROJECT.');const args=process.argv.slice(2);
    if(args.length===1&&args[0]==='--help'){console.log(
    'Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]\nServes only the selected '+

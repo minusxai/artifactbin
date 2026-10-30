@@ -1,3 +1,4 @@
+import {beforeCommand} from './toolbox-update.mjs';
 /**
  * Internal: shared runtime of the installed commands: ToolError, argument and file helpers, the
  * origin-bound HTTP client (makeClient) and runTool, which parses flags, runs a command and prints
@@ -164,6 +165,8 @@ return {...diagnostics,ok:false,code:error.code??'operation_failed',message:
   '../../../lib/skills/author-toolbox-contract').AuthorResult|any>} execute */
 export async function runTool(name,url,execute,args=process.argv.slice(2)){
  if(!process.argv[1]||realpathSync(process.argv[1])!==fileURLToPath(url))return;
+ if(await beforeCommand(url,args))return;
+ args=args.filter(arg=>arg!=='--no-update');
  let parsed;
  try{
 try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_invocation',

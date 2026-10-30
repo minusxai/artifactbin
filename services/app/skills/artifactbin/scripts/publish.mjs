@@ -1,3 +1,4 @@
+import {beforeCommand} from './toolbox-update.mjs';
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Publish a page, dataset or asset with its local dependencies.
 FILE and FILE.af.json are rewritten in place with the canonical result.
@@ -150,6 +151,8 @@ export async function sendPublication(saved, env = process.env, fetcher = fetch)
 }
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (['--prepare', '--send'].includes(process.argv[2])) {
+    if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
+    process.argv=process.argv.filter(arg=>arg!=='--no-update');
     process.stderr.write(
       'Deprecated sample/request flags; prefer publish.mjs FILE or --resume JOURNAL.\n'
     );
