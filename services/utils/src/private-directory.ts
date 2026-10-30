@@ -86,3 +86,24 @@ export async function privateDirectories(paths:readonly string[]):Promise<void>{
 export async function privateDirectory(path:string):Promise<void>{
  await privateDirectories([path]);
 }
+
+/** Read-side privacy check: never repair permissions or trust historical protection records.
+ * Missing paths are allowed for a fresh store. Every existing controlled ancestor is checked.
+ * Windows checks the current ACL, since a signed creation record cannot detect later ACL edits.
+ */
+export async function verifyPrivatePaths(directories:readonly string[],file:string):Promise<void>{
+ const existing:string[]=[];
+ for(const path of [...directories,file]){
+  let info;try{info=await lstat(path);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')continue;throw error;}
+  const directory=path!==file;
+  if(info.isSymbolicLink()||(directory?!info.isDirectory():!info.isFile()))throw new Error('Credential privacy: expected private directories and a regular credential file.');
+  if(process.platform!=='win32'&&(info.uid!==process.getuid?.()||(info.mode&0o077)!==0))throw new Error('Credential privacy: unsafe owner or permissions. Restore ownership to the current user and remove group/other permissions before retrying.');
+  existing.push(path);
+ }
+ if(process.platform!=='win32'||existing.length===0)return;
+ const quoted=existing.map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
+ // Inspect access rules by SID, not localized account names. Deny rules cannot broaden access.
+ const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach($item in @(${quoted})) { $acl=Get-Acl -LiteralPath $item; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $user) { throw 'Unsafe owner' }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.FileSystemRights -ne 0 -and $rule.IdentityReference.Value -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { throw 'Unsafe permissions' } } }`;
+ try{await execute('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:30000,windowsHide:true});}
+ catch{throw new Error('Credential privacy: Windows owner or ACL permissions could not be verified. Restrict the credential store to the current user and SYSTEM, then retry.');}
+}
