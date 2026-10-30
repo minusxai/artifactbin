@@ -92,3 +92,16 @@ it.skipIf(process.platform!=='win32')('creates a real Windows junction and rejec
  await expect(readCredentials(grant.server,root)).rejects.toThrow(/projection/);
  expect(await readCredentials(grant.server,root).catch(()=>null)).toBeNull();
 });
+
+it.skipIf(process.platform!=='win32')('publishes current-user-owned Windows directories and atomic credential replacements',async()=>{
+ const run=promisify(execFile);
+ for(const token of ['first_access','replacement_access']){
+  await saveCredentials({...grant,token},root);
+  const paths=credentialPaths(grant.server,root);
+  const literals=[root,join(root,'hosts'),paths.backingDirectory,paths.backingPath].map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
+  // ACL inheritance does not inherit the owner: elevated tokens may default new files to a group owner.
+  const script=`$ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User; foreach($path in @(${literals})) { $acl=Get-Acl -LiteralPath $path; if($acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { throw 'Expected current-user owner' }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { throw 'Unexpected access rule' } } }`;
+  await run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true});
+  expect(await readCredentials(grant.server,root)).toEqual({...grant,token});
+ }
+});

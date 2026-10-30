@@ -59,3 +59,15 @@ it('uses the same atomic Windows retry when an existing cached object has differ
  expect(vi.mocked(rename).mock.calls).toHaveLength(2);
  expect(await readFile(path,'utf8')).toBe('different cache bytes');expect(await readdir(root)).toEqual(['report.jsx']);
 });
+
+it('prepares an empty temporary file before writing or publishing, and fails closed on preparation error',async()=>{
+ const prepare=vi.fn(async(temporary:string)=>{
+  expect(await readFile(temporary,'utf8')).toBe('');
+  expect(await readFile(path,'utf8')).toBe('old complete bytes');
+ });
+ await atomicWrite(path,'new bytes',{prepare});
+ expect(prepare).toHaveBeenCalledTimes(1);expect(await readFile(path,'utf8')).toBe('new bytes');
+ const error=new Error('Cannot establish ownership');prepare.mockRejectedValueOnce(error);
+ await expect(atomicWrite(path,'unpublished bytes',{prepare})).rejects.toBe(error);
+ expect(await readFile(path,'utf8')).toBe('new bytes');expect(await readdir(root)).toEqual(['report.jsx']);
+});
