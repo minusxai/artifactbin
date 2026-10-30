@@ -94,3 +94,18 @@ it('keeps standalone help offline, rejects unknown flags, and parses boolean opt
  expect((await run([],'0')).code).toBe(1);
  expect((await run([],'false')).out).toContain('Reinstall');
 });
+
+it('does not wait for the background updater lock before running a command',async()=>{
+ const base=await mkdtemp(path.join(tmpdir(),'skill-busy-'));
+ const root=path.join(base,'.artifactbin-releases','initial','artifactbin');
+ await mkdir(path.join(root,'scripts'),{recursive:true});await symlink(root,path.join(base,'artifactbin'));
+ await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:'http://127.0.0.1:1',version:'0'.repeat(64)}));
+ await cp(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'),path.join(root,'scripts/toolbox-update.mjs'));
+ await writeFile(path.join(root,'scripts/probe.mjs'),`import {beforeCommand} from './toolbox-update.mjs';if(!await beforeCommand(import.meta.url,[]))console.log('ran');`);
+ await symlink(String(process.pid),path.join(base,'.artifactbin-releases','lock'));
+ try{
+  const start=performance.now();
+  const result=await new Promise<{code:number|null,out:string}>(resolve=>{const child=spawn(process.execPath,[path.join(root,'scripts/probe.mjs')]);let out='';child.stdout.on('data',b=>out+=b);child.on('exit',code=>resolve({code,out}));});
+  expect(result).toEqual({code:0,out:'ran\n'});expect(performance.now()-start).toBeLessThan(1000);
+ }finally{await rm(base,{recursive:true,force:true});}
+},20000);

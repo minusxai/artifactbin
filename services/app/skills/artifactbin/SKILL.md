@@ -200,8 +200,12 @@ credentials.
 
 ## Installed resources
 
-[Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/`
-folder into your harness’s skill directory, then reload skills.
+[Download the author skill]([[ base ]]/skills/artifactbin.zip). Use the three-line managed
+installation recipe in `[[ base ]]/getting-started.md`: it keeps an immutable
+release behind `~/.agents/skills/artifactbin`, with harness symlinks to that shared path.
+Reload skills after installing or updating. Manually extracted copies still work, but must be
+reinstalled with the managed layout to enable updates. Do not save your own pages inside a release.
+The public release manifest is `[[ base ]]/skills/artifactbin/latest.json`.
 
 Only when the user asks for a private draft, run `node scripts/serve.mjs PROJECT_DIR` and
 `node scripts/check.mjs http://127.0.0.1:PORT/ --playwright-module FILE` (the preview adds a 76px

@@ -48,7 +48,7 @@ async function context(root){
  if(release.schemaVersion!==1||!hex(release.version)||new URL(release.origin).origin!==release.origin||current.origin!==release.origin)throw Error('Invalid installed release');
  return {root:active,release:current,state,canonical};
 }
-async function locked(c,action){
+async function locked(c,action,wait=true){
  const lock=path.join(c.state,'lock');
  for(let attempt=0;;attempt++){
   try{await symlink(String(process.pid),lock);break;}catch(error){
@@ -57,6 +57,7 @@ async function locked(c,action){
    if(!Number.isSafeInteger(pid)||pid<=0)throw Error('Invalid updater lock; remove it after checking no updater is running');
    if(pid>0)try{process.kill(pid,0);}catch(e){if(e.code==='ESRCH')alive=false;}
    if(!alive){await rm(lock,{force:true});continue;}
+   if(!wait)return;
    if(attempt>=200)throw Error('Update busy; retry later');await new Promise(resolve=>setTimeout(resolve,50));
   }
  }
@@ -91,9 +92,10 @@ export async function update(root,{background=false,rollback=false}={}){
  return locked(c,async()=>{
   Object.assign(c,await context(root));
   for(const name of await readdir(c.state))if(/^stage-[a-f0-9-]+$/.test(name))await rm(path.join(c.state,name),{recursive:true,force:true});
-  if(rollback){const previous=await json(path.join(c.state,'previous.json'));await activate(c,previous.directory);await rm(path.join(c.state,'pending.json'),{force:true});return {status:'rolled-back'};}
+  if(rollback){await atomic(path.join(c.state,'checked.json'),{time:Date.now()});const previous=await json(path.join(c.state,'previous.json'));await activate(c,previous.directory);await rm(path.join(c.state,'pending.json'),{force:true});return {status:'rolled-back'};}
   const manifest=JSON.parse((await fetchBytes(c.release.origin+'/skills/artifactbin/latest.json',16384)).toString());
   if(manifest.schemaVersion!==1||manifest.origin!==c.release.origin||manifest.url!==c.release.origin+'/skills/artifactbin.zip'||!hex(manifest.version))throw Error('Invalid update manifest');
+  await atomic(path.join(c.state,'checked.json'),{time:Date.now()});
   if(manifest.version===c.release.version)return {status:'current'};
   let pending;try{pending=await json(path.join(c.state,'pending.json'));const pendingRoot=await verified(c,pending.directory);if((await json(path.join(pendingRoot,'release.json'))).version!==manifest.version)pending=null;}catch{pending=null;}
   if(pending){if(!background){await activate(c,pending.directory);await rm(path.join(c.state,'pending.json'),{force:true});}return {status:background?'staged':'activated',version:manifest.version};}
@@ -119,7 +121,7 @@ export async function beforeCommand(url,args){
    try{const pending=await json(path.join(c.state,'pending.json'));await activate(c,pending.directory);}catch{}finally{await rm(path.join(c.state,'pending.json'),{force:true});}
    let checked=0;try{checked=(await json(path.join(c.state,'checked.json'))).time;}catch{}
    if(Date.now()-checked>3600000){await atomic(path.join(c.state,'checked.json'),{time:Date.now()});const child=spawn(process.execPath,[path.join(await realpath(c.canonical),'scripts/update.mjs'),'--background'],{stdio:'ignore',detached:true});child.on('error',()=>{});child.unref();}
-  });
+  },false);
  }catch{}
  const active=await realpath(c.canonical),original=fileURLToPath(new URL('../',url));
  if(active===await realpath(original))return false;

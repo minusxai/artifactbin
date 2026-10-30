@@ -1,4 +1,3 @@
-import {beforeCommand} from './toolbox-update.mjs';
 /** What this command does and how to use it; also printed by --help. */
 export const DESCRIPTION = `Publish a page, dataset or asset with its local dependencies.
 FILE and FILE.af.json are rewritten in place with the canonical result.
@@ -41,6 +40,7 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   never contain credentials.`;
 
 /** Optional author-skill helper. Credentials never enter a page or saved publication request. */
+import {beforeCommand} from './toolbox-update.mjs';
 import {realpathSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
