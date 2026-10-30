@@ -120,7 +120,6 @@ ${readerBareTypography}
 af-markdown .mx-markdown table{display:block;width:fit-content;max-width:100%;overflow-x:auto;` +
   `-webkit-overflow-scrolling:touch}
 af-markdown{display:block}
-af-markdown .mx-markdown > :first-child{margin-block-start:0}
 af-markdown pre{position:relative;overflow:auto}
 af-markdown pre button{position:absolute;top:.5rem;right:.5rem;opacity:0;padding:.25rem .5rem;` +
   `color:var(--foreground,CanvasText);background:var(--background,Canvas);` +

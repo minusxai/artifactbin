@@ -33,7 +33,8 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('padding: .5em .75em');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain(':where(af-markdown .mx-markdown code){font-size:1em}');
  expect(getComputedStyle(el.querySelector('table')!).overflowX).toBe('auto');
- expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('af-markdown .mx-markdown > :first-child{margin-block-start:0}');
+ // The first block keeps the reader's own top margin, so a component matches the page around it.
+ expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain(':first-child{margin-block-start:0}');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('padding:1rem;background:var(--muted');
  expect(el.querySelector('table')?.parentElement?.classList.contains('mx-md-table-scroll')).toBe(true);
  expect(el.querySelector('th')?.textContent).toBe('Name');
