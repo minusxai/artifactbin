@@ -4,7 +4,7 @@ import {lstat,readFile,readlink,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {normalizeOrigin,API_RESOURCE_PATH} from '@artifactbin/contracts';
 import {atomicWrite} from './atomic-file';
-import {privateDirectories,privateDirectory} from './private-directory';
+import {privateDirectories,privateDirectory,verifyPrivatePaths} from './private-directory';
 import {lockDirectory,withStateLock} from './state-lock';
 export interface Credentials {server:string;token:string;refreshToken?:string;clientId?:string;expiresAt?:number}
 export function credentialOrigin(value:string):string{
@@ -49,7 +49,10 @@ export async function credentialLocation(server:string,root:string){
  return {...paths,path:readable?paths.path:paths.backingPath,readable};
 }
 export async function readCredentials(server:string,root:string):Promise<Credentials|null>{
- const paths=await projection(server,root);const saved:Record<string,string>={};
+ const paths=credentialPaths(server,root);const saved:Record<string,string>={};
+ // Validate the controlled ancestors before following the normalized origin projection or reading secrets.
+ await verifyPrivatePaths([root,join(root,'hosts'),paths.backingDirectory],paths.backingPath);
+ await projection(server,root);
  try{if(!(await lstat(paths.backingPath)).isFile())throw new Error('Expected a private credential file.');for(const line of(await readFile(paths.backingPath,'utf8')).split(/\r?\n/)){
   const match=line.match(/^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/);
   if(match?.[1]&&match[2]!==undefined)saved[match[1]]=match[2].replace(/^(['"])(.*)\1$/,'$2');
@@ -104,7 +107,9 @@ export async function refreshCredentials(connection:Credentials,root:string,opti
  return withStateLock(root,'home',()=>withStateLock(root,'@credential-refresh',async()=>{
   options.signal?.throwIfAborted();
   const saved=await readCredentials(connection.server,root);
-  if(saved&&saved.token!==connection.token&&saved.refreshToken&&saved.clientId===connection.clientId)return saved;
+  if(!saved||!saved.refreshToken||!saved.clientId||saved.clientId!==connection.clientId)throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
+  if(saved.token!==connection.token||saved.refreshToken!==connection.refreshToken)return saved;
+  connection=saved;
   if(!connection.refreshToken||!connection.clientId)throw new CredentialRefreshError('auth_required: credentials could not be refreshed.');
   const origin=credentialOrigin(connection.server);
   const response=await(options.fetch??fetch)(`${origin}/oauth/token`,{method:'POST',redirect:'error',signal:options.signal?AbortSignal.any([options.signal,AbortSignal.timeout(options.timeoutMs??15000)]):AbortSignal.timeout(options.timeoutMs??15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:connection.clientId,refresh_token:connection.refreshToken,resource:`${origin}${API_RESOURCE_PATH}`})}).catch(()=>{options.signal?.throwIfAborted();throw new CredentialRefreshUnavailableError('refresh_unavailable: the refresh server could not be reached. Retry later; the saved grant was retained.');});

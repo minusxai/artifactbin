@@ -7,16 +7,16 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  */
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
-import { testIdentity, useAppHarness, request, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
+import { testIdentity as baseIdentity, useAppHarness, request, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken } from '@/lib/authentication';
 import { createUser, exchangePagesTicket, issuePagesTicket, revokeToken } from '@/lib/accounts';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { DELETE as clearSession } from '@/app/api/session/token/route';
-import { measureQueries } from '@/lib/platform';
+import { setServices, measureQueries } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { pagesOriginFor } from '@/lib/http';
 import { framedDocumentSrc } from '@/lib/document-serving';
@@ -50,9 +50,12 @@ async function world() {
   };
   const secret = await publish(DOC, 'private');
   const other = await publish('<h1>Another</h1>', 'private');
-  const actor: Actor = { credential: 'session', userId: user.id, email: 'pages-owner@example.com', emailVerified: true };
+  const actor: Actor = { credential: 'session', sessionId:'test-session', userId: user.id, email: 'pages-owner@example.com', emailVerified: true };
   return { user, actor, secret, other, token: t, publish };
 }
+
+const testIdentity=(credential:Parameters<typeof baseIdentity>[0],ids:Parameters<typeof baseIdentity>[1]={})=>({...baseIdentity(credential,ids),...(credential==='session'?{sessionId:'test-session'}:{})});
+beforeEach(()=>setServices({humanSessions:{live:async ref=>ref==='test-session'}}));
 
 const as = (url: string, actor: Actor | null, init: RequestInit = {}) => {
   const built = new Request(url, init);
@@ -369,7 +372,7 @@ describe('the pages session', () => {
     expect((await door(w.secret, cookie)).status).toBe(200);
     // Someone else's sign-out ends nothing of theirs.
     const stranger = await createUser({ email: 'pages-stranger@example.com' });
-    await clearSession(as(`${APP}/api/session/token`, { credential: 'session', userId: stranger.id, email: 'pages-stranger@example.com', emailVerified: true }, { method: 'DELETE' }));
+    await clearSession(as(`${APP}/api/session/token`, { credential: 'session', sessionId:'test-session', userId: stranger.id, email: 'pages-stranger@example.com', emailVerified: true }, { method: 'DELETE' }));
     expect((await door(w.secret, cookie)).status).toBe(200);
     // The app's own sign-out call ends them all, whichever document, whatever cookies the browser still holds.
     const out = await clearSession(as(`${APP}/api/session/token`, w.actor, { method: 'DELETE' }));
@@ -463,7 +466,7 @@ describe('a first URL loaded twice', () => {
     const open = await w.publish('<h1>Open</h1>', 'unlisted');
     const planted = await pagesCookie(app, w.actor, open);
     const visitor = await createUser({ email: 'mxmx_test_pages_visitor@example.com' });
-    const visitorActor: Actor = { credential: 'session', userId: visitor.id, email: visitor.email!, emailVerified: true };
+    const visitorActor: Actor = { credential: 'session', sessionId:'test-session', userId: visitor.id, email: visitor.email!, emailVerified: true };
     const visit = new URL(await frameSrc(app, visitorActor, open));
     const first = await app.request(visit.href, held(planted));
     expect(first.status).toBe(200);
@@ -742,7 +745,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
     const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
-    const reader: Actor = { credential: 'session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
+    const reader: Actor = { credential: 'session', sessionId:'test-session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
     const self = pagesOriginFor(id, site);
     /** The reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
     const framedAs = async (appCookie: string | null) => {

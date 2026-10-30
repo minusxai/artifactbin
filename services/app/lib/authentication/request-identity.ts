@@ -102,13 +102,18 @@ function identityOf(claims: { userId: string | null; tokenId: string | null; ema
 // ── The explicit bearer ──────────────────────────────────────────────────────
 
 async function bearerIdentity(request: Request, presented: string, door: 'token' | 'request', options: ResolveOptions & { effects: boolean }): Promise<IdentityResolution> {
+  // A trusted identity owner refusal must survive app-owned token resolution.
+  const claims = actorOf(request);
+  if(claims?.credential==='none')return door==='token'?{kind:'bearer-invalid'}:nobody();
   const token = await resolveToken(presented);
   if (!token) return door === 'token' ? { kind: 'bearer-invalid' } : nobody();
   // The proxy's claims belong to this credential only when they name this very token and account, and never
   // for a browser session's scripted browser (which holds a token, not a verified login).
-  const claims = actorOf(request);
   const matched = !request.headers.has(BROWSER_SESSION_HEADER) && claims?.credential === 'bearer' && !!token.userId
     && claims.userId === token.userId && claims.tokenId === token.id;
+  // Scoped OAuth candidates are private until auth publishes their family membership.
+  // A raw bearer on a direct app listener cannot bypass that owner's fence.
+  if(token.audience&&!matched)return door==='token'?{kind:'bearer-invalid'}:nobody();
   const identity = identityOf({
     userId: token.userId,
     tokenId: token.id,
@@ -194,6 +199,7 @@ async function attachedIdentity(request: Request, effects: boolean): Promise<Ide
     email: userId ? wire.email ?? null : null,
     emailVerified: userId && verifiable ? wire.emailVerified === true : null,
   }, wire.credential, wire.heldTokenIds);
+  if(wire.credential==='session')identity.sessionId=wire.sessionId;
   if (userId && !await admitDeploymentIdentity({ userId, email: identity.email ?? undefined, ...(identity.emailVerified === null ? {} : { emailVerified: identity.emailVerified }) })) return nobody();
   if (wire.credential === 'agent-cookie') {
     // Only the pages host creates token-backed browser cookies. Its WeakMap mark cannot be supplied by a

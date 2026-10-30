@@ -72,4 +72,14 @@ export async function ensureAuthSchema(db: Queryable, schema = 'auth'): Promise<
     await db.query(`DROP INDEX IF EXISTS ${schema}.idx_codes_kind_subject`);
   }
   await ensureTable(db, AUTH_TABLES, { schema });
+  // Create a durable family fence for existing grants. Admission reads live
+  // membership from retained refresh rows, not this historical payload: an old
+  // writer inserting another member after this statement cannot escape the fence.
+  // Tombstones are never overwritten, so reboot cannot resurrect a revoked family.
+  await db.query(`INSERT INTO ${schema}.credentials (kind,credential_hash,group_id,payload,expires_at,deleted_at)
+    SELECT 'refresh_family',group_id,group_id,
+      jsonb_build_object('access_ids',jsonb_agg(DISTINCT payload->>'access_token_id')),
+      max(expires_at), CASE WHEN bool_and(deleted_at IS NOT NULL) THEN max(deleted_at) ELSE NULL END
+    FROM ${schema}.credentials WHERE kind='refresh_token' AND group_id IS NOT NULL
+    GROUP BY group_id ON CONFLICT (kind,credential_hash) DO NOTHING`);
 }

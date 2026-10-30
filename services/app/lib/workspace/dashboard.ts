@@ -8,10 +8,8 @@
 import {getGroupRole} from '@/lib/groups';
 import { forkCountByUser, likeSummaryByUser, VIEW_SERIES_DAYS, viewSeriesByUser } from './analytics';
 import { count } from '@/lib/social';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
-import { getDb } from '@/lib/platform';
 import type { SharedArtifactSummary } from './';
-import { workspaceCountsFor, workspaceDocumentsFor } from './inventory';
+import { workspaceCountsFor, workspaceDocumentsFor, workspaceSharedFor } from './inventory';
 
 
 // Workspace projections deliberately exclude source metadata and engagement.
@@ -20,18 +18,14 @@ export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | '
 
 export async function accountWorkspaceCoreFor(userId: string, email?: string | null, groupId?:string) {
   if(groupId && !(await getGroupRole(userId,groupId)))return null;
-  const db = await getDb();
   const [artifacts, shared] = await Promise.all([
     workspaceDocumentsFor(userId,groupId),
-    email && !groupId ? db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
-      FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
-      WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
-      ORDER BY a.updated_at DESC LIMIT 200`, [email.toLowerCase().trim(), userId]) : { rows: [] },
+    email && !groupId ? workspaceSharedFor(userId, email) : [],
   ]);
   return {
     artifacts: artifacts.map((artifact) => ({
       ...artifact, url: `/a/${artifact.id}`,
-    })), shared: shared.rows,
+    })), shared,
   };
 }
 

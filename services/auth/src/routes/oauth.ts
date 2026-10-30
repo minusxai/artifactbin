@@ -76,6 +76,7 @@ interface OAuthRoutesOptions {
   aliasOrigins?: readonly string[];
   /** CLI__RETIREMENT=on: the retired sign-in paths answer an old CLI with the retirement message (retiredCliAnswer). */
   cliRetired?: boolean;
+  invalidateTokens?:()=>void;
 }
 
 /**
@@ -249,6 +250,23 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     return Response.redirect(url, 303);
   });
 
+  app.options('/oauth/revoke', () => new Response(null,{status:204,headers:CORS}));
+  app.post('/oauth/revoke',async c=>{
+    const answer=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json',...NO_STORE,...CORS}});
+    let text:string;
+    try{text=await readBody(c.req.raw,{limit:AUTH_BODY_LIMIT,as:'text'});}
+    catch(error){if(error instanceof BodyTooLargeError)return payloadTooLarge();throw error;}
+    let body:unknown;
+    try{body=(c.req.header('content-type')??'').includes('application/json')?JSON.parse(text):Object.fromEntries(new URLSearchParams(text));}
+    catch{return answer({error:'invalid_request'},400);}
+    if(!body||typeof body!=='object')return answer({error:'invalid_request'},400);
+    const {client_id,token}=body as Record<string,unknown>;
+    if(typeof client_id!=='string'||!client_id||typeof token!=='string'||!token)return answer({error:'invalid_request'},400);
+    await o.oauth.revokeRefresh(token,client_id);
+    o.invalidateTokens?.();
+    return answer({});
+  });
+
   app.options('/oauth/token', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/token', async (c) => {
     const oauthJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
@@ -281,7 +299,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
         const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: expectedResource, scope: grant.scope, accessTokenId: minted.id });
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
-        return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
+        return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
       }
     }
 
@@ -290,14 +308,13 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const requestedResource = body.resource || expectedResource;
       if (!acceptsResource(c.req.raw, requestedResource)) return oauthError('invalid_target', 'Invalid API resource');
       // A grant issued under a former canonical name (now an alias) refreshes, and moves to the canonical resource.
-      const grant = await o.oauth.rotateRefresh(body.refresh_token, body.client_id, resources(c.req.raw));
-      if (!grant) return oauthError('invalid_grant', 'Invalid, expired, revoked, or already-used refresh token');
       try {
-        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
-        await o.oauth.bindRefresh(grant.token, minted.id);
+        const result=await o.oauth.rotateAndMint(body.refresh_token,body.client_id,resources(c.req.raw),grant=>mintFor(o,c.req.raw,grant));
+        if(!result)return oauthError('invalid_grant','Invalid, expired, revoked, or already-used refresh token');
+        const {grant,minted}=result;
         return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });
       } catch (error) {
-        return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
+        return oauthJson({ error: 'temporarily_unavailable', error_description: 'Token issuance unavailable' }, 503);
       }
     }
 

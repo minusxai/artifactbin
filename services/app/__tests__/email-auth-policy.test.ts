@@ -83,3 +83,10 @@ it('admits account-backed scripted browser pages cookies only on the trusted pag
   const trusted = markPagesRequest(request('/', { actor: pages!.actor }), { id: 'testdoc', self: 'https://74657374646f63.pages.example.test', site: pagesSiteFor('pages.example.test', 'https://app.example.test') });
   expect(await sessionActor(trusted)).toMatchObject({ credential: 'agent-cookie', userId: account.id, tokenId: bearer.id, documentEditor: false });
 });
+
+it('guards browser session logout against cross-site requests',async()=>{
+ const {DELETE}=await import('@/app/api/session/token/route');
+ const account=await createUser({email:'mxmx_test_logout_csrf@example.com'});
+ const response=await DELETE(request('/api/session/token',{method:'DELETE',actor:{credential:'session',userId:account.id,email:account.email!,emailVerified:true},headers:{origin:'https://foreign.example','sec-fetch-site':'cross-site'}}));
+ expect(response.status).toBe(403);expect(response.headers.get('set-cookie')).toBeNull();
+});

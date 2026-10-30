@@ -1,18 +1,20 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
 import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
-import {BodyTooLargeError,readBody,assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse} from '@artifactbin/utils';
+import {BodyTooLargeError,readBody,assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
+import {sessionAuthority} from './session-authority';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 import {createAgentBrowserSessions} from './auth/agent-browser-session';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
-export interface SessionInfo {userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
+export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
+ live?:(sessionId:string,userId:string)=>Promise<boolean>;
  handler?:(request:Request)=>Promise<Response>;
 }
 export interface AuthOptions {
@@ -32,9 +34,9 @@ export interface AuthOptions {
 export type AuthEnv={Variables:{actor:Actor}};
 export type AuthApp=Hono<AuthEnv>;
 const agentBrowsers = new WeakMap<AuthOptions, ReturnType<typeof createAgentBrowserSessions>>();
-const aliasOrigins = new WeakMap<AuthOptions, readonly string[]>();
+const aliasOrigins = new WeakMap<Pick<AuthOptions,'env'>, readonly string[]>();
 /** APP__ALIAS_ORIGINS, parsed once per options; a malformed value throws when the part mounts. */
-const aliasOriginsOf = (o:AuthOptions):readonly string[] => {
+const aliasOriginsOf = (o:Pick<AuthOptions,'env'>):readonly string[] => {
   let origins=aliasOrigins.get(o);
   if(!origins){origins=parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS'));aliasOrigins.set(o,origins);}
   return origins;
@@ -45,6 +47,21 @@ const agentBrowserOf = (o:AuthOptions) => {
   if(!browser){browser=createAgentBrowserSessions(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth');agentBrowsers.set(o,browser);}
   return browser;
 };
+
+/** App-only composition: the auth owner admits bearers without mounting login or OAuth routes.
+ * Trusted internal actors already on the request remain authoritative, including refusals. */
+type BearerAdmissionOptions=Pick<AuthOptions,'env'|'tokens'|'identityDb'|'appSchema'|'trustedHops'|'admitIdentity'>;
+export function bearerAdmission(o: BearerAdmissionOptions): Part {
+  return {name:'bearerAdmission',mount:app=>app.use('*',async(c,next)=>{
+    if(actorOf(c.req.raw)||!c.req.raw.headers.has('authorization'))return next();
+    let actor:Actor;
+    try {actor=await resolveBearer(c.req.raw,o)??ANONYMOUS;}
+    catch {return Response.json({error:'session_unavailable'},{status:503,headers:{'cache-control':'no-store'}});}
+    if(actor.userId&&o.admitIdentity&&!await o.admitIdentity({userId:actor.userId}))return Response.json({error:'deployment_admission_required'},{status:403});
+    attachActor(c.req.raw,actor);
+    await next();
+  })};
+}
 
 export function session(o: AuthOptions): Part<AuthEnv> {
   return {
@@ -177,6 +194,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
+        invalidateTokens:()=>o.tokens.invalidate(),
         admitIdentity:o.admitIdentity,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         upstream: o.upstream,
@@ -211,20 +229,29 @@ export function publicBuildAssets(o: AuthOptions): Part<AuthEnv> {
 }
 
 
-async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
+async function resolveBearer(request:Request,o:BearerAdmissionOptions,sessions?:Pick<SessionStore,'identity'>):Promise<Actor|null>{
   const auth = request.headers.get('authorization') ?? '';
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
+    // Family revocation committed in another process must take effect on this request.
+    o.tokens.invalidate();
     const token = await o.tokens.byToken(presented);
-    if (token?.userId && tokenFitsRequest(token, request, o)) {
+    const oauthLive = !token?.audience || (o.identityDb && await createOAuthStore(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth',o.appSchema??readEnv(o.env,'APP__SCHEMA')).accessLive(token.id));
+    if (token?.userId && oauthLive && tokenFitsRequest(token, request, o)) {
       const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
-      const identity = token.userId ? await o.sessions.identity?.(token.userId).catch(() => null) : null;
+      const identity = token.userId ? await sessions?.identity?.(token.userId).catch(() => null) : null;
       return identity?.userId === token.userId && identity
         ? {...actor, email: identity.email, emailVerified: identity.emailVerified}
         : actor;
     }
     return ANONYMOUS;
   }
+  return null;
+}
+
+async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
+  const bearer=await resolveBearer(request,o,o.sessions);
+  if(bearer)return bearer;
   const secure = o.secure ?? false;
   let held = decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
   const browser=agentBrowserOf(o),heldPrimary=held?.tokenIds.at(-1);
@@ -235,6 +262,7 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
     if (session.setCookies) refresh?.push(...session.setCookies);
     return {
       credential: 'session',
+      sessionId:session.sessionId,
       userId: session.userId,
       ...(session.email ? { email: session.email } : {}),
       ...(session.emailVerified !== undefined ? { emailVerified: session.emailVerified } : {}),
@@ -247,15 +275,18 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
 }
 
 /** OAuth access tokens are capabilities for one deployment's API (its canonical origin or an alias) and scope. */
-function tokenFitsRequest(token: { audience?: string; scope?: string }, request: Request, o: AuthOptions): boolean {
+function tokenFitsRequest(token: { audience?: string; scope?: string }, request: Request, o: BearerAdmissionOptions): boolean {
   if (!token.audience) return true;
   const origins = acceptedOriginsOf(request, o.trustedHops ?? 0, readEnv(o.env, 'APP__PUBLIC_BASE_URL'), aliasOriginsOf(o));
   const path = new URL(request.url).pathname;
-  return (path === '/api' || path.startsWith('/api/')) && origins.some((origin) => token.audience === `${origin}/api`) && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
+  // These app-origin read adapters are part of the artifacts API even though their URLs
+  // live beside the reader. Never admit the bearer to arbitrary UI or pages-host paths.
+  const artifactRead = /^\/a\/[A-Za-z0-9_-]+\/(?:download|export)$/.test(path);
+  return (path === '/api' || path.startsWith('/api/') || artifactRead) && origins.some((origin) => token.audience === `${origin}/api`) && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
 }
 
 
 export function authParts(o:AuthOptions):Part<AuthEnv>[] {
- return [publicBuildAssets(o),session(o),internalBoundary(),loginRoutes(o),oauthRoutes(o),{name:'application',mount:app=>app.all('*',c=>o.upstream(c.req.raw,c.get('actor')))}];
+ return [sessionAuthority(o),publicBuildAssets(o),session(o),internalBoundary(),loginRoutes(o),oauthRoutes(o),{name:'application',mount:app=>app.all('*',c=>o.upstream(c.req.raw,c.get('actor')))}];
 }
 export const createAuthHost=(o:AuthOptions):AuthApp=>assemble(authParts(o));

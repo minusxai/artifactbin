@@ -15,6 +15,8 @@ export interface Actor {
   tokenId?: string;
   email?: string;
   emailVerified?: boolean;
+  /** Non-secret identity row reference; never the session bearer token. */
+  sessionId?: string;
   /**
    * Every token id the browser's agent cookie holds (the LAST is the primary),
    * present whenever that cookie is — under a session too, which is how a
@@ -30,3 +32,9 @@ export const ANONYMOUS: Actor = { credential: 'none' };
 
 /** Default lifetime of a signed header. Short: it is minted per request. */
 export const ACTOR_TTL_SECONDS = 120;
+
+/** The identity owner revalidates a human session for derived pages sessions. */
+export interface HumanSessionAuthority { live(sessionId:string,userId:string):Promise<boolean> }
+
+/** Auth-owned, service-authenticated POST; body {sessionId,userId}, response {live:boolean}. */
+export const HUMAN_SESSION_LIVE_PATH = '/api/internal/auth/session-live';

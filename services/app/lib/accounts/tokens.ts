@@ -192,6 +192,8 @@ export async function withAccountToken<T extends AccessActor>(actor: T): Promise
 }
 
 interface ResolvedToken {
+  /** OAuth bearers require admission by the identity owner, beyond row liveness. */
+  audience?: string;
   id: string;
   userId: string | null;
   clientHarness: Harness | null;
@@ -205,12 +207,12 @@ export async function resolveToken(presented: string): Promise<ResolvedToken | n
 }
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
   const db = await getDb();
-  const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null }>(
-    `SELECT id, user_id, client_harness FROM tokens WHERE token_hash = $1 AND ${LIVE_TOKEN_SQL}`,
+  const r = await db.query<{ id: string; user_id: string | null; client_harness: Harness | null; audience:string|null }>(
+    `SELECT id, user_id, client_harness, audience FROM tokens WHERE token_hash = $1 AND ${LIVE_TOKEN_SQL}`,
     [hash],
   );
   const row = r.rows[0];
-  return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
+  return row && await canUseDeploymentIdentity(row.user_id,db) && await canAuthenticateUser(row.user_id, db) ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness, ...(row.audience?{audience:row.audience}:{}) } : null;
 }
 
 /** Remember a declared/observed agent harness for attribution on later stateless calls. */

@@ -36,7 +36,7 @@ describe('settings', () => {
       OBJECT_STORE__LOCAL_DIR: '/objects', WEB_INGEST__ALLOW_PRIVATE: '1', WEB_INGEST__TIMEOUT_MS: '11', WEB_INGEST__MAX_PER_HOUR: '12',
       IMAGES__MAX_BYTES: '13', PDF__MAX_BYTES: '14', FILES__MAX_BYTES: '15', EMAIL__RESEND_API_KEY: 'resend',
       EXPORT__INTERNAL_ORIGIN: ' http://export ', FLAG__CUSTOM_DOMAINS: 'Domains.Example.com.', BROWSER__SERVICE_URL: 'http://browser',
-      INTERNAL__SERVICE_SECRET: 'internal', EVENTS__SERVICE_URL: 'http://events', EVENTS__SCHEMA: 'facts',
+      AUTH__SERVICE_URL:'http://auth', INTERNAL__SERVICE_SECRET: 'internal', EVENTS__SERVICE_URL: 'http://events', EVENTS__SCHEMA: 'facts',
       RUNNER__SERVICE_URL: 'http://runner',
     });
     expectSettings(config, [
@@ -74,7 +74,7 @@ describe('settings', () => {
       ['EXPORT_INTERNAL_ORIGIN', 'http://export'],
       ['CUSTOM_DOMAINS_TARGET', 'domains.example.com'],
       ['BROWSER_SERVICE_URL', 'http://browser'],
-      ['INTERNAL_SERVICE_SECRET', 'internal'],
+      ['AUTH_SERVICE_URL','http://auth'], ['INTERNAL_SERVICE_SECRET', 'internal'],
       ['EVENTS_SERVICE_URL', 'http://events'],
       ['EVENTS_SCHEMA', 'facts'],
       ['RUNNER_SERVICE_URL', 'http://runner'],

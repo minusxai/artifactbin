@@ -214,7 +214,7 @@ describe('oauth code and redirect binding', () => {
     const oauth = createOAuthStore({ query }, 'auth');
     const refreshToken = await oauth.issueRefresh({ clientId: 'afbin_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
     await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
-    expect(await oauth.rotateRefresh(refreshToken, 'afbin_client', [RESOURCE])).toBeNull();
+    expect(await oauth.rotateAndMint(refreshToken, 'afbin_client', [RESOURCE],async()=>{throw new Error('must not mint revoked grant');})).toBeNull();
   });
 });
 
@@ -449,5 +449,99 @@ describe('retired CLI sign-in',()=>{
 
  it('stays retired as a 404 while the switch is off',async()=>{
   expect((await app.request('/oauth/device',{method:'POST',headers:{'X-Artifactbin-Protocol':'3'}})).status).toBe(404);
+ });
+});
+
+describe('grant family revocation', () => {
+ const post=(path:string,body:Record<string,string>)=>app.request(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+ const issue=async()=>{asUser();const r=await app.request('/api/authentication/token',{method:'POST',headers:{origin:BASE,'content-type':'application/json'},body:'{}'});expect(r.status).toBe(201);return r.json() as Promise<{access_token:string;refresh_token:string;client_id:string}>;};
+ it('keeps refresh retryable on mint failure and never publishes a mint completed after revoke',async()=>{
+  const grant=await issue();
+  const refreshBody={grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token};
+  const options=await optionsOf();
+  let fail=true,entered!:()=>void,release!:()=>void;
+  const waiting=new Promise<void>(r=>{entered=r;});const blocked=new Promise<void>(r=>{release=r;});
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   if(new URL(request.url).pathname!==INTERNAL_MINT_PATH)return options.upstream(request,actor);
+   if(fail)throw new Error('synthetic mint failure');
+   const response=await options.upstream(request,actor);entered();await blocked;return response;
+  }}));
+  const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(refreshBody)});
+  expect((await rotate()).status).toBe(503);
+  expect((await testDb().query("SELECT consumed_at FROM auth.credentials WHERE kind='refresh_token'")).rows[0]).toMatchObject({consumed_at:null});
+  fail=false;const pending=rotate();await waiting;
+  expect((await post('/oauth/revoke',{client_id:grant.client_id,token:grant.refresh_token})).status).toBe(200);
+  release();const response=await pending;expect(response.status).toBe(400);expect(await response.text()).not.toContain('mx_');
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+ });
+ it('rolls back a failed final binding without burning the presented refresh',async()=>{
+  const grant=await issue(),options=await optionsOf();const {query}=testDb();let fail=true;
+  const host=assemble(authParts({...options,identityDb:{query:async(sql,params)=>{
+   if(fail&&sql.includes('SET payload=payload')){fail=false;throw new Error('synthetic binding failure');}
+   return query(sql,params);
+  }}}));
+  const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})});
+  expect((await rotate()).status).toBe(503);
+  const candidates=(await query<{id:string}>('SELECT id FROM tokens ORDER BY created_at')).rows;
+  expect(await createOAuthStore({query}).accessLive(candidates.at(-1)!.id)).toBe(false);
+  expect((await rotate()).status).toBe(200);
+ });
+ it('backfills durable membership idempotently without reviving revoked families',async()=>{
+  const grant=await issue();const {query}=testDb();
+  await query("DELETE FROM auth.credentials WHERE kind='refresh_family'");
+  await ensureAuthSchema({query});
+  await post('/oauth/revoke',{client_id:grant.client_id,token:grant.refresh_token});
+  await ensureAuthSchema({query});
+  expect((await post('/oauth/token',{grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token})).status).toBe(400);
+ });
+ it('serializes two rotations so only one successor is published',async()=>{
+  const grant=await issue();const body={grant_type:'refresh_token',client_id:grant.client_id,refresh_token:grant.refresh_token};
+  const results=await Promise.all([post('/oauth/token',body),post('/oauth/token',body)]);
+  expect(results.map(r=>r.status).sort()).toEqual([200,400]);
+ });
+ it('revokes both published bearers when overlapping refreshes lose finalization',async()=>{
+  const first=await issue(),options=await optionsOf();let arrived=0,release!:()=>void;
+  const ready=new Promise<void>(r=>{release=r;});
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   const response=await options.upstream(request,actor);
+   if(new URL(request.url).pathname===INTERNAL_MINT_PATH){if(++arrived===2)release();await ready;}
+   return response;
+  }}));
+  const rotate=()=>host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
+  const responses=await Promise.all([rotate(),rotate()]);expect(responses.map(r=>r.status).sort()).toEqual([200,400]);
+  const published=await responses.find(r=>r.status===200)!.json();
+  for(const bearer of [first.access_token,published.access_token])expect(await(await host.request('/api/artifacts',{headers:{authorization:`Bearer ${bearer}`}})).json()).toMatchObject({credential:'none'});
+ });
+ it('refuses successor publication after direct current-access deletion during mint',async()=>{
+  const first=await issue(),options=await optionsOf();let entered!:()=>void,release!:()=>void;
+  const ready=new Promise<void>(r=>{entered=r;}),blocked=new Promise<void>(r=>{release=r;});
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   const response=await options.upstream(request,actor);
+   if(new URL(request.url).pathname===INTERNAL_MINT_PATH){entered();await blocked;}
+   return response;
+  }}));
+  const pending=host.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token})});
+  await ready;await testDb().query('UPDATE tokens SET deleted_at=now() WHERE token_hash=$1',[hashToken(first.access_token)]);release();
+  expect((await pending).status).toBe(400);
+  for(const row of (await testDb().query<{id:string}>('SELECT id FROM tokens')).rows)expect(await createOAuthStore({query:testDb().query}).accessLive(row.id)).toBe(false);
+ });
+ it('bounds malformed revocation bodies and returns the same answer for unknown proof',async()=>{
+  expect((await post('/oauth/revoke',{client_id:'unknown',token:'unknown'})).status).toBe(200);
+  expect((await post('/oauth/revoke',{client_id:'unknown',token:'x'.repeat(17000)})).status).toBe(413);
+  const malformed=await app.request('/oauth/revoke',{method:'POST',headers:{'content-type':'application/json'},body:'null'});
+  expect(malformed.status).toBe(400);expect(malformed.headers.get('cache-control')).toBe('no-store');
+ });
+ it('revokes rotated accesses and refreshes, isolates other grants and rejects wrong-client proof',async()=>{
+  const first=await issue(),other=await issue();
+  const rotated=await post('/oauth/token',{grant_type:'refresh_token',client_id:first.client_id,refresh_token:first.refresh_token});
+  expect(rotated.status).toBe(200);const next=await rotated.json();
+  const revoke=(client:string)=>post('/oauth/revoke',{client_id:client,token:first.refresh_token});
+  expect((await revoke(other.client_id)).status).toBe(200);
+  expect((await app.request('/api/artifacts',{headers:{authorization:`Bearer ${next.access_token}`}})).status).toBe(200);
+  const ended=await revoke(first.client_id);expect(ended.status).toBe(200);expect(ended.headers.get('cache-control')).toBe('no-store');
+  for(const access of [first.access_token,next.access_token])expect(await(await app.request('/api/artifacts',{headers:{authorization:`Bearer ${access}`}})).json()).toMatchObject({credential:'none'});
+  expect((await post('/oauth/token',{grant_type:'refresh_token',client_id:first.client_id,refresh_token:next.refresh_token})).status).toBe(400);
+  expect(await(await app.request('/api/artifacts',{headers:{authorization:`Bearer ${other.access_token}`}})).json()).toMatchObject({credential:'bearer'});
+  expect((await revoke(first.client_id)).status).toBe(200);
  });
 });

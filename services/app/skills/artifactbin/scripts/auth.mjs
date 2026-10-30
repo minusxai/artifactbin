@@ -4,7 +4,7 @@ It uses an email one-time code.
 Usage: node scripts/auth.mjs status
        node scripts/auth.mjs login --email ADDRESS
        node scripts/auth.mjs login --challenge HANDLE --code-file FILE
-       node scripts/auth.mjs logout
+       node scripts/auth.mjs logout [--local | --revoke]
 Flags: --email ADDRESS starts sign-in and prints a challenge HANDLE; --challenge HANDLE plus
   --code-file FILE (a file holding the code the user received by email; never pass codes on argv)
   completes it. Common: --server ORIGIN (default: the archive origin), --json, --output FILE
@@ -19,8 +19,9 @@ Gotchas: use an email the user gave you; never invent an identity, and never sea
   refreshes a due token, so authenticated:false means log in again. Challenges expire after 30
   minutes and are bound to the origin. Credentials live in the private origin store
   (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
-  references/http-auth.md. logout removes only the local grant (there is no server-side
-  revocation) and an ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
+  the selected origin's /llms/http-auth guide. logout defaults to --local:
+  it removes only the saved grant. --revoke ends its server grant before removing it locally;
+  failures keep it for retry. An ARTIFACTBIN_URL + ARTIFACTBIN_TOKEN environment grant stays active.
   Every other script reuses this grant and refreshes an expired access token itself (the refresh
   token is single-use and serialized across processes, so never refresh by hand or copy the
   store). Network errors, 429 and server errors keep the grant: retry later. Missing credentials
@@ -31,6 +32,7 @@ Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write o
   Results never contain credentials.`;
 
 import path from 'node:path';
+import {logoutGrant} from './auth-logout.mjs';
 import {mkdir, readFile, unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {
@@ -79,25 +81,9 @@ export async function authCommand({sub, values, positionals}, {env = process.env
       expired: saved?.expiresAt ? Date.now() >= saved.expiresAt : null
     };
   }
-  // logout: remove the stored grant under both locks so a concurrent refresh cannot recreate it.
-  if (sub === 'logout') {
-    const location = shared.credentialPaths(server, root);
-    await shared.withStateLock(root, 'home', () =>
-      shared.withStateLock(root, '@credential-refresh', () =>
-        unlink(location.backingPath).catch(error => {
-          if (error.code !== 'ENOENT') throw error;
-        })
-      )
-    );
-    return {
-      server,
-      localGrantRemoved: true,
-      serverRevoked: false,
-      environmentGrantStillActive: !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN),
-      note: 'No self-revocation endpoint is provided; ' +
-        'local logout does not revoke the server grant.'
-    };
-  }
+  if (sub === 'logout')
+    return {...await logoutGrant({values, server, root, shared, env, fetcher})};
+
   const client = makeClient(server, {env, fetcher});
   // login step 1: email a one-time code and save a private challenge file bound to this origin.
   if (values.email) {

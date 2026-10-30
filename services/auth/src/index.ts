@@ -1,4 +1,4 @@
-export {authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
+export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
 export {AUTH_TABLES,ensureAuthSchema} from './schema';
 export { createHumanAuth, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
 export {
@@ -12,6 +12,7 @@ import type { SessionStore } from './parts';
 
 /** Better Auth as the parts see it — the one adapter between HumanAuth's shape and AuthOptions.sessions. */
 export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
+  live: (sessionId,userId) => h.sessions.live(sessionId,userId),
   resolve: (request) => h.sessions.resolve(request),
   ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),

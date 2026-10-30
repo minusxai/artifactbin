@@ -1,7 +1,7 @@
 /** Native document validators preserve private reader isolation, ACLs, conditional reads and compression. */
 import zlib from 'node:zlib';
 import {nativeResponseIdentity} from '@/__tests__/native-response-identity';
-import {afterEach,describe,expect,it,vi} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {attachActor} from '@artifactbin/utils';
 import type {Actor} from '@artifactbin/contracts';
 import {useAppHarness,request,setSession,mintAccountToken,testPagesSite as pagesSiteFor} from '@/__tests__/harness';
@@ -11,11 +11,17 @@ import {PUT as putRoute} from '@/app/api/artifacts/[id]/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import { createUser } from '@/lib/accounts';
 import {pagesOriginFor} from '@/lib/http';
-import { getDb, measureQueries } from '@/lib/platform';
+import { getDb, measureQueries, setServices } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
 import * as native from '@/lib/document-serving/native-html.server';
 import {createAppServer} from '@/server/app';
 useAppHarness();afterEach(()=>{setSession(null);vi.restoreAllMocks();});
+const liveSessions=new Map<string,string>();
+beforeEach(()=>{liveSessions.clear();setServices({humanSessions:{live:async(id,userId)=>liveSessions.get(id)===userId}});});
+function humanActor(user:{id:string;email:string|null}):Actor{
+ const sessionId=`revalidation-${user.id}`;liveSessions.set(sessionId,user.id);
+ return {credential:'session',sessionId,userId:user.id,email:user.email!,emailVerified:true};
+}
 const APP='https://app.example.test',site=pagesSiteFor('pages.example.test',APP)!;
 const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>',pagesSite:site});
 const BODY='<html><head><title>A plan</title></head><body><h1>A plan</h1>'+Array.from({length:40},()=>'<p>The quick brown fox jumps over the lazy dog, and then does it again for good measure.</p>').join('')+'</body></html>';
@@ -23,7 +29,7 @@ const read=(id:string,headers:Record<string,string>={},init:RequestInit={})=>app
 const tagOf=(response:Response)=>response.headers.get('etag')!;
 async function world(visibility='public'){
  const user=await createUser({email:`mxmx_test_reval_${Math.random().toString(36).slice(2,8)}@example.com`});const token=await mintAccountToken('reval',user.id);
- const actor:Actor={credential:'session',userId:user.id,email:user.email!,emailVerified:true};
+ const actor=humanActor(user);
  const result=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{html:BODY,visibility}}));expect(result.status,await result.clone().text()).toBe(201);const {id}=await result.json();
  const edit=async(html:string)=>{const result=await putRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html}}),{params:Promise.resolve({id})});expect(result.status,await result.clone().text()).toBe(200);};
  return {id:id as string,user,token,actor,edit};
@@ -48,8 +54,13 @@ describe('native document conditional reads',()=>{
  it.each(['*','weak','strong','list'])('accepts a matching %s conditional validator',async(kind)=>{const w=await world(),tag=tagOf(await read(w.id));const asked=kind==='*'?'*':kind==='weak'?tag:kind==='strong'?tag.slice(2):`"other", ${tag}`;expect((await read(w.id,{'if-none-match':asked})).status).toBe(304);});
  it('invalidates the source validator after a conditional native HTML replacement',async()=>{const w=await world(),tag=tagOf(await read(w.id));await w.edit(BODY.replace('A plan</h1>','An updated plan</h1>'));const fresh=await read(w.id,{'if-none-match':tag});expect(fresh.status).toBe(200);expect(tagOf(fresh)).not.toBe(tag);expect(await fresh.text()).toContain('An updated plan');expect((await read(w.id,{'if-none-match':tagOf(fresh)})).status).toBe(304);});
  it('includes authored initial viewer state in the immutable representation',async()=>{const w=await world(),tag=tagOf(await read(w.id));await w.edit(BODY.replace('</head>','<script type="application/json" data-af="state">{"tab":"details"}</script></head>'));const fresh=await read(w.id,{'if-none-match':tag});expect(fresh.status).toBe(200);expect(tagOf(fresh)).not.toBe(tag);expect(await fresh.text()).toContain('"initialState":{"tab":"details"}');});
- it('separates another signed-in reader from the owner and anonymous reader',async()=>{const w=await world(),other=await createUser({email:'mxmx_test_reval_other@example.com'});const owner=await read(w.id,{cookie:await pagesCookie(w.id,w.actor)}),stranger=await read(w.id,{cookie:await pagesCookie(w.id,{credential:'session',userId:other.id,email:other.email!})}),guest=await read(w.id);expect(new Set([tagOf(owner),tagOf(stranger),tagOf(guest)]).size).toBe(3);});
+ it('separates another signed-in reader from the owner and anonymous reader',async()=>{const w=await world(),other=await createUser({email:'mxmx_test_reval_other@example.com'});const owner=await read(w.id,{cookie:await pagesCookie(w.id,w.actor)}),stranger=await read(w.id,{cookie:await pagesCookie(w.id,humanActor(other))}),guest=await read(w.id);expect(new Set([tagOf(owner),tagOf(stranger),tagOf(guest)]).size).toBe(3);});
  it('does not let an owner validator open a private page to an anonymous reader',async()=>{const w=await world('private'),owner=await read(w.id,{cookie:await pagesCookie(w.id,w.actor)});expect(owner.status).toBe(200);const guest=await read(w.id,{'if-none-match':tagOf(owner)});expect(guest.status).toBe(404);expect(tagOf(guest)).toBeNull();});
+ it('refuses the old page cookie and validator after the human authority revokes its session',async()=>{
+  const w=await world('private'),cookie=await pagesCookie(w.id,w.actor),owner=await read(w.id,{cookie});expect(owner.status).toBe(200);
+  liveSessions.delete(w.actor.sessionId!);
+  const revoked=await read(w.id,{cookie,'if-none-match':tagOf(owner)});expect(revoked.status).toBe(404);expect(tagOf(revoked)).toBeNull();
+ });
  it('rechecks current read access before accepting an old public validator',async()=>{const w=await world(),tag=tagOf(await read(w.id));await (await getDb()).query("UPDATE artifacts SET visibility='private',sharing_revision=sharing_revision+1 WHERE id=$1",[w.id]);expect((await read(w.id,{'if-none-match':tag})).status).toBe(404);});
  it('does not cache exporter captures under a normal reader validator',async()=>{const w=await world(),capture=await app.request(`${pagesOriginFor(w.id,site)}/?chrome=0&key=${encodeURIComponent(mintExportKey(w.id))}`);expect(capture.status).toBe(200);expect(capture.headers.get('etag')).toBeNull();expect(capture.headers.get('cache-control')).toBe('no-store');});
  it('compresses native HTML while preserving its weak semantic validator',async()=>{const w=await world(),plain=await read(w.id),identity=await plain.text(),br=await read(w.id,{'accept-encoding':'gzip, br'});expect(br.headers.get('content-encoding')).toBe('br');expect(br.headers.get('vary')).toMatch(/Accept-Encoding/i);const wire=Buffer.from(await br.arrayBuffer());expect(wire.byteLength).toBeLessThan(identity.length/3);const compressed=nativeResponseIdentity(zlib.brotliDecompressSync(wire).toString()),uncompressed=nativeResponseIdentity(identity);expect(compressed.nonce).not.toBe(uncompressed.nonce);expect(compressed.html).toBe(uncompressed.html);expect(tagOf(br)).toBe(tagOf(plain));for(const tag of [tagOf(br),tagOf(plain)]){const again=await read(w.id,{'accept-encoding':'br','if-none-match':tag});expect(again.status).toBe(304);expect(again.headers.get('content-encoding')).toBeNull();expect(tagOf(again)).toBe(tag);}});

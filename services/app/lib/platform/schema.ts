@@ -1001,6 +1001,7 @@ const PAGES_SESSIONS: Table = {
     { name: 'credential', type: 'TEXT', notNull: true },
     { name: 'user_id', type: 'TEXT' },
     { name: 'token_id', type: 'TEXT' },
+    { name: 'human_session_id', type: 'TEXT' },
     { name: 'email', type: 'TEXT' },
     { name: 'email_verified', type: 'BOOLEAN' },
     // App-origin decisions the app page carried across with the ticket (a reader's one-time consent

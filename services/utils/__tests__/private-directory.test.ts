@@ -4,7 +4,7 @@ import {execFile} from 'node:child_process';
 import {createHmac} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {privateDirectories,privateDirectory} from '../src/private-directory';
+import {privateDirectories,privateDirectory,verifyPrivatePaths} from '../src/private-directory';
 import {lockDirectory,privateStateDirectory,withStateLock} from '../src/state-lock';
 import {credentialPaths,privateCredentialStore,readCredentials,saveCredentials} from '../src/credentials';
 
@@ -14,7 +14,7 @@ const platform=Object.getOwnPropertyDescriptor(process,'platform')!;
 const saved={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
 const windows=()=>Object.defineProperty(process,'platform',{...platform,value:'win32'});
 /** The directories each PowerShell launch protected, decoded from its script. */
-const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe').map(call=>{
+const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe'&&Buffer.from(call[1][3] as string,'base64').toString('utf16le').includes('SetAccessControl')).map(call=>{
  const script=Buffer.from(call[1][3] as string,'base64').toString('utf16le');
  return [...script.match(/\$paths=@\(((?:'(?:[^']|'')*',?)*)\)/)![1]!.matchAll(/'((?:[^']|'')*)'/g)].map(match=>match[1]!.replace(/''/g,"'"));
 });
@@ -164,5 +164,16 @@ it('keeps a first sign-in to one launch when the store is prepared before its fi
  expect(launches()).toHaveLength(1);
  expect(await readCredentials(server,store)).toEqual(connection);
  await privateCredentialStore(server,store);await withStateLock(store,`auth:${server}`,async()=>{await saveCredentials(connection,store);});
+ expect(launches()).toHaveLength(1);
+});
+
+it('checks current Windows ACLs on reads without trusting a protection record or repairing ACLs',async()=>{
+ windows();const path=join(root,'acl-check');await privateDirectory(path);
+ await verifyPrivatePaths([path],join(path,'missing.env'));
+ const script=Buffer.from(spawn.mock.calls.at(-1)![1][3] as string,'base64').toString('utf16le');
+ expect(script).toContain('Get-Acl -LiteralPath');expect(script).toContain('GetOwner');expect(script).toContain('GetAccessRules');
+ expect(script).not.toContain('SetAccessControl');
+ spawn.mockImplementationOnce((...args:unknown[])=>{(args.at(-1) as (error:Error)=>void)(new Error('sensitive provider output'));});
+ await expect(verifyPrivatePaths([path],join(path,'missing.env'))).rejects.toThrow('Credential privacy: Windows owner or ACL permissions could not be verified');
  expect(launches()).toHaveLength(1);
 });

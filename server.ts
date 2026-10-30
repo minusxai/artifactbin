@@ -13,7 +13,7 @@ import { developmentPagesHosts, developmentViteOptions } from './services/app/li
 import { withRequestLog } from './services/app/lib/runtime/request-log';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
+import { bearerAdmission, ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf, testDomainSignInOf } from '@artifactbin/auth';
 import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 // The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
@@ -160,13 +160,13 @@ async function main(): Promise<void> {
   }
   /*
    * AUTHENTICATION COMPOSITION — skipped whole by `--app-only`: human login,
-   * its schema and mailer, the token reader, the parts and the assembly.
-   * Nothing below runs in the app-only shape; the app's own listener is
-   * served directly instead (see the listener at the bottom).
+   * its schema and mailer, and the public login/OAuth routes.
+   * App-only still uses auth-owned bearer admission against the existing family store.
    */
   let authSecret: string | undefined;
   let human: Awaited<ReturnType<typeof createHumanAuth>> | undefined;
-  let reader: ReturnType<typeof createTokenReader> | undefined;
+  // Both compositions use auth-owned family admission; app-only omits login and mint routes.
+  const reader = createTokenReader({ db: queryable, ttlMs: 5000, admitBearer: token => canAuthenticateUser(token.userId), schema: readEnv(env, 'APP__SCHEMA') });
   if (!appOnly) {
     validateDeploymentConfiguration();
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
@@ -192,14 +192,9 @@ async function main(): Promise<void> {
       ...(authSchema ? { schema: authSchema } : {}),
     });
 
-    /*
-     * THE AUTH BOUNDARY’S ONE READ of the app-owned `tokens` table: an indexed SELECT
-     * with a short cache (utils createTokenReader), never an HTTP call. The
-     * schema is where the deployment put the app's tables (APP__SCHEMA, public
-     * by default). A revoke is immediate in the app's own reads and ≤ TTL here.
-     */
-    const appSchema = readEnv(env, 'APP__SCHEMA');
-    reader = createTokenReader({ db: queryable, ttlMs: 5000, admitBearer: token => canAuthenticateUser(token.userId), ...(appSchema ? { schema: appSchema } : {}) });
+    setServices({humanSessions:human.sessions});
+
+
   }
 
   /*
@@ -233,7 +228,8 @@ async function main(): Promise<void> {
    * path — the flag only decides who answers the socket.
    */
   const listener = appOnly
-    ? getRequestListener(app.fetch)
+    ? getRequestListener(assemble([bearerAdmission({env,tokens:reader,identityDb:queryable,appSchema:readEnv(env,'APP__SCHEMA'),admitIdentity:admitDeploymentIdentity}),
+      {name:'application',mount:host=>host.all('*',c=>app.fetch(c.req.raw))}]).fetch)
     : getRequestListener(assemble(authParts({
       upstream: inProcess(app),
       env,

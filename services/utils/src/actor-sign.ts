@@ -62,6 +62,7 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   if (typeof claims.userId === 'string') actor.userId = claims.userId;
   if (typeof claims.tokenId === 'string') actor.tokenId = claims.tokenId;
   if (typeof claims.email === 'string') actor.email = claims.email;
+  if (typeof claims.sessionId === 'string') actor.sessionId = claims.sessionId;
   if (typeof claims.emailVerified === 'boolean') actor.emailVerified = claims.emailVerified;
   if (Array.isArray(claims.heldTokenIds) && claims.heldTokenIds.every((t) => typeof t === 'string')) actor.heldTokenIds = claims.heldTokenIds.slice(0, 32);
   if (claims.runner !== undefined) {
