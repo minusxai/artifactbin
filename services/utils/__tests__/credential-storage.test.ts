@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {chmod,mkdtemp,rename,rm,stat,symlink} from 'node:fs/promises';
+import {chmod,lstat,mkdir,mkdtemp,rename,rm,stat,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFile} from 'node:child_process';
@@ -8,8 +8,9 @@ import {credentialPaths,readCredentials,refreshCredentials,saveCredentials} from
 import {withStateLock} from '../src/state-lock';
 let root:string;
 const grant={server:'https://example.test',token:'old_access',refreshToken:'old_refresh',clientId:'client_one'};
-beforeEach(async()=>{root=await mkdtemp(join(tmpdir(),'credential-storage-'));});
-afterEach(async()=>{await rm(root,{recursive:true,force:true});});
+const originalHome={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
+beforeEach(async()=>{root=await mkdtemp(join(tmpdir(),'credential-storage-'));const home=join(root,'synthetic-profile');await mkdir(home);process.env.HOME=home;process.env.USERPROFILE=home;});
+afterEach(async()=>{for(const [key,value] of Object.entries(originalHome))if(value===undefined)delete process.env[key];else process.env[key]=value;await rm(root,{recursive:true,force:true});});
 const rotated=()=>Response.json({access_token:'new_access',refresh_token:'new_refresh',expires_in:3600});
 it('does not recreate a grant removed by logout before stale refresh acquires the home lock',async()=>{
  await saveCredentials(grant,root);const stale=(await readCredentials(grant.server,root))!;
@@ -80,4 +81,14 @@ it.skipIf(process.platform!=='win32').each(['root','file'])('rejects a real broa
  const inspect=`(Get-Acl -LiteralPath ${literal}).Sddl`;
  const after=await run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(inspect,'utf16le').toString('base64')],{windowsHide:true});
  expect(after.stdout.trim()).toBe(before.stdout.trim());
+});
+
+it.skipIf(process.platform!=='win32')('creates a real Windows junction and rejects a substituted junction',async()=>{
+ await saveCredentials(grant,root);const paths=credentialPaths(grant.server,root);
+ expect((await lstat(paths.directory)).isSymbolicLink()).toBe(true);
+ expect((await stat(paths.path)).ino).toBe((await stat(paths.backingPath)).ino);
+ const other=join(root,'unrelated');await mkdir(other);
+ await rm(paths.directory);await symlink(other,paths.directory,'junction');
+ await expect(readCredentials(grant.server,root)).rejects.toThrow(/projection/);
+ expect(await readCredentials(grant.server,root).catch(()=>null)).toBeNull();
 });

@@ -222,3 +222,21 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
     expect(baseCommit({ EVENT: 'workflow_dispatch' }, known)).toBeNull();
   });
 });
+
+describe('native credential verification stays outside the fast PR budget',()=>{
+ it('runs the same focused tests on three native Node 22 platforms with scoped triggers',()=>{
+  const native=workflow('credential-platform.yml'),job=native.jobs.credentials;
+  expect(job.strategy.matrix.os).toEqual(['ubuntu-latest','macos-latest','windows-latest']);
+  expect(job.strategy['fail-fast']).toBe(false);
+  expect(native.on.pull_request.paths).toContain('services/utils/**');
+  expect(native.on).toHaveProperty('workflow_dispatch');
+  expect(native.permissions).toEqual({contents:'read'});
+  expect(job.steps.find(step=>step.uses?.startsWith('actions/setup-node@')).with['node-version']).toBe(22);
+  expect(job.steps.at(-1).run).toBe('npm test -- --files services/utils/__tests__/credential-storage.test.ts services/utils/__tests__/credential-process.test.ts');
+  for(const step of job.steps.filter(step=>step.uses))expect(step.uses).toMatch(/@[0-9a-f]{40}$/);
+  expect(readFileSync(path.join(root,'.github/workflows/pr-fast.yml'),'utf8')).not.toContain('credential-platform');
+  const fast=JSON.parse(readFileSync(path.join(root,'scripts/ci/fast-tests.json'),'utf8'));
+  for(const file of ['credential-storage.test.ts','credential-process.test.ts'])expect(fast.some(entry=>entry.endsWith(file))).toBe(false);
+  expect(native.on.push.paths).toEqual(native.on.pull_request.paths);
+ });
+});
