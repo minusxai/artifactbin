@@ -9,7 +9,7 @@ import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
 import {createAgentBrowserSessions} from './auth/agent-browser-session';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
-export interface SessionInfo {userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
+export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
 export interface SessionStore {
  identity?(userId:string):Promise<SessionInfo|null>;
  resolve(request:Request):Promise<SessionInfo|null>;
@@ -177,6 +177,7 @@ export function oauthRoutes(o: AuthOptions): Part<AuthEnv> {
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         sessions: o.sessions,
+        invalidateTokens:()=>o.tokens.invalidate(),
         admitIdentity:o.admitIdentity,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         upstream: o.upstream,
@@ -215,6 +216,8 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
   const auth = request.headers.get('authorization') ?? '';
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
+    // Family revocation committed in another process must take effect on this request.
+    o.tokens.invalidate();
     const token = await o.tokens.byToken(presented);
     if (token?.userId && tokenFitsRequest(token, request, o)) {
       const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
@@ -235,6 +238,7 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
     if (session.setCookies) refresh?.push(...session.setCookies);
     return {
       credential: 'session',
+      sessionId:session.sessionId,
       userId: session.userId,
       ...(session.email ? { email: session.email } : {}),
       ...(session.emailVerified !== undefined ? { emailVerified: session.emailVerified } : {}),

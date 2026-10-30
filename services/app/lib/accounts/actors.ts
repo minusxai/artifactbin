@@ -41,6 +41,7 @@ export interface AccessActor {
  * code reads `documentEditor`, never this.
  */
 export interface RequestIdentity extends AccessActor {
+  sessionId?:string;
   credential: Credential;
   emailVerified: boolean | null;
   heldTokenIds?: string[];

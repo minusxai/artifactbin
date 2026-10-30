@@ -86,9 +86,9 @@ export interface OAuthStore {
   issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number, ttlMs?: number): Promise<string>;
   consumeAuthorizationCode(input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now?: number): Promise<AuthorizationGrant | null>;
   issueRefresh(grant: Omit<RefreshGrant, 'token'> & { accessTokenId: string }): Promise<string>;
-  /** `resources[0]` is the canonical API resource; a grant bound to any of `resources` rotates onto it. */
-  rotateRefresh(token: string, clientId: string, resources: readonly string[]): Promise<RefreshGrant | null>;
-  bindRefresh(token: string, accessTokenId: string): Promise<void>;
+  /** Mint privately, then atomically consume, record membership and publish against the live family. */
+  rotateAndMint<T extends {id:string}>(token:string, clientId:string, resources:readonly string[], mint:(grant:RefreshGrant)=>Promise<T>):Promise<{grant:RefreshGrant;minted:T}|null>;
+  revokeRefresh(token:string,clientId:string):Promise<void>;
 }
 
 function identifier(value: string, what: string): string {
@@ -116,7 +116,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
   const clients = `${s}.clients`;
   const credentials = `${s}.credentials`;
   const accessTokens = `${appSchema ? `${identifier(appSchema, 'app schema')}.` : ''}tokens`;
-  const sweep = () => db.query(`DELETE FROM ${credentials} WHERE expires_at <= now()`);
+  const sweep = () => db.query(`DELETE FROM ${credentials} WHERE expires_at <= now() AND kind NOT IN ('refresh_token', 'refresh_family')`);
   return {
     async register(body) {
       const valid = registration(body);
@@ -172,60 +172,69 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
     async issueRefresh(grant) {
       await sweep();
       const token = refreshToken();
+      const family = randomBytes(18).toString('base64url');
       await db.query(
-        `INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [REFRESH_TOKEN, hash(token), grant.userId, randomBytes(18).toString('base64url'), JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString()],
+        `WITH family AS (
+          INSERT INTO ${credentials} (kind, credential_hash, group_id, payload, expires_at)
+          VALUES ('refresh_family', $4, $4, jsonb_build_object('access_ids', jsonb_build_array($7::text)), $6)
+        ) INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [REFRESH_TOKEN, hash(token), grant.userId, family, JSON.stringify({ client_id: grant.clientId, resource: grant.resource, scope: grant.scope, access_token_id: grant.accessTokenId }), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(), grant.accessTokenId],
       );
       return token;
     },
-    async rotateRefresh(presented, clientId, resources) {
-      const resource = resources[0];
-      if (!resource) return null;
-      await sweep();
-      const next = refreshToken();
-      const oldHash = hash(presented);
-      const row = (await db.query<{ subject_id: string | null; group_id: string; payload: Record<string, unknown> | string }>(
-        `WITH consumed AS (
-           UPDATE ${credentials} AS current
-              SET consumed_at = now()
-            WHERE current.kind = $1 AND current.credential_hash = $2
-              AND current.payload->>'client_id' = $3 AND current.payload->>'resource' = ANY($4::text[])
-              AND current.consumed_at IS NULL AND current.deleted_at IS NULL AND current.expires_at > now()
-              AND EXISTS (SELECT 1 FROM ${accessTokens} access WHERE access.id = current.payload->>'access_token_id' AND access.deleted_at IS NULL)
-          RETURNING current.subject_id, current.group_id, current.payload
-         ), inserted AS (
-           INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at)
-           SELECT $1, $5, subject_id, group_id, payload || jsonb_build_object('resource', $7::text), $6 FROM consumed
-         )
-         SELECT subject_id, group_id, payload FROM consumed`,
-        [REFRESH_TOKEN, oldHash, clientId, [...resources], hash(next), new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString(), resource],
-      )).rows[0];
-      if (!row) {
-        await db.query(
-          `UPDATE ${credentials} SET deleted_at = now()
-            WHERE kind = $1 AND group_id = (
-              SELECT group_id FROM ${credentials}
-               WHERE kind = $1 AND credential_hash = $2 AND payload->>'client_id' = $3 LIMIT 1
-            ) AND deleted_at IS NULL`,
-          [REFRESH_TOKEN, oldHash, clientId],
-        );
+    async revokeRefresh(token, clientId) {
+      // The family row is the serialization boundary. RETURNING observes the latest
+      // membership even when this UPDATE waited for another process's rotation.
+      await db.query(`WITH ended AS (
+        UPDATE ${credentials} family SET deleted_at=now()
+        WHERE family.kind='refresh_family' AND family.credential_hash=(
+          SELECT group_id FROM ${credentials} WHERE kind=$1 AND credential_hash=$2 AND payload->>'client_id'=$3
+        ) RETURNING family.group_id, family.payload
+      ), refreshes AS (
+        UPDATE ${credentials} SET deleted_at=now() WHERE kind=$1 AND group_id IN (SELECT group_id FROM ended)
+      ) UPDATE ${accessTokens} SET deleted_at=now() WHERE id IN (
+        SELECT jsonb_array_elements_text(payload->'access_ids') FROM ended
+      )`, [REFRESH_TOKEN,hash(token),clientId]);
+    },
+    async rotateAndMint(presented, clientId, resources, mint) {
+      const resource=resources[0];if(!resource)return null;
+      const row=(await db.query<{group_id:string;payload:Record<string,unknown>|string;user_id:string|null}>(`
+        SELECT current.group_id,current.payload,access.user_id FROM ${credentials} current
+        JOIN ${credentials} family ON family.kind='refresh_family' AND family.credential_hash=current.group_id AND family.deleted_at IS NULL
+        JOIN ${accessTokens} access ON access.id=current.payload->>'access_token_id' AND access.deleted_at IS NULL
+        WHERE current.kind=$1 AND current.credential_hash=$2 AND current.payload->>'client_id'=$3
+        AND current.payload->>'resource'=ANY($4::text[]) AND current.consumed_at IS NULL
+        AND current.deleted_at IS NULL AND current.expires_at>now()`,[REFRESH_TOKEN,hash(presented),clientId,[...resources]])).rows[0];
+      if(!row){
+        const replay=await db.query(`SELECT 1 FROM ${credentials} WHERE kind=$1 AND credential_hash=$2 AND payload->>'client_id'=$3 AND payload->>'resource'=ANY($4::text[]) AND consumed_at IS NOT NULL`,[REFRESH_TOKEN,hash(presented),clientId,[...resources]]);
+        if(replay.rows.length)await this.revokeRefresh(presented,clientId);
         return null;
       }
-      const payload = objectOf(row.payload);
-      if (typeof payload.scope !== 'string') return null;
-      // Login may have merged a guest user into an account since approval.
-      // The live credential owns the current identity, not the old snapshot.
-      const current = (await db.query<{ user_id: string | null }>(`SELECT user_id FROM ${accessTokens} WHERE id = $1 AND deleted_at IS NULL`, [payload.access_token_id])).rows[0];
-      if (!current) return null;
-      return { token: next, clientId, userId: current.user_id, resource, scope: payload.scope };
+      const payload=objectOf(row.payload);if(typeof payload.scope!=='string')return null;
+      const grant:RefreshGrant={token:refreshToken(),clientId,userId:row.user_id,resource,scope:payload.scope};
+      const minted=await mint(grant);
+      try {
+        const result=await db.query(`WITH family AS (
+          UPDATE ${credentials} SET payload=jsonb_set(payload,'{access_ids}',(payload->'access_ids') || jsonb_build_array($5::text))
+          WHERE kind='refresh_family' AND credential_hash=$3 AND deleted_at IS NULL RETURNING group_id
+        ), consumed AS (
+          UPDATE ${credentials} SET consumed_at=now() WHERE kind=$1 AND credential_hash=$2
+          AND consumed_at IS NULL AND deleted_at IS NULL AND expires_at>now()
+          AND group_id IN (SELECT group_id FROM family) RETURNING subject_id,group_id
+        ), inserted AS (
+          INSERT INTO ${credentials} (kind,credential_hash,subject_id,group_id,payload,expires_at)
+          SELECT $1,$4,subject_id,group_id,$6::jsonb,$7 FROM consumed RETURNING credential_hash
+        ) SELECT credential_hash FROM inserted`,[REFRESH_TOKEN,hash(presented),row.group_id,hash(grant.token),minted.id,
+          JSON.stringify({client_id:clientId,resource,scope:grant.scope,access_token_id:minted.id}),new Date(Date.now()+REFRESH_TOKEN_TTL_MS).toISOString()]);
+        if(result.rows.length)return {grant,minted};
+      } catch(error) {
+        await db.query(`UPDATE ${accessTokens} SET deleted_at=now() WHERE id=$1`,[minted.id]);
+        throw error;
+      }
+      await db.query(`UPDATE ${accessTokens} SET deleted_at=now() WHERE id=$1`,[minted.id]);
+      return null;
     },
-    async bindRefresh(token, accessTokenId) {
-      await db.query(
-        `UPDATE ${credentials} SET payload = payload || $3::jsonb
-          WHERE kind = $1 AND credential_hash = $2 AND consumed_at IS NULL AND deleted_at IS NULL`,
-        [REFRESH_TOKEN, hash(token), JSON.stringify({ access_token_id: accessTokenId })],
-      );
-    },
+
   };
 }
 
@@ -238,6 +247,7 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   issuer: base,
   authorization_endpoint: `${base}/oauth/authorize`,
   token_endpoint: `${base}/oauth/token`,
+  revocation_endpoint: `${base}/oauth/revoke`,
   registration_endpoint: `${base}/oauth/register`,
   response_types_supported: ['code'],
   grant_types_supported: [AUTHORIZATION_CODE, REFRESH_TOKEN],

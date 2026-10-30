@@ -28,7 +28,7 @@
 import crypto from 'node:crypto';
 import { createCodeStore } from '@artifactbin/utils';
 import { ANONYMOUS, type Actor, type Queryable } from '@artifactbin/contracts';
-import { getDb } from '../platform';
+import { getDb,services } from '../platform';
 import { resolveTokenById, sha256 } from './tokens';
 import type { AccessActor, RequestIdentity } from './actors';
 import { canAuthenticateUser } from '../user-kinds';
@@ -48,7 +48,7 @@ const SECRET = /^[A-Za-z0-9_-]{16,128}$/;
 /** The one document a ticket (and the session it buys) is for: its id and its exact origin. */
 export interface PagesBinding { artifactId: string; origin: string }
 
-interface ActorSnapshot { credential: 'session' | 'agent-cookie' | 'none'; userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }
+interface ActorSnapshot { sessionId?:string; credential: 'session' | 'agent-cookie' | 'none'; userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }
 /** A guest's snapshot: nobody, there only to carry the app page's decisions across. */
 const NOBODY: ActorSnapshot = { credential: 'none', userId: null, tokenId: null, email: null, emailVerified: null };
 const CREDENTIALS: ReadonlySet<unknown> = new Set(['session', 'agent-cookie', 'none']);
@@ -68,7 +68,7 @@ function snapshotOf(actor: RequestIdentity, browserSession: boolean): ActorSnaps
   if (!credential) return null;
   if (!actor.userId && !actor.tokenId) return null;
   // The CLAIM is stored, never the grant it earned: the document origin re-resolves it per request.
-  return { credential, userId: actor.userId, tokenId: actor.tokenId, email: actor.email, emailVerified: actor.emailVerified };
+  return { sessionId:actor.sessionId, credential, userId: actor.userId, tokenId: actor.tokenId, email: actor.email, emailVerified: actor.emailVerified };
 }
 
 /**
@@ -118,7 +118,7 @@ async function ticketReader(payload: TicketPayload | null, binding: PagesBinding
   // Nobody's session exists only to carry something: never an empty one.
   if (payload.credential === 'none' && !Object.keys(payload.carried ?? {}).length) return null;
   // The ticket is a snapshot up to a minute old: the reader is resolved again now, so a revoked token never renders once.
-  return readerOf({ credential: payload.credential as string, user_id: payload.userId ?? null, token_id: payload.tokenId ?? null, email: payload.email ?? null, email_verified: payload.emailVerified ?? null, carried: payload.carried ?? {} });
+  return readerOf({ human_session_id:payload.sessionId, credential: payload.credential as string, user_id: payload.userId ?? null, token_id: payload.tokenId ?? null, email: payload.email ?? null, email_verified: payload.emailVerified ?? null, carried: payload.carried ?? {} });
 }
 
 /** Write the session a ticket bought, under `cookie` (only its sha256 is stored). */
@@ -126,8 +126,8 @@ async function writeSession(q: Queryable, cookie: string, payload: TicketPayload
   // Hygiene rides the write path, as the code store's does: no background job.
   await q.query('DELETE FROM pages_sessions WHERE expires_at < $1', [new Date(now).toISOString()]);
   await q.query(
-    'INSERT INTO pages_sessions (id_hash, credential, user_id, token_id, email, email_verified, carried, artifact_id, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-    [sha256(cookie), payload.credential, payload.userId ?? null, payload.tokenId ?? null, payload.email ?? null, payload.emailVerified ?? null, JSON.stringify(payload.carried ?? {}), artifactId, new Date(now + PAGES_SESSION_TTL_MS).toISOString()],
+    'INSERT INTO pages_sessions (id_hash, credential, user_id, token_id, email, email_verified, carried, artifact_id, expires_at, human_session_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+    [sha256(cookie), payload.credential, payload.userId ?? null, payload.tokenId ?? null, payload.email ?? null, payload.emailVerified ?? null, JSON.stringify(payload.carried ?? {}), artifactId, new Date(now + PAGES_SESSION_TTL_MS).toISOString(), payload.sessionId??null],
   );
 }
 
@@ -227,7 +227,7 @@ export async function pagesSessionOf(cookie: string | null | undefined, now = Da
   if (!cookie || !SECRET.test(cookie)) return null;
   const db = await getDb();
   const row = (await db.query<{ credential: string; user_id: string | null; token_id: string | null; email: string | null; email_verified: boolean | null; carried: unknown; artifact_id: string | null }>(
-    'SELECT credential, user_id, token_id, email, email_verified, carried, artifact_id FROM pages_sessions WHERE id_hash = $1 AND expires_at > $2',
+    'SELECT credential, user_id, token_id, email, email_verified, carried, artifact_id, human_session_id FROM pages_sessions WHERE id_hash = $1 AND expires_at > $2',
     [sha256(cookie), new Date(now).toISOString()],
   )).rows[0];
   if (!row || !CREDENTIALS.has(row.credential)) return null;
@@ -235,7 +235,7 @@ export async function pagesSessionOf(cookie: string | null | undefined, now = Da
   return readerOf(row);
 }
 
-interface SessionRow { credential: string; user_id: string | null; token_id: string | null; email: string | null; email_verified: boolean | null; carried: unknown }
+interface SessionRow { human_session_id?:string|null; credential: string; user_id: string | null; token_id: string | null; email: string | null; email_verified: boolean | null; carried: unknown }
 
 /** The reader a stored session names, as of now: nobody for a guest's, null when its account or token no longer stands. */
 async function readerOf(row: SessionRow): Promise<PagesSession | null> {
@@ -243,6 +243,7 @@ async function readerOf(row: SessionRow): Promise<PagesSession | null> {
   const held: PagesCarried = carried && typeof carried === 'object' && !Array.isArray(carried) ? carried as PagesCarried : {};
   if (row.credential === 'none') return { actor: ANONYMOUS, carried: held };
   if (!await canAuthenticateUser(row.user_id)) return null;
+  if(row.credential==='session'&&(!row.human_session_id||!row.user_id||!await services().humanSessions.live(row.human_session_id,row.user_id)))return null;
   if (row.token_id) {
     const token = await resolveTokenById(row.token_id);
     if (!token || (token.userId ?? null) !== (row.user_id ?? token.userId ?? null)) return null;

@@ -66,3 +66,19 @@ describe('session refresh', () => {
     expect(reached).toBe(false);
   });
 });
+
+it('the owning session authority follows direct signout and refuses another account',async()=>{
+ const login=async()=>{
+  const call=(path:string,body:unknown)=>auth.handler(new Request(`${baseURL}/api/auth${path}`,{method:'POST',headers:{'content-type':'application/json',origin:baseURL},body:JSON.stringify(body)}));
+  const email='mxmx_test_authority@example.com';await call('/email-otp/send-verification-otp',{email,type:'sign-in'});
+  const response=await call('/sign-in/email-otp',{email,otp});
+  const held=response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  const identity=await auth.sessions.resolve(new Request(baseURL,{headers:{cookie:held}}));
+  return {held,identity:identity!};
+ };
+ const {held,identity}=await login();
+ expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(true);
+ expect(await auth.sessions.live(identity.sessionId,'other-account')).toBe(false);
+ const ended=await auth.handler(new Request(`${baseURL}/api/auth/sign-out`,{method:'POST',headers:{cookie:held,origin:baseURL,'content-type':'application/json'},body:'{}'}));
+ expect(ended.status).toBe(200);expect(await auth.sessions.live(identity.sessionId,identity.userId)).toBe(false);
+});

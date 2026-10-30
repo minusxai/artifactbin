@@ -1,14 +1,17 @@
 /** Browser credentials: the signed agent-session cookie, and the one-time pages tickets a document origin exchanges. */
 // harness-exempt: cookie the agent-session codec (encode, decode, tamper) is the subject under test
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ANONYMOUS } from '@artifactbin/contracts';
-import { agentCookie, createGuestOwner, request, testIdentity, useAppHarness } from '@/__tests__/harness';
+import { agentCookie, createGuestOwner, request, testIdentity as baseIdentity, useAppHarness } from '@/__tests__/harness';
 import { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, createUser, encodeAgentSession, endPagesSession, endPagesSessionsFor, identityForUser, exchangePagesTicket, issuePagesTicket, liveAgentSession, mintToken, pagesSessionOf, revokeToken } from '@/lib/accounts';
 import { decodeAgentSessionEnvelope, withToken, withoutToken } from '@/lib/accounts/agent-session';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
-import { getDb } from '@/lib/platform';
+import { setServices,getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
+
+const testIdentity=(credential:Parameters<typeof baseIdentity>[0],ids:Parameters<typeof baseIdentity>[1]={})=>({...baseIdentity(credential,ids),...(credential==='session'?{sessionId:'test-session'}:{})});
+beforeEach(()=>setServices({humanSessions:{live:async ref=>ref==='test-session'}}));
 
 const SESSION_ID = 'A'.repeat(43);
 
@@ -175,4 +178,19 @@ describe('pages tickets', () => {
     expect(await pagesSessionOf(b)).toBeNull();
     expect(await pagesSessionOf(c)).not.toBeNull();
   });
+});
+
+it('rechecks the originating human session on pages reads and refuses unbound legacy rows',async()=>{
+ const user=await createUser({email:'mxmx_test_bound_pages@example.com'});
+ const binding={artifactId:'bound_doc',origin:'https://bound.pages.example.test'};
+ const identity={...testIdentity('session',{userId:user.id,email:user.email,emailVerified:true}),sessionId:'originating-session'};
+ let live=true;setServices({humanSessions:{live:async(ref,owner)=>live&&ref===identity.sessionId&&owner===user.id}});
+ const ticket=(await issuePagesTicket(identity,{},Date.now(),binding))!;
+ const spent=await exchangePagesTicket(ticket,binding);expect(spent).not.toBeNull();
+ const late=(await issuePagesTicket(identity,{},Date.now(),binding))!;
+ live=false;
+ expect(await pagesSessionOf(spent!.cookie)).toBeNull();
+ expect(await exchangePagesTicket(late,binding)).toBeNull();
+ live=true;const db=await getDb();await db.query('UPDATE pages_sessions SET human_session_id=NULL');
+ expect(await pagesSessionOf(spent!.cookie)).toBeNull();
 });

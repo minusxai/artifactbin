@@ -194,6 +194,7 @@ async function attachedIdentity(request: Request, effects: boolean): Promise<Ide
     email: userId ? wire.email ?? null : null,
     emailVerified: userId && verifiable ? wire.emailVerified === true : null,
   }, wire.credential, wire.heldTokenIds);
+  if(wire.credential==='session')identity.sessionId=wire.sessionId;
   if (userId && !await admitDeploymentIdentity({ userId, email: identity.email ?? undefined, ...(identity.emailVerified === null ? {} : { emailVerified: identity.emailVerified }) })) return nobody();
   if (wire.credential === 'agent-cookie') {
     // Only the pages host creates token-backed browser cookies. Its WeakMap mark cannot be supplied by a

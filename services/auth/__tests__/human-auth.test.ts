@@ -74,6 +74,8 @@ describe('session cookie', () => {
     const line = (res.headers.getSetCookie?.() ?? []).find((c) => c.includes('session_token='))!;
     expect(line).toMatch(/^__Host-better-auth\.session_token=/);
     expect(line).toMatch(/; Secure/i);
+    expect(line).toMatch(/; HttpOnly/i);
+    expect(line).toMatch(/; SameSite=Lax/i);
     expect(line).toMatch(/; Path=\//i);
     expect(line).not.toMatch(/; Domain=/i);
     expect((await secure.sessions.resolve(new Request('https://x', { headers: { cookie: line.split(';')[0]! } })))?.email).toBe('host@example.com');

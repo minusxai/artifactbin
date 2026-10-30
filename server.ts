@@ -192,6 +192,8 @@ async function main(): Promise<void> {
       ...(authSchema ? { schema: authSchema } : {}),
     });
 
+    setServices({humanSessions:human.sessions});
+
     /*
      * THE AUTH BOUNDARY’S ONE READ of the app-owned `tokens` table: an indexed SELECT
      * with a short cache (utils createTokenReader), never an HTTP call. The

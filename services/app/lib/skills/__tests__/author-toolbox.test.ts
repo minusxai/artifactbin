@@ -372,3 +372,27 @@ it('does not ask agents to write what the platform adds, and says what each side
   expect(html,example).not.toContain('core.js');expect(html,example).toContain('artifactbin:design-system');
  }
 });
+it('revoke logout uses the saved grant without refreshing or revoking environment overrides and retains failures',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
+ const {platform}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ const shared=await platform(),root=await mkdtemp(path.join(tmpdir(),'auth-revoke-')),server='https://example.test';
+ const saved={server,token:'synthetic-saved',refreshToken:'synthetic-refresh',clientId:'synthetic-client',expiresAt:1};
+ try{
+  await shared.saveCredentials(saved,root);
+  let calls=0;let success=false;
+  const options={env:{ARTIFACTBIN_HOME:root,ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic-environment'},fetcher:async(url:string|URL|Request,init:RequestInit={})=>{
+   calls++;expect(String(url)).toBe(server+'/oauth/revoke');expect(JSON.parse(init.body as string)).toEqual({client_id:saved.clientId,token:saved.refreshToken});
+   expect(JSON.stringify(init)).not.toContain('synthetic-environment');return Response.json({}, {status:success?200:503});
+  }};
+  await expect(authCommand({sub:'logout',values:{revoke:true},positionals:[]},options)).rejects.toMatchObject({code:'revoke_unavailable'});
+  expect(await shared.readCredentials(server,root)).toEqual(saved);
+  success=true;const result=await authCommand({sub:'logout',values:{revoke:true},positionals:[]},options);
+  expect(result).toMatchObject({serverRevoked:true,localGrantRemoved:true,environmentGrantStillActive:true});
+  expect(JSON.stringify(result)).not.toContain('synthetic');expect(calls).toBe(2);expect(await shared.readCredentials(server,root)).toBeNull();
+  await expect(authCommand({sub:'logout',values:{revoke:true},positionals:[]},options)).rejects.toMatchObject({code:'revoke_unavailable'});
+  expect(calls).toBe(2);
+  expect(await authCommand({sub:'logout',values:{local:true},positionals:[]},options)).toMatchObject({serverRevoked:false,environmentGrantStillActive:true});
+  expect(calls).toBe(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

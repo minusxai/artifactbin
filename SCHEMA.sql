@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS app.pages_sessions (
   credential TEXT NOT NULL,
   user_id TEXT,
   token_id TEXT,
+  human_session_id TEXT,
   email TEXT,
   email_verified BOOLEAN,
   carried JSONB NOT NULL DEFAULT '{}',
@@ -360,6 +361,8 @@ ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS credential TEXT NOT NULL
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS user_id TEXT;
 
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS token_id TEXT;
+
+ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS human_session_id TEXT;
 
 ALTER TABLE app.pages_sessions ADD COLUMN IF NOT EXISTS email TEXT;
 

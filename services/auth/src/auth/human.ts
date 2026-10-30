@@ -126,7 +126,7 @@ const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Pro
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
-  sessions: { identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean; setCookies?: string[] } | null> };
+  sessions: { live(sessionId:string,userId:string):Promise<boolean>; identity?(userId:string): Promise<{userId:string;email:string;emailVerified:boolean}|null>; resolve(request: Request): Promise<{ sessionId:string; userId: string; email: string; emailVerified: boolean; setCookies?: string[] } | null> };
   /** The instance, for identity routes (sign-out on revoke, …). */
   api: ReturnType<typeof betterAuth>['api'];
 }
@@ -341,6 +341,9 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
     handler: (request) => auth.handler(request),
     api: auth.api,
     sessions: {
+      async live(sessionId,userId){
+        return (await queryable.query(`SELECT 1 FROM ${schema}.session WHERE id=$1 AND "userId"=$2 AND "expiresAt">now()`,[sessionId,userId])).rows.length===1;
+      },
       async identity(userId) {
         const row = await (db as unknown as Kysely<IdentityTables>).selectFrom('user')
           .select(['id', 'email', 'emailVerified']).where('id', '=', userId).executeTakeFirst();
@@ -351,7 +354,7 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
         const {headers, response: s} = await auth.api.getSession({ headers: request.headers, returnHeaders: true });
         if (!s?.user?.id) return null;
         const setCookies = headers.getSetCookie();
-        return { userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
+        return { sessionId:s.session.id, userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified, ...(setCookies.length ? { setCookies } : {}) };
       },
     },
   };

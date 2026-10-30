@@ -1,7 +1,7 @@
 /** Legacy bearer-to-browser login is closed. Keep sign-out available to clear
  * old ownership cookies; email login may still adopt their artifacts. */
 import { agentSessionClearCookie, endPagesSessionsFor } from '@/lib/accounts';
-import { sessionActor } from '@/lib/authentication';
+import { refusesCrossSite, sessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
 
 export async function POST(_request: Request) {
@@ -15,6 +15,7 @@ export async function POST(_request: Request) {
 export async function DELETE(request?: Request) {
   if (request) {
     const actor = await sessionActor(request);
+    if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
     await endPagesSessionsFor(actor);
   }
   return new Response(null, { status: 204, headers: {
