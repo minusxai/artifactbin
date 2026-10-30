@@ -67,11 +67,15 @@ it('serves private nested CSS/JS/image dependencies through the page session and
  const {createAppServer}=await import('@/server/app');
  const user=await createUser({email:'mxmx_test_bundle_private@example.com'});const actor=await mintAccountToken('bundle-private',user.id);
  const reader=await createUser({email:'mxmx_test_bundle_reader@example.com'});
+ const {setServices}=await import('@/lib/platform');
+ const liveSessions=new Map([[`bundle-${user.id}`,user.id],[`bundle-${reader.id}`,reader.id]]);
+ setServices({humanSessions:{live:async(id,userId)=>liveSessions.get(id)===userId}});
+ const sessionIdentity=(account:typeof user)=>({...testIdentity('session',{userId:account.id,email:account.email}),sessionId:`bundle-${account.id}`});
  const body={visibility:'private',shares:[{email:reader.email,role:'viewer'}],html:'<link rel="stylesheet" href="./main.css"><script type="module" src="./main.js"></script><img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('main.css','body{background:url(./logo.svg)}','text/css'),file('main.js','import "./nested.js";','text/javascript'),file('nested.js','export const ready=true;','text/javascript'),file('logo.svg','<svg/>','image/svg+xml')]}};
  const published=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_private_delivery_01'},json:body}));const saved=await published.json();expect(published.status,JSON.stringify(saved)).toBe(201);
  const site=pagesSiteFor('pages.example.test','https://app.example.test'),self=pagesOriginFor(saved.id,site);
  const app=createAppServer({indexHtml:async()=>'<html><body><div id="root"></div></body></html>',pagesSite:site});
- const ticket=await issuePagesTicket(testIdentity('session',{userId:user.id,email:user.email}),{},Date.now(),{artifactId:saved.id,origin:self});
+ const ticket=await issuePagesTicket(sessionIdentity(user),{},Date.now(),{artifactId:saved.id,origin:self});
  const opened=await app.request(self+'/?_pt='+ticket);expect(opened.status).toBe(200);const cookie=/__Host-afbin_pages=([^;]+)/.exec(opened.headers.get('set-cookie')??'')?.[1];expect(cookie).toBeTruthy();
  for(const receipt of saved.dependencyReceipts){
   const url=self+`/a/${saved.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`;
@@ -80,14 +84,19 @@ it('serves private nested CSS/JS/image dependencies through the page session and
   if(receipt.path==='main.css'||receipt.path==='main.js')expect(await result.text()).toContain(`/a/${saved.id}/assets?dependency=`);
  }
  const {loadBundleAssetResources}=await import('@/lib/html-publication-bundle');
- const resources=await loadBundleAssetResources(new Request(self+'/download'),testIdentity('session',{userId:user.id,email:user.email}),saved.id);expect(resources).toHaveLength(4);expect(resources.some(resource=>resource.contentType==='text/javascript')).toBe(true);
+ const resources=await loadBundleAssetResources(new Request(self+'/download'),sessionIdentity(user),saved.id);expect(resources).toHaveLength(4);expect(resources.some(resource=>resource.contentType==='text/javascript')).toBe(true);
  const dependency=saved.dependencyReceipts[0];const url=self+`/a/${saved.id}/assets?dependency=${dependency.id}&revision=${dependency.revision}`;
- const readerTicket=await issuePagesTicket(testIdentity('session',{userId:reader.id,email:reader.email}),{},Date.now(),{artifactId:saved.id,origin:self});
+ const readerTicket=await issuePagesTicket(sessionIdentity(reader),{},Date.now(),{artifactId:saved.id,origin:self});
  const readerPage=await app.request(self+'/?_pt='+readerTicket);expect(readerPage.status).toBe(200);const readerCookie=/__Host-afbin_pages=([^;]+)/.exec(readerPage.headers.get('set-cookie')??'')?.[1];
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
  const db=await harness.db();await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[dependency.id]);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(200);
+ liveSessions.delete(`bundle-${reader.id}`);
+ expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(404);
+ const refusedTicket=await issuePagesTicket(sessionIdentity(reader),{},Date.now(),{artifactId:saved.id,origin:self});
+ expect((await app.request(self+'/?_pt='+refusedTicket)).status).toBe(404);
+
  await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[saved.id]);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(404);
 });

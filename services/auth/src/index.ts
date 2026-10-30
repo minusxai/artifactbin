@@ -1,4 +1,4 @@
-export {authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
+export {bearerAdmission,authParts,createAuthHost,session,loginRoutes,oauthRoutes,internalBoundary,publicBuildAssets,type AuthOptions,type AuthApp,type AuthEnv,type SessionStore,type SessionInfo} from './parts';
 export {AUTH_TABLES,ensureAuthSchema} from './schema';
 export { createHumanAuth, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
 export {
