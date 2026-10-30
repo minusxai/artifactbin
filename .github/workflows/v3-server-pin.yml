@@ -43,19 +43,6 @@ jobs:
             if [ "$direction" != ahead ]; then echo "${SHA:0:12} does not advance pin ${pinned:0:12}"; exit 0; fi
             git read-tree FETCH_HEAD
             git update-index --cacheinfo "160000,$SHA,toolkit"
-            # Stage capability metadata in the same tree; never grant a missing auth fence.
-            capability=$(git show FETCH_HEAD:infra/auth-capability.json | node -e '
-              let input = "";
-              process.stdin.on("data", chunk => input += chunk);
-              process.stdin.on("end", () => {
-                const capability = JSON.parse(input);
-                if (capability.schema !== 1 || capability.authFence !== 1)
-                  throw Error("Unsupported auth capability; refusing to advance pin");
-                capability.toolkit = process.env.SHA;
-                process.stdout.write(JSON.stringify(capability, null, 2) + "\n");
-              });
-            ' | git hash-object -w --stdin)
-            git update-index --cacheinfo "100644,$capability,infra/auth-capability.json"
             commit=$(git commit-tree "$(git write-tree)" -p FETCH_HEAD -m "Update isolated toolkit to ${SHA:0:12}")
             if git push -q "$server" "$commit:refs/heads/main"; then echo "Pinned ${SHA:0:12}"; exit 0; fi
             echo "Server branch moved (attempt $attempt/5); re-pinning on top of it"
