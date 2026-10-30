@@ -17,7 +17,7 @@ it('validates release contents without evaluating scripts and rejects corruption
 import {mkdtemp,writeFile,readFile,access,rm,cp,symlink,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {createServer} from 'node:http';
+import {withHttpServer} from '@artifactbin/test-support/net';
 import {spawn} from 'node:child_process';
 it('updates isolated installs once, preserves data and symlinks, and returns promptly with a stalled endpoint',async()=>{
  const {update,disabled}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
@@ -26,17 +26,16 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
  const root=path.join(base,'.artifactbin-releases','initial','artifactbin');await mkdir(root,{recursive:true});await symlink(root,path.join(base,'artifactbin'));
  let stalled=false;
  let release:ReturnType<typeof skillRelease>;
- const server=createServer((req,res)=>{if(stalled)return;res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
- await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
- const address=server.address();if(!address||typeof address==='string')throw Error('No address');
- const origin=`http://127.0.0.1:${address.port}`;
+ const server=await withHttpServer((req,res)=>{if(stalled)return;res.end(req.url?.endsWith('latest.json')?JSON.stringify(release.manifest):Buffer.from(release.bytes));});
+ const origin=server.base;
  const scripts=path.join(root,'scripts');
  await cp(path.dirname(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs')),scripts,{recursive:true});
+ const updaterFiles=Object.fromEntries(await Promise.all(['toolbox-update.mjs','toolbox-update-state.mjs','toolbox-update-archive.mjs'].map(async name=>['scripts/'+name,await readFile(path.join(scripts,name),'utf8')])));
  const probe=`import {beforeCommand} from './toolbox-update.mjs'; if(!await beforeCommand(import.meta.url,process.argv.slice(2))) {if(process.argv.includes('fail'))process.exit(7);console.log(JSON.stringify(process.argv.slice(2).filter(a=>a!=='--no-update')));}`;
  await writeFile(path.join(scripts,'probe.mjs'),probe);
  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin,version:'0'.repeat(64)}));
  await writeFile(path.join(root,'personal.txt'),'retain');await symlink(path.join(base,'artifactbin'),root+'-link');
- release=skillRelease({'SKILL.md':'new skill','scripts/probe.mjs':probe,'scripts/toolbox-update.mjs':await readFile(path.join(scripts,'toolbox-update.mjs'),'utf8')},origin);
+ release=skillRelease({'SKILL.md':'new skill','scripts/probe.mjs':probe,...updaterFiles},origin);
  const run=(args:string[],env={},old=false)=>new Promise<{out:string,err:string,code:number|null}>(resolve=>{const child=spawn(process.execPath,[path.join(old?root:root+'-link','scripts/probe.mjs'),...args],{env:{...process.env,...env}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('exit',code=>resolve({out,err,code}));});
  try{
   await run(['--no-update']);await run([],{ARTIFACTBIN__NO_UPDATE:'1'});await run(['--help']);
@@ -53,7 +52,7 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
   expect((await run(['--no-update'],{},true)).code).toBe(0);
   expect((await run(['--server','https://other.example'],{},true)).code).toBe(0);
   const firstVersion=release.manifest.version;
-  release=skillRelease({'SKILL.md':'second skill','scripts/probe.mjs':probe+'\n// second release','scripts/toolbox-update.mjs':await readFile(path.join(scripts,'toolbox-update.mjs'),'utf8')},origin);
+  release=skillRelease({'SKILL.md':'second skill','scripts/probe.mjs':probe+'\n// second release',...updaterFiles},origin);
   expect((await update(root,{background:true})).status).toBe('staged');
   await run(['--server','https://other.example']);
   await run(['--no-update']);
@@ -76,10 +75,10 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
   expect((await run(['--no-update'])).code).toBe(0);
   stalled=true;const start=performance.now();expect((await run(['foreground'])).code).toBe(0);
   const duration=performance.now()-start;console.log('stalled endpoint foreground ms:',duration);expect(duration).toBeLessThan(1500);
-  server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
+  await server.close();
   await expect(update(root)).rejects.toThrow();
   expect((await run(['offline'])).code).toBe(0);
- }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(base,{recursive:true,force:true});}
+ }finally{await server.close();await rm(base,{recursive:true,force:true});}
 });
 
 it('keeps standalone help offline, rejects unknown flags, and parses boolean opt-outs',async()=>{
@@ -100,7 +99,7 @@ it('does not wait for the background updater lock before running a command',asyn
  const root=path.join(base,'.artifactbin-releases','initial','artifactbin');
  await mkdir(path.join(root,'scripts'),{recursive:true});await symlink(root,path.join(base,'artifactbin'));
  await writeFile(path.join(root,'release.json'),JSON.stringify({schemaVersion:1,origin:'http://127.0.0.1:1',version:'0'.repeat(64)}));
- await cp(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'),path.join(root,'scripts/toolbox-update.mjs'));
+ await cp(path.dirname(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs')),path.join(root,'scripts'),{recursive:true});
  await writeFile(path.join(root,'scripts/probe.mjs'),`import {beforeCommand} from './toolbox-update.mjs';if(!await beforeCommand(import.meta.url,[]))console.log('ran');`);
  await symlink(String(process.pid),path.join(base,'.artifactbin-releases','lock'));
  try{

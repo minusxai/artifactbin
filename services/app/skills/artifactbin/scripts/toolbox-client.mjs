@@ -1,4 +1,3 @@
-import {beforeCommand} from './toolbox-update.mjs';
 /**
  * Internal: shared runtime of the installed commands: ToolError, argument and file helpers, the
  * origin-bound HTTP client (makeClient) and runTool, which parses flags, runs a command and prints
@@ -7,6 +6,7 @@ import {beforeCommand} from './toolbox-update.mjs';
  * Used by: every command script (auth serve autofix publish read export check graphql comment),
  *   toolbox-*.mjs, author-toolbox/author-check tests.
  */
+import {beforeCommand} from './toolbox-update.mjs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
@@ -171,7 +171,8 @@ export async function runTool(name,url,execute,args=process.argv.slice(2)){
  try{
 try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_invocation',
     error.message,2,'Read --help.');}
-  if(parsed.values.help){process.stdout.write(commandHelp(name)+"\n--no-update disables update checks and activation.\n");return;}
+  if(parsed.values.help){process.stdout.write(commandHelp(name)+
+ "\n--no-update disables update checks and activation.\n");return;}
 if(parsed.values.output&&!parsed.values.append){const destination=await safeParent(
     parsed.values.output);let exists=false;try{await lstat(destination);exists=true;}catch(error){
     if(error.code!=='ENOENT')throw error;}if(exists)throw new ToolError('output_exists',

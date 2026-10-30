@@ -68,7 +68,7 @@ describe('one installable native HTML author skill',()=>{
   const archive=Buffer.from(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
   const members:string[]=[];let offset=0;
   while(archive.readUInt32LE(offset)===0x04034b50){const size=archive.readUInt32LE(offset+18),name=archive.readUInt16LE(offset+26);members.push(archive.subarray(offset+30,offset+30+name).toString().replace(/^artifactbin\//,''));offset+=30+name+size;}
-  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
+  for(const name of members)expect(name).toMatch(/^(?:SKILL\.md|release\.json|references\/[a-z0-9-]+\.md|examples\/[a-z0-9-]+\.(?:html|csv|ts|mjs)|design-systems\/[a-z0-9-]+\.css|components\/[a-z0-9-]+\.ts|scripts\/[a-z0-9-]+\.mjs)$/);
   // Pages import components as @afbin/<component> and the preview fetches the runtime and libraries from the server (D20).
   expect(members.filter(name=>/^components\/.*\.js$|^scripts\/preview-(?:runtime|libraries)\.mjs$|^fonts\//.test(name))).toEqual([]);
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
