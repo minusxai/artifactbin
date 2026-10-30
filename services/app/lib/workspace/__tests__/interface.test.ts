@@ -50,6 +50,26 @@ describe('the dashboard core', () => {
     expect((await accountWorkspaceCoreFor(alice.id, null))!.shared).toEqual([]);
   });
 
+  it('keeps older shared documents reachable behind more than 200 newer assets without widening access', async () => {
+    const alice = await owner('alice'), bob = await owner('bob');
+    await artifact({ id: 'older_document', user: bob.id, token: bob.token, at: '2026-09-01T00:00:00Z' });
+    const db = await getDb();
+    await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ('older_document', 'alice@example.test', 'viewer')");
+    for (let i = 0; i < 205; i++) {
+      const id = `shared_asset_${i}`;
+      await artifact({ id, user: bob.id, token: bob.token, format: i % 4 === 3 ? 'dataset' : 'file', title: `resource_${i}.${['css', 'js', 'woff2', 'csv'][i % 4]}` });
+      await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, 'alice@example.test', 'editor')", [id]);
+    }
+    await artifact({ id: 'not_shared', user: bob.id, token: bob.token });
+    await artifact({ id: 'deleted_shared', user: bob.id, token: bob.token, deleted: true });
+    await db.query("INSERT INTO artifact_shares (artifact_id, email, role) VALUES ('deleted_shared', 'alice@example.test', 'viewer')");
+    const core = (await accountWorkspaceCoreFor(alice.id, 'alice@example.test'))!;
+    expect(core.shared).toHaveLength(206);
+    expect(core.shared.some(row => row.id === 'older_document')).toBe(true);
+    expect(core.shared.some(row => row.format === 'dataset' && row.role === 'editor')).toBe(true);
+    expect(core.shared.some(row => ['not_shared', 'deleted_shared'].includes(row.id))).toBe(false);
+  });
+
   it('answers null for a group the account does not belong to', async () => {
     const alice = await owner('alice');
     expect(await accountWorkspaceCoreFor(alice.id, null, 'grp_not_mine')).toBeNull();

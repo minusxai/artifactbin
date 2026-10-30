@@ -2,6 +2,7 @@
 import { getDb } from '@/lib/platform';
 import { type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
+import type { WorkspaceSharedItem } from './dashboard';
 import { viewTotalsFor } from '@/lib/analytics';
 
 export interface WorkspaceStats { artifacts: number; assets: number; views: number }
@@ -70,3 +71,13 @@ export async function workspaceAssetsFor(userId: string, selection: AssetSelecti
   });
 }
 export type WorkspaceAssets = Awaited<ReturnType<typeof workspaceAssetsFor>>;
+
+/** Complete authorized shared inventory: the selected view must precede counts and pagination. */
+export async function workspaceSharedFor(userId: string, email: string): Promise<WorkspaceSharedItem[]> {
+  const db = await getDb();
+  const result = await db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
+    FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
+    WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
+    ORDER BY a.updated_at DESC, a.id DESC`, [email.toLowerCase().trim(), userId]);
+  return result.rows;
+}

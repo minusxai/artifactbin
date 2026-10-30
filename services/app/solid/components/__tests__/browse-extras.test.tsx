@@ -103,3 +103,39 @@ it('says when nothing shared matches the search, quoting it', () => {
   expect(screen.getByRole('status')).toHaveTextContent('nothing matches “zzz”');
   expect(screen.queryByLabelText('Open shared artifact one')).toBeNull();
 });
+
+// Contract: the view is chosen before facets, result counts and page slicing.
+it('defaults mixed shared inventory to documents and deliberately exposes every asset', () => {
+  const docs = Array.from({ length: 12 }, (_, i): WorkspaceSharedItem => ({ ...shared(`page_${i}`), format: 'html' }));
+  const assets = Array.from({ length: 205 }, (_, i): WorkspaceSharedItem => ({ ...shared(`asset_${i}`, 'editor'), title: `asset_${i}.${['css', 'js', 'woff2', 'csv'][i % 4]}`, format: i % 4 === 3 ? 'dataset' : 'file' }));
+  render(() => <SharedWithYou items={[...assets, ...docs]} />);
+  expect(screen.queryByLabelText('Open shared artifact asset_0')).toBeNull();
+  expect(screen.queryByLabelText('Filter file')).toBeNull();
+  expect(screen.queryByLabelText('Filter editor')).toBeNull();
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('1-10 of 12');
+  fireEvent.click(screen.getByLabelText('Next shared page'));
+  expect(screen.getByLabelText('Open shared artifact page_11')).toBeInTheDocument();
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('11-12 of 12');
+  fireEvent.click(screen.getByRole('button', { name: 'Shared assets' }));
+  expect(screen.getByLabelText('Open shared artifact asset_0')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open shared artifact page_0')).toBeNull();
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('1-10 of 205');
+  for (let page = 1; page <= 20; page++) fireEvent.click(screen.getByLabelText('Next shared page'));
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('201-205 of 205');
+  expect(screen.getByLabelText('Open shared artifact asset_204')).toBeInTheDocument();
+  expect(screen.getByLabelText('Next shared page')).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Filter dataset'));
+  expect(screen.getByLabelText('Shared page range')).toHaveTextContent('1-10 of 51');
+  fireEvent.input(screen.getByLabelText('Search shared artifacts'), { target: { value: 'asset_203' } });
+  expect(screen.getByLabelText('Open shared artifact asset_203')).toHaveAttribute('href', '/a/asset_203');
+  expect(screen.getByLabelText('Shared result count')).toHaveTextContent('1/205');
+  fireEvent.click(screen.getByRole('button', { name: 'Shared documents' }));
+  expect(screen.getByRole('status')).toHaveTextContent('nothing matches');
+});
+
+it('offers the assets view when no documents have been shared', () => {
+  render(() => <SharedWithYou items={[{ ...shared('file'), format: 'file', title: 'font.woff2' }]} />);
+  expect(screen.getByRole('status')).toHaveTextContent('no shared documents');
+  fireEvent.click(screen.getByRole('button', { name: 'Shared assets' }));
+  expect(screen.getByLabelText('Open shared artifact file')).toBeInTheDocument();
+});
