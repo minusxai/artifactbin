@@ -74,11 +74,11 @@ it.skipIf(process.platform!=='win32').each(['root','file'])('rejects a real broa
  const path=target==='root'?root:credentialPaths(grant.server,root).backingPath;
  const literal="'"+path.replace(/'/g,"''")+"'";
  const run=promisify(execFile);
- const script=`$ErrorActionPreference='Stop'; $path=${literal}; $acl=Get-Acl -LiteralPath $path; $sid=New-Object Security.Principal.SecurityIdentifier('S-1-1-0'); $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'Read','Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $path -AclObject $acl; (Get-Acl -LiteralPath $path).Sddl`;
+ const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $path=${literal}; $acl=Get-Acl -LiteralPath $path; $sid=New-Object Security.Principal.SecurityIdentifier('S-1-1-0'); $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'Read','Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $path -AclObject $acl; (Get-Acl -LiteralPath $path).Sddl`;
  const args=['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')];
  const before=await run('powershell.exe',args,{windowsHide:true});
  await expect(readCredentials(grant.server,root)).rejects.toThrow(/privacy.*Windows/i);
- const inspect=`(Get-Acl -LiteralPath ${literal}).Sddl`;
+ const inspect=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; (Get-Acl -LiteralPath ${literal}).Sddl`;
  const after=await run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(inspect,'utf16le').toString('base64')],{windowsHide:true});
  expect(after.stdout.trim()).toBe(before.stdout.trim());
 });
@@ -100,7 +100,7 @@ it.skipIf(process.platform!=='win32')('publishes current-user-owned Windows dire
   const paths=credentialPaths(grant.server,root);
   const literals=[root,join(root,'hosts'),paths.backingDirectory,paths.backingPath].map(path=>"'"+path.replace(/'/g,"''")+"'").join(',');
   // ACL inheritance does not inherit the owner: elevated tokens may default new files to a group owner.
-  const script=`$ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User; foreach($path in @(${literals})) { $acl=Get-Acl -LiteralPath $path; if($acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { throw 'Expected current-user owner' }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { throw 'Unexpected access rule' } } }`;
+  const script=`$env:PSModulePath=$PSHOME+'\\Modules'; $ErrorActionPreference='Stop'; $user=[Security.Principal.WindowsIdentity]::GetCurrent().User; foreach($path in @(${literals})) { $acl=Get-Acl -LiteralPath $path; if($acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { throw 'Expected current-user owner' }; foreach($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) { if($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference -ne $user -and $rule.IdentityReference.Value -ne 'S-1-5-18') { throw 'Unexpected access rule' } } }`;
   await run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true});
   expect(await readCredentials(grant.server,root)).toEqual({...grant,token});
  }
