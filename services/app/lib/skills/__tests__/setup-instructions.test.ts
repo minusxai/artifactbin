@@ -4,6 +4,7 @@ describe('shared recipient setup instructions',()=>{
  it('uses supplied deployment identity and recipient authentication for both transports',()=>{
   const text=buildGroupSetupInstructions({serverOrigin:'https://team.example/',groupHandle:'research'});
   expect(text).toContain('https://team.example/skills/artifactbin.zip');
+  expect(text).toContain('https://artifactbin.dev/install.sh');
   expect(text).not.toMatch(/afbin |@afbin\/cli/);
   expect(text).toContain('GET /api/groups/research');expect(text).toContain('PUT /api/me/preferences');
   expect(text).toContain('"id":"<resolved group.id>"');expect(text).toContain('sender’s login is never transferred');

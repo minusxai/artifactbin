@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { limit, hex, decodeRelease } from "./toolbox-update-archive.mjs";
 import { json, atomic, context, locked, verified, activate } from "./toolbox-update-state.mjs";
-export { decodeRelease } from "./toolbox-update-archive.mjs";
 async function fetchBytes(url, max) {
   const response = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "error" });
   if (!response.ok) throw Error("Update HTTP " + response.status);
@@ -153,16 +152,17 @@ export async function beforeCommand(url, args) {
       ["SIGINT", "SIGTERM", "SIGHUP"].map((signal) => [signal, () => forward(signal)]),
     );
   for (const [signal, handler] of handlers) process.on(signal, handler);
+  let result;
   try {
-    const result = await new Promise((resolve, reject) => {
+    result = await new Promise((resolve, reject) => {
       child.once("error", reject);
       child.once("exit", (code, signal) => resolve({ code, signal }));
     });
-    for (const [signal, handler] of handlers) process.off(signal, handler);
-    if (result.signal) process.kill(process.pid, result.signal);
-    else process.exitCode = result.code;
-    return true;
   } finally {
+    // Remove the forwarders before re-raising, or a listener would swallow the signal.
     for (const [signal, handler] of handlers) process.off(signal, handler);
   }
+  if (result.signal) process.kill(process.pid, result.signal);
+  else process.exitCode = result.code;
+  return true;
 }

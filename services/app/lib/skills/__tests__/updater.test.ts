@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 it('validates release contents without evaluating scripts and rejects corruption',async()=>{
- const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update.mjs'));
+ const {decodeRelease}=await import(require.resolve('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs'));
  const release=skillRelease({'SKILL.md':'hello','scripts/read.mjs':'throw Error("never execute")'},'https://example.test');
  expect(decodeRelease(Buffer.from(release.bytes),release.manifest)['SKILL.md']).toBe('hello');
  const broken=Buffer.from(release.bytes);broken[40]^=1;

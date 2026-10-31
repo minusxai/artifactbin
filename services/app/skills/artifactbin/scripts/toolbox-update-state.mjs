@@ -57,12 +57,11 @@ export async function locked(c, action, wait = true) {
       let alive = true;
       if (!Number.isSafeInteger(pid) || pid <= 0)
         throw Error("Invalid updater lock; remove it after checking no updater is running");
-      if (pid > 0)
-        try {
-          process.kill(pid, 0);
-        } catch (e) {
-          if (e.code === "ESRCH") alive = false;
-        }
+      try {
+        process.kill(pid, 0);
+      } catch (e) {
+        if (e.code === "ESRCH") alive = false;
+      }
       if (!alive) {
         await rm(lock, { force: true });
         continue;

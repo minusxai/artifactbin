@@ -142,7 +142,8 @@ describe('llms.txt and the discovery head', () => {
     expect(text).not.toContain('[[');
     const guide = JSON.stringify(gettingStarted(BASE));
     expect(guide).toContain('artifactbin skill');
-    expect(guide).not.toMatch(/@afbin\/cli|install\.sh/);
+    expect(guide).not.toMatch(/@afbin\/cli|\|\s*(?:ba)?sh\b/);
+    expect(guide).not.toContain(`${BASE}/install.sh`);
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
 

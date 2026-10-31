@@ -201,7 +201,7 @@ credentials.
 ## Installed resources
 
 [Download the author skill]([[ base ]]/skills/artifactbin.zip). Use the three-line managed
-installation recipe at https://artifactbin.dev/: it keeps an immutable
+installation recipe in https://artifactbin.dev/install.sh: it keeps an immutable
 release behind `~/.agents/skills/artifactbin`, with harness symlinks to that shared path.
 Reload skills after installing or updating. Manually extracted copies still work, but must be
 reinstalled with the managed layout to enable updates. Do not save your own pages inside a release.
