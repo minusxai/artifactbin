@@ -7,17 +7,14 @@
  *   toolbox-*.mjs, author-toolbox/author-check tests.
  */
 import {beforeCommand} from './toolbox-update.mjs';
-import {homedir} from 'node:os';
-import path from 'node:path';
+import {homedir} from 'node:os';import path from 'node:path';
 import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
-import {realpathSync} from 'node:fs';
-import {fileURLToPath} from 'node:url';
+import {realpathSync} from 'node:fs';import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import configuredServer from './toolbox-config.mjs';
 import {parseCommand} from './toolbox-commands.mjs';
 import {commandHelp} from './toolbox-description.mjs';
-import {checkDigest} from './toolbox-check-digest.mjs';
-export {checkDigest};
+import {checkDigest} from './toolbox-check-digest.mjs';export {checkDigest};
 // toolbox-journal.mjs imports helpers back from this module; the cycle is safe because neither
 // module uses the other's exports while loading.
 export {createJournal,journalIntent,resumeJournal} from './toolbox-journal.mjs';
@@ -137,6 +134,10 @@ const authLapse=error=>(error?.code==='auth_required'||/^auth_required\b/.test(S
 /** The process exit code for a failure: 3 (auth/access) for a lapsed sign-in. */
 export const toolExit=error=>error?.exit??(authLapse(error)?3:1);
 /** Preserve legacy details while exposing a stable check result on all refusals. */
+/** An unexpected error's first line, bounded, with bearer values and token-like runs removed. */
+const causeOf=error=>{const line=String(error?.message??'').split('\n')[0].replace(/Bearer\s+\S+/gi,
+  'Bearer [redacted]').replace(/[A-Za-z0-9_.~+/=-]{32,}/g,'[redacted]').slice(0,300).trim();
+  return line?' Cause: '+line:'';};
 export function toolFailure(name,error){
 if(authLapse(error))return {ok:false,code:'auth_required',message:
   'Sign-in expired: run node scripts/auth.mjs login --email ADDRESS',recovery:
@@ -153,11 +154,10 @@ if(error?.code==='ERR_MODULE_NOT_FOUND'){
 const diagnostics=name==='check'?{smokePassed:false,checks:[],unverified:['visual appearance',
    'task behavior','persistence','permissions'],note:'No passing smoke evidence.',...(
    error.code==='check_failed'?error.details:{})}:{};
-return {...diagnostics,ok:false,code:error.code??'operation_failed',message:
-   error instanceof ToolError?error.message:transient(
-   error)?'Network or server error before a result arrived.':
-   'Operation failed; inspect the selected files and server.',recovery:error.recovery??(transient(
-   error)?'Retry once; written requests resume from their journal.':
+return {...diagnostics,ok:false,code:error.code??'operation_failed',message:error instanceof
+   ToolError?error.message:transient(error)?'Network or server error before a result arrived.':
+   'Operation failed; inspect the selected files and server.'+causeOf(error),recovery:
+   error.recovery??(transient(error)?'Retry once; written requests resume from their journal.':
    'Correct the input or inspect the underlying operation.'),...(error.details?{details:
    error.details}:{})};
 }

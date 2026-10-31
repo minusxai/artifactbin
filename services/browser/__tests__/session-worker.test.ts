@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {SESSION_WORKER_SOURCE} from '../src/session-worker';
 import {sessionSandboxPlan} from '../src/session-process';
 
-async function initialization(executablePath?:string){
+async function initialization(executablePath?:string,args?:string[]){
  const root=await mkdtemp(join(tmpdir(),'afbin-worker-init-'));
  const messages:Array<Record<string,unknown>>=[];
  try{
@@ -25,7 +25,7 @@ export const chromium={launch:async options=>{process.stdout.write(JSON.stringif
      buffered+=chunk;
      for(;;){const end=buffered.indexOf('\n');if(end<0)break;const line=buffered.slice(0,end);buffered=buffered.slice(end+1);
       const message=JSON.parse(line);messages.push(message);
-      if(message.type==='hello')child.stdin.write(JSON.stringify({type:'init',baseURL:'http://127.0.0.1:3030',...(executablePath!==undefined?{executablePath}:{})})+'\n');
+      if(message.type==='hello')child.stdin.write(JSON.stringify({type:'init',baseURL:'http://127.0.0.1:3030',...(executablePath!==undefined?{executablePath}:{}),...(args?{args}:{})})+'\n');
       if(['ready','fatal'].includes(message.type)){clearTimeout(timer);resolve();}
      }
     });
@@ -46,5 +46,13 @@ it('retains ordinary Playwright registry discovery without an explicit executabl
 it('rejects executable paths outside the read-only browser mount before launching',async()=>{
  for(const executable of ['/host/secret','/browsers/../bin/chrome','/browsers/chrome/child']){
   const messages=await initialization(executable);expect(messages.some(message=>message.type==='launch')).toBe(false);expect(messages.at(-1)).toMatchObject({type:'fatal',error:'Invalid session browser executable'});
+ }
+});
+it('launches with the development switches the parent derives and refuses any other address-space override',async()=>{
+ const dev=['--host-resolver-rules=MAP *.lvh.me 127.0.0.1, MAP lvh.me 127.0.0.1','--ip-address-space-overrides=127.0.0.1:3521=public'];
+ expect((await initialization(undefined,dev)).find(message=>message.type==='launch')?.options).toEqual({headless:true,args:dev});
+ // Only one loopback port may be declared public: never another host, a wider space, a list or a feature switch.
+ for(const arg of ['--ip-address-space-overrides=10.0.0.1:80=public','--ip-address-space-overrides=127.0.0.1:3521=local','--ip-address-space-overrides=127.0.0.1:1=public,127.0.0.1:2=public','--disable-features=LocalNetworkAccessChecks']){
+  const messages=await initialization(undefined,[arg]);expect(messages.some(message=>message.type==='launch'),arg).toBe(false);expect(messages.at(-1)).toMatchObject({type:'fatal',error:'Invalid session browser arguments'});
  }
 });

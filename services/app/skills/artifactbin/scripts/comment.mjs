@@ -17,8 +17,10 @@ Flags: write commands also take --request FILE (exclusive saved journal) and --r
   exits 0; a first call also prints threads still waiting for your answer. It resumes from
   watch/<server>/ID.ndjson in the sign-in folder (ARTIFACTBIN_HOME or ~/.artifactbin; created on
   first use), or the --output LOG --append / --cursor you pass. --wait caps it in seconds (default
-  240); then it prints "no new comments yet; keep watching: run the same watch --next command again
-  now" and exits 0. Common: --server, --json, --help.
+  240); then it prints "no new comments yet: run the same watch --next command again" and exits 0.
+  After 15 minutes with no comment, reply or publish from anyone it prints "no new comments for 15
+  minutes: stop watching and end your turn" instead; a later --next starts a new 15 minutes.
+  Common: --server, --json, --help.
 Examples:
   node scripts/comment.mjs list ID --status all --json  # root and reply IDs, revisions, reactions
   node scripts/comment.mjs reply ID --thread T --body-file reply.txt
@@ -35,9 +37,10 @@ Gotchas: list before replying, editing or changing state. A plain reply needs no
   (retry the same call, never invert it); counts are unique accounts, only thumbs_up exists, and
   they change no source or revision. Resolve and reopen are not feed events.
   Loop: watch --next, answer what it prints (edit and publish if asked, then reply), watch --next
-  again; never background it or start a new watch. watch --once establishes "now" without a
-  cursor; events deduplicate by ID and only delivered ones advance checkpoints. Logs and
-  checkpoints saved under the old "human-comments" stream name still resume.
+  again; when it says stop, end your turn. One watch at a time: a second --next on the page prints
+  "another watch is already running" and exits 0. watch --once sets "now" without a cursor;
+  events deduplicate by ID and only delivered ones advance checkpoints. Logs and checkpoints
+  saved under the old "human-comments" stream name still resume.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints
@@ -72,10 +75,9 @@ import {
   resumeJournal,
   ToolError,
   serverOrigin,
-  credentialRoot,
-  hash
+  credentialRoot
 } from './toolbox-client.mjs';
-import {watchComments, listText} from './toolbox-comments.mjs';
+import {watchComments, listText, watchLogPath} from './toolbox-comments.mjs';
 // Reads (list, watch) call the API directly; every write goes through a saved journal so an
 // uncertain result can be resumed.
 export async function commentCommand({sub, values, positionals}, options = {}) {
@@ -109,16 +111,19 @@ export async function commentCommand({sub, values, positionals}, options = {}) {
   // returns after the next comment from someone else. Its checkpoint lives beside the saved
   // sign-in, never in the working directory: a loop that changes directory must not baseline twice.
   if (sub === 'watch') {
-    const controller = new AbortController();
-    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort());
+    const controller = new AbortController(), stop = () => controller.abort();
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, stop);
     let watchValues = values;
     if (values.next && !values.output) {
-      const dir = path.join(credentialRoot(options.env), 'watch', hash(client.server).slice(0, 16));
-      mkdirSync(dir, {recursive: true, mode: 0o700});
-      const output = path.join(dir, `${id}.ndjson`);
+      const output = watchLogPath(credentialRoot(options.env), client.server, id);
+      mkdirSync(path.dirname(output), {recursive: true, mode: 0o700});
       watchValues = {...values, output, append: existsSync(output)};
     }
-    await watchComments(client, id, watchValues, {signal: controller.signal, ...options});
+    try {
+      await watchComments(client, id, watchValues, {signal: controller.signal, ...options});
+    } finally {
+      for (const signal of ['SIGINT', 'SIGTERM']) process.off(signal, stop);
+    }
     return;
   }
   let body = {},

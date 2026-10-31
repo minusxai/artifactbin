@@ -1,6 +1,7 @@
 /**
  * Internal: the publish command (publishCommand): classify the file, autofix and bundle a page,
- * journal the write, send it and save the canonical pair (toolbox-publish-finish.mjs).
+ * journal the write, send it and save the canonical pair (toolbox-publish-finish.mjs); a publish
+ * counts as activity in the page's comment watch (toolbox-watch-state.mjs).
  * Used by: publish.mjs, author-toolbox.test.ts, skill-examples.test.ts.
  */
 import path from 'node:path';
@@ -11,6 +12,7 @@ export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
   hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
+import {noteWatchActivity} from './toolbox-watch-state.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
@@ -21,7 +23,8 @@ positional(positionals,0);if(Object.keys(values).some(flag=>!['resume','server',
     'Resume accepts no changed source or write flags.',2);
 const saved=await jsonFile(values.resume),server=serverOrigin(selectedServer(values,options.env)??
     saved.server);
-  return finishPublication(await resumeJournal(values.resume,makeClient(server,options),'publish'));
+const client=makeClient(server,options),done=await finishPublication(await resumeJournal(
+    values.resume,client,'publish'));return watched(client,done,options);
  }
 const file=await realpath(positional(positionals)),server=serverOrigin(selectedServer(values,
    options.env)),client=makeClient(server,options),bytes=await readFile(file),extension=
@@ -142,7 +145,8 @@ const intent=journalIntent({server,method:baseline?'PUT':'POST',path:'/api/artif
 intent.source.output=path.join(path.dirname(file),path.basename(file,
    extension)+'.canonical-'+intent.key.slice(0,8)+(type==='html'?'.html':extension||'.bin'));
  const journal=await createJournal(intent,{file:values.request,root:client.root,project:root});
- const done=await finishPublication(await resumeJournal(journal,client,'publish'));
+ const done=await watched(client,await finishPublication(await resumeJournal(journal,client,
+  'publish')),options);
  if(!fixed)return done;
 const {autofixDetail}=await import('./autofix.mjs'),{formatAutofixReport}=await import(
    './preview-html.mjs');
@@ -159,6 +163,9 @@ const report=formatAutofixReport(fixed,{file:path.basename(file),landed:
   'data-af-id attributes: re-read it before editing; match on short anchors, not whole lines.':null;
  return {...done,...(rewritten?{rewritten}:{}),autofix:autofixDetail({...fixed,routine},report)};
 }
+/** A publish resets the quiet time of the page's comment watch; it never fails the publish. */
+async function watched(client,done,{now}={}){await noteWatchActivity(client.root,client.server,
+  done.id,now).catch(()=>{});return done;}
 /** Platform-owned changes the server made on publish, counted rather than listed: identities and
  * asset links. */
 function routineChanges(sent,saved,identity,baseline){

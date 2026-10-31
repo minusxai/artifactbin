@@ -98,12 +98,17 @@ async function main(): Promise<void> {
     const { createSql } = await import('@artifactbin/sql/local');
     setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
   }
+  // Dev only: Vite's HMR socket port, derived from our own port (see the Vite server below). The session browser
+  // is told it too, so a hosted check's app page may reach that one loopback socket.
+  const hmrPort: number | null = dev
+    ? await import('@/lib/platform').then(({ APP_HMR_PORT_SETTING, resolveHmrPort }) => resolveHmrPort(APP_HMR_PORT_SETTING, port))
+    : null;
   if (!BROWSER_SERVICE_URL) {
     const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
     const { sessionBridge } = await import('@/lib/runtime');
     // `app` is composed below; the hop is chosen once, on the first page a session opens.
     let hop: ReturnType<typeof sessionBridge> | undefined;
-    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL,
+    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, ...(hmrPort !== null ? { devSocketPort: hmrPort } : {}),
       request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app }))(request, actor) } }) });
     // The session settings are read in THAT package, so this process's audit is told about them.
     for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
@@ -140,11 +145,9 @@ async function main(): Promise<void> {
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;
-  let hmrPort: number | null = null;
-  if (dev) {
+  if (dev && hmrPort !== null) {
     const { createServer } = await import('vite');
-    const { APP_HMR_PORT_SETTING, requirePagesHost, resolveHmrPort } = await import('@/lib/platform');
-    hmrPort = resolveHmrPort(APP_HMR_PORT_SETTING, port);
+    const { requirePagesHost } = await import('@/lib/platform');
     vite = await createServer({
       configFile: path.resolve(import.meta.dirname, 'vite.config.mts'),
       // Vite's HMR socket defaults to 24678 for every project on the machine;

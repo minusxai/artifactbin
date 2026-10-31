@@ -209,9 +209,14 @@ export function pagesFrameSources(site: PagesSite): string[] {
   const port = site.port ? `:${site.port}` : '';
   return [`${site.scheme}//*.${site.host}${port}`];
 }
-/** Only the development socket joins connect-src; production uses the policy unchanged. */
-function developmentAppCsp(csp: string, pageUrl: string, port: number): string {
-  const socket = new URL(pageUrl);
+/**
+ * Only the development socket joins connect-src; production uses the policy unchanged. The socket is on
+ * the host the page was addressed by (`baseUrl`: forwarded host and protocol first), because Vite's client
+ * dials the host its module loaded from: a server-browser session reaches this process over loopback and
+ * names the public host it browsed in `x-forwarded-host`.
+ */
+function developmentAppCsp(csp: string, pageOrigin: string, port: number): string {
+  const socket = new URL(pageOrigin);
   socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
   socket.port = String(port);
   return csp.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
@@ -349,7 +354,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('*', pagesHost(pagesSite));
   /** The policy every app page carries: strict, framing only the pages origins. */
   const appPageCsp = appPagePolicy(pagesSite);
-  const pageCsp = (url: string): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, url, opts.devHmrPort) : appPageCsp);
+  const pageCsp = (request: Request): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, baseUrl(request), opts.devHmrPort) : appPageCsp);
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
   const index = async (url: string): Promise<string> => {
@@ -435,7 +440,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.url).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.url),
+      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.raw).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.raw),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),

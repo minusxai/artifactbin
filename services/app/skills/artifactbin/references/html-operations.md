@@ -1,6 +1,6 @@
 ---
 name: html-operations
-description: Native HTML comment anchor contract, HTTP comment operations and the server browser session.
+description: Native HTML comment anchor contract, HTTP comment operations and watching, and the server browser session.
 ---
 
 ## Read first
@@ -10,6 +10,7 @@ Use this guide for the native HTML comment contract over HTTP and the browser se
 ## Contents
 
 - [Comment on a saved HTML node](#comment-on-a-saved-html-node)
+- [Watch for comments](#watch-for-comments)
 - [The server browser session and its document frame](#the-server-browser-session-and-its-document-frame)
 - [Recovery and limits](#recovery-and-limits)
 
@@ -63,6 +64,10 @@ Use an empty `quote` for the whole node. A comment on a script-created node also
 Read the current thread list with `GET /api/artifacts/ID/annotations?status=all` before replying, editing or changing state; `GET /api/artifacts/ID` returns page source and version, not the comment list. Follow each `next_cursor` via the `cursor` query parameter. To reply or resolve, send `POST /api/artifacts/ID/annotations/THREAD_ID` with `reply`, `resolve:true`, or both; a plain reply needs no `expected_revision`, resolve needs the last one (stale + reply: reply kept, `status_conflict:true`). One `{reply:"Fixed in version 2",resolve:true,expected_revision:REVISION}` request atomically replies then resolves. Quote the version checked. To edit your comment, send `PATCH /api/artifacts/ID/annotations/COMMENT_ID` with `body` and `expected_revision`.
 
 Reactions: `PUT /api/artifacts/ID/annotations/COMMENT_ID/reactions`; the top of `scripts/comment.mjs` describes them.
+
+## Watch for comments
+
+`GET /api/artifacts/ID/annotations/changes?after=now&wait=60` returns `{events,next_cursor,has_more}`: each new comment, reply, edit (`change:'edited'`) and reaction from anyone. Start at `after=now` (`after=start` replays history), then pass the last `next_cursor` as `after`; `wait` (0–60 seconds) holds the request until an event arrives. Skip events whose `author.you` or `reactor.you` is true (your own writes) and any unknown `type`. Keep one request waiting at a time (429 `too_many_comment_waits`: another watch is open); `400 invalid_cursor` means start again at `after=now`. Keep a cursor only after handling its events. Write your reply first, then watch; answer each comment (save a requested change, then reply), then watch again; stop after 15 minutes with no comment, reply or save from anyone.
 
 ## The server browser session and its document frame
 

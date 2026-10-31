@@ -82,6 +82,11 @@ describe('the app CSP', () => {
       const connections = response.headers.get('content-security-policy')!.split('; ').find(d => d.startsWith('connect-src'))!.split(' ');
       expect(connections.filter(source => /^wss?:/.test(source))).toEqual([socket]);
     }
+    // A server-browser session (a hosted check) reaches the process over loopback and names the public host it
+    // browsed: Vite's client dials that host, so the socket is admitted there, not on 127.0.0.1.
+    const viaLoopback = await dev.request('http://127.0.0.1:3040/login', { headers: { 'x-forwarded-host': 'app.lvh.me:3040', 'x-forwarded-proto': 'http' } });
+    const loopbackConnections = viaLoopback.headers.get('content-security-policy')!.split('; ').find(d => d.startsWith('connect-src'))!.split(' ');
+    expect(loopbackConnections.filter(source => /^wss?:/.test(source))).toEqual(['ws://app.lvh.me:3041']);
     expect((await app.request('/login')).headers.get('content-security-policy')).not.toMatch(/wss?:/);
   });
 

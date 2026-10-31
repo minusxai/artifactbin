@@ -92,7 +92,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},{...options,fetcher:clocked,now:()=>clock});
   expect(calls.slice(before).map(c=>c.wait)).toEqual(['30','30','30','30','30','30','30','25']);
   expect(calls[before]!.after).toBe('c4');
-  expect(printed).toEqual(['no new comments yet; keep watching: run the same watch --next command again now']);
+  expect(printed).toEqual(['no new comments yet: run the same watch --next command again']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
   expect(calls.filter(c=>c.after==='start'||c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);
@@ -106,8 +106,8 @@ it('watch --next honours an explicit log and rejects --once',async()=>{
  const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);n++;return {events:n===2?[{event_id:'e1',author:{you:false}}]:[],next_cursor:'k'+n,has_more:false};}};
  try{
   const delivered:any[]=[];
-  expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
-  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true});
+  expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true,stopped:false});
   expect(afters).toEqual(['start','k1']);
   expect(delivered.map(v=>typeof v==='string'?v.split(' ')[0]:v.event.event_id)).toEqual(['e1','next:','no']);
   expect((await readFile(output,'utf8')).trim().split('\n').at(-1)).toContain('"cursor":"k2"');
@@ -128,7 +128,7 @@ it('a first watch --next prints threads still waiting on an answer, from before 
  const afters:string[]=[];let n=0;
  const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);const page=pages[n]??{events:[],has_more:false};n++;return {...page,next_cursor:'p'+n};}};
  const delivered:any[]=[];
- expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','p1']);
  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
  expect(delivered.at(-1)).toMatch(/^next: answer each comment above now/);
@@ -139,6 +139,290 @@ it('a first watch --next falls back to "now" on a server without history replay'
  const afters:string[]=[];let n=0;
  const client={server:'https://example.test',request:async(route:string)=>{const after=new URL(route,'https://example.test').searchParams.get('after')!;afters.push(after);
   if(after==='start')throw Object.assign(new Error('refused'),{code:'invalid_cursor'});n++;return {events:n===2?[{type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{you:false}}]:[],has_more:false,next_cursor:'q'+n};}};
- expect(await watchComments(client,'PAGE12',{next:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false});
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','now','q1']);
+});
+
+/** A --next harness on the default log: each request advances a fake clock by its wait, and `feed` scripts the events per request. */
+async function quietHarness(feed:(n:number)=>any[]){
+ const {mkdtemp}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-quiet-')),server='https://example.test';
+ // Thread listings (status=open) answer every thread the feed has carried except those in `gone` (deleted or resolved); they are not feed requests.
+ const state={clock:0,n:0,printed:[] as any[],threads:new Set<string>(),gone:new Set<string>(),listings:0};
+ const fetcher=async(url:any)=>{const at=new URL(String(url));
+  if(at.pathname.endsWith('/annotations')){state.listings++;return Response.json({annotations:[...state.threads].filter(t=>!state.gone.has(t)).map(id=>({id,status:'open'})),next_cursor:null});}
+  const wait=Number(at.searchParams.get('wait'));state.n++;state.clock+=wait*1000;const events=feed(state.n);events.forEach((e:any)=>e.annotation_id&&state.threads.add(e.annotation_id));return Response.json({events,next_cursor:'c'+state.n,has_more:false});};
+ const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
+ /** One watch --next call: its printed lines, others' events as their IDs. */
+ const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
+ return {root,server,state,watch};
+}
+const YET='no new comments yet: run the same watch --next command again';
+const STOP='no new comments for 15 minutes: stop watching and end your turn; if the person asks you to watch again, run watch --next';
+it('watch --next stops itself after 15 quiet minutes, closes its window and opens a new one on the next call',async()=>{
+ const {rm,readFile}=await import('node:fs/promises');
+ const {root,state,watch}=await quietHarness(()=>[]);
+ try{
+  // Each empty call waits 235 s of the fake clock; the one that ends past 15 minutes says stop.
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(state.clock).toBe(705000);
+  expect(await watch()).toEqual([STOP]);
+  const {readdir}=await import('node:fs/promises'),path=await import('node:path');
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!);
+  const windows=()=>readFile(path.join(dir,'PAGE12.ndjson'),'utf8').then(text=>text.trim().split('\n').map(line=>JSON.parse(line)).filter(r=>r.kind==='window'));
+  expect(await windows()).toEqual([expect.objectContaining({opened:0}),expect.objectContaining({closed:940000})]);
+  // "Watch again": the next call opens a new window and waits a full 15 minutes before stopping again.
+  expect(await watch()).toEqual([YET]);
+  expect((await windows()).at(-1)).toMatchObject({opened:940000});
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[STOP]]);
+  // A window left open by a watch that was interrupted is stale once it is 15 minutes quiet: the next call starts afresh instead of stopping at once.
+  expect(await watch()).toEqual([YET]);
+  state.clock+=20*60000;
+  expect(await watch()).toEqual([YET]);
+  expect((await windows()).at(-1)).toMatchObject({opened:state.clock-235000});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('the agent\'s own replies and publishes reset the quiet time, as others\' comments do',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const {noteWatchActivity,QUIET_MINUTES}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const {DESCRIPTION}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ expect(QUIET_MINUTES).toBe(15);expect(DESCRIPTION).toContain(`After ${QUIET_MINUTES} minutes with no comment, reply or publish`);
+ // Request 2 of the first call is the baseline poll; request 12 (inside the second call, at 325 s) carries the agent's own reply.
+ const mine={type:'artifactbin.comment',event_id:'e_mine',author:{kind:'agent',you:true},body:'Done'};
+ const theirs={type:'artifactbin.comment',event_id:'e_theirs',author:{kind:'human',you:false},body:'Bigger title'};
+ let later:any=null;
+ const {root,server,state,watch}=await quietHarness(n=>n===12?[mine]:later&&n===later.n?[theirs]:[]);
+ try{
+  expect(await watch()).toEqual([YET]);
+  // The own reply is logged, never printed, and moves the quiet start to 325 s: 940 s is not yet quiet enough.
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(state.clock).toBe(940000);
+  expect(await watch()).toEqual([YET]);
+  // A publish between calls (publish.mjs records it in the same log) moves it again.
+  await noteWatchActivity(root,server,'PAGE12',()=>state.clock);const published=state.clock;
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(await watch()).toEqual([STOP]);
+  expect(state.clock-published).toBe(940000);
+  // Someone else's comment in a new window is printed with the order to answer it, and resets quiet too.
+  later={n:state.n+3};
+  expect((await watch()).slice(0,1)).toEqual(['e_theirs']);
+  const answered=state.clock;
+  expect([await watch(),await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET],[STOP]]);
+  expect(state.clock-answered).toBe(940000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a watch killed after the server returned comments but before printing them prints them on the next call',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-killed-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const theirs={type:'artifactbin.comment',event_id:'e_theirs',annotation_id:'A',author:{kind:'human',you:false},body:'Make it blue'};
+ // The server holds the comment after c1 until a checkpoint past it is accepted.
+ const afters:string[]=[];
+ const client={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after')!;afters.push(after);return after==='start'?{events:[],next_cursor:'c1',has_more:false}:{events:[theirs],next_cursor:'c2',has_more:false};}};
+ const killed=async(v:any)=>{if(typeof v!=='string')throw Object.assign(new Error('killed'),{code:'killed'});};
+ try{
+  await expect(watchComments(client,'PAGE12',{next:true,output},{deliver:killed})).rejects.toMatchObject({code:'killed'});
+  const delivered:any[]=[];
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true},{deliver:async(v:any)=>{delivered.push(v);}})).toMatchObject({events:1});
+  expect(afters).toEqual(['start','c1','c1']);
+  expect(delivered.map(v=>typeof v==='string'?v.split(':')[0]:v.event.event_id)).toEqual(['e_theirs','next']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a first watch killed in the middle of its history replay replays it again and prints the waiting thread',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-killed-replay-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const waiting={type:'artifactbin.comment',event_id:'b1',annotation_id:'B',author:{kind:'human',you:false},body:'Add a closing line'};
+ const afters:string[]=[];let dead=true;
+ const client={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after')!;afters.push(after);
+  if(after==='start')return {events:[waiting],next_cursor:'p1',has_more:true};
+  if(dead){dead=false;throw Object.assign(new Error('killed'),{code:'killed'});}
+  return {events:[],next_cursor:'p2',has_more:false};}};
+ try{
+  await expect(watchComments(client,'PAGE12',{next:true,output},{deliver:async()=>{}})).rejects.toMatchObject({code:'killed'});
+  const delivered:any[]=[];
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'10'},{deliver:async(v:any)=>{delivered.push(v);}})).toMatchObject({events:1});
+  expect(afters).toEqual(['start','p1','start','p1']);
+  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+const BUSY=/^another watch is already running for this page \(started \d\d:\d\d:\d\d, maybe your own\): wait for it to print; don't start another$/;
+it('refuses a second watch --next on the same log while one runs, without touching the feed',async()=>{
+ const {mkdtemp,rm,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-lock-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{kind:'human',you:false},body:'Hi'};
+ let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});let polled!:()=>void;const polling=new Promise<void>(resolve=>{polled=resolve;});
+ const first={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after');if(after==='start')return {events:[],next_cursor:'c1',has_more:false};polled();await waiting;return {events:[theirs],next_cursor:'c2',has_more:false};}};
+ // The second client advances a fake clock by each requested wait, so its own calls end deterministically.
+ let clock=0;const secondRequests:string[]=[];const second={server,request:async(route:string)=>{secondRequests.push(route);clock+=Number(new URL(route,server).searchParams.get('wait'))*1000;return {events:[],next_cursor:'x',has_more:false};}};
+ try{
+  const running=watchComments(first,'PAGE12',{next:true,output},{deliver:async()=>{}});
+  await polling;
+  const printed:any[]=[];
+  expect(await watchComments(second,'PAGE12',{next:true,output,append:true},{deliver:async(v:any)=>{printed.push(v);}})).toEqual({events:0,timedOut:false,stopped:false,busy:true});
+  expect(printed).toHaveLength(1);expect(printed[0]).toMatch(BUSY);expect(secondRequests).toEqual([]);
+  release();expect(await running).toMatchObject({events:1});
+  // Released when the first watch returns: the next call runs.
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  await watchComments(second,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async()=>{},now:()=>clock});
+  expect(secondRequests.length).toBeGreaterThan(0);
+ }finally{release();await rm(root,{recursive:true,force:true});}
+});
+it('takes over the lock of a watch that died or stopped touching it',async()=>{
+ const {mkdtemp,rm,writeFile,utimes,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path'),{spawnSync}=await import('node:child_process');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-stale-')),output=path.join(root,'feed.ndjson'),lock=output+'.lock',server='https://example.test';
+ let clock=0;const requests:string[]=[];const client={server,request:async(route:string)=>{requests.push(route);clock+=Number(new URL(route,server).searchParams.get('wait'))*1000;return {events:[],next_cursor:'c'+requests.length,has_more:false};}};
+ try{
+  // A killed watch (its pid is gone) left its lock behind.
+  const dead=spawnSync(process.execPath,['-e','']).pid;
+  await writeFile(lock,JSON.stringify({pid:dead,token:'old'}));
+  expect(await watchComments(client,'PAGE12',{next:true,output,wait:'0'},{deliver:async()=>{},now:()=>clock})).not.toHaveProperty('busy');
+  expect(requests.length).toBeGreaterThan(0);
+  // A live pid whose lock nobody touched for minutes (pid reuse, a hung watch) is stale too.
+  await writeFile(lock,JSON.stringify({pid:process.pid,token:'hung'}));const old=new Date(Date.now()-10*60000);await utimes(lock,old,old);
+  const before=requests.length;
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async()=>{},now:()=>clock})).toMatchObject({timedOut:true});
+  expect(requests.length).toBeGreaterThan(before);
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  // A fresh lock of a live watch is not.
+  await writeFile(lock,JSON.stringify({pid:process.pid,token:'live'}));
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true},{deliver:async()=>{}})).toMatchObject({busy:true});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('releases the lock when a watch is interrupted or fails',async()=>{
+ const {mkdtemp,rm,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-release-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ let polled!:()=>void;const polling=new Promise<void>(resolve=>{polled=resolve;});
+ const hanging={server,request:async(route:string,{signal}:{signal:AbortSignal})=>{if(new URL(route,server).searchParams.get('after')==='start')return {events:[],next_cursor:'c1',has_more:false};polled();
+  return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{code:'aborted'}))));}};
+ try{
+  // SIGINT/SIGTERM abort the watch (comment.mjs): it returns and the lock is gone.
+  const controller=new AbortController();
+  const running=watchComments(hanging,'PAGE12',{next:true,output},{signal:controller.signal,deliver:async()=>{}});
+  await polling;expect((await readdir(root)).sort()).toEqual(['feed.ndjson','feed.ndjson.lock']);
+  controller.abort();await running;
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  // A watch that throws releases it too.
+  const failing={server,request:async()=>{throw Object.assign(new Error('boom'),{code:'boom'});}};
+  await expect(watchComments(failing,'PAGE12',{next:true,output,append:true},{deliver:async()=>{}})).rejects.toMatchObject({code:'boom'});
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): edit and publish if asked, then comment.mjs reply PAGE12 --thread THREAD --body-file FILE; then watch --next again`;
+it('watch --next refuses to wait while a printed comment has no reply, and the reply clears it',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
+ const mine={type:'artifactbin.comment',event_id:'e2',annotation_id:'T1',author:{kind:'agent',you:true},body:'Done'};
+ const reaction={type:'artifactbin.comment_reaction',event_id:'e3',annotation_id:'T1',comment_id:'e2',change:'added',kind:'thumbs_up',reactor:{kind:'human',you:false}};
+ const script=new Map<number,any[]>([[2,[theirs]],[4,[mine]]]);
+ const {root,state,watch}=await quietHarness(n=>script.get(n)??[]);
+ try{
+  expect(await watch()).toEqual(['e1',expect.stringMatching(/^next: answer each comment above now/)]);
+  // Watching again before replying: one feed request without waiting, then the order to answer.
+  const clock=state.clock,requests=state.n;
+  expect(await watch()).toEqual([ANSWER('T1')]);
+  expect([state.clock,state.n]).toEqual([clock,requests+1]);
+  // The reply (the agent's own event on that thread) clears it: the call waits as usual.
+  expect(await watch()).toEqual([YET]);
+  expect(state.clock-clock).toBe(235000);
+  // A reaction is information, not a thread to answer: the next call waits.
+  script.set(state.n+2,[reaction]);
+  expect(await watch()).toEqual(['e3',expect.stringMatching(/^next:/)]);
+  expect(await watch()).toEqual([YET]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a thread printed by the first call\'s history replay must be answered before the next watch waits',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const waiting={type:'artifactbin.comment',event_id:'b1',annotation_id:'B',author:{kind:'human',you:false},body:'Add a closing line'};
+ const {root,state,watch}=await quietHarness(n=>n===1?[waiting]:[]);
+ try{
+  expect(await watch()).toEqual(['b1',expect.stringMatching(/^next:/)]);
+  expect(await watch()).toEqual([ANSWER('B')]);
+  expect(state.clock).toBe(0);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a thread whose latest comment in the batch is your own reply is answered, so the next watch waits',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const comment=(event_id:string,thread:string,you:boolean)=>({type:'artifactbin.comment',event_id,annotation_id:thread,author:{kind:you?'agent':'human',you},body:you?'Done':'Please fix'});
+ // One batch: the person's comment on T then your reply on T (already behind the cursor); U ends with theirs.
+ const script=new Map<number,any[]>([[2,[comment('t1','T',false),comment('t2','T',true),comment('u2','U',true),comment('u3','U',false)]]]);
+ const {root,state,watch}=await quietHarness(n=>script.get(n)??[]);
+ try{
+  expect(await watch()).toEqual(['t1','u3',expect.stringMatching(/^next:/)]);
+  // Only U still awaits a reply; T is never recorded, so no duplicate reply is asked for.
+  expect(await watch()).toEqual([ANSWER('U')]);
+  script.set(state.n+1,[comment('u4','U',true)]);
+  const clock=state.clock;expect(await watch()).toEqual([YET]);expect(state.clock-clock).toBe(235000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a reply late in the window restarts the quiet time within the same call',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
+ const mine={type:'artifactbin.comment',event_id:'e2',annotation_id:'T1',author:{kind:'agent',you:true},body:'Done'};
+ const {root,state,watch}=await quietHarness(n=>n===2?[theirs]:n===3?[mine]:[]);
+ try{
+  expect((await watch())[0]).toBe('e1');
+  // The agent takes 12 minutes to answer; the call that carries its reply must not stop 4 minutes later.
+  state.clock+=12*60000;const replied=state.clock;
+  expect(await watch()).toEqual([YET]);
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[STOP]]);
+  expect(state.clock-replied).toBe(940000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a printed thread that was deleted or resolved no longer holds the watch',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs=(event_id:string,thread:string)=>({type:'artifactbin.comment',event_id,annotation_id:thread,author:{kind:'human',you:false},body:'Please fix'});
+ const {root,state,watch}=await quietHarness(n=>n===2?[theirs('e1','T1'),theirs('e2','T2')]:[]);
+ try{
+  expect(await watch()).toEqual(['e1','e2',expect.stringMatching(/^next:/)]);
+  // T1 was deleted (no feed event says so): one listing drops it; T2 still needs a reply.
+  state.gone.add('T1');
+  expect(await watch()).toEqual([ANSWER('T2')]);
+  // T2 resolved by anyone: answered. The call waits, and the result is remembered (no further listing).
+  state.gone.add('T2');
+  expect(await watch()).toEqual([YET]);const listings=state.listings;
+  expect(await watch()).toEqual([YET]);expect(state.listings).toBe(listings);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a watch log whose last line was torn by a kill keeps working; damage elsewhere is refused',async()=>{
+ const {rm,readdir,appendFile,readFile,writeFile}=await import('node:fs/promises'),path=await import('node:path');
+ const {root,watch}=await quietHarness(()=>[]);
+ try{
+  expect(await watch()).toEqual([YET]);
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!),log=path.join(dir,'PAGE12.ndjson');
+  await appendFile(log,'{"kind":"event","server":"https://exa');
+  expect(await watch()).toEqual([YET]);
+  const text=await readFile(log,'utf8');
+  expect(text.endsWith('\n')).toBe(true);expect(()=>text.trim().split('\n').map(line=>JSON.parse(line))).not.toThrow();
+  const lines=text.trim().split('\n');lines.splice(1,1,'{torn');await writeFile(log,lines.join('\n')+'\n');
+  await expect(watch()).rejects.toMatchObject({code:'invalid_log'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('two watches that both find a stale lock never both run, and a lock still being written is live',async()=>{
+ const {mkdtemp,rm,writeFile,utimes,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path'),{spawnSync}=await import('node:child_process');
+ const {withWatchLock}=await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-race-')),lock=path.join(root,'feed.ndjson.lock');
+ try{
+  await writeFile(lock,JSON.stringify({pid:spawnSync(process.execPath,['-e','']).pid,token:'dead'}));
+  // B judges the lock stale; before B moves it, A takes it over completely and starts watching.
+  let releaseA!:()=>void;const holdA=new Promise<void>(resolve=>{releaseA=resolve;});let a!:Promise<any>;
+  const ran:string[]=[];
+  const b=await withWatchLock(lock,async()=>{ran.push('B');},{beforeTakeover:async()=>{
+   let started!:()=>void;const running=new Promise<void>(resolve=>{started=resolve;});
+   a=withWatchLock(lock,async()=>{ran.push('A');started();await holdA;});await running;}});
+  expect(b).toMatchObject({ran:false});expect(ran).toEqual(['A']);
+  // A's lock survived B's attempt: a third watch is refused too.
+  expect(await withWatchLock(lock,async()=>{ran.push('C');})).toMatchObject({ran:false});
+  releaseA();expect(await a).toMatchObject({ran:true});expect(await readdir(root)).toEqual([]);
+  // A lock file created but not yet written (empty) is live until it is two minutes old.
+  await writeFile(lock,'');
+  expect(await withWatchLock(lock,async()=>'ran')).toMatchObject({ran:false});
+  const old=new Date(Date.now()-3*60000);await utimes(lock,old,old);
+  expect(await withWatchLock(lock,async()=>'ran')).toEqual({ran:true,value:'ran'});
+  expect(await readdir(root)).toEqual([]);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

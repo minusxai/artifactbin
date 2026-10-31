@@ -39,11 +39,19 @@ export function sessionOrigins(baseURL: string, pagesHost?: string): SessionOrig
  * The Chromium switches a session's browser needs for these origins: a development pages host
  * (`lvh.me`, `localhost`, `*.localhost`) maps to loopback outright, exactly as the gates' own browser does
  * (scripts/gates/lib/browser.mjs), so no name the session uses waits on a resolver the sandbox lacks.
+ *
+ * `devSocketPort` (development only, the app's Vite HMR socket): every response a session sees is fulfilled by the
+ * worker's route, so Chromium gives its pages no local address space, and Local Network Access refuses the app shell's
+ * one unrouted connection, the HMR WebSocket to loopback (net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS, a console
+ * error that fails a hosted check's smoke). That ONE loopback port is declared public, so the check stays on for
+ * every other local address. A real pages host gets neither switch.
  */
-export function sessionBrowserArgs(pagesHost?: string): string[] {
+export function sessionBrowserArgs(pagesHost?: string, devSocketPort?: number): string[] {
   const host = pagesHost?.toLowerCase();
   if (!host || !(host === 'lvh.me' || host === 'localhost' || host.endsWith('.localhost'))) return [];
-  return [`--host-resolver-rules=MAP *.${host} 127.0.0.1, MAP ${host} 127.0.0.1`];
+  const socket = devSocketPort !== undefined && Number.isInteger(devSocketPort) && devSocketPort > 0 && devSocketPort < 65536
+    ? [`--ip-address-space-overrides=127.0.0.1:${devSocketPort}=public`] : [];
+  return [`--host-resolver-rules=MAP *.${host} 127.0.0.1, MAP ${host} 127.0.0.1`, ...socket];
 }
 
 export interface PagesCookieJar {

@@ -8,6 +8,15 @@ it('reports a lapsed sign-in as auth_required with the login command, exit 3',as
  expect(toolFailure('publish',new Error('boom')).code).toBe('operation_failed');
  expect(toolExit(new Error('boom'))).toBe(1);
 });
+it('names the real cause of an unexpected failure, first line only, bounded and without secrets',async()=>{
+ const {toolFailure}=await import('../../../skills/artifactbin/scripts/toolbox-client.mjs');
+ expect(toolFailure('check',new Error('Mismatched browser receipt.\n    at inspectViewport (x.mjs:1)')).message).toBe('Operation failed; inspect the selected files and server. Cause: Mismatched browser receipt.');
+ const leaked=toolFailure('publish',new Error('upstream said Bearer mxmx_secret_value and key '+'a1B2c3D4'.repeat(6))).message;
+ expect(leaked).toContain('Cause: upstream said Bearer [redacted] and key [redacted]');
+ expect(leaked).not.toMatch(/mxmx_secret_value|a1B2c3D4a1B2/);
+ expect(toolFailure('publish',new Error('x'.repeat(5)+' '+'word '.repeat(200))).message.length).toBeLessThanOrEqual('Operation failed; inspect the selected files and server. Cause: '.length+300);
+ expect(toolFailure('publish',new Error('')).message).toBe('Operation failed; inspect the selected files and server.');
+});
 it('auth status runs a real refresh and reports authenticated:false when it fails',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');

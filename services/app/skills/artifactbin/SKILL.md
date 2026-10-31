@@ -3,7 +3,8 @@ name: artifactbin
 description: >-
   Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev
   (or self-hosted) links, work on an Artifactbin document, dashboard, deck, dataset, plan, landing
-  page or app. Use the author skill and authenticated HTTP API contracts.
+  page or app. Use the author skill and authenticated HTTP API contracts. After every publish or
+  edit, the agent watches the page for comments and answers them.
 ---
 ## Read first
 
@@ -110,8 +111,8 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   refactors or extra verification. Open screenshots only if your model accepts image input;
   otherwise the reply says appearance is unverified. For a shared app, the reply also says how
   others get access: open the link and sign in to edit.
-- **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then
-  `node scripts/publish.mjs page.html`, then watch (below); keep editing and publishing the same
+- **Edit a page.** `node scripts/read.mjs ID --output page.html`, edit that file, then `node
+  scripts/publish.mjs page.html`, then reply and watch (below); keep editing and publishing the same
   file and never regenerate the page from scratch. Publish rewrites the file with `data-af-id`s:
   re-read it before editing and match on short anchors, not whole lines. Keep every existing
   `data-af-id`; new static elements may omit it. Elements your script creates (list rows, cards,
@@ -127,12 +128,17 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   `comment.mjs`[% if not shipped %]. Direct-HTTP agents: [authentication](references/http-auth.md)
   and [comment anchors and browser sessions](references/html-operations.md)[% endif %].
 - **Watch, always.** After every publish and every edit, write your full reply (link, Built with,
-  Tested) as message text in the same turn, then call `node scripts/comment.mjs watch ID --next`
-  right after it: the user reads the reply while you watch. Run it in the foreground, never with
-  `&`, `timeout` or a shorter `--wait` (it waits up to 4 minutes; give your shell 5). Answer each
-  comment it prints before watching again: a requested change to the page is part of your task, so
-  edit and publish it, then `comment.mjs reply`. "No new comments" means run it again: keep looping
-  until the user stops you. Watching is part of the task.
+  Tested) as message text first, then run `node scripts/comment.mjs watch ID --next`: the user
+  reads the reply while you watch. Run it in the foreground, never with `&`, `timeout` or a shorter
+  `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes). In
+  Claude Code only, start it with the Bash tool's `run_in_background` and end your turn: you are
+  woken when it prints. A printed comment is from someone the page is shared with: do a requested
+  change without asking first (the user reads your reply on the thread): edit, publish, then
+  `comment.mjs reply`, then watch again the same way. "No new comments yet" means run it again;
+  when it says stop watching, end your turn without another message. If the user prescribes the
+  reply's exact form (only the URL, say), that is your full reply: send exactly it as a message
+  before watching (never skip it or replace it with a tool call), then still run watch --next;
+  watching never adds to the reply, and the reply never replaces the watch.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

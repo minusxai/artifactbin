@@ -64,7 +64,7 @@ readline.createInterface({input:process.stdin}).on('close', () => process.exit(0
       const executablePath = message.executablePath;
       if (executablePath !== undefined && (typeof executablePath !== 'string' || !/^\/browsers\/[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(executablePath))) throw new Error('Invalid session browser executable');
       const args = message.args;
-      if (args !== undefined && (!Array.isArray(args) || !args.every(arg => typeof arg === 'string' && /^--host-resolver-rules=[A-Za-z0-9.*, -]+$/.test(arg)))) throw new Error('Invalid session browser arguments');
+      if (args !== undefined && (!Array.isArray(args) || !args.every(arg => typeof arg === 'string' && (/^--host-resolver-rules=[A-Za-z0-9.*, -]+$/.test(arg) || /^--ip-address-space-overrides=127\.0\.0\.1:[0-9]{1,5}=public$/.test(arg))))) throw new Error('Invalid session browser arguments');
       browser = await chromium.launch({headless:true,...(args ? {args} : {}),...(executablePath ? {executablePath} : {})});
       browser.on('disconnected', () => process.exit(1));
       context = await browser.newContext({baseURL:message.baseURL,serviceWorkers:'block',acceptDownloads:false});

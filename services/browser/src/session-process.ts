@@ -31,6 +31,8 @@ export interface SessionProcessOptions {
   browserExecutable?: () => Promise<string>;
   /** Read once at the service's env boundary (`session-config`); bubblewrap unless told otherwise. */
   sandbox?: SessionSandboxChoice;
+  /** Development only: the app's Vite HMR socket port, the one loopback port a session page may dial (sessionBrowserArgs). */
+  devSocketPort?: number;
 }
 const require = createRequire(import.meta.url);
 
@@ -215,7 +217,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
   const requests = createSessionRequestQueue();
   const lifetime = new AbortController();
   const jar = createPagesCookieJar(sessionOrigins(options.baseURL, options.pagesHost), options.pagesHost);
-  const browserArgs = sessionBrowserArgs(options.pagesHost);
+  const browserArgs = sessionBrowserArgs(options.pagesHost, options.devSocketPort);
   const closedListeners = new Set<() => void>();
   const close = async () => {
     if (stopped) return;

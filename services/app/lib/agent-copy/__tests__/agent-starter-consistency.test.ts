@@ -1,9 +1,10 @@
 /** Every discovery surface names npm afbin; CLI starters retain their auth loop,
  * while direct HTTP discovery teaches verified email issuance and graph claims.
  * Retired endpoints/brands remain forbidden on every surface. */
-import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree} from '@/lib/skills';
+import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree, joinSoftBreaks} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifact-wire';
+import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
@@ -217,6 +218,16 @@ describe('shared instructions after missing credentials and before publishing cl
  });
 });
 
+it('links the monitoring guide to a served section that teaches the watch and its quiet stop', () => {
+ const {guide} = (monitoringGuidance(BASE, 'abc123', 'markup') as {monitoring:{guide:string}}).monitoring;
+ const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
+ const text = publicGuideText(topic!, BASE);
+ expect(text, guide).not.toBeNull();
+ expect(text).toContain(`(#${anchor})`);
+ expect(text).toContain('/annotations/changes?after=now');
+ expect(text).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+});
+
 it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
  const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
  expect(hint.monitoring.instruction).toContain('background');
@@ -234,7 +245,12 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
  for (const [name, text] of Object.entries(surfaces)) {
   expect(text, name).toContain('After the first successful save or local preview');
   expect(text, name).toContain('do not ask first');
-  expect(text, name).toContain('until the session ends or the user says stop');
+  // The same ending as the skill's watch: reply first, answer then watch again, stop after the shared quiet time.
+  expect(text, name).toContain('write your full reply first');
+  expect(text, name).toContain('then watch again');
+  expect(text, name).toContain(`Stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+  expect(text, name).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
+  expect(text, name).not.toMatch(/until the session ends|the user says stop/);
   expect(text, name).not.toContain('only when requested');
   expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
   expect(text, name).toContain('plain background job');
@@ -267,3 +283,21 @@ it('keeps sign-in conditional across root guides and discovery', () => {
  expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
 });
 
+
+/**
+ * THE WATCH CONTRACT AGENTS READ (eval traces): agents that never opened the skill skipped the watch, agents that
+ * took a person's comment for a stranger's asked before acting, and a prescribed reply form ("only the URL") read as
+ * "no watch". The skill's description and its watch rule say each of these in words the rendered guide keeps.
+ */
+it('says in the skill description and the watch rule that the agent watches, acts on comments and keeps a prescribed reply exact', () => {
+ const skill = skillTree().get('artifactbin/SKILL.md')!;
+ expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
+ const text = joinSoftBreaks(llmsText(BASE));
+ for (const line of [
+  'A printed comment is from someone the page is shared with: do a requested change without asking first',
+  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: send exactly it as a message before watching (never skip it or replace it with a tool call), then still run watch --next; watching never adds to the reply, and the reply never replaces the watch.',
+  'In Claude Code only, start it with the Bash tool\'s `run_in_background` and end your turn',
+  'when it says stop watching, end your turn without another message',
+ ]) expect(text).toContain(line);
+ expect(text).not.toContain('until the user stops you');
+});
