@@ -6,6 +6,7 @@
  * Used by: every command script (auth serve autofix publish read export check graphql comment),
  *   toolbox-*.mjs, author-toolbox/author-check tests.
  */
+import {beforeCommand} from './toolbox-update.mjs';
 import {homedir} from 'node:os';
 import path from 'node:path';
 import {readFile,writeFile,realpath,lstat} from 'node:fs/promises';
@@ -164,11 +165,14 @@ return {...diagnostics,ok:false,code:error.code??'operation_failed',message:
   '../../../lib/skills/author-toolbox-contract').AuthorResult|any>} execute */
 export async function runTool(name,url,execute,args=process.argv.slice(2)){
  if(!process.argv[1]||realpathSync(process.argv[1])!==fileURLToPath(url))return;
+ if(await beforeCommand(url,args))return;
+ args=args.filter(arg=>arg!=='--no-update');
  let parsed;
  try{
 try{parsed=parseCommand(name,args);}catch(error){throw new ToolError('invalid_invocation',
     error.message,2,'Read --help.');}
-  if(parsed.values.help){process.stdout.write(commandHelp(name));return;}
+  if(parsed.values.help){process.stdout.write(commandHelp(name)+
+ "\n--no-update disables update checks and activation.\n");return;}
 if(parsed.values.output&&!parsed.values.append){const destination=await safeParent(
     parsed.values.output);let exists=false;try{await lstat(destination);exists=true;}catch(error){
     if(error.code!=='ENOENT')throw error;}if(exists)throw new ToolError('output_exists',

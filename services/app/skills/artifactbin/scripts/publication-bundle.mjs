@@ -5,6 +5,7 @@
  * Used by: toolbox-publish.mjs, publish.mjs, native-author-skill/helper/skill-examples tests,
  *   scripts/lib and fixture publication helpers.
  */
+import {beforeCommand} from './toolbox-update.mjs';
 import {readFile,realpath,lstat,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {realpathSync} from 'node:fs';
@@ -119,6 +120,8 @@ console.log(
    'Saved immutable publication request. Send with publication-bundle.mjs --send; preserve its '+
    'receipt mappings for updates.');
 }
-if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){console.error(
-  'Deprecated publication-bundle.mjs; prefer publish.mjs FILE.');main(process.argv.slice(2)).catch(
+if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)){
+  if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
+  console.error('Deprecated publication-bundle.mjs; prefer publish.mjs FILE.');
+  main(process.argv.slice(2).filter(arg=>arg!=='--no-update')).catch(
   error=>{console.error(error.message);process.exitCode=1;});}

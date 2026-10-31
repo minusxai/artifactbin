@@ -17,7 +17,8 @@ describe('the tokenless paste', () => {
   it('offers the author skill and HTTP guide without an executable installer',()=>{
     const guide=JSON.stringify(gettingStarted(B));
     expect(guide).toContain(`${B}/skills/artifactbin.zip`);
-    expect(guide).not.toMatch(/afbin |install\.sh|@afbin\/cli/);
+    expect(guide).not.toMatch(/afbin |@afbin\/cli|\|\s*(?:ba)?sh\b/);
+    expect(guide).not.toContain(`${B}/install.sh`);
   });
   it('existing: the link plus how to reach afbin, and never a token', () => {
     expect(existingPaste(B, ID)).toBe(STARTER);

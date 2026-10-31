@@ -5,7 +5,7 @@ it('runs the installed native helper with Node alone and refuses project symlink
  const dir=await mkdtemp(join(tmpdir(),'bundle-fresh-'));
  try{
   await mkdir(join(dir,'scripts'));await mkdir(join(dir,'project'));
-  for(const script of ['publication-bundle.mjs','publish.mjs'])await copyFile(new URL('../../../skills/artifactbin/scripts/'+script,import.meta.url),join(dir,'scripts',script));
+  for(const script of ['publication-bundle.mjs','publish.mjs','toolbox-update.mjs','toolbox-update-state.mjs','toolbox-update-archive.mjs'])await copyFile(new URL('../../../skills/artifactbin/scripts/'+script,import.meta.url),join(dir,'scripts',script));
   const {buildPreviewParser}=await import('../../skills');
   await writeFile(join(dir,'scripts/preview-html.mjs'),await buildPreviewParser(await readFile(new URL('../../../skills/artifactbin/scripts/preview-html.mjs',import.meta.url),'utf8')));
   await writeFile(join(dir,'project','index.html'),'<img src="./logo.svg"><script type="module">import "./main.js";</script>');await writeFile(join(dir,'project','logo.svg'),'<svg/>');

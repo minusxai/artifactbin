@@ -12,13 +12,18 @@ describe('skill-first HTTP onboarding',()=>{
   const discovery=agentDiscovery(BASE);
   for(const text of [discovery.instruction,agentDiscoveryHead(discovery),agentDiscoveryTail(discovery),existingPaste(BASE,'example'),JSON.stringify(gettingStarted(BASE)),buildSetupInstructions({serverOrigin:BASE})]){
    expect(text).toContain(`${BASE}/llms.txt`);
-   expect(text).not.toMatch(/afbin |@afbin\/cli|install\.sh|name="cli"|device approval/i);
+   expect(text).not.toMatch(/afbin |@afbin\/cli|name="cli"|device approval|\|\s*(?:ba)?sh\b/i);
+   expect(text).not.toContain(`${BASE}/install.sh`);
   }
  });
  it('provides skill installation and actual HTTP authoring and auth contracts',()=>{
   const guide=JSON.stringify(gettingStarted(BASE));
   expect(guide).toContain(`${BASE}/skills/artifactbin.zip`);
-  expect(guide).toContain('unzip -n');
+  expect(guide).toContain('https://artifactbin.dev/install.sh');
+  expect(guide).not.toContain('#workshop-install');
+  expect(guide).toContain(`${BASE}/skills/artifactbin/latest.json`);
+  expect(guide).toContain('node scripts/update.mjs');
+  expect(guide).not.toContain('unzip -n');
   const brief=llmsText(BASE);
   expect(brief).toContain('POST /api/artifacts');
   expect(brief).toContain('expectedState');

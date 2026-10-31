@@ -7,6 +7,8 @@
  * Used by: serve.mjs, html-preview/author-toolbox/font-delivery/shared-skill-delivery tests,
  *   scripts/fixtures/local-preview.mjs.
  */
+import {beforeCommand} from './toolbox-update.mjs';
+
 import {realpathSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {realpath,stat,writeFile,rename} from 'node:fs/promises';
@@ -152,6 +154,8 @@ return {server,url:`http://127.0.0.1:${server.address().port}/`,close:()=>new Pr
    reject)=>server.close(error=>error?reject(error):done()))};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
+if(await beforeCommand(import.meta.url,process.argv.slice(2)))process.exit(process.exitCode??0);
+process.argv=process.argv.filter(arg=>arg!=='--no-update');
 console.error('Deprecated preview.mjs; prefer serve.mjs PROJECT.');const args=process.argv.slice(2);
    if(args.length===1&&args[0]==='--help'){console.log(
    'Usage: node preview.mjs ROOT [--port PORT] [--runtime-dir DIR]\nServes only the selected '+
