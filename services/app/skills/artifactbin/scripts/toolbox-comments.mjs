@@ -4,8 +4,9 @@
  * Used by: comment.mjs, author-toolbox and comment-reactions-toolbox tests;
  * the log state and lock live in toolbox-watch-state.mjs.
  */
-import {open,readFile} from 'node:fs/promises';
-import {STREAM as stream,withWatchLock,windowOf,awaitingOf} from './toolbox-watch-state.mjs';
+import {open} from 'node:fs/promises';
+import {STREAM as stream,withWatchLock,windowOf,awaitingOf,readWatchLog,openThreads}
+  from './toolbox-watch-state.mjs';
 import {ToolError,optionalFile,integer} from './toolbox-client.mjs';
 export {watchLogPath,noteWatchActivity} from './toolbox-watch-state.mjs';
 /** Logs and checkpoints saved before the feed carried agents' writes name the old stream; they
@@ -84,9 +85,8 @@ if(values.cursor){const initial=await checkpointInput(values.cursor,server,id);c
  let handle;
  if(values.append){
   if(!values.output)throw new ToolError('output_required','--append requires --output.',2);
-const raw=await readFile(values.output,'utf8');try{records=raw.trim().split('\n').map(
-    line=>JSON.parse(line));}catch{throw new ToolError('invalid_log',
-    'Existing NDJSON log is malformed.',2);}
+  records=await readWatchLog(values.output);if(!records)throw new ToolError('invalid_log',
+    'Existing NDJSON log is malformed.',2);
 if(!matches(records[0],server,id)||records[0].kind!=='watch')throw new ToolError('log_mismatch',
     'Log belongs to another origin, artifact or stream.',2);
   // A log cut off before its first checkpoint (a killed first call) starts over.
@@ -165,10 +165,14 @@ if(replay&&!result.has_more){replay=false;for(const event of latest.values())if(
       event.annotation_id).filter(t=>typeof t==='string'&&!mine.get(t)))];
      threads.forEach(t=>awaiting.add(t));
      if(threads.length&&handle)await write({kind:'printed',server,artifact:id,stream,threads});
-     if(active&&window)await write({kind:'activity',server,artifact:id,stream,at:now()});
+     if(active&&window){window.active=now();await write({kind:'activity',server,artifact:id,
+      stream,at:window.active});}
      await write(checkpoint);
-     if(gate&&!result.has_more&&!events){if(awaiting.size){unanswered=[...awaiting];break;}
-      gate=false;}}
+     // Still awaited only while its thread is open: deleted or resolved threads are answered.
+     if(gate&&!result.has_more&&!events){const closed=awaiting.size?await openThreads(client,id,
+      [...awaiting],signal):[];if(closed.length){closed.forEach(t=>awaiting.delete(t));await
+      write({kind:'answered',server,artifact:id,stream,threads:closed});}
+      if(awaiting.size){unanswered=[...awaiting];break;}gate=false;}}
    }
    if(values.once&&!result.has_more)break;
    if(next&&events>0&&!result.has_more)break;

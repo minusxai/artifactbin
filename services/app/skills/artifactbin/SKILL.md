@@ -136,8 +136,9 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   change without asking first (the user reads your reply on the thread): edit, publish, then
   `comment.mjs reply`, then watch again the same way. "No new comments yet" means run it again;
   when it says stop watching, end your turn without another message. If the user prescribes the
-  reply's exact form (only the URL, say), that is your full reply: write exactly it as its own
-  message, then watch; watching never adds to it.
+  reply's exact form (only the URL, say), that is your full reply: send exactly it as a message
+  before watching (never skip it or replace it with a tool call), then still run watch --next;
+  watching never adds to the reply, and the reply never replaces the watch.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

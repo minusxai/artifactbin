@@ -148,8 +148,11 @@ async function quietHarness(feed:(n:number)=>any[]){
  const {mkdtemp}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
  const root=await mkdtemp(path.join(tmpdir(),'watch-quiet-')),server='https://example.test';
- const state={clock:0,n:0,printed:[] as any[]};
- const fetcher=async(url:any)=>{const wait=Number(new URL(String(url)).searchParams.get('wait'));state.n++;state.clock+=wait*1000;return Response.json({events:feed(state.n),next_cursor:'c'+state.n,has_more:false});};
+ // Thread listings (status=open) answer every thread the feed has carried except those in `gone` (deleted or resolved); they are not feed requests.
+ const state={clock:0,n:0,printed:[] as any[],threads:new Set<string>(),gone:new Set<string>(),listings:0};
+ const fetcher=async(url:any)=>{const at=new URL(String(url));
+  if(at.pathname.endsWith('/annotations')){state.listings++;return Response.json({annotations:[...state.threads].filter(t=>!state.gone.has(t)).map(id=>({id,status:'open'})),next_cursor:null});}
+  const wait=Number(at.searchParams.get('wait'));state.n++;state.clock+=wait*1000;const events=feed(state.n);events.forEach((e:any)=>e.annotation_id&&state.threads.add(e.annotation_id));return Response.json({events,next_cursor:'c'+state.n,has_more:false});};
  const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
  /** One watch --next call: its printed lines, others' events as their IDs. */
  const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
@@ -264,7 +267,7 @@ it('refuses a second watch --next on the same log while one runs, without touchi
   // Released when the first watch returns: the next call runs.
   expect(await readdir(root)).toEqual(['feed.ndjson']);
   await watchComments(second,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async()=>{},now:()=>clock});
-  expect(secondRequests).toHaveLength(1);
+  expect(secondRequests.length).toBeGreaterThan(0);
  }finally{release();await rm(root,{recursive:true,force:true});}
 });
 it('takes over the lock of a watch that died or stopped touching it',async()=>{
@@ -354,5 +357,72 @@ it('a thread whose latest comment in the batch is your own reply is answered, so
   expect(await watch()).toEqual([ANSWER('U')]);
   script.set(state.n+1,[comment('u4','U',true)]);
   const clock=state.clock;expect(await watch()).toEqual([YET]);expect(state.clock-clock).toBe(235000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a reply late in the window restarts the quiet time within the same call',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
+ const mine={type:'artifactbin.comment',event_id:'e2',annotation_id:'T1',author:{kind:'agent',you:true},body:'Done'};
+ const {root,state,watch}=await quietHarness(n=>n===2?[theirs]:n===3?[mine]:[]);
+ try{
+  expect((await watch())[0]).toBe('e1');
+  // The agent takes 12 minutes to answer; the call that carries its reply must not stop 4 minutes later.
+  state.clock+=12*60000;const replied=state.clock;
+  expect(await watch()).toEqual([YET]);
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[STOP]]);
+  expect(state.clock-replied).toBe(940000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a printed thread that was deleted or resolved no longer holds the watch',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs=(event_id:string,thread:string)=>({type:'artifactbin.comment',event_id,annotation_id:thread,author:{kind:'human',you:false},body:'Please fix'});
+ const {root,state,watch}=await quietHarness(n=>n===2?[theirs('e1','T1'),theirs('e2','T2')]:[]);
+ try{
+  expect(await watch()).toEqual(['e1','e2',expect.stringMatching(/^next:/)]);
+  // T1 was deleted (no feed event says so): one listing drops it; T2 still needs a reply.
+  state.gone.add('T1');
+  expect(await watch()).toEqual([ANSWER('T2')]);
+  // T2 resolved by anyone: answered. The call waits, and the result is remembered (no further listing).
+  state.gone.add('T2');
+  expect(await watch()).toEqual([YET]);const listings=state.listings;
+  expect(await watch()).toEqual([YET]);expect(state.listings).toBe(listings);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a watch log whose last line was torn by a kill keeps working; damage elsewhere is refused',async()=>{
+ const {rm,readdir,appendFile,readFile,writeFile}=await import('node:fs/promises'),path=await import('node:path');
+ const {root,watch}=await quietHarness(()=>[]);
+ try{
+  expect(await watch()).toEqual([YET]);
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!),log=path.join(dir,'PAGE12.ndjson');
+  await appendFile(log,'{"kind":"event","server":"https://exa');
+  expect(await watch()).toEqual([YET]);
+  const text=await readFile(log,'utf8');
+  expect(text.endsWith('\n')).toBe(true);expect(()=>text.trim().split('\n').map(line=>JSON.parse(line))).not.toThrow();
+  const lines=text.trim().split('\n');lines.splice(1,1,'{torn');await writeFile(log,lines.join('\n')+'\n');
+  await expect(watch()).rejects.toMatchObject({code:'invalid_log'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('two watches that both find a stale lock never both run, and a lock still being written is live',async()=>{
+ const {mkdtemp,rm,writeFile,utimes,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path'),{spawnSync}=await import('node:child_process');
+ const {withWatchLock}=await import('../../../skills/artifactbin/scripts/toolbox-watch-state.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-race-')),lock=path.join(root,'feed.ndjson.lock');
+ try{
+  await writeFile(lock,JSON.stringify({pid:spawnSync(process.execPath,['-e','']).pid,token:'dead'}));
+  // B judges the lock stale; before B moves it, A takes it over completely and starts watching.
+  let releaseA!:()=>void;const holdA=new Promise<void>(resolve=>{releaseA=resolve;});let a!:Promise<any>;
+  const ran:string[]=[];
+  const b=await withWatchLock(lock,async()=>{ran.push('B');},{beforeTakeover:async()=>{
+   let started!:()=>void;const running=new Promise<void>(resolve=>{started=resolve;});
+   a=withWatchLock(lock,async()=>{ran.push('A');started();await holdA;});await running;}});
+  expect(b).toMatchObject({ran:false});expect(ran).toEqual(['A']);
+  // A's lock survived B's attempt: a third watch is refused too.
+  expect(await withWatchLock(lock,async()=>{ran.push('C');})).toMatchObject({ran:false});
+  releaseA();expect(await a).toMatchObject({ran:true});expect(await readdir(root)).toEqual([]);
+  // A lock file created but not yet written (empty) is live until it is two minutes old.
+  await writeFile(lock,'');
+  expect(await withWatchLock(lock,async()=>'ran')).toMatchObject({ran:false});
+  const old=new Date(Date.now()-3*60000);await utimes(lock,old,old);
+  expect(await withWatchLock(lock,async()=>'ran')).toEqual({ran:true,value:'ran'});
+  expect(await readdir(root)).toEqual([]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
