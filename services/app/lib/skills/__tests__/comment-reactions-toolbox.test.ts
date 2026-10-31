@@ -342,3 +342,17 @@ it('a thread printed by the first call\'s history replay must be answered before
   expect(state.clock).toBe(0);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('a thread whose latest comment in the batch is your own reply is answered, so the next watch waits',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const comment=(event_id:string,thread:string,you:boolean)=>({type:'artifactbin.comment',event_id,annotation_id:thread,author:{kind:you?'agent':'human',you},body:you?'Done':'Please fix'});
+ // One batch: the person's comment on T then your reply on T (already behind the cursor); U ends with theirs.
+ const script=new Map<number,any[]>([[2,[comment('t1','T',false),comment('t2','T',true),comment('u2','U',true),comment('u3','U',false)]]]);
+ const {root,state,watch}=await quietHarness(n=>script.get(n)??[]);
+ try{
+  expect(await watch()).toEqual(['t1','u3',expect.stringMatching(/^next:/)]);
+  // Only U still awaits a reply; T is never recorded, so no duplicate reply is asked for.
+  expect(await watch()).toEqual([ANSWER('U')]);
+  script.set(state.n+1,[comment('u4','U',true)]);
+  const clock=state.clock;expect(await watch()).toEqual([YET]);expect(state.clock-clock).toBe(235000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

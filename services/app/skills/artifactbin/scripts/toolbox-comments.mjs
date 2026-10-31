@@ -157,8 +157,12 @@ if(replay&&!result.has_more){replay=false;for(const event of latest.values())if(
     // Printed first, logged after (a replay only once it ends): a call killed in between leaves
     // the cursor behind, and the next call prints the batch again.
     if(!replay){for(const record of shown)await print(record);for(const record of held)await
-     write(record);held.length=0;const threads=[...new Set(shown.map(({event})=>event.type===
-     'artifactbin.comment'&&event.annotation_id).filter(t=>typeof t==='string'))];
+     write(record);
+     // A printed thread awaits a reply unless the batch's latest comment on it is your own.
+     const mine=new Map(held.map(({event})=>[event.type==='artifactbin.comment'&&
+      event.annotation_id,event.author?.you===true]));held.length=0;
+     const threads=[...new Set(shown.map(({event})=>event.type==='artifactbin.comment'&&
+      event.annotation_id).filter(t=>typeof t==='string'&&!mine.get(t)))];
      threads.forEach(t=>awaiting.add(t));
      if(threads.length&&handle)await write({kind:'printed',server,artifact:id,stream,threads});
      if(active&&window)await write({kind:'activity',server,artifact:id,stream,at:now()});
