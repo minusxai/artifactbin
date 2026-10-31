@@ -131,19 +131,22 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: node scripts/ci/fast-check.mjs
 
-  # THE NODE PROJECT SHARDS, like api and ui: four, packed by measured file time
+  # THE NODE PROJECT SHARDS, like api and ui: six, packed by measured file time
   # (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json), and NOTHING ELSE. The integration
   # project is its own job below, beside these shards rather than after one of them.
+  # SIX after runs 41145428563/41147523975: the table knew 438 of 809 node files, the rest weighed the 51ms
+  # median against ~2.3s measured, and four shards drew 255-449s of file time (152-244s of Vitest, a 4m14s-5m03s
+  # run). Refreshed from run 41147523975, ~1328s splits ~221s per shard at six (~332s at four keeps the run near 4m).
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
-    name: node tests (${{ matrix.shard }}/4)
+    name: node tests (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4 ]
+        shard: [ 1, 2, 3, 4, 5, 6 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -178,7 +181,7 @@ jobs:
           restore-keys: test-builds-v1-${{ runner.os }}-
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
-        run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/4
+        run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/6
 
   # The heavy tests that `npm test` leaves out — a disposable Dockerised Postgres and real Chromium — live in
   # the `integration` project, selected wherever the node project is. Run once; no --passWithNoTests, so a

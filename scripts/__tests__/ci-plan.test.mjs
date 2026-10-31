@@ -556,11 +556,11 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.node.steps.filter(step => step.if?.includes('matrix.shard'))).toEqual([]);
     expect(JSON.parse(readFileSync(path.join(root, 'scripts/ci/test-timings.json'), 'utf8')).reserve).toBeUndefined();
   });
-  it('splits the node project into four shards, and every shard runs its fourth', () => {
+  it('splits the node project into six shards, and every shard runs its sixth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
-    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/4)');
-    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/4');
+    expect(jobs.node.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(jobs.node.name).toBe('node tests (${{ matrix.shard }}/6)');
+    expect(jobs.node.steps.find(step => (step.run ?? '').startsWith('node scripts/ci/ci.mjs node')).run).toBe('node scripts/ci/ci.mjs node ${{ matrix.shard }}/6');
   });
   it('splits the ui and islands projects into two shards, and every shard runs its half', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
