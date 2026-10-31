@@ -69,9 +69,16 @@ it('updates isolated installs once, preserves data and symlinks, and returns pro
   await writeFile(path.join(base,'.artifactbin-releases','pending.json'),JSON.stringify({directory:'release-missing'}));
   expect((await run(['missing'])).code).toBe(0);
   await mkdir(path.join(base,'.artifactbin-releases','stage-deadbeef'));
+  await mkdir(path.join(base,'.artifactbin-releases','release-superseded',"artifactbin"),{recursive:true});
   await symlink('2147483647',path.join(base,'.artifactbin-releases','lock'));
   expect((await update(root)).status).toBe('activated');
   await expect(access(path.join(base,'.artifactbin-releases','stage-deadbeef'))).rejects.toThrow();
+  // Releases other than the active, rollback and pending ones are removed, so updates never fill the cache.
+  await expect(access(path.join(base,'.artifactbin-releases','release-superseded'))).rejects.toThrow();
+  const kept=JSON.parse(await readFile(path.join(base,'.artifactbin-releases','previous.json'),'utf8')).directory;
+  await access(path.join(base,'.artifactbin-releases',kept,'artifactbin','SKILL.md'));
+  expect((await update(root,{rollback:true})).status).toBe('rolled-back');
+  expect((await update(root)).status).toBe('activated');
   expect((await run(['--no-update'])).code).toBe(0);
   stalled=true;const start=performance.now();expect((await run(['foreground'])).code).toBe(0);
   const duration=performance.now()-start;console.log('stalled endpoint foreground ms:',duration);expect(duration).toBeLessThan(1500);
