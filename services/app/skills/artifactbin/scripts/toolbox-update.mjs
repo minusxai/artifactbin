@@ -25,10 +25,14 @@ export async function update(root, { background = false, rollback = false } = {}
     // Keep only the active, previous (rollback) and pending releases; older ones and stale stages go.
     const keep = new Set([path.basename(path.dirname(c.root))]);
     for (const file of ["previous.json", "pending.json"])
-      try { keep.add((await json(path.join(c.state, file))).directory); } catch {}
-    for (const name of await readdir(c.state))
-      if (/^stage-[a-f0-9-]+$/.test(name) || (/^(release|install)-[A-Za-z0-9-]+$/.test(name) && !keep.has(name)))
+      try {
+        keep.add((await json(path.join(c.state, file))).directory);
+      } catch {}
+    for (const name of await readdir(c.state)) {
+      const release = /^(release|install)-[A-Za-z0-9-]+$/.test(name) && !keep.has(name);
+      if (release || /^stage-[a-f0-9-]+$/.test(name))
         await rm(path.join(c.state, name), { recursive: true, force: true });
+    }
     if (rollback) {
       await atomic(path.join(c.state, "checked.json"), { time: Date.now() });
       const previous = await json(path.join(c.state, "previous.json"));
