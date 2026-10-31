@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
+import type {BrowserSessionResult} from '@artifactbin/contracts';
 
 it('prepares a conditional project update with retained mappings and a fresh immutable write key',async()=>{
  const {prepareBundleUpdate,sendBundleFile}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
@@ -76,17 +77,35 @@ it('checks each viewport in its own fresh session, concurrently, and reports the
 it('waits for a free browser session and names a full server instead of failing opaquely',async()=>{
  const {checkHosted}=await import('../../../skills/artifactbin/scripts/check.mjs');
  const ok={pageErrors:[],consoleErrors:[],failedRequests:[],httpErrors:[],telemetry:[],text:'Ready',overflow:{viewport:390,content:390,fits:true}};
- const busy=()=>Response.json({error:{code:'SESSION_ACTOR_CAPACITY',message:'One credential may hold at most 2 browser sessions at once.'}},{status:429});
+ // The browser service's own refusal (services/browser sessions.ts capacityRefusal, pinned in sessions.test.ts): an HTTP 200
+ // receipt naming no session, status failed, the capacity code in error. A 429 carrying the code means the same.
+ const refusal:BrowserSessionResult={session_id:'',status:'failed',pages:[],attachments:[],error:{code:'SESSION_ACTOR_CAPACITY',message:'One credential may hold at most 2 browser sessions at once on this server, and you hold 2.'}};
+ const busy=()=>Response.json(refusal);
  let refusals=1;const ops:string[]=[];
- const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token'},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+ const run=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{
   const body=JSON.parse(String(init?.body));ops.push(body.op);
   if(body.op==='close')return Response.json({session_id:body.session_id,status:'closed'});
   if(body.op==='script'&&refusals-->0)return busy();
   return Response.json({session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:ok});
  });
  expect(run.smokePassed).toBe(true);expect(ops.filter(op=>op==='script')).toHaveLength(2);expect(ops).not.toContain('status');
- await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token'},async()=>busy())).rejects.toMatchObject({code:'browser_busy',message:expect.stringContaining('at most 2 browser sessions')});
-},40000);
+ // Never created, so never closed.
+ expect(ops.filter(op=>op==='close')).toHaveLength(1);
+ const closes:string[]=[];
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async(_url:Parameters<typeof fetch>[0],init?:RequestInit)=>{const body=JSON.parse(String(init?.body));if(body.op==='close')closes.push(body.session_id);return busy();})).rejects.toMatchObject({code:'browser_busy',message:expect.stringContaining('at most 2 browser sessions')});
+ expect(closes).toEqual([]);
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async()=>Response.json({error:refusal.error},{status:429}))).rejects.toMatchObject({code:'browser_busy'});
+ // Any other refusal of a create names the server's code and message instead of a mismatched receipt.
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',token:'test-token',busyDelayMs:5},async()=>Response.json({...refusal,error:{code:'SANDBOX_UNAVAILABLE',message:'The browser sandbox could not start.'}}))).rejects.toMatchObject({code:'browser_session_failed',message:expect.stringContaining('(SANDBOX_UNAVAILABLE): The browser sandbox could not start.')});
+ // check.mjs sends through the signed-in client (requester): the same refusal waits there too.
+ let requesterRefusals=1;const requested:string[]=[];
+ const viaClient=await checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',busyDelayMs:5,requester:async(body:any)=>{requested.push(body.op);
+  if(body.op==='close')return {session_id:body.session_id,status:'closed'};
+  if(requesterRefusals-->0)return refusal;
+  return {session_id:body.session_id,execution_id:body.execution_id,status:'completed',result:ok};}});
+ expect(viaClient.smokePassed).toBe(true);expect(requested).toEqual(['script','script','close']);
+ await expect(checkHosted({target:'/a/PAGE12',viewports:[{width:390,height:844}],server:'https://example.test',busyDelayMs:5,requester:async()=>refusal})).rejects.toMatchObject({code:'browser_busy'});
+},20000);
 
 it('collects errors, separates only known telemetry, and catches overflow without implying visual acceptance',async()=>{
  const {inspectPage,summarizeCheck}=await import('../../../skills/artifactbin/scripts/check.mjs');

@@ -28,13 +28,24 @@ function origin(value) {
 // closed.
 export async function checkHosted(
   {target, viewports, steps = '', viewer, server, token = undefined, requester = undefined,
-    capture = false},
+    capture = false, busyDelayMs = 5000},
   fetcher = fetch
 ) {
   server = origin(server);
   if (!token && !requester) throw Error('Supply ARTIFACTBIN_TOKEN outside page code.');
+  // The server holds a few browser sessions at once; a full server is a known, retryable state,
+  // not an unexplained failure. It refuses a create with a 200 receipt naming no session (or an
+  // error status carrying the same code), through either transport.
+  const capacity = (error = {}) =>
+    ['SESSION_CAPACITY', 'SESSION_ACTOR_CAPACITY'].includes(error.code) &&
+    new ToolError('browser_busy', error.message ?? 'All browser sessions are in use.', 1,
+      'Run checks one at a time; wait a few seconds and retry.');
   async function request(body) {
-    if (requester) return requester(body);
+    if (requester) {
+      const result = await requester(body).catch(error => { throw capacity(error) || error; });
+      if (capacity(result?.error)) throw capacity(result.error);
+      return result;
+    }
     // Only a status read is repeated through a restart (shared policy, lib/http/retry); a script
     // submission is never replayed — its lost response is recovered by observing the same receipt
     // below.
@@ -55,19 +66,10 @@ export async function checkHosted(
         ? (await (await platform()).retryFetch(send, {method: 'POST', safeToRepeat: true})).response
         : await send();
     const result = await response.json();
-    if (!response.ok) {
-      const code = result.error?.code ?? result.error ?? 'unknown';
-      // The server holds a few browser sessions at once; a full server is a known, retryable
-      // state, not an unexplained failure.
-      if (code === 'SESSION_CAPACITY' || code === 'SESSION_ACTOR_CAPACITY')
-        throw new ToolError(
-          'browser_busy',
-          result.error?.message ?? 'All browser sessions are in use.',
-          1,
-          'Run checks one at a time; wait a few seconds and retry.'
-        );
+    const code = result.error?.code ?? result.error ?? 'unknown';
+    if (capacity(result.error)) throw capacity(result.error);
+    if (!response.ok)
       throw Error('Browser session refused (HTTP ' + response.status + '): ' + code);
-    }
     return result;
   }
   // Each viewport runs in its own fresh session, concurrently: no viewer-local state leaks between
@@ -93,21 +95,22 @@ export async function checkHosted(
         ...(viewer ? {viewer} : {})
       };
       let run;
-      // Creating the session waits up to ~20 s for a free browser slot before reporting
-      // browser_busy.
+      // Creating the session waits up to ~20 s for a free browser slot (another check's sessions
+      // close when it ends) before reporting browser_busy.
       const submit = async () => {
         for (let attempt = 0; ; attempt++) {
           try {
             return await request(body);
           } catch (error) {
             if (error?.code !== 'browser_busy' || attempt >= 4) throw error;
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(resolve => setTimeout(resolve, busyDelayMs));
           }
         }
       };
       try {
         run = await submit();
-        accepted = true;
+        // Only a session the server created is closed later.
+        accepted = run.session_id === session_id;
       } catch (error) {
         if (error?.code === 'browser_busy') throw error;
         // A lost submission response may still have executed. Observe the same receipt; never
@@ -119,6 +122,9 @@ export async function checkHosted(
           throw error;
         }
       }
+      if (run.session_id !== session_id && run.status === 'failed' && run.error?.code)
+        throw new ToolError('browser_session_failed', `The server browser refused the check (${
+          run.error.code}): ${run.error.message ?? 'no detail'}`, 1, 'Retry the check once.');
       if (run.session_id !== session_id || run.execution_id !== execution_id)
         throw Error('Mismatched browser receipt.');
       for (
