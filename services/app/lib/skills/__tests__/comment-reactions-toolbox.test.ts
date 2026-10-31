@@ -92,7 +92,7 @@ it('watch --next baselines once, resumes from its default checkpoint, skips own 
   await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},{...options,fetcher:clocked,now:()=>clock});
   expect(calls.slice(before).map(c=>c.wait)).toEqual(['30','30','30','30','30','30','30','25']);
   expect(calls[before]!.after).toBe('c4');
-  expect(printed).toEqual(['no new comments yet; keep watching: run the same watch --next command again now']);
+  expect(printed).toEqual(['no new comments yet: run the same watch --next command again']);
   expect((await readFile(log,'utf8')).trim().split('\n').map(line=>JSON.parse(line)).at(-1)).toMatchObject({kind:'checkpoint',cursor:'c'+n});
   expect(calls.filter(c=>c.after==='start'||c.after==='now')).toHaveLength(1);
   expect(maxInflight).toBe(1);
@@ -106,8 +106,8 @@ it('watch --next honours an explicit log and rejects --once',async()=>{
  const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);n++;return {events:n===2?[{event_id:'e1',author:{you:false}}]:[],next_cursor:'k'+n,has_more:false};}};
  try{
   const delivered:any[]=[];
-  expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
-  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true});
+  expect(await watchComments(client,'PAGE12',{next:true,output},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'0'},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:0,timedOut:true,stopped:false});
   expect(afters).toEqual(['start','k1']);
   expect(delivered.map(v=>typeof v==='string'?v.split(' ')[0]:v.event.event_id)).toEqual(['e1','next:','no']);
   expect((await readFile(output,'utf8')).trim().split('\n').at(-1)).toContain('"cursor":"k2"');
@@ -128,7 +128,7 @@ it('a first watch --next prints threads still waiting on an answer, from before 
  const afters:string[]=[];let n=0;
  const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);const page=pages[n]??{events:[],has_more:false};n++;return {...page,next_cursor:'p'+n};}};
  const delivered:any[]=[];
- expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false});
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','p1']);
  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
  expect(delivered.at(-1)).toMatch(/^next: answer each comment above now/);
@@ -139,6 +139,108 @@ it('a first watch --next falls back to "now" on a server without history replay'
  const afters:string[]=[];let n=0;
  const client={server:'https://example.test',request:async(route:string)=>{const after=new URL(route,'https://example.test').searchParams.get('after')!;afters.push(after);
   if(after==='start')throw Object.assign(new Error('refused'),{code:'invalid_cursor'});n++;return {events:n===2?[{type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{you:false}}]:[],has_more:false,next_cursor:'q'+n};}};
- expect(await watchComments(client,'PAGE12',{next:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false});
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async()=>{}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','now','q1']);
+});
+
+/** A --next harness on the default log: each request advances a fake clock by its wait, and `feed` scripts the events per request. */
+async function quietHarness(feed:(n:number)=>any[]){
+ const {mkdtemp}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {commentCommand}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-quiet-')),server='https://example.test';
+ const state={clock:0,n:0,printed:[] as any[]};
+ const fetcher=async(url:any)=>{const wait=Number(new URL(String(url)).searchParams.get('wait'));state.n++;state.clock+=wait*1000;return Response.json({events:feed(state.n),next_cursor:'c'+state.n,has_more:false});};
+ const options={env:{ARTIFACTBIN_URL:server,ARTIFACTBIN_TOKEN:'synthetic',ARTIFACTBIN_HOME:root},fetcher,now:()=>state.clock,deliver:async(v:any)=>{state.printed.push(v);}};
+ /** One watch --next call: its printed lines, others' events as their IDs. */
+ const watch=async()=>{state.printed.length=0;await commentCommand({sub:'watch',values:{next:true},positionals:['PAGE12']},options);return state.printed.map(v=>typeof v==='string'?v:v.event.event_id);};
+ return {root,server,state,watch};
+}
+const YET='no new comments yet: run the same watch --next command again';
+const STOP='no new comments for 15 minutes: stop watching and end your turn; if the person asks you to watch again, run watch --next';
+it('watch --next stops itself after 15 quiet minutes, closes its window and opens a new one on the next call',async()=>{
+ const {rm,readFile}=await import('node:fs/promises');
+ const {root,state,watch}=await quietHarness(()=>[]);
+ try{
+  // Each empty call waits 235 s of the fake clock; the one that ends past 15 minutes says stop.
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(state.clock).toBe(705000);
+  expect(await watch()).toEqual([STOP]);
+  const {readdir}=await import('node:fs/promises'),path=await import('node:path');
+  const dir=path.join(root,'watch',(await readdir(path.join(root,'watch')))[0]!);
+  const windows=()=>readFile(path.join(dir,'PAGE12.ndjson'),'utf8').then(text=>text.trim().split('\n').map(line=>JSON.parse(line)).filter(r=>r.kind==='window'));
+  expect(await windows()).toEqual([expect.objectContaining({opened:0}),expect.objectContaining({closed:940000})]);
+  // "Watch again": the next call opens a new window and waits a full 15 minutes before stopping again.
+  expect(await watch()).toEqual([YET]);
+  expect((await windows()).at(-1)).toMatchObject({opened:940000});
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[STOP]]);
+  // A window left open by a watch that was interrupted is stale once it is 15 minutes quiet: the next call starts afresh instead of stopping at once.
+  expect(await watch()).toEqual([YET]);
+  state.clock+=20*60000;
+  expect(await watch()).toEqual([YET]);
+  expect((await windows()).at(-1)).toMatchObject({opened:state.clock-235000});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('the agent\'s own replies and publishes reset the quiet time, as others\' comments do',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const {noteWatchActivity,QUIET_MINUTES}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const {DESCRIPTION}=await import('../../../skills/artifactbin/scripts/comment.mjs');
+ expect(QUIET_MINUTES).toBe(15);expect(DESCRIPTION).toContain(`After ${QUIET_MINUTES} minutes with no comment, reply or publish`);
+ // Request 2 of the first call is the baseline poll; request 12 (inside the second call, at 325 s) carries the agent's own reply.
+ const mine={type:'artifactbin.comment',event_id:'e_mine',author:{kind:'agent',you:true},body:'Done'};
+ const theirs={type:'artifactbin.comment',event_id:'e_theirs',author:{kind:'human',you:false},body:'Bigger title'};
+ let later:any=null;
+ const {root,server,state,watch}=await quietHarness(n=>n===12?[mine]:later&&n===later.n?[theirs]:[]);
+ try{
+  expect(await watch()).toEqual([YET]);
+  // The own reply is logged, never printed, and moves the quiet start to 325 s: 940 s is not yet quiet enough.
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(state.clock).toBe(940000);
+  expect(await watch()).toEqual([YET]);
+  // A publish between calls (publish.mjs records it in the same log) moves it again.
+  await noteWatchActivity(root,server,'PAGE12',()=>state.clock);const published=state.clock;
+  expect([await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET]]);
+  expect(await watch()).toEqual([STOP]);
+  expect(state.clock-published).toBe(940000);
+  // Someone else's comment in a new window is printed with the order to answer it, and resets quiet too.
+  later={n:state.n+3};
+  expect((await watch()).slice(0,1)).toEqual(['e_theirs']);
+  const answered=state.clock;
+  expect([await watch(),await watch(),await watch(),await watch()]).toEqual([[YET],[YET],[YET],[STOP]]);
+  expect(state.clock-answered).toBe(940000);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a watch killed after the server returned comments but before printing them prints them on the next call',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-killed-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const theirs={type:'artifactbin.comment',event_id:'e_theirs',annotation_id:'A',author:{kind:'human',you:false},body:'Make it blue'};
+ // The server holds the comment after c1 until a checkpoint past it is accepted.
+ const afters:string[]=[];
+ const client={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after')!;afters.push(after);return after==='start'?{events:[],next_cursor:'c1',has_more:false}:{events:[theirs],next_cursor:'c2',has_more:false};}};
+ const killed=async(v:any)=>{if(typeof v!=='string')throw Object.assign(new Error('killed'),{code:'killed'});};
+ try{
+  await expect(watchComments(client,'PAGE12',{next:true,output},{deliver:killed})).rejects.toMatchObject({code:'killed'});
+  const delivered:any[]=[];
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true},{deliver:async(v:any)=>{delivered.push(v);}})).toMatchObject({events:1});
+  expect(afters).toEqual(['start','c1','c1']);
+  expect(delivered.map(v=>typeof v==='string'?v.split(':')[0]:v.event.event_id)).toEqual(['e_theirs','next']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a first watch killed in the middle of its history replay replays it again and prints the waiting thread',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-killed-replay-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const waiting={type:'artifactbin.comment',event_id:'b1',annotation_id:'B',author:{kind:'human',you:false},body:'Add a closing line'};
+ const afters:string[]=[];let dead=true;
+ const client={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after')!;afters.push(after);
+  if(after==='start')return {events:[waiting],next_cursor:'p1',has_more:true};
+  if(dead){dead=false;throw Object.assign(new Error('killed'),{code:'killed'});}
+  return {events:[],next_cursor:'p2',has_more:false};}};
+ try{
+  await expect(watchComments(client,'PAGE12',{next:true,output},{deliver:async()=>{}})).rejects.toMatchObject({code:'killed'});
+  const delivered:any[]=[];
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'10'},{deliver:async(v:any)=>{delivered.push(v);}})).toMatchObject({events:1});
+  expect(afters).toEqual(['start','p1','start','p1']);
+  expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
+ }finally{await rm(root,{recursive:true,force:true});}
 });
