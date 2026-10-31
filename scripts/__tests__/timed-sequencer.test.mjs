@@ -74,7 +74,7 @@ describe('timed shard packing', () => {
       files: { node: { 'a.test.mjs': 50, 'b.test.mjs': 40, 'c.test.mjs': 30, 'd.test.mjs': 20, 'e.test.mjs': 10 }, api: { 'x.test.ts': 8 }, 'api-isolated': { 'y.test.ts': 4 } },
     });
     expect(loads.node.map((shard) => shard.files).reduce((a, b) => a + b)).toBe(5);
-    expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 30]);
+    expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 20, 10, 0]);
     expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(150);
     expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12);
   });
