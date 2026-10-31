@@ -15,7 +15,7 @@ export const PRESENCE_ROSTER_CAP = 25;
 /** The label of a reader without a public handle (publish.server); named readers rank before guests in a capped frame. */
 export const PRESENCE_GUEST_LABEL = 'Guest';
 const nodeId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 256;
-/** Pagegi presence semantics: normalized node-relative cursors, exact fingerprinted text offsets and a short TTL. */
+/** Presence semantics: normalized node-relative cursors, exact fingerprinted text offsets and a short TTL. */
 export function presenceGeometry(input: unknown): PresenceGeometry {
   const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
   let cursor: PresenceCursor | null = null;
