@@ -22,7 +22,7 @@ export async function update(root, { background = false, rollback = false } = {}
   const c = await context(root);
   return locked(c, async () => {
     Object.assign(c, await context(root));
-    // Keep only the active, previous (rollback) and pending releases; older ones and stale stages go.
+    // Keep only the active, previous (rollback) and pending releases; drop the rest and old stages.
     const keep = new Set([path.basename(path.dirname(c.root))]);
     for (const file of ["previous.json", "pending.json"])
       try {
