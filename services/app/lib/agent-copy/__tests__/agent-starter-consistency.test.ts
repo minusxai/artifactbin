@@ -218,6 +218,16 @@ describe('shared instructions after missing credentials and before publishing cl
  });
 });
 
+it('links the monitoring guide to a served section that teaches the watch and its quiet stop', () => {
+ const {guide} = (monitoringGuidance(BASE, 'abc123', 'markup') as {monitoring:{guide:string}}).monitoring;
+ const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
+ const text = publicGuideText(topic!, BASE);
+ expect(text, guide).not.toBeNull();
+ expect(text).toContain(`(#${anchor})`);
+ expect(text).toContain('/annotations/changes?after=now');
+ expect(text).toContain(`stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+});
+
 it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
  const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
  expect(hint.monitoring.instruction).toContain('background');

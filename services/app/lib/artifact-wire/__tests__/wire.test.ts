@@ -50,7 +50,7 @@ describe('body parsers', () => {
     expect(committedOpenAnnotations({ open_annotations: 3 } as ArtifactRow)).toBe(3);
     expect(committedOpenAnnotations({} as ArtifactRow)).toBe(0);
     expect(monitoringGuidance('https://app.test/', 'Abc123', 'image')).toEqual({});
-    expect(monitoringGuidance('https://app.test/', 'Abc123', 'markup')).toMatchObject({ monitoring: { artifact_url: 'https://app.test/a/Abc123', guide: 'https://app.test/llms/monitoring', http: expect.stringContaining('/api/artifacts/Abc123/annotations/changes') } });
+    expect(monitoringGuidance('https://app.test/', 'Abc123', 'markup')).toMatchObject({ monitoring: { artifact_url: 'https://app.test/a/Abc123', guide: 'https://app.test/llms/html-operations#watch-for-comments', http: expect.stringContaining('/api/artifacts/Abc123/annotations/changes') } });
   });
 
   it('placement from a wire parent: absent leaves it, a non-owner is refused, a folder files', async () => {
