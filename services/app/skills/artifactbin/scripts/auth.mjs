@@ -16,7 +16,7 @@ Examples:
   node scripts/auth.mjs login --challenge HANDLE --code-file code.txt
 Gotchas: use an email the user gave you; never invent an identity, and never search files,
   bundles, mailboxes or git config for credentials, codes or accounts: ask the user. status
-  refreshes a due token, so authenticated:false means log in again. Challenges expire after 30
+  refreshes the saved grant, so authenticated:false means log in again. Challenges expire after 30
   minutes and are bound to the origin. Credentials live in the private origin store
   (ARTIFACTBIN_HOME or ~/.artifactbin); the file format and token refresh are in
   the selected origin's /llms/http-auth guide. logout ends the saved grant on the server, then
@@ -50,7 +50,7 @@ import {
   positional,
   makeClient
 } from './toolbox-client.mjs';
-// Subcommands: status (refreshes a due token to prove the grant works), logout (revokes, then
+// Subcommands: status (refreshes the saved grant to prove it works), logout (revokes, then
 // removes the saved grant; --local only removes it), login (two steps: send the code, then
 // exchange it).
 export async function authCommand({sub, values, positionals}, {env = process.env, fetcher = fetch} =
@@ -66,9 +66,10 @@ export async function authCommand({sub, values, positionals}, {env = process.env
       refresh = null;
     const stored = !!saved;
     const environment = !!(env.ARTIFACTBIN_URL === server && env.ARTIFACTBIN_TOKEN);
-    // A grant whose access token is due is refreshed now, exactly as any other script would, so
-    // status reports whether work can proceed: a refused refresh means log in again.
-    if (!environment && saved?.expiresAt && saved.expiresAt < Date.now() + 30000) {
+    // A saved grant is always refreshed, exactly as any other script would when its token is due,
+    // so status proves the grant with the server: one revoked or ended elsewhere reads as signed
+    // out, never as a still-unexpired local token. A refused refresh means log in again.
+    if (!environment && saved) {
       try {
         saved = await shared.refreshCredentials(saved, root, {fetch: fetcher});
       } catch (error) {
