@@ -37,9 +37,10 @@ Gotchas: list before replying, editing or changing state. A plain reply needs no
   (retry the same call, never invert it); counts are unique accounts, only thumbs_up exists, and
   they change no source or revision. Resolve and reopen are not feed events.
   Loop: watch --next, answer what it prints (edit and publish if asked, then reply), watch --next
-  again; when it says stop, end your turn. Never run two watches at once. watch --once sets
-  "now" without a cursor; events deduplicate by ID and only delivered ones advance checkpoints.
-  Logs and checkpoints saved under the old "human-comments" stream name still resume.
+  again; when it says stop, end your turn. One watch at a time: a second --next on the page prints
+  "another watch is already running" and exits 0. watch --once sets "now" without a cursor;
+  events deduplicate by ID and only delivered ones advance checkpoints. Logs and checkpoints
+  saved under the old "human-comments" stream name still resume.
 Reactions: each listed comment's reactions are
   [{kind,count,viewer_reacted,by:[{kind:human|agent,label,user_id,image}]}]: who reacted (at most
   50 per kind, count stays exact), shown to everyone who sees comment authors. Text output prints

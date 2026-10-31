@@ -244,3 +244,68 @@ it('a first watch killed in the middle of its history replay replays it again an
   expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+const BUSY='another watch is already running for this page: wait for it to print instead of starting another';
+it('refuses a second watch --next on the same log while one runs, without touching the feed',async()=>{
+ const {mkdtemp,rm,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-lock-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'A',author:{kind:'human',you:false},body:'Hi'};
+ let release!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve;});let polled!:()=>void;const polling=new Promise<void>(resolve=>{polled=resolve;});
+ const first={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after');if(after==='start')return {events:[],next_cursor:'c1',has_more:false};polled();await waiting;return {events:[theirs],next_cursor:'c2',has_more:false};}};
+ // The second client advances a fake clock by each requested wait, so its own calls end deterministically.
+ let clock=0;const secondRequests:string[]=[];const second={server,request:async(route:string)=>{secondRequests.push(route);clock+=Number(new URL(route,server).searchParams.get('wait'))*1000;return {events:[],next_cursor:'x',has_more:false};}};
+ try{
+  const running=watchComments(first,'PAGE12',{next:true,output},{deliver:async()=>{}});
+  await polling;
+  const printed:any[]=[];
+  expect(await watchComments(second,'PAGE12',{next:true,output,append:true},{deliver:async(v:any)=>{printed.push(v);}})).toEqual({events:0,timedOut:false,stopped:false,busy:true});
+  expect(printed).toEqual([BUSY]);expect(secondRequests).toEqual([]);
+  release();expect(await running).toMatchObject({events:1});
+  // Released when the first watch returns: the next call runs.
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  await watchComments(second,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async()=>{},now:()=>clock});
+  expect(secondRequests).toHaveLength(1);
+ }finally{release();await rm(root,{recursive:true,force:true});}
+});
+it('takes over the lock of a watch that died or stopped touching it',async()=>{
+ const {mkdtemp,rm,writeFile,utimes,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path'),{spawnSync}=await import('node:child_process');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-stale-')),output=path.join(root,'feed.ndjson'),lock=output+'.lock',server='https://example.test';
+ let clock=0;const requests:string[]=[];const client={server,request:async(route:string)=>{requests.push(route);clock+=Number(new URL(route,server).searchParams.get('wait'))*1000;return {events:[],next_cursor:'c'+requests.length,has_more:false};}};
+ try{
+  // A killed watch (its pid is gone) left its lock behind.
+  const dead=spawnSync(process.execPath,['-e','']).pid;
+  await writeFile(lock,JSON.stringify({pid:dead,token:'old'}));
+  expect(await watchComments(client,'PAGE12',{next:true,output,wait:'0'},{deliver:async()=>{},now:()=>clock})).not.toHaveProperty('busy');
+  expect(requests.length).toBeGreaterThan(0);
+  // A live pid whose lock nobody touched for minutes (pid reuse, a hung watch) is stale too.
+  await writeFile(lock,JSON.stringify({pid:process.pid,token:'hung'}));const old=new Date(Date.now()-10*60000);await utimes(lock,old,old);
+  const before=requests.length;
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true,wait:'6'},{deliver:async()=>{},now:()=>clock})).toMatchObject({timedOut:true});
+  expect(requests.length).toBeGreaterThan(before);
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  // A fresh lock of a live watch is not.
+  await writeFile(lock,JSON.stringify({pid:process.pid,token:'live'}));
+  expect(await watchComments(client,'PAGE12',{next:true,output,append:true},{deliver:async()=>{}})).toMatchObject({busy:true});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('releases the lock when a watch is interrupted or fails',async()=>{
+ const {mkdtemp,rm,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'watch-release-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
+ let polled!:()=>void;const polling=new Promise<void>(resolve=>{polled=resolve;});
+ const hanging={server,request:async(route:string,{signal}:{signal:AbortSignal})=>{if(new URL(route,server).searchParams.get('after')==='start')return {events:[],next_cursor:'c1',has_more:false};polled();
+  return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{code:'aborted'}))));}};
+ try{
+  // SIGINT/SIGTERM abort the watch (comment.mjs): it returns and the lock is gone.
+  const controller=new AbortController();
+  const running=watchComments(hanging,'PAGE12',{next:true,output},{signal:controller.signal,deliver:async()=>{}});
+  await polling;expect((await readdir(root)).sort()).toEqual(['feed.ndjson','feed.ndjson.lock']);
+  controller.abort();await running;
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+  // A watch that throws releases it too.
+  const failing={server,request:async()=>{throw Object.assign(new Error('boom'),{code:'boom'});}};
+  await expect(watchComments(failing,'PAGE12',{next:true,output,append:true},{deliver:async()=>{}})).rejects.toMatchObject({code:'boom'});
+  expect(await readdir(root)).toEqual(['feed.ndjson']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

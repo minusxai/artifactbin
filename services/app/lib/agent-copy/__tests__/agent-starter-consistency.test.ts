@@ -4,6 +4,7 @@
 import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifact-wire';
+import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract, agentBlurb, existingPaste, publicGuideText, llmsText } from '@/lib/agent-copy';
@@ -234,7 +235,12 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
  for (const [name, text] of Object.entries(surfaces)) {
   expect(text, name).toContain('After the first successful save or local preview');
   expect(text, name).toContain('do not ask first');
-  expect(text, name).toContain('until the session ends or the user says stop');
+  // The same ending as the skill's watch: reply first, answer then watch again, stop after the shared quiet time.
+  expect(text, name).toContain('write your full reply first');
+  expect(text, name).toContain('then watch again');
+  expect(text, name).toContain(`Stop after ${SKILL_QUIET_MINUTES} minutes with no comment, reply or save from anyone`);
+  expect(text, name).toContain(`a later watch starts a new ${SKILL_QUIET_MINUTES} minutes`);
+  expect(text, name).not.toMatch(/until the session ends|the user says stop/);
   expect(text, name).not.toContain('only when requested');
   expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
   expect(text, name).toContain('plain background job');

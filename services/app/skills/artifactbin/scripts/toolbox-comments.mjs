@@ -4,6 +4,7 @@
  * Used by: comment.mjs, toolbox-publish.mjs, author-toolbox and comment-reactions-toolbox tests.
  */
 import {open,readFile,appendFile} from 'node:fs/promises';
+import {withWatchLock} from './toolbox-watch-lock.mjs';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {ToolError,optionalFile,integer,hash} from './toolbox-client.mjs';
@@ -71,11 +72,23 @@ function windowOf(records){
  * pass (the last poll ends 5 s early, so a shell timeout of --wait never cuts it off; a first call
  * replays history and prints unanswered threads), and returns {events,timedOut,stopped}; requests
  * never overlap. A --next batch is printed before it is logged, so a call killed mid-batch prints
- * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it. */
-export async function watchComments(client,id,values,{signal,deliver,now=Date.now,
- quietMs=QUIET_MINUTES*60000}={}){
+ * it again. With a log, an empty call QUIET_MINUTES after the window's last activity stops it, and
+ * a second --next on the same log while one runs prints one line and returns {busy:true}. */
+export async function watchComments(client,id,values,options={}){
+ if(values.next&&values.once)throw new ToolError('invalid_invocation',
+  'Use --next or --once, not both.',2);
+ if(!values.next||!values.output)return watchFeed(client,id,values,options);
+ // One --next watch per log: a second one would print the same comments twice.
+ const result=await withWatchLock(values.output+'.lock',touch=>watchFeed(client,id,values,{
+  ...options,touch}));
+ if(result)return result;
+ await (options.deliver??(line=>{process.stdout.write(line+'\n');}))('another watch is already'+
+  ' running for this page: wait for it to print instead of starting another');
+ return {events:0,timedOut:false,stopped:false,busy:true};
+}
+async function watchFeed(client,id,values,{signal,deliver,now=Date.now,quietMs=QUIET_MINUTES*60000,
+ touch=async()=>{}}={}){
  const server=client.server,seen=new Set(),next=Boolean(values.next);let cursor,records=[];
- if(next&&values.once)throw new ToolError('invalid_invocation','Use --next or --once, not both.',2);
  const deadline=next?now()+integer(values.wait??'240','wait',0,3600)*1000:Infinity;
 if(values.cursor){const initial=await checkpointInput(values.cursor,server,id);cursor=
    initial.cursor;initial.eventIds.forEach(id=>seen.add(id));}
@@ -117,6 +130,7 @@ if(next&&handle&&(!window||now()-window.active>=quietMs)){window={opened:now(),a
  const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  try{
   while(!signal?.aborted){
+   await touch();
    if(next&&cursor&&!replay&&remaining()<=0){timedOut=true;break;}
    let result;
 try{result=await client.request(`/api/artifacts/${id}/annotations/changes?`+new URLSearchParams({

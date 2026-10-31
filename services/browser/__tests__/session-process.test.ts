@@ -199,6 +199,10 @@ it('admits the app origin and document origins under the pages host, and nothing
 it('maps a development pages host to loopback for the session browser and leaves a real one alone',()=>{
  expect(sessionBrowserArgs('lvh.me')).toEqual(['--host-resolver-rules=MAP *.lvh.me 127.0.0.1, MAP lvh.me 127.0.0.1']);
  expect(sessionBrowserArgs('pages.localhost')).toHaveLength(1);
+ // Development only: the app's HMR socket is the one loopback port a session page may dial (Local Network Access).
+ expect(sessionBrowserArgs('lvh.me',3521)).toEqual(['--host-resolver-rules=MAP *.lvh.me 127.0.0.1, MAP lvh.me 127.0.0.1','--ip-address-space-overrides=127.0.0.1:3521=public']);
+ expect(sessionBrowserArgs('pages.example.com',3521)).toEqual([]);
+ expect(sessionBrowserArgs('lvh.me',0)).toHaveLength(1);
  expect(sessionBrowserArgs('pages.example.com')).toEqual([]);
  expect(sessionBrowserArgs(undefined)).toEqual([]);
  expect(sessionProcessPaths({APP__PAGES_HOST:'LVH.me'})).toMatchObject({pagesHost:'lvh.me'});
