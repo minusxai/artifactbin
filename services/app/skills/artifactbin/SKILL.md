@@ -3,7 +3,8 @@ name: artifactbin
 description: >-
   Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev
   (or self-hosted) links, work on an Artifactbin document, dashboard, deck, dataset, plan, landing
-  page or app. Use the author skill and authenticated HTTP API contracts.
+  page or app. Use the author skill and authenticated HTTP API contracts. After every publish or
+  edit, the agent watches the page for comments and answers them.
 ---
 ## Read first
 
@@ -131,9 +132,12 @@ Use these scripts, never shell-built HTTP wrappers. Reuse the saved sign-in
   reads the reply while you watch. Run it in the foreground, never with `&`, `timeout` or a shorter
   `--wait`; it waits up to 4 minutes, so set your shell tool's timeout to 300000 ms (5 minutes). In
   Claude Code only, start it with the Bash tool's `run_in_background` and end your turn: you are
-  woken when it prints. Answer each comment it prints (a requested change is part of your task:
-  edit, publish, then `comment.mjs reply`), then watch again the same way. "No new comments yet"
-  means run it again; when it says stop watching, end your turn without another message.
+  woken when it prints. A printed comment is from someone the page is shared with: do a requested
+  change without asking first (the user reads your reply on the thread): edit, publish, then
+  `comment.mjs reply`, then watch again the same way. "No new comments yet" means run it again;
+  when it says stop watching, end your turn without another message. If the user prescribes the
+  reply's exact form (only the URL, say), that is your full reply: write exactly it as its own
+  message, then watch; watching never adds to it.
 - **Data, apps, exports.** CSV and datasets: [datasets](references/datasets.md); for sample data
   copy `examples/gen-transactions.mjs`, adjust its categories, payers and merchants, and run it once
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or

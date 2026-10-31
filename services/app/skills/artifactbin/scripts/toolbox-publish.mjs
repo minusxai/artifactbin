@@ -1,7 +1,7 @@
 /**
  * Internal: the publish command (publishCommand): classify the file, autofix and bundle a page,
  * journal the write, send it and save the canonical pair (toolbox-publish-finish.mjs); a publish
- * counts as activity in the page's comment watch (toolbox-comments.mjs).
+ * counts as activity in the page's comment watch (toolbox-watch-state.mjs).
  * Used by: publish.mjs, author-toolbox.test.ts, skill-examples.test.ts.
  */
 import path from 'node:path';
@@ -12,7 +12,7 @@ export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,
   hash,platform,journalIntent,createJournal,resumeJournal,within} from './toolbox-client.mjs';
 import {loadPair,sourceIdentity,UNPAIRED} from './toolbox-source.mjs';
-import {noteWatchActivity} from './toolbox-comments.mjs';
+import {noteWatchActivity} from './toolbox-watch-state.mjs';
 const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml',
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};

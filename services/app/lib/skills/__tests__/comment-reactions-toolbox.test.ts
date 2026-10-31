@@ -244,7 +244,7 @@ it('a first watch killed in the middle of its history replay replays it again an
   expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['b1']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
-const BUSY='another watch is already running for this page: wait for it to print instead of starting another';
+const BUSY=/^another watch is already running for this page \(started \d\d:\d\d:\d\d, maybe your own\): wait for it to print; don't start another$/;
 it('refuses a second watch --next on the same log while one runs, without touching the feed',async()=>{
  const {mkdtemp,rm,readdir}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
  const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
@@ -259,7 +259,7 @@ it('refuses a second watch --next on the same log while one runs, without touchi
   await polling;
   const printed:any[]=[];
   expect(await watchComments(second,'PAGE12',{next:true,output,append:true},{deliver:async(v:any)=>{printed.push(v);}})).toEqual({events:0,timedOut:false,stopped:false,busy:true});
-  expect(printed).toEqual([BUSY]);expect(secondRequests).toEqual([]);
+  expect(printed).toHaveLength(1);expect(printed[0]).toMatch(BUSY);expect(secondRequests).toEqual([]);
   release();expect(await running).toMatchObject({events:1});
   // Released when the first watch returns: the next call runs.
   expect(await readdir(root)).toEqual(['feed.ndjson']);
@@ -307,5 +307,38 @@ it('releases the lock when a watch is interrupted or fails',async()=>{
   const failing={server,request:async()=>{throw Object.assign(new Error('boom'),{code:'boom'});}};
   await expect(watchComments(failing,'PAGE12',{next:true,output,append:true},{deliver:async()=>{}})).rejects.toMatchObject({code:'boom'});
   expect(await readdir(root)).toEqual(['feed.ndjson']);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+const ANSWER=(threads:string)=>`answer the comment(s) printed above first (${threads}): edit and publish if asked, then comment.mjs reply PAGE12 --thread THREAD --body-file FILE; then watch --next again`;
+it('watch --next refuses to wait while a printed comment has no reply, and the reply clears it',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const theirs={type:'artifactbin.comment',event_id:'e1',annotation_id:'T1',author:{kind:'human',you:false},body:'Make it blue'};
+ const mine={type:'artifactbin.comment',event_id:'e2',annotation_id:'T1',author:{kind:'agent',you:true},body:'Done'};
+ const reaction={type:'artifactbin.comment_reaction',event_id:'e3',annotation_id:'T1',comment_id:'e2',change:'added',kind:'thumbs_up',reactor:{kind:'human',you:false}};
+ const script=new Map<number,any[]>([[2,[theirs]],[4,[mine]]]);
+ const {root,state,watch}=await quietHarness(n=>script.get(n)??[]);
+ try{
+  expect(await watch()).toEqual(['e1',expect.stringMatching(/^next: answer each comment above now/)]);
+  // Watching again before replying: one feed request without waiting, then the order to answer.
+  const clock=state.clock,requests=state.n;
+  expect(await watch()).toEqual([ANSWER('T1')]);
+  expect([state.clock,state.n]).toEqual([clock,requests+1]);
+  // The reply (the agent's own event on that thread) clears it: the call waits as usual.
+  expect(await watch()).toEqual([YET]);
+  expect(state.clock-clock).toBe(235000);
+  // A reaction is information, not a thread to answer: the next call waits.
+  script.set(state.n+2,[reaction]);
+  expect(await watch()).toEqual(['e3',expect.stringMatching(/^next:/)]);
+  expect(await watch()).toEqual([YET]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a thread printed by the first call\'s history replay must be answered before the next watch waits',async()=>{
+ const {rm}=await import('node:fs/promises');
+ const waiting={type:'artifactbin.comment',event_id:'b1',annotation_id:'B',author:{kind:'human',you:false},body:'Add a closing line'};
+ const {root,state,watch}=await quietHarness(n=>n===1?[waiting]:[]);
+ try{
+  expect(await watch()).toEqual(['b1',expect.stringMatching(/^next:/)]);
+  expect(await watch()).toEqual([ANSWER('B')]);
+  expect(state.clock).toBe(0);
  }finally{await rm(root,{recursive:true,force:true});}
 });

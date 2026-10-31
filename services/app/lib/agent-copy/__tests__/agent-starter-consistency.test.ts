@@ -1,7 +1,7 @@
 /** Every discovery surface names npm afbin; CLI starters retain their auth loop,
  * while direct HTTP discovery teaches verified email issuance and graph claims.
  * Retired endpoints/brands remain forbidden on every surface. */
-import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree} from '@/lib/skills';
+import {isPublicSkillTopic, renderSkill, projectSkillLinks, skillTree, joinSoftBreaks} from '@/lib/skills';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifact-wire';
 import { QUIET_MINUTES as SKILL_QUIET_MINUTES } from '../../../skills/artifactbin/scripts/toolbox-comments.mjs';
@@ -283,3 +283,21 @@ it('keeps sign-in conditional across root guides and discovery', () => {
  expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
 });
 
+
+/**
+ * THE WATCH CONTRACT AGENTS READ (eval traces): agents that never opened the skill skipped the watch, agents that
+ * took a person's comment for a stranger's asked before acting, and a prescribed reply form ("only the URL") read as
+ * "no watch". The skill's description and its watch rule say each of these in words the rendered guide keeps.
+ */
+it('says in the skill description and the watch rule that the agent watches, acts on comments and keeps a prescribed reply exact', () => {
+ const skill = skillTree().get('artifactbin/SKILL.md')!;
+ expect(skill.description).toContain('After every publish or edit, the agent watches the page for comments and answers them.');
+ const text = joinSoftBreaks(llmsText(BASE));
+ for (const line of [
+  'A printed comment is from someone the page is shared with: do a requested change without asking first',
+  'If the user prescribes the reply\'s exact form (only the URL, say), that is your full reply: write exactly it as its own message, then watch; watching never adds to it.',
+  'In Claude Code only, start it with the Bash tool\'s `run_in_background` and end your turn',
+  'when it says stop watching, end your turn without another message',
+ ]) expect(text).toContain(line);
+ expect(text).not.toContain('until the user stops you');
+});
