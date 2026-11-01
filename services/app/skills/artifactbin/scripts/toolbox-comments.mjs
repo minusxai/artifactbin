@@ -117,7 +117,8 @@ const fresh=next&&handle&&(!window||now()-window.active>=quietMs);if(fresh){wind
  let failures=0,events=0,timedOut=false,stopped=false;
  // A first --next call replays the page's history once instead of starting at "now", so a comment
  // posted while the agent was still publishing is not lost: it prints each thread whose latest
- // comment is someone else's (the unanswered ones), then waits as usual.
+ // comment is someone else's (the unanswered ones) and is still open, then waits as usual.
+ // Resolving is not a feed event, so which threads are open comes from the annotation list.
  let replay=next&&!cursor;const latest=new Map(),held=[];
  const remaining=()=>Math.max(0,Math.floor((deadline-now())/1000)-5);
  try{
@@ -152,8 +153,10 @@ for(const event of result.events){if(typeof event.event_id!=='string')throw new 
    // Accept the next cursor only after all event records have been delivered and flushed.
    if(!next)await emit(checkpoint);
    else{
-if(replay&&!result.has_more){replay=false;for(const event of latest.values())if(event.author?.you
-     !==true){events++;shown.push({kind:'event',server,artifact:id,stream,event});}}
+if(replay&&!result.has_more){replay=false;const theirs=[...latest.values()].filter(event=>
+     event.author?.you!==true),closed=new Set(theirs.length?await openThreads(client,id,theirs.map(
+     event=>event.annotation_id),signal):[]);for(const event of theirs)if(!closed.has(event.
+     annotation_id)){events++;shown.push({kind:'event',server,artifact:id,stream,event});}}
     // Printed first, logged after (a replay only once it ends): a call killed in between leaves
     // the cursor behind, and the next call prints the batch again.
     if(!replay){for(const record of shown)await print(record);for(const record of held)await
