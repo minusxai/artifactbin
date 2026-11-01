@@ -126,7 +126,7 @@ it('a first watch --next prints threads still waiting on an answer, from before 
  // History: thread A answered by us, thread B still waiting (posted while the agent was publishing).
  const pages=[{events:[other('a1','A','Fix the date'),mine('a2','A')],has_more:true},{events:[other('b1','B','Add a closing line')],has_more:false}];
  const afters:string[]=[];let n=0;
- const client={server:'https://example.test',request:async(route:string)=>{afters.push(new URL(route,'https://example.test').searchParams.get('after')!);const page=pages[n]??{events:[],has_more:false};n++;return {...page,next_cursor:'p'+n};}};
+ const client={server:'https://example.test',request:async(route:string)=>{if(new URL(route,'https://example.test').pathname.endsWith('/annotations'))return {annotations:[{id:'B'}],next_cursor:null};afters.push(new URL(route,'https://example.test').searchParams.get('after')!);const page=pages[n]??{events:[],has_more:false};n++;return {...page,next_cursor:'p'+n};}};
  const delivered:any[]=[];
  expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
  expect(afters).toEqual(['start','p1']);
@@ -235,7 +235,8 @@ it('a first watch killed in the middle of its history replay replays it again an
  const root=await mkdtemp(path.join(tmpdir(),'watch-killed-replay-')),output=path.join(root,'feed.ndjson'),server='https://example.test';
  const waiting={type:'artifactbin.comment',event_id:'b1',annotation_id:'B',author:{kind:'human',you:false},body:'Add a closing line'};
  const afters:string[]=[];let dead=true;
- const client={server,request:async(route:string)=>{const after=new URL(route,server).searchParams.get('after')!;afters.push(after);
+ const client={server,request:async(route:string)=>{if(new URL(route,server).pathname.endsWith('/annotations'))return {annotations:[{id:'B'}],next_cursor:null};
+  const after=new URL(route,server).searchParams.get('after')!;afters.push(after);
   if(after==='start')return {events:[waiting],next_cursor:'p1',has_more:true};
   if(dead){dead=false;throw Object.assign(new Error('killed'),{code:'killed'});}
   return {events:[],next_cursor:'p2',has_more:false};}};
@@ -334,6 +335,25 @@ it('watch --next refuses to wait while a printed comment has no reply, and the r
   expect(await watch()).toEqual(['e3',expect.stringMatching(/^next:/)]);
   expect(await watch()).toEqual([YET]);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+it('a first watch --next skips history threads that were resolved since, and prints the open ones',async()=>{
+ const {watchComments}=await import('../../../skills/artifactbin/scripts/toolbox-comments.mjs');
+ const other=(id:string,thread:string)=>({type:'artifactbin.comment',event_id:id,annotation_id:thread,author:{kind:'human',you:false},body:'Please change it'});
+ // Resolving is not a feed event: only the annotation list knows R was closed long ago.
+ const afters:string[]=[];let n=0;
+ const client={server:'https://example.test',request:async(route:string)=>{const url=new URL(route,'https://example.test');
+  if(url.pathname.endsWith('/annotations'))return {annotations:[{id:'O'}],next_cursor:null};
+  afters.push(url.searchParams.get('after')!);n++;return {events:n===1?[other('r1','R'),other('o1','O')]:n===2?[other('x1','X')]:[],has_more:false,next_cursor:'p'+n};}};
+ const delivered:any[]=[];
+ expect(await watchComments(client,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
+ expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['o1']);
+ // With every history thread resolved, the first call prints nothing old and waits for new comments.
+ const quiet={...client,request:async(route:string)=>{const url=new URL(route,'https://example.test');
+  if(url.pathname.endsWith('/annotations'))return {annotations:[],next_cursor:null};return client.request(route);}};
+ n=0;afters.length=0;delivered.length=0;
+ expect(await watchComments(quiet,'PAGE12',{next:true},{deliver:async(v:any)=>{delivered.push(v);}})).toEqual({events:1,timedOut:false,stopped:false});
+ expect(afters).toEqual(['start','p1']);
+ expect(delivered.filter(v=>typeof v!=='string').map(v=>v.event.event_id)).toEqual(['x1']);
 });
 it('a thread printed by the first call\'s history replay must be answered before the next watch waits',async()=>{
  const {rm}=await import('node:fs/promises');
