@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { createSignal } from 'solid-js';
 import { createInPlaceEdit } from '../create-in-place-edit';
-import { createEditorSource } from '../create-editor-source';
 import { renderHook } from '@/solid/__tests__/helpers';
 
 const NONCE = 'n'.repeat(24);
@@ -142,23 +141,19 @@ it('pauses for a version preview and resumes after it', () => {
   expect(editModes(sent)).toEqual([true, false, true]);
 });
 
-it('carries typed prose into the source as typing, so its draft waits for a pause; a command is drawn at once', () => {
+it('reports composed prose, redraw intent and typing group to the source owner', () => {
   const { runtimeRef, emit } = fakeRuntime();
-  const drawn: Array<{ source: string; typing: boolean }> = [];
-  const { result: store } = renderHook(() => createEditorSource({
-    initial: '<p id="a">alpha</p>', live: { queue: () => {} }, commitPending: async () => {},
-    draw: (source, _editId, how) => drawn.push({ source, typing: !!how?.typing }),
-  }));
+  const sourceRef = { current: '<p id="a">alpha</p>' };
+  const edited = vi.fn<Parameters<typeof createInPlaceEdit>[0]['onSourceEdited']>((next) => { sourceRef.current = next; });
   renderHook(() => createInPlaceEdit({
-    runtimeRef, sourceRef: { get current() { return store.current(); } }, editing: true, sessionNonce: NONCE,
-    onSourceEdited: (next, render, group, selection) => store.apply(next, { origin: 'local', group, selection, redraw: render }),
+    runtimeRef, sourceRef, editing: true, sessionNonce: NONCE, onSourceEdited: edited,
   }));
   emit({ type: 'mx:flow-edit', path: '0', expected: '<p id="a">alpha</p>', replacement: '<p id="a">alpha!</p>', group: 'typing:0' });
   emit({ type: 'mx:flow-edit', path: '0', expected: '<p id="a">alpha!</p>', replacement: '<p id="a"><strong>alpha!</strong></p>' });
-  expect(store.current()).toBe('<p id="a"><strong>alpha!</strong></p>');
-  expect(drawn).toEqual([
-    { source: '<p id="a">alpha!</p>', typing: true },
-    { source: '<p id="a"><strong>alpha!</strong></p>', typing: false },
+  expect(sourceRef.current).toBe('<p id="a"><strong>alpha!</strong></p>');
+  expect(edited.mock.calls).toEqual([
+    ['<p id="a">alpha!</p>', true, 'typing:0', undefined],
+    ['<p id="a"><strong>alpha!</strong></p>', true, undefined, undefined],
   ]);
 });
 

@@ -34,7 +34,7 @@ where the author script runs in [serving and security](../../../../docs/serving-
   `lib/reader-chrome/slides.ts`; previews must not introduce a second live data subscription.
 - Besides the renderer, this module holds the reader kit's pure helpers: table and comment-target
   identity (`data-table`, `row-key`, `repeat-identity`, `comment-target`, `control-options`), reading
-  geometry (`scroll-anchor`, `edit-bar`, `edit-panel-fit`) and the document's third-party sources
+  geometry (`scroll-anchor`, `edit-bar`) and the document's third-party sources
   (`document-sources`). It imports only itself, `lib/jsx`, `lib/dataflow`, `@artifactbin/contracts` and
   `@artifactbin/utils`; anything above (the story pipelines, the runtime, the islands) is a cycle.
 - Floating UI must remain in the document's correct DOM/window. Do not reintroduce obsolete
