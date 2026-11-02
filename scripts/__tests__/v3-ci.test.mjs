@@ -67,7 +67,7 @@ describe('main validation', () => {
     expect([...selected('refs/pull/904/merge')].sort()).toEqual([...main].sort());
     for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts','services/app/__tests__/lambda-operations.test.ts'])
       expect(main.has(file)).toBe(false);
-    for (const script of ['os-boundary.mjs','postgres-proof.mjs','services/runner/prove-postgres.ts']) expect(steps.some(step => step.run?.includes(script))).toBe(true);
+    for (const script of ['scripts/runner-os-boundary.mjs','services/runner/prove-postgres.ts']) expect(steps.some(step => step.run?.includes(script))).toBe(true);
   });
   it('selects main push jobs from the pushed diff', () => {
     git('init','-q'); git('config','user.name','CI fixture');git('config','user.email','ci@example.test');

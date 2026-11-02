@@ -8,7 +8,7 @@
  * The check reads every string and template literal of non-test source with the TypeScript parser (so a
  * comment that quotes a statement is not one) and refuses an `UPDATE`, `INSERT INTO` or `DELETE FROM` naming
  * an owned table outside its owner. IMPORTERS lists the code that recreates or erases whole rows on purpose:
- * the native importers, the disposable migration provider that seeds them, test-user erasure and the test
+ * test-user erasure and the test
  * fixtures package.
  *
  *   node scripts/ci/table-ownership.mjs [--root <dir>]
@@ -28,13 +28,8 @@ const OWNERS = {
 };
 /** Path prefixes (ending in `/`) or exact files allowed to write any owned table. */
 const IMPORTERS = [
-  'services/app/lib/native-history-import/',
-  'services/app/lib/native-identity-import/',
-  'services/app/lib/native-ancillary-folders/',
   'services/app/lib/operations/testuser-erase.ts',
   'services/test-support/',
-  // Seeds the disposable database the native importers are rehearsed against.
-  'scripts/lib/native-migration-disposable-provider.ts',
 ];
 
 const WRITE = new RegExp(String.raw`(?<!\bFOR\s+)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(?:ONLY\s+)?(?:"?public"?\.)?"?(${Object.keys(OWNERS).join('|')})"?(?!\w)`, 'gi');

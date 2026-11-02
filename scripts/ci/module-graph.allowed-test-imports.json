@@ -70,9 +70,6 @@
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
     ],
-    "services/app/lib/native-history-import/__tests__/catalog-publication.test.ts": [
-      "@/lib/page-graphql/registered-queries"
-    ],
     "services/app/lib/notifications/__tests__/notification-jobs.test.ts": [
       "@/lib/operations/testuser-erase"
     ],

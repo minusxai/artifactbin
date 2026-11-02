@@ -25,7 +25,7 @@ describe('table ownership', () => {
     expect(check('services/app/lib/artifacts/store.ts', "q.query('UPDATE artifacts SET title=$2 WHERE id=$1')")).toEqual([]);
     expect(check('services/app/lib/accounts/users.ts', "q.query('UPDATE users SET name=$2'); q.query('DELETE FROM tokens')")).toEqual([]);
     expect(check('services/app/lib/accounts/users.ts', "q.query('UPDATE artifacts SET user_id=$1')")).toHaveLength(1);
-    expect(check('services/app/lib/native-history-import/index.ts', "q.query('UPDATE artifacts SET version=$2')")).toEqual([]);
+    expect(check('services/app/lib/native-history-import/index.ts', "q.query('UPDATE artifacts SET version=$2')")).toHaveLength(1);
     expect(check('services/test-support/src/db.ts', "q.query('INSERT INTO tokens (id) VALUES ($1)')")).toEqual([]);
     expect(check('services/app/lib/operations/testuser-erase.ts', "q.query('DELETE FROM users WHERE id = $1')")).toEqual([]);
   });

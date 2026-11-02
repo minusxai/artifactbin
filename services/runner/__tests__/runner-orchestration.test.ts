@@ -4,7 +4,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {createRunner} from '../src/local';
 import {createScheduler,type TransactionalDatabase} from '../src/scheduler';
 import {hostCapabilities} from '../src/capabilities';
-import {fixtureModel} from '../../../docs/proposals/runner-validation/path.mjs';
+import {fixtureModel} from '@artifactbin/test-support/runner-model';
 const closing:Array<()=>Promise<unknown>>=[];afterEach(async()=>{for(const fn of closing.splice(0).reverse())await fn();});
 async function setup(){const db=new PGlite();closing.push(()=>db.close());const model=await fixtureModel();closing.push(()=>model.close());const calls:string[]=[];
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:hostCapabilities({artifactbin:async(context,op,args)=>{expect(context.request.userId).toBe('alice');calls.push(op);return op==='read'?{title:'Report'}:args;},ai:{baseUrl:model.url+'/v1',apiKey:'fixture-key',models:['fixture'],defaultModel:'fixture'}})});closing.push(()=>runner.close());return {db,runner,calls,model};}
@@ -32,4 +32,13 @@ it('keeps parallel AI responses distinct when they finish out of order',async()=
   expect(await call(ctx,'ai.next',a)).toMatchObject({message:{content:[{text:'first'}]}});
   expect(await call(ctx,'ai.next',b)).toMatchObject({message:{content:[{text:'second'}]}});
  }finally{vi.unstubAllGlobals();}
+});
+it('uses the retained HTTP fixture through real managed inference with streamed tool arguments and UTF-8',async()=>{
+ const {runner,model}=await setup();
+ const {runId}=await runner.start({userId:'alice',requestId:'stream-fixture',input:null,program:{language:'typescript',source:`export default async(input,c)=>{const stream=await c.ai.open({context:{messages:[{role:'user',content:'review'}],tools:[{name:'read_artifact',parameters:{type:'object'}}]}});return await c.ai.next(stream);}`}});
+ let snapshot;
+ for(let n=0;n<1200;n++){snapshot=await runner.getRun({userId:'alice',runId});if(snapshot.receipt)break;await new Promise(resolve=>setTimeout(resolve,10));}
+ expect(snapshot?.status,JSON.stringify(snapshot)).toBe('completed');
+ expect(snapshot?.output).toMatchObject({message:{content:[{type:'toolCall',name:'read_artifact',arguments:{}}]}});
+ expect(model.requests).toHaveLength(1);expect(model.requests[0].authorized).toBe(true);
 });

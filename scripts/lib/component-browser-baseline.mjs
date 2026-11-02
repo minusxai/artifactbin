@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import {pixelDifference} from './native-pixel-quantization.mjs';
+import {pixelDifference} from './pixel-difference.mjs';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
 /** @param {import('../fixtures/component-baseline/contract').BrowserParityAction} action */
 export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
