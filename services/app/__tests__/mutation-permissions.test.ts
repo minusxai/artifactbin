@@ -12,8 +12,14 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import {patchMetadata} from './conditional-request';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {nativeDatasetClient} from './native-dataset-http';
-import {viewersWritePolicy} from '@artifactbin/utils';
 useAppHarness();
+/** The v1 viewers-write policy as version 3 (metadata PATCH refuses v1/v2 since the stored migration): every role reads and writes every row. */
+const ROLES=['viewer','signed_in','anonymous'];
+const VIEWERS_WRITE={version:3,tables:[{table:{schema:'public',name:'rows'},
+ select_permissions:ROLES.map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),
+ insert_permissions:ROLES.map(role=>({role,permission:{columns:'*',check:{}}})),
+ update_permissions:ROLES.map(role=>({role,permission:{columns:'*',filter:{},check:{}}})),
+ delete_permissions:ROLES.map(role=>({role,permission:{filter:{}}}))}]};
 async function fixture(data:Record<string,unknown>={dataset:[{n:1}],access:'readwrite'}){
  const owner=await mintAccountToken('owner'),user=await createUser({email:'mxmx_test_dataset_friend@example.com'}),friend=await mintAccountToken('friend',user.id);
  const publish=async(body:object)=>{const response=await publishRoute(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',...body}}));expect(response.status,await response.clone().text()).toBe(201);return (await response.json()).id as string;};
@@ -24,7 +30,7 @@ async function fixture(data:Record<string,unknown>={dataset:[{n:1}],access:'read
  let serial=0;
  const insert=async(auth?:Actor,value=2)=>client.write(table.id,String((await getArtifactById(dataset))!.version),[{kind:'INSERT',cells:[{columnId:table.columns[0]!.id,value:{type:'NUMBER',number:value}}]}],`insert_${++serial}`,{actor:auth});
  const share=(id:string,role:'viewer'|'editor')=>updateSharingFor(identityForUser(owner.userId,owner.id),id,{shares:[{email:user.email!,role}]});
- const grant=async()=>{const head=(await getArtifactById(dataset))!;const response=await patchMetadata(owner.token,dataset,{policy:viewersWritePolicy(),expectedPolicyRevision:head.policy_revision??0});expect(response.status,await response.clone().text()).toBe(200);return response.json();};
+ const grant=async()=>{const head=(await getArtifactById(dataset))!;const response=await patchMetadata(owner.token,dataset,{policy:VIEWERS_WRITE,expectedPolicyRevision:head.policy_revision??0});expect(response.status,await response.clone().text()).toBe(200);return response.json();};
  const rows=async(auth?:Actor)=>client.rows(table.id,{actor:auth});
  return {owner,friend,actor,dataset,page,client,table,insert,share,grant,rows};
 }
@@ -54,7 +60,7 @@ it('refuses a commit when dataset sharing is revoked while preparing the pending
 });
 it('requires the explicit viewers-write dataset policy for shared viewers and the link audience',async()=>{
  const f=await fixture();await f.share(f.dataset,'viewer');expect(outcome(await f.insert(f.actor))).toBe('rejected');expect(outcome(await f.insert())).toBe('rejected');
- const saved=await f.grant();expect(saved.dataset_policy).toEqual(viewersWritePolicy());
+ const saved=await f.grant();expect(saved.dataset_policy).toEqual(VIEWERS_WRITE);
  expect(outcome(await f.insert(f.actor))).toBe('committed');expect(outcome(await f.insert())).toBe('committed');expect((await getArtifactById(f.dataset))?.version).toBe(3);
 });
 it('updates exactly the selected stable row and refuses a stale observed revision',async()=>{

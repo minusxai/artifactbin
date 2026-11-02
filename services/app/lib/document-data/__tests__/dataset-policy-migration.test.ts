@@ -67,7 +67,7 @@ describe('migrateDatasetPolicies', () => {
       counts: {
         source: { none: 1, v1: 3, v2: 3, v3: 1 },
         outcome: { planned: 7, already_v3: 1, invalid_policy: 1 },
-        code: { anonymous_write: 2, private_viewer_only: 1, private_page_reads: 1, functions_dropped: 1, read_named_user: 1, write_named_user: 1, write_page_scoped: 1, share_unresolved: 1 },
+        code: { anonymous_write: 2, private_viewer_only: 1, functions_dropped: 1, read_named_user: 1, write_named_user: 1, write_page_scoped: 1, share_unresolved: 1 },
         shares: { editor: 1, viewer: 1 },
         accessToReadwrite: 3,
       },

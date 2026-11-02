@@ -89,11 +89,11 @@ describe('planPolicyMigration', () => {
     expect(codes(plan(v2([READ_ALL], { execution: { functions: { allow: ['upper'] } } })))).toEqual(['functions_dropped']);
   });
 
-  it('flags private v1 datasets whose writes now apply to shared viewers only, and whose page reads lose the page-owner ceiling', () => {
+  it('flags private v1 datasets whose writes now apply to shared viewers only, and keeps none/v1 select rules (the read door\'s private ceiling is the same)', () => {
     const result = plan(viewersWritePolicy(), { visibility: 'private' });
-    expect(codes(result)).toEqual(['private_viewer_only', 'private_page_reads']);
+    expect(codes(result)).toEqual(['private_viewer_only']);
     expect(result.policy).toEqual(toV3({ policy: viewersWritePolicy(), visibility: 'private', tables: [ROWS] }).policy);
-    expect(codes(plan(null, { visibility: 'private' }))).toEqual(['private_page_reads']);
+    expect(plan(null, { visibility: 'private' })).toMatchObject({ report: [], policy: toV3({ policy: null, visibility: 'private', tables: [ROWS] }).policy });
   });
 
   it('keeps page readers out of a private v2 dataset, as its grants did: no signed_in or anonymous select entry', () => {

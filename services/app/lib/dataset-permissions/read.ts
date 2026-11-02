@@ -5,11 +5,11 @@
  *  - The role is the dataset's own sharing (./role). Owner and editor are admin-equivalent: the whole
  *    dataset. Every other role sees only what its v3 select entry allows (./to-v3 reads stored v1/v2
  *    policies as v3); a role with no select entry on any table gets the uniform 404.
- *  - Stored v1/v2/no policies keep today's read outcomes until the stored rewrite (PR 9):
- *    · A PRIVATE dataset's signed_in and anonymous rules never apply (the visibility ceiling), except, for
- *      no policy or v1, to a reader arriving through a document whose owner holds owner or editor on the
- *      dataset: a page's <Query>/<Import> and registered queries read by the page owner's reach today
- *      (v2 grants never did: their private ceiling admits shares only).
+ *  - A PRIVATE dataset's signed_in and anonymous rules never apply (the visibility ceiling, plan §3/§8), except
+ *    to a reader arriving through a document whose owner holds owner or editor on the dataset (stored v2
+ *    grants excepted: their private ceiling admits shares only): a page's <Query>/<Import> and registered
+ *    queries read by the page owner's reach.
+ *  - Stored v2 policies keep today's read outcomes until the stored rewrite (scripts/migrate-dataset-policies.ts):
  *    · A v2 read grant that admits this caller today (`grantsPermitRead`: a named person, a page-scoped
  *      grant through that page) keeps admitting them to the whole dataset. v3 has no slot for one
  *      person or one page, so this compatibility lives here and nowhere else, as the write one does.
@@ -106,7 +106,7 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
     return admitted(row, role, all, session, false);
   }
   if (!read) return { allowed: false, role };
-  if (read.source !== 'v3' && row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) {
+  if (row.visibility === 'private' && (role === 'signed_in' || role === 'anonymous')) {
     // v2 grants never let a page reach past a private dataset's shares (grantsPermitRead's ceiling).
     if (read.source === 'v2') return { allowed: false, role };
     const doc = options.document;

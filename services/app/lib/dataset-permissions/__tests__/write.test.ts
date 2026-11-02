@@ -9,6 +9,8 @@ import { account, dataset, head, mine, sql, type Account } from '@/__tests__/art
 import { attestRegisteredHtmlMutation, type ArtifactRow } from '@/lib/artifact-access';
 import { changeMembership, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
+import { datasetReadAccess } from '../read';
 import { assertWriteCommit, canInsert, datasetWriteAccess, tableMutationPolicy } from '../write';
 
 const harness = useAppHarness();
@@ -79,6 +81,38 @@ describe('datasetWriteAccess', () => {
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: true, admin: true });
     await sql("UPDATE artifacts SET access='read' WHERE id=$1", [data.id]);
     expect(await datasetWriteAccess(await head(data.id), owner)).toMatchObject({ allowed: false, reason: 'dataset_read_only' });
+  });
+
+  // Plan §3/§8: on a private dataset signed_in and anonymous rules never apply (stored v3 included; the
+  // stored migration and the new-dataset default would otherwise open private datasets to page readers).
+  it('keeps a private dataset\'s signed_in and anonymous rules out, except backend_only ones through a trusted program', async () => {
+    const roles = ['viewer', 'signed_in', 'anonymous'];
+    const policy = { version: 3, tables: [{ table: ROWS,
+      select_permissions: roles.map((role) => ({ role, permission: { columns: '*', filter: {} } })),
+      insert_permissions: roles.map((role) => ({ role, permission: { columns: '*', check: {} } })),
+      update_permissions: [{ role: 'signed_in', permission: { columns: '*', filter: {}, backend_only: true } }],
+    }] };
+    const f = await fixture(policy);
+    await sql("UPDATE artifacts SET access='readwrite' WHERE id=$1", [f.data.id]);
+    f.data = await head(f.data.id);
+    expect(await datasetWriteAccess(f.data, f.stranger, { throughPage: true })).toMatchObject({ allowed: true, role: 'signed_in' });
+    expect(await datasetReadAccess(f.data, f.stranger, { throughPage: true })).toMatchObject({ allowed: true, role: 'signed_in' });
+    await updateSharingFor(f.owner, f.data.id, { visibility: 'private', shares: [{ email: f.member.email!, role: 'viewer' }] });
+    const data = await head(f.data.id);
+    expect(await datasetWriteAccess(data, f.stranger, { throughPage: true })).toMatchObject({ allowed: false, role: 'signed_in', reason: 'no_rule' });
+    expect(await datasetWriteAccess(data, ANONYMOUS_ACTOR, { throughPage: true })).toMatchObject({ allowed: false, reason: 'no_rule' });
+    expect(await datasetReadAccess(data, f.stranger, { throughPage: true })).toMatchObject({ allowed: false });
+    expect(await datasetReadAccess(data, ANONYMOUS_ACTOR, { throughPage: true })).toMatchObject({ allowed: false });
+    // A shared viewer keeps its rules.
+    expect(await datasetWriteAccess(data, f.member)).toMatchObject({ allowed: true, role: 'viewer' });
+    // Through the owner's page: reads by the page owner's reach, and only backend_only writes.
+    await updateSharingFor(f.owner, f.data.id, { shares: [] });
+    const unshared = await head(f.data.id);
+    const page = { ...f.page, format: 'html' as const };
+    expect(await datasetReadAccess(unshared, f.member, { document: page })).toMatchObject({ allowed: true, role: 'signed_in' });
+    const trusted = await datasetWriteAccess(unshared, f.member, { document: f.program });
+    expect(trusted).toMatchObject({ allowed: true, role: 'signed_in', trusted: true });
+    expect(tableMutationPolicy(trusted, ROWS)!.operations).toEqual(['update']);
   });
 
   it('throws for a table the role has no entry for', async () => {

@@ -120,9 +120,10 @@ What the rewrite decides beyond the plain mapping:
 - **Signed-out v1 writes** are kept for the anonymous role (`anonymous_write`); every
   rule-admitted write is rate-limited per dataset (30 a minute). **Function lists** are dropped
   (`functions_dropped`).
-- **Private datasets**: a v2 one loses its signed-in and signed-out select rules (v2 never let
-  page readers past its shares). A none/v1 one keeps them, so its owner's pages keep reading it,
-  reported as `private_page_reads`: pages by its shared viewers now read it too.
+- **Private datasets**: signed-in and signed-out page readers pass a private dataset's ceiling only
+  through a page its owner or an editor wrote (and write only through `backend_only` entries), for
+  every policy version. Stored v2 grants never let them past it at all, so a private v2 dataset
+  loses its signed-in and signed-out select rules.
 - Connected PostgreSQL datasets carry no stored policy and are skipped.
 
 After `--apply` has run everywhere, remove the named-user compatibility (`namedUserWrites` in

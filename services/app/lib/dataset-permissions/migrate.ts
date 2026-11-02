@@ -11,12 +11,10 @@
  *    it as a ceiling on every write. A migrated v2 dataset therefore gets `readwrite`, so nobody loses a
  *    write; a v2 dataset was locked by its grants, which carry over as rules. None and v1 policies already
  *    sat under the ceiling and keep their value.
- *  - A PRIVATE dataset: until the rewrite, the read door keeps signed_in and anonymous page readers out of a
- *    stored v2 policy entirely, and out of a none/v1 policy unless the page's owner administers the dataset;
- *    a v3 policy has no such ceiling (page readers get exactly their rules). So a private v2 dataset loses
- *    its signed_in and anonymous select entries (exact), and a private none/v1 dataset keeps them, so the
- *    owner's own pages keep reading it, reported as `private_page_reads` (pages by its shared viewers would
- *    now read it too). Writes already follow `toV3` (v1 entries are viewer-only on a private dataset).
+ *  - A PRIVATE dataset: the read door lets signed_in and anonymous page readers past the visibility ceiling
+ *    only through a page whose owner administers the dataset (./read), except under stored v2 grants, which
+ *    admitted shares only. So a private v2 dataset loses its signed_in and anonymous select entries (exact);
+ *    none and v1 keep theirs. Writes need no change (./write's private ceiling applies to every source).
  *  - Page-scoped grants are already `backend_only` entries; signed-out v1 writes are already kept for the
  *    anonymous role (rule-admitted writes are throttled per dataset); function lists are dropped. Each is
  *    a report item for the owner, with its subjects.
@@ -24,13 +22,7 @@
 import type { DatasetPermissions } from '@artifactbin/contracts';
 import { toV3, type ToV3Input, type ToV3ReportItem } from './to-v3';
 
-/** `toV3`'s report items, and the one the rewrite adds for private datasets. */
-type MigrationReportItem = Omit<ToV3ReportItem, 'code'> & { code: ToV3ReportItem['code'] | 'private_page_reads' };
 const PAGE_ROLES = new Set(['signed_in', 'anonymous']);
-const PRIVATE_PAGE_READS: MigrationReportItem = {
-  code: 'private_page_reads',
-  message: 'The dataset is private: signed-in and signed-out readers of a page linking it read it by its rules, including pages by shared viewers (before, only pages by its owner or editors).',
-};
 
 type MigrationShareRole = 'viewer' | 'editor';
 
@@ -49,7 +41,7 @@ export type PolicyMigrationPlan =
       access: string;
       /** The people a v2 grant named, and the dataset role each needs to keep its access. */
       shares: Array<{ userId: string; role: MigrationShareRole }>;
-      report: MigrationReportItem[];
+      report: ToV3ReportItem[];
     };
 
 /** Throws when the stored policy does not parse (the caller reports it and leaves the row alone). */
@@ -62,20 +54,17 @@ export function planPolicyMigration(input: PolicyMigrationInput): PolicyMigratio
   for (const userId of subjects('read_named_user')) if (!roles.has(userId)) roles.set(userId, 'viewer');
   if (input.ownerUserId) roles.delete(input.ownerUserId);
   let policy = read.policy;
-  const report: MigrationReportItem[] = [...read.report];
   if (input.visibility === 'private' && read.source === 'v2') {
     policy = { ...policy, tables: policy.tables.map(({ select_permissions, ...table }) => {
       const kept = select_permissions?.filter((entry) => !PAGE_ROLES.has(entry.role));
       return kept?.length ? { ...table, select_permissions: kept } : table;
     }) };
-  } else if (input.visibility === 'private' && policy.tables.some((t) => t.select_permissions?.some((e) => PAGE_ROLES.has(e.role)))) {
-    report.push({ ...PRIVATE_PAGE_READS });
   }
   return {
     source: read.source,
     policy,
     access: read.source === 'v2' ? 'readwrite' : input.access,
     shares: [...roles].map(([userId, role]) => ({ userId, role })),
-    report,
+    report: read.report,
   };
 }

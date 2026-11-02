@@ -9,7 +9,8 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 const harness=useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
-async function stored(){const token=await mintToken('owner');const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],visibility:'public'}}));return {token,id:(await response.json()).id as string};}
+// Explicitly `read`: a new stored dataset is otherwise born `readwrite` under the read-only template (v3 default).
+async function stored(){const token=await mintToken('owner');const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],visibility:'public',access:'read'}}));return {token,id:(await response.json()).id as string};}
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 async function makePostgres(id:string,tokenId:string){const secret=await createDatasetSecret(identityForUser(null, tokenId),'access-test-password',target,id);const db=await harness.db();const row=(await db.query<{meta:Record<string,unknown>}>('SELECT meta FROM artifacts WHERE id=$1',[id])).rows[0];await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',[id,JSON.stringify({...row.meta,catalog:{kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'rows',columns:[{name:'n',type:'number'}],source:{schema:'public',table:'rows'}}]}})]);}
 
