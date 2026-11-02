@@ -203,7 +203,7 @@ it("executes real page GraphQL with result-only document authority and viewer fi
         typeDefs: backend.typeDefs,
       },
     ]),
-    caller: { pageId: "page", subject: "viewer", role: "VIEWER" },
+    caller: { pageId: "page", subject: "viewer", role: "viewer" },
     request: {
       query:
         "query { queries { evaluate(values:{amount:null},only:[sum]) { tables {name error rows {cells {number isNull}}} } } }",
@@ -228,7 +228,7 @@ it("executes real page GraphQL with result-only document authority and viewer fi
   const descriptor = registeredQueryDescriptor("queries", program, "sum");
   const compact = await executePageOperation({
     schema: composePageSchema([{ name: "queries", fileId: "backend", version: backend.version, typeDefs: backend.typeDefs }]),
-    caller: { pageId: "page", subject: "viewer", role: "VIEWER" },
+    caller: { pageId: "page", subject: "viewer", role: "viewer" },
     request: { query: descriptor.document, variables: { values: { amount: null }, only: ["sum"] } },
     invoke,
   });
@@ -257,7 +257,7 @@ it("executes real page GraphQL with result-only document authority and viewer fi
         typeDefs: backend.typeDefs,
       },
     ]),
-    caller: { pageId: "page", subject: "viewer", role: "VIEWER" },
+    caller: { pageId: "page", subject: "viewer", role: "viewer" },
     request: {
       query:
         'query {queries {evaluate(values:{_now:"spoof"},only:[sum]) {tables {name}}}}',
@@ -327,7 +327,7 @@ it('preserves a multi-megabyte registered table through the complete typed Graph
       name: 'queries', fileId: context.backendId, version: context.backendVersion,
       typeDefs: registeredQuerySchema(plan),
     }]),
-    caller: { pageId: 'page', subject: 'viewer', role: 'VIEWER' },
+    caller: { pageId: 'page', subject: 'viewer', role: 'viewer' },
     request: { query: descriptor.document, variables: { only: ['payload'] } },
     signal: new AbortController().signal,
     invoke: registeredQueryInvoker(page, context, adapter.execute),

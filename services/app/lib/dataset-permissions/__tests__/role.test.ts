@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { datasetRoleFrom, type ArtifactRole, type DatasetRoleFacts, type GroupRole, type UserKind } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
 import type { AccessFacts } from '@/lib/artifact-access';
-import { datasetRole, type DatasetRoleRow } from '../role';
+import { datasetRole, pageRole, type DatasetRoleRow } from '../role';
 
 const facts = (over: Partial<DatasetRoleFacts>): DatasetRoleFacts => ({ held: 'none', account: true, linkRole: 'viewer', visibility: 'unlisted', throughPage: false, ...over });
 
@@ -71,5 +71,23 @@ describe('datasetRole (the dataset sharing, read through access facts)', () => {
     expect(await datasetRole(closed, identityForUser(null, null), { facts: fakeFacts() })).toBeNull();
     expect(await datasetRole(closed, user('reader'), { facts: fakeFacts(), throughPage: true })).toBe('signed_in');
     expect(await datasetRole(closed, identityForUser(null, null), { facts: fakeFacts(), throughPage: true })).toBe('anonymous');
+  });
+});
+
+describe('pageRole (the page sharing, which resolver @auth reads)', () => {
+  const page = (over: Partial<DatasetRoleRow> = {}) => row({ id: 'page1', format: 'html', visibility: 'public', ...over });
+  it('derives every role from the page itself, never raised by a linking page', async () => {
+    expect(await pageRole(page(), user('owner'), { facts: fakeFacts() })).toBe('owner');
+    expect(await pageRole(page(), user('reader'), { facts: fakeFacts({ named: 'editor' }) })).toBe('editor');
+    expect(await pageRole(page(), user('reader'), { facts: fakeFacts({ named: 'commenter' }) })).toBe('viewer');
+    expect(await pageRole(page(), user('reader'), { facts: fakeFacts() })).toBe('signed_in');
+    expect(await pageRole(page(), user('guest'), { facts: fakeFacts({ kinds: { guest: 'guest' } }) })).toBe('anonymous');
+    expect(await pageRole(page(), identityForUser(null, null), { facts: fakeFacts() })).toBe('anonymous');
+    expect(await pageRole(page({ visibility: 'private' }), user('reader'), { facts: fakeFacts() })).toBeNull();
+  });
+  it('keeps the document-editor grant as the page editor role, for an account only', async () => {
+    expect(await pageRole(page(), { ...user('admin'), documentEditor: true }, { facts: fakeFacts() })).toBe('editor');
+    expect(await pageRole(page(), { ...user('admin'), documentEditor: true }, { facts: fakeFacts({ kinds: { admin: 'guest' } }) })).toBe('anonymous');
+    expect(await pageRole(page({ visibility: 'private' }), { ...user('admin'), documentEditor: true }, { facts: fakeFacts() })).toBeNull();
   });
 });

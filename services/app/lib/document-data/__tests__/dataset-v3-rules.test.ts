@@ -3,7 +3,7 @@
  * mutateDataset — presets from X-Hasura-User-Id, filters that hide other people's rows from update and
  * delete, anonymous denied — and the signed-out writes migrated v1 policies keep, rate-limited.
  */
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import {ANONYMOUS_ACTOR} from '@/lib/accounts';
 import {datasetPermissionsTemplate} from '@artifactbin/utils/dataset-permissions';
@@ -36,9 +36,13 @@ it('enforces a stored own-rows policy: presets the writer, scopes update and del
 it('keeps the signed-out writes a v1 policy allowed, rate-limited to 30 a minute per dataset',async()=>{
  const f=await datasetFixture();
  await f.db.query('UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1',[f.id,JSON.stringify(viewersWritePolicy())]);
+ // The limiter counts per wall-clock minute: hold the clock mid-minute so the 31 writes share one bucket.
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-11-03T12:00:30Z'));
+ try{
  for(let i=0;i<30;i++)expect(refusal(await write(await f.row(),ANONYMOUS_ACTOR,'insert into public.rows values (2)',{nativePolicy:true}))).toBeNull();
  const limited=await write(await f.row(),ANONYMOUS_ACTOR,'insert into public.rows values (2)',{nativePolicy:true});
  expect(limited).toMatchObject({reason:'dataset_read_only',detail:expect.stringContaining('limit')});
  // Owner writes are never throttled.
  expect(refusal(await write(await f.row(),f.owner.actor,'insert into public.rows values (3)'))).toBeNull();
+ }finally{vi.useRealTimers();}
 });

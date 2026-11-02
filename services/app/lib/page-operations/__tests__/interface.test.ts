@@ -74,11 +74,11 @@ describe('compilePageBackend', () => {
   });
 
   it('accepts an optional owner-only test query field and refuses any other test shape', async () => {
-    for (const typeDefs of ['type Query { n: Int test: String! @auth(role: OWNER) }', 'type Query { test(verbose: Boolean): String! @auth(role: OWNER) }']) {
+    for (const typeDefs of ['type Query { n: Int test: String! @auth(role: owner) }', 'type Query { n: Int test: String! @auth(role: OWNER) }', 'type Query { test(verbose: Boolean): String! @auth(role: OWNER) }']) {
       setServices({ runner: fakeRunner({ typeDefs }) });
       expect((await compilePageBackend('export default {}')).test).toBe(true);
     }
-    for (const typeDefs of ['type Query { test: Boolean! @auth(role: OWNER) }', 'type Query { test: String @auth(role: OWNER) }', 'type Query { test: [String!]! @auth(role: OWNER) }', 'type Query { test: String! }', 'type Query { test: String! @auth(role: EDITOR) }', 'type Query { test: String! @auth(signedIn: true) }', 'type Query { test(id: ID!): String! @auth(role: OWNER) }', 'type Query { n: Int } type Mutation { test: String! @auth(role: OWNER) }']) {
+    for (const typeDefs of ['type Query { test: Boolean! @auth(role: OWNER) }', 'type Query { test: String @auth(role: OWNER) }', 'type Query { test: [String!]! @auth(role: OWNER) }', 'type Query { test: String! }', 'type Query { test: String! @auth(role: EDITOR) }', 'type Query { test: String! @auth(role: editor) }', 'type Query { test: String! @auth(signedIn: true) }', 'type Query { test(id: ID!): String! @auth(role: OWNER) }', 'type Query { n: Int } type Mutation { test: String! @auth(role: OWNER) }']) {
       setServices({ runner: fakeRunner({ typeDefs }) });
       await expect(compilePageBackend('export default {}'), typeDefs).rejects.toThrow('invalid_test_field');
     }

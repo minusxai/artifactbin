@@ -40,9 +40,13 @@ export function boundedSchema(source: string, limit = 65536) {
   assertValidSchema(schema);
   return schema;
 }
-/** Supplied by the platform to every backend file; authors never declare these. */
+/**
+ * Supplied by the platform to every backend file; authors never declare these. `Role` holds the Hasura
+ * role names (`@auth(role:)` means "at least", namespaces.ts `resolverFieldRefusal`); the uppercase
+ * values are legacy and keep their original meaning for immutable published code.
+ */
 export const BACKEND_PLATFORM_SDL =
-  "directive @auth(signedIn: Boolean, role: Role) on FIELD_DEFINITION\nenum Role { VIEWER EDITOR OWNER }\n";
+  "directive @auth(signedIn: Boolean, role: Role) on FIELD_DEFINITION\nenum Role { owner editor viewer signed_in anonymous OWNER EDITOR VIEWER }\n";
 const MISSING_QUERY = "Query root type must be provided.";
 /**
  * One backend file's schema, written as if the file were alone: the platform
@@ -97,7 +101,7 @@ export function boundedBackendSchema(typeDefs: string): GraphQLSchema {
 }
 /**
  * The optional Test connection field. When present it must be the owner-only
- * Query field `test: String! @auth(role: OWNER)` with no required arguments.
+ * Query field `test: String! @auth(role: owner)` (or legacy `OWNER`) with no required arguments.
  */
 export function resolverTestField(schema: GraphQLSchema): boolean {
   const field = schema.getQueryType()?.getFields().test;
@@ -113,7 +117,7 @@ export function resolverTestField(schema: GraphQLSchema): boolean {
     role.value.toLowerCase() !== "owner"
   )
     throw Error(
-      "invalid_test_field: declare it on Query as test: String! @auth(role: OWNER), with no required arguments",
+      "invalid_test_field: declare it on Query as test: String! @auth(role: owner), with no required arguments",
     );
   return true;
 }

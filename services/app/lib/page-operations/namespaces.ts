@@ -30,7 +30,7 @@ import {
   type GraphQLTypeResolver,
   type TypeNode,
 } from "graphql";
-import type { HtmlJson as AfJson, HtmlJsonObject as AfJsonObject, PageMutationOutcome as Outcome, PageResolverRole as PageRole, PageNamespaceSource as NamespaceSource, PageSchema, PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
+import { DATASET_ROLES, datasetRoleAtLeast, type DatasetRole, type HtmlJson as AfJson, type HtmlJsonObject as AfJsonObject, type PageMutationOutcome as Outcome, type PageNamespaceSource as NamespaceSource, type PageSchema, type PageOperationResponse as RemoteResponse } from '@artifactbin/contracts';
 import { PAGE_OPERATION_RESULT_BYTES, FIELD_ERROR_CODE, FieldFailed, FieldNotExecuted, boundedDetail, type ExecuteOptions, type RemoteError } from './contracts';
 const FILE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 import {
@@ -52,7 +52,34 @@ const SHARED_TYPES = new Set([
 ]);
 const BACKEND_DIRECTIVE =
   "directive @backend(file: String!, version: String!) on FIELD_DEFINITION\n";
-const ROLE_RANK: Record<PageRole, number> = { VIEWER: 1, EDITOR: 2, OWNER: 3 };
+/**
+ * Legacy uppercase `@auth(role:)` values keep their original meaning for immutable published code:
+ * `VIEWER` was any reader of the page (a guest on a public link included), so it is `anonymous`.
+ */
+const LEGACY_AUTH_ROLES: Readonly<Record<'OWNER' | 'EDITOR' | 'VIEWER', DatasetRole>> = Object.freeze({ OWNER: 'owner', EDITOR: 'editor', VIEWER: 'anonymous' });
+const authRole = (value: unknown): DatasetRole | null =>
+  typeof value !== 'string' ? null
+    : Object.hasOwn(LEGACY_AUTH_ROLES, value) ? LEGACY_AUTH_ROLES[value as keyof typeof LEGACY_AUTH_ROLES]
+    : (DATASET_ROLES as readonly string[]).includes(value) ? value as DatasetRole : null;
+
+/**
+ * THE RESOLVER FIELD DECISION: why a caller with this page role may not run a field carrying this
+ * `@auth` rule, or null when it may. Every role means "at least" (anonymous < signed_in < viewer <
+ * editor < owner); `signedIn: true` is at least `signed_in`; no directive is anonymous (any reader).
+ * A caller without a page role, or a rule naming no known role, is refused.
+ */
+export function resolverFieldRefusal(
+  role: DatasetRole | null,
+  rule: { role?: unknown; signedIn?: unknown } | undefined,
+): 'Sign in required' | 'Not allowed' | null {
+  if (!role || !(DATASET_ROLES as readonly string[]).includes(role)) return 'Not allowed';
+  const named = rule?.role === undefined || rule.role === null ? 'anonymous' : authRole(rule.role);
+  if (!named) return 'Not allowed';
+  const signIn = rule?.signedIn === true || named === 'signed_in';
+  if (signIn && role === 'anonymous') return 'Sign in required';
+  if (!datasetRoleAtLeast(role, named)) return 'Not allowed';
+  return null;
+}
 const MAX_SOURCES = 64;
 const MAX_COMPOSED_BYTES = 1048576;
 const MAX_VARIABLE_BYTES = 65536;
@@ -323,22 +350,16 @@ export async function executePageOperation(
   const signal = options.signal ?? new AbortController().signal;
   const principal = { tenant: caller.pageId, subject: caller.subject };
   // The owner may read what their own backend said; nobody else learns more than the code.
-  const owner = caller.role === "OWNER";
+  const owner = caller.role === "owner";
   const outcomes: Record<string, Outcome> = {};
   let chain: Promise<unknown> = Promise.resolve();
 
   /** Why this caller may not run a field, or null when it may. */
-  const refusal = (field: GraphQLField<unknown, unknown>): string | null => {
-    if (!caller.role || !Object.hasOwn(ROLE_RANK, caller.role))
-      return "Not allowed";
-    const rule = field.astNode
-      ? getDirectiveValues(auth, field.astNode)
-      : undefined;
-    if (rule?.signedIn === true && !caller.subject) return "Sign in required";
-    const role = rule?.role as PageRole | undefined;
-    if (role && ROLE_RANK[caller.role] < ROLE_RANK[role]) return "Not allowed";
-    return null;
-  };
+  const refusal = (field: GraphQLField<unknown, unknown>): string | null =>
+    resolverFieldRefusal(
+      caller.role,
+      field.astNode ? getDirectiveValues(auth, field.astNode) : undefined,
+    );
 
   const namespaceValue = (mounted: Mounted) => {
     const resolvers = Object.create(null) as Record<string, unknown>;
