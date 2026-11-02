@@ -1,17 +1,18 @@
 import {registeredMutationPlan,registeredMutationInvoker} from '@/lib/registered-page-mutations';
 import {createRetainedRegisteredMutation} from '@/lib/page-graphql/registered-mutations';
 import {type HtmlBackendVersionRecord, getHtmlBackendVersion} from '@/lib/html-backends';
+import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {HtmlBackendLink} from '@artifactbin/contracts';
 import {registeredPlan, registeredQueryInvoker} from '@/lib/registered-page-queries';
 import {createRetainedRegisteredQueries} from '@/lib/page-graphql/registered-queries';
 import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
-import { getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
+import { getArtifactById, getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
 import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
-import {createPageOperations,createBackendInvoker,pageOperationKind} from '@/lib/page-operations';
-import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql} from '@/lib/dataset-graphql';
+import {createPageOperations,createBackendInvoker,createResolverQuery,pageOperationKind} from '@/lib/page-operations';
+import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql, executeLinkedDatasetGraphql} from '@/lib/dataset-graphql';
 import {services} from '@/lib/platform';
 import {json,readJson} from '@/lib/http';
 import { requestOrSessionActor, refusesCrossSite } from '@/lib/authentication';
@@ -49,6 +50,14 @@ function operations(actor:AccessActor,page:HtmlPageVersion,revalidateActor:()=>P
   return dataset(call);
  }});
 }
+/**
+ * A resolver's caps.query (api 2), composed here so page operations stay below datasets and artifacts: the datasets
+ * the page head links, as one Hasura-style API run as the caller the run was admitted for.
+ */
+export const resolverDatasetQuery=createResolverQuery({
+ links:async pageId=>{const row=await getArtifactById(pageId);return !row||row.format!=='html'?[]:((row.meta as {htmlLinks?:HtmlPageLink[]}).htmlLinks??[]).filter((link):link is HtmlDatasetLink=>link.kind==='dataset');},
+ execute:executeLinkedDatasetGraphql,
+});
 /** Original request identity and ACLs guard both SDL and executions. */
 export async function pageGraphql(request:Request,pageId:string):Promise<Response>{
  const actor=await requestOrSessionActor(request);

@@ -4,7 +4,7 @@ import type {DatasetGraphql,PageResolverFieldCall} from '@artifactbin/contracts'
 import type { AccessActor } from '@/lib/accounts';
 const actor:AccessActor={userId:'viewer',tokenId:null,email:null,documentEditor:false};
 const binding={kind:'dataset' as const,name:'data',datasetId:'dataset',mode:'live' as const};
-const call:PageResolverFieldCall={namespace:'data',fileId:'dataset',version:'live',operation:'query',field:'rows',args:{tableId:'table',first:2},principal:{tenant:'tenant',subject:'untrusted-page'},signal:new AbortController().signal};
+const call:PageResolverFieldCall={namespace:'data',fileId:'dataset',version:'live',operation:'query',field:'rows',args:{tableId:'table',first:2},principal:{tenant:'tenant',subject:'untrusted-page',role:'viewer' as const},signal:new AbortController().signal};
 it('uses constant schema and trusted actor with typed wire outputs',async()=>{
  const read=vi.fn().mockResolvedValue({revision:'1',columns:[],rows:[{id:'row',cells:[{columnId:'column',value:{type:'NUMBER',value:2.5}}]}],pageInfo:{hasNextPage:false,endCursor:null}});
  const service={people:vi.fn(),schema:vi.fn(),query:vi.fn(),read,write:vi.fn()} as DatasetGraphql<AccessActor>,invoke=createDatasetNamespaceInvoker(actor,[binding],service);

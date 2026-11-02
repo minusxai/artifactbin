@@ -335,18 +335,18 @@ it('exposes only the authenticated target viewer identity through the readonly r
  const context={pageId:'page',pageVersion:1,backendId:'backend',backendVersion:'one',sourceSha256:'a'.repeat(64),subject:'target-viewer'};
  let evaluated=false;
  const invoke=registeredQueryInvoker(page,context,async()=>{evaluated=true;return {};});
- const call={operation:'query' as const,field:'viewer',principal:{tenant:'page',subject:'target-viewer'},fileId:'backend',version:'one',args:{id:'forged-source-user'},signal:new AbortController().signal,namespace:'queries'};
+ const call={operation:'query' as const,field:'viewer',principal:{tenant:'page',subject:'target-viewer',role:'viewer' as const},fileId:'backend',version:'one',args:{id:'forged-source-user'},signal:new AbortController().signal,namespace:'queries'};
  expect(await invoke(call)).toEqual({id:'target-viewer'});expect(evaluated).toBe(false);
- expect(await registeredQueryInvoker(page,{...context,subject:null},async()=>({}))({...call,principal:{tenant:'page',subject:null}})).toEqual({id:null});
+ expect(await registeredQueryInvoker(page,{...context,subject:null},async()=>({}))({...call,principal:{tenant:'page',subject:null,role:'anonymous' as const}})).toEqual({id:null});
  await expect(invoke({...call,operation:'mutation'})).rejects.toThrow('registered_query_unavailable');
- await expect(invoke({...call,principal:{tenant:'page',subject:'forged'}})).rejects.toThrow('registered_query_unavailable');
+ await expect(invoke({...call,principal:{tenant:'page',subject:'forged',role:'viewer' as const}})).rejects.toThrow('registered_query_unavailable');
  expect(registeredViewerDescriptor('queries')).toMatchObject({namespace:'queries',identity:'target-subject-v1',responsePath:['queries','viewer','id']});
 });
 it('a failed evaluation reaches the page as a field error with its sanitized reason as the code, never its detail',async()=>{
  const {registeredQueryInvoker}=await import('../namespace');
  const page={pageId:'page',version:1,revision:'1',html:'',nextNodeId:1,links:[]};
  const context={pageId:'page',pageVersion:1,backendId:'backend',backendVersion:'one',sourceSha256:'a'.repeat(64),subject:null};
- const call={operation:'query' as const,field:'evaluate',principal:{tenant:'page',subject:null},fileId:'backend',version:'one',args:{only:['total']},signal:new AbortController().signal,namespace:'queries'};
+ const call={operation:'query' as const,field:'evaluate',principal:{tenant:'page',subject:null,role:'anonymous' as const},fileId:'backend',version:'one',args:{only:['total']},signal:new AbortController().signal,namespace:'queries'};
  await expect(registeredQueryInvoker(page,context,async()=>{throw Error('sql_read_rejected');})(call)).rejects.toMatchObject({name:'FieldFailed',code:'sql_read_rejected'});
  const failed=await registeredQueryInvoker(page,context,async()=>{throw Error('connection to 10.0.0.1 refused');})(call).catch(error=>error);
  expect(failed).toMatchObject({name:'FieldFailed',code:'registered_query_failed'});expect(failed.detail).toBeUndefined();

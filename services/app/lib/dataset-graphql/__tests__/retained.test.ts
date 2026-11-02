@@ -66,7 +66,7 @@ it('executes constant GraphQL schema discovery, typed reads and writes over reta
  const {DATASET_GRAPHQL_SDL}=await import('@artifactbin/contracts');
  const {createDatasetNamespaceInvoker}=await import('../index');
  const f=await fixture(),invoke=createDatasetNamespaceInvoker(f.actor,[f.binding],f.api),schema=buildSchema(DATASET_GRAPHQL_SDL);
- const field=(name:string,operation:'query'|'mutation')=>(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation,field:name,args:args as never,principal:{tenant:'page',subject:'viewer'},signal});
+ const field=(name:string,operation:'query'|'mutation')=>(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation,field:name,args:args as never,principal:{tenant:'page',subject:'viewer',role:'viewer' as const},signal});
  const rootValue={schema:field('schema','query'),rows:field('rows','query'),writeRows:field('writeRows','mutation')};
  const discovery=await graphql({schema,rootValue,source:'{ schema { revision tables { id label columns { id type sourceType } } } }'});
  expect(discovery.errors).toBeUndefined();expect(discovery.data).toHaveProperty('schema');
@@ -92,7 +92,7 @@ it('runs named-parameter whole-source aggregates through real GraphQL beyond sou
  const {createDatasetNamespaceInvoker}=await import('../index');
  const f=await fixture(Array.from({length:10005},(_,i)=>({amount:i+1,label:'all'}))),amount=f.table.columns.find(c=>c.label==='amount')!;
  const invoke=createDatasetNamespaceInvoker(f.actor,[f.binding],f.api),schema=buildSchema(DATASET_GRAPHQL_SDL);
- const result=await graphql({schema,rootValue:{query:(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation:'query',field:'query',args:args as never,principal:{tenant:'page',subject:'viewer'},signal})},source:'query($table:ID!,$amount:ID!){ query(tableId:$table,first:1,filters:[{columnId:$amount,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:0}}],aggregates:[{id:"count",operation:COUNT},{id:"total",operation:SUM,columnId:$amount},{id:"average",operation:AVG,columnId:$amount}]) { revision columns { id type } rows { cells { columnId value { type number } } } pageInfo { hasNextPage } } }',variableValues:{table:f.table.id,amount:amount.id}});
+ const result=await graphql({schema,rootValue:{query:(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation:'query',field:'query',args:args as never,principal:{tenant:'page',subject:'viewer',role:'viewer' as const},signal})},source:'query($table:ID!,$amount:ID!){ query(tableId:$table,first:1,filters:[{columnId:$amount,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:0}}],aggregates:[{id:"count",operation:COUNT},{id:"total",operation:SUM,columnId:$amount},{id:"average",operation:AVG,columnId:$amount}]) { revision columns { id type } rows { cells { columnId value { type number } } } pageInfo { hasNextPage } } }',variableValues:{table:f.table.id,amount:amount.id}});
  expect(result.errors).toBeUndefined();expect(result.data).toMatchObject({query:{rows:[{cells:[{columnId:'count',value:{type:'NUMBER',number:10005}},{columnId:'total',value:{type:'NUMBER',number:50055015}},{columnId:'average',value:{type:'NUMBER',number:5003}}]}],pageInfo:{hasNextPage:false}}});
 });
 it('paginates complete groups and rejects cursors when named parameter inputs change',async()=>{

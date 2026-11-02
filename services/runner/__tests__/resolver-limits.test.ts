@@ -8,7 +8,9 @@ afterEach(async()=>{for(const close of cleanup.splice(0).reverse())await close()
 const MiB=1024*1024;
 describe('the resolver limits table',()=>{
  it('moves together: each link after the fetch response is at least as large, and the app outwaits the wall time',()=>{
-  expect(RESOLVER_LIMITS).toEqual({fetchResponseBytes:2*MiB,fetchRequestBodyBytes:256*1024,fetchTimeoutMs:10_000,messageBytes:4*MiB,outputBytes:MiB,wallMs:15_000,appWaitMs:16_000,maxRequests:32});
+  // caps.query's document and answer caps join the table (resolvers plan PR 5: 16 KiB document, 1 MiB result).
+  expect(RESOLVER_LIMITS).toEqual({fetchResponseBytes:2*MiB,fetchRequestBodyBytes:256*1024,fetchTimeoutMs:10_000,messageBytes:4*MiB,outputBytes:MiB,wallMs:15_000,appWaitMs:16_000,maxRequests:32,queryDocumentBytes:16*1024,queryResultBytes:MiB});
+  expect(RESOLVER_LIMITS.messageBytes).toBeGreaterThanOrEqual(RESOLVER_LIMITS.queryResultBytes);
   expect(RESOLVER_LIMITS.messageBytes).toBeGreaterThanOrEqual(2*RESOLVER_LIMITS.fetchResponseBytes);
   expect(RESOLVER_LIMITS.appWaitMs).toBe(RESOLVER_LIMITS.wallMs+1000);
   expect(RESOLVER_LIMITS.fetchTimeoutMs).toBeLessThan(RESOLVER_LIMITS.wallMs);

@@ -26,6 +26,8 @@ export type DatasetGraphqlErrorCode =
   | 'dataset_not_found'
   | 'dataset_changed'
   | 'result_too_large'
+  /** A resolver's caps.query asked for a mutation before generated mutations are served to resolvers. */
+  | 'mutations_unavailable'
   | 'unexpected';
 
 export interface DatasetGraphqlError {

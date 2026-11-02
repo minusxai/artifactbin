@@ -84,7 +84,7 @@ async function workerOnce(bundle: string, args: string[], env: NodeJS.ProcessEnv
   const next = async () => { const { value, done } = await lines.next(); if (done) throw Error('worker_exit'); return JSON.parse(value) as { type: string; wallMs?: number; error?: string }; };
   if ((await next()).type !== 'ready') throw Error('worker_not_ready');
   const ready = performance.now();
-  child.stdin.write(JSON.stringify({ type: 'run', bundle, input: { kind: 'invoke', field: 'ping', args: {}, principal: { tenant: 'bench-page', subject: null } }, env: {}, memoryMiB: 64, cpuMs: 200 }) + '\n');
+  child.stdin.write(JSON.stringify({ type: 'run', bundle, input: { kind: 'invoke', field: 'ping', args: {}, principal: { tenant: 'bench-page', subject: null, role: 'anonymous' as const } }, env: {}, memoryMiB: 64, cpuMs: 200 }) + '\n');
   const result = await next();
   if (result.type !== 'result') throw Error(`worker_${result.type}: ${result.error ?? ''}`);
   const done = performance.now();
@@ -193,7 +193,7 @@ async function runnerMode(mode: 'runner' | 'http' | 'docker', compiled: string, 
   const call = async (): Promise<[CallSample, number]> => {
     const sample: CallSample = { calledAt: Date.now(), polls: 0 }; pending.push(sample);
     const t = performance.now();
-    const value: HtmlJson = await invoke({ namespace: 'bench', fileId: 'bench', version: '1', operation: 'query', field: 'ping', args: {}, principal: { tenant: 'bench-page', subject: null }, signal: AbortSignal.timeout(30_000) });
+    const value: HtmlJson = await invoke({ namespace: 'bench', fileId: 'bench', version: '1', operation: 'query', field: 'ping', args: {}, principal: { tenant: 'bench-page', subject: null, role: 'anonymous' as const }, signal: AbortSignal.timeout(30_000) });
     if (value !== 'pong') throw Error(`unexpected ${JSON.stringify(value)}`);
     return [sample, performance.now() - t];
   };

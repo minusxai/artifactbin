@@ -11,7 +11,8 @@ export interface PageOperations<A> {
   schema(actor:A,pageId:string,revision:string):Promise<string>;
   execute(actor:A,request:PageOperationRequest,signal:AbortSignal):Promise<PageOperationResponse>;
 }
-export interface PageResolverPrincipal { readonly tenant:string; readonly subject:string|null }
+/** `role` is the caller's page role, decided by the app before the resolver ran (never by resolver input). */
+export interface PageResolverPrincipal { readonly tenant:string; readonly subject:string|null; readonly role:DatasetRole }
 export interface PageResolverFieldCall {
   namespace:string; fileId:string; version:string; operation:'query'|'mutation';
   field:string; args:HtmlJsonObject; principal:PageResolverPrincipal; signal:AbortSignal;

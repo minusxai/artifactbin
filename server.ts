@@ -131,9 +131,10 @@ async function main(): Promise<void> {
     const {createRunner}=await import('@artifactbin/runner/local');
     const {runnerConfig}=await import('./services/runner/src/config');
     const {localPageBackendCapability}=await import('@/lib/page-operations');
+    const {resolverDatasetQuery}=await import('@/lib/page-graphql');
     const config=runnerConfig(env);for(const name of config.names)sessionEnvNames.add(name);
     const runner=await createRunner({db:queryable,dockerImage:config.image,maxConcurrent:config.concurrent,capabilities:async(ctx,operation,args)=>{
-      return localPageBackendCapability(ctx.request,operation,args,ctx.signal);
+      return localPageBackendCapability(ctx.request,operation,args,ctx.signal,resolverDatasetQuery);
     }});setServices({runner});closeRunner=()=>runner.close();
   }
   /*
