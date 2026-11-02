@@ -1,31 +1,11 @@
-import { grantMutationPolicy } from '@artifactbin/utils';
-import { grantsOf, grantContext, grantsPermitWrite, type GrantDocument, effectiveRole, writerFor } from '@/lib/artifact-access';
-import { canReadArtifact, commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
-import {validateDatasetPolicyForRow, policySession, viewerMutationPolicy, catalogOf} from '@/lib/datasets';
-import { canEdit, type DatasetAccessPolicy as DatasetPolicy, type DatasetMutationPolicy } from '@artifactbin/contracts';
-import { parseDatasetAccessPolicy } from '@artifactbin/utils';
+import type { GrantDocument } from '@/lib/artifact-access';
+import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
+import { validateDatasetPolicyForRow, catalogOf } from '@/lib/datasets';
+import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
+import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform';
-import { policyReaderSql } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
 
-export async function canUseDataPolicy(
-  dataset: ArtifactRow,
-  actor: AccessActor,
-): Promise<boolean> {
-  if (!dataset.dataset_policy) return false;
-  try {
-    parseDatasetAccessPolicy(dataset.dataset_policy);
-  } catch {
-    return false;
-  }
-  const db = await getDb();
-  const result = await db.query(
-    `SELECT id FROM artifacts WHERE id=$1 AND deleted_at IS NULL
-   AND policy_revision=$4 AND (${policyReaderSql('$2', '$3')})`,
-    [dataset.id, actor.userId, actor.tokenId, dataset.policy_revision ?? 0],
-  );
-  return result.rows.length > 0;
-}
 export async function setDatasetPolicy(
   actor: AccessActor,
   id: string,
@@ -43,62 +23,24 @@ export async function setDatasetPolicy(
   const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
   return committed === null ? { conflict: true } : { revision: committed, policy };
 }
-export async function mutationPolicy(
-  dataset: ArtifactRow,
-  actor: AccessActor,
-  table: { schema: string; name: string },
-  declared: boolean | GrantDocument,
-): Promise<DatasetMutationPolicy | undefined> {
-  if (!dataset.dataset_policy) return undefined;
-  const policy = parseDatasetAccessPolicy(dataset.dataset_policy);
-  if(policy.version===2){
-    const context=await grantContext(dataset,actor,typeof declared==='object'?declared:undefined);
-    const selected=grantMutationPolicy(policy,context,table,policySession(actor.userId));
-    if(!selected)throw new Error('No policy permits writes to this table');
-    return selected;
-  }
-  if (
-    !declared &&
-    !(await getArtifactFor(actor, dataset.id))
-  )
-    throw new Error('Direct SQL requires dataset edit access');
-  if (!(await canUseDataPolicy(dataset, actor)))
-    throw new Error('Dataset view access is required');
-  const selected = viewerMutationPolicy(
-    policy,
-    table,
-    policySession(actor.userId),
-  );
-  if (!selected) throw new Error('No policy permits writes to this table');
-  return selected;
-}
+/** How a write door reaches the dataset: false = the direct door, true = page writeRows, a document = its program. */
+export type WriteDoor = boolean | GrantDocument;
+const doorOptions = (declared: WriteDoor): DatasetWriteOptions =>
+  typeof declared === 'object' ? { document: declared, throughPage: true } : { throughPage: declared };
+
+/** Re-read the head: the same policy revision, and the caller may still write through this door. */
 export async function recheckMutation(
   dataset: ArtifactRow,
   actor: AccessActor,
-  document?: GrantDocument,
+  declared: WriteDoor = false,
 ): Promise<ArtifactRow> {
   const current = await getArtifactById(dataset.id);
-  if(current && grantsOf(current)){
-    if((current.policy_revision??0)!==(dataset.policy_revision??0)||!(await grantsPermitWrite(current,actor,document)))throw new Error('Mutation permission changed');
-    return current;
-  }
   if (
     !current ||
     (current.policy_revision ?? 0) !== (dataset.policy_revision ?? 0) ||
-    (await canWriteDataset(current, actor, !!document))
+    !(await datasetWriteAccess(current, actor, doorOptions(declared))).allowed
   )
     throw new Error('Mutation permission changed');
-  if (document) {
-    const doc = await getArtifactById(document.id);
-    if (
-      !doc ||
-      doc.edit_id !== document.editId ||
-      !(await canReadArtifact(doc, actor))
-    )
-      throw new Error('Document access or mutation changed');
-    if (!(await getArtifactFor(writerFor(doc), dataset.id)))
-      throw new Error('Document no longer has dataset access');
-  }
   return current;
 }
 
@@ -107,14 +49,14 @@ export async function recheckMutation(
 /** Why a write may not happen. Each names the fix; none is an existence oracle. */
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
-/** The dataset must allow writes AND the current actor must hold its editor role. */
-export async function canWriteDataset(dataset: ArtifactRow, actor: AccessActor, declared: boolean | GrantDocument = false): Promise<WriteRefusal | null> {
+/**
+ * May this actor write the dataset at all through this door: owner and editors (under the `access` ceiling
+ * for datasets without v2 grants), or a role with a v3 rule it can use (lib/dataset-permissions).
+ */
+export async function canWriteDataset(dataset: ArtifactRow, actor: AccessActor, declared: WriteDoor = false): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
-  if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
-  if(grantsOf(dataset))return await grantsPermitWrite(dataset,actor,typeof declared==='object'?declared:undefined)?null:'dataset_read_only';
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
-  if (!canEdit(await effectiveRole(dataset, actor)) && !(declared && await canUseDataPolicy(dataset, actor))) return 'dataset_read_only';
-  return dataset.access === 'readwrite' ? null : 'dataset_read_only';
+  return (await datasetWriteAccess(dataset, actor, doorOptions(declared))).allowed ? null : 'dataset_read_only';
 }

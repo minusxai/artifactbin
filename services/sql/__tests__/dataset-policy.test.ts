@@ -109,6 +109,23 @@ describe.each<[string, SqlService]>([
       await run('delete from rows', { ...policy, role: 'editor' }),
     ).toHaveProperty('error');
   });
+  it('admits a backend_only entry only for a trusted program, and per operation', async () => {
+    const backendOnly = (trusted?: boolean): DatasetMutationPolicy => ({
+      ...policy,
+      ...(trusted === undefined ? {} : { trusted }),
+      table: {
+        ...policy.table,
+        insert_permissions: policy.table.insert_permissions!.map((e) => ({ ...e, permission: { ...e.permission, backend_only: true } })),
+      },
+    });
+    const insert = "insert into rows (id,body) values (3,'three')";
+    for (const p of [backendOnly(), backendOnly(false)]) {
+      expect(await run(insert, p)).toMatchObject({ code: 'policy_denied' });
+      // The role's other, ordinary entries still apply to untrusted callers.
+      expect(await run('delete from rows', p)).toMatchObject({ affected: 1 });
+    }
+    expect(await run(insert, backendOnly(true))).toMatchObject({ affected: 1 });
+  });
   it('checks resolved nested function dependencies before execution', async () => {
     expect(
       await run("insert into rows (id,body) select 3, upper(lower('HI'))"),

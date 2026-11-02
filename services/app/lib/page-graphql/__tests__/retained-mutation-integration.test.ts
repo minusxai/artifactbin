@@ -61,11 +61,11 @@ it('real UPDATE uses dataset policies and exact count rollback, and unrestricted
  const removed=await unrestricted.run('request_delete_many_123456','__all__');expect(removed).toMatchObject({outcome:'committed',affected:2});expect(await unrestricted.run('request_delete_many_123456','__all__')).toEqual(removed);expect((await getArtifactById(unrestricted.datasetId))!.version).toBe(version+1);
  expect(await unrestricted.run('request_delete_zero_123456','missing')).toMatchObject({outcome:'committed',affected:0});expect(await unrestricted.rows()).toEqual([]);
 });
-it('UPDATE remains denied when the source dataset policy permits only read/insert/delete',async()=>{
+it('the dataset owner is admin-equivalent: a policy without update never refuses the owner\'s UPDATE',async()=>{
  const f=await fixture('update'),before=(await getArtifactById(f.datasetId))!;
  if(typeof before.policy_revision!=='number')throw Error('missing fixture policy revision');
  expect(await setDatasetPolicy(f.actor,f.datasetId,{version:2,allow:[{actions:['read','insert','delete'],from:{user:'$owner'}}]},before.policy_revision)).toMatchObject({revision:before.policy_revision+1});
- expect(await f.run('request_update_denied_123456','changed')).toMatchObject({outcome:'rejected',reset:[]});expect(await f.rows()).toEqual([{body:'seed'},{body:'other'}]);expect((await getArtifactById(f.datasetId))!.version).toBe(before.version);
+ expect(await f.run('request_update_owner_123456','changed')).toMatchObject({outcome:'committed',affected:1});expect(await f.rows()).toEqual([{body:'changed'},{body:'other'}]);expect((await getArtifactById(f.datasetId))!.version).toBe(before.version+1);
 });
 
 it('source event parameters use the same typed authorized durable transaction without caller SQL or builtin authority',async()=>{

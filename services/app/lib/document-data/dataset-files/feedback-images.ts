@@ -1,10 +1,11 @@
 import { getDb, generateInternalId, ID_RE, MAX_FILE_BYTES, MAX_IMAGE_BYTES } from '@/lib/platform';
 import { type ArtifactRow, getArtifactById } from '@/lib/artifacts';
-import { effectiveRole, liveAccessFacts, grantsOf, grantContext, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifact-access';
+import { grantsOf, uploadGrantContext, attestSavedHtmlUpload, grantsPermitRead, readThrough } from '@/lib/artifact-access';
+import { canInsert, datasetWriteAccess } from '@/lib/dataset-permissions';
 import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
-import {canEdit,type HtmlPageLink} from '@artifactbin/contracts';
-import { catalogOf, DatasetError, imageInsertAllowed, storeImageContent, uploadedSha256, storeFileContent } from '@/lib/datasets';
+import type {HtmlPageLink} from '@artifactbin/contracts';
+import { catalogOf, DatasetError, storeImageContent, uploadedSha256, storeFileContent } from '@/lib/datasets';
 import { objectStore, IMAGE_CONTENT_TYPES } from '@/lib/object-store';
 import { assetFormatOf, fileContentType, type DatasetUploadResult } from '@artifactbin/contracts';
 
@@ -46,20 +47,21 @@ function liveRow(rows:ArtifactRow[],id:string,format?:string):ArtifactRow {
 async function declaredDataset(document:ArtifactRow,datasetId:string):Promise<boolean> {
   return document.format==='html'&&Array.isArray(document.meta.htmlLinks)&&(document.meta.htmlLinks as HtmlPageLink[]).some(link=>link.kind==='dataset'&&link.datasetId===datasetId&&link.mode==='live');
 }
+/**
+ * An upload is an insert: owner and editors (under the access ceiling), or a role with an insert rule
+ * (lib/dataset-permissions). A backend_only insert rule needs the saved page's upload proof, and the page
+ * owner must hold owner or editor on the dataset.
+ */
 async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform').Queryable):Promise<void> {
-  const db=tx??await getDb(),grants=grantsOf(dataset);
-  if(grants){
-    // Preserve direct actor grants independently of artifact membership.
-    if(imageInsertAllowed(grants,await grantContext(dataset,actor,undefined,db)))return;
-    const authority={id:document.id,editId:document.edit_id,version:document.version,datasetId:dataset.id};
-    const uploadProof=attestSavedHtmlUpload(authority,async transaction=>{
-      const rows=(await artifactQuery<ArtifactRow>(transaction,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[[document.id,dataset.id]])).rows;
-      const currentDoc=liveRow(rows,document.id,'html'),currentDataset=liveRow(rows,dataset.id,'dataset');
-      if(currentDoc.edit_id!==authority.editId||currentDoc.version!==authority.version||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,dataset.id))throw new DatasetError('Dataset file is unavailable',404);
-    });
-    const context=await uploadGrantContext(dataset,actor,{...authority,uploadProof},db);
-    if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
-  }else if(dataset.access!=='readwrite'||!canEdit(await effectiveRole(dataset,actor,liveAccessFacts(actor,db))))throw new DatasetError('This dataset does not grant file uploads',403);
+  const db=tx??await getDb();
+  const authority={id:document.id,editId:document.edit_id,version:document.version,datasetId:dataset.id};
+  const uploadProof=attestSavedHtmlUpload(authority,async transaction=>{
+    const rows=(await artifactQuery<ArtifactRow>(transaction,'SELECT * FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL',[[document.id,dataset.id]])).rows;
+    const currentDoc=liveRow(rows,document.id,'html'),currentDataset=liveRow(rows,dataset.id,'dataset');
+    if(currentDoc.edit_id!==authority.editId||currentDoc.version!==authority.version||catalogOf(currentDataset)?.kind!=='stored'||!await declaredDataset(currentDoc,dataset.id))throw new DatasetError('Dataset file is unavailable',404);
+  });
+  const decision=await datasetWriteAccess(dataset,actor,{tx:db,throughPage:true,trust:q=>uploadGrantContext(dataset,actor,{...authority,uploadProof},q)});
+  if(!canInsert(decision))throw new DatasetError(grantsOf(dataset)?'No insert grant permits this upload':'This dataset does not grant file uploads',403);
 }
 async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform').Queryable):Promise<boolean> {
   if(grantsOf(dataset))return grantsPermitRead(dataset,actor,document,tx);

@@ -25,4 +25,4 @@ export { evaluateNotificationQuery } from './notification-query';
 
 /** Native dataset GraphQL shares the retained write and policy boundary. */
 export {mutateDataset,isMutationRefused} from './dataset-mutate';
-export {canWriteDataset,canUseDataPolicy} from './dataset-policy';
+export {canWriteDataset} from './dataset-policy';

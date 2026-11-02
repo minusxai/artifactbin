@@ -131,7 +131,7 @@ it('rechecks the insert grant after storing the object and before committing the
   expect(await imageCount(dataset.id)).toBe(0);
 });
 
-it('requires an explicit artifact grant and rechecks accepted participation on replay, including the normal owner',async()=>{
+it('requires an explicit artifact grant and rechecks accepted participation on replay, except for the dataset owner',async()=>{
  const {ownerActor,reporter,ownerSession,dataset,document,filePost}=await world();
  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}}]},1);
  const put=vi.spyOn(objectStore(),'put');
@@ -146,7 +146,9 @@ it('requires an explicit artifact grant and rechecks accepted participation on r
   expect((await ownerPost()).status).toBe(201);expect(await imageCount(dataset.id)).toBe(2);
   await changeMembership(identityForUser(reporter.id,null),document.id,{action:'leave'});put.mockClear();
   expect((await filePost()).status).toBe(403);expect(put).not.toHaveBeenCalled();
+  // The dataset's owner always has full access (v3: owner and editor are admin-equivalent), so leaving the
+  // page's participation does not refuse their own upload; the replay answers the stored image again.
   await changeMembership(ownerActor,document.id,{action:'leave'});
-  expect((await ownerPost()).status).toBe(403);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(2);
+  expect((await ownerPost()).status).toBe(201);expect(put).not.toHaveBeenCalled();expect(await imageCount(dataset.id)).toBe(2);
  }finally{put.mockRestore();}
 });

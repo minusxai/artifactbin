@@ -49,15 +49,24 @@ afterAll(async () => { vi.restoreAllMocks(); });
  */
 async function alwaysContended(datasetId: string) {
   const db = await harness.db();
-  const original = db.query.bind(db);
-  vi.spyOn(db, 'query').mockImplementation(async (sql: string, values?: unknown[]) => {
-    if (sql.includes('UPDATE artifacts') && sql.includes('edit_id = $2')) {
-      // Someone else landed first — rotate the head pointer, then let the
-      // guarded update run and find nothing to update.
-      await original(`UPDATE artifacts SET edit_id = md5(random()::text) WHERE id = $1`, [datasetId]);
-    }
-    return original(sql, values) as ReturnType<typeof original>;
-  });
+  // Someone else landed first — rotate the head pointer, then let the guarded update run and find nothing
+  // to update. The commit may run on the connection or inside a transaction, so both are intercepted.
+  let rotating = false;
+  const contend = <Q extends { query: (sql: string, values?: unknown[]) => Promise<unknown> }>(q: Q) => {
+    const original = q.query.bind(q);
+    return async (sql: string, values?: unknown[]) => {
+      if (!rotating && sql.includes('UPDATE artifacts') && sql.includes('edit_id = $2')) {
+        rotating = true;
+        try { await original(`UPDATE artifacts SET edit_id = md5(random()::text) WHERE id = $1`, [datasetId]); } finally { rotating = false; }
+      }
+      return original(sql, values);
+    };
+  };
+  const onConnection = contend(db);
+  vi.spyOn(db, 'query').mockImplementation(onConnection as typeof db.query);
+  const transaction = db.transaction.bind(db);
+  vi.spyOn(db, 'transaction').mockImplementation((async (fn: (tx: typeof db) => Promise<unknown>) =>
+    transaction(async (tx) => { (tx as { query: unknown }).query = contend(tx); return fn(tx as typeof db); })) as typeof db.transaction);
 }
 
 describe('contention', () => {

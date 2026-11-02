@@ -10,7 +10,6 @@ export { DatasetError } from './errors';
 export { executeCatalog } from './execute';
 export { publishFile, readFileUpload, serveStoredFile, storeFileContent, uploadedSha256 } from './file-store';
 export { datasetResponse } from './http';
-export { imageInsertAllowed } from './image-upload-policy';
 export { connectionShape, secretTargetShape } from './input';
 export { storedMediaReferences } from './media-references';
 export { compileNotebookSql } from './notebook';

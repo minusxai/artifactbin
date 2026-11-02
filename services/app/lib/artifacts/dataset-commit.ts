@@ -2,10 +2,10 @@
  * A DATASET WRITE'S COMMIT — the one guarded statement behind lib/document-data/dataset-mutate, which has
  * already run the author's DML and stored the rows it produced. Inside the caller's transaction (or as its
  * single statement), it:
- *  - swaps the head to `meta` if and only if the rows the caller read are still the head (`edit_id`), the
- *    policy revision is unchanged, and the actor may still write: the editor scope, or the dataset policy's
- *    viewer role, or (with `granted`) grants the caller already checked inside this transaction; and a
- *    declared document still at its attested edit can still reach the dataset;
+ *  - swaps the head to `meta` if and only if the rows the caller read are still the head (`edit_id`) and the
+ *    policy revision is unchanged. Dataset writes pass `granted`: the write decision (lib/dataset-permissions:
+ *    role, v3 rules, the access ceiling, program trust, document provenance) was re-checked inside this
+ *    transaction under the row lock. Without it the statement keeps its own editor-scope / policy-viewer guard;
  *  - archives the previous state, coalesced on the edit protocol's window;
  *  - notifies the dataset's live channel with the new edit id.
  * No row is a lost compare-and-swap or revoked access, both of which the caller handles by re-reading.
@@ -33,7 +33,7 @@ export interface DatasetCommit {
   policyRole: string | null;
   /** A declared (document or native) write that a policy admitted: a policy viewer needs no editor scope. */
   policyDeclared: boolean;
-  /** Grants (policy version 2) were checked inside this transaction: access and editor scope are not re-asked. */
+  /** The write decision (lib/dataset-permissions) was re-checked inside this transaction: access and editor scope are not re-asked. */
   granted: boolean;
 }
 
