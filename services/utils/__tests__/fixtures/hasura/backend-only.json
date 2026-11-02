@@ -1,0 +1,35 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/auth/authorization/permissions/backend-only.mdx",
+  "note": "YAML converted to JSON.",
+  "columns": [
+    "id",
+    "name"
+  ],
+  "table": {
+    "table": {
+      "name": "users",
+      "schema": "public"
+    },
+    "insert_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "check": {},
+          "columns": [
+            "id"
+          ],
+          "backend_only": true
+        }
+      }
+    ],
+    "delete_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "backend_only": true,
+          "filter": {}
+        }
+      }
+    ]
+  }
+}
