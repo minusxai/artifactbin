@@ -1,0 +1,97 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/migrations-metadata-seeds/metadata-format.mdx",
+  "note": "public_author.yaml converted to JSON.",
+  "columns": [
+    "id",
+    "name"
+  ],
+  "table": {
+    "table": {
+      "name": "author",
+      "schema": "public"
+    },
+    "array_relationships": [
+      {
+        "name": "articles",
+        "using": {
+          "foreign_key_constraint_on": {
+            "column": "author_id",
+            "table": {
+              "name": "article",
+              "schema": "public"
+            }
+          }
+        }
+      }
+    ],
+    "insert_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "check": {
+            "id": {
+              "_eq": "X-Hasura-User-Id"
+            }
+          },
+          "set": {
+            "id": "x-hasura-user-id"
+          },
+          "columns": [
+            "name"
+          ]
+        }
+      }
+    ],
+    "select_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "columns": [
+            "id",
+            "name"
+          ],
+          "filter": {
+            "id": {
+              "_eq": "X-Hasura-User-Id"
+            }
+          },
+          "allow_aggregations": true,
+          "query_root_fields": [
+            "select",
+            "select_by_pk"
+          ],
+          "subscription_root_fields": [
+            "select",
+            "select_by_pk"
+          ]
+        }
+      }
+    ],
+    "delete_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "backend_only": true,
+          "filter": {}
+        }
+      }
+    ],
+    "event_triggers": [
+      {
+        "name": "author_created",
+        "definition": {
+          "enable_manual": false,
+          "insert": {
+            "columns": "*"
+          }
+        },
+        "retry_conf": {
+          "interval_sec": 10,
+          "num_retries": 0,
+          "timeout_sec": 60
+        },
+        "webhook": "http://httpbin.org/post"
+      }
+    ]
+  }
+}
