@@ -168,6 +168,7 @@ describe('workflows and package scripts', () => {
   it('name only scripts/ paths that exist in the tree', () => {
     const { checked, problems } = missingScriptPaths(repoOnDisk());
     expect(problems.join('\n')).toBe('');
-    expect(checked).toBeGreaterThanOrEqual(100);
+    // A floor that the checker actually sees the tree's references (#1007 removed runner-design's PR path list).
+    expect(checked).toBeGreaterThanOrEqual(95);
   });
 });

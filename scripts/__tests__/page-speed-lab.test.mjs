@@ -14,8 +14,9 @@ const workflow = yaml.parse(workflowText);
 const ci = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
 
 describe('the page-speed workflow', () => {
-  it('runs beside ordinary PR CI and on every merge for exact release evidence', () => {
-    expect(workflow.on.pull_request).toBeNull();
+  // #1007: full performance evidence is post-merge/manual; pull requests run only pr-fast.
+  it('runs on every merge for exact release evidence, never on pull requests', () => {
+    expect(workflow.on).not.toHaveProperty('pull_request');
     expect(workflow.on.push.paths).toEqual(expect.arrayContaining(['services/app/**', 'scripts/ci/performance-loads.mjs', 'scripts/lib/document-views.mjs', 'scripts/fixtures/page-speed/**', '.github/workflows/page-speed.yml']));
     expect(workflow.on.push.branches).toEqual(['main']);
     expect(workflow.on.push.paths).toContain('**');
