@@ -114,8 +114,8 @@ export async function groupsCommand({sub,values,positionals},options={}){
   sub==='role'?{role}:undefined);
  }
  if(sub==='leave')return write(base+'/members/me','DELETE');
- if(['share','unshare'].includes(sub))return
-  write('/api/artifacts/'+target.id+'/group-shares/'+segment(group.id),
+ if(['share','unshare'].includes(sub))
+  return write('/api/artifacts/'+target.id+'/group-shares/'+segment(group.id),
   sub==='share'?'PUT':'DELETE',sub==='share'?{role}:undefined);
  if(sub==='move')return write('/api/artifacts/'+target.id+'/transfer','POST',
   {destination:{type:'group',id:group.id}});
