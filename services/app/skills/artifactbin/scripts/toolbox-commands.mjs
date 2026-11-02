@@ -62,7 +62,10 @@ const commands = {
     sub: {
       schema: {revision: flag()},
       query: {document: flag(), operation: flag(), variables: flag(), revision: flag()},
-      mutate: {document: flag(), operation: flag(), variables: flag(), revision: flag()}
+      mutate: {
+        document: flag(), operation: flag(), variables: flag(), revision: flag(),
+        'idempotency-key': flag()
+      }
     }
   },
   groups: {sub: {
@@ -105,7 +108,11 @@ const commands = {
         wait: flag()
       }
     }
-  }
+  },
+  policy: {sub: {
+    get: {}, explain: {}, template: {'owner-column': flag()},
+    set: {file: flag(), 'dry-run': flag('boolean'), 'expected-revision': flag()}
+  }}
 };
 export const COMMANDS = Object.freeze(commands);
 

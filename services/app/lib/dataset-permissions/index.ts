@@ -9,5 +9,6 @@
 export {
   canAggregate, datasetExportable, datasetReadAccess, datasetRowsFor, datasetView, viewCatalog, viewDatasetWire, type DatasetReadDecision,
 } from './read';
+export { toV3 } from './to-v3';
 export { assertWriteCommit, canInsert, datasetWriteAccess, tableMutationPolicy, type DatasetWriteOptions } from './write';
 export { pageRole } from './role';

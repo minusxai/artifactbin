@@ -18,7 +18,7 @@ Skill map (run `ls <folder>` for the full list; each file's top comment says how
 
 - `examples/`: starters: deck.html (deck-steps.mjs); shared-app.html (garden.ts, shared-app-steps,
   -guest, -cleanup .mjs); csv-dashboard.html; report.html; gen-transactions.mjs; repairs.csv
-- `scripts/`: publish, check, read, comment, groups, graphql, export, auth, autofix, serve
+- `scripts/`: publish, check, read, comment, groups, graphql, policy, export, auth, autofix, serve
 (`--help` each)
 - `references/`: guides: runtime, datasets, backends, dataviz, diagrams, maps, groups (read only
 one)
@@ -156,7 +156,8 @@ sharing and deliberate ownership moves.
   (about 300 rows, never over 400, labelled as sample); it ships as generated: never retune or
   republish it. Shared apps and backend files: [backends](references/backends.md) (read before
   modeling identity or writes; a readable page grants no dataset write access).
-  `node scripts/graphql.mjs schema ID` for the linked schema,
+  `node scripts/graphql.mjs schema ID` for the linked schema (a dataset ID: its own API),
+  `node scripts/policy.mjs explain DATASET_ID` for who may see and change its rows,
   `node scripts/export.mjs ID --format html --output copy.html` for a portable copy.
 - **Network and install.** To call an external API add `<meta name="csp-connect"
   content="https://api.example.com">` in `<head>` (also `csp-script`, `csp-style`, `csp-img`,
