@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
   action TEXT NOT NULL,
   sender_id TEXT NOT NULL,
   lease_until TIMESTAMPTZ,
+  claim_token TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quarantined_at TIMESTAMPTZ,
   sent_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
@@ -62,6 +66,14 @@ ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
 ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sender_id TEXT NOT NULL;
 
 ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
 
 ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
 

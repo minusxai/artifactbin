@@ -134,3 +134,9 @@ it('native identity provenance belongs to the app and preserves multiple verifie
 });
 
 it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBe('app');});
+
+it('group mail retries and fenced claims belong to app durable state',()=>{
+ expect(declared()['app.group_mail_outbox']).toBe('app');
+ const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS app.group_mail_outbox (')[1]?.split(');')[0];
+ for(const column of ['claim_token TEXT','attempts INTEGER NOT NULL DEFAULT 0','next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()','quarantined_at TIMESTAMPTZ'])expect(declaration).toContain(column);
+});

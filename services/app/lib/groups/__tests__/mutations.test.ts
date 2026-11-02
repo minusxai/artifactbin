@@ -61,7 +61,8 @@ it('retries delivery with one stable key and honors blocks and preferences',asyn
  setNotificationDelivery({preferences:async()=>({invitations:true,activity:true,comments:true}),updatePreferences:async(_id,p)=>p,click:async()=>null,sendGroupEmail:sent});
  await inviteGroupMember(owner.userId,group.id,member.email!,'viewer');const db=await getDb();await flushGroupMail(db);
  expect((await sql('SELECT sent_at FROM group_mail_outbox'))[0]).toEqual({sent_at:null});
- sent.mockImplementation(async()=>{});await flushGroupMail(db);
+ sent.mockImplementation(async()=>{});await flushGroupMail(db);expect(sent).toHaveBeenCalledTimes(1);
+ await sql("UPDATE group_mail_outbox SET next_attempt_at=now()-interval '1 second'");await flushGroupMail(db);
  expect(sent).toHaveBeenCalledTimes(2);expect(sent.mock.calls[0]?.[0]).toEqual(sent.mock.calls[1]?.[0]);
  await inviteGroupMember(owner.userId,group.id,member.email!,'editor');await sql('INSERT INTO user_blocks(user_id,blocked_user_id) VALUES($1,$2)',[member.userId,owner.userId]);
  await flushGroupMail(db);expect(sent).toHaveBeenCalledTimes(2);

@@ -1016,7 +1016,9 @@ const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
  {name:'id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT'},
  {name:'group_id',type:'TEXT',notNull:true},{name:'group_name',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
  {name:'action',type:'TEXT',notNull:true},{name:'sender_id',type:'TEXT',notNull:true},
- {name:'lease_until',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ {name:'lease_until',type:'TIMESTAMPTZ'},{name:'claim_token',type:'TEXT'},
+ {name:'attempts',type:'INTEGER',notNull:true,default:'0'},{name:'next_attempt_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ {name:'quarantined_at',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_group_mail_pending',columns:['created_at'],where:'sent_at IS NULL'}]};
 const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
 const GROUP_AUDIT:Table={name:'group_audit',columns:[
