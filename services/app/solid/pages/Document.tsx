@@ -372,7 +372,7 @@ export function DocumentPage(): JSX.Element {
         onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => void openSocialPreview() : undefined} /></Suspense>
     </Show>
     <Show when={metadataError()}><p role="alert">{metadataError()}</p></Show>
-    <Show when={settingsOpen() && backend}><Suspense fallback={null}><DocumentSettings id={id!} title={shownTitle()} onPwaEnabledChange={setPwaEnabled} onClose={() => setSettingsOpen(false)} /></Suspense></Show>
+    <Show when={settingsOpen() && backend}><Suspense fallback={null}><DocumentSettings id={id!} title={shownTitle()} owner={isOwner()} onPwaEnabledChange={setPwaEnabled} onClose={() => setSettingsOpen(false)} /></Suspense></Show>
     <Show when={socialPreviewOpen() && previewHead()}>{(head) => <Suspense fallback={null}><SocialPreviewEditor id={id!} source={head().source} editId={head().editId} version={head().version} onClose={() => setSocialPreviewOpen(false)} /></Suspense>}</Show>
     </TrustedUi>
   </Show>;
