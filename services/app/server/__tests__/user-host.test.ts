@@ -4,7 +4,6 @@ import {beforeEach,expect,it} from 'vitest';
 import {useAppHarness,request} from '@/__tests__/harness';
 import {overrideConfig} from '@/lib/platform/config';
 import {mintToken,createUser,setUsername} from '@/lib/accounts';
-import {claimToken} from '@/lib/authentication';
 import {getDb} from '@/lib/platform';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {createAppServer} from '../app';
@@ -13,8 +12,8 @@ const app=()=>createAppServer({indexHtml:async()=>'<html><head><link rel="styles
 const base='https://alice.u.example.test';
 beforeEach(()=>overrideConfig({userPagesHost:'u.example.test',publicBaseUrl:'https://app.example.test'}));
 async function owner(handle='alice'){
- const token=await mintToken('host-test');const user=await createUser({email:`mxmx_test_${handle}_${Math.random()}@example.com`});
- await claimToken(user.id,token.token);await setUsername(user.id,handle);return {id:user.id,token:token.token};
+ const user=await createUser({email:`mxmx_test_${handle}_${Math.random()}@example.com`});const token=await mintToken('host-test',user.id);
+ await setUsername(user.id,handle);return {id:user.id,token:token.token};
 }
 async function page(token:string,visibility='public',extra:Record<string,unknown>={}){
  const res=await publish(request('/api/artifacts',{method:'POST',token,json:{html:'<h1>Hello owner</h1>',title:'Hello world',visibility,...extra}}));
