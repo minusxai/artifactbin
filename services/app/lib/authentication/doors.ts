@@ -65,6 +65,24 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
   };
 }
 
+type AgentOrBrowserHandler = (request: Request, ctx: { actor: RequestIdentity; params: Record<string, string> }) => Promise<Response>;
+
+/**
+ * THE AGENT-OR-APP DOOR: one route serving agents and the app's own editor with the same contract. An
+ * `Authorization` header goes through the token door unchanged (a bearer that does not resolve is the uniform
+ * 401, never a cookie fallback); without one, the browser's account session (`browserActor`: same-site writes
+ * only). Routes whose operations authorize per artifact, such as the dataset policy door, use it.
+ */
+export function withAgentOrBrowserAuth(handler: AgentOrBrowserHandler) {
+  const bearer = withTokenAuth((request, { actor, params }) => actor.credential === 'bearer' ? handler(request, { actor, params }) : Promise.resolve(unauthorized(request)));
+  return async (request: Request, routeCtx?: { params: Promise<Record<string, string>> }): Promise<Response> => {
+    if (request.headers.has('authorization')) return bearer(request, routeCtx);
+    const actor = await browserActor(request);
+    if (actor instanceof Response) return actor;
+    return handler(request, { actor, params: routeCtx ? await routeCtx.params : {} });
+  };
+}
+
 /**
  * The request door as a guard (the dataset routes): an explicit bearer or the browser's credentials, the same
  * cross-site refusal, and the uniform 401 for nobody. Returns the actor, or the Response to answer with.

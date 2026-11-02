@@ -5,7 +5,7 @@
  * and a verified login's guest merge move artifacts in the same transaction as the credential (./ownership).
  * Server-only.
  */
-export { browserActor, refusesCrossSite, requestActor, withTokenAuth } from './doors';
+export { browserActor, refusesCrossSite, requestActor, withAgentOrBrowserAuth, withTokenAuth } from './doors';
 export { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from './request-identity';
 export { auth, overrideSession, type Session } from './session';
 export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';

@@ -97,9 +97,9 @@ describeRetryingRead('the dataset\'s read-only data actions', () => ({
 }), { matches: (url) => url === '/api/my/artifacts/ds123/policy', ok: ok({ policy: null, writtenBy: [] }), abortable: true });
 
 describeRetryingRead('the dataset access policies', () => ({
-  start: () => { mount(() => <DatasetPolicies artifactId="ds123" expanded />); },
-  landed: () => text().includes('Allow insert'),
-}), { matches: (url) => url === '/api/my/artifacts/ds123/policy', ok: ok({ policy: null, revision: 0, tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'branch', type: 'string' }] }], writtenBy: [] }) });
+  start: () => mount(() => <DatasetPolicies artifactId="ds123" expanded />),
+  landed: () => text().includes('Always full access'),
+}), { matches: (url) => url === '/api/artifacts/ds123/policy', ok: ok({ revision: 0, source: 'none', report: [], policy: { version: 3, tables: [{ table: { schema: 'public', name: 'rows' } }] }, tables: [{ table: { schema: 'public', name: 'rows' }, root: 'rows', columns: [{ name: 'branch', field: 'branch', type: 'string' }] }], readBackTables: [], warnings: [] }), abortable: true });
 
 describeRetryingRead('the email notification settings', () => ({
   start: () => { mount(() => <InboxProvider><NotificationSettings /></InboxProvider>); },
