@@ -181,7 +181,8 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
     const f = await sharedFixture(role);
     await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
     expect((await f.write()).outcome).toBe('committed');
-    expect((await f.writeAs(f.actor,'remove')).outcome).toBe('rejected');
+    // The owner is admin-equivalent: the policy's rules (insert only) never restrict the owner.
+    expect((await f.writeAs(f.actor,'remove')).outcome).toBe('committed');
     await updateSharingFor(f.actor, f.ds, { shares: [] });
     expect((await f.write()).outcome).toBe('rejected');
   },

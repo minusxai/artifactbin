@@ -7,23 +7,27 @@ import { POST as create } from '@/app/api/artifacts/route';
 
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
-import { readableArtifact, changeMembership, getArtifactById } from '@/lib/artifacts';
+import { readableArtifact, changeMembership, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 
 import { forkArtifact } from '@/lib/publish';
 useAppHarness();
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
  const token=await mintToken('mxmx_test_read_grants', owner.id);
- const actor=identityForUser(owner.id, token.id);
+ const actor=identityForUser(owner.id, token.id),reader=await mintToken('read-grants-reader',(await createUser({email:'read-grants-reader@example.test'})).id);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();
  expect((await getArtifactById(id))?.dataset_policy).toEqual(defaultDatasetGrants());
  for(const key of [undefined,'policy-hint-receipt-0001']){
-  const denied=await mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:token.token,headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
-  expect(denied.status).toBe(403);
-  const details=(await denied.json()).details.join(' ');expect(details).toContain('grant');expect(details).not.toContain('--access readwrite');
+  const mutate=(bearer?:string)=>mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',...(bearer?{token:bearer}:{}),headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
+  // The owner is admin-equivalent: the default grants no longer refuse the owner's own direct write.
+  expect((await mutate(token.token)).status).toBe(200);
+  // A link reader has no write rule (the default's writes are owner programs only): refused, and nothing lands.
+  // The status is the route's own: the plain door answers 403 with the grant hint, the durable (Idempotency-Key) door 404.
+  expect([403,404]).toContain((await mutate(reader.token)).status);
  }
 
+ expect((await getArtifactById(id))?.version).toBe(3);
  expect(await readableArtifact(identityForUser(null, ''),id)).not.toBeNull();
  await setDatasetPolicy(actor,id,{version:2,allow:[{actions:['read'],from:{user:'$owner'}}]},0);
  expect(await readableArtifact(identityForUser(null, ''),id)).toBeNull();
@@ -53,17 +57,20 @@ it('keeps a private dataset and its grants unchanged when its native owner page 
  expect((await getArtifactById(ds))?.visibility).toBe('private');expect((await getArtifactById(ds))?.dataset_policy).toEqual(originalPolicy);
  expect(await readableArtifact(identityForUser(null,''),ds)).toBeNull();
 });
-it('does not treat page membership as dataset authority and admits an explicit user grant',async()=>{
+it('does not treat page membership as dataset authority, and a named-user write grant keeps working until it becomes a share',async()=>{
  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql');
  const owner=await mintToken('grant-owner'),bob=await mintToken('grant-reader');const actor=identityForUser(owner.userId,owner.id),reader=identityForUser(bob.userId,bob.id);
  const ds=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],access:'readwrite',visibility:'public'}}))).json();
  const page=await(await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds.id}"></head><body>Rows</body></html>`,visibility:'public'}}))).json();
  const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'data',datasetId:ds.id,mode:'live' as const},signal=new AbortController().signal;
  const table=(await api.schema(actor,binding,signal)).tables[0]!,column=table.columns[0]!;
- const write=(requestId:string)=>api.write(reader,binding,{tableId:table.id,expectedRevision:'1',requestId,changes:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:2}}]}]},signal);
+ const write=(requestId:string,expectedRevision='1')=>api.write(reader,binding,{tableId:table.id,expectedRevision,requestId,changes:[{kind:'INSERT',cells:[{columnId:column.id,value:{type:'NUMBER',value:2}}]}]},signal);
  expect((await write('before-membership')).outcome).toBe('rejected');
  await changeMembership(reader,page.id,{action:'join'});await changeMembership(actor,page.id,{action:'approve',userId:bob.userId!});
  expect((await write('after-membership')).outcome).toBe('rejected');
  await setDatasetPolicy(actor,ds.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:bob.userId}}]},0);
+ // COMPATIBILITY (write.ts namedUserWrites): a v2 user:<id> write grant keeps admitting that person's granted ops until the stored migration shares the dataset with them.
  expect((await write('explicit-user-grant')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(2);
+ await updateSharingFor(actor,ds.id,{shares:[{email:bob.email!,role:'editor'}]});
+ expect((await write('shared-editor','2')).outcome).toBe('committed');expect((await getArtifactById(ds.id))?.version).toBe(3);
 });

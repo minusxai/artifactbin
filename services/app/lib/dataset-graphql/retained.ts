@@ -5,7 +5,7 @@ import {catalogOf, executeCatalog, loadDatasetRows, people} from '@/lib/datasets
 import {getDb} from '@/lib/platform';
 import {readDatasetPeople} from './people';
 import {objectStore} from '@/lib/object-store';
-import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '@/lib/document-data';
+import {canWriteDataset,isMutationRefused,mutateDataset} from '@/lib/document-data';
 import type {DatasetGraphqlPort} from './types';
 import {createDatasetGraphql} from './index';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
@@ -57,8 +57,9 @@ export function retainedDatasetGraphqlPort(options:RetainedReadOptions={}):Datas
   },
   async commit(actor,binding,snapshot,input,statements,signal){
    const current=await authorizedDataset(actor,binding.datasetId);
-   // A page link never supplies edit permission. Repeat before ledger lookup and in mutateDataset's CAS.
-   const nativePolicy=await canUseDataPolicy(current,actor);
+   // A page link never supplies edit permission: the dataset role and its v3 rules decide. Repeat before
+   // ledger lookup and in mutateDataset's commit transaction.
+   const nativePolicy=true;
    if(await canWriteDataset(current,actor,nativePolicy))return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};
    const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===input.tableId);if(!table)throw unavailable();
    const reply=await durableMutation(actor,'https://dataset.invalid',createHash('sha256').update(input.requestId).digest('base64url'),{datasetId:binding.datasetId,...input},async receipt=>{

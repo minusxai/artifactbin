@@ -94,7 +94,7 @@ export async function effectiveRole(
  * owns, which is what makes it a full user in there and a guest out here
  * (lib/user-kinds, the same rule the SQL scopes read).
  */
-async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: AccessActor, facts: AccessFacts): Promise<boolean> {
+export async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: AccessActor, facts: AccessFacts): Promise<boolean> {
   const kind = await facts.userKind(actor.userId);
   if (kind === null || kind === 'account') return true;
   if (kind !== 'testuser') return false;

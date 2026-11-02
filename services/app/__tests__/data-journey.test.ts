@@ -1,7 +1,7 @@
 /**
  * gate-data-journey's HTTP facts (scripts/gates/gate-data-journey.mjs keeps what a browser must see): a dataflow
  * that reads a column its dataset lacks is refused at publish, naming the query and the column; and a dataset under
- * an access policy takes no direct SQL its grants do not name, not even from its owner.
+ * an access policy takes no direct SQL its rules do not name from a non-owner, while its owner keeps full access.
  */
 import { describe, expect, it } from 'vitest';
 import { identityForUser } from '@/lib/accounts';
@@ -39,7 +39,8 @@ describe('native dataset column validation',()=>{
 });
 
 describe('a dataset under an access policy', () => {
-  it('refuses its owner\'s direct SQL that no grant names, and keeps the rows', async () => {
+  // Plan §249: owner and editor are admin-equivalent, so a rule never refuses the owner; rule holders get only their rules.
+  it('refuses a reader\'s direct SQL that no rule names and keeps the rows, while its owner keeps full access', async () => {
     const o = await owner();
     const ds = await o.created({ dataset: [{ branch: 'root' }], access: 'readwrite' });
     const actor = identityForUser(o.t.userId, o.t.id);
@@ -48,9 +49,13 @@ describe('a dataset under an access policy', () => {
       enforcement: 'enabled',
       tables: [{ table: { schema: 'public', name: 'rows' }, insert_permissions: [{ role: 'viewer', permission: { columns: '*', check: { branch: { _neq: 'blocked' } } } }] }],
     }, 0);
-    const raw = await mutateDataset(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: o.t.token, json: { sql: 'delete from public.rows' } }), params(ds));
+    const reader = await mintToken('data-journey-reader');
+    const raw = await mutateDataset(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: reader.token, json: { sql: 'delete from public.rows' } }), params(ds));
     expect(raw.status).toBe(403);
     expect(((await raw.json()) as { error: string }).error).toBe('policy_denied');
     expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{ branch: 'root' }]);
+    const owned = await mutateDataset(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: o.t.token, json: { sql: 'delete from public.rows' } }), params(ds));
+    expect(owned.status, await owned.clone().text()).toBe(200);
+    expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([]);
   });
 });

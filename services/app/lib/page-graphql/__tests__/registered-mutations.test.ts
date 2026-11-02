@@ -177,6 +177,8 @@ it("requires both accepted page membership and explicit writer grant, and denies
       version: 2,
       allow: [
         { actions: ["read", "insert"], from: { user: "$owner" } },
+        // A stored v2 grant naming the writer keeps working through this trusted program until migration
+        // (write.ts namedUserWrites); accepted page membership is still required, as in v2.
         { actions: ["insert"], from: { user: f.writer.userId } },
       ],
     },

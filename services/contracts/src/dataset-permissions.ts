@@ -1,4 +1,5 @@
 import type { Scalar } from './sql';
+import type { ArtifactRole, Visibility } from './sharing';
 
 /**
  * Version 3 dataset permissions: Hasura's own metadata shape (`tables[].select/insert/update/
@@ -33,6 +34,40 @@ export function datasetRoleAtLeast(
   minimum: DatasetRole,
 ): boolean {
   return DATASET_ROLES.indexOf(role) >= DATASET_ROLES.indexOf(minimum);
+}
+
+/**
+ * What the dataset's OWN sharing says about one caller: the facts `datasetRoleFrom` decides from. The
+ * owning lib module (`lib/dataset-permissions` `datasetRole`) reads them; resolvers call that, never this.
+ */
+export interface DatasetRoleFacts {
+  /** The role held without the link: ownership (group editor included), a named share, group viewer. */
+  held: ArtifactRole;
+  /** The caller reaches as an account: signed in, not a guest, not a test user outside the sandbox. */
+  account: boolean;
+  /** What the dataset's link alone grants (`none` when private). */
+  linkRole: ArtifactRole;
+  visibility: Visibility;
+  /**
+   * The caller arrives through a page that links the dataset. With no sharing of their own they get
+   * `signed_in` or `anonymous`, even on a private dataset; never viewer or editor.
+   */
+  throughPage: boolean;
+}
+
+/**
+ * THE ONE ROLE DERIVATION for a dataset request: exactly one role, or null (the uniform 404). The first
+ * matching step wins: owner; editor (a named editor share, or the link's editor role for an account);
+ * anonymous (no account); viewer (a viewer or commenter share, or group viewer); signed_in (an account
+ * reaching through the link or a linking page). A page never raises the role.
+ */
+export function datasetRoleFrom(facts: DatasetRoleFacts): DatasetRole | null {
+  if (facts.held === 'owner') return 'owner';
+  if (facts.held === 'editor' || (facts.account && facts.linkRole === 'editor')) return 'editor';
+  const reached = facts.visibility !== 'private' || facts.throughPage;
+  if (!facts.account) return reached ? 'anonymous' : null;
+  if (facts.held === 'viewer' || facts.held === 'commenter') return 'viewer';
+  return reached ? 'signed_in' : null;
 }
 
 /**

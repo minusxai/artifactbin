@@ -3,8 +3,9 @@ import {useAppHarness,admitGroupMember} from '@/__tests__/harness';
 import {account,mine,head,sql,dataset} from '@/__tests__/artifact-fixtures';
 import {createGroup,removeGroupMember,setGroupLink} from '@/lib/groups';
 import {setArtifactGroupShare,listArtifactPageFor,getArtifactFor,getSharingFor,updateSharingFor} from '@/lib/artifacts';
-import {effectiveRole,preloadAccessFacts,liveAccessFacts,readThrough,annotationScope,editorScope,ownerScope,reactionScope,policyReaderSql,grantsPermitWrite} from '..';
+import {effectiveRole,preloadAccessFacts,liveAccessFacts,readThrough,annotationScope,editorScope,ownerScope,reactionScope,policyReaderSql} from '..';
 import {getDb} from '@/lib/platform';
+import {datasetWriteAccess} from '@/lib/dataset-permissions';
 useAppHarness();
 const admitted=async(scope:ReturnType<typeof editorScope>,id:string)=>(await sql(`SELECT id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[id,scope.val])).length===1;
 describe('group principal lattice',()=>{
@@ -49,7 +50,7 @@ describe('group principal lattice',()=>{
   expect(await effectiveRole(row,member)).toBe('none');
   await setArtifactGroupShare(owner,row.id,second.id,'viewer');
   expect(await readThrough(await getDb(),row,member)).toBe(true);
-  expect(await grantsPermitWrite(row,member)).toBe(false);
+  expect((await datasetWriteAccess(row,member)).allowed).toBe(false);
   await setArtifactGroupShare(owner,row.id,second.id,null);
   expect(await effectiveRole(row,member)).toBe('none');
  });
