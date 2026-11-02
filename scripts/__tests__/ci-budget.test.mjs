@@ -98,6 +98,8 @@ it('makes the pull request lane the one that enforces the 60-second limit, in ev
  const runs=job.steps.map(step=>step.run??'').join('\n');
  for(const command of ['check-local.mjs validate --part=types','check-local.mjs validate --part=lint','scripts/ci/fast-check.mjs','rhysd/actionlint'])expect(runs).toContain(command);
  expect(job.strategy.matrix.part).toEqual(['types','lint','tests']);
+ expect(runs).not.toContain('docker run');
+ expect(runs).toContain('sha256sum --check --strict');
  expect(JSON.stringify(lane)).not.toMatch(/tested-(tree|patch)/);
  expect(job.steps.filter(step=>step.uses?.startsWith('actions/upload-artifact')).map(step=>step.with.name)).toEqual(['tsgo-buildinfo']);
 });
