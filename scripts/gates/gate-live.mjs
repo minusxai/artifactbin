@@ -99,9 +99,11 @@ try {
     await watcher.frame.locator('html[data-af-ready="yes"]').waitFor();
     check(await watcher.frame.locator("#choice").inputValue() === "tacos", "viewer choice survives reload");
     await api(owner.token, `/api/artifacts/${ds.id}/policy`, {expectedPolicyRevision: 1, policy: {version: 1, enforcement: 'enabled', tables: [{table: {schema: 'public', name: 'rows'}, insert_permissions: []}]}}, 'PUT');
-    await voter.frame.locator("#refresh").click();
-    await voter.frame.locator("#vote").click();
-    const refusal = await until(() => voter.frame.locator("#receipt").textContent(), (v) => Boolean(v) && v !== "committed");
+    // Plan §249: the owner is admin-equivalent and never locked out, so the revocation is checked on the open anonymous writer.
+    await watcher.frame.locator("#refresh").click();
+    await until(() => rows(watcher.frame), (v) => v === "rows: 3");
+    await watcher.frame.locator("#vote").click();
+    const refusal = await until(() => watcher.frame.locator("#receipt").textContent(), (v) => Boolean(v) && v !== "committed");
     check(typeof refusal === "string" && /refused|rejected/i.test(refusal), "revoked dataset refuses an already-open writer");
   });
   await lane(check, "published HTML and private local state").run(async () => {

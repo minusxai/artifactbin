@@ -177,7 +177,9 @@ it("requires both accepted page membership and explicit writer grant, and denies
       version: 2,
       allow: [
         { actions: ["read", "insert"], from: { user: "$owner" } },
-        { actions: ["insert"], from: { user: f.writer.userId } },
+        // v3: a named-user grant does not admit programs (write.ts namedUserWrites is outside a program only);
+        // the page-scoped grant becomes a backend_only entry, usable through this trusted program (plan §311).
+        { actions: ["insert"], from: { artifact: f.pageId } },
       ],
     },
     dataset.policy_revision ?? 0,

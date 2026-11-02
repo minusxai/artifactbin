@@ -11,18 +11,19 @@ import {account,datasetFixture as fixture,document,refusal,write} from './datase
 
 useAppHarness();
 
-it('honours a cross-document grant only for members acting through the granted document',async()=>{
+it('honours a cross-document grant only for members acting through a trusted program of a dataset admin',async()=>{
  const f=await fixture(),member=await account('member'),granted=await document(f.db,'docGranted',f.owner),other=await document(f.db,'docOther',f.owner);
  const policy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:granted.id}}]};
  const saved=await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:0});expect(saved.status,await saved.clone().text()).toBe(200);
  const target={schema:'public',table:'rows'},sql='insert into public.rows values (7)';
  expect(refusal(await write(await f.row(),member.actor,sql,{document:granted,target}))).toBe('dataset_read_only');
  await seedOwnerJoin(f.db,granted.id,member.id);await seedOwnerJoin(f.db,other.id,member.id);
- expect(refusal(await write(await f.row(),member.actor,sql,{document:other,target}))).toBe('dataset_read_only');
+ // Plan §312 (toV3 write_page_scoped): artifact:X becomes backend_only entries, so any trusted program on a page the dataset owner owns writes, not X alone.
+ expect(refusal(await write(await f.row(),member.actor,sql,{document:other,target}))).toBeNull();
  expect(refusal(await write(await f.row(),member.actor,sql))).toBe('dataset_read_only');
  expect(refusal(await write(await f.row(),member.actor,sql,{document:granted,target}))).toBeNull();
  expect(refusal(await write(await f.row(),member.actor,'delete from public.rows',{document:granted,target}))).toBe('policy_denied');
- expect(await f.rows()).toEqual([{n:1},{n:7}]);
+ expect(await f.rows()).toEqual([{n:1},{n:7},{n:7}]);
 });
 
 it('validates assigned user fields at commit: a self field takes only the caller, any user field only a real user',async()=>{
