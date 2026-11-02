@@ -33,7 +33,13 @@ with its URL-encoded and base64 forms, is replaced with `[redacted]` in the body
 headers and URL. Resolver code never receives a value: api 2 versions are refused
 `secrets.get` and the store on the host. The run receipt records method, host, the
 path as written, status, duration, bytes and secret names, never a query string,
-header value or body. Size and time limits are one table, `RESOLVER_LIMITS` in
+header value or body. `auth: {type: 'google', secret, scopes}` (`google-auth.ts`)
+treats the named secret as a Google service-account JSON key: the app signs an RS256
+JWT, exchanges it at the fixed `oauth2.googleapis.com` endpoint (never the key's
+`token_uri`), caches the token per owner, resolver, secret, key and scope set until a
+minute before expiry, and sends `Authorization: Bearer` only to a `*.googleapis.com`
+host the secret is bound to, never across a redirect. The token joins the redacted
+values; failures are `auth_key_invalid` or `auth_failed`. Size and time limits are one table, `RESOLVER_LIMITS` in
 `services/contracts`: 2 MiB response, 256 KiB request body and 10 s per fetch,
 4 MiB per runner message and remote callback reply, 15 s wall time and a 16 s app
 wait.
