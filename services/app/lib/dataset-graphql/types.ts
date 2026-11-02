@@ -1,6 +1,7 @@
 import type { AccessActor } from '@/lib/accounts';
 import type { CatalogRowView, DatasetCatalog } from '@/lib/datasets';
-import type { DatasetPerson, DatasetSourceInfo, DatasetWriteRequest, DatasetWriteReceipt, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
+import type { DatasetPerson, DatasetRole, DatasetSourceInfo, DatasetWriteRequest, DatasetWriteReceipt, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
+import type { HasuraTableNames } from './hasura-names';
 export interface DatasetRowIdentitySidecar {objectKey:string;ids:readonly string[]}
 /** Authorized, revision-specific data. Policy identity changes invalidate cursors. */
 export interface DatasetSnapshot {
@@ -11,6 +12,10 @@ export interface DatasetSnapshot {
  view?:CatalogRowView|null;
  /** Per table: may this role run aggregate queries (the select rule's allow_aggregations; owner and editor always). */
  aggregatable?:Readonly<Record<string,boolean>>;
+ /** The role the view was decided for (lib/dataset-permissions `datasetRole`). */
+ role?:DatasetRole;
+ /** Per table: the generated GraphQL root and column names (lib/dataset-graphql/hasura-names), for every declared table. */
+ names?:Readonly<Record<string,HasuraTableNames>>;
 }
 export interface DatasetStatement { sql:string; params:Record<string,Scalar> }
 /** Narrow port to the retained dataset executor, ACL, object storage and mutation transaction. */
