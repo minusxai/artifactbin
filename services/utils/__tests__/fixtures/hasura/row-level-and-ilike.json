@@ -1,0 +1,42 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/auth/authorization/permissions/row-level-permissions.mdx",
+  "note": "YAML converted to JSON.",
+  "columns": [
+    "id",
+    "name",
+    "description",
+    "price",
+    "manufacturer",
+    "category",
+    "image",
+    "added_by_user_id"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "products"
+    },
+    "select_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "columns": [],
+          "filter": {
+            "_and": [
+              {
+                "price": {
+                  "_lt": 1000
+                }
+              },
+              {
+                "name": {
+                  "_ilike": "acme%"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

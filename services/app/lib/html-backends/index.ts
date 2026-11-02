@@ -22,8 +22,11 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
   const previousOwner=old?(await tx.query<{owner_id:string}>('SELECT owner_id FROM html_backend_versions WHERE backend_id=$1 LIMIT 1',[old])).rows[0]?.owner_id:undefined;
   const fresh=previousOwner!==undefined&&requiresFreshBackendIdentity({previousOwnerId:previousOwner,nextOwnerId:ownerId});
   const backendId=!old||fresh?generateFileId():old;
-  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled,backend.secretBindings??[]])).digest('hex');
-  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id,secret_bindings) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId,JSON.stringify(backend.secretBindings??[])]);
+  const api=backend.api??1,secretHosts=backend.secretHosts??{};
+  // Legacy-shaped versions keep their original hash; the resolver contract is part of every other one.
+  const contract=api===1&&!Object.keys(secretHosts).length?[]:[api,secretHosts];
+  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled,backend.secretBindings??[],...contract])).digest('hex');
+  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id,secret_bindings,secret_hosts,api) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId,JSON.stringify(backend.secretBindings??[]),JSON.stringify(secretHosts),api]);
   if(fresh)await tx.query('INSERT INTO html_backend_stores(backend_id,value,version) SELECT $1,value,version FROM html_backend_stores WHERE backend_id=$2 ON CONFLICT DO NOTHING',[backendId,old]);
   await tx.query('INSERT INTO html_backend_stores(backend_id,value,version) VALUES($1,NULL,0) ON CONFLICT DO NOTHING',[backendId]);
   links.push({kind:'backend',name:backend.name,backendId,version});
@@ -32,8 +35,8 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
 }
 /** Internal execution adapter: access is established by the resolved immutable page link. */
 export async function getHtmlBackendVersion(backendId:string,version:string):Promise<HtmlBackendVersionRecord|null>{
- const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[]}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
- return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[]}:null;
+ const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[];secret_hosts:Record<string,string>|null;api:number|null}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
+ return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[],secretHosts:row.secret_hosts??{},api:row.api===2?2:1}:null;
 }
 export async function getHtmlBackendStore(backendId:string):Promise<HtmlBackendStoreValue>{
  const row=(await (await getDb()).query<{value:HtmlJson|null;version:number}>('SELECT value,version FROM html_backend_stores WHERE backend_id=$1',[backendId])).rows[0];

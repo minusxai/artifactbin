@@ -342,8 +342,8 @@ async function rebindCarriedPrograms(tx:Queryable,next:{pageId:string;version:nu
     return {links:mutations.links,rebinds:{queries:queries.rebinds,mutations:mutations.rebinds}};
   }
   catch(error){
-    if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
-    if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement backend for '${error.namespace}' in backendSources, or remove its <link rel="af-backend">.`]},409);
+    if(error instanceof RegisteredQueryRebindError)return json({error:'registered_queries_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
+    if(error instanceof RegisteredMutationRebindError)return json({error:'registered_mutations_rebind_failed',namespace:error.namespace,reason:error.reason,details:[`${error.message}. Supply a replacement resolver for '${error.namespace}' in resolverSources, or remove its <link rel="af-resolver">.`]},409);
     throw error;
   }
 }

@@ -33,7 +33,7 @@ it('explicit new-owner republish creates an independent credential identity whil
  const updated=await PUT(request(`/api/artifacts/${created.id}`,{method:'PUT',token:next.token,json:{html:head.html,backendSources:{db:'owner credential'},expectedVersion:head.version,expectedState:head.state}}),params(created.id));expect(updated.status).toBe(200);
  const after=(await db.query<{meta:typeof row.meta}>('SELECT meta FROM artifacts WHERE id=$1',[created.id])).rows[0]!.meta.htmlLinks[0]!;
  expect((await secretGET(request('/api/my/backends/secrets',{token:next.token}),secrets(after))).status).toBe(200);
- expect(await(await secretGET(request('/api/my/backends/secrets',{token:next.token}),secrets(after))).json()).toEqual({names:[]});
+ expect(await(await secretGET(request('/api/my/backends/secrets',{token:next.token}),secrets(after))).json()).toEqual({names:[],secrets:{},test:false,api:1});
  expect((await secretPUT(request('/api/my/backends/secrets',{method:'PUT',token:next.token,json:{name:'TOKEN',value:'new-private-value'}}),secrets(after))).status).toBe(200);
  release();await expect(oldInflightWrite).rejects.toThrow('backend_binding_changed');
  expect(after.backendId).not.toBe(first.backendId);expect((await getHtmlBackendVersion(after.backendId,after.version))?.ownerId).toBe(next.userId);

@@ -7,6 +7,7 @@ import {
   assertValidSchema,
   validateSchema,
   Kind,
+  isRequiredArgument,
   type DocumentNode,
   type GraphQLSchema,
   type SelectionSetNode,
@@ -93,6 +94,36 @@ export function boundedBackendSchema(typeDefs: string): GraphQLSchema {
   if (query.some((field) => mutation.includes(field)))
     throw Error("Root field names must be unique across Query and Mutation");
   return schema;
+}
+/**
+ * The optional Test connection field. When present it must be the owner-only
+ * Query field `test: String! @auth(role: OWNER)` with no required arguments.
+ */
+export function resolverTestField(schema: GraphQLSchema): boolean {
+  const field = schema.getQueryType()?.getFields().test;
+  if (!field && !schema.getMutationType()?.getFields().test) return false;
+  const role = field?.astNode?.directives
+    ?.find((directive) => directive.name.value === "auth")
+    ?.arguments?.find((argument) => argument.name.value === "role")?.value;
+  if (
+    !field ||
+    String(field.type) !== "String!" ||
+    field.args.some(isRequiredArgument) ||
+    role?.kind !== Kind.ENUM ||
+    role.value.toLowerCase() !== "owner"
+  )
+    throw Error(
+      "invalid_test_field: declare it on Query as test: String! @auth(role: OWNER), with no required arguments",
+    );
+  return true;
+}
+/** Whether a published version offers Test connection; versions from before the check never fail here. */
+export function declaresResolverTest(typeDefs: string): boolean {
+  try {
+    return resolverTestField(boundedBackendSchema(typeDefs));
+  } catch {
+    return false;
+  }
 }
 export function boundedDocument(source: string): DocumentNode {
   syntaxBudget(source, 16384);

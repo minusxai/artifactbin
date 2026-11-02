@@ -99,7 +99,10 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle,conte
  const backendNames=new Set<string>();
  const backendDocument=parse(html,{sourceCodeLocationInfo:true});
  const findBackends=(node:DefaultTreeAdapterMap['node']):void=>{
-  if('tagName'in node&&node.tagName==='link'&&node.attrs.some(attr=>attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){
+  // af-backend is the permanent alias of af-resolver; a link names a resolver once.
+  const rel='tagName'in node&&node.tagName==='link'?node.attrs.find(attr=>attr.name==='rel')?.value.split(/\s+/)??[]:[];
+  if(rel.includes('af-resolver')&&rel.includes('af-backend'))throw Error('A link declares one namespace kind');
+  if('tagName'in node&&(rel.includes('af-resolver')||rel.includes('af-backend'))){
    const href=node.attrs.find(attr=>attr.name==='href')?.value,name=node.attrs.find(attr=>attr.name==='data-af-name')?.value;
    const local=href&&resolve(href,entryPath);
    if(local){

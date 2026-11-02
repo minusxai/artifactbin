@@ -68,6 +68,7 @@
   "services/utils/__tests__/artifact-reference.test.ts",
   "services/utils/__tests__/assets-origin.test.ts",
   "services/utils/__tests__/dataset-grants.test.ts",
+  "services/utils/__tests__/dataset-permissions.test.ts",
   "services/utils/__tests__/dataset-policy.test.ts",
   "services/utils/__tests__/runner-native-client.test.ts",
   "services/utils/__tests__/timestamp.test.ts",

@@ -10,7 +10,7 @@ const page=async(id:string,userId:string|null,links:unknown[])=>(await getDb()).
 it('commits immutable content-addressed versions under one stable identity per page name',async()=>{
  const [link]=await commit('Page1','u1',[counter]);
  expect(link).toEqual({kind:'backend',name:'counter',backendId:expect.any(String),version:expect.stringMatching(/^[a-f0-9]{64}$/)});
- expect(await getHtmlBackendVersion(link!.backendId,link!.version)).toEqual({...counter,backendId:link!.backendId,pageId:'Page1',version:link!.version,ownerId:'u1',secretBindings:[]});
+ expect(await getHtmlBackendVersion(link!.backendId,link!.version)).toEqual({...counter,backendId:link!.backendId,pageId:'Page1',version:link!.version,ownerId:'u1',secretBindings:[],secretHosts:{},api:1});
  expect(await getHtmlBackendStore(link!.backendId)).toEqual({value:null,version:0});
  // Republishing identical code is the same version; changed code is a new version of the same backend.
  expect(await commit('Page1','u1',[counter],[link!])).toEqual([link]);

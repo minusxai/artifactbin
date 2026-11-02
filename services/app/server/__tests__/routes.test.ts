@@ -6,17 +6,19 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mountRoutes } from '../api';
 import { createAppServer } from '../app';
 import { ROUTES } from '../routes.generated';
+import { exportedMethods } from '../../scripts/generate-routes.mjs';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {createGroup} from '@/lib/groups';
 import {admitGroupMember} from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
-useAppHarness();
+vi.mock('@/lib/page-operations', async original => ({ ...await original<typeof import('@/lib/page-operations')>(), compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { value: String }', compiled: source, secretBindings: ['TOKEN'] }) }));
+const harness = useAppHarness();
 
 describe('the route table', () => {
   it('is generated from the filesystem and up to date', () => {
@@ -38,6 +40,13 @@ describe('the route table', () => {
     expect(byDir.get('/llms.txt')).toEqual(['GET']);
     expect(byDir.get('/api/artifacts')).toEqual(expect.arrayContaining(['GET', 'POST']));
     expect(byDir.get('/oauth/register') ?? null).toBeNull(); // the proxy's
+    expect(byDir.get('/api/my/backends/[id]/[version]/secrets')).toEqual(['GET', 'PUT', 'DELETE']);
+  });
+  it('detects every form of exported method, and nothing else', () => {
+    expect(exportedMethods('const handle=()=>0;\nexport const GET=handle,PUT=handle,DELETE=handle;')).toEqual(['GET', 'PUT', 'DELETE']);
+    expect(exportedMethods('export async function POST(){}\nexport function HEAD(){}\nexport const PATCH = (r) => r;')).toEqual(['POST', 'PATCH', 'HEAD']);
+    expect(exportedMethods("export {notFound as POST, notFound as GET} from '@/lib/http';\nexport {OPTIONS} from './x';")).toEqual(['GET', 'POST', 'OPTIONS']);
+    expect(exportedMethods("const GET=1;\n// export const PUT=1\nconst s='export const DELETE=1';\nexport {GET as PATCH};\nexport const runtime='node';")).toEqual(['PATCH']);
   });
 });
 
@@ -66,6 +75,24 @@ describe('handlers through Hono', () => {
     await admitGroupMember(owner.userId!,group.id,viewer.userId!,'viewer');
     const response=await app.request(`/api/groups/${group.id}/members/me`,{method:'DELETE',headers:{authorization:`Bearer ${viewer.token}`}});
     expect(response.status).toBe(200);
+  });
+  it('routes PUT and DELETE on backend secrets to the handler: the owner sets and revokes, the value never returns', async () => {
+    const owner = await mintToken('secret-routes');
+    const auth = { 'content-type': 'application/json', authorization: `Bearer ${owner.token}` };
+    const html = '<html><head><link rel="af-backend" data-af-name="db" href="./db.ts"></head><body>App</body></html>';
+    const created = await (await app.request('/api/artifacts', { method: 'POST', headers: auth, body: JSON.stringify({ html, backendSources: { db: 'credential' } }) })).json();
+    const db = await harness.db();
+    const link = (await db.query<{ meta: { htmlLinks: { backendId: string; version: string }[] } }>('SELECT meta FROM artifacts WHERE id=$1', [created.id])).rows[0]!.meta.htmlLinks[0]!;
+    const url = `/api/my/backends/${link.backendId}/${link.version}/secrets`;
+    const set = await app.request(url, { method: 'PUT', headers: auth, body: JSON.stringify({ name: 'TOKEN', value: 'private-route-value' }) });
+    expect(set.status).toBe(200);
+    const setBody = await set.text();
+    expect(JSON.parse(setBody)).toEqual({ names: ['TOKEN'] });
+    expect(setBody).not.toContain('private-route-value');
+    expect(await (await app.request(url, { headers: auth })).json()).toEqual({ names: ['TOKEN'], secrets: {}, test: false, api: 1 });
+    const revoked = await app.request(url, { method: 'DELETE', headers: auth, body: JSON.stringify({ name: 'TOKEN' }) });
+    expect(revoked.status).toBe(200);
+    expect(await revoked.json()).toEqual({ names: [] });
   });
   it('decodes params before the handler sees them (an encoded id is the id)', async () => {
     expect((await app.request('/api/artifacts/%41b3xK9')).status).toBe(401); // reached the handler (bearer missing), not a 404 from routing

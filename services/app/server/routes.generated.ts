@@ -268,7 +268,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/my/artifacts/:id/sharing", dir: "/api/my/artifacts/[id]/sharing", methods: ["GET","PUT"], module: r103 },
   { path: "/api/my/artifacts/:id/versions", dir: "/api/my/artifacts/[id]/versions", methods: ["GET"], module: r104 },
   { path: "/api/my/artifacts/:id/versions/:version", dir: "/api/my/artifacts/[id]/versions/[version]", methods: ["GET"], module: r105 },
-  { path: "/api/my/backends/:id/:version/secrets", dir: "/api/my/backends/[id]/[version]/secrets", methods: ["GET"], module: r106 },
+  { path: "/api/my/backends/:id/:version/secrets", dir: "/api/my/backends/[id]/[version]/secrets", methods: ["GET","PUT","DELETE"], module: r106 },
   { path: "/api/my/datasets/discover", dir: "/api/my/datasets/discover", methods: ["POST"], module: r107 },
   { path: "/api/my/datasets/import", dir: "/api/my/datasets/import", methods: ["POST"], module: r108 },
   { path: "/api/my/datasets/notebook/preview", dir: "/api/my/datasets/notebook/preview", methods: ["POST"], module: r109 },

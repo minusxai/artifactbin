@@ -1070,6 +1070,9 @@ const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
  {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
  {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
  {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
+ // Resolver contract: name->host bindings of a secrets map, and the file api (1 = legacy capabilities).
+ {name:'secret_hosts',type:'JSONB',notNull:true,default:"'{}'::jsonb"},
+ {name:'api',type:'SMALLINT',notNull:true,default:'1'},
 ],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}]};
 /** Mutable platform-kept state belongs to the backend identity, never to a module version. */
 const HTML_BACKEND_STORES:Table={name:'html_backend_stores',columns:[

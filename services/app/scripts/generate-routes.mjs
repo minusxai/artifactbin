@@ -10,10 +10,28 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const APP_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+
+const exported = (node) => ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export;
+
+/** The HTTP methods a route module exports, read from its syntax tree: every
+ *  declarator of `export const A=x,B=y`, exported functions and `export {x as A}`. */
+export function exportedMethods(src) {
+  const names = new Set();
+  for (const node of ts.createSourceFile('route.ts', src, ts.ScriptTarget.Latest).statements) {
+    if (ts.isVariableStatement(node) && exported(node)) {
+      for (const d of node.declarationList.declarations) if (ts.isIdentifier(d.name)) names.add(d.name.text);
+    } else if (ts.isFunctionDeclaration(node) && node.name && exported(node)) names.add(node.name.text);
+    else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.exportClause && ts.isNamedExports(node.exportClause)) {
+      for (const e of node.exportClause.elements) if (!e.isTypeOnly) names.add(e.name.text);
+    }
+  }
+  return METHODS.filter((m) => names.has(m));
+}
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -49,7 +67,7 @@ function buildTable(root = join(APP_ROOT, 'app')) {
   };
   return walk(root).sort(compare).map((file, i) => {
     const src = readFileSync(file, 'utf8');
-    const methods = METHODS.filter((m) => new RegExp(`export (async function|const|function) ${m}\\b`).test(src) || new RegExp(`export \\{[^}]*\\b${m}\\b[^}]*\\}`).test(src));
+    const methods = exportedMethods(src);
     const dir = relative(root, file).split('\\').join('/').replace(/\/?route\.ts$/, '');
     return { file, dir: '/' + dir, path: toHonoPath(dir), methods, alias: `r${i}` };
   });

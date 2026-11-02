@@ -1,0 +1,33 @@
+{
+  "source": "https://raw.githubusercontent.com/hasura/graphql-engine/master/docs/docs/auth/authorization/permissions/column-level-permissions.mdx",
+  "note": "YAML converted to JSON; the docs mis-indent _eq under id.",
+  "columns": [
+    "id",
+    "name",
+    "email",
+    "phone"
+  ],
+  "table": {
+    "table": {
+      "schema": "public",
+      "name": "users"
+    },
+    "select_permissions": [
+      {
+        "role": "user",
+        "permission": {
+          "columns": [
+            "id",
+            "name",
+            "email"
+          ],
+          "filter": {
+            "id": {
+              "_eq": "X-Hasura-User-Id"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

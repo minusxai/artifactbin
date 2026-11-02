@@ -1,11 +1,12 @@
 import { transform } from 'esbuild';
 import { randomUUID } from 'node:crypto';
-import type { HtmlJson, PageResolverFieldCall, RunnerService, RunStart, RunnerJson } from '@artifactbin/contracts';
+import type { HtmlJson, PageResolverFieldCall, ResolverApi, ResolverSecretHosts, RunnerService, RunStart, RunnerJson } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
-import { boundedBackendSchema } from './execution-policy';
-import {secretBindingNames} from '@/lib/html-backend-secrets';
+import { boundedBackendSchema, resolverTestField } from './execution-policy';
+import {secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
 import { FieldFailed, FieldNotExecuted } from './contracts';
-export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[]}
+/** `secretBindings` lists every declared secret name; `secretHosts` binds api 2 names to hosts. */
+export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[];secretHosts?:ResolverSecretHosts;api?:ResolverApi;test?:boolean}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
 export interface PageBackendFetchResult {status:number;url:string;contentType:string;body:string}
 export type PageBackendFetcher=(url:string)=>Promise<PageBackendFetchResult>;
@@ -17,7 +18,7 @@ async function backendProgram(source:string):Promise<string>{
  const transformed=await transform(source,{loader:'ts',format:'cjs',target:'es2022'});
  return `const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secretBindings:Backend.secretBindings??[]};}
+ if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secretBindings:Backend.secretBindings,secrets:Backend.secrets};}
  const fn=Backend.default[input.field];if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
  const caps=Object.freeze({secrets:Object.freeze({get:(name)=>host.artifactbin.call('pageBackend.secrets.get',{name})}),fetch:async(url)=>{const r=await host.artifactbin.call('pageBackend.fetch',{url});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({'content-type':r.contentType}),text:async()=>r.body,json:async()=>JSON.parse(r.body)});},store:Object.freeze({get:()=>host.artifactbin.call('pageBackend.store.get',{}),set:async(value,options)=>{const result=await host.artifactbin.call('pageBackend.store.set',{value,expected:options.expected});if(!result.ok){const e=Error('conflict');e.code='conflict';throw e;}return result.version;}})});
@@ -70,11 +71,16 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
   await new Promise(resolve=>setTimeout(resolve,10));
  }
 }
+/** Source that reaches for a legacy capability or declaration is api 1; everything else is the resolver contract, api 2. */
+const LEGACY_API=/\bsecretBindings\b|\bsecrets\s*\.\s*get\b|\bstore\s*\.\s*(?:get|set)\b|\bcaps\s*\.\s*store\b/;
 export function createBackendCompiler(runner:RunnerService){return async(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>=>{
  const compiled=await backendProgram(source);
  const result=await run(runner,{requestId:randomUUID(),userId:'page-backend-compiler',artifactId:'page-backend-compiler',artifactVersion:'compile',document:{source:compiled,editId:'compile'},program:{source:compiled,language:'javascript'},input:{kind:'schema'},limits},signal);
  if(!result||typeof result!=='object'||Array.isArray(result)||typeof result.typeDefs!=='string')throw Error('invalid_backend_exports');
- boundedBackendSchema(result.typeDefs);return {compiled,typeDefs:result.typeDefs,secretBindings:secretBindingNames(result.secretBindings)};
+ const test=resolverTestField(boundedBackendSchema(result.typeDefs));
+ if(result.secretBindings!==undefined&&result.secrets!==undefined)throw Error('invalid_secrets: export a secrets map or legacy secretBindings, not both');
+ const secretHosts=secretHostMap(result.secrets),secretBindings=result.secrets===undefined?secretBindingNames(result.secretBindings):Object.keys(secretHosts);
+ return {compiled,typeDefs:result.typeDefs,secretBindings,secretHosts,api:LEGACY_API.test(source)?1:2,test};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
 export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[]}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
