@@ -9,18 +9,20 @@ import {DatasetError} from './errors';
 import {resolveDatasetConnection} from './secrets';
 import type { AccessActor } from '@/lib/accounts';
 import {storedTables} from './catalog';
-import type {DatasetCatalog} from './types';
+import type {CatalogRowView,DatasetCatalog} from './types';
 import { getDb } from '@/lib/platform';
 import {createDatasetResultCache} from './result-cache';
-interface CatalogQueryOptions {/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
+interface CatalogQueryOptions {/** The caller's role view (lib/dataset-permissions), or null: decided at every door, never defaulted. */view:CatalogRowView|null;/** Trusted host-owned SQL execution; never a request parameter. */execute?:typeof runQueries;timeoutMs?:number;objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/dataflow').DatasetColumn['type']>;datasetId?:string;actor?:AccessActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
 export type CatalogResult=TableResult&{refreshedAt:string};
 /** Callers authorize dataset access before entering this execution/cache boundary. */
-async function executeCatalogDirect(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {
+async function executeCatalogDirect(saved:DatasetCatalog,sql:string,params:Record<string,Scalar>,opts:CatalogQueryOptions):Promise<CatalogResult> {
+ // The role view first: hidden columns leave the catalog every statement is checked against.
+ const catalog=opts.view?opts.view.catalog(saved):saved;
  const limit=Math.min(10000,Math.max(1,Math.floor(opts.limit??1000)));const offset=Math.max(0,Math.floor(opts.offset??0));
  if(!Number.isFinite(limit)||!Number.isSafeInteger(offset))throw new DatasetError('Invalid query window');
  const config=catalog.kind==='postgres'?(catalog.connection?await resolveDatasetConnection(catalog.connection,opts.actor,opts.datasetId):(()=>{throw new DatasetError('Postgres dataset credentials are unavailable')})()):null;
  const sorted=(query:string)=>opts.sort?`SELECT * FROM (${query}) AS dataset_sorted ORDER BY "${opts.sort.col.replaceAll('"','""')}" ${opts.sort.dir==='desc'?'DESC':'ASC'}`:query;
- const cacheKey=createHash('sha256').update(JSON.stringify([opts.datasetId,opts.actor,catalog,config,sql,params,opts.paramTypes,opts.sort,limit,offset])).digest('hex');
+ const cacheKey=createHash('sha256').update(JSON.stringify([opts.datasetId,opts.actor,catalog,config,sql,params,opts.paramTypes,opts.sort,limit,offset,opts.view?.identity??null])).digest('hex');
  const load=async():Promise<CatalogResult>=>{
  let result:TableResult;
  if(config){
@@ -31,7 +33,9 @@ async function executeCatalogDirect(catalog:DatasetCatalog,sql:string,params:Rec
   const undeclared=datasetSqlParams(sql).find(name=>!Object.hasOwn(params,name));
   if(undeclared)throw new Error(`Dataset SQL: undeclared parameter $${undeclared}`);
   const readCatalog={defaultSchema:catalog.defaultSchema,tables:catalog.tables.map((table,i)=>({schema:table.schema,name:table.name,columns:table.columns,...(table.sql?{sql:table.sql}:{source:`dataset_table_${i}`})})),paramTypes:opts.paramTypes};
-  const out=await (opts.execute??runQueries)({tables:await storedTables(catalog,opts.objects),catalog:readCatalog,queries:[{name:'result',sql}],params,limit,timeoutMs:opts.timeoutMs,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
+  const stored=await storedTables(catalog,opts.objects);
+  if(opts.view)for(const i of catalog.tables.keys()){const loaded=stored[`dataset_table_${i}`];if(loaded)loaded.rows=opts.view.rows(saved.tables[i]!,loaded.rows);}
+  const out=await (opts.execute??runQueries)({tables:stored,catalog:readCatalog,queries:[{name:'result',sql}],params,limit,timeoutMs:opts.timeoutMs,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
   const table=out.result;if(!table||isQueryFailure(table))throw new DatasetError(table?.error??'Query failed');
   result=table;
  }

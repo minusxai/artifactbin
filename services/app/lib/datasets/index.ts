@@ -21,6 +21,6 @@ export type { ServerRefLoader } from './asset-reference';
 export { openDatasetSecret, sealDatasetSecret } from './secret-crypto';
 export { claimPendingDatasetSecret, createDatasetSecret, resolveDatasetConnection } from './secrets';
 export type {
-  CatalogInput, DatasetCatalog, DatasetConnection, DatasetNotebook, DatasetTable, DiscoveredTable, NotebookCell,
+  CatalogInput, CatalogRowView, DatasetCatalog, DatasetConnection, DatasetNotebook, DatasetTable, DiscoveredTable, NotebookCell,
 } from './types';
 export { people, resolveUserColumnScope, retainUserScope, userOptions, validateUserContent, validateUserWrites } from './user-fields';

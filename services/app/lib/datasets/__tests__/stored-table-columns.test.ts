@@ -30,7 +30,7 @@ async function fixture() {
     const row = (await getArtifactById(id))!;
     return replace(request(`/api/artifacts/${id}`, { method: 'PUT', token: author.token, json: { dataset, expectedVersion: row.version, expectedState: artifactState(row) } }), { params: Promise.resolve({ id }) });
   };
-  const select = async (sql: string) => (await executeCatalog(catalogOf((await getArtifactById(id))!)!, sql)).rows;
+  const select = async (sql: string) => (await executeCatalog(catalogOf((await getArtifactById(id))!)!, sql, {}, { view: null })).rows;
   return { put, select };
 }
 

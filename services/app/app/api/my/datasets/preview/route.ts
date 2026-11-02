@@ -9,7 +9,7 @@ export async function POST(request:Request){
  const previous=typeof body.datasetId==='string'?await getArtifactFor(actor,body.datasetId):undefined;
  if(body.datasetId&&!previous)return json({error:'not_found'},404);
  const prepared=await prepareCatalog(body.dataset,actor,previous??undefined);if(prepared instanceof Response)return prepared;
- return datasetResponse(()=>executeCatalog(catalogOf(prepared)!,body.sql as string,{}, {limit:50,refresh:true,datasetId:previous?.id,actor,signal:request.signal,authorize:async()=>{
+ return datasetResponse(()=>executeCatalog(catalogOf(prepared)!,body.sql as string,{}, {view:null/* the caller's own draft, or a dataset they own or edit (getArtifactFor): the whole catalog */,limit:50,refresh:true,datasetId:previous?.id,actor,signal:request.signal,authorize:async()=>{
   const currentActor=await requestActor(request);
   if(currentActor instanceof Response)throw new DatasetError('Dataset not found',404);
   if(previous){const current=await getArtifactFor(currentActor,previous.id);if(!current||JSON.stringify(catalogOf(current))!==JSON.stringify(catalogOf(previous)))throw new DatasetError('Dataset changed; retry preview',404);}

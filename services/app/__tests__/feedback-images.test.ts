@@ -100,7 +100,8 @@ it('uploads through a real pages actor, replays safely, and rechecks the current
   const replayedImage=await filePost('proof.png',new Uint8Array(bytes),'generic-image-123');
   expect(await replayedImage.json()).toMatchObject({...imageFile,replayed:true});
   expect(await metaOf(imageFile.ref)).toMatchObject({filename:'proof.png',format:'image'});
-  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:ownerActor.userId}},{actions:['insert'],from:{user:reporter.id}}]},1);
+  // Deliberate (dataset permissions v3, toV3): a v2 read naming one person is a viewer select, so shared viewers keep reading; revoke reads with no read grant at all.
+  await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['insert'],from:{user:reporter.id}}]},1);
   // The read grant is checked on every request, before any bytes are loaded.
   const get=vi.spyOn(objectStore(),'get');
   try {

@@ -47,6 +47,7 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
    signal.throwIfAborted();
    const snapshot=await port.snapshot(actor,binding,signal),table=tableFor(snapshot,input.tableId),normalized=parameterizedFilters(input);
    if(!input.aggregates?.length&&input.groupBy?.length)throw new Error('dataset_aggregate_required');
+   if(input.aggregates?.length&&snapshot.aggregatable?.[input.tableId]===false)throw new Error('dataset_aggregations_denied');
    const base=input.aggregates?.length?undefined:compileRead(table,normalized);
    const plan=input.aggregates?.length?compileDatasetQuery(table,input):{
     statement:base!.statement,columns:descriptors(table).filter(c=>base!.columns.some(p=>columnIdentity(input.tableId,p.name)===c.id)),
@@ -60,7 +61,10 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
   async write(actor:AccessActor,binding:HtmlDatasetLink,input:DatasetWriteRequest,signal:AbortSignal){
    signal.throwIfAborted();
    if(binding.mode==='pinned'||!input.expectedRevision||!input.requestId||!input.changes.length||input.changes.length>100)return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};
-   const snapshot=await port.snapshot(actor,binding,signal),table=tableFor(snapshot,input.tableId);
+   // Access moving under the read fence (a revoked share, a new rule) before the commit starts writes nothing: a definite rejection.
+   let snapshot:DatasetSnapshot;
+   try{snapshot=await port.snapshot(actor,binding,signal);}catch(error){if(error instanceof Error&&error.message==='dataset_changed')return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};throw error;}
+   const table=tableFor(snapshot,input.tableId);
    // Receipt lookup and expected-revision validation live together in the retained commit port.
    return port.commit(actor,binding,snapshot,input,compileChanges(table,input.changes,hash([snapshot.id,actor,input.requestId])),signal);
   },

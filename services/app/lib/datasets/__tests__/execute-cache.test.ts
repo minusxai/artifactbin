@@ -9,7 +9,7 @@ vi.mock('../catalog', () => ({ storedTables: vi.fn() }));
 vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), runManyQueries: vi.fn(), isQueryFailure: () => false }));
 import { executeCatalog } from '../execute';
 const catalog: DatasetCatalog = { kind: 'postgres', connection:{host:'db.example.com',port:5432,database:'app',username:'reader',ssl:true,passwordSecretId:'secret'}, refreshSeconds: 60, defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', source: { schema: 'public', table: 'rows' }, columns: [{ name: 'payload', type: 'string' }] }] };
-const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, { refresh,authorize:async()=>{} });
+const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, {view:null, refresh,authorize:async()=>{} });
 useAppHarness();
 beforeEach(() => {
   fixture.query.mockReset().mockImplementation(async () => ({ rows: [{ payload: 'x'.repeat(7 * 1024 * 1024) }], columns: catalog.tables[0].columns }));

@@ -27,6 +27,7 @@ import { requestOrSessionActor } from '@/lib/authentication';
 import { baseUrl, parseByteRange, pagesRequestOf, etagOf, matchingTag, notModified } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
+import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
 import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
 import { servesDocument } from '@/lib/user-pages';
@@ -201,7 +202,12 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
     {
       const catalog=catalogOf(artifact);
       const legacyFlat=catalog?.kind==='stored'&&catalog.tables.length===1&&catalog.tables[0].schema==='public'&&catalog.tables[0].name==='rows'&&typeof (artifact.meta as Record<string,unknown>).objectKey==='string';
-      return new Response(JSON.stringify(legacyFlat||!catalog ? await loadDatasetRows(artifact) : {catalog:publicCatalogOf(artifact)}), {
+      // The reader's role view (lib/dataset-permissions); the creating token and a verified export key read whole.
+      const decision=holdsCreatingToken(header,actor)||byExportKey?null:await datasetReadAccess(header as ArtifactRow,actor);
+      if(decision&&!decision.allowed)return notFound();
+      const rows=async()=>decision&&!decision.full?datasetRowsFor(decision,artifact):loadDatasetRows(artifact);
+      const described=()=>{const open=publicCatalogOf(artifact);return open&&decision?viewCatalog(decision,open):open;};
+      return new Response(JSON.stringify(legacyFlat||!catalog ? await rows() : {catalog:described()}), {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });
