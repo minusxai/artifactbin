@@ -1,7 +1,7 @@
 /**
  * THE GENERATED DATASET GRAPHQL API (Hasura v2 subset): one schema per dataset table and caller role, built from
- * the table's columns and the role's select rule. These are the read contracts shared by the server, the direct
- * endpoint (`/api/artifacts/:id/graphql` on a dataset) and later the page composition and the skill.
+ * the table's columns and the role's select, insert, update and delete rules. These are the contracts shared by the
+ * server, the direct endpoint (`/api/artifacts/:id/graphql` on a dataset) and later the page composition and the skill.
  */
 import type { DatasetRole } from './dataset-permissions';
 
@@ -16,6 +16,15 @@ export const DATASET_GRAPHQL_READ_LIMITS = {
   resultBytes: 4 * 1024 * 1024,
 } as const;
 
+export const DATASET_GRAPHQL_WRITE_LIMITS = {
+  /** Rows one mutation operation may change in total (every field together); above it nothing is written. */
+  rows: 100,
+  /** Objects one `insert_<root>` takes. */
+  objects: 100,
+  /** Re-runs of the operation's statements on the new head after the version CAS loses a race. */
+  casRetries: 3,
+} as const;
+
 /** Field names the generated API owns: a column never takes one (plus anything starting `__`). */
 export const DATASET_GRAPHQL_RESERVED_FIELDS = ['_id', '_and', '_or', '_not', 'true', 'false', 'null'] as const;
 
@@ -26,6 +35,9 @@ export type DatasetGraphqlErrorCode =
   | 'dataset_not_found'
   | 'dataset_changed'
   | 'result_too_large'
+  | 'check_violation'
+  | 'too_many_rows'
+  | 'outcome_unknown'
   /** A resolver's caps.query asked for a mutation before generated mutations are served to resolvers. */
   | 'mutations_unavailable'
   | 'unexpected';
@@ -36,11 +48,16 @@ export interface DatasetGraphqlError {
   extensions: { code: DatasetGraphqlErrorCode };
 }
 
-/** A GraphQL request to one dataset. Mutations arrive with PR 5; this schema has a query root only. */
+/**
+ * A GraphQL request to one dataset: a query, or a mutation (one atomic dataset write). `idempotencyKey` (the
+ * `Idempotency-Key` header) names the write: the same key and request replay its first reply and write nothing
+ * again. Without one the server generates a key, which gives no replay safety.
+ */
 export interface DatasetGraphqlRequest {
   query: string;
   variables?: Record<string, unknown>;
   operationName?: string;
+  idempotencyKey?: string;
 }
 
 /** `{data}` and/or `{errors}`, as Hasura answers (HTTP 200 either way). */

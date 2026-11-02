@@ -139,6 +139,9 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
       const filter = compilePolicyPredicate(permission.filter, names, p.session, '__policy_filter');
       effect.visible = new Set(db.exec(`SELECT rowid AS id FROM ${target} WHERE ${filter.sql}`, bindOf(filter.params)).map((r) => Number(r.id)));
     }
+    // Row identity by rowid before the statement runs (a deleted row's identity is gone afterwards; UPDATE never moves a rowid).
+    const identity = input.identity && names.includes(input.identity) ? input.identity : null;
+    const identities = identity ? new Map(db.exec(`SELECT rowid AS id, ${quote(identity)} AS v FROM ${target}`).map((r) => [Number(r.id), r.v as Scalar])) : null;
     statement.bind(input.params, input.paramTypes).run(remaining());
     effect.stop();
     if (!effect.within(op)) {
@@ -173,7 +176,13 @@ export function runMutation(sqlite3: Sqlite3, input: MutationInput, bounds: Writ
     const assigned = new Set([...written, ...presets.map(([name]) => name)]);
     const users = op === 'delete' ? [] : columns.filter((c) => c.type === 'user' && assigned.has(c.name));
     const userWrites: Row[] = users.length ? db.exec(`SELECT ${users.map((c) => quote(c.name)).join(', ')} FROM ${target} WHERE ${writtenRows}`, { $__policy_ids: ids }) : [];
-    const applied = p || columns.some((c) => c.type === 'user') ? { affected, analysis, userWrites } : { affected };
+    let touched: Scalar[] | undefined;
+    if (identity && identities) {
+      const rowids = [...new Set(op === 'insert' ? effect.inserted : op === 'update' ? effect.updated : effect.deleted)].sort((a, b) => a - b);
+      const inserted = op === 'insert' ? new Map(db.exec(`SELECT rowid AS id, ${quote(identity)} AS v FROM ${target} WHERE ${writtenRows}`, { $__policy_ids: JSON.stringify(rowids) }).map((r) => [Number(r.id), r.v as Scalar])) : identities;
+      touched = rowids.map((id) => inserted.get(id) ?? null);
+    }
+    const applied = { ...(p || columns.some((c) => c.type === 'user') ? { affected, analysis, userWrites } : { affected }), ...(touched ? { written: touched } : {}) };
 
     if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
       if (affected === 0) return { error: 'the row changed since it was read', code: 'row_changed' };

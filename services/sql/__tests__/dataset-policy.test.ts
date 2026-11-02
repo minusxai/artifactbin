@@ -71,6 +71,18 @@ describe.each<[string, SqlService]>([
   const ROW: { id: string; body: string; status: string; params: Record<string, Scalar> } = { id: '$id', body: '$body', status: '$status', params: { id: 1, body: 'one', status: 'open' } };
   const run = (sql: string, p = policy) =>
     svc.mutate({ table, sql, params: { body: 'changed' }, policy: p });
+  it('names the rows a write touched by an identity column: rows the filter skips are not written', async () => {
+    const keyed = { ...table, columns: [...table.columns, { name: 'rid', type: 'string' as const }], rows: table.rows.map((r) => ({ ...r, rid: `r${r.id}` })) };
+    const ins = await svc.mutate({ table: keyed, sql: "insert into rows (id, body, rid) values (3, 'three', 'r3'), (4, 'four', 'r4')", params: {}, identity: 'rid' });
+    expect(ins).toMatchObject({ affected: 2, written: ['r3', 'r4'] });
+    const withRid = { ...policy, table: { ...policy.table, update_permissions: [{ role: 'visitor', permission: { columns: ['body'], filter: { status: { _eq: 'open' } } } }] } };
+    // Both rows match the statement; the filter (row-level security) lets only the open one be written.
+    const upd = await svc.mutate({ table: keyed, sql: "update rows set body = 'same'", params: {}, policy: withRid, identity: 'rid' });
+    expect(upd).toMatchObject({ affected: 1, written: ['r1'] });
+    const del = await svc.mutate({ table: keyed, sql: 'delete from rows where id > 0', params: {}, identity: 'rid' });
+    expect(del).toMatchObject({ affected: 2, written: ['r1', 'r2'] });
+    expect(await svc.mutate({ table: keyed, sql: 'delete from rows', params: {} })).not.toHaveProperty('written');
+  });
   it('does not expose an undeclared likes table',async()=>{
     expect(await svc.mutate({table,sql:'insert into rows select 3, "user", \'open\' from _likes',params:{}})).toHaveProperty('error');
   });

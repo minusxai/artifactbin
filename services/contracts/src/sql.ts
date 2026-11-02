@@ -118,6 +118,8 @@ export interface MutationInput {
   paramTypes?: Record<string, ColumnType>;
   /** Required changed-row count for server-controlled writes such as cell edits. */
   expectedAffected?: number;
+  /** A row-identity column of the table: the result then names the rows the statement wrote (`written`). */
+  identity?: string;
   /** The most rows the table may hold AFTER the write. */
   limit?: number;
   timeoutMs?: number;
@@ -128,6 +130,8 @@ export interface MutationResult extends TableResult {
   analysis?: MutationAnalysis;
   /** Actual assigned user fields, after expressions/presets. App validates before commit. */
   userWrites?: Row[];
+  /** With `identity`: that column's value on every row the statement inserted, updated or deleted, in rowid order. */
+  written?: Scalar[];
 }
 export type MutationOutcome = MutationResult | QueryFailure;
 

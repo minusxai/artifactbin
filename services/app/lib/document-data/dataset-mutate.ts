@@ -64,7 +64,7 @@ interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
+  reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only' | 'too_many_rows';
   detail: string;
   /**
    * A MACHINE-READABLE reason beside the sentence, for the one refusal a
@@ -81,8 +81,13 @@ interface MutationApplied {
   affected: number;
   /** Rows the dataset holds afterwards. */
   rowCount: number;
-
+  /**
+   * With `guard.trace` and `guard.rowIdentity`: per statement, the identities of the rows it wrote and the
+   * table (identity column included) before and after it, from the attempt that committed.
+   */
+  steps?: MutationStep[];
 }
+export interface MutationStep { affected: number; written: Scalar[]; before: Record<string, unknown>[]; after: Record<string, unknown>[] }
 
 export const isMutationRefused = (r: MutationApplied | MutationRefused): r is MutationRefused => 'reason' in r;
 
@@ -107,8 +112,17 @@ export async function mutateDataset(
   guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;
     /** Native dataset API: all statements and identity metadata commit in the existing pointer CAS. */
     statements?:readonly {sql:string;params:Record<string,Scalar>}[];
-    rowIdentity?:{column:string;ids:readonly string[];tableId:string};
+    /** Row identities: fixed, or derived from each attempt's head (a lost CAS re-reads it) and the table's stored rows. */
+    rowIdentity?:{column:string;ids:readonly string[]|((current:ArtifactRow,objectKey:string,count:number)=>readonly string[]);tableId:string};
     nativePolicy?:boolean;
+    /** The dataset's own GraphQL endpoint: a declared native write whose role is the dataset's sharing alone (no page). */
+    directPolicy?:boolean;
+    /** Re-runs after a lost CAS (default WRITE_CAS_RETRIES). */
+    casRetries?:number;
+    /** Rows all statements together may change; above it nothing is written (`too_many_rows`). */
+    maxAffected?:number;
+    /** Report each statement's written rows (`steps`); needs `rowIdentity`. */
+    trace?:boolean;
     /** Trusted internal producer: effect and canonical receipt share only the winning dataset transaction. */
     commitEffect?:(tx:Queryable,result:MutationApplied)=>Promise<void>;
   } = {},
@@ -118,7 +132,7 @@ export async function mutateDataset(
   // One write decision (lib/dataset-permissions) for every door: the role, the v3 rules, program trust and
   // the carrying document's provenance. Asked before each attempt and again inside the commit transaction.
   const door=guard.document??guard.nativePolicy??false;
-  const access:DatasetWriteOptions={throughPage:!!(guard.document||guard.nativePolicy),...(guard.document?{document:guard.document}:{})};
+  const access:DatasetWriteOptions={throughPage:!!(guard.document||guard.nativePolicy)&&!guard.directPolicy,...(guard.document?{document:guard.document}:{})};
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
     try{await recheckMutation(dataset,actor,door);}catch{throw new DatasetError('Mutation permission changed',403);}
   }});
@@ -156,9 +170,13 @@ export async function mutateDataset(
     const storedColumns = selected.columns;
     const identity=guard.rowIdentity;
     const storedRows = await loadDatasetRows({meta:{objectKey:selected.objectKey}});
-    if(identity&&(storedColumns.some(c=>c.name===identity.column)||identity.ids.length!==storedRows.length||new Set(identity.ids).size!==identity.ids.length))return {reason:'invalid_sql',detail:'Invalid dataset row identity'};
+    let ids:readonly string[]=[];
+    try{ids=identity?(typeof identity.ids==='function'?identity.ids(current,selected.objectKey!,storedRows.length):identity.ids):[];}catch{return {reason:'invalid_sql',detail:'Invalid dataset row identity'};}
+    if(identity&&(storedColumns.some(c=>c.name===identity.column)||ids.length!==storedRows.length||new Set(ids).size!==ids.length))return {reason:'invalid_sql',detail:'Invalid dataset row identity'};
     const columns=identity?[...storedColumns,{name:identity.column,type:'string' as const}]:storedColumns;
-    const rows=identity?storedRows.map((row,i)=>({...row,[identity.column]:identity.ids[i]})):storedRows;
+    const rows=identity?storedRows.map((row,i)=>({...row,[identity.column]:ids[i]})):storedRows;
+    const trace=!!(guard.trace&&identity);
+    const steps:MutationStep[]=[];
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
@@ -172,10 +190,15 @@ export async function mutateDataset(
       out={rows,columns,affected:0};
       for(const statement of statements){
         const step=await invocation.run({ policy, table: { schema, name: selected.name, rows:currentRows, columns }, sql:statement.sql, params:statement.params,
-          ...(guard.paramTypes?{paramTypes:guard.paramTypes}:{}), ...(guard.reads?.length?{reads:guard.reads}:{}), ...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}), limit: datasetRowCap() },{mutate:runMutation});
+          ...(guard.paramTypes?{paramTypes:guard.paramTypes}:{}), ...(guard.reads?.length?{reads:guard.reads}:{}), ...(guard.expectedAffected===undefined?{}:{expectedAffected:guard.expectedAffected}), ...(trace?{identity:identity!.column}:{}), limit: datasetRowCap() },{mutate:runMutation});
         if(isQueryFailure(step)){out=step;break;}
         if(columns.some(c=>c.type==='user')&&!Array.isArray(step.userWrites))throw new Error('The SQL service must support user-field validation');
+        if(trace){
+          if(!Array.isArray(step.written))throw new Error('The SQL service must report written rows');
+          steps.push({affected:step.affected,written:step.written,before:currentRows,after:step.rows});
+        }
         affected+=step.affected;currentRows=step.rows;userWrites.push(...(step.userWrites??[]));out={...step,affected,userWrites};
+        if(guard.maxAffected!==undefined&&affected>guard.maxAffected)return {reason:'too_many_rows',detail:`the mutation changes more than ${guard.maxAffected} rows; nothing was written`};
       }
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Dataset mutation failed'};}
     if (isQueryFailure(out)) {
@@ -230,9 +253,9 @@ export async function mutateDataset(
       if(!locked||artifactState(locked)!==guard.expectedState)return undefined;
      }
      const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
-      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:true});
+      policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy||!!guard.directPolicy)&&!!policy,granted:true});
      if(committed){
-      await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length});
+      await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length,...(trace?{steps}:{})});
       if(guard.receipt){
        if(guard.document)await completeDocumentMutationReceipt(tx,guard.receipt,{datasetId:committed.id,datasetEditId:committed.edit_id,version:committed.version,affected:out.affected,rowCount:out.rows.length});
        else await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
@@ -253,11 +276,11 @@ export async function mutateDataset(
       // revalidation (lib/publish/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
       // the write — freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
       emitDatasetCommitted(row.id);
-      return { row, affected: out.affected, rowCount: out.rows.length };
+      return { row, affected: out.affected, rowCount: out.rows.length, ...(trace?{steps}:{}) };
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML
     // that is the same statement, not a merge.
-    if (attempt >= WRITE_CAS_RETRIES) {
+    if (attempt >= (guard.casRetries ?? WRITE_CAS_RETRIES)) {
       return { reason: 'contended', detail: 'the dataset is being written too quickly to apply this change — try again' };
     }
   }

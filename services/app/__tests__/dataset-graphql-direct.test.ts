@@ -130,10 +130,11 @@ it('nothing bypasses the role view: every engine statement for a restricted role
   overrideCatalogExecutor(undefined);
 });
 
-it('mutations and subscriptions are not in the read schema', async () => {
-  const { owner, id } = await staff();
-  for (const query of ['mutation { insert_staff_one(object: {name: "x"}) { _id } }', 'subscription { staff { name } }']) {
-    const refused = await gql(id, owner, query);
+it('a role without write rules has no mutation root; there is no subscription root', async () => {
+  const { owner, other, id } = await staff();
+  // Mutations are generated per role from its write rules (PR 5): `other` (signed_in) has none here.
+  for (const [who, query] of [[other, 'mutation { insert_staff_one(object: {name: "x"}) { _id } }'], [owner, 'subscription { staff { name } }']] as const) {
+    const refused = await gql(id, who, query);
     expect(refused.body.errors![0]!.extensions.code).toBe('validation_failed');
   }
   expect((await POST(request(`/api/artifacts/${id}/graphql`, { method: 'POST', json: { query: 7 }, token: owner.token }), params(id))).status).toBe(400);
