@@ -250,8 +250,14 @@ export function testPagesSite(host: string, publicBaseUrl: string): PagesSite {
  * Set a dataset's policy through lib/document-data's policy door (the policy route's `writeDatasetPolicy`), with the
  * answers of the store call beneath it: the saved `{ revision, policy }`, `{ conflict: true }` for a stale revision,
  * null when the actor cannot edit that dataset, and an Error for an invalid policy.
+ *
+ * A version 1 or 2 body is no longer accepted by any door (it is refused with LEGACY_POLICY_REFUSED): it is STORED
+ * here as a pre-migration row, with the same editor, revision and catalog checks and the same audit row, so tests
+ * of how stored v1/v2 policies are still enforced keep their fixtures. Remove with the stored-policy compatibility.
  */
 export async function setDatasetPolicy(actor: AccessActor, id: string, policy: unknown, expectedPolicyRevision: number): Promise<{ revision: number; policy: unknown } | { conflict: true } | null> {
+  const version = policy && typeof policy === 'object' ? (policy as { version?: unknown }).version : undefined;
+  if (policy !== null && version !== 3) return storeLegacyDatasetPolicy(actor, id, policy, expectedPolicyRevision);
   const { writeDatasetPolicy } = await import('@/lib/document-data');
   const response = await writeDatasetPolicy(actor, id, { policy, expectedPolicyRevision });
   const body = await response.json() as { revision: number; policy: unknown; detail?: string };
@@ -266,4 +272,23 @@ export async function admitGroupMember(actorId:string,groupId:string,userId:stri
  const email=(await (await getDb()).query<{email:string}>('SELECT email FROM users WHERE id=$1',[userId])).rows[0]?.email;
  if(!email)throw Error('Fixture member requires an email account');
  await inviteGroupMember(actorId,groupId,email,role);await acceptGroupInvitations(userId,email);
+}
+
+async function storeLegacyDatasetPolicy(actor: AccessActor, id: string, value: unknown, revision: number) {
+  const { getArtifactFor } = await import('@/lib/artifacts');
+  const { catalogOf, validateStoredDatasetPolicy } = await import('@/lib/datasets');
+  const { editorScope } = await import('@/lib/artifact-access');
+  const row = await getArtifactFor(actor, id);
+  if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') return null;
+  const policy = validateStoredDatasetPolicy(row, value);
+  const scope = editorScope(actor);
+  const updated = (await (await getDb()).query<{ policy_revision: number }>(
+    `WITH updated AS (UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1
+      WHERE id=$1 AND ${scope.where('$2')} AND policy_revision=$4 AND deleted_at IS NULL RETURNING *),
+     audit AS (INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id) SELECT id,policy_revision,dataset_policy,$5,$6 FROM updated)
+     SELECT policy_revision FROM updated`,
+    [id, scope.val, JSON.stringify(policy), revision, actor.userId, actor.tokenId])).rows[0];
+  if (updated) return { revision: updated.policy_revision, policy };
+  const current = (await (await getDb()).query<{ ok: boolean }>(`SELECT ${scope.where('$2')} AS ok FROM artifacts WHERE id=$1`, [id, scope.val])).rows[0];
+  return current?.ok ? { conflict: true as const } : null;
 }

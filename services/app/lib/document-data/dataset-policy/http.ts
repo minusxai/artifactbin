@@ -2,7 +2,7 @@ import { getDb } from '@/lib/platform';
 import { getArtifactFor, getSharingFor } from '@/lib/artifacts';
 import { editorScope } from '@/lib/artifact-access';
 import type { AccessActor } from '@/lib/accounts';
-import { catalogOf } from '@/lib/datasets';
+import { catalogOf, type PolicyDoor } from '@/lib/datasets';
 import { json, readJson } from '@/lib/http';
 import { setDatasetPolicy } from '.';
 
@@ -34,6 +34,7 @@ export async function writeDatasetPolicy(
   actor: AccessActor,
   id: string,
   body: Record<string, unknown>,
+  door: PolicyDoor = {},
 ): Promise<Response> {
   if (!Object.hasOwn(body, 'policy'))
     return json({ error: 'invalid_policy' }, 400);
@@ -43,6 +44,7 @@ export async function writeDatasetPolicy(
       id,
       body.policy,
       body.expectedPolicyRevision as number,
+      door,
     );
     if (!result) return json({ error: 'not_found' }, 404);
     if ('conflict' in result)
@@ -64,6 +66,7 @@ export async function writeDatasetPolicy(
     );
   }
 }
+/** The app's retained policy form (/api/my/artifacts/:id/policy): the one door that may still store version 1 (PolicyDoor). */
 export async function datasetPolicyRequest(
   request: Request,
   actor: AccessActor,
@@ -72,6 +75,6 @@ export async function datasetPolicyRequest(
   if (request.method === 'GET') return readDatasetPolicy(actor, id);
   const body = await readJson(request);
   return body
-    ? writeDatasetPolicy(actor, id, body)
+    ? writeDatasetPolicy(actor, id, body, { retainedEditor: true })
     : json({ error: 'invalid_json' }, 400);
 }

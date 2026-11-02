@@ -31,7 +31,12 @@ type ToV3ReportCode =
   | 'read_page_scoped'
   | 'write_page_scoped'
   | 'write_named_user';
-interface ToV3ReportItem { code: ToV3ReportCode; message: string }
+export interface ToV3ReportItem {
+  code: ToV3ReportCode;
+  message: string;
+  /** The user IDs (`*_named_user`) or page IDs and page-owner IDs (`*_page_scoped`) the item is about, in policy order. */
+  subjects?: string[];
+}
 export interface ToV3Result {
   source: ToV3Source;
   policy: DatasetPermissions;
@@ -101,7 +106,11 @@ function fromV1(policy: DatasetPolicy, tables: readonly DatasetTableName[], visi
 /** v2: grants by selector. Page-scoped writes become backend_only entries (trusted owner programs). */
 function fromV2(policy: DatasetGrantPolicy, tables: readonly DatasetTableName[]): ToV3Result {
   const report: ToV3ReportItem[] = [];
-  const note = (code: ToV3ReportCode, message: string) => { if (!report.some((r) => r.code === code)) report.push({ code, message }); };
+  const note = (code: ToV3ReportCode, message: string, subject?: string) => {
+    let item = report.find((r) => r.code === code);
+    if (!item) report.push(item = { code, message });
+    if (subject !== undefined && !item.subjects?.includes(subject)) item.subjects = [...(item.subjects ?? []), subject];
+  };
   const readers = new Set<DatasetRuleRole>();
   const writers = Object.fromEntries(MUTATIONS.map((op) => [op, { normal: new Set<DatasetRuleRole>(), backend: new Set<DatasetRuleRole>() }])) as Record<DatasetOperation, { normal: Set<DatasetRuleRole>; backend: Set<DatasetRuleRole> }>;
   for (const grant of policy.allow) {
@@ -111,22 +120,22 @@ function fromV2(policy: DatasetGrantPolicy, tables: readonly DatasetTableName[])
       if (action === 'read') {
         if (user !== undefined && user !== '*') {
           // $owner reads are implicit (owner and editors always read); a named person keeps access only through a share.
-          if (user !== '$owner') { readers.add('viewer'); note('read_named_user', 'A read grant names one person: it now covers shared viewers, and that person needs a share.'); }
+          if (user !== '$owner') { readers.add('viewer'); note('read_named_user', 'A read grant names one person: it now covers shared viewers, and that person needs a share.', user); }
         } else if (pageScoped) {
           readers.add('viewer'); readers.add('signed_in');
-          note('read_page_scoped', 'A read grant through one page has no v3 slot: shared viewers and signed-in link holders can read.');
+          note('read_page_scoped', 'A read grant through one page has no v3 slot: shared viewers and signed-in link holders can read.', artifact ?? artifactOwner);
         } else DATASET_RULE_ROLES.forEach((role) => readers.add(role));
         continue;
       }
       if (user !== undefined && user !== '*') {
         // The owner is implicit; a named person has no rule slot (reported, no entry).
-        if (user !== '$owner') note('write_named_user', 'A write grant names one person: it has no v3 rule; share the dataset with them as an editor.');
+        if (user !== '$owner') note('write_named_user', 'A write grant names one person: it has no v3 rule; share the dataset with them as an editor.', user);
         continue;
       }
       const target = writers[action];
       if (pageScoped) {
         target.backend.add('viewer'); target.backend.add('signed_in');
-        if (artifact !== undefined || artifactOwner !== '$owner') note('write_page_scoped', 'A write grant through another page or owner now needs that page owner to hold owner or editor on the dataset.');
+        if (artifact !== undefined || artifactOwner !== '$owner') note('write_page_scoped', 'A write grant through another page or owner now needs that page owner to hold owner or editor on the dataset.', artifact ?? artifactOwner);
       } else { target.normal.add('viewer'); target.normal.add('signed_in'); }
     }
   }

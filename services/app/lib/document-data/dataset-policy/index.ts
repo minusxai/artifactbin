@@ -1,8 +1,7 @@
 import type { GrantDocument } from '@/lib/artifact-access';
 import { commitDatasetPolicy, type ArtifactRow, getArtifactById, getArtifactFor } from '@/lib/artifacts';
-import { validateDatasetPolicyForRow, catalogOf } from '@/lib/datasets';
+import { validateDatasetPolicyForRow, catalogOf, type PolicyDoor, type StoredDatasetPolicy } from '@/lib/datasets';
 import { datasetWriteAccess, type DatasetWriteOptions } from '@/lib/dataset-permissions';
-import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { getDb } from '@/lib/platform';
 import type { AccessActor } from '@/lib/accounts';
 
@@ -11,15 +10,16 @@ export async function setDatasetPolicy(
   id: string,
   value: unknown,
   revision: number,
+  door: PolicyDoor = {},
 ): Promise<
-  { revision: number; policy: DatasetPolicy | null } | { conflict: true } | null
+  { revision: number; policy: StoredDatasetPolicy | null } | { conflict: true } | null
 > {
   const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres')
     return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');
-  const policy = validateDatasetPolicyForRow(row,value);
+  const policy = validateDatasetPolicyForRow(row,value,door);
   const committed = await commitDatasetPolicy(await getDb(), actor, row, policy, revision);
   return committed === null ? { conflict: true } : { revision: committed, policy };
 }

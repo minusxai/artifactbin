@@ -9,10 +9,10 @@ import { identityForUser } from '@/lib/accounts';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById, artifactState } from '@/lib/artifacts';
-import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { publishDataset } from '@/lib/datasets';
 import type { StoredContent } from '@/lib/document';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+// A stored v1 policy, seeded through the harness (no door sets v1/v2 since the stored migration).
+import { mintAccountToken as mintToken, setDatasetPolicy } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 

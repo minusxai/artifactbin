@@ -8,10 +8,12 @@ import {canWriteDataset,writeDatasetPolicy} from '@/lib/document-data';
 import {account,datasetFixture as fixture,document,refusal,write} from './dataset-fixture';
 
 useAppHarness();
+/** A version 3 insert rule for every rule role: what the old v1 viewer entry reads as (the door sets v3 only since the stored migration). */
+const insertFor=(permission:object)=>({version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}})),insert_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission}))}]});
 
 it('refuses a write read under an older policy revision, even from the owner',async()=>{
  const f=await fixture(),stale=await f.row();
- const policy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}]}]};
+ const policy=insertFor({columns:'*',check:{}});
  const saved=await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:stale.policy_revision??0});
  expect(saved.status,await saved.clone().text()).toBe(200);expect(await saved.json()).toMatchObject({revision:(stale.policy_revision??0)+1});
  expect(refusal(await write(stale,f.owner.actor,'insert into public.rows values (3)'))).toBe('dataset_read_only');
@@ -32,7 +34,7 @@ it('writes only a readwrite dataset, and only as one of its editors',async()=>{
 
 it('lets a viewer write, directly or through a document, only what the viewer policy permits',async()=>{
  const f=await fixture(),viewer=await account('reader'),doc=await document(f.db,'doc_policy',f.owner);
- const policy={version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},insert_permissions:[{role:'viewer',permission:{columns:'*',check:{n:{_gt:0}}}}]}]};
+ const policy=insertFor({columns:'*',check:{n:{_gt:0}}});
  expect((await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:0})).status).toBe(200);
  const target={schema:'public',table:'rows'};
 

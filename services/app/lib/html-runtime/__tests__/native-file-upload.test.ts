@@ -46,6 +46,9 @@ it.each(['source','policy','membership'])('rechecks saved HTML upload authority 
  const owner=await createUser({email:'mxmx_test_upload_fence@example.test'}),token=await mintAccountToken('upload-fence',owner.id),member=await createUser({email:'mxmx_test_upload_fence_member@example.test'});
  const make=async(body:object)=>{const result=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(result.status).toBe(201);return result.json();};
  const dataset=await make({dataset:[{fixture:'upload-fence'}],visibility:'private'});
+ // New datasets are read-only (v3 template) since the stored migration: open trusted owner programs' inserts, as the old v2 default did.
+ const programs={version:3,tables:[{table:{schema:'public',name:'rows'},insert_permissions:['viewer','signed_in'].map(role=>({role,permission:{columns:'*',check:{},backend_only:true}}))}]};
+ await (await getDb()).query('UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1',[dataset.id,JSON.stringify(programs)]);
  const document=await make({visibility:'unlisted',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="attachments" href="ref:${dataset.id}" data-af-mode="live"></head><body>Upload</body></html>`});
  await changeMembership(identityForUser(member.id),document.id,{action:'join'});await changeMembership(identityForUser(owner.id),document.id,{action:'approve',userId:member.id});
  const actor:Actor={credential:'session',userId:member.id,email:member.email??undefined,emailVerified:true},db=await getDb(),objects=objectStore(),put=objects.put.bind(objects);

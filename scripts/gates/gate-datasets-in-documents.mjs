@@ -99,16 +99,15 @@ try {
     const email = `mxmx_test_cell_editor_${Date.now()}@example.com`;
     const editor = await connectAgent(BASE, { email });
     await share(owner, dataset.id, { shares: [{ email, role: "editor" }] });
-    const session = await fetch(`${BASE}/api/page/session`, { headers: { cookie: connectionBrowserCookie(BASE, editor.token) } }).then((response) => response.json());
-    await api(owner.token, `/api/artifacts/${dataset.id}/policy`, { expectedPolicyRevision: 0, policy: { version: 2, allow: [{ actions: ["read"], from: { user: "*" } }, { actions: ["update"], from: { user: "$owner" } }, { actions: ["update"], from: { user: session.user.id } }] } }, "PUT");
+    // Dataset permissions v3: one person writes through a dataset share (named-user grants became shares in the stored migration).
     const invited = await open(owner.id, editor);
     await invited.frame.getByLabel("item 2", { exact: true }).fill("Editor update");
     await invited.frame.getByRole("button", { name: "Save 2", exact: true }).click();
-    check(await outcome(invited.frame) === "committed", "explicit named-user grant authorizes invited account write");
-    await api(owner.token, `/api/artifacts/${dataset.id}/policy`, { expectedPolicyRevision: 1, policy: { version: 2, allow: [{ actions: ["read"], from: { user: "*" } }, { actions: ["update"], from: { user: "$owner" } }] } }, "PUT");
+    check(await outcome(invited.frame) === "committed", "a dataset editor share authorizes the invited account's write");
+    await share(owner, dataset.id, { shares: [] });
     await invited.frame.getByLabel("item 2", { exact: true }).fill("After revoke");
     await invited.frame.getByRole("button", { name: "Save 2", exact: true }).click();
-    check(/rejected|refused/i.test(await outcome(invited.frame)), "revoked named grant stops already-open editor");
+    check(/rejected|refused/i.test(await outcome(invited.frame)), "a revoked share stops the already-open editor");
     await invited.page.setViewportSize({ width: 390, height: 844 });
     check(await invited.frame.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "native editable table scrolls internally at phone width");
   });

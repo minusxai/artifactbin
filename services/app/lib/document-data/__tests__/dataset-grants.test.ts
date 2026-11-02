@@ -5,8 +5,9 @@ import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 
-import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
-import { defaultDatasetGrants } from '@artifactbin/utils';
+// Stored v1/v2 policies are seeded through the harness (no door sets them since the stored migration).
+import { setDatasetPolicy } from '@/__tests__/harness';
+import { setDatasetPolicy as setThroughDoor } from '@/lib/document-data/dataset-policy';
 import { readableArtifact, changeMembership, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 
 import { forkArtifact } from '@/lib/publish';
@@ -17,12 +18,13 @@ it('enforces read grants independently of link visibility and keeps owner admini
  const actor=identityForUser(owner.id, token.id),reader=await mintToken('read-grants-reader',(await createUser({email:'read-grants-reader@example.test'})).id);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();
- expect((await getArtifactById(id))?.dataset_policy).toEqual(defaultDatasetGrants());
+ // New datasets get the read-only template (v3) and readwrite access: everyone who reaches it reads, owner and editors write.
+ expect((await getArtifactById(id))).toMatchObject({access:'readwrite',dataset_policy:{version:3,tables:[{table:{schema:'public',name:'rows'},select_permissions:['viewer','signed_in','anonymous'].map(role=>({role,permission:{columns:'*',filter:{},allow_aggregations:true}}))}]}});
  for(const key of [undefined,'policy-hint-receipt-0001']){
   const mutate=(bearer?:string)=>mutateDirect(request(`/api/artifacts/${id}/mutate`,{method:'POST',...(bearer?{token:bearer}:{}),headers:key?{'Idempotency-Key':key}:{},json:{sql:'insert into public.rows values (2)'}}),{params:Promise.resolve({id})});
   // The owner is admin-equivalent: the default grants no longer refuse the owner's own direct write.
   expect((await mutate(token.token)).status).toBe(200);
-  // A link reader has no write rule (the default's writes are owner programs only): refused, and nothing lands.
+  // A link reader has no write rule (the read-only template has none): refused, and nothing lands.
   // The status is the route's own: the plain door answers 403 with the grant hint, the durable (Idempotency-Key) door 404.
   expect([403,404]).toContain((await mutate(reader.token)).status);
  }
@@ -36,7 +38,7 @@ it('enforces read grants independently of link visibility and keeps owner admini
  // Deliberate (dataset permissions v3): the owner is admin-equivalent and cannot be locked out; everyone else is.
  expect(await readableArtifact(actor,id)).not.toBeNull();
  expect(await readableArtifact(identityForUser(null, ''),id)).toBeNull();
- await expect(setDatasetPolicy(actor,id,null,2)).rejects.toThrow('version 2');
+ await expect(setThroughDoor(actor,id,{version:2,allow:[]},2)).rejects.toThrow('Version 1 and 2 dataset policies can no longer be set');
 });
 
 it('does not disclose private grant-controlled datasets through direct mutation refusals',async()=>{

@@ -12,7 +12,7 @@
  *  - A write carried by a document is that document's SQL: the document must be live at the attested edit,
  *    readable by the caller, and its owner must hold owner or editor on the dataset (provenance).
  *  - The `access` column stays a ceiling for datasets without v2 grants, owner included (v2 grants never
- *    read it; the stored rewrite decides that column).
+ *    read it; the stored rewrite sets it to readwrite on every migrated v2 dataset, ./migrate).
  */
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -87,7 +87,9 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
 }
 
 /**
- * COMPATIBILITY until the stored migration (PR 9) shares the dataset with each named person: a v2 write grant
+ * COMPATIBILITY until the stored migration (scripts/migrate-dataset-policies.ts) has been APPLIED everywhere: it shares
+ * the dataset with each named person (editor) and stores v3, after which no row reaches this. Remove it, the
+ * read-side twin in ./read and the harness's v1/v2 seeding then (docs/operations.md). Until then: a v2 write grant
  * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program, and through
  * a trusted program (as v2 did with accepted membership), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
  */

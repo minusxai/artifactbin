@@ -67,7 +67,8 @@ describe('a dataset write', () => {
 });
 
 describe('a dataset policy write', () => {
-  const policy = { version: 2, allow: [{ actions: ['read', 'insert'], from: { user: '$owner' } }] };
+  // Set through the policy door, so version 3 (version 1 and 2 bodies are refused since the stored migration).
+  const policy = { version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer', permission: { columns: '*', filter: {} } }] }] };
   it('bumps the revision, audits the actor, notifies, and refuses a stale revision or a stranger', async () => {
     const { row, actor, owner } = await dataset();
     const channel = await heard(row.id);

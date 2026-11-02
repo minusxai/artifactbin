@@ -100,7 +100,8 @@ export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor,
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
   const read = permissionsOf(row);
-  // v2 compatibility: a grant admitting this caller today keeps admitting them, whole.
+  // v2 compatibility: a grant admitting this caller today keeps admitting them, whole. Remove once the stored
+  // migration (scripts/migrate-dataset-policies.ts) has been applied everywhere: named readers are shares by then.
   if ((read?.source === 'v2' || (!read && grantsOf(row))) && await grantsPermitRead(row as ReadRow, actor, options.document, options.tx, facts)) {
     return admitted(row, role, all, session, false);
   }

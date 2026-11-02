@@ -27,9 +27,8 @@ import { artifactState } from './state';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
-import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
-import { defaultDatasetGrants } from '@artifactbin/utils';
-import { validateDatasetPolicyForRow } from '../datasets';
+import type { StoredDatasetPolicy as DatasetPolicy } from '../datasets';
+import { readOnlyDatasetPolicy, validateDatasetPolicyForRow, validateStoredDatasetPolicy } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json, thrownMessage } from '../http';
 import { servableDocument } from './servable';
@@ -242,8 +241,10 @@ async function insertArtifact(
     : input.visibility ??
       (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
-  const datasetPolicy = atCreation.datasetPolicy?.policy ??
-    (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
+  // A new stored dataset that names no access gets the read-only template (v3) and `readwrite` access: every
+  // reader of the dataset reads, and only the owner and editors write (no rule admits anyone else).
+  const defaultPolicy = !atCreation.datasetPolicy && !atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres';
+  const datasetPolicy = atCreation.datasetPolicy?.policy ?? (defaultPolicy ? readOnlyDatasetPolicy(input) : null);
   if(input.format==='html'&&input.htmlBackends){
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
@@ -293,7 +294,7 @@ async function insertArtifact(
     // Read-only unless the caller asked otherwise: a dataset that could
     // be written by default would make every existing document's data
     // mutable without anyone choosing it.
-    input.access ?? 'read',
+    input.access ?? (defaultPolicy ? 'readwrite' : 'read'),
     atCreation.forkedFrom ?? null,
     JSON.stringify(sourceIds),
     // A DATASET carried whole, policy included. NULL for every other
@@ -685,7 +686,7 @@ async function replaceScoped(
      * are untouched by a replace: what was granted stays granted.
      */
     if (current.dataset_policy) {
-      try { validateDatasetPolicyForRow({format:input.format,meta:input.meta}, current.dataset_policy); }
+      try { validateStoredDatasetPolicy({format:input.format,meta:input.meta,dataset_policy:null}, current.dataset_policy); }
       catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
     }
     await write.validateContent(input);

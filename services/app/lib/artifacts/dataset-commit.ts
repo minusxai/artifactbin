@@ -10,7 +10,8 @@
  *  - notifies the dataset's live channel with the new edit id.
  * No row is a lost compare-and-swap or revoked access, both of which the caller handles by re-reading.
  *
- * And a dataset POLICY's commit, the guarded statement behind lib/document-data/dataset-policy.
+ * And a dataset POLICY's commit, the guarded statement behind lib/document-data/dataset-policy, and the stored
+ * migration's per-dataset rewrite (by actor system).
  */
 import type { AccessActor } from '@/lib/accounts';
 import type { Queryable } from '@artifactbin/contracts';
@@ -108,4 +109,43 @@ export async function commitDatasetPolicy(q: Queryable, actor: AccessActor, row:
     [row.id, scope.val, JSON.stringify(policy), revision, actor.userId, actor.tokenId, row.version, row.edit_id, row.sharing_revision ?? 0],
   );
   return result.rows[0]?.policy_revision ?? null;
+}
+
+/** One dataset's stored-policy rewrite (lib/document-data's policy migration): the v3 policy, the access column and the shares it needs. */
+export interface MigratedDatasetPolicy {
+  id: string;
+  /** The policy revision the migration read under its row lock. */
+  revision: number;
+  policy: unknown;
+  access: string;
+  /** Shares to add or raise: `email` is the existing row's key when the person already has one. */
+  shares: Array<{ email: string; userId: string; role: 'viewer' | 'editor' }>;
+}
+
+/**
+ * Store a migrated dataset policy, by actor `system` (an audit row with no actor): only while the policy
+ * revision is still `revision`. Bumps the policy revision (and the sharing revision when shares change, in
+ * the same statement, so no reader sees the policy without its shares), writes the shares, notifies the
+ * row's channel. Null when the revision moved (the caller leaves the row for the next run).
+ */
+export async function commitMigratedDatasetPolicy(tx: Queryable, migrated: MigratedDatasetPolicy): Promise<number | null> {
+  const result = await tx.query<{ policy_revision: number }>(
+    `WITH updated AS (
+ UPDATE artifacts SET dataset_policy=$2::jsonb,access=$3,policy_revision=policy_revision+1,
+ sharing_revision=sharing_revision+CASE WHEN $5::boolean THEN 1 ELSE 0 END
+ WHERE id=$1 AND format='dataset' AND policy_revision=$4
+ RETURNING *), audit AS (
+ INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
+ SELECT id,policy_revision,dataset_policy,NULL,NULL FROM updated)
+ SELECT policy_revision,${notifyArtifactSql('id', 'edit_id')} FROM updated`,
+    [migrated.id, JSON.stringify(migrated.policy), migrated.access, migrated.revision, migrated.shares.length > 0],
+  );
+  const revision = result.rows[0]?.policy_revision;
+  if (revision === undefined) return null;
+  for (const share of migrated.shares)
+    await tx.query(
+      'INSERT INTO artifact_shares (artifact_id,email,role,user_id) VALUES ($1,$2,$3,$4) ON CONFLICT (artifact_id,email) DO UPDATE SET role=EXCLUDED.role,user_id=COALESCE(artifact_shares.user_id,EXCLUDED.user_id)',
+      [migrated.id, share.email, share.role, share.userId],
+    );
+  return revision;
 }

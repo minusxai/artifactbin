@@ -152,7 +152,8 @@ describe('metadata', () => {
   it('a policy write needs the policy revision it observed; a move swaps the whole subtree\'s trail', async () => {
     const owner = await account('owner@example.test');
     const data = await dataset(owner, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] });
-    const policy = { version: 2 as const, allow: [{ actions: ['read' as const], from: { user: '$owner' } }] };
+    // A metadata write sets version 3 (version 1 and 2 bodies are refused since the stored migration); a stored v2 policy is replaced.
+    const policy = { version: 3 as const, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: [{ role: 'viewer' as const, permission: { columns: '*' as const, filter: {} } }] }] };
     expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 5 })).toMatchObject({ conflict: true, reason: 'state_conflict' });
     expect(await setMetadataFor(owner, data.id, { policy }, { expectedPolicyRevision: 0 })).toMatchObject({ policy_revision: 1, dataset_policy: policy });
     expect(await sql('SELECT revision FROM dataset_policy_audit WHERE dataset_id=$1 ORDER BY revision', [data.id])).toEqual([{ revision: 0 }, { revision: 1 }]);

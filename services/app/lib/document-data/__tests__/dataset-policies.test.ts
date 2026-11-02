@@ -29,18 +29,17 @@ async function fixture() {
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
+  // Version 3 (the door refuses v1/v2 since the stored migration): what the old v1 viewer-insert entry reads as.
   const policy = {
-    version: 1,
-    enforcement: 'enabled',
+    version: 3,
     tables: [
       {
         table: { schema: 'public', name: 'rows' },
-        insert_permissions: [
-          {
-            role: 'viewer',
-            permission: { columns: '*', check: { n: { _gt: 0 } } },
-          },
-        ],
+        select_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })),
+        insert_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({
+          role,
+          permission: { columns: '*', check: { n: { _gt: 0 } } },
+        })),
       },
     ],
   };
@@ -116,7 +115,7 @@ it('cannot evade active policy through ordinary file replacement', async () => {
   });
   const unchanged = (await getArtifactById(f.ds))!;
   expect(unchanged.version).toBe(1);
-  expect(unchanged.dataset_policy).toMatchObject({ enforcement: 'enabled' });
+  expect(unchanged.dataset_policy).toMatchObject({ version: 3 });
 });
 /**
  * THE DATA-LOSS CHECK. Viewers write rows into this dataset, so the owner's
@@ -173,7 +172,10 @@ async function sharedFixture(
     shares: [{ email: user.email, role }],
   });
   const write=()=>f.writeAs(identityForUser(user.id,token.id),'add',3);
-  return { ...f, actor, user, token, session, write };
+  // Private: the rules name shared viewers only (signed_in and anonymous page readers get nothing), as the v1 policy did.
+  const viewers = <E extends { role: string }>(entries: E[]) => entries.filter((e) => e.role === 'viewer');
+  const policy = { ...f.policy, tables: f.policy.tables.map((t) => ({ ...t, select_permissions: viewers(t.select_permissions), insert_permissions: viewers(t.insert_permissions) })) };
+  return { ...f, actor, user, token, session, write, policy };
 }
 it.each(['viewer', 'commenter', 'editor'] as const)(
   'lets a shared %s use the same policy without a separate grant',
@@ -231,7 +233,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
       return;
     }
     expect((await save(f.policy, 0)).status).toBe(409);
-    const changed = {...f.policy, execution:{functions:{deny:['lower']}}};
+    const changed = {...f.policy, tables:[{...f.policy.tables[0]!, delete_permissions:[{role:'viewer',permission:{filter:{}}}]}]};
     expect((await save(changed, 1)).status).toBe(200);
     expect((await getArtifactById(f.ds))?.dataset_policy).toEqual(changed);
     expect((await save(null, 2)).status).toBe(200);

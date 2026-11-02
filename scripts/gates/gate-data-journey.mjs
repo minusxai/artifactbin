@@ -110,7 +110,7 @@ try {
   await lane(check, "retained dataset policy editor").run(async () => {
     const owner = await startDocument(BASE);
     const ds = await create(owner, { dataset: [{ choice: "ramen" }], access: "readwrite" });
-    await api(owner.token, `/api/artifacts/${ds.id}/policy`, { expectedPolicyRevision: 0, policy: { version: 1, enforcement: "enabled", tables: [{ table: { schema: "public", name: "rows" }, insert_permissions: [] }] } }, "PUT");
+    // No policy to start from (the policy API refuses version 1 bodies; the retained form below still saves them).
     await put(owner, datasetPageHtml(ds.id));
     const email = `mxmx_test_policy_editor_${Date.now()}@example.com`;
     const editor = await connectAgent(BASE, { email });
