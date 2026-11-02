@@ -11,7 +11,6 @@ import {nativeAnchor} from './native-annotation-fixture';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
@@ -27,7 +26,6 @@ const SOURCE = '<div data-af-id="root"><p data-af-id="lede">Revenue grew in the 
 async function person(name: string) {
   const user = await createUser({ email: `mxmx_test_edit_${name}@example.com` });
   const token = await mintToken(`edit-${name}`, user.id);
-  await claimToken(user.id, token.token);
   return {
     user, token,
     session: { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true },

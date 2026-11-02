@@ -12,7 +12,6 @@ import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import {loadDatasetRows, people, userOptions} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { avatarUrl } from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
@@ -22,7 +21,6 @@ const ctx = (id:string)=>({params:Promise.resolve({id})});
 async function account(name:string) {
  const user=await createUser({email:`mxmx_test_${name}@example.com`,name});
  const token = await mintToken(name, user.id);
-    await claimToken(user.id,token.token);
  return {token:token.token,tokenId:token.id,user};
 }
 async function create(token:string,body:Record<string,unknown>) {

@@ -30,6 +30,126 @@ create index "verification_identifier_idx" on "auth"."verification" ("identifier
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.group_mail_outbox (
+  id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  recipient_id TEXT,
+  group_id TEXT NOT NULL,
+  group_name TEXT NOT NULL,
+  handle TEXT NOT NULL,
+  action TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  lease_until TIMESTAMPTZ,
+  claim_token TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quarantined_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS email TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS recipient_id TEXT;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS handle TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sender_id TEXT NOT NULL;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+
+ALTER TABLE app.group_mail_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_group_mail_pending ON app.group_mail_outbox (created_at) WHERE sent_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS app.group_quotas (
+  user_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  window_start BIGINT NOT NULL,
+  used INTEGER NOT NULL,
+  PRIMARY KEY (user_id, action)
+);
+
+ALTER TABLE app.group_quotas ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.group_quotas ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE app.group_quotas ADD COLUMN IF NOT EXISTS window_start BIGINT NOT NULL;
+
+ALTER TABLE app.group_quotas ADD COLUMN IF NOT EXISTS used INTEGER NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.group_audit (
+  id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  actor_token_id TEXT,
+  client_harness TEXT,
+  action TEXT NOT NULL,
+  details JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT NOT NULL;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS client_harness TEXT;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS details JSONB NOT NULL;
+
+ALTER TABLE app.group_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_group_audit_group ON app.group_audit (group_id, created_at);
+
+CREATE TABLE IF NOT EXISTS app.artifact_group_shares (
+  artifact_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (artifact_id, group_id)
+);
+
+ALTER TABLE app.artifact_group_shares ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_group_shares ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_group_shares ADD COLUMN IF NOT EXISTS role TEXT NOT NULL;
+
+ALTER TABLE app.artifact_group_shares ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL;
+
+ALTER TABLE app.artifact_group_shares ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DO $check$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='app.artifact_group_shares'::regclass AND conname='artifact_group_share_role') THEN ALTER TABLE app.artifact_group_shares ADD CONSTRAINT artifact_group_share_role CHECK (role IN ('viewer','commenter','editor')); END IF; END $check$;
+
+CREATE INDEX IF NOT EXISTS idx_artifact_group_shares_group ON app.artifact_group_shares (group_id, artifact_id);
+
 CREATE TABLE IF NOT EXISTS app.native_identity_imports (
   source_namespace TEXT NOT NULL,
   kind TEXT NOT NULL,
@@ -870,41 +990,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON app.users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON app.users (username);
 
 CREATE INDEX IF NOT EXISTS idx_users_parent ON app.users (parent_user_id);
-
-CREATE TABLE IF NOT EXISTS app.custom_domains (
-  user_id TEXT NOT NULL,
-  hostname TEXT NOT NULL,
-  token TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  verified_at TIMESTAMPTZ,
-  missing_since TIMESTAMPTZ,
-  homepage_artifact_id TEXT,
-  path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (user_id)
-);
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS hostname TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS token TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS homepage_artifact_id TEXT;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app.custom_domains (hostname) WHERE status = 'verified';
-
-CREATE INDEX IF NOT EXISTS idx_custom_domains_host ON app.custom_domains (hostname);
 
 CREATE TABLE IF NOT EXISTS app.tokens (
   id TEXT NOT NULL,

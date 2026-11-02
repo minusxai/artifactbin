@@ -9,7 +9,7 @@ export { BodyTooLargeError, readBody, collectNodeBody } from './body';
 export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fakeActor, type FakeSql, type FakeEvents } from './fakes';
 export { TOKEN_RE, hashToken, createTokenReader } from './tokens';
 export { createCodeStore } from './codes';
-export { AGENT_COOKIE, AGENT_COOKIE_MAX_AGE, encodeAgentSession, decodeAgentSession, withToken, withoutToken, cookieName, setCookieHeader, clearCookieHeader, readCookie } from './agent-session';
+export { AGENT_COOKIE, cookieName, clearCookieHeader, readCookie } from './agent-session';
 export { renderSchema, ensureTable } from './schema';
 export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
 export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';

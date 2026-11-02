@@ -14,7 +14,6 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { buildShelf } from '@/lib/workspace';
 
@@ -25,7 +24,6 @@ const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as 
 async function owner(name = 'owner') {
   const u = await createUser({ email: `${name}@example.com` });
   const t = await mintToken(name, u.id);
-    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id, actor: { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true } };
 }
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));

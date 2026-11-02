@@ -9,7 +9,6 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import { linkRoleOf } from '@/lib/artifact-access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, createUser, ensureUsername } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { setRelationState, has, count, linked, link } from '@/lib/social';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -54,7 +53,6 @@ const SOURCE = '<div id="root" data-af-id="root"><p>hello</p></div>';
 async function account(email: string) {
   const user = await createUser({ email });
   const token = await mintToken(email, user.id);
-  await claimToken(user.id, token.token);
   return { user, token };
 }
 type Account = Awaited<ReturnType<typeof account>>;
@@ -424,13 +422,13 @@ describe('the commenter role, through the routes', () => {
 
   async function world() {
     const owner = await createUser({ email: 'mxmx_test_owner@example.com' });
-    const to = await mintToken('owner', owner.id); await claimToken(owner.id, to.token);
+    const to = await mintToken('owner', owner.id);
     const commenter = await createUser({ email: 'mxmx_test_commenter@example.com' });
-    const tc = await mintToken('commenter', commenter.id); await claimToken(commenter.id, tc.token);
+    const tc = await mintToken('commenter', commenter.id);
     const viewer = await createUser({ email: 'mxmx_test_viewer@example.com' });
-    const tv = await mintToken('viewer', viewer.id); await claimToken(viewer.id, tv.token);
+    const tv = await mintToken('viewer', viewer.id);
     const editor = await createUser({ email: 'mxmx_test_editor@example.com' });
-    const te = await mintToken('editor', editor.id); await claimToken(editor.id, te.token);
+    const te = await mintToken('editor', editor.id);
     const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { html:nativeHtml('<div id="root" data-af-id="root"><p>hello</p></div>'), visibility: 'private' }, to.token));
     const doc = await res.json();
     asSession(owner);
@@ -500,7 +498,6 @@ describe('what an editor may do with sharing', () => {
   const params=(id:string)=>({params:Promise.resolve({id})});
   async function person(name:string){
    const user=await createUser({email:`mxmx_test_${name}@example.com`}),token=await mintToken(name,user.id);
-   await claimToken(user.id,token.token);
    return {user,token,actor:identityForUser(user.id, token.id),session:{userId:user.id,email:user.email,emailVerified:true,credential:'session' as const}};
   }
   async function fixture(role:'viewer'|'commenter'|'editor',dataset=false){
@@ -607,14 +604,11 @@ describe('editors through every door', () => {
   async function world(body = PROSE, visibility: 'public' | 'private' = 'public') {
     const owner = await createUser({ email: 'owner@x.com' });
     const ta = await mintToken('a', owner.id);
-      await claimToken(owner.id, ta.token);
     const bob = await createUser({ email: 'Bob@X.com' });
     const tb = await mintToken('b', bob.id);
     const bobNamed = await ensureUsername(bob);
-    await claimToken(bob.id, tb.token);
     const carol = await createUser({ email: 'carol@x.com' });
     const tc = await mintToken('c', carol.id);
-      await claimToken(carol.id, tc.token);
     const anon = await mintToken('anon', null);
     const doc = await create(ta.token, { html:nativeHtml(body), visibility });
     return { ta, tb, tc, anon, owner, bob: bobNamed, carol, doc };
@@ -888,7 +882,6 @@ describe('editors through every door', () => {
       const doc = await create(anon.token, { html:nativeHtml(PROSE) });
       const bob = await createUser({ email: 'bob@x.com' });
       const tb = await mintToken('b', bob.id);
-      await claimToken(bob.id, tb.token);
       // The library call uses the same email account owner scope as browser sharing.
       const { updateSharingFor } = await import('@/lib/artifacts');
       const state = await updateSharingFor(identityForUser(anon.userId, anon.id), doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });

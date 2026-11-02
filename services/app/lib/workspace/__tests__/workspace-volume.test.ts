@@ -13,7 +13,7 @@ import { GET as homeRoute } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts';
 import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
-import { accountWorkspaceFor, accountWorkspaceInsightsFor, listDraftsByTokenIds, listOwnedArtifacts } from '@/lib/workspace';
+import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 
@@ -187,16 +187,5 @@ describe('the owner listing', () => {
     // The dataset's listed facts survive; the wire is what it always was.
     expect(artifactSummaryToWire(rows.find((row) => row.id === 'volds1')!, 'http://app.test').meta).toEqual({ rowCount: 3 });
     expect(artifactSummaryToWire(markup, 'http://app.test').meta).toEqual({});
-  });
-
-  it('serves a browser\'s unclaimed drafts the same way', async () => {
-    const db = await getDb();
-    const token = await mintAccountToken('draft-holder', null);
-    await db.query("INSERT INTO artifacts (id, token_id, user_id, format, title, meta, version) VALUES ('draft1', $1, NULL, 'html', 'Draft', '{\"css\":\"x\"}', 1)", [token.id]);
-    await db.query("INSERT INTO analytics_events (event, artifact_id, visitor, created_at) VALUES ('view','draft1','a', now() - interval '2 days'),('view','draft1','b-old', now() - interval '2 days'),('view','draft1','b-new', now())");
-    const drafts = await listDraftsByTokenIds([token.id]);
-    expect(drafts.map((draft) => [draft.id, draft.views])).toEqual([['draft1', 3]]);
-    const token2 = await listOwnedArtifacts('token_id', token.id);
-    expect(token2.map((row) => [row.id, row.views])).toEqual([['draft1', 3]]);
   });
 });

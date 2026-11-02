@@ -1,3 +1,4 @@
+import {recordGroupMutation} from '../group-mutations';
 import {authenticatingTestParent} from '../user-kinds';
 /** Durable company bootstrap and admission. All state transitions hold the singleton row lock. */
 import type {ArtifactDestination,DeploymentState,GroupSummary} from '@artifactbin/contracts';
@@ -74,8 +75,10 @@ export async function admitDeploymentIdentity(identity:{userId:string;email?:str
   if(!s.setup_complete||!policy.matches(email)||!await group(tx,s.default_group_id,null,true))return false;
   const invitation=(await tx.query<{role:'editor'|'viewer'}>('SELECT role FROM group_invitations WHERE group_id=$1 AND lower(email)=$2 FOR UPDATE',[s.default_group_id,email])).rows[0];
   if(policy.inviteOnly&&!invitation)return false;
+  const previous=(await tx.query<{role:string}>('SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2',[s.default_group_id,identity.userId])).rows[0]?.role??null;
   await tx.query("INSERT INTO group_members(group_id,user_id,role) VALUES ($1,$2,$3) ON CONFLICT (group_id,user_id) DO UPDATE SET role=CASE WHEN group_members.role='editor' THEN 'editor' ELSE excluded.role END",[s.default_group_id,identity.userId,invitation?.role??'viewer']);
   if(invitation)await tx.query('DELETE FROM group_invitations WHERE group_id=$1 AND lower(email)=$2',[s.default_group_id,email]);
+  if(!previous||(previous==='viewer'&&invitation?.role==='editor'))await recordGroupMutation(tx,identity.userId,s.default_group_id!,'joined',{previous_role:previous,role:previous==='editor'?'editor':invitation?.role??'viewer'},[]);
   await tx.query('INSERT INTO deployment_members(user_id) VALUES ($1) ON CONFLICT DO NOTHING',[identity.userId]);return true;
  });
 }

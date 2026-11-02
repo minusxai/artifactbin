@@ -16,7 +16,6 @@ import { getArtifactById } from '@/lib/artifacts';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -94,7 +93,6 @@ describe('access on the browser surfaces', () => {
   it('the sharing surface carries dataset access for an account owner', async () => {
     const user = await createUser({ email: 'owner@x.com' });
     const t = await mintToken('t', user.id);
-    await claimToken(user.id, t.token);
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
     // JSX-declared writer discovery retired with the compiler; retain the dataset sharing ACL contract.
     const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));

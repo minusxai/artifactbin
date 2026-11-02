@@ -3,67 +3,14 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '@/solid/App';
-import { CustomDomainCard } from '@/solid/account/CustomDomainCard';
-
-/** Drives the house Select: open its trigger, pick the option. */
-async function choose(name: string, option: string, trigger?: HTMLElement) {
-  fireEvent.click(trigger ?? screen.getByRole('button', { name }));
-  fireEvent.click(await screen.findByRole('option', { name: new RegExp(option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }));
-}
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 
-it('creates, edits and removes a custom path while preserving homepage settings', async () => {
-  const paths = new Map<string, string>();
-  const saves: unknown[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
-    if (init?.method === 'PATCH') {
-      const body = JSON.parse(String(init.body));
-      saves.push(body);
-      if (body.artifactId === null) paths.delete(body.path); else paths.set(body.path, body.artifactId);
-      return Response.json({});
-    }
-    return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'About us' }, { id: 'doc_2', title: 'Our story' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId: 'doc_2', pathOverrides: Array.from(paths, ([path, artifactId]) => ({ path, artifactId })) } });
-  }));
-  render(() => <CustomDomainCard />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
-  fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/about' } });
-  await choose('Path document', 'About us');
-  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
-  expect(await screen.findByRole('link', { name: '/about' })).toHaveAttribute('href', 'https://blog.example.com/about');
-  expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }]);
-  await waitFor(() => expect(screen.queryByRole('form', { name: 'Custom path editor' })).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'Domain homepage' })).toHaveTextContent('Our story');
-  fireEvent.click(screen.getByRole('button', { name: 'Edit path /about' }));
-  expect(screen.getByRole('button', { name: 'Path document' })).toHaveTextContent('About us');
-  await choose('Path document', 'Our story');
-  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
-  await waitFor(() => expect(saves).toHaveLength(2));
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Path document' })).not.toBeInTheDocument());
-  fireEvent.click(screen.getByRole('button', { name: 'Remove path /about' }));
-  await waitFor(() => expect(saves).toEqual([{ path: '/about', artifactId: 'doc_1' }, { path: '/about', artifactId: 'doc_2' }, { path: '/about', artifactId: null }]));
-  await waitFor(() => expect(screen.queryByRole('link', { name: '/about' })).not.toBeInTheDocument());
-});
-
-it('keeps a failed path edit available to correct and reports the refusal', async () => {
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
-    if (init?.method === 'PATCH') return Response.json({ error: 'invalid_path' }, { status: 422 });
-    return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'About us' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId: null, pathOverrides: [] } });
-  }));
-  render(() => <CustomDomainCard />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Add custom path' }));
-  fireEvent.input(screen.getByRole('textbox', { name: 'Custom path' }), { target: { value: '/api/test' } });
-  await choose('Path document', 'About us');
-  fireEvent.click(screen.getByRole('button', { name: 'Save custom path' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Choose a path');
-  expect(screen.getByRole('textbox', { name: 'Custom path' })).toHaveValue('/api/test');
-});
 it('loads the account handle late while keeping profile controls without the retired data uploader', async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1' }); }
+    if (url === '/api/page/account') { await new Promise(resolve => setTimeout(resolve, 5)); return Response.json({ username: 'owner', image: '/api/users/usr_1/avatar?v=1', user_page_url:'https://owner.u.example.test' }); }
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
     if (url === '/api/my/tokens') return Response.json({ tokens: [] });
     return Response.json({});
   }));
@@ -74,6 +21,8 @@ it('loads the account handle late while keeping profile controls without the ret
   await waitFor(() => expect((screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement).value).toBe('owner'));
   expect(view.container.querySelector('img[src="/api/users/usr_1/avatar?v=1"]')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'https://owner.u.example.test'})).toHaveAttribute('href','https://owner.u.example.test');
+  expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/api/my/domain'))).toBe(false);
   expect(screen.queryByRole('heading', { name: 'Data' })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Upload a CSV')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Google Sheet URL')).not.toBeInTheDocument();
@@ -87,7 +36,6 @@ it('asks a person for no pasted token anywhere on the account page', async () =>
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
     if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
     if (url === '/api/my/tokens') return Response.json({ tokens: [] });
     return Response.json({});
   }));
@@ -99,25 +47,6 @@ it('asks a person for no pasted token anywhere on the account page', async () =>
   expect(view.container.textContent).not.toMatch(/mx_\.\.\./);
 });
 
-it('shows an attached domain’s DNS records and verifies through its named action', async () => {
-  const calls: string[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push(`${init?.method ?? 'GET'} ${url}`);
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], domain: { hostname: 'blog.example.com', status: 'pending', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null } });
-    if (url === '/api/my/domain/verify') return Response.json({});
-    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
-    return Response.json({});
-  }));
-  window.history.replaceState(null, '', '/account');
-  render(() => <App />);
-  expect(await screen.findByRole('table', { name: 'DNS records' })).toHaveTextContent('_verify.blog.example.com');
-  fireEvent.click(screen.getByRole('button', { name: 'Verify custom domain' }));
-  await waitFor(() => expect(calls).toContain('POST /api/my/domain/verify'));
-});
-
 it('requires confirmation before revoking a connection', async () => {
   const calls: string[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -125,7 +54,6 @@ it('requires confirmation before revoking a connection', async () => {
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
     if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
     if (url === '/api/my/tokens') return Response.json({ tokens: [{ id: 'tok_1', name: 'Laptop', status: 'active', created_at: '2026-01-01', deleted_at: null, expires_at: null, last_used_at: null }] });
     return Response.json({});
   }));
@@ -144,7 +72,6 @@ it('bounds connections to five rows and separates inactive history', async () =>
     if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
     if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') return Response.json({ enabled: false, target: null, targetAddresses: [], domain: null });
     if (url === '/api/my/tokens') return Response.json({ tokens });
     return Response.json({});
   }));
@@ -162,32 +89,4 @@ it('bounds connections to five rows and separates inactive history', async () =>
   expect(screen.queryByRole('button', { name: 'Previous connections page' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Active (7)' }));
   expect(screen.getByRole('row', { name: 'Token row Connection 0' })).toBeInTheDocument();
-});
-
-
-it('saves a custom-domain homepage and can restore the document listing', async () => {
-  let homepageArtifactId: string | null = null;
-  const saves: unknown[] = [];
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === '/api/page/session') return Response.json({ user: { id: 'usr_1', email: 'a@example.com', username: 'owner', image: null }, kind: 'account', onboarded: true });
-    if (url === '/api/page/account') return Response.json({ username: 'owner', image: null });
-    if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
-    if (url === '/api/my/domain') {
-      if (init?.method === 'PATCH') { const body = JSON.parse(String(init.body)); saves.push(body); homepageArtifactId = body.homepageArtifactId; return Response.json({}); }
-      return Response.json({ enabled: true, target: 'edge.example.net', targetAddresses: [], homepageOptions: [{ id: 'doc_1', title: 'My homepage' }], domain: { hostname: 'blog.example.com', status: 'verified', txtName: '_verify.blog.example.com', txtValue: 'proof', target: 'edge.example.net', verifiedAt: null, missingSince: null, homepageArtifactId } });
-    }
-    if (url === '/api/my/tokens') return Response.json({ tokens: [] });
-    return Response.json({});
-  }));
-  window.history.replaceState(null, '', '/account');
-  render(() => <App />);
-  await choose('Domain homepage', 'My homepage', await screen.findByRole('button', { name: 'Domain homepage' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
-  await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }]));
-  expect(await screen.findByText('Homepage saved.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Domain homepage' })).toHaveTextContent('My homepage');
-  expect(screen.getByRole('button', { name: 'Save homepage' })).toBeDisabled();
-  await choose('Domain homepage', 'Document listing (default)');
-  fireEvent.click(screen.getByRole('button', { name: 'Save homepage' }));
-  await waitFor(() => expect(saves).toEqual([{ homepageArtifactId: 'doc_1' }, { homepageArtifactId: null }]));
 });

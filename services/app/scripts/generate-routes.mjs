@@ -53,7 +53,19 @@ export function toHonoPath(dir) {
 }
 
 function buildTable(root = join(APP_ROOT, 'app')) {
-  return walk(root).sort().map((file, i) => {
+  // Hono dispatches the first matching route. Prefer literal segments to parameters,
+  // so /members/me cannot be consumed as the userId of /members/:userId.
+  const compare=(a,b)=>{
+    const left=relative(root,a).split('/'),right=relative(root,b).split('/');
+    for(let i=0;i<Math.min(left.length,right.length);i++){
+      if(left[i]===right[i])continue;
+      const dynamicLeft=left[i].startsWith('['),dynamicRight=right[i].startsWith('[');
+      if(dynamicLeft!==dynamicRight)return dynamicLeft?1:-1;
+      return left[i]<right[i]?-1:1;
+    }
+    return left.length-right.length;
+  };
+  return walk(root).sort(compare).map((file, i) => {
     const src = readFileSync(file, 'utf8');
     const methods = exportedMethods(src);
     const dir = relative(root, file).split('\\').join('/').replace(/\/?route\.ts$/, '');

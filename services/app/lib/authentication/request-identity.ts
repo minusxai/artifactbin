@@ -34,7 +34,6 @@ import { currentRequest } from '../platform';
 import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type RequestIdentity } from '@/lib/accounts';
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
-import { mergeGuestUsers } from './ownership';
 import { hostedRequestRefusal } from './request-authority';
 import { auth } from './session';
 
@@ -93,10 +92,10 @@ function explicitBearer(request: Request): string | null {
 }
 
 /** The one place a claim becomes an identity, and the host policy is asked. */
-function identityOf(claims: { userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }, credential: Credential, heldTokenIds?: string[]): RequestIdentity {
+function identityOf(claims: { userId: string | null; tokenId: string | null; email: string | null; emailVerified: boolean | null }, credential: Credential): RequestIdentity {
   const { userId, tokenId, email, emailVerified } = claims;
   const documentEditor = emailVerified !== null && hasDocumentEditorAccess({ userId, email, emailVerified });
-  return { userId, tokenId, email, emailVerified, documentEditor, credential, ...(heldTokenIds ? { heldTokenIds } : {}) };
+  return { userId, tokenId, email, emailVerified, documentEditor, credential };
 }
 
 // ── The explicit bearer ──────────────────────────────────────────────────────
@@ -198,7 +197,7 @@ async function attachedIdentity(request: Request, effects: boolean): Promise<Ide
     tokenId,
     email: userId ? wire.email ?? null : null,
     emailVerified: userId && verifiable ? wire.emailVerified === true : null,
-  }, wire.credential, wire.heldTokenIds);
+  }, wire.credential);
   if(wire.credential==='session')identity.sessionId=wire.sessionId;
   if (userId && !await admitDeploymentIdentity({ userId, email: identity.email ?? undefined, ...(identity.emailVerified === null ? {} : { emailVerified: identity.emailVerified }) })) return nobody();
   if (wire.credential === 'agent-cookie') {
@@ -217,8 +216,6 @@ async function attachedIdentity(request: Request, effects: boolean): Promise<Ide
     // The app's own row for this person follows the claims (lib/profiles) — created on first sight, updated on change.
     await syncProfile({ userId, email: identity.email ?? undefined });
     if (identity.emailVerified && identity.email) await acceptGroupInvitations(userId, identity.email);
-    // Held legacy ownership proofs are adopted only AFTER a verified email login; they never authenticate alone.
-    if (identity.emailVerified) await mergeGuestUsers(userId, wire.heldTokenIds ?? []);
   }
   if (await hostedRequestRefusal(userId, tokenId, request, browserSession || wire.credential === 'agent-cookie')) return nobody();
   if (effects && tokenId && (wire.credential === 'bearer' || wire.credential === 'agent-cookie')) await touchToken(tokenId);

@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {nativeHtml} from './native-html-fixture';
 import {artifactState, getArtifactById} from '@/lib/artifacts';
-import { setDocumentEditorPolicy, claimToken } from '@/lib/authentication';
+import { setDocumentEditorPolicy } from '@/lib/authentication';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';
@@ -17,7 +17,7 @@ import {request,useAppHarness} from './harness';
 
 const harness=useAppHarness();
 it('HTTP native publication grants never reach private pages and end on verification loss, policy removal or token revocation',async()=>{
- const user=await createUser({email:'admin@example.com'}),token=await mintToken('mxmx_test_admin_cli',user.id);await claimToken(user.id,token.token);
+ const user=await createUser({email:'admin@example.com'}),token=await mintToken('mxmx_test_admin_cli',user.id);
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  for(const [id,title,visibility] of [['abc123','Unlisted document','unlisted'],['prv123','Private document','private']])

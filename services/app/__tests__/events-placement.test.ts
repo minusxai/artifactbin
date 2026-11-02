@@ -25,7 +25,6 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -45,7 +44,6 @@ const said=async(verb:string)=>(await recorded()).filter(e=>e.verb===verb);
 async function world() {
   const u = await createUser({ email: 'mxmx_test_placement@example.com' });
   const t = await mintToken('o', u.id);
-    await claimToken(u.id, t.token);
   setSession({user:{id:t.userId!,email:t.email!}});
  const cookie = await agentCookie([t.id]);
   const mk = async (body: Record<string, unknown>) => {

@@ -52,3 +52,34 @@ Other errors retain their HTTP status and structured `error`, `message`/`details
 The normal selected-server API response includes `X-Artifactbin-CLI-Version` and `X-Artifactbin-Protocol` headers, derived from the build's served release pointer.
 
 Future plugin/MCP adapters can share these service contracts and OAuth infrastructure. They are outside this implementation and must define their own consent/capability requirements; they do not automatically become email OTP clients.
+
+## Groups and group sharing
+
+Group operations use the existing `artifacts` bearer authority and also accept same-site account sessions. An explicit Authorization header never falls back to cookies. Groups retain editor/viewer membership; a group editor governs group-owned artifacts, while `created_by` is attribution only. Read group detail by stable ID, handle or `@handle`; every mutation uses a stable ID.
+
+| Request | Body and response |
+| --- | --- |
+| `GET /api/groups` | `{groups:[...]}` with your live memberships. |
+| `POST /api/groups` | `{handle,name,description?}`; 201 group summary. |
+| `GET /api/groups/ID` | `{group,members,linked_groups,invitations?}`; only editors see invitation addresses. |
+| `PATCH /api/groups/ID` | Nonempty `{name?,description?}`; handles cannot change. |
+| `DELETE /api/groups/ID` | `{handle}` echoes the exact stored handle after user confirmation. |
+| `GET /api/groups/ID/members?query=TEXT` | `{members:[{user_id,username,name,role}]}`; group-local exact ID or fuzzy handle/name search. |
+| `PUT /api/groups/ID/members/USER_ID` | `{role:"editor"|"viewer"}` changes an existing member only; nonmember 404. |
+| `DELETE /api/groups/ID/members/USER_ID` | Editor removes a member; self-removal also permits viewers. |
+| `DELETE /api/groups/ID/members/me` | Leave; last editor receives 409 `last_editor`. |
+| `GET /api/groups/ID/invitations` | Editor-only `{invitations:[{id,email,role,invited_by,created_at}]}`. |
+| `POST /api/groups/ID/invitations` | One `{email,role}`; 201 invitation includes `changed`. Same pending role is unchanged, with no duplicate mail. |
+| `DELETE /api/groups/ID/invitations/INVITATION_ID` | Withdraw a pending invitation. |
+| `PUT/DELETE /api/groups/ID/links/OTHER_ID` | Directional navigation only; no inherited access. |
+| `PUT /api/artifacts/PAGE_ID/group-shares/GROUP_ID` | `{role:"viewer"|"commenter"|"editor"}`; `{changed}`. Requires governance and target membership. |
+| `DELETE /api/artifacts/PAGE_ID/group-shares/GROUP_ID` | Idempotent `{changed}`; missing share is unchanged. |
+| `POST /api/artifacts/PAGE_ID/transfer` | Explicit ownership move with `{destination:{type:"group",id}}` or `{destination:{type:"personal"}}`. |
+
+Invitation acceptance is automatic only after verified-email account authentication, including the next normal authenticated request. It preserves existing editor membership and company admission behavior. A navigation link never joins a group. Group shares cap at editor, preserve the personal or group owner, and grant no dataset mutation authority beyond the existing dataset policy. Removing membership, unsharing, or deleting the group revokes access on subsequent checks, including streams and prepared access facts for new requests.
+
+`GET /api/artifacts?group_id=ID` lists live group-owned or explicitly group-shared work, intersected with the caller's membership and normal filters. It preserves each artifact's actual owner, deduplicates rows, and binds the opaque cursor to the group and other filters. Sharing with a group never transfers ownership or changes a personal page's host.
+
+Deletion requires no live owned artifacts of any format. Trashed history stays historical and cannot restore into a deleted group. Deletion clears shares, invitations, links in both directions and memberships, resets affected saved defaults to inherit, and retains the handle reservation as a tombstone. Errors include 409 `group_not_empty`, `handle_mismatch`, `default_group_locked`; 404 hides unknown or inaccessible group detail. A deployment default cannot be deleted.
+
+Durable account quotas are shared across tokens and app replicas: 10 create attempts/day, 100 invitation attempts/hour, 500 pending invitations/group, and 60 successful group-share changes/minute. Unchanged invitations still charge the invitation attempt quota; unchanged shares do not charge the change quota. HTTP 429 includes `retry_after` seconds and `Retry-After`. Audit actor account, actual token and stored harness attribution commit with mutations; group recipients and email outbox entries commit atomically, while provider delivery runs after commit. Delivery honors preferences, blocks and test-account isolation, and retries with stable provider idempotency keys.

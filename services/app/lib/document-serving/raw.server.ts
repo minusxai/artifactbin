@@ -30,7 +30,7 @@ import { loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/
 import { datasetReadAccess, datasetRowsFor, viewCatalog } from '@/lib/dataset-permissions';
 import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import { servesDocument } from '@/lib/custom-domains';
+import { servesDocument } from '@/lib/user-pages';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
 import { anonymousReader, FRAME_TTL_MS, NONCE_PLACEHOLDER, renderCache, renderKey, withFreshNonce } from './render-cache';
@@ -49,13 +49,13 @@ const COMMON = {
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
 
 /**
- * A POST ON ITS OWNER'S CUSTOM DOMAIN (server/custom-host). Only the host
+ * A POST ON ITS ANONYMOUS OWNER HOST (server/user-host). Only the host
  * boundary sets it — the router passes params alone — so no request can ask
  * for this mode. It renders the reader copy with no reader chrome and no doors,
- * a footer back to the app, and a self-canonical on the domain; every
+ * a footer back to the app, and the app canonical; every
  * capture, archive and editing switch on the URL is ignored.
  */
-export interface DomainPost { hostname: string; ownerId: string; homepage?: boolean; path?: string }
+export interface DomainPost { hostname: string; owner: import('@/lib/user-pages').UserPagesOwner }
 
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
@@ -102,7 +102,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const actor = await requestOrSessionActor(request);
   /*
    * A SHARED RENDER (./render-cache): an anonymous reader's head document on the app or its own origin —
-   * no key, version, fragment or custom domain, no carried grant. Admission still runs below on the header, every
+   * no key, version, fragment or anonymous owner host, no carried grant. Admission still runs below on the header, every
    * time, before a cached body may be served; only a miss reads the row whole.
    */
   const shared = request.method === 'GET' && !domain && !fragment && !key && !new URL(request.url).searchParams.has(VERSION_PARAM) && !new URL(request.url).searchParams.has('v') && anonymousReader(actor, pages?.carried);
@@ -111,7 +111,7 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
   const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
   if (!header) return notFound();
   if (fragment) return notFound();
-  if (domain && !servesDocument(domain.ownerId, header)) return notFound();
+  if (domain && !servesDocument(domain.owner, header)) return notFound();
   /*
    * The ACL decides before any bytes leave; a denied private doc is
    * indistinguishable from a missing one.

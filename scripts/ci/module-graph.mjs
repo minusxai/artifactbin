@@ -220,7 +220,8 @@ export const DEEP_MODULES = {
   // Infrastructure (config, db, schema, ids, events, request scope, services): its index only, and never in a browser bundle.
   'lib/platform': { entries: [''], downstream: ['config', 'db', 'services'], serverOnly: [''] },
   'lib/document-serving': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: DOCUMENT_SERVING_BROWSER_LEAVES },
-  'lib/custom-domains': { entries: [''], serverOnly: [''] },
+  'lib/shelf': { entries: [''], browser: [''] },
+  'lib/user-pages': { entries: [''], serverOnly: [''] },
   'lib/agent-copy': { entries: [''], serverOnly: [''], browserImporters: ['services/app/solid/'], browserLeaves: AGENT_COPY_BROWSER_LEAVES },
   // Above lib/accounts and lib/artifacts: request identity, its doors, token claims and guest merges.
   'lib/authentication': { entries: [''], serverOnly: [''] },

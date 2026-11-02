@@ -15,6 +15,7 @@ import { services, setServices } from '@/lib/platform';
 type Fixtures = { [K in ObjectKind]: { [V in EventVerb<K>]: EventPayload<K, V> } };
 /** One payload per verb, the values an operator would want in a channel: ids and names, never content. */
 const FIXTURES: Fixtures = {
+ group:{changed:{action:'updated',audit_id:'ga_example',recipients:['usr_example']}},
   artifact: {
     created: { client: 'claude-code', user_id: 'usr_a' },
     updated: { client: 'claude-code', user_id: 'usr_a' },

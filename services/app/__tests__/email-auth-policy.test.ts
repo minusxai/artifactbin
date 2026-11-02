@@ -2,8 +2,6 @@ import { expect, it } from 'vitest';
 import { mintToken, createUser, resolveToken, issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { POST as start } from '@/app/api/start/route';
-import { POST as connect } from '@/app/api/internal/artifact-approval/route';
-import { POST as mint } from '@/app/api/internal/tokens/route';
 import { POST as exchange } from '@/app/api/session/token/route';
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
@@ -36,14 +34,6 @@ it('refuses anonymous artifact creation without creating ownership', async () =>
   const response = await start(request('/api/start', { method: 'POST' }));
   expect(response.status).toBe(401);
   expect(response.headers.get('set-cookie')).toBeNull();
-});
-
-it('refuses anonymous connection and internal minting', async () => {
-  for (const handler of [connect, mint]) {
-    const response = await handler(request('/api/internal/tokens', { method: 'POST', json: { action: 'connect' } }));
-    expect(response.status).toBe(401);
-    expect(response.headers.get('set-cookie')).toBeNull();
-  }
 });
 
 it('refuses exchanging a bearer for a browser login', async () => {

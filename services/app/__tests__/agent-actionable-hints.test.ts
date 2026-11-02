@@ -11,7 +11,6 @@ import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations
 import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -26,7 +25,6 @@ const create = async (token: string, input: Record<string, unknown>) => {
 async function claimed(name = 'owner') {
   const u = await createUser({ email: `${name}@example.com` });
   const t = await mintToken(name, u.id);
-    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id };
 }
 

@@ -14,7 +14,6 @@ import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { DATASET_OPERATIONS } from '@/lib/operations/datasets';
 import { request, useAppHarness } from '@/__tests__/harness';
 
@@ -23,7 +22,7 @@ const target = {host:'db.example.com',port:5432,database:'commerce',username:'re
 const ctx = (id:string) => ({params:Promise.resolve({id})});
 async function actor(name:string) {
   const user = await createUser({email:`mxmx_test_secret_review_${name}@example.com`});
-  const token = await mintToken(name, user.id); await claimToken(user.id,token.token);
+  const token = await mintToken(name, user.id);
   return {user,token};
 }
 async function fixture() {
@@ -57,8 +56,8 @@ it('gives dataset editors exposure control but rejects credential redirection an
   const denied = await discover(request('/api/my/datasets/discover',{method:'POST',token:friend.token.token,json:{datasetId:id,connection:dataset.connection}}));
   expect(denied.status).toBe(404);
 });
-it('keeps a pre-claim pending secret with its claimed account and rejects unauthenticated creation',async()=>{
- const token=await mintToken('claim');const made=await createSecret(request('/api/my/secrets',{method:'POST',token:token.token,json:{value:'claim-password',connection:target}}));expect(made.status).toBe(201);const user=await createUser({email:'mxmx_test_secret_review_claim@example.com'});await claimToken(user.id,token.token);const secret=(await made.json()).secret.id;
+it('keeps an account-owned pending secret with its account and rejects unauthenticated creation',async()=>{
+ const user=await createUser({email:'mxmx_test_secret_review_claim@example.com'});const token=await mintToken('account', user.id);const made=await createSecret(request('/api/my/secrets',{method:'POST',token:token.token,json:{value:'claim-password',connection:target}}));expect(made.status).toBe(201);const secret=(await made.json()).secret.id;
  expect((await discover(request('/api/my/datasets/discover',{method:'POST',token:token.token,json:{connection:{...target,passwordSecretId:secret}}}))).status).toBe(200);
  expect((await createSecret(request('/api/my/secrets',{method:'POST',json:{value:'x',connection:target}}))).status).toBe(401);
 });

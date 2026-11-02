@@ -1,11 +1,4 @@
-/**
- * WHAT A VERIFIED LOGIN OWNS — the accounts gate's claim leg, moved here: none of it needs a browser.
- *
- * A connection approved for an email account publishes into that account from the start, so the account's session
- * lists what it made, the connection keeps editing after the person signs in again, and nothing ties the account to
- * a guest it never approved: an unrelated connection's document stays the uniform 404, and the legacy claim door
- * cannot take another connection's token.
- */
+/** Account-owned publication survives login; unrelated accounts retain private access boundaries. */
 import { beforeEach, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from '@/__tests__/harness';
 import { observedRequest } from '@/__tests__/conditional-request';
@@ -13,7 +6,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
-import { POST as claimRoute } from '@/app/api/tokens/claim/route';
 
 useAppHarness();
 beforeEach(() => setSession(null));
@@ -40,12 +32,10 @@ it('the account lists what its connection published, and the connection still ed
   expect(((await edited.json()) as { id: string }).id).toBe(kept.id);
 });
 
-it('adopts no unrelated connection: its private document is the uniform 404, and the legacy claim door refuses its token', async () => {
+it('keeps an unrelated account connection private', async () => {
   const account = await mintAccountToken('claim-account');
   const stranger = await mintAccountToken('claim-stranger');
   const unrelated = await publish(stranger.token, 'Not Yours', 'private');
   setSession({ user: { id: account.userId!, email: account.email! } });
   expect((await getMineRoute(request(`/api/my/artifacts/${unrelated.id}`), params(unrelated.id))).status).toBe(404);
-  const claimed = await claimRoute(request('/api/tokens/claim', { method: 'POST', origin: 'same', json: { token: stranger.token } }));
-  expect(claimed.status).toBe(404);
 });

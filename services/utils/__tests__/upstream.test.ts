@@ -31,7 +31,7 @@ function createApp(): Hono {
     'content-type': 'text/javascript', 'content-encoding': 'br', 'content-length': String(ENCODED.byteLength), vary: 'Accept-Encoding',
     'x-seen-accept-encoding': c.req.header('accept-encoding') ?? '',
   } }));
-  app.post('/echo', async (c) => c.text(await c.req.text()));
+  app.all('/echo', async (c) => c.text(await c.req.text()));
   app.get('/cookies', () => {
     const headers = new Headers({ location: '/elsewhere' });
     headers.append('set-cookie', 'a=1; Path=/');
@@ -122,6 +122,11 @@ describe('overHttp', () => {
     expect(moved.status).toBe(302);
     expect(moved.headers.get('location')).toBe('/elsewhere');
     expect(moved.headers.getSetCookie()).toEqual(['a=1; Path=/', 'b=2; Path=/']);
+  });
+  it('frames DELETE request bodies across the real HTTP hop', async () => {
+    const echoed = await fetch(`http://127.0.0.1:${proxyServer.port}/echo`, { method: 'DELETE', headers: {'content-type':'application/json'}, body: '{"handle":"test_team"}' });
+    expect(echoed.status).toBe(200);
+    expect(await echoed.text()).toBe('{"handle":"test_team"}');
   });
   it('answers HEAD with the length a GET would carry and no body', async () => {
     const raw = await readRawResponse(proxyServer.port, '/encoded', { method: 'HEAD', headers: { 'accept-encoding': 'br' } });

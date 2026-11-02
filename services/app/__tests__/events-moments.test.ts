@@ -14,9 +14,8 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
-import { identityForUser, revokeHeldToken, revokeToken } from '@/lib/accounts';
+import { identityForUser, revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, claimTokenById } from '@/lib/authentication';
 import { createUser, revokeUserToken } from '@/lib/accounts';
 import { mountRoutes } from '@/server/api';
 
@@ -67,24 +66,7 @@ describe('tokens', () => {
     expect(fake.events[1]).toMatchObject({ verb: 'minted', subject_kind: 'user', subject_id: owner.id, object_id: owned.id, payload: { name: 'web' } });
     expect(JSON.stringify(fake.events), 'the secret never travels').not.toContain(owned.token);
   });
-  it('a claim says token.claimed with the claimer as subject and the token name; a refused or repeated no-op claim still says it only when it attached', async () => {
-    const user = await createUser({ email: 'mxmx_test_claim@example.com' });
-    const other = await createUser({ email: 'mxmx_test_claim_other@example.com' });
-    const t = await mintToken('cli-one', null);
-    listen();
-    expect(await claimToken(user.id, t.token)).toMatchObject({ tokenId: t.id });
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0]).toMatchObject({ verb: 'claimed', subject_kind: 'user', subject_id: user.id, object_kind: 'token', object_id: t.id, payload: { name: 'cli-one' } });
-    expect(await claimToken(other.id, t.token), 'someone else\'s').toBeNull();
-    expect(await claimToken(user.id, 'mx_not_a_token')).toBeNull();
-    expect(fake.events).toHaveLength(1);
-    const t2 = await mintToken('cli-two', null);
-    listen();
-    expect(await claimTokenById(user.id, t2.id)).toMatchObject({ tokenId: t2.id });
-    expect(fake.events).toHaveLength(1);
-    expect(fake.events[0]).toMatchObject({ verb: 'claimed', subject_id: user.id, object_id: t2.id, payload: { name: 'cli-two' } });
-  });
-  it('each of the three revokes says token.revoked once when a live token died, and nothing when nothing changed', async () => {
+  it('ordinary token revocation says token.revoked once when a live token died, and nothing when nothing changed', async () => {
     const user = await createUser({ email: 'mxmx_test_revoke@example.com' });
     const a = await mintToken('a');
     const b = await mintToken('b', user.id);
@@ -95,14 +77,14 @@ describe('tokens', () => {
     expect(fake.events[0]).toMatchObject({ verb: 'revoked', subject_kind: null, subject_id: null, object_kind: 'token', object_id: a.id });
     expect(await revokeToken(a.id), 'already dead').toBe(false);
     expect(fake.events).toHaveLength(1);
-    expect(await revokeHeldToken(b.id, user.id)).toBe(true);
+    expect(await revokeUserToken(user.id, b.id)).toBe(true);
     expect(fake.events).toHaveLength(2);
     expect(fake.events[1]).toMatchObject({ verb: 'revoked', subject_kind: 'user', subject_id: user.id, object_id: b.id });
     expect(await revokeUserToken(user.id, c.id)).toBe(true);
     expect(fake.events).toHaveLength(3);
     expect(fake.events[2]).toMatchObject({ verb: 'revoked', subject_kind: 'user', subject_id: user.id, object_id: c.id });
     expect(await revokeUserToken(user.id, 'tok_nope')).toBe(false);
-    expect(await revokeHeldToken(c.id, user.id), 'already dead').toBe(false);
+    expect(await revokeUserToken(user.id, c.id), 'already dead').toBe(false);
     expect(fake.events).toHaveLength(3);
   });
 });

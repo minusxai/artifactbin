@@ -6,13 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
-import { POST as reject } from '@/app/api/tokens/reject/route';
-import { AGENT_COOKIE } from '@/lib/accounts';
-import { decodeAgentSession } from '@artifactbin/utils';
-import { AUTH_SECRET } from '@/lib/platform';
-const decodeAgentSessionEnvelope = async (value: string | null | undefined) => decodeAgentSession(value, AUTH_SECRET);
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { agentCookie, cookieValue, request, useAppHarness } from './harness';
+import { request, useAppHarness } from './harness';
 
 useAppHarness();
 
@@ -44,25 +39,5 @@ describe('request()', () => {
   it('refuses a bearer AND an actor in one request — two credentials is a test bug', async () => {
     const t = await mintToken('t');
     expect(() => request('/api/x', { token: t.token, actor: { credential: 'bearer', tokenId: t.id, userId: t.userId!, email: t.email!, emailVerified: true } })).toThrow(/one credential/i);
-  });
-});
-
-describe('agentCookie() and cookieValue()', () => {
-  it('the cookie header round-trips through the app\'s own decoder', async () => {
-    const header = await agentCookie(['tok_a', 'tok_b']);
-    expect(header.startsWith(`${AGENT_COOKIE}=`)).toBe(true);
-    expect(await decodeAgentSessionEnvelope(header.slice(AGENT_COOKIE.length + 1))).toMatchObject({ tokenIds: ['tok_a', 'tok_b'], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
-  });
-  it('reads a rewritten cookie and recognises a cleared one', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b', a.userId!);
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id }, actor: {credential:'session',userId:a.userId!,email:a.email!,emailVerified:true,heldTokenIds:[a.id,b.id]}, cookie: await agentCookie([a.id, b.id]) }));
-    expect(res.status).toBe(204);
-    const rewritten = cookieValue(res);
-    expect(rewritten.cleared).toBe(false);
-    expect(await decodeAgentSessionEnvelope(rewritten.value)).toMatchObject({ tokenIds: [b.id], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
-    const last = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '', actor: { credential:'session',userId:b.userId!,email:b.email!,emailVerified:true,heldTokenIds:[b.id] } }));
-    expect(cookieValue(last).cleared).toBe(true);
-    expect(cookieValue(new Response(null)).value).toBeNull();
   });
 });

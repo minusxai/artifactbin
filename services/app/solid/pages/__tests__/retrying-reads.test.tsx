@@ -19,7 +19,6 @@ import { WelcomePage } from '@/solid/pages/Welcome';
 import { DatasetActionsView } from '@/solid/datasets/DatasetActionsView';
 import { DatasetPolicies } from '@/solid/datasets/DatasetPolicies';
 import { NotificationSettings } from '@/solid/account/NotificationSettings';
-import { CustomDomainCard } from '@/solid/account/CustomDomainCard';
 import { InboxProvider } from '@/solid/lib/notifications';
 import { createInboxController } from '@/solid/lib/create-inbox';
 
@@ -107,10 +106,6 @@ describeRetryingRead('the email notification settings', () => ({
   landed: () => text().includes('Unread comment updates'),
 }), { matches: (url) => url === '/api/my/people/email', ok: ok({ enabled: true, preferences: { invitations: true, comments: true, activity: false } }) });
 
-describeRetryingRead('the custom domain settings', () => ({
-  start: () => { mount(() => <CustomDomainCard />); },
-  landed: () => !!container?.querySelector('[aria-label="Add custom domain"]'),
-}), { matches: (url, init) => url === '/api/my/domain' && (init?.method ?? 'GET') === 'GET', ok: ok({ enabled: true, target: 'pages.test', targetAddresses: [], domain: null }) });
 
 {
   let inbox: { state: () => unknown; dispose: () => void } | null = null;

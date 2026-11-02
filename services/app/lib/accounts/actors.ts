@@ -34,8 +34,7 @@ export interface AccessActor {
 
 /**
  * One request's resolved identity: the actor, plus how it proved itself. `credential` keys the same-site
- * guard (a cookie-borne write must be same-site; a bearer never is); `heldTokenIds` are the ids the
- * browser's agent cookie holds (proxy-provided), what a sign-up may claim; `emailVerified` is the
+ * guard (a cookie-borne write must be same-site; a bearer never is); `emailVerified` is the
  * verified-email claim AS THIS DOOR ADMITTED IT (null when the credential carries none, or a browser
  * session's scripted browser), kept only so a pages ticket can carry the claim across origins — access
  * code reads `documentEditor`, never this.
@@ -44,7 +43,6 @@ export interface RequestIdentity extends AccessActor {
   sessionId?:string;
   credential: Credential;
   emailVerified: boolean | null;
-  heldTokenIds?: string[];
 }
 
 /**

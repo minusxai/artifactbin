@@ -1,13 +1,14 @@
 /** Process compositions share this lifecycle; creating a request handler never starts workers. */
 import {type Db, startEventPublisher} from '@/lib/platform';
 import { flushViews } from '../analytics';
-import {createNotificationJobStore,createNotificationWorker,notificationAuthority} from '@/lib/notifications';
+import {startGroupMailDelivery,createNotificationJobStore,createNotificationWorker,notificationAuthority} from '@/lib/notifications';
 import { evaluateNotificationQuery } from '@/lib/document-data';
 export async function startAppBackgroundTasks(db:Db):Promise<()=>Promise<void>>{
+ const stopGroupMail=startGroupMailDelivery(db);
  const stopPublisher=startEventPublisher(db);
  const worker=createNotificationWorker({store:createNotificationJobStore({db,authority:notificationAuthority}),evaluator:{evaluate:evaluateNotificationQuery}});
  worker.start();
  let closing:Promise<void>|undefined;
  // Buffered views (lib/analytics recordView) are written before the publisher drains the outbox.
- return ()=>closing??=(async()=>{try{await worker.stop();}finally{await flushViews();await stopPublisher();}})();
+ return ()=>closing??=(async()=>{try{await worker.stop();await stopGroupMail();}finally{await flushViews();await stopPublisher();}})();
 }

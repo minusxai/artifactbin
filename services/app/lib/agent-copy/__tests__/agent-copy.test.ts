@@ -57,3 +57,15 @@ describe('the tokenless paste', () => {
     expect(Object.keys(agentCopy)).toEqual(['existingPaste']);
   });
 });
+
+it('discovers and ships the same bounded groups guide and command resources',async()=>{
+ const {publicGuideText,llmsText}=await import('..');
+ const {skillTree,skillPackageFiles}=await import('@/lib/skills');
+ const base='https://example.test',guide=publicGuideText('groups',base);
+ expect(guide).not.toBeNull();expect(Buffer.byteLength(guide!)).toBeLessThan(8192);
+ expect(llmsText(base)).toContain(base+'/llms/groups');
+ const files=skillPackageFiles(skillTree(),base);
+ expect(files['references/groups.md']).toBeDefined();
+ expect(files['scripts/groups.mjs']).toContain('export const DESCRIPTION');
+ expect(files['scripts/toolbox-groups.mjs']).toBeDefined();
+});

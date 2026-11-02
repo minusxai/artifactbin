@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  APP_HMR_PORT_SETTING, deploymentConfig, env, envNamesRead, parseCustomDomainsTarget, requirePagesHost, resolveHmrPort, unknownEnvNames,
+  APP_HMR_PORT_SETTING, deploymentConfig, env, envNamesRead, parseUserPagesHost, requirePagesHost, resolveHmrPort, unknownEnvNames,
 } from '@/lib/platform';
 import { overrideConfig, parseAliasOrigins, parseDatasetDnsServers, parseDatasetPrivateTargetHashes, parsePagesHost, resetConfigOverrides } from '@/lib/platform/config';
 
@@ -35,7 +35,7 @@ describe('settings', () => {
       SQL__MAX_ROWS: '50', SQL__MAX_QUERY_ROWS: undefined, SQL__QUERY_TIMEOUT_MS: '900', SQL__SERVICE_URL: 'http://sql',
       OBJECT_STORE__LOCAL_DIR: '/objects', WEB_INGEST__ALLOW_PRIVATE: '1', WEB_INGEST__TIMEOUT_MS: '11', WEB_INGEST__MAX_PER_HOUR: '12',
       IMAGES__MAX_BYTES: '13', PDF__MAX_BYTES: '14', FILES__MAX_BYTES: '15', EMAIL__RESEND_API_KEY: 'resend',
-      EXPORT__INTERNAL_ORIGIN: ' http://export ', FLAG__CUSTOM_DOMAINS: 'Domains.Example.com.', BROWSER__SERVICE_URL: 'http://browser',
+      EXPORT__INTERNAL_ORIGIN: ' http://export ', APP__USER_PAGES_HOST: 'U.Example.net.', BROWSER__SERVICE_URL: 'http://browser',
       AUTH__SERVICE_URL:'http://auth', INTERNAL__SERVICE_SECRET: 'internal', EVENTS__SERVICE_URL: 'http://events', EVENTS__SCHEMA: 'facts',
       RUNNER__SERVICE_URL: 'http://runner',
     });
@@ -72,7 +72,7 @@ describe('settings', () => {
       ['MAX_FILE_BYTES', 15],
       ['RESEND_API_KEY', 'resend'],
       ['EXPORT_INTERNAL_ORIGIN', 'http://export'],
-      ['CUSTOM_DOMAINS_TARGET', 'domains.example.com'],
+      ['USER_PAGES_HOST', 'u.example.net'],
       ['BROWSER_SERVICE_URL', 'http://browser'],
       ['AUTH_SERVICE_URL','http://auth'], ['INTERNAL_SERVICE_SECRET', 'internal'],
       ['EVENTS_SERVICE_URL', 'http://events'],
@@ -88,7 +88,7 @@ describe('settings', () => {
       'ARTIFACTS__ALLOW_PUBLIC', 'DATASET__ALLOW_PRIVATE_NETWORKS', 'DATASET__DNS_SERVERS', 'DATASET__PRIVATE_TARGET_HASHES',
       'QUOTA__ARTIFACTS_PER_TOKEN', 'ASSETS__MAX_BYTES_PER_TOKEN', 'HTTP__TRUSTED_PROXY_HOPS', 'SQL__MAX_ROWS', 'SQL__MAX_QUERY_ROWS',
       'SQL__QUERY_TIMEOUT_MS', 'OBJECT_STORE__LOCAL_DIR', 'WEB_INGEST__ALLOW_PRIVATE', 'WEB_INGEST__TIMEOUT_MS', 'WEB_INGEST__MAX_PER_HOUR',
-      'IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'EXPORT__INTERNAL_ORIGIN', 'FLAG__CUSTOM_DOMAINS', 'EVENTS__SCHEMA',
+      'IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'EXPORT__INTERNAL_ORIGIN', 'APP__USER_PAGES_HOST', 'EVENTS__SCHEMA',
     ].map(name => [name, undefined]));
     const config = await configFrom({ ...unset, NODE_ENV: 'test' });
     expectSettings(config, [
@@ -114,7 +114,7 @@ describe('settings', () => {
       ['WEB_INGEST_TIMEOUT_MS', 10_000],
       ['WEB_INGEST_MAX_PER_HOUR', 300],
       ['EXPORT_INTERNAL_ORIGIN', 'http://127.0.0.1:3000'],
-      ['CUSTOM_DOMAINS_TARGET', null],
+      ['USER_PAGES_HOST', null],
       ['EVENTS_SCHEMA', 'events'],
       ['RUNNER_ACTOR_SECRET', undefined],
     ]);
@@ -173,10 +173,14 @@ describe('parsers', () => {
     }
   });
 
-  it('reads the custom domains target, empty as off', () => {
-    expect(parseCustomDomainsTarget(undefined)).toBeNull();
-    expect(parseCustomDomainsTarget('  ')).toBeNull();
-    expect(parseCustomDomainsTarget(' Domains.Example.com. ')).toBe('domains.example.com');
+  it('reads anonymous owner hosts, off by default and without collisions', () => {
+    expect(parseUserPagesHost(undefined)).toBeNull();
+    expect(parseUserPagesHost('  ')).toBeNull();
+    expect(parseUserPagesHost(' U.Example.net. ')).toBe('u.example.net');
+    for(const value of ['https://u.example.net','u.example.net:4100','user@u.example.net','u.example.net/path'])expect(()=>parseUserPagesHost(value)).toThrow('APP__USER_PAGES_HOST');
+    for(const value of ['app.example.test','pages.example.test','abc.pages.example.test','example.test'])expect(()=>parseUserPagesHost(value,'https://app.example.test','pages.example.test',[])).toThrow('conflicts');
+    expect(()=>parseUserPagesHost('alias.example.test','https://app.example.test','pages.example.test',['https://alias.example.test'])).toThrow('conflicts');
+    expect(parseUserPagesHost('u.lvh.me','http://app.lvh.me:4100','lvh.me',[])).toBe('u.lvh.me');
   });
 
   it('reads alias origins as a list', () => {

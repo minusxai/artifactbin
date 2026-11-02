@@ -4,7 +4,6 @@ import { request, setSession, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { measureQueries } from '@/lib/platform';
 
@@ -25,7 +24,6 @@ const door = async (id: string, query = 'part=kind', options: Parameters<typeof 
 async function world() {
   const user = await createUser({ email: 'mxmx_test_kind_door@example.com' });
   const token = await mintToken('kind-door', user.id);
-  await claimToken(user.id, token.token);
   const create = async (json: Record<string, unknown>) => {
     const response = await createRoute(request('/api/artifacts', { method: 'POST', json, token: token.token }));
     expect(response.status, await response.clone().text()).toBe(201);

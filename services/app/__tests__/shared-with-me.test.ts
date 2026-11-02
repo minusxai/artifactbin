@@ -21,7 +21,6 @@ import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/rout
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { listSharedWithEmail } from '@/lib/workspace';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
@@ -36,7 +35,6 @@ async function ownerFixture() {
   const owner = await ensureUsername(await createUser({ email: 'share-owner@example.com' }));
   await setUsername(owner.id, 'shareowner');
   const t = await mintToken('share', owner.id);
-  await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }
 

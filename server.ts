@@ -1,3 +1,5 @@
+import {isUserPagesHost,handleFromUserPagesHost} from './services/app/lib/user-pages';
+import {userHostIngress,userHostStaticPath,USER_HOST_CREDENTIAL_HEADERS} from './services/app/server/user-host';
 import {admitDeploymentIdentity,validateDeploymentConfiguration} from './services/app/lib/deployment';
 /**
  * OSS single-process host: shared authentication wraps the app. SQL, browser
@@ -91,7 +93,7 @@ async function main(): Promise<void> {
    * entry that loads the native module, Playwright or the writer's own DDL,
    * and the lean image has none of them.
    */
-  const { services, setServices } = await import('@/lib/platform');
+  const { services, setServices,USER_PAGES_HOST } = await import('@/lib/platform');
   /** Settings another package's env boundary consumed on this process's behalf. */
   const sessionEnvNames = new Set<string>();
   if (!SQL_SERVICE_URL) {
@@ -222,10 +224,11 @@ async function main(): Promise<void> {
    * THE LISTENER: the app alone, or authentication assembled around it. ONE boot
    * path — the flag only decides who answers the socket.
    */
+  const anonymousHosts = {name:'anonymousUserHosts',mount:<E extends import('hono').Env>(host:import('hono').Hono<E>)=>{host.use('*',userHostIngress(app));}};
   const listener = appOnly
-    ? getRequestListener(assemble([bearerAdmission({env,tokens:reader,identityDb:queryable,appSchema:readEnv(env,'APP__SCHEMA'),admitIdentity:admitDeploymentIdentity}),
+    ? getRequestListener(assemble([anonymousHosts,bearerAdmission({env,tokens:reader,identityDb:queryable,appSchema:readEnv(env,'APP__SCHEMA'),admitIdentity:admitDeploymentIdentity}),
       {name:'application',mount:host=>host.all('*',c=>app.fetch(c.req.raw))}]).fetch)
-    : getRequestListener(assemble(authParts({
+    : getRequestListener(assemble([anonymousHosts,...authParts({
       upstream: inProcess(app),
       env,
       tokens: reader!,
@@ -236,7 +239,7 @@ async function main(): Promise<void> {
       identityDb: queryable,
       appSchema: readEnv(env, 'APP__SCHEMA'),
       events,
-    })).fetch);
+    })]).fetch);
 
   /*
    * SAY SOMETHING ABOUT AN ENV NOBODY READ. There is exactly one spelling of
@@ -260,7 +263,20 @@ async function main(): Promise<void> {
    * everything else — so in dev its asset paths are matched BEFORE the door check.
    */
   const server = http.createServer(withRequestLog(
-    vite ? (req, res) => vite!.middlewares(req, res, () => void listener(req, res)) : listener,
+    vite ? (req, res) => {
+      const addressed=req.headers['x-forwarded-host']??req.headers.host??new URL(baseURL).host;
+      const host=(Array.isArray(addressed)?addressed[0]!:addressed).split(',')[0]!.trim();
+      if(isUserPagesHost(host,USER_PAGES_HOST)){
+        const pathname=new URL(req.url??'/',baseURL).pathname;
+        // Vite normally fronts authentication. Owner hosts must never reach its
+        // executable source graph or bypass the product's resource boundary.
+        if(!handleFromUserPagesHost(host,USER_PAGES_HOST)||!['GET','HEAD'].includes(req.method??'')||!userHostStaticPath(pathname)){
+          void listener(req,res);return;
+        }
+        for(const name of USER_HOST_CREDENTIAL_HEADERS)delete req.headers[name];
+      }
+      vite!.middlewares(req,res,()=>void listener(req,res));
+    } : listener,
   ));
   server.once('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {

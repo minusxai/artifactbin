@@ -25,7 +25,6 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser, setUsername } from '@/lib/accounts';
 
 useAppHarness();
@@ -35,7 +34,6 @@ const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as 
 async function owner(name: string) {
   const u = await createUser({ email: `${name}@example.com` });
   const t = await mintToken(name, u.id);
-    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id, email: `${name}@example.com`, actor: { userId: u.id, email: u.email, emailVerified: true, credential: 'session' as const } };
 }
 const create = async (token: string, body: Record<string, unknown>) => {

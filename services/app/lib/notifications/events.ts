@@ -7,6 +7,29 @@ export async function projectNotifications(tx:Queryable,event:EventEnvelope):Pro
  const sender=event.subject_kind==='user'?event.subject_id:null;
  const objectId=event.object_id;
  const payload=event.payload;
+ if(event.object_kind==='group'&&sender){
+  const group=(await tx.query<{name:string;handle:string}>('SELECT name,handle FROM groups WHERE id=$1',[objectId])).rows[0];
+  const addresses=new Map<string,string|null>();
+  const recipients=new Set(Array.isArray(payload.recipients)?payload.recipients.map(String):[]);
+  if(typeof payload.invitation_id==='string'){
+   const invite=(await tx.query<{email:string}>('SELECT email FROM group_invitations WHERE id=$1',[payload.invitation_id])).rows[0];
+   if(invite){const users=(await tx.query<{id:string}>("SELECT id FROM users WHERE email=$1 AND kind='account'",[invite.email])).rows;
+    if(!users.length)addresses.set(invite.email,null);
+    for(const user of users)recipients.add(user.id);
+   }
+  }
+  for(const recipient of recipients){if(recipient===sender||await blocked(tx,sender,recipient))continue;
+   const user=(await tx.query<{email:string}>('SELECT email FROM users WHERE id=$1',[recipient])).rows[0];if(user?.email)addresses.set(user.email,recipient);
+   await recordNotification(tx,{id:`group:${event.id}:${recipient}`,artifactId:null,recipientId:recipient,senderId:sender,kind:`group_${payload.action}`,source:`group:${objectId}`,once:true,sourceEventId:event.id});
+  }
+  if(group)for(const [email,recipient] of addresses){
+   // Test senders never reach real mail, and blocked recipients stay excluded.
+   if((await tx.query('SELECT 1 FROM users WHERE id=$1 AND test_account',[sender])).rows.length)continue;
+   if(recipient&&await blocked(tx,sender,recipient))continue;
+   await tx.query('INSERT INTO group_mail_outbox(id,email,recipient_id,group_id,group_name,handle,action,sender_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING',[`group:${event.id}:${email}`,email,recipient,objectId,group.name,group.handle,payload.action,sender]);
+  }
+  return;
+ }
  if(event.object_kind==='artifact'&&event.verb==='annotation_deleted'){
   await removeThreadNotifications(tx,objectId,String(payload.annotation_id));
   return;

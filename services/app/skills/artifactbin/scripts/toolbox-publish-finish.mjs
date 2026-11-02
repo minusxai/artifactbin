@@ -44,7 +44,8 @@ const companion=output+'.af.json',write=inPlace?atomicWrite:exclusive;await writ
     body.file.contentType,filename:body.file.filename}:{}),sourceFile:path.basename(output),
     historical:false},null,2)+'\n');pair={source:output,baseline:companion};
  }
-const result={id:receipt.id,url:receipt.url,version:receipt.version,journal,...pair,...(
+const result={id:receipt.id,url:receipt.url,...(receipt.user_page_url?{user_page_url:
+  receipt.user_page_url}:{}),version:receipt.version,journal,...pair,...(
    receipt.identity?{identity:receipt.identity}:{}),...(inPlace?{updatedInPlace:true}:
    saved.source?.file?{note:
    'The input changed during publication, so it was kept. Reapply those later edits to the saved '+

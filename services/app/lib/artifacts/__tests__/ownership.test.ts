@@ -1,15 +1,14 @@
 /**
- * WHOSE A ROW IS through the interface: new-artifact destinations, atomic ownership transfer of an owner closure,
- * and the adoption of a claimed token's or a merged guest's artifacts.
+ * WHOSE A ROW IS through the interface: new-artifact destinations, atomic ownership transfer of an owner closure.
  */
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
-import { identityForUser, mintToken } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import { createGroup } from '@/lib/groups';
-import { adoptGuestArtifacts, adoptTokenArtifacts, createArtifact, newArtifactDestination, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
-import { account, dataset, head, mine, page, personOfKind, sql } from '@/__tests__/artifact-fixtures';
+import { createArtifact, newArtifactDestination, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { account, dataset, head, mine, sql } from '@/__tests__/artifact-fixtures';
 
-const harness = useAppHarness();
+useAppHarness();
 const folder = (actor: { userId: string }, title = 'Folder', ancestor_ids: string[] = [], extra: Record<string, unknown> = {}) =>
   createArtifact(null, actor.userId, { format: 'folder', source: null, meta: {}, title, ancestor_ids, ...extra });
 
@@ -55,23 +54,5 @@ describe('destinations and transfer', () => {
     const foreign = await mine(stranger, 'Foreign');
     await sql('UPDATE artifacts SET ancestor_ids=$2 WHERE id=$1', [foreign.id, [mixed.id]]);
     await expect(transferArtifact(owner, mixed.id, { type: 'group', id: group.id })).rejects.toThrow('different owner');
-  });
-});
-
-describe('adoption', () => {
-  it('a claimed token takes only its unowned, ungrouped rows; a guest merge takes everything the guest owns', async () => {
-    const user = await account('claimer@example.test');
-    const guest = await personOfKind('guest');
-    const loose = await mintToken('loose', null);
-    const loose2 = await createArtifact(loose.id, null, page('Loose'));
-    const owned = await createArtifact(loose.id, user.userId, page('Owned'));
-    const guestRow = await createArtifact(null, guest.userId, page('Guest'));
-    const db = await harness.db();
-    expect(await db.transaction(tx => adoptTokenArtifacts(tx, loose.id, user.userId))).toBe(1);
-    expect(await db.transaction(tx => adoptTokenArtifacts(tx, loose.id, user.userId))).toBe(0);
-    expect((await head(loose2.id)).user_id).toBe(user.userId);
-    expect((await head(owned.id)).user_id).toBe(user.userId);
-    await db.transaction(tx => adoptGuestArtifacts(tx, guest.userId, user.userId));
-    expect((await head(guestRow.id)).user_id).toBe(user.userId);
   });
 });

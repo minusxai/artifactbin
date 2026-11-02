@@ -25,7 +25,6 @@ import { eraseTestUser, sweepTestUsers } from '../testuser-erase';
 import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers, resolveTokenById, createUser, getUserById } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { count, has, link } from '@/lib/social';
 import { setAvatar } from '@/lib/avatars';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
@@ -38,7 +37,6 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });
   const token = await mintToken(name, user.id);
-    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id };
 }
 
@@ -169,7 +167,6 @@ const png = () => sharp({ create: { width: 30, height: 30, channels: 3, backgrou
 it('erasing a test user takes its picture with it, and survives an object that has already gone', async () => {
   const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
   const token = await mintToken('eraser', owner.id);
-  await claimToken(owner.id, token.token);
 
   const mint = async () => {
     const minted = await createTestUser(identityForUser(owner.id, token.id));

@@ -120,10 +120,12 @@ const live = (scope: Scope): Scope => ({ where: (p) => `${LIVE_ARTIFACT_SQL} AND
  * through an email change, and an old invite to an address the person no
  * longer has stops matching (share-resolution.test.ts).
  */
+const GROUP_SHARE_PREDICATE=(roles:readonly string[],param:string)=>`EXISTS (SELECT 1 FROM artifact_group_shares gs JOIN group_members gm ON gm.group_id=gs.group_id JOIN groups g ON g.id=gm.group_id JOIN users gu ON gu.id=gm.user_id WHERE gs.artifact_id=artifacts.id AND gm.user_id=${param} AND gu.kind='account' AND g.deleted_at IS NULL AND gs.role IN (${roles.map(role=>`'${role}'`).join(',')}))`;
+
 export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
-  `EXISTS (SELECT 1 FROM artifact_shares s
+  `(${GROUP_SHARE_PREDICATE(roles,param)} OR EXISTS (SELECT 1 FROM artifact_shares s
            WHERE s.artifact_id = artifacts.id AND s.role IN (${roles.map((r) => `'${r}'`).join(', ')})
-             AND (s.user_id = ${param} OR (s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = ${param}))))`;
+             AND (s.user_id = ${param} OR (s.user_id IS NULL AND s.email = (SELECT email FROM users WHERE id = ${param})))))`;
 
 /**
  * WHO owns the row, WITHOUT the trash gate — for lib/trash alone, which reads
@@ -140,7 +142,7 @@ export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(act
 /** One read-access fence for policy actions: sharing remains the only audience. Placeholders are the caller's. */
 export function policyReaderSql(user = '$13', token = '$14'): string {
   return `(artifacts.visibility<>'private' OR (artifacts.group_id IS NULL AND (artifacts.user_id=${user} OR (artifacts.user_id IS NULL AND artifacts.token_id=${token}))) OR ${groupMemberPredicate(user)}
-   OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
+   OR ${GROUP_SHARE_PREDICATE(['viewer','commenter','editor'],user)} OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
      AND (policy_reader.user_id=${user} OR (policy_reader.user_id IS NULL AND
        policy_reader.email=(SELECT email FROM users WHERE id=${user})))))`;
 }
@@ -197,7 +199,7 @@ export const annotationScope = (actor: AccessActor): Scope => scopeAtLeast(actor
 /** Group viewers may observe comment feeds without gaining annotation writes. */
 export const commentMonitorScope = (actor:AccessActor):Scope => {
  const scope=annotationScope(actor);
- return actor.userId?{where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND ${groupMemberPredicate(p)}))`,val:scope.val}:scope;
+ return actor.userId?{where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND (${groupMemberPredicate(p)} OR ${GROUP_SHARE_PREDICATE(['viewer','commenter','editor'],p)})))`,val:scope.val}:scope;
 };
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */

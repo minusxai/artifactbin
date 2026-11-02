@@ -17,15 +17,14 @@ export interface TokenRecord {
 export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */
   byToken(presented: string): Promise<TokenRecord | null>;
-  /** The agent-cookie path (the cookie carries ids, never secrets). */
+  /** Token-reference liveness lookup; callers establish the request authority. */
   byId(id: string): Promise<TokenRecord | null>;
   /** Composition-root hook: the app's revoke calls this in the full image; across a network the bound is the TTL. */
   invalidate(id?: string): void;
 }
 export interface TokenReaderOptions {
   db: Queryable;
-  /** Owning service's bearer admission policy, rechecked even on cache hits.
-   * ID reads remain available for legacy ownership adoption after email login. */
+  /** Owning service's bearer admission policy, rechecked even on cache hits. */
   admitBearer?: (token: TokenRecord) => Promise<boolean>;
   /** Where `tokens` lives (APP__SCHEMA). Interpolated — validated as a plain identifier. */
   schema?: string;
@@ -47,6 +46,3 @@ export interface CodeStore {
   claimBySubject(i: { kind: string; subject: string; code: string; maxAttempts: number; now?: number }): Promise<ClaimResult>;
   peekByHash(i: { kind: string; code: string; now?: number }): Promise<Record<string, unknown> | null>;
 }
-
-/** The signed browser cookie: token IDS, never secrets; the last id is the primary. */
-export interface AgentSession { tokenIds: string[]; sessionId?: string }

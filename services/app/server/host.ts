@@ -1,7 +1,6 @@
 import {setNotificationDelivery,type NotificationDelivery} from '@/lib/notifications';
 export type {NotificationDelivery} from '@/lib/notifications';
 import {startAppBackgroundTasks} from '@/lib/runtime';
-import { startDomainRecheck } from '@/lib/custom-domains';
 import { setDocumentEditorPolicy, type DocumentEditorPolicy } from '@/lib/authentication';
 import {setMutationInvocation,type MutationInvocationFactory} from '@/lib/artifacts';
 import {useSqlExtensions} from '@/lib/sql';
@@ -39,13 +38,11 @@ export async function createAppHost(options:AppHostOptions={}):Promise<AppHost>{
  if(options.services)setServices(options.services);
  await options.initialize?.(db);
  const stopBackgroundTasks=await startAppBackgroundTasks(db);
- // Custom domains' daily TXT re-check: at boot, then every 24h, flag or no flag (lib/custom-domains).
- const stopRecheck=startDomainRecheck();
  const app=createAppServer(options),request=inProcess(app);
  const fetch=options.identity?.(request).fetch??((incoming:Request)=>Promise.resolve(app.fetch(incoming)));
  let closing:Promise<void>|undefined;
  return {fetch,request,close:()=>closing??=(async()=>{
-  try{await stopBackgroundTasks();await stopRecheck();await services().events.close?.();await options.shutdown?.();}
+  try{await stopBackgroundTasks();await services().events.close?.();await options.shutdown?.();}
   finally{await db.close();}
  })()};
 }

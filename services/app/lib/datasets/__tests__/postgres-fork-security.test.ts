@@ -10,14 +10,13 @@ import {POST as tables} from '@/app/a/[id]/tables/route';
 import {createDatasetSecret} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import {request,setSession,useAppHarness} from '@/__tests__/harness';
 const harness=useAppHarness();const current={id:'',email:''};
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 beforeEach(()=>{current.id='';current.email='';});
 beforeEach(()=>setSession(()=>current.id?{user:{id:current.id,email:current.email}}:null));
-async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name, account.id);await claimToken(account.id,token.token);return {account,token};}
+async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name, account.id);return {account,token};}
 async function postgresDataset(owner:Awaited<ReturnType<typeof user>>){
  const secret=await createDatasetSecret(identityForUser(owner.account.id, owner.token.id),'fork-test-password',target);
  const definition={kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:['id']}]};

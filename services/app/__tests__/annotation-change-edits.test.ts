@@ -152,11 +152,10 @@ it('allocates an edit\'s feed position only after locking the artifact', async (
 it('says which comments were written with the watching credential: author.you', async () => {
   const f = await fixture();
   const { createUser } = await import('@/lib/accounts');
-  const { claimToken } = await import('@/lib/authentication');
   const { updateSharingFor } = await import('@/lib/artifacts');
   const { identityForUser } = await import('@/lib/accounts');
   const colleague = await createUser({ email: 'mxmx_test_feed_colleague@example.com' });
-  const colleagueToken = await mintAccountToken('feed-colleague', colleague.id); await claimToken(colleague.id, colleagueToken.token);
+  const colleagueToken = await mintAccountToken('feed-colleague', colleague.id);
   await updateSharingFor(identityForUser(f.t.userId!, f.t.id), f.doc.id, { shares: [{ email: colleague.email!, role: 'commenter' }] });
   const cursor = await f.now();
   // The watcher's own user in the browser is not the watcher: an agent must answer its user's comments.

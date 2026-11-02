@@ -1,3 +1,4 @@
+import {admitGroupMember} from '@/__tests__/harness';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness} from '@/__tests__/harness';
 import { createUser, setUsername } from '@/lib/accounts';
@@ -31,11 +32,11 @@ describe('independent group owner contracts',()=>{
  it('permits editor member management, refuses viewers and protects the last editor',async()=>{
   const owner=await account('owner'),viewer=await account('viewer'),other=await account('other');
   const group=await createGroup(owner.id,{handle:'acme',name:'Acme'});
-  await setGroupMember(owner.id,group.id,viewer.id,'viewer');
+  await admitGroupMember(owner.id,group.id,viewer.id,'viewer');
   await expect(setGroupMember(viewer.id,group.id,other.id,'editor')).rejects.toThrow();
   await expect(removeGroupMember(owner.id,group.id,owner.id)).rejects.toThrow();
   await expect(setGroupMember(owner.id,group.id,owner.id,'viewer')).rejects.toThrow();
-  await setGroupMember(owner.id,group.id,other.id,'editor');
+  await admitGroupMember(owner.id,group.id,other.id,'editor');
   await removeGroupMember(other.id,group.id,owner.id);
   expect(await getGroupRole(owner.id,group.id)).toBeNull();
   expect((await getGroupDetail(other.id,group.id))?.group.id).toBe(group.id);
@@ -50,7 +51,7 @@ describe('independent group owner contracts',()=>{
   const owner=await account('owner'),member=await account('member');const group=await createGroup(owner.id,{handle:'acme',name:'Acme'});
   expect(await getAccountPreferences(member.id)).toEqual({default_destination:{type:'inherit'}});
   await expect(setAccountPreferences(member.id,{type:'group',id:group.id})).rejects.toThrow();
-  await setGroupMember(owner.id,group.id,member.id,'viewer');
+  await admitGroupMember(owner.id,group.id,member.id,'viewer');
   await setAccountPreferences(member.id,{type:'group',id:group.id});
   await removeGroupMember(owner.id,group.id,member.id);
   expect(await getAccountPreferences(member.id)).toEqual({default_destination:{type:'group',id:group.id}});
@@ -58,7 +59,7 @@ describe('independent group owner contracts',()=>{
  });
  it('serializes competing last-editor removals',async()=>{
   const first=await account('first'),second=await account('second');const group=await createGroup(first.id,{handle:'race_team',name:'Race'});
-  await setGroupMember(first.id,group.id,second.id,'editor');
+  await admitGroupMember(first.id,group.id,second.id,'editor');
   const results=await Promise.allSettled([removeGroupMember(first.id,group.id,first.id),removeGroupMember(second.id,group.id,second.id)]);
   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
   const db=await getDb();expect(Number((await db.query<{count:string}>("SELECT count(*) FROM group_members WHERE group_id=$1 AND role='editor'",[group.id])).rows[0].count)).toBe(1);
@@ -84,7 +85,7 @@ describe('independent group owner contracts',()=>{
  });
  it('links groups for navigation without inheriting membership',async()=>{
   const owner=await account('owner'),viewer=await account('viewer');const first=await createGroup(owner.id,{handle:'first_team',name:'First'}),second=await createGroup(owner.id,{handle:'second_team',name:'Second'});
-  await setGroupMember(owner.id,first.id,viewer.id,'viewer');await setGroupLink(owner.id,first.id,second.id,true);
+  await admitGroupMember(owner.id,first.id,viewer.id,'viewer');await setGroupLink(owner.id,first.id,second.id,true);
   expect((await getGroupDetail(viewer.id,first.id))?.linked_groups).toMatchObject([{id:second.id,role:null}]);
   expect(await getGroupRole(viewer.id,second.id)).toBeNull();expect(await getGroupDetail(viewer.id,second.id)).toBeNull();
  });

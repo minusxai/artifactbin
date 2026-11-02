@@ -12,7 +12,6 @@ import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '../app';
@@ -28,7 +27,7 @@ const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doc
 
 async function publicDocument() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_encoding@example.com' }));
-  const t = await mintToken('o'); await claimToken(owner.id, t.token);
+  const t = await mintToken('o', owner.id);
   const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Pub', html:nativeHtml('<div><p>' + 'public words that repeat. '.repeat(100) + '</p></div>'), visibility: 'public' }) }));
   const { id } = await res.json() as { id: string };
   return { id, canonical: `/@${owner.username}/${id}-pub` };

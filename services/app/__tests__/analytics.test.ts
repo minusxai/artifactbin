@@ -29,7 +29,6 @@ import { mintExportKey } from '@/lib/export';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { renderSparklineSvg } from '@/lib/viz';
 
 const BASE = 'http://localhost:3000';
@@ -208,7 +207,6 @@ describe('read events', () => {
   it('a denied viewer logs nothing; the owner’s pretty-URL render logs a view with their id', async () => {
     const owner = await createUser({ email: 'owner@example.com' });
     const t = await mintToken('owned', owner.id);
-    await claimToken(owner.id, t.token);
     const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'private', title: 'secret' });
 
     expect(await outcome(ArtifactPage(doc.id))).toBe('notFound');

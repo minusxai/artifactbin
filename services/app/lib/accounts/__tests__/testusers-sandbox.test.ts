@@ -21,7 +21,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { getUserById, identityForUser, createTestUser, createUser, getUserByUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { userOptions } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
@@ -32,7 +31,6 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_${name}@example.com`, name });
   const token = await mintToken(name, user.id);
-    await claimToken(user.id, token.token);
   return { token: token.token, tokenId: token.id, userId: user.id };
 }
 

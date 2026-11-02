@@ -1,3 +1,5 @@
+import {DELETE as withdraw} from '@/app/api/groups/[id]/invitations/[invitationId]/route';
+import {getGroupRole,acceptGroupInvitations} from '@/lib/groups';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import {POST as create,GET as list} from '@/app/api/groups/route';
@@ -25,7 +27,9 @@ describe('groups authenticated HTTP boundary',()=>{
   expect((await (await list(request('/api/groups',{token:owner.token}))).json()).groups).toMatchObject([{id:group.id}]);
   expect((await detail(request('/api/groups/@api_team',{token:owner.token}),context({id:'@api_team'}))).status).toBe(200);
   expect((await detail(request('/api/groups/'+group.id,{token:outsider.token}),context({id:group.id}))).status).toBe(404);
-  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(200);
+  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(404);
+  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:viewer.email,role:'viewer'}}),context({id:group.id}))).status).toBe(201);
+  await acceptGroupInvitations(viewer.userId!,viewer.email!);
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'editor'}}),context({id:group.id}))).status).toBe(403);
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),context({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
  });
@@ -35,4 +39,16 @@ describe('groups authenticated HTTP boundary',()=>{
   expect((await savePreferences(request('/api/me/preferences',{method:'PUT',token:owner.token,json:{}}))).status).toBe(400);
   expect(await (await savePreferences(request('/api/me/preferences',{method:'PUT',token:owner.token,json:{default_destination:{type:'personal'}}}))).json()).toEqual({default_destination:{type:'personal'}});
  });
+});
+
+it('refuses withdrawal of accepted or missing invitations without removing membership',async()=>{
+ const owner=await mintAccountToken('withdraw_owner'),invitee=await mintAccountToken('withdraw_member');
+ const group=await (await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'withdraw_team',name:'Withdrawal'}}))).json();
+ const invitation=await (await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:invitee.email,role:'viewer'}}),context({id:group.id}))).json();
+ await acceptGroupInvitations(invitee.userId!,invitee.email!);
+ for(const invitationId of [invitation.id,'gin_missing']){
+  const response=await withdraw(request('/api/groups/'+group.id+'/invitations/'+invitationId,{method:'DELETE',token:owner.token}),context({id:group.id,invitationId}));
+  expect(response.status).toBe(404);expect(await response.json()).toMatchObject({error:'not_found'});
+ }
+ expect(await getGroupRole(invitee.userId!,group.id)).toBe('viewer');
 });

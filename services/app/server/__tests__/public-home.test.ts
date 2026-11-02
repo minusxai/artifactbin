@@ -33,7 +33,7 @@ describe('application home',()=>{
   expect(response.status).toBe(302);expect(response.headers.get('location')).toBe('/login?signedOut=1');
  });
  it('sends anonymous held-token sessions to login without exposing drafts',async()=>{
-  const response=await app.request(request('/',{actor:{credential:'agent-cookie',tokenId:'held-token',heldTokenIds:['held-token']}}));
+  const response=await app.request(request('/',{actor:{credential:'agent-cookie',tokenId:'held-token'}}));
   expect(response.status).toBe(302);expect(response.headers.get('location')).toBe('/login');
  });
  it.each(['/examples','/privacy','/terms'])('does not serve the removed %s marketing page',async path=>{

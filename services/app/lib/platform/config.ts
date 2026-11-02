@@ -329,21 +329,23 @@ export const ANALYTICS_SECRET = env('ANALYTICS', 'SECRET') ?? AUTH_SECRET;
  */
 export const ALLOW_PUBLIC_VISIBILITY = env('ARTIFACTS', 'ALLOW_PUBLIC') === '1' || IS_DEV;
 
-/**
- * CUSTOM DOMAINS — the DNS target hostname a person points their own domain at
- * (`domains.artifactbin.dev`): a CNAME/ALIAS to it, or an A record to the
- * address it resolves to. Unset or empty is OFF.
- *
- * It gates ATTACHING and VERIFYING only (lib/custom-domains). Serving a
- * verified domain, the certificate ask check, the daily re-check and removal
- * all ignore it, so switching it off never breaks a live domain or locks an
- * owner into one they cannot detach.
- */
-export function parseCustomDomainsTarget(value: string | undefined): string | null {
-  const target = value?.trim().toLowerCase().replace(/\.$/, '') ?? '';
-  return target || null;
+/** Anonymous user/group publishing hosts. Unset is off; this never grants account authority. */
+export function parseUserPagesHost(value: string | undefined, app = PUBLIC_BASE_URL, pages: string | null = PAGES_HOST, aliases: readonly string[] = ALIAS_ORIGINS): string | null {
+  let host: string | null;
+  try { host = parsePagesHost(value); } catch { throw new Error('APP__USER_PAGES_HOST must be a bare hostname without a scheme, port, path or credentials.'); }
+  if (!host) return null;
+  if (isIP(host)) throw new Error('APP__USER_PAGES_HOST must be a DNS hostname.');
+  const own = [app, ...aliases, ...(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : [])].map(origin => new URL(origin).hostname.toLowerCase());
+  const under = (name: string, base: string) => name === base || name.endsWith(`.${base}`);
+  // A pages host may be an ancestor (u.lvh.me under lvh.me), but a hex label
+  // at that depth would collide with an existing document origin.
+  const suffix = pages && host.endsWith(`.${pages}`) ? host.slice(0, -pages.length - 1) : null;
+  if (own.some(name => under(name, host)) || pages && (under(pages, host) || suffix !== null && /^[a-f0-9]+$/.test(suffix))) {
+    throw new Error('APP__USER_PAGES_HOST conflicts with an app, alias, assets or pages host.');
+  }
+  return host;
 }
-export let CUSTOM_DOMAINS_TARGET = parseCustomDomainsTarget(env('FLAG', 'CUSTOM_DOMAINS'));
+export let USER_PAGES_HOST = parseUserPagesHost(env('APP', 'USER_PAGES_HOST'));
 
 /**
  * Where Chromium runs. Set, the export renders through an HTTP client to the
@@ -459,7 +461,7 @@ export function cliReleaseVersion(): string {
  * every file; production code never calls either.
  */
 const SETTING_DEFAULTS = {
-  publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, customDomainsTarget: CUSTOM_DOMAINS_TARGET,
+  publicBaseUrl: PUBLIC_BASE_URL, assetsOrigin: ASSETS_ORIGIN, aliasOrigins: ALIAS_ORIGINS, userPagesHost: USER_PAGES_HOST,
   browserServiceUrl: BROWSER_SERVICE_URL, internalServiceSecret: INTERNAL_SERVICE_SECRET, sqlServiceUrl: SQL_SERVICE_URL, eventsServiceUrl: EVENTS_SERVICE_URL,
   testDomain: TEST_DOMAIN,
 };
@@ -468,7 +470,7 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
   if ('publicBaseUrl' in settings) PUBLIC_BASE_URL = settings.publicBaseUrl!;
   if ('assetsOrigin' in settings) ASSETS_ORIGIN = settings.assetsOrigin!;
   if ('aliasOrigins' in settings) ALIAS_ORIGINS = settings.aliasOrigins!;
-  if ('customDomainsTarget' in settings) CUSTOM_DOMAINS_TARGET = settings.customDomainsTarget!;
+  if ('userPagesHost' in settings) USER_PAGES_HOST = settings.userPagesHost!;
   if ('browserServiceUrl' in settings) BROWSER_SERVICE_URL = settings.browserServiceUrl;
   if ('internalServiceSecret' in settings) INTERNAL_SERVICE_SECRET = settings.internalServiceSecret;
   if ('sqlServiceUrl' in settings) SQL_SERVICE_URL = settings.sqlServiceUrl;
@@ -478,7 +480,7 @@ export function overrideConfig(settings: ConfigOverrides, environment: Record<st
 }
 export function resetConfigOverrides(): void {
   PUBLIC_BASE_URL = SETTING_DEFAULTS.publicBaseUrl; ASSETS_ORIGIN = SETTING_DEFAULTS.assetsOrigin; ALIAS_ORIGINS = SETTING_DEFAULTS.aliasOrigins;
-  CUSTOM_DOMAINS_TARGET = SETTING_DEFAULTS.customDomainsTarget; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
+  USER_PAGES_HOST = SETTING_DEFAULTS.userPagesHost; BROWSER_SERVICE_URL = SETTING_DEFAULTS.browserServiceUrl;
   INTERNAL_SERVICE_SECRET = SETTING_DEFAULTS.internalServiceSecret; SQL_SERVICE_URL = SETTING_DEFAULTS.sqlServiceUrl; EVENTS_SERVICE_URL = SETTING_DEFAULTS.eventsServiceUrl;
   TEST_DOMAIN = SETTING_DEFAULTS.testDomain;
   envOverrides.clear();

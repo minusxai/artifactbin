@@ -5,21 +5,15 @@ import { mintAccountToken, setSession } from '@/__tests__/harness';
  *   mint      → expires_at = now + 6 h by default; the mint answers expiresAt; a caller may ask for 1–8760 h
  *   status    → derived from the row, never stored twice: revoked > expired > active; NULL expires_at never expires
  *   resolve   → an expired token is NOTHING on both paths (bearer + cookie id), exactly like a revoked one
- *   claim     → an expired token's artifacts transfer; the token is NOT reactivated (a test, not an implication)
  *   touch     → last_used_at is stamped where the app first trusts a token-bearing actor, sampled per minute
- *   reject    → POST /api/tokens/reject revokes a cookie-held token and rewrites the cookie without it
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { claimTokenById } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
-import { createArtifact } from '@/lib/artifacts';
-import { DEFAULT_TOKEN_TTL_MS, ensureUserToken, listTokensByUser, mintToken, resolveToken, resolveTokenById, tokenStatus } from '@/lib/accounts';
+import { DEFAULT_TOKEN_TTL_MS, ensureUserToken, listTokensByUser, mintToken, resolveToken, resolveTokenById } from '@/lib/accounts';
 import { TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
-import { decodeAgentSessionEnvelope } from '@/lib/accounts/agent-session';
 import { POST as mintAnonymous } from '@/app/api/internal/tokens/route';
-import { POST as reject } from '@/app/api/tokens/reject/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
-import { agentCookie, cookieValue, request, useAppHarness } from '@/__tests__/harness';
+import { request, useAppHarness } from '@/__tests__/harness';
 
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 const HOUR = 60 * 60 * 1000;
@@ -85,25 +79,6 @@ describe('resolve: expired is nothing, on both paths', () => {
   });
 });
 
-describe('claim: ownership transfers, usability never returns', () => {
-  it('claiming an EXPIRED held token moves its artifacts to the account and leaves the token expired', async () => {
-    const t = await mintToken('draft');
-    const artifact = await createArtifact(t.id, null, { format: 'markup', source: '<div />', meta: {}, title: 'draft', description: null });
-    await setExpiry(t.id, -60_000);
-    const user = await createUser({ email: 'claimer@example.com' });
-    const claimed = await claimTokenById(user.id, t.id);
-    expect(claimed?.claimedArtifacts).toBe(1);
-    const db = await harness.db();
-    const owner = (await db.query<{ user_id: string | null }>('SELECT user_id FROM artifacts WHERE id = $1', [artifact.id])).rows[0];
-    expect(owner?.user_id).toBe(user.id);
-    const after = await row(t.id);
-    expect(after.user_id).toBe(user.id);
-    expect(tokenStatus(after)).toBe('expired');
-    expect(await resolveTokenById(t.id)).toBeNull();
-    expect(await resolveToken(t.token)).toBeNull();
-  });
-});
-
 describe('touch: last_used_at, sampled', () => {
   it('a token-bearing actor the app trusts stamps last_used_at once, then at most once per interval', async () => {
     const t = await mintAccountToken('agent');
@@ -146,61 +121,5 @@ describe('touch: last_used_at, sampled', () => {
       olderUse.id,
       neverUsed.id,
     ]);
-  });
-});
-
-describe('reject: POST /api/tokens/reject', () => {
-  it('revokes a held token and rewrites the cookie without it, keeping the others in order', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id, b.id]), json: { tokenId: a.id } }));
-    expect(res.status).toBe(204);
-    const { value } = cookieValue(res);
-    expect(await decodeAgentSessionEnvelope(value)).toMatchObject({ tokenIds: [b.id], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
-    expect(await resolveTokenById(a.id)).toBeNull();
-    expect(tokenStatus(await row(a.id))).toBe('revoked');
-    expect(await resolveTokenById(b.id)).not.toBeNull();
-  });
-
-  it('rejecting the last held token clears the cookie', async () => {
-    const a = await mintToken('a');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id]), json: { tokenId: a.id } }));
-    expect(res.status).toBe(204);
-    expect(cookieValue(res).cleared).toBe(true);
-    expect(await resolveTokenById(a.id)).toBeNull();
-  });
-
-  it('404 when the cookie does not hold the id, and nothing is revoked', async () => {
-    const a = await mintToken('a');
-    const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([b.id]), json: { tokenId: a.id } }));
-    expect(res.status).toBe(404);
-    expect(await resolveTokenById(a.id)).not.toBeNull();
-    const none = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id } }));
-    expect(none.status).toBe(404);
-  });
-
-  it("a token claimed by ANOTHER account is never revoked here; the owner's own session may", async () => {
-    const owner = await createUser({ email: 'owner@example.com' });
-    const c = await mintToken('c', owner.id);
-    const cookie = await agentCookie([c.id]);
-    const stranger = await reject(request('/api/tokens/reject', { method: 'POST', cookie, json: { tokenId: c.id } }));
-    expect(stranger.status).toBe(404);
-    expect(await resolveTokenById(c.id)).not.toBeNull();
-    const asOwner = await reject(request('/api/tokens/reject', {
-      method: 'POST',
-      cookie,
-      json: { tokenId: c.id },
-      actor: { credential: 'session', userId: owner.id, email: 'owner@example.com', emailVerified: true, heldTokenIds: [c.id] },
-    }));
-    expect(asOwner.status).toBe(204);
-    expect(await resolveTokenById(c.id)).toBeNull();
-  });
-
-  it('refuses a cross-site request with 403, like claim', async () => {
-    const a = await mintToken('a');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id]), origin: 'https://evil.example', json: { tokenId: a.id } }));
-    expect(res.status).toBe(403);
-    expect(await resolveTokenById(a.id)).not.toBeNull();
   });
 });

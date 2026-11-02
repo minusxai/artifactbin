@@ -30,10 +30,11 @@ describe('the registry is curated, not generated', () => {
 
   it('carries the artifact and dataset operations of the protocol', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
+      'create_group','delete_group','get_group','invite_group_member','leave_group','link_group','list_group_invitations','list_group_members','list_groups','remove_group_invitation','remove_group_member','set_group_member_role','share_artifact_with_group','unlink_group','unshare_artifact_with_group','update_group',
       'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_comment', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
       'get_dataset_policy', 'get_notification_job', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'react_comment', 'refresh_asset', 'restore_artifact', 'retry_notification_job', 'revert_artifact',
       'set_dataset_policy', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
-    ]);
+    ].sort());
   });
 
   it('every example input parses against the operation\'s own schema', () => {
@@ -53,7 +54,7 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_notification_job', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list']);
+    expect(readOnly).toEqual(['get_group','list_group_invitations','list_group_members','list_groups','discover_dataset_source', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_notification_job', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list'].sort());
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 
@@ -63,7 +64,7 @@ describe('the registry is curated, not generated', () => {
       // twin is the document's own sub-path (a page can't return bytes); and
       // /api/testusers is the throwaway-people family, which is about the
       // CALLER rather than about any one artifact.
-      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions|browser-sessions|testusers|notification-runs|notification-jobs)(\/|$)|^\/a\/\{id\}\/export$/);
+      expect(op.http.path, op.name).toMatch(/^\/api\/(groups|artifacts|datasets|secrets|sessions|browser-sessions|testusers|notification-runs|notification-jobs)(\/|$)|^\/a\/\{id\}\/export$/);
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(op.http.method);
       for (const [, param] of op.http.path.matchAll(/\{(\w+)\}/g)) {
         expect(Object.keys(op.input), `${op.name}: path param ${param}`).toContain(param);

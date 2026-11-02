@@ -1,3 +1,4 @@
+import {userPageUrl} from '@/lib/user-pages';
 import {htmlAppearance} from '@/lib/html-page';
 import {designSystemChoice} from '@/lib/html-systems';
 import {artifactPwaEnabled} from './artifact-pwa.server';
@@ -314,6 +315,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     editId: artifact.edit_id,
     format: artifact.format,
     visibility: artifact.visibility,
+    user_page_url: await userPageUrl(artifact),
     ...(ownerScope ? { hasInvitedUsers } : {}),
     title: nativeHtml ? nativeHtmlTitle(row) : row.title,
     author: authorMark,

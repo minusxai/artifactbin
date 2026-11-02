@@ -20,7 +20,6 @@ import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 
 useAppHarness();
@@ -42,8 +41,6 @@ async function fixtures() {
   const anon = await mintToken('other-account');
   const owner = await createUser({ email: 'owner@example.com' });
   const owned = await mintToken('owned', owner.id);
-  const claimed = await claimToken(owner.id, owned.token);
-  expect(claimed).not.toBeNull();
   return { anonToken: anon.token, ownedToken: owned.token, owner };
 }
 

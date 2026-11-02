@@ -17,6 +17,8 @@ const media={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':
   '.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain','.css':
   'text/css','.js':'text/javascript','.woff2':'font/woff2'};
 export async function publishCommand({values,positionals},options={}){
+ if(values.personal&&values.group!==undefined)throw new ToolError('invalid_destination',
+   'Choose --personal or --group, not both.',2);
  if(values.resume){
 positional(positionals,0);if(Object.keys(values).some(flag=>!['resume','server','json',
     'output'].includes(flag)))throw new ToolError('resume_overrides',
@@ -115,6 +117,12 @@ if(baseline){delete body.visibility;body.expectedVersion=baseline.version;body.e
  else body.visibility='unlisted';
 if(values.visibility)body.visibility=enumValue(values.visibility,['private','unlisted','public'],
    'visibility');if(values.title!==undefined)body.title=values.title;
+ if(values.personal){
+  if(baseline)throw new ToolError('personal_not_for_update',
+    '--personal places a new page; it never moves an existing one.',2,
+    'Drop --personal (updates keep their owner) or use --create for a new page.');
+  body.destination={type:'personal'};
+ }
  // --group HANDLE: create the page directly in a group you can edit. The server refuses a
  // destination that conflicts with the parent's owner.
  if(values.group!==undefined){

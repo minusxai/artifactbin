@@ -1,9 +1,8 @@
-/** Durable HTTP identity allocation, replay and account namespace isolation. Retired CLI workspace cases are removed. */
+/** Durable HTTP identity allocation, replay and account namespace isolation. Historical merged-user aliases remain readable. */
 import {it,expect,vi} from 'vitest';
-import {useAppHarness,request,createGuestOwner,mintAccountToken as mintToken} from './harness';
+import { useAppHarness, request, createGuestOwner, mintAccountToken as mintToken } from './harness';
 import {nativeHtml} from './native-html-fixture';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { mergeGuestUsers } from '@/lib/authentication';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import {reserveIds} from '@/lib/artifacts';
@@ -80,15 +79,14 @@ it('ordinary creates skip reserved identities and reservation allocation skips e
  }finally{spy.mockRestore();}
 });
 
-
-it('guest adoption preserves reservation replay and unused IDs despite an account batch with the same nonce',async()=>{
+it('persisted merged-user aliases preserve reservation replay and unused IDs despite an account batch with the same nonce',async()=>{
  const guest=await createGuestOwner({name:'mxmx_test_reserved_adoption'}),guestToken=await mintToken('guest-reserved',guest.userId);
  const account=await createUser({email:'mxmx_test_reserved_adopted@example.test'}),accountToken=await mintToken('account-reserved',account.id),other=await mintToken('foreign-reserved',(await createUser({email:'mxmx_test_reserved_foreign@example.test'})).id);
  const batch='batch_shared_adoption_001';
  const allocate=(token:string,pin?:string)=>reserve(request('/api/artifacts/reservations',{method:'POST',token,headers:{'Idempotency-Key':batch,...(pin?{'X-Artifactbin-Account':pin}:{})}}));
  const guestIds=await reserveIds(identityForUser(guest.userId, guestToken.id),batch),accountIds=(await(await allocate(accountToken.token)).json()).ids;
  expect(guestIds.some((id:string)=>accountIds.includes(id))).toBe(false);
- await mergeGuestUsers(account.id,[guest.tokenId]);
+ await (await getDb()).query('UPDATE users SET merged_into_user_id=$1 WHERE id=$2',[account.id,guest.userId]);
  expect((await(await allocate(accountToken.token,guest.userId)).json()).ids).toEqual(guestIds);
  expect((await(await allocate(accountToken.token)).json()).ids).toEqual(accountIds);
  const publish=(token:string)=>create(request('/api/artifacts',{method:'POST',token,json:{reserved_id:guestIds[0],html:nativeHtml('<p>After adoption</p>')}}));

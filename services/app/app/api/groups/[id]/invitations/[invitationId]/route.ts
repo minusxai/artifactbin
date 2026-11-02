@@ -1,4 +1,2 @@
-import {groupRoute} from '@/lib/group-routes';
-import {removeGroupInvitation} from '@/lib/groups';
-import {json} from '@/lib/http';
-export const DELETE=groupRoute(async(_request,userId,{id,invitationId})=>{await removeGroupInvitation(userId,id,invitationId);return json({ok:true});});
+import {groupOperation} from '@/lib/group-routes';
+export const DELETE=groupOperation('remove_group_invitation');

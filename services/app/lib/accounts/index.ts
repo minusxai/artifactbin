@@ -1,11 +1,10 @@
 /**
- * The accounts module's interface: the identity store — actors, users and handles, tokens, the agent and pages
+ * The accounts module's interface: the identity store — actors, users and handles, tokens, legacy cookie clearing and pages
  * session cookies, profiles and test accounts. Only what other modules import; tests reach a defining file
  * directly. Server-only; the one other entry is ./tokens, which a downstream deployment imports by path
  * (services/app/__tests__/downstream-exports.test.ts).
  *
- * Who a request is lives a layer up, in lib/authentication (it also claims tokens and merges guests, which move
- * artifacts); pictures are lib/avatars', likes and follows lib/social's, hourly quotas lib/allowances'.
+ * Who a request is lives a layer up, in lib/authentication; pictures are lib/avatars', likes and follows lib/social's, hourly quotas lib/allowances'.
  */
 
 /** Actors: the identity every access decision reads. */
@@ -19,16 +18,15 @@ export { lockMembershipUsers } from './membership-lock';
 export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } from './profiles';
 
 /** Tokens: minting, lookup and the per-request credential memo. */
-export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
-export { claimableTokensById, revokeUserToken } from './users';
+export { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveTokenSql, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
+export { revokeUserToken } from './users';
 export { hasAdminCredential } from './admin-auth';
 
-/** The accounts halves of a token claim and a guest merge, run by lib/authentication inside its transaction. */
-export { attachClaimedToken } from './users';
-export { lockMergeableGuests, matchesWorkspaceAccount, retireGuest } from './guest-owner';
+/** Historical workspace account aliases. */
+export { matchesWorkspaceAccount } from './guest-owner';
 
-/** Session cookies: the agent session (app origin) and pages sessions (the pages origin). */
-export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, encodeAgentSession, liveAgentSession } from './agent-session';
+/** Legacy cookie clearing and current document-bound Pages sessions. */
+export { AGENT_COOKIE, agentSessionClearCookie } from './agent-session';
 export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionOf, type PagesSession } from './pages-sessions';
 
 /** Test accounts and test users. */

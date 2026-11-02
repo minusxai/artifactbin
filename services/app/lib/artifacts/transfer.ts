@@ -6,7 +6,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {DatasetError, catalogOf} from '../datasets';
 import { notifyArtifactSql } from './table';
 import { ownerPredicate, type ArtifactRow } from '@/lib/artifact-access';
-import {getGroupRole} from '../groups';
+import {recordGroupMutation,getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
 
 export async function transferArtifact(actor:AccessActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
@@ -41,6 +41,7 @@ export async function transferArtifact(actor:AccessActor,id:string,destination:A
     WHERE id=ANY($1::text[]) RETURNING *`,[[...ids],groupId,userId,target.ancestor_ids.length+1]);
   changed=updated.rows;
   await tx.query('INSERT INTO ownership_transfers(id,artifact_id,actor_user_id,previous_owner,next_owner) VALUES($1,$2,$3,$4::jsonb,$5::jsonb)',['tr_'+generateInternalId(),id,actor.userId,JSON.stringify(target.group_id?{type:'group',id:target.group_id}:{type:'personal',id:target.user_id}),JSON.stringify(destination)]);
+  for(const group of groups){const recipients=(await tx.query<{user_id:string}>('SELECT user_id FROM group_members WHERE group_id=$1',[group])).rows.map(row=>row.user_id);await recordGroupMutation(tx,actor.userId!,group,'transferred',{artifact_id:id,destination},recipients,actor);}
   return updated.rows.find(r=>r.id===id)!;
  }).catch(error=>{
   if(error&&typeof error==='object'&&'code' in error&&error.code==='55P03')throw new DatasetError('Work is changing; retry ownership transfer',409);

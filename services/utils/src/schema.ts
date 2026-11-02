@@ -72,6 +72,7 @@ function renderTable(table: Table, qualified: (name: string) => string, schemaEx
     `CREATE TABLE IF NOT EXISTS ${name} (\n${body.join(',\n')}\n)`,
     // Lets a database built from an older declaration gain newly-declared columns.
     ...table.columns.map((c) => `ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${renderColumn(c)}`),
+    ...(table.checks??[]).map(check=>`DO $check$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${name}'::regclass AND conname='${check.name}') THEN ALTER TABLE ${name} ADD CONSTRAINT ${check.name} CHECK (${check.expression}); END IF; END $check$`),
     // A DECLARED rename: copy the old column across and drop it, guarded so
     // the second boot is a no-op. AFTER the adds (the new column must exist to
     // be written into) and BEFORE the drops and the indexes.

@@ -2,7 +2,6 @@ import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 
@@ -14,7 +13,7 @@ import { forkArtifact } from '@/lib/publish';
 useAppHarness();
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
- const token=await mintToken('mxmx_test_read_grants', owner.id);await claimToken(owner.id,token.token);
+ const token=await mintToken('mxmx_test_read_grants', owner.id);
  const actor=identityForUser(owner.id, token.id),reader=await mintToken('read-grants-reader',(await createUser({email:'read-grants-reader@example.test'})).id);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();

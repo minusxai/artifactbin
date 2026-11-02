@@ -107,6 +107,9 @@ export async function restoreArtifactFor(actor: AccessActor, id: string): Promis
       [id, scope.val, row.deleted_at],
     );
     documents.rows.forEach((document) => servableDocument(document));
+    // Deletion holds the same group row; a deleted owner cannot be resurrected by trash restore.
+    const groups=(await tx.query<{group_id:string}>('SELECT DISTINCT group_id FROM artifacts WHERE (id=$1 OR ancestor_ids @> ARRAY[$1]) AND group_id IS NOT NULL ORDER BY group_id',[id])).rows;
+    for(const group of groups)if(!(await tx.query('SELECT id FROM groups WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[group.group_id])).rows.length)return null;
     await restoreTrashedSubtree(tx, actor, id, row.deleted_at);
     const trail = row.ancestor_ids ?? [];
     if (!trail.length) return trail;

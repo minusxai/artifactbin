@@ -4,7 +4,7 @@ export { crumbsFor } from './breadcrumb';
 export { accountWorkspaceCoreFor, accountWorkspaceFor, accountWorkspaceInsightsFor } from './dashboard';
 export { homeBootstrapFor } from './home';
 export { formatJsxPreview } from './format-jsx-preview';
-export { listAccountTokenRows, listArtifactsByUser, listDraftsByTokenIds, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';
+export { listAccountTokenRows, listArtifactsByUser, listOwnedArtifacts, listPublicArtifactsByUser, listSharedWithEmail } from './listings';
 export type { SharedArtifactSummary } from './listings';
 export { workspaceAssetsFor } from './inventory';
 export { buildShelf, groupShelfByRecency } from './shelf';

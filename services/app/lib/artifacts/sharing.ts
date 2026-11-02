@@ -1,4 +1,5 @@
-import { editorScope, grantsOf, type ArtifactRow } from '@/lib/artifact-access';
+import {groupQuota,recordGroupMutation,GroupError,getGroupRole} from '../groups';
+import { ownerScope,editorScope, grantsOf, type ArtifactRow } from '@/lib/artifact-access';
 import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
@@ -18,6 +19,7 @@ export interface SharingState {
   linkRole: ShareRole;
   /** The named people, by email, with their role — sorted by email. */
   shares: ShareEntry[];
+  groupShares?:import('@artifactbin/contracts').GroupShare[];
   /** Datasets: the write ACL, and the documents that would stop working if it were closed. */
   access?: DatasetAccess;
   datasetKind?: 'stored' | 'postgres';
@@ -47,6 +49,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     canPublic: ALLOW_PUBLIC_VISIBILITY,
     linkRole: (row.link_role ?? 'viewer') as ShareRole,
     shares: shares.rows,
+    groupShares:(await db.query<import('@artifactbin/contracts').GroupShare>("SELECT jsonb_build_object('id',g.id,'handle',g.handle,'name',g.name,'description',g.description,'role',m.role) AS group,s.role FROM artifact_group_shares s JOIN groups g ON g.id=s.group_id LEFT JOIN group_members m ON m.group_id=g.id AND m.user_id=$2 WHERE s.artifact_id=$1 AND g.deleted_at IS NULL ORDER BY g.handle",[id,actor.userId])).rows,
     canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
       ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: [] }
@@ -104,4 +107,33 @@ export async function updateSharingFor(actor: AccessActor, id: string, patch: Sh
     link_role: patch.linkRole ?? null,
   });
   return (await getSharingFor(actor, id)) ?? done;
+}
+
+/** Separate group ACL: full-replace email edits never erase these rows. Governance, not shared edit access. */
+export async function setArtifactGroupShare(actor:AccessActor,id:string,groupId:string,role:import('@artifactbin/contracts').GroupShareRole|null):Promise<{changed:boolean}|null>{
+ if(!actor.userId) return null;
+ if(role!==null&&!['viewer','commenter','editor'].includes(role))throw new GroupError('invalid_role');
+ const db=await getDb();
+ return db.transaction(async tx=>{
+  const observed=(await tx.query<{group_id:string|null}>('SELECT group_id FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
+  if(!observed)return null;
+  // Freeze both target membership and governing membership before locking the artifact.
+  const groups=[...new Set([groupId,...(observed.group_id?[observed.group_id]:[])])].sort();
+  const locked=await tx.query('SELECT id FROM groups WHERE id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY id FOR UPDATE NOWAIT',[groups]);
+  if(locked.rows.length!==groups.length||!await getGroupRole(actor.userId,groupId,tx))throw new GroupError('share_refused',403);
+  const scope=ownerScope(actor);
+  const row=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE NOWAIT`,[id,scope.val])).rows[0];
+  if(!row)return null;
+  if(row.group_id!==observed.group_id)throw new GroupError('share_refused',409);
+  const previous=(await tx.query<{role:string}>('SELECT role FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId])).rows[0]?.role??null;
+  if(previous===role)return {changed:false};
+  await groupQuota(tx,actor.userId!,'share');
+  if(role===null)await tx.query('DELETE FROM artifact_group_shares WHERE artifact_id=$1 AND group_id=$2',[id,groupId]);
+  else await tx.query('INSERT INTO artifact_group_shares(artifact_id,group_id,role,created_by) VALUES($1,$2,$3,$4) ON CONFLICT(artifact_id,group_id) DO UPDATE SET role=EXCLUDED.role',[id,groupId,role,actor.userId]);
+  await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
+  await tx.query(`SELECT ${notifyArtifactSql('id','edit_id')} FROM artifacts WHERE id=$1`,[id]);
+  const members=(await tx.query<{user_id:string}>('SELECT user_id FROM group_members WHERE group_id=$1',[groupId])).rows.map(member=>member.user_id);
+  await recordGroupMutation(tx,actor.userId!,groupId,role===null?'unshared':'shared',{artifact_id:id,previous_role:previous,role},members,actor);
+  return {changed:true};
+ }).catch(error=>{if(error&&typeof error==='object'&&'code' in error&&error.code==='55P03')throw new GroupError('share_refused',409);throw error;});
 }

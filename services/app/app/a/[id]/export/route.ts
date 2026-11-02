@@ -13,7 +13,7 @@ import { canEdit } from '@artifactbin/contracts';
 
 /**
  * `delivery: 'bytes'` is for a caller that cannot follow the redirect to the
- * export asset: a custom domain's home page (server/custom-host), whose
+ * export asset: a anonymous owner host's home page (server/user-host), whose
  * thumbnails must come from that host alone.
  */
 export function GET(request: Request, ctx: { params: Promise<{ id: string }>; delivery?: 'bytes' }): Promise<Response> {

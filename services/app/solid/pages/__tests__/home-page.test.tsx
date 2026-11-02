@@ -68,7 +68,7 @@ it('renders a populated folder workspace without recursive updates', async () =>
 
 it('keeps the working shelf before the account dashboard and links to assets, trash, and dataset creation', async () => {
   const insights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : url.includes('claimable') ? { claimable: [] } : insights))));
+  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : insights))));
   const view = open();
   const shelf = await screen.findByLabelText('Shelf');
   const dashboard = await screen.findByLabelText('Dashboard');
@@ -98,7 +98,7 @@ it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', asy
 const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'html', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0 });
 const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
 function homeFetch(home: unknown, insights: unknown = richInsights) {
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : url.includes('claimable') ? { claimable: [] } : insights))));
+  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : insights))));
 }
 
 it('leads a populated workspace with its shelf and shows all account metrics in the rail', async () => {
@@ -170,14 +170,13 @@ it('filters "Shared with you" too, from "My artifacts"\' own search box', async 
   expect(screen.getByLabelText('Open shared artifact shared')).toBeInTheDocument();
 });
 
-it('keeps the claim result while an empty library fills on refresh', async () => {
+it('refreshes an empty account into its populated library', async () => {
   let current = { signedIn: true, accountId: 'one', artifacts: [] as ReturnType<typeof doc>[], shared: [] };
-  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? current : url.includes('claimable') ? { claimable: [{ tokenId: 'tok_1', titles: ['Quarterly Review'], artifacts: 1 }] } : url.includes('/claim') ? { ok: true } : { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }))));
-  open(); await screen.findByLabelText('Unclaimed drafts'); fireEvent.click(screen.getByLabelText('Add to my account'));
-  expect(await screen.findByLabelText('Claim result')).toHaveTextContent(/Added/);
+  vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? current : { ...richInsights, stats: { ...richInsights.stats, assets: 0 } }))));
+  open(); await screen.findByRole('heading', {name:/create your first artifact/i});
   current = { ...current, artifacts: [doc('a')] };
   window.dispatchEvent(new Event(REFRESH_EVENT)); await screen.findByLabelText('Open Doc a');
-  expect(screen.getByLabelText('Claim result')).toHaveTextContent(/Added/);
+  expect(screen.queryByRole('heading', {name:/create your first artifact/i})).toBeNull();
 });
 
 it('puts creation and all workspace destinations in the left navigation, separate from stats', async () => {

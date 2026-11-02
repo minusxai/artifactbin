@@ -64,12 +64,9 @@ it('membership and its notifications belong to the app',()=>{for(const name of [
 
 it('notification outbox and subscriber receipts stay with their existing owners',()=>{expect(declared()['app.event_outbox']).toBe('app');expect(declared()['events.deliveries']).toBe('events');});
 
-it('custom domains belong to app accounts: one per account, one VERIFIED owner per hostname',()=>{
- expect(declared()['app.custom_domains']).toBe('app');
- expect(renderedSchema().schema).toContain('homepage_artifact_id TEXT');
- expect(renderedSchema().schema).toContain('ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS homepage_artifact_id TEXT');
- expect(renderedSchema().schema).toMatch(/CREATE TABLE IF NOT EXISTS app\.custom_domains \([\s\S]*PRIMARY KEY \(user_id\)/);
- expect(renderedSchema().schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app\.custom_domains \(hostname\) WHERE status = 'verified'/);
+it('retired custom domains are not active schema and are not destructively dropped',()=>{
+ expect(declared()['app.custom_domains']).toBeUndefined();
+ expect(renderedSchema().schema).not.toMatch(/(?:CREATE|ALTER|DROP) TABLE(?: IF (?:NOT )?EXISTS)? app\.custom_domains/);
 });
 
 it('canonical document storage belongs to artifact heads and archived versions',()=>{
@@ -118,11 +115,6 @@ it('optional comment view state stays with app-owned annotations', () => {
   expect(declared()['app.annotations']).toBe('app');
   expect(renderedSchema().schema).toContain('view_state JSONB');
 });
-it('custom-domain path overrides belong to the domain and migrate existing accounts', () => {
- expect(renderedSchema().schema).toContain("path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb");
- expect(renderedSchema().schema).toContain('ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB');
-});
-
 it('the hot-path indexes are declared, created at boot only when missing, and partial where the live rows are what is read',()=>{
  const sql=renderedSchema().schema;
  expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_artifacts_group_updated ON app.artifacts (group_id, updated_at DESC) WHERE deleted_at IS NULL');
@@ -142,3 +134,9 @@ it('native identity provenance belongs to the app and preserves multiple verifie
 });
 
 it('account comment reactions belong to the app',()=>{expect(declared()['app.comment_reactions']).toBe('app');expect(declared()['app.comment_reaction_events']).toBe('app');});
+
+it('group mail retries and fenced claims belong to app durable state',()=>{
+ expect(declared()['app.group_mail_outbox']).toBe('app');
+ const declaration=renderedSchema().schema.split('CREATE TABLE IF NOT EXISTS app.group_mail_outbox (')[1]?.split(');')[0];
+ for(const column of ['claim_token TEXT','attempts INTEGER NOT NULL DEFAULT 0','next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now()','quarantined_at TIMESTAMPTZ'])expect(declaration).toContain(column);
+});

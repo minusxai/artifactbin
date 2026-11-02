@@ -1,3 +1,4 @@
+import {admitGroupMember} from '@/__tests__/harness';
 /**
  * TEST ACCOUNTS (lib/accounts/test-accounts): rows created for a test-domain address while the feature
  * is on are marked, existing rows never are, and a marked account stays among test accounts.
@@ -6,11 +7,9 @@ import { expect, it } from 'vitest';
 import { useAppHarness, mintAccountToken } from './harness';
 import { can } from '@/lib/artifact-access';
 import { capabilityGuard, changeMembership, createArtifact } from '@/lib/artifacts';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser, isTestAccount, shareTargetsRefusal, syncProfile } from '@/lib/accounts';
 import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/lib/groups';
 import { recordNotification } from '@/lib/notifications';
-import { attachDomain, verifyDomain } from '@/lib/custom-domains';
 import { overrideConfig } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform';
 
@@ -25,7 +24,6 @@ async function person(email: string) {
   const userId = `usr_td${++n}${Date.now().toString(36)}`;
   await syncProfile({ userId, email });
   const t = await mintAccountToken(`t${n}`, userId);
-  await claimToken(userId, t.token);
   return { ...identityForUser(userId, t.id), userId, tokenId: t.id };
 }
 const page = (owner: { userId: string; tokenId: string }) =>
@@ -53,16 +51,6 @@ it('marks nothing while the feature is off', async () => {
   overrideConfig({ testDomain: undefined });
   const off = await person(`eval-off@${DOMAIN}`);
   expect(await isTestAccount(off.userId)).toBe(false);
-});
-
-it('refuses a custom domain to a test account', async () => {
-  on();
-  overrideConfig({ customDomainsTarget: 'domains.example.dev' });
-  const test = await person(`eval-domain@${DOMAIN}`);
-  expect(await attachDomain(test.userId, 'blog.example.org')).toEqual({ error: 'test_account_restricted' });
-  expect(await verifyDomain(test.userId, 'blog.example.org', { addresses: async () => [], txt: async () => [] } as never)).toEqual({ error: 'test_account_restricted' });
-  const real = await person('mxmx_test_domain_real@example.com');
-  expect(await attachDomain(real.userId, 'blog.example.org')).not.toEqual({ error: 'test_account_restricted' });
 });
 
 it('lets a test account share only with test-domain addresses', async () => {
@@ -121,6 +109,7 @@ it('invites and adds only test accounts to artifacts and groups', async () => {
   await expect(inviteGroupMember(test.userId, group.id, 'someone@example.com', 'viewer')).rejects.toMatchObject({ code: 'test_account_restricted', status: 403 });
   await expect(inviteGroupMember(test.userId, group.id, `person@${DOMAIN}`, 'viewer')).resolves.toMatchObject({ email: `person@${DOMAIN}` });
   await expect(setGroupMember(test.userId, group.id, real.userId, 'viewer')).rejects.toBeInstanceOf(GroupError);
+  await admitGroupMember(test.userId,group.id,other.userId,'viewer');
   await expect(setGroupMember(test.userId, group.id, other.userId, 'viewer')).resolves.toBeUndefined();
 });
 

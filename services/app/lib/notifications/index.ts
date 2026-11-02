@@ -14,7 +14,7 @@ export { notificationRecipients } from './run-plan';
 // Inbox: what a person reads and changes; optional deployment email delivery.
 export { membershipInbox, updateMembershipInbox } from './inbox';
 export { notificationDelivery, setNotificationDelivery } from './delivery';
-export type { NotificationDelivery } from './delivery';
+export type { GroupEmail,NotificationDelivery } from './delivery';
 // Jobs: durable mutation-notification jobs, their worker and the authority they run under.
 export { notificationContextSnapshot, notificationQueryContext, notificationRuleSourceIds } from './context';
 export { NotificationExecutionError } from './errors';
@@ -24,3 +24,5 @@ export { notificationJobStore } from './runtime';
 export { createNotificationWorker } from './worker';
 export { lockNotificationExecution, notificationArtifactAuthority, notificationAuthority, notificationExecutionFence, notificationExecutionSource, notificationPrincipal } from './authority';
 export { eraseMutationNotifications, lockMutationNotificationAuthority } from './mutation-notifications';
+
+export {flushGroupMail,startGroupMailDelivery} from './group-mail';

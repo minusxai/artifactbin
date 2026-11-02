@@ -13,6 +13,8 @@ import { ROUTES } from '../routes.generated';
 import { exportedMethods } from '../../scripts/generate-routes.mjs';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {createGroup} from '@/lib/groups';
+import {admitGroupMember} from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
 vi.mock('@/lib/page-operations', async original => ({ ...await original<typeof import('@/lib/page-operations')>(), compilePageBackend: async (source: string) => ({ typeDefs: 'type Query { value: String }', compiled: source, secretBindings: ['TOKEN'] }) }));
@@ -67,6 +69,13 @@ describe('handlers through Hono', () => {
     const raw = await app.request(`/a/${id}/raw`);
     expect(raw.status).toBe(200);
     expect(raw.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+  it('dispatches viewer self-leave to the static me route before the member ID route',async()=>{
+    const owner=await mintToken('route-owner'),viewer=await mintToken('route-viewer');
+    const group=await createGroup(owner.userId!,{handle:'static_leave',name:'Leave'});
+    await admitGroupMember(owner.userId!,group.id,viewer.userId!,'viewer');
+    const response=await app.request(`/api/groups/${group.id}/members/me`,{method:'DELETE',headers:{authorization:`Bearer ${viewer.token}`}});
+    expect(response.status).toBe(200);
   });
   it('routes PUT and DELETE on backend secrets to the handler: the owner sets and revokes, the value never returns', async () => {
     const owner = await mintToken('secret-routes');

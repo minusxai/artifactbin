@@ -2,7 +2,7 @@
 import type { Queryable } from '../platform';
 /** 3–32 lowercase letters/digits, with underscores only inside the handle. */
 export const HANDLE_RE = /^[a-z0-9][a-z0-9_]{1,30}[a-z0-9]$/;
-export const RESERVED_HANDLES=new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens']);
+export const RESERVED_HANDLES=new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens','www','app','mail','smtp','static','cdn','status','pages','runner','assets','blog','auth','ns1','ns2','u']);
 export const isValidHandle = (handle:string):boolean => HANDLE_RE.test(handle) && !RESERVED_HANDLES.has(handle);
 export async function reserveHandle(query:Queryable,handle:string,kind:'user'|'group',id:string):Promise<void>{
  // Backfill legacy account handles before any new claim. Existing names always win.

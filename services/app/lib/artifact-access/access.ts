@@ -54,7 +54,7 @@ export async function roleWithoutLink(
   // an account invites. They reach a stranger's document through the LINK or
   // not at all (lib/user-kinds).
   if (isLinkOnlyKind(await facts.userKind(actor.userId))) return groupRole;
-  return maxRole(groupRole,await namedRoleFor(row, actor, facts));
+  return maxRole(groupRole,await namedRoleFor(row, actor, facts),await facts.groupShareRole(row.id));
 }
 
 /**

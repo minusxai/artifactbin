@@ -68,7 +68,7 @@ export async function mergeGuestIntoAccount(page, base, token) {
 /** Verify the account after the browser established its guest connection. */
 export async function verifiedAccountSession(request, base) {
   // Like the owner SSR read, allow one ECONNRESET on Playwright's shared socket.
-  // Verified guest adoption is idempotent; HTTP errors and a second reset still fail.
+  // Account login is idempotent; HTTP errors and a second reset still fail.
   const response = await request.get(`${base}/api/page/session`, { maxRetries: 1 });
   if (!response.ok() || (await response.json()).kind !== 'account') {
     throw new Error(`guest merge requires a verified account (${response.status()})`);
@@ -81,8 +81,8 @@ export async function verifiedAccountSession(request, base) {
  * real email-code door, and nothing else.
  *
  * Thirteen gates used to write the same three steps by hand: log in, approve a
- * CLI connection for a bearer, then POST that bearer to `/api/tokens/claim` so
- * the account adopted it. The claim door is the ACCOUNT PANEL's, not a gate's
+ * CLI connection followed by a retired token ownership transfer. That flow is obsolete;
+ * publication now uses the signed-in account directly, including a gate's
  * setup step — a browser that is signed in already owns everything it creates
  * through `/api/my/*` (the same routes the product's own UI uses). So the
  * helper logs in and hands back a `publish` bound to that session; setup mints

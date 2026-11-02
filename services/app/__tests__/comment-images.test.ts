@@ -1,7 +1,6 @@
 import {nativeHtml} from './native-html-fixture';
 import {nativeAnchor} from './native-annotation-fixture';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import {GET as readImageRoute} from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
 import {POST as stageRoute} from '@/app/api/my/artifacts/[id]/comment-images/route';
 import {getDb} from '@/lib/platform';
@@ -83,22 +82,6 @@ it('rejects another actor consuming a private stage and malformed stroke coordin
  const s=await setup();
  const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Response).status).toBe(400);
  const stranger=await mintToken('agent');const result=await stageCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
-});
-
-it('carries a staged image and its quota into a claimed account',async()=>{
- const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
- const user=await createUser({email:'mxmx_test_imageclaim@example.com',name:'Image claim'});
- // Recreate stored pre-email ownership; the legacy token is only an adoption proof.
- const db=await getDb();
- await db.query('UPDATE tokens SET user_id=NULL WHERE id=$1',[s.token.id]);
- await db.query('UPDATE artifacts SET user_id=NULL WHERE id=$1',[s.doc.id]);
- await db.query('UPDATE comment_images SET user_id=NULL WHERE id=$1',[stage.id]);
- await claimToken(user.id,s.token.token);
- s.browserActor={credential:'session',userId:user.id,email:user.email!,emailVerified:true};
- const row=(await (await getDb()).query<{user_id:string}>('SELECT user_id FROM comment_images WHERE id=$1',[stage.id])).rows[0];
- expect(row.user_id).toBe(user.id);
- const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{anchor:nativeAnchor('capture'),edit_id:s.doc.edit_id,body:'Claimed screenshot',attachment_id:stage.id}}),params(s.doc.id));
- expect(response.status,await response.clone().text()).toBe(201);
 });
 
 import {GET as readAgentImage} from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';

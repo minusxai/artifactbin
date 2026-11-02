@@ -6,7 +6,7 @@
  * set the per-row response headers that the document's sandbox is built from.
  * `?raw=true` on a page could do neither.
  *
- * `domain` (server/custom-host) and `fragment` (app/a/[id]/story) are set only by their callers: the router passes
+ * `domain` (server/user-host) and `fragment` (app/a/[id]/story) are set only by their callers: the router passes
  * params alone, so no request can ask for either mode.
  */
 import { serveRawDocument, type DomainPost } from '@/lib/document-serving';

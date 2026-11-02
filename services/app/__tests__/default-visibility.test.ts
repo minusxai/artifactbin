@@ -13,7 +13,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, createGuestOwner } from '@/__tests__/harness';
 
@@ -54,7 +53,6 @@ async function createImage(token: string) {
 async function userToken(email: string) {
   const user = await createUser({ email });
   const t = await mintToken('t', user.id);
-  await claimToken(user.id, t.token);
   return t.token;
 }
 

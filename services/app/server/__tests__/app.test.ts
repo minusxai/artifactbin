@@ -15,7 +15,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { mintToken, createUser, ensureUsername } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
 import { appPagePolicy, createAppServer } from '../app';
@@ -32,7 +31,7 @@ const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SE
 
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
-  const t = await mintToken('o'); await claimToken(owner.id, t.token);
+  const t = await mintToken('o', owner.id);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
   return { owner, t, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>public words</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret words</p></div>'), visibility: 'private' }) };
 }
@@ -164,7 +163,7 @@ describe('the address heals after checking read access', () => {
   });
   it('keeps dataset edit addresses restricted to editors',async()=>{
     const w=await world();
-    const token=await mintToken('dataset-editor');await claimToken(w.owner.id,token.token);
+    const token=await mintToken('dataset-editor', w.owner.id);
     const made=await createArtifactRoute(new Request(`${BASE}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token.token}`},body:JSON.stringify({title:'Data',dataset:[{value:1}],visibility:'public'})}));
     expect(made.status).toBe(201);const {id}=await made.json();
     expect((await app.request(`/a/${id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);

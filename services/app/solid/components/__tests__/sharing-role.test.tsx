@@ -62,3 +62,21 @@ it('closes through its Close button and reports it to the opener', async () => {
   expect(onClose).toHaveBeenCalledOnce();
   expect(screen.queryByRole('dialog', { name: 'Sharing' })).toBeNull();
 });
+
+it('copies the server public-view URL separately and hides it after making the page private',async()=>{
+ const copied:string[]=[];
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text:string)=>{copied.push(text);}}});
+ vi.stubGlobal('fetch',vi.fn(async(_url:string,init?:RequestInit)=>Response.json(sharing({visibility:init?.method==='PUT'?'private':'unlisted',user_page_url:init?.method==='PUT'?null:'https://alice.u.example.test/PAGE12-plan'}))));
+ render(()=><ShareLink artifactId="PAGE12" title="Plan" format="html" editable startOpen />);
+ fireEvent.click(await screen.findByRole('button',{name:'Copy public view'}));
+ await waitFor(()=>expect(copied).toEqual(['https://alice.u.example.test/PAGE12-plan']));
+ fireEvent.click(screen.getByRole('button',{name:'Make private'}));
+ await waitFor(()=>expect(screen.queryByRole('button',{name:'Copy public view'})).not.toBeInTheDocument());
+});
+
+it('has no public-view copy when the server has no eligible host URL',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json(sharing({visibility:'public',user_page_url:null}))));
+ render(()=><ShareLink artifactId="PAGE12" title="Plan" format="html" editable startOpen />);
+ await screen.findByRole('button',{name:'Role for one@example.com'});
+ expect(screen.queryByRole('button',{name:'Copy public view'})).not.toBeInTheDocument();
+});

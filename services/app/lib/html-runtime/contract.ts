@@ -12,7 +12,7 @@ export interface HtmlRuntimeConfig {
   bindings?: Readonly<Record<string, string>>;
   /** Exact platform origin. Never a credential or a URL carrying one. */
   appOrigin?: string;
-  /** Served on a custom domain, unframed: reads go to this page's own host as a signed-out viewer (domain-reads). */
+  /** Served on a anonymous owner host, unframed: reads go to this page's own host as a signed-out viewer (domain-reads). */
   domainReads?: true;
   /** Default publication destination for an unpublished file, never a published association. */
   publishOrigin?: string;

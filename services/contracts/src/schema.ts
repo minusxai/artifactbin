@@ -43,6 +43,8 @@ export interface Table {
   columns: Column[];
   primaryKey: string[];
   uniques?: string[][];
+  /** Named checks are installed on fresh and existing tables. */
+  checks?: Array<{name:string;expression:string}>;
   indexes?: Index[];
   /**
    * Columns this table once declared and no longer does. Rendered as

@@ -10,7 +10,7 @@ import type { ShareRole } from '@artifactbin/contracts';
 import { SUMMARY_META_FIELDS } from '@/lib/artifact-wire';
 import { type ArtifactSummary } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
-import { LIVE_TOKEN_SQL } from '@/lib/accounts/tokens';
+import type { TokenRow } from '@/lib/accounts/tokens';
 import { getDb } from '@/lib/platform';
 import { viewTotalsFor } from '@/lib/analytics';
 
@@ -88,42 +88,11 @@ export async function listSharedWithEmail(email: string, excludeUserId?: string)
   return r.rows;
 }
 
-/**
- * The drafts a browser holds: artifacts created by these LIVE tokens that NOBODY has claimed,
- * newest first, in the summary shape the signed-in home list uses. Revoked or expired credentials are
- * nothing even when a stale cookie still names them. Empty ids ⇒ empty list, no query.
- */
-export async function listDraftsByTokenIds(tokenIds: string[]): Promise<OwnedArtifactSummary[]> {
-  if (tokenIds.length === 0) return [];
-  const db = await getDb();
-  const r = await db.query<ArtifactSummary>(
-    `SELECT ${summaryColumns('$2', 'artifacts.')}
-     FROM artifacts
-     WHERE artifacts.group_id IS NULL AND artifacts.${LIVE_ARTIFACT_SQL} AND EXISTS (
-       SELECT 1 FROM tokens LEFT JOIN users ON users.id = tokens.user_id
-       WHERE tokens.id = ANY($1) AND ${LIVE_TOKEN_SQL}
-         AND ((artifacts.user_id = tokens.user_id AND users.kind = 'guest')
-           OR (artifacts.token_id = tokens.id AND artifacts.user_id IS NULL)))
-     ORDER BY artifacts.updated_at DESC LIMIT 200`,
-    [tokenIds, META_ALLOWED],
-  );
-  return withViews(r.rows);
-}
-
 export async function listArtifactsByUser(userId: string): Promise<OwnedArtifactSummary[]> {
   return listOwnedArtifacts('user_id', userId);
 }
 
-/**
- * The dashboard list for whichever credential the BROWSER holds: an account
- * (`user_id`) or an anonymous token (`token_id`, lib/agent-session). The same
- * two statements either way (the page, then its view counts as one aggregate over
- * the page's ids) — the view count is what makes this list different from
- * lib/artifacts' plain summary, and an anonymous owner's dashboard would look
- * broken without it.
- *
- * The column name comes from a two-value union, never from caller input.
- */
+/** Account dashboard rows or token attribution, with one aggregate of view totals. */
 export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: string): Promise<OwnedArtifactSummary[]> {
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
@@ -133,13 +102,7 @@ export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: str
   return withViews(r.rows);
 }
 
-interface UserTokenRow {
-  id: string;
-  name: string | null;
-  artifacts: number;
-  created_at: string;
-  deleted_at: string | null;
-}
+type UserTokenRow = Pick<TokenRow, 'id' | 'name' | 'created_at' | 'deleted_at'> & { artifacts: number };
 
 /** The user's machine tokens (revoked ones included, so the dashboard shows history). */
 export async function listAccountTokenRows(userId: string): Promise<UserTokenRow[]> {

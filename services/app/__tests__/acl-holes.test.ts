@@ -25,7 +25,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 import { readFrames } from '@/__tests__/sse';
@@ -54,7 +53,6 @@ async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'hole@example.com' }));
   await setUsername(owner.id, 'holeowner');
   const t = await mintToken('hole', owner.id);
-  await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }
 
@@ -147,7 +145,6 @@ describe('the resolver is not an existence oracle', () => {
     // A private document owned by a DIFFERENT account.
     const other = await createUser({ email: 'other@example.com' });
     const otherToken = await mintToken('other', other.id);
-    await claimToken(other.id, otherToken.token);
     const secret = await create(otherToken.token, { title: 'Theirs', html:nativeHtml('<h1>x</h1>') });
 
     const { owner } = await fixtures();

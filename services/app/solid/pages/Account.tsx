@@ -7,7 +7,6 @@ import { useSession } from '../lib/session';
 import { AvatarCircle } from '../ui/AvatarCircle';
 import { UsernameCard } from '../account/UsernameCard';
 import { NotificationSettings } from '../account/NotificationSettings';
-import { CustomDomainCard } from '../account/CustomDomainCard';
 import { TokensPanel } from '../account/TokensPanel';
 import { Button } from '../ui/Button';
 import { Panel } from '../ui/Panel';
@@ -15,7 +14,7 @@ import { SectionHeading } from '../ui/PageHeader';
 
 export function AccountPage(): JSX.Element {
   const { session } = useSession();
-  const page = usePageData<{ username: string | null; image: string | null }>('/api/page/account');
+  const page = usePageData<{ username: string | null; image: string | null; user_page_url?: string | null }>('/api/page/account');
   return <Show when={!session() || !!session()?.user} fallback={<Navigate href="/login?callbackUrl=/account" />}>
     <main class="workspace-page">
       <WorkspaceHeading title="Account" description="Manage your profile, publishing and API access." />
@@ -27,8 +26,8 @@ export function AccountPage(): JSX.Element {
             <UsernameCard username={page.data()?.username ?? null} />
           </Panel>
         </section>
+        <Show when={page.data()?.user_page_url}>{url => <p class="text-sm text-muted">Your public home: <a class="text-accent" href={url()}>{url()}</a></p>}</Show>
         <NotificationSettings />
-        <div class="empty:hidden"><CustomDomainCard /></div>
         <section aria-labelledby="connections-heading"><SectionHeading id="connections-heading">API access</SectionHeading><p class="mt-2 max-w-2xl text-sm leading-relaxed text-muted">Manage API access to your account. Revoking a token stops clients using it. To connect an authoring agent, follow the <a href="/llms/http-auth" class="text-accent">HTTP authentication guide</a>.</p><div class="mt-4"><TokensPanel /></div></section>
       </div>
     </main>

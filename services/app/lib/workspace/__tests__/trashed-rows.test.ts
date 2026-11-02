@@ -24,7 +24,6 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { getDb } from '@/lib/platform';
 import { dailyViewsByUser, viewSeriesByUser } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 
 useAppHarness();
@@ -34,7 +33,6 @@ const q = encodeURIComponent(JSON.stringify({ values: {}, only: ['children'] }))
 async function trashedWorld() {
   const u = await ensureUsername(await createUser({ email: 'o@example.com' }));
   const t = await mintToken('o', u.id);
-    await claimToken(u.id, t.token);
   const actor = { userId: u.id, email: u.email, emailVerified: true, credential: 'session' as const };
   const mk = async (body: Record<string, unknown>) => { const r = await createRoute(request('/api/artifacts', { method: 'POST', json: body, token: t.token })); expect(r.status).toBe(201); return (await r.json()) as { id: string }; };
   const folder = await mk({ format: 'folder', title: 'F', visibility: 'public' });

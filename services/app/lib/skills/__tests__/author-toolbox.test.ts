@@ -322,6 +322,8 @@ it('publish --group resolves the group first and sends an explicit destination o
   const planned=await publishCommand({values:{server,'dry-run':true,group:'@team'},positionals:[file]},options);
   expect(seen).toEqual(['/api/groups/team']);expect(planned).toMatchObject({dryRun:true,method:'POST',destination:{type:'group',id:'grp_team'}});
   expect(await publishCommand({values:{server,'dry-run':true},positionals:[file]},options)).not.toHaveProperty('destination');
+  expect(await publishCommand({values:{server,'dry-run':true,personal:true},positionals:[file]},options)).toMatchObject({destination:{type:'personal'}});
+  await expect(publishCommand({values:{server,'dry-run':true,personal:true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'invalid_destination'});
   role='viewer';
   await expect(publishCommand({values:{server,'dry-run':true,group:'team'},positionals:[file]},options)).rejects.toMatchObject({code:'group_not_editor'});
  }finally{await rm(root,{recursive:true,force:true});}
@@ -429,5 +431,14 @@ it('logout revokes the saved grant by default without refreshing or revoking env
   // Nothing saved: nothing to revoke, no request, and the result never claims a revocation.
   expect(await logout()).toMatchObject({serverRevoked:false,localGrantRemoved:true,environmentGrantStillActive:true,note:expect.stringContaining('No saved grant')});
   expect(calls).toBe(7);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+it('forwards the eligible anonymous public-view receipt to the publication result',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {finishPublication}=await import('../../../skills/artifactbin/scripts/toolbox-publish-finish.mjs');
+ const root=await mkdtemp(path.join(tmpdir(),'public-view-receipt-'));
+ try{
+  const result=await finishPublication({saved:{server:'https://app.example.test',body:{dataset:[{value:1}]},source:{file:path.join(root,'absent.json'),output:path.join(root,'data.json'),root}},receipt:{id:'PAGE12',url:'https://app.example.test/a/PAGE12',user_page_url:'https://alice.u.example.test/PAGE12-plan',version:1,state:'saved',format:'dataset'},journal:path.join(root,'publish')});
+  expect(result.user_page_url).toBe('https://alice.u.example.test/PAGE12-plan');
  }finally{await rm(root,{recursive:true,force:true});}
 });

@@ -1,5 +1,5 @@
 /** Legacy bearer-to-browser login is closed. Keep sign-out available to clear
- * old ownership cookies; email login may still adopt their artifacts. */
+ * old ownership cookies and revoke current Pages sessions. */
 import { agentSessionClearCookie, endPagesSessionsFor } from '@/lib/accounts';
 import { refusesCrossSite, sessionActor } from '@/lib/authentication';
 import { json } from '@/lib/http';
