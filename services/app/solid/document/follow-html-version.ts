@@ -1,6 +1,4 @@
 import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from '@/lib/html-runtime/live-morph-contract';
-import {STORY_DOCUMENT_MESSAGE} from '@/lib/story-runtime/contract';
-import type {JsxNode} from '@/lib/jsx';
 
 /** How long the frame has to draw a new version in place before the page reloads instead. */
 const HTML_VERSION_TIMEOUT_MS=3000;
@@ -49,9 +47,8 @@ export function followHtmlVersion(options:FollowHtmlVersionOptions):Promise<'mor
 let following:Promise<void>=Promise.resolve(),newest=0;
 export function followPublication(options:{
  version:number;editId?:string;
- frame:(VersionFrame&{update(command:{type:typeof STORY_DOCUMENT_MESSAGE;nodes:JsxNode[]}):void})|null;
+ frame:VersionFrame|null;
  /** The drawn version's tree when the frame holds one (undefined when it holds none, null when it could not be read). */
- tree:()=>Promise<JsxNode[]|null|undefined>;
  show:(head:{version:number;editId:string})=>void;
  reload:()=>void;
 }):Promise<void>{
@@ -62,9 +59,6 @@ export function followPublication(options:{
   refresh:async(drawn,revision)=>{
    const shown=Number(revision);
    if(!Number.isInteger(shown)||shown<drawn)return false;
-   const nodes=await options.tree();
-   if(nodes===null)return false;
-   if(nodes)options.frame?.update({type:STORY_DOCUMENT_MESSAGE,nodes});
    options.show({version:shown,editId:options.editId??''});
    return true;
   }}).then(outcome=>outcome==='morphed'?undefined:new Promise<never>(()=>{/* the page is reloading: nothing follows it */})));

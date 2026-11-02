@@ -14,7 +14,7 @@ import { seedOwnerJoin } from '@/lib/social';
 import {
   DatasetError, catalogOf, executeDocumentQueries, claimPendingDatasetSecret, connectionShape, createDatasetSecret, datasetResponse, importedRows, importedTables, loadDatasetRows,
   openDatasetSecret, placeholderSession, policySession, publicCatalogOf, publishDataset, publishFile, publishImage, publishPdf, publishVizRecipe,
-  readFileUpload, resolveDatasetConnection, resolveUserColumnScope, retainUserScope, schemaLoaderFor, sealDatasetSecret, secretTargetShape, serveStoredFile,
+  readFileUpload, resolveDatasetConnection, resolveUserColumnScope, retainUserScope, sealDatasetSecret, secretTargetShape, serveStoredFile,
   storeDatasetRows, storeFileContent, storeImageContent, storePdfContent, storedMediaReferences, storedRowStats, throttlePublicMutation, uploadedSha256,
   userOptions, validateDatasetPolicyForRow, validateUserContent, validateUserWrites, viewerMutationPolicy, type DatasetCatalog,
 } from '@/lib/datasets';
@@ -106,14 +106,7 @@ describe('stored catalogs and rows', () => {
     expect(await storedMediaReferences({ meta: { catalog: { ...catalog, kind: 'postgres' } } })).toEqual(new Set());
   });
 
-  it('loads a schema for datasets and folders and nothing for other formats or missing refs', async () => {
-    const loader = schemaLoaderFor(async id => id === 'ds' ? { format: 'dataset', columns: [{ name: 'a', type: 'string' }] } as never
-      : id === 'folder' ? { format: 'folder', columns: [] } as never : id === 'doc' ? { format: 'html' } as never : null);
-    expect(await loader('ds')).toMatchObject({ kind: 'dataset', tables: [{ name: 'rows', columns: [{ name: 'a', type: 'string' }] }] });
-    expect(await loader('folder')).toMatchObject({ kind: 'folder' });
-    expect(await loader('doc')).toBeNull();
-    expect(await loader('missing')).toBeNull();
-  });
+
 });
 
 describe('user columns', () => {

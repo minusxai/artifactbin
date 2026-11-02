@@ -1,9 +1,12 @@
 # JavaScript libraries
 
-The document's Helmet `<script>` imports a library directly, by npm name
-(`import * as THREE from 'three'`, resolved at publish to `https://esm.sh/three`)
-or by full https URL; the agent skill teaches this in `references/markup-scripts.md`.
-The script runs in the document itself (lib/islands/page-runtime) as a module built at
-publish (lib/author-script/author-module.server), so a library needs no registry,
-no pinned bundle and no managed frame. The document's CSP decides which hosts a
-script may load from; see docs/serving-and-security.md.
+Native HTML documents use ordinary browser ES modules. Import hosted libraries
+through their `@afbin/` specifiers; the core runtime installs the import map before
+author modules. The served author references document the supported chart, map,
+diagram and component APIs. These imports do not use a JSX compiler or a managed
+island runtime.
+
+External module URLs must satisfy the document's declared CSP and reader consent.
+Publishing does not automatically bundle arbitrary npm packages or make external
+URLs available offline. Keep account credentials out of browser code. See
+[serving and security](serving-and-security.md) and the served `/llms/runtime` guide.

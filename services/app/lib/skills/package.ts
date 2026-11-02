@@ -10,7 +10,7 @@ export function skillPackageFiles(tree:SkillTree,base:string,assets:SkillPackage
  return {...assets,...Object.fromEntries(renderTree(tree,base,true).filter(({file})=>!file.ref||isShippedSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]))};
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
- * Text members need no filesystem traversal or compression. No binary members: fonts load from the platform (D16). */
+ * Stored members preserve compatibility with already-installed managed updaters. No binary members: fonts load from the platform (D16). */
 export type SkillArchiveFiles=Readonly<Record<string,string>>;
 /** Bundles the platform now serves instead (D20): the preview fetches the runtime and libraries from the selected server. */
 const RETIRED_MEMBERS=new Set(['scripts/preview-runtime.mjs','scripts/preview-libraries.mjs']);

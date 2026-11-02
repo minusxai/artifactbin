@@ -9,7 +9,7 @@ import { replaceComment } from './comment-input';
 import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
-import type { StoryEditSelection } from '@/lib/edit-protocol';
+import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';

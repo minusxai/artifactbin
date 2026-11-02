@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { readLucideIcons } from './lucide-icons.mjs';
 import { recordServerReader, repoRelative, serverReaderFresh, stampInputs } from './server-reader-cache.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -34,9 +33,6 @@ const components = [...hosted.components, ...hosted.legacy];
 // Older checkouts also wrote mermaid-modules.json here; nothing reads it.
 fs.rmSync(path.join(output, 'mermaid-modules.json'), { force: true });
 
-// Lucide's icon data: the icon packages are browser dependencies, so the server reads this copy.
-fs.writeFileSync(path.join(output, 'lucide-icons.json'), JSON.stringify(readLucideIcons(root)));
-
 // MapLibre's worker is a build dependency; the server serves this copy (app/basemap). Since v6 it
 // is one self-contained ES module (its `maplibre-gl-shared.mjs` sibling is empty), started as a
 // module worker. The source-map comment is dropped: the map is not served, so it would only 404.
@@ -50,7 +46,7 @@ fs.rmSync(path.join(output, 'maplibre-gl-csp-worker.js'), { force: true });
 
 const registry = JSON.parse(fs.readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
 recordServerReader(stamped, [
-  ...['lucide-icons.json', 'maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
+  ...['maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
   ...Object.entries(registry).map(([name, spec]) => repoRelative(path.join(root, 'public/libraries', `${name}-${spec.version}`, 'index.js'))),
   ...components.map((name) => repoRelative(path.join(output, 'components', `${name}.js`))),
 ]);

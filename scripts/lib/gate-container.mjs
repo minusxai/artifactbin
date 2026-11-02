@@ -20,7 +20,6 @@ export const BUILD_OUTPUTS = Object.freeze([
   'dist',
   'services/app/dist',
   'services/app/lib/build-assets',
-  'services/app/public/islands',
   'services/app/public/libraries',
   'services/app/server/routes.generated.ts',
 ]);

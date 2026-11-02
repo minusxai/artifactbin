@@ -19,7 +19,7 @@ const SERVICES = path.join(ROOT, 'services');
 
 /** Pure JavaScript the server bundle carries inline on purpose, with no own-location reads: tailwindcss compiles the
  * stored CSS from the sheets build-server.mjs defines into the bundle (`__MX_TAILWIND_*_CSS__`). */
-const BUNDLED = new Set(['tailwindcss']);
+const BUNDLED = new Set();
 
 const manifest = (service) => JSON.parse(readFileSync(path.join(SERVICES, service, 'package.json'), 'utf8'));
 /** The app's runtime dependencies and those of the workspace packages it depends on, as an image installs them. */
@@ -77,7 +77,7 @@ function serverImports() {
 
 describe('server runtime dependencies', () => {
   it('sees the publish compiler load esbuild, so the check below is not vacuous', () => {
-    expect(serverImports().get('esbuild')).toContain('services/app/lib/author-script/author-module.server.ts');
+    expect(serverImports().get('esbuild')).toContain('services/app/lib/html-runtime/build.server.ts');
   });
 
   it('every package a server module imports is a runtime dependency, or deliberately bundled', () => {

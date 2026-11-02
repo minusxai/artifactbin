@@ -1,25 +1,16 @@
-# Live browser sessions and `window.page`
+# Live browser sessions
 
-A browser session drives a public artifact page through `window.page`, which
-the island boot (`lib/islands/boot.ts`) installs on a top-level page that
-declares data, while it reads. It reads and writes the page runtime's bindings
-(`lib/islands/page-runtime.ts` `bindPage`, `exposePage`), the very Solid signals
-the page's own `<Helmet>` script binds from `page`, as plain data: `get(name)` is
-a Value's current value or a Query's (or table Value's) current rows, `set(name,
-value)` writes a scalar Value (queries re-run), `ready(name)` a Query's next
-settled rows, and `mutation(name)` an async function that waits for the page's
-access check, resolves after commit and rejects with the server's message. An
-undeclared name gives `undefined` (`set` and `ready` throw). Editing removes it
-and reading again restores it. There is no cached read API and no subscription
-API beside the signals.
+A browser session drives native HTML through ordinary Playwright locators and
+page evaluation. There is no platform `window.page` binding API. Use the page
+DOM or its explicitly authored interfaces to inspect and interact with it.
 
 The session service owns authentication scope, leases, execution receipts, and
 script serialization. Each isolated worker owns an actual Playwright browser,
 context, and pages across calls. Clients submit async function bodies and poll
 receipts, keeping the recovery IDs before waiting. `context` is standard Playwright;
 `pages` is a frozen map of stable page IDs; `output.image(bytes)` attaches PNG/JPEG.
-Open artifacts with `await page.goto('/a/<id>')`, call `window.page` through
-`page.evaluate()`, and use normal locators and screenshots. Independent page work
+Open artifacts with `await page.goto('/a/<id>')` and use normal locators,
+page evaluation and screenshots. Independent page work
 can use `Promise.all`. Source editing is not a session operation.
 
 Clients use the HTTP API `POST /api/browser-sessions`, with ops `script` (a new
@@ -29,15 +20,13 @@ session, or an existing session ID with the next function body), `status`
 ```js
 const page = await context.newPage();
 await page.goto('/a/abc123');
-await page.waitForFunction(() => Boolean(window.page));
-await page.evaluate(() => { window.page.set('region', 'West'); });
-const rows = await page.evaluate(() => window.page.ready('sales'));
+await page.getByRole('heading', {name: 'Report'}).waitFor();
+const text = await page.locator('body').innerText();
 await output.image(await page.screenshot());
-return rows;
+return {text};
 ```
 
-Session routes use `/api/browser-sessions`; existing remote terminal resources
-under `/api/sessions` retain their contract. Credentials remain in the parent
+Session routes use `/api/browser-sessions`. Credentials remain in the parent
 broker. Workers have no network namespace access to the host, no host checkout,
 and only private writable storage. The broker admits the configured app origin and, under
 `APP__PAGES_HOST`, the document origins the app page frames (`<hex id>.<pages host>`),
@@ -48,7 +37,7 @@ The frame's first URL is the document's own origin, which spends the frame's one
 host-only pages cookie in the response that serves the document. That cookie is held by the broker per document host
 and attached only to requests for that host; the worker's browser never holds it. On a page
 that frames a document, `page.evaluate`, `waitForFunction`, locators and selector actions resolve in the document
-frame (after it has loaded and booted), where `window.page` lives; `page.url()`, `goto` and `screenshot` stay the app page's.
+frame after it has loaded; `page.url()`, `goto` and `screenshot` stay the app page's.
 
 Google Fonts is the only external resource exception for scripted sessions. The broker relays GETs to the shared
 `fonts.googleapis.com` and `fonts.gstatic.com` origins to an app-only `/api/internal` route; the app permits only the

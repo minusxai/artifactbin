@@ -200,14 +200,12 @@ it('refuses inbound dependency representations without materializing unrelated a
   {meta:{htmlLinks:[{kind:'dataset',name:'records',datasetId:id,mode:'live'}]}},
   {meta:{userScopeDocument:id}},
   {source:`legacy ref:${id}`},
-  {document:{nested:[{value:`ref:${id}`}]}},
-  {document:{[`ref:${id}`]:'legacy key'}},
   {meta:{nested:`ref:${id}`}},
   {dataset_policy:{nested:`ref:${id}`}},
   {dataset_policy:{version:2,allow:[{actions:['insert'],from:{artifact:id}}]}},
  ];
  for(const fields of cases){
-  await f.db.query('UPDATE artifacts SET source=$2,document=$3::jsonb,meta=$4::jsonb,dataset_policy=$5::jsonb WHERE id=$1',[foreign,fields.source??null,fields.document?JSON.stringify(fields.document):null,JSON.stringify(fields.meta??{}),fields.dataset_policy?JSON.stringify(fields.dataset_policy):null]);
+  await f.db.query('UPDATE artifacts SET source=$2,document=$3::jsonb,meta=$4::jsonb,dataset_policy=$5::jsonb WHERE id=$1',[foreign,fields.source??null,null,JSON.stringify(fields.meta??{}),fields.dataset_policy?JSON.stringify(fields.dataset_policy):null]);
   const response=await f.move(id,{type:'group',id:'grp_ownership'});expect(response.status,JSON.stringify(fields)).toBe(409);
   expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
  }

@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
-import { readPwaSettings } from '@/lib/document/pwa-settings';
+import { readPwaSettings } from '@/lib/html-page/pwa-settings';
 import { PwaSettingsPanel } from '../PwaSettingsPanel';
 
 const SOURCE = '<p id="one">Keep me</p>';

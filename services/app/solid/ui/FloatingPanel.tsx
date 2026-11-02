@@ -8,7 +8,7 @@
  */
 import { splitProps, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
+import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
 import { LAYER } from './layers';
 import { createPlacedAppearance } from './theme';
 

@@ -10,7 +10,7 @@ import { render } from 'solid-js/web';
 import { MemoryRouter, Route, Router } from '@solidjs/router';
 import { vi } from 'vitest';
 import { describeRetryingRead } from '@/solid/__tests__/retrying-read';
-import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
 import type { FolderPage as FolderData } from '@/lib/workspace';
 import type { DatasetCatalog } from '@/lib/datasets';
 import { FolderPage } from '@/solid/pages/Folder';

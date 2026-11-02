@@ -1,4 +1,4 @@
-import { parseCommentTarget, type CommentTarget } from '@/lib/story-ui/comment-target';
+import { parseCommentTarget, type CommentTarget } from './comment-target';
 /**
  * WHAT A COMMENT WAS ABOUT, BESIDE THE NODE IT IS ON — the quote and the
  * anchor-relative range.
@@ -25,7 +25,7 @@ import { parseCommentTarget, type CommentTarget } from '@/lib/story-ui/comment-t
  */
 
 /** One run of selected text, addressed from the anchor. `text` is the truth; the indices are hints. */
-export interface AnnotationRangePart {
+interface AnnotationRangePart {
   /** '' the anchor · '0'/'0.2' element-child steps · '+1'/'+1.2' following element sibling, then steps. */
   rel: string;
   /** Index into the node's canonical text where the run started when it was captured. */

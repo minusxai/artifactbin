@@ -16,8 +16,8 @@
 import { createUniqueId, Show, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import X from 'lucide-solid/icons/x';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
+import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
+import { createDialogShell } from '@/lib/ui-runtime/dialog-shell';
 import { Button } from './Button';
 import { LAYER } from './layers';
 import { createPlacedAppearance } from './theme';

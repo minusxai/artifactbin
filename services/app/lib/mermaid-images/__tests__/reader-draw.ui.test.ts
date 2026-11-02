@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {parseMermaidFaces} from '..';
+import {parseMermaidFaces} from '../drawn';
 const engine=vi.hoisted(()=>({renderMermaid:vi.fn(async()=>({src:'data:image/svg+xml;charset=utf-8,%3Csvg%2F%3E',type:'flowchart-v2',width:10,height:5}))}));
 vi.mock('../mermaid-render',()=>engine);
 import {drawForReader,facesOf,paletteFor} from '../reader-draw';

@@ -10,11 +10,11 @@
  */
 import { ACCOUNT_REACH_SQL } from '@/lib/user-kinds';
 import { identityForUser, type AccessActor } from '@/lib/accounts';
-import type { StoredDocument } from '@/lib/document';
+import type {DocumentGraph} from '@artifactbin/contracts';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 export interface ArtifactRow {
-  document?:StoredDocument|null;
+  document?:DocumentGraph|null;
   open_annotations?:number;
   id: string;
   token_id: string | null;
@@ -161,7 +161,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  * ./access `documentEditorReaches`. It grants `editor`, which reaches every `min` it is asked
  * for, and only ever inside ACCOUNT_REACH_SQL (scopeAtLeast below).
  */
-const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format IN ('markup','html') AND artifacts.visibility <> 'private')";
+const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'html' AND artifacts.visibility <> 'private')";
 
 /**
  * The SQL MIRROR of the lattice: the owner, an account holding any share role

@@ -15,7 +15,7 @@ import { mintToken } from '@/lib/accounts';
 import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
-import { STORY_FONT_THEMES } from '@/lib/story-design/story-fonts';
+import { STORY_FAMILY_ASSETS } from '@/lib/html-systems';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/page-styles';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -41,7 +41,7 @@ async function world() {
 }
 
 /** A bundled family's latin upright — what a first-screen preload names. */
-const latinOf = (family: string): string => STORY_FONT_THEMES.neutral.find((a) => a.family === family && a.preload === true)!.url;
+const latinOf = (family: string): string => Object.values(STORY_FAMILY_ASSETS).flat().find((a) => a.family === family && a.preload === true)!.url;
 /** The font preloads in a page's head, in order; every one must be crossorigin (fonts fetch in CORS mode). */
 const fontPreloadsIn = (html: string): string[] => {
   const head = html.split('</head>')[0];

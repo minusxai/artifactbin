@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { relayedRequest } from '../../story-runtime/frame-bridge/parent';
+import { relayedRequest } from '../../html-reader/frame-bridge/parent';
 const win = { location: { origin: 'https://platform.example' } } as Window;
 const request = (path: string, method = 'POST') => relayedRequest(win, 'p1', { path, method, headers: { authorization: 'private', 'content-type': 'application/json' }, body: '{"query":"{ orders { total } }","operation":"query","variables":{},"revision":"spoof"}' }, { revision: '7', readOnly: false });
 it('admits only the current page GraphQL POST and binds the trusted version', () => {

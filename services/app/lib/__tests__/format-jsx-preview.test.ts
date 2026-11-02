@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatJsxPreview } from '@/lib/workspace';
-import { parseJsx } from '../jsx/parse';
+import { parseJsx } from '../jsx';
 
 describe('formatted JSX preview', () => {
   it('formats multiple roots and nested markup without exposing the temporary wrapper', async () => {

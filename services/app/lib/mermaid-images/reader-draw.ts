@@ -138,8 +138,8 @@ async function withPageFonts(image: MermaidImage, palette: MermaidPalette): Prom
 const engineAskedFor = (): boolean => typeof location !== 'undefined' && new URLSearchParams(location.search).get('mermaid') === 'engine';
 
 /** What this browser would draw with — the palette's key and the faces' measurements. */
-export interface Measured { palette: string; metrics: MermaidMetrics | null }
-export const measured = (palette: MermaidPalette, code: string): Measured => ({ palette: mermaidPaletteKey(palette), metrics: measureFaces(palette, code) });
+interface Measured { palette: string; metrics: MermaidMetrics | null }
+const measured = (palette: MermaidPalette, code: string): Measured => ({ palette: mermaidPaletteKey(palette), metrics: measureFaces(palette, code) });
 const sameMeasure = (a: Measured, b: Measured) => a.palette === b.palette && (a.metrics && formatMermaidMetrics(a.metrics)) === (b.metrics && formatMermaidMetrics(b.metrics));
 
 /**
@@ -163,7 +163,7 @@ function fontsFor(palette: MermaidPalette, code: string): Promise<void> {
 }
 
 /** An engine drawing, and — when the fonts held still while it was drawn — what it was drawn under, for the harvest. */
-export type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
+type Drawn = { code: string; image?: MermaidImage; error?: string; palette?: string; metrics?: string; portable?: boolean; faces?: string };
 
 /** A reader's drawing and its marks: what `drawForReader` returns (minus the code it was drawn for). */
 type ReaderDrawing = Omit<Drawn, 'code' | 'error'> & { image: MermaidImage };

@@ -10,8 +10,8 @@
  *   Animation runs only while visible, the tab is shown and reduced motion is off.
  */
 import { registerComponent } from './register-component';
-import { isometricScene, type IsoDrawPath } from "../story-ui/isometric";
-import { isometricError } from "../jsx/isometric-spec";
+import { isometricScene, type IsoDrawPath } from "./isometric-scene";
+import { isometricError } from "../html-component-specs/isometric-spec";
 import {
   advanceIsometric,
   isometricPathAttributes,

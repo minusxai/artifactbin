@@ -22,8 +22,7 @@
  * only, no path, query, fragment or credentials, and a wildcard only as a whole leading `*.` label
  * over at least a registrable-looking name. Nothing that passes can carry `;`, `'` or whitespace.
  */
-import type { JsxElement, ValidationError } from '@/lib/jsx';
-import type { HelmetContent } from './helmet';
+interface ValidationError {message:string;tag?:string;attr?:string;start?:number;end?:number}
 
 /** The directives a document may extend, as https origins appended per directive. */
 export interface CspExtensions {
@@ -92,51 +91,30 @@ export function parseCspOrigin(written: string): { ok: true; origin: string } | 
   return { ok: true, origin: lower };
 }
 
-/** The `<meta name="csp-…">` element in the Helmet, for spans. */
-function metaElement(helmet: JsxElement | null | undefined, name: string): JsxElement | null {
-  for (const child of helmet?.children ?? []) {
-    if (child.type !== 'element' || child.tag.toLowerCase() !== 'meta') continue;
-    const attr = child.attributes.find((a) => a.name.toLowerCase() === 'name');
-    if (attr?.value.static && attr.value.json === name) return child;
-  }
-  return null;
-}
-
-function spanOf(helmet: JsxElement | null | undefined, name: string): { start?: number; end?: number } {
-  const element = metaElement(helmet, name);
-  if (!element) return {};
-  const content = element.attributes.find((a) => a.name.toLowerCase() === 'content');
-  return content ? { start: content.start, end: content.end } : { start: element.start, end: element.end };
-}
-
-/**
- * Read and validate the four `csp-*` metas of a split Helmet. `helmet` (the split's element) only
- * supplies spans; the values come from `content.meta`, which the Helmet grammar already collected.
- */
-export function cspExtensionsOf(content: Pick<HelmetContent, 'meta'>, helmet?: JsxElement | null): CspExtensionsResult {
+export function cspExtensionsOf(content: {meta:Array<{name:string;content:string}>}): CspExtensionsResult {
   const errors: CspExtensionError[] = [];
   const extensions = emptyCspExtensions();
   for (const meta of content.meta) {
     if (!meta.name.startsWith(META_PREFIX)) continue;
     const directive = meta.name.slice(META_PREFIX.length) as CspDirective;
-    const span = spanOf(helmet, meta.name);
+
     if (!CSP_DIRECTIVES.includes(directive)) {
-      errors.push({ message: `the Helmet meta ${meta.name} is not a policy a document can extend — use ${CSP_DIRECTIVES.map(metaName).join(', ')}`, tag: 'meta', attr: 'name', value: meta.name, ...span });
+      errors.push({ message: `the native head meta ${meta.name} is not a policy a document can extend — use ${CSP_DIRECTIVES.map(metaName).join(', ')}`, tag: 'meta', attr: 'name', value: meta.name });
       continue;
     }
     const written = meta.content.trim().split(/\s+/).filter(Boolean);
     if (written.length === 0) {
-      errors.push({ message: `the Helmet meta ${meta.name} lists no origins — name each https origin, separated by spaces`, tag: 'meta', attr: 'content', value: meta.content, ...span });
+      errors.push({ message: `the native head meta ${meta.name} lists no origins — name each https origin, separated by spaces`, tag: 'meta', attr: 'content', value: meta.content });
       continue;
     }
     const origins: string[] = [];
     for (const value of written) {
       const parsed = parseCspOrigin(value);
-      if (!parsed.ok) errors.push({ message: `the Helmet meta ${meta.name}: "${value}" ${parsed.reason}`, tag: 'meta', attr: 'content', value, ...span });
+      if (!parsed.ok) errors.push({ message: `the native head meta ${meta.name}: "${value}" ${parsed.reason}`, tag: 'meta', attr: 'content', value });
       else if (!origins.includes(parsed.origin)) origins.push(parsed.origin);
     }
     if (origins.length > MAX_CSP_ORIGINS_PER_DIRECTIVE) {
-      errors.push({ message: `the Helmet meta ${meta.name} names ${origins.length} origins; the cap is ${MAX_CSP_ORIGINS_PER_DIRECTIVE}`, tag: 'meta', attr: 'content', value: meta.content, ...span });
+      errors.push({ message: `the native head meta ${meta.name} names ${origins.length} origins; the cap is ${MAX_CSP_ORIGINS_PER_DIRECTIVE}`, tag: 'meta', attr: 'content', value: meta.content });
     }
     extensions[directive] = origins.slice(0, MAX_CSP_ORIGINS_PER_DIRECTIVE);
   }

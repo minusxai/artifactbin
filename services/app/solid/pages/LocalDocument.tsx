@@ -3,10 +3,10 @@ import { retryingFetch } from '@/lib/http/retry-lazily';
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
 import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
-import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/story-runtime/contract';
-import {chooseTheme,storedTheme} from '@/lib/story-runtime/reader-mode';
+import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/html-reader/contract';
+import {chooseTheme,storedTheme} from '@/lib/html-reader/reader-mode';
 import {createAppAppearance} from '../ui/theme';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 import {DocumentChrome} from '../document/DocumentChrome';
 import type {Panel} from '../components/PageChrome';
 import {Input} from '../ui/Field';
@@ -59,7 +59,7 @@ export function LocalDocumentPage(){
   onCleanup(()=>{backgrounds.forEach(restore=>restore());if(scheme)root.style.setProperty('color-scheme',scheme,schemePriority);else root.style.removeProperty('color-scheme');});
   broker=installLocalConnectionBroker({win:window,onState(next){if(['connecting','offline','blocked','unavailable','permission-required','signin-required','unknown-outcome'].includes(next))setRemoteObservation(undefined);if(next!=='connected'){setNonce(null);runtimeRef.current?.dispose();runtimeRef.current=null;}setState(next);},onIdentity:setIdentity,onLocalSourceEvidence:setLocalDigest,onSourceObservation(observation){setRemoteObservation(observation);const current=identity();setRemoteChanged(Boolean(current&&observation.remoteDigest!==current.sourceDigest));},onConnected(value){
    setIdentity(value.identity);
-   const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
+   const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
    runtimeRef.current=controller;
    void retryingFetch(`/api/page/artifact/${encodeURIComponent(value.identity.artifactId)}`,{credentials:'omit'}).then(response=>response.ok?response.json():null).then(page=>{if(page?.surface?.title)setTitle(page.surface.title);});
   },onMessage(message){

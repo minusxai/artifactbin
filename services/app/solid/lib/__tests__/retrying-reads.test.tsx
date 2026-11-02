@@ -15,7 +15,6 @@ import { SessionProvider, useSession } from '../session';
 import { usePageData } from '../use-page-data';
 import { useSetupDeployment } from '../deployment-setup';
 import { freshFrameSrc } from '../../document/frame-src';
-import { fetchFrameNodes } from '../../document/create-framed-story';
 
 const ok = (body: unknown) => () => Response.json(body);
 const pathOf = (url: string) => new URL(url, 'http://app.test').pathname;
@@ -50,11 +49,6 @@ function mounted<T>(primitive: () => T): { value: T; dispose: () => void } {
 }
 
 {
-  let nodes: unknown = null;
-  describeRetryingRead('fetchFrameNodes', () => ({
-    start: () => { const c = new AbortController(); nodes = null; void fetchFrameNodes('Doc1', '', c.signal).then((value) => { nodes = value; }); return { abort: () => c.abort() }; },
-    landed: () => Array.isArray(nodes),
-  }), { matches: (url) => url === '/api/page/artifact/Doc1?part=nodes', ok: ok({ nodes: [] }), abortable: true });
 }
 
 {

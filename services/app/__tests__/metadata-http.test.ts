@@ -1,11 +1,10 @@
+import {retiredUpdate} from './retired-document-fixture';
 import {expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {PATCH as patch} from '@/app/api/artifacts/[id]/route';
 import {PATCH as sessionPatch} from '@/app/api/my/artifacts/[id]/route';
 import {getArtifactById} from '@/lib/artifacts';
-import {createDocumentGraph} from '@/lib/document/document-graph';
-import {prepareClientDocumentUpdate} from '@/lib/document/document-update-client';
 useAppHarness();
 async function fixture(){
  const owner=await mintAccountToken('native-metadata');
@@ -16,7 +15,7 @@ it.each(['bearer','session'] as const)('rejects an otherwise valid graph replace
  const f=await fixture(),head=(await getArtifactById(f.page.id))!;
  // Adversarial client supplies a fully valid legacy replacement; malformed-body
  // rejection alone would leave the conversion path open.
- const document_update=prepareClientDocumentUpdate({...head,document:createDocumentGraph('<p>Original</p>',head.version)},{source:'<p>Legacy replacement</p>',whole:true});
+ const document_update=retiredUpdate;
  const body={edit_id:head.edit_id,expectedState:f.page.state,document_update};
  const response=credential==='bearer'?await patch(request(`/api/artifacts/${f.page.id}`,{method:'PATCH',token:f.owner.token,json:body}),f.context):await sessionPatch(request(`/api/my/artifacts/${f.page.id}`,{method:'PATCH',origin:'same',actor:{credential:'session',userId:f.owner.userId!,email:f.owner.email!,emailVerified:true},json:body}),f.context);
  expect(response.status).toBe(400);expect((await response.json()).error).toBe('native_html_required');

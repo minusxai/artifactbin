@@ -1,7 +1,7 @@
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {createReaderPresenceSession} from '@/lib/html-presence/reader-session';
 import type {PresenceFrame,ReaderPreferences,PresenceViewer} from '@/lib/html-presence';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 import type {ArtifactBackend} from '@/lib/artifact-backend';
 export interface ReaderPresenceEngineOptions {
  revision:string; nonce:string; active:boolean;

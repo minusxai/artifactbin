@@ -16,7 +16,7 @@
  *   resolve account cards. Keep an absent card null; never invent a name from the ID.
  */
 import { registerComponent, type ComponentDescriptor } from './register-component';
-import { personFaceBackground, personInitial } from '../islands';
+import { personFaceBackground, personInitial } from '../ui-runtime/person-face';
 import {
   identityStateOf, imageNeedsReplace, isOn, modeOf, paintAvatar, profileLink,
   replayPreUpgradeProperties, safeHref, safeImageSource, setOrRemove, sizeOf, slotSpan,

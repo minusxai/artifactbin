@@ -43,7 +43,7 @@ const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@co
  * The compiled document's page, boot and Solid runtime entries. They are the
  * shared browser graph shipped to `/raw` readers under `/islands/`.
  */
-const RUNTIME_ENTRY = ['lib/islands/page.ts', 'lib/islands/rt.tsx', 'lib/islands/boot.ts'];
+const RUNTIME_ENTRY = ['lib/html-runtime/browser-reader.ts', 'lib/html-runtime/browser-client.ts'];
 
 /**
  * Packages the document runtime must never reach statically.
@@ -55,7 +55,7 @@ const RUNTIME_ENTRY = ['lib/islands/page.ts', 'lib/islands/rt.tsx', 'lib/islands
  *
  * An ICON SET (`lucide-solid`, `lucide-static`): `<Icon name>` resolves any of ~1600 glyphs by
  * name, and the whole map is 517 KB raw, 148 KB gz. The glyphs a document actually uses are
- * resolved server-side and travel in the island beside `refData` (lib/story-ui/icon-glyphs.server.ts).
+ * resolved server-side and travel in the island beside `refData` (lib/html-reader/icon-glyphs.server.ts).
  */
 const RUNTIME_FORBIDDEN = ['acorn', 'acorn-jsx', 'lucide-solid', 'lucide-static', ...SQLITE];
 
@@ -167,9 +167,9 @@ describe('compiled document bundle hygiene', () => {
     // Guards the guard, exactly as above: a broken parse would make every
     // forbidden check below pass while importing nothing.
     expect([...reach.files].map((f) => path.relative(ROOT, f))).toContain(
-      'lib/islands/live.ts',
+      'lib/html-runtime/upload-relay.ts',
     );
-    expect([...reach.packages.keys()]).toContain('solid-js');
+    expect([...reach.packages.keys()]).not.toContain('solid-js');
   });
 
   it.each(RUNTIME_FORBIDDEN)('never statically reaches %s', (pkg) => {

@@ -1,7 +1,4 @@
-import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
-import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
-import { runDocumentMutation } from '@/lib/document-data';
 import { refusesCrossSite } from '@/lib/authentication';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -37,53 +34,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const work=async(receipt?:MutationReceipt):Promise<Response>=>{
-  const result = await runDocumentMutation(artifact, parsed, actor,receipt);
-  if (!result.ok) {
-    if(String(result.reason)==='operation_key_required')return json({error:'operation_key_required'},400,CORS);
-    switch (result.reason) {
-      case 'unknown_mutation':
-        return json({ error: 'unknown_mutation', detail: `this document declares no <Mutation name="${parsed.mutation}">` }, 400, CORS);
-      case 'invalid_row':
-        return json({ error: 'invalid_row', detail: result.detail }, 400, CORS);
-      case 'row_changed':
-      case 'row_not_unique':
-        return json({ error: result.reason, detail: result.detail }, 409, CORS);
-      case 'dataset_full':
-        return json({ error: 'dataset_full', detail: result.detail }, 409, CORS);
-      case 'contended':
-        // Not the caller's fault and not permanent: say so, and say when.
-        return json({ error: 'dataset_busy', detail: result.detail }, 503, { ...CORS, 'Retry-After': '1' });
-      case 'policy_denied':
-        // A KIND refused (a guest, or a test user outside its sandbox) answers
-        // as ITSELF: the door's own status and its own top-level error, which
-        // is what the like/follow/fork controls already navigate on.
-        if (result.capability) return json(result.capability.body, result.capability.status, CORS);
-        // Otherwise: same status, same `error`. `code` is the machine-readable
-        // half, and today it has exactly one value: an anonymous reader pressed
-        // a write that binds `$_me` (@artifactbin/contracts sign-in-required).
-        return json({error:'policy_denied',...(result.code?{code:result.code}:{}),detail:result.detail},403,CORS);
-      case 'invalid_sql':
-        return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);
-      default:
-        // read-only, or a target that is not (any longer) a writable dataset.
-        return json({ error: 'dataset_read_only', detail: 'You need edit access to a writable dataset to make this change.' }, 403, CORS);
-    }
-  }
-  if ('local' in result) return json({ok: true, dataset: '', local: result.local}, 200, CORS);
-  return json(
-    { ok: true, dataset: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount },
-    200,
-    CORS,
-  );
-  };
-  const key=parsed.operationKey??request.headers.get('Idempotency-Key');
-  if(!key||(!actor.userId&&!actor.tokenId))return work();
-  const reply=await durableMutation(actor,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(actor,actor.credential==='session'?'human':'agent')});
-  const adapted=adaptMutationOperationReply(reply,'browser');
-  // Older non-Notify writes store the dataset-shaped success in their atomic receipt.
-  if(adapted.status===200&&typeof adapted.body.id==='string')adapted.body={ok:true,dataset:adapted.body.id,version:adapted.body.version,affected:adapted.body.affected,rowCount:adapted.body.rowCount};
-  return json(adapted.body,adapted.status,CORS);
+  return json({error:'unknown_mutation'},400,CORS);
 }
 
 /**

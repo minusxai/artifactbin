@@ -14,7 +14,7 @@ import { registerComponent } from './register-component';
 export interface MarkdownContract { source: string; copyControls: boolean }
 import { markdownContent } from '../markdown/content';
 import { MARKDOWN_CSS } from '../markdown/styles';
-import { STORY_BARE_TYPOGRAPHY_CSS } from '../story-surface/bare-typography';
+import { STORY_BARE_TYPOGRAPHY_CSS } from './markdown-typography';
 let nextHeadingScope = 0;
 function splitSelectors(value:string):string[]{
  const selectors:string[]=[];let start=0,depth=0,quote='',comment=false;

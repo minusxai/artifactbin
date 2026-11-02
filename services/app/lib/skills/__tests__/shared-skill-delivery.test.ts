@@ -89,6 +89,8 @@ describe('installable shared skill folder',()=>{
    // The archive carries no runtime, library or component bundles: the preview fetches them from the selected server.
    for(const retired of ['preview-runtime.mjs','preview-libraries.mjs'])expect(existsSync(path.join(dir,'artifactbin/scripts',retired)),retired).toBe(false);
    const installedParser=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/preview-html.mjs')).href);
+   expect(expected['scripts/preview-export.mjs']).toBeUndefined();
+   expect(await installedParser.packPreviewExport({html:'<!doctype html><html><head><title>Saved</title></head><body><p>Retained</p></body></html>',pathname:'/index.html',load:async()=>{throw Error('No external resources');}})).toContain('Retained');
    expect(installedParser.previewHtml('<!doctype html><html><head><script>check()</script></head><body>Source</body></html>','')).toContain('<html data-af-private-preview="true">');
    const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
@@ -189,4 +191,33 @@ it('keeps credential recovery references consistent with direct HTTP authenticat
   expect(text).toContain('/llms/http-auth');
  }
  expect(publicGuideText('http-auth',origin)).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
+});
+
+it('preserves deterministic stored UTF-8 members for already-installed updaters',async()=>{
+ const text='Native author contract ✓\n'.repeat(1000),files={'SKILL.md':text};
+ const archive=Buffer.from(skillZip(files));
+ expect(archive.equals(Buffer.from(skillZip(files)))).toBe(true);
+ expect(archive.readUInt16LE(8)).toBe(0);
+ const start=30+archive.readUInt16LE(26),size=archive.readUInt32LE(18);
+ expect(archive.subarray(start,start+size).toString()).toBe(text);
+ expect(size).toBe(Buffer.byteLength(text));
+ const {skillRelease}=await import('../package');
+ // This is the unchanged stored-only decoder already shipped to installed clients.
+ const {decodeRelease}=await import('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs');
+ const release=skillRelease(files,'https://example.test');
+ expect(decodeRelease(Buffer.from(release.bytes),release.manifest)['SKILL.md']).toBe(text);
+});
+
+it('keeps the served release within the unchanged installed updater limit',async()=>{
+ const {archiveFor}=await import('..');
+ const {decodeRelease,limit}=await import('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs');
+ const {bytes,manifest}=await archiveFor('https://installed.example');
+ expect(bytes.byteLength).toBeLessThanOrEqual(limit);
+ const files=decodeRelease(Buffer.from(bytes),manifest);
+ expect(files['scripts/toolbox-publication-bundle.mjs']).toBeTruthy();
+ expect(files['scripts/preview.mjs']).toBeTruthy();
+ expect(files['design-systems/almanac.css']).toBeTruthy();
+ expect(files['scripts/preview-runtime.mjs']).toBeUndefined();
+ expect(files['scripts/preview-libraries.mjs']).toBeUndefined();
+ console.log('Stored served skill ZIP bytes:',bytes.byteLength,'installed updater limit:',limit);
 });

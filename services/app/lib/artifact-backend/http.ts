@@ -12,21 +12,9 @@ import {createReaderHttpBackend} from './reader-http';
  * `fetch` and `EventSource` are looked up at call time, never captured.
  */
 import type { AnnotationWire } from '@/lib/annotations';
-import { createAuthenticatedTransport } from '@/lib/page-store/authenticated-transport';
 import { SIGN_IN_REQUIRED } from '@artifactbin/contracts';
 import { BackendRequestError } from './errors';
-import type {
-  ArtifactBackend,
-  ArtifactVersionSnapshot,
-  ArtifactVersionSummary,
-  ChosenImage,
-  DatasetTableRead,
-  DraftQueryResult,
-  EditAnswer,
-  FlushResponse,
-  ImageChoice,
-  MembersAnswer,
-} from './types';
+import type { ArtifactBackend, ArtifactVersionSnapshot, ArtifactVersionSummary, ChosenImage, EditAnswer, FlushResponse, ImageChoice, MembersAnswer } from './types';
 
 import { newIdempotencyKey, retried, watchRetrying } from './retrying';
 
@@ -42,7 +30,6 @@ export function artifactRequests(id: string) {
   return {
     head: () => retried(() => fetch(path)),
     version: (n: number) => retried(() => fetch(`${path}/versions/${n}`)),
-    edits: (body: unknown) => fetch(`${path}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     htmlUpdate: (body: unknown) => fetch(path, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     patch: (body: unknown) => fetch(path, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     revert: (body: unknown) => fetch(`${path}/revert`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
@@ -88,38 +75,6 @@ export function createHttpBackend(id: string): ArtifactBackend {
         return typeof body.src === 'string' ? body.src : null;
       } catch { return null; }
     },
-    async commitEdit(input) {
-      return answer(await fetch(`${mine}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }));
-    },
-    async prepare(source) {
-      const response = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/prepare`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ source }) });
-      if (response.ok) return response.json();
-      const body = await response.json().catch(() => ({}));
-      const message = body.details?.map((d: unknown) => typeof d === 'string' ? d : (d as { message?: string })?.message).filter(Boolean).join('\n');
-      throw new Error(message || body.error || 'Unable to prepare document resources');
-    },
-    async previewCss(markup) {
-      const res = await fetch('/api/preview', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ markup }) });
-      if (!res.ok) throw new BackendRequestError('preview refused', res.status);
-      const body = (await res.json()) as { css?: string | null };
-      if (typeof body.css !== 'string') throw new BackendRequestError('no stylesheet', res.status);
-      return { css: body.css };
-    },
-    async previewQueries(markup) {
-      const r = await fetch('/api/query', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ markup }) });
-      return r.ok ? ((await r.json()) as DraftQueryResult) : null;
-    },
-    async queryTable(ref, body) {
-      const response = await fetch(`/a/${encodeURIComponent(ref)}/tables`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(body),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new BackendRequestError(data.details?.[0] ?? data.error ?? 'unavailable', response.status);
-      return data as DatasetTableRead;
-    },
     importImage(input) {
       /*
        * The URL door: the browser ingests-and-owns it (POST {imageUrl} — the
@@ -164,7 +119,6 @@ export function createHttpBackend(id: string): ArtifactBackend {
     async revert(input) {
       return answer(await artifactRequests(id).revert(input));
     },
-    queryTransport: () => createAuthenticatedTransport(id),
 
     // ── comments ────────────────────────────────────────────────────────────
     watchRetrying,

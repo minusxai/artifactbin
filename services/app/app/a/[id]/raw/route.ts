@@ -9,9 +9,9 @@
  * `domain` (server/custom-host) and `fragment` (app/a/[id]/story) are set only by their callers: the router passes
  * params alone, so no request can ask for either mode.
  */
-import { serveRawDocument, type DomainPost, type StoryFragmentRequest } from '@/lib/document-serving';
+import { serveRawDocument, type DomainPost } from '@/lib/document-serving';
 
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: StoryFragmentRequest }): Promise<Response> {
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }>; domain?: DomainPost; fragment?: true }): Promise<Response> {
   const { id } = await ctx.params;
   return serveRawDocument(request, { id, ...(ctx.domain ? { domain: ctx.domain } : {}), ...(ctx.fragment ? { fragment: ctx.fragment } : {}) });
 }

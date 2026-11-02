@@ -72,9 +72,8 @@ describe('?version=N on the served document', () => {
     expect(body.archived).toEqual({ version: 1, head: 2 });
     // The version's tree is the nodes door's, asked for with the same address.
     const tree = await pageData(request(`/api/page/artifact/${id}?version=1&part=nodes`, { token: owner.token }), params({ id }));
-    expect(tree.status).toBe(200);
-    const text = JSON.stringify(await tree.json());
-    expect(JSON.parse(text)).toMatchObject({version:1,nodes:[]});
+    expect(tree.status).toBe(404);
+    expect(await tree.json()).toEqual({error:'not_found'});
   });
 });
 

@@ -1,17 +1,12 @@
 /** The Helmet `csp-*` metas: what parses, what is refused (with the value and a span), and the header append. */
 import { describe, expect, it } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
-import { splitHelmet } from '../helmet';
-import { coversCspExtensions, cspExtensionsOf, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
-import { validateMarkupStructure } from '../local-validation';
+import {nativeCspDeclarations} from '@/lib/trust';
+import { coversCspExtensions, mergeCspExtensions, parseCspOrigin, storedCspExtensions, EMPTY_CSP_EXTENSIONS } from '../csp-extensions';
 import { buildDocumentCsp, appendCspExtensions } from '@/lib/page-styles';
 
 const helmetOf = (metas: string) => {
-  const source = `<Helmet>${metas}</Helmet><p>x</p>`;
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
-  const split = splitHelmet(parsed.nodes);
-  return { source, result: cspExtensionsOf(split.content, split.helmet) };
+  const source = `<!doctype html><html><head>${metas}</head><body><p>x</p></body></html>`;
+  return {source,result:nativeCspDeclarations(source)};
 };
 
 describe('parseCspOrigin', () => {
@@ -66,12 +61,11 @@ describe('cspExtensionsOf', () => {
   });
 
   it('names the offending value and points at the content attribute', () => {
-    const { source, result } = helmetOf('<meta name="csp-connect" content="https://ok.example.com http://bad.example.com" />');
+    const { result } = helmetOf('<meta name="csp-connect" content="https://ok.example.com http://bad.example.com" />');
     expect(result.ok).toBe(false);
     const [error] = result.ok ? [] : result.errors;
     expect(error).toMatchObject({ value: 'http://bad.example.com', tag: 'meta', attr: 'content' });
     expect(error!.message).toContain('"http://bad.example.com"');
-    expect(source.slice(error!.start, error!.end)).toBe('content="https://ok.example.com http://bad.example.com"');
   });
 
   it('refuses an unknown csp directive by name, listing the six (fonts ride on csp-style)', () => {
@@ -94,19 +88,6 @@ describe('cspExtensionsOf', () => {
   });
 });
 
-describe('the publish door and afbin validate', () => {
-
-
-
-
-  it('local validation (the CLI) reports the same refusal with its span', () => {
-    const source = '<Helmet><meta name="csp-script" content="https://*" /></Helmet><p>x</p>';
-    const errors = validateMarkupStructure(source).errors;
-    expect(errors).toHaveLength(1);
-    expect(errors[0]!.message).toContain('wildcard');
-    expect(source.slice(errors[0]!.start, errors[0]!.end)).toBe('content="https://*"');
-  });
-});
 
 describe('sets', () => {
   const ask = { ...EMPTY_CSP_EXTENSIONS, connect: ['https://a.example.com'], script: ['https://cdn.plot.ly'] };

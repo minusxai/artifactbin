@@ -1,6 +1,6 @@
 import {fileUploadResult} from './upload';
 import type {FileUploadRequest,FileUploadTransport} from './upload-contract';
-import type {FrameBridgeParentPayload,FrameBridgeFramePayload} from '../story-runtime/contract';
+import type {FrameBridgeParentPayload,FrameBridgeFramePayload} from '../html-reader/contract';
 /** Bounded in-flight ownership. Cancellation suppresses a result; it does not claim to undo a committed upload. */
 export function createUploadRelay(post:(payload:FrameBridgeFramePayload)=>void,nextCall:()=>number){
  const pending=new Map<number,{finish(error:Error|null,value?:unknown):void}>();

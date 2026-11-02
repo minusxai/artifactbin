@@ -3,7 +3,7 @@
  *   from compareTable; rows are keyed by metric column so they survive re-renders.
  * Used by: data-table-frame.ts.
  */
-import { compareTable, parseMetricSpecs } from "@/lib/story-ui/compare";
+import { compareTable, parseMetricSpecs } from "@/lib/html-components/table-comparison";
 import type { AfDataTable } from "./data-table";
 import type { TableState } from "./data-table-frame";
 import { DATA_TABLE_CLASSES, tableIdentity } from "./table-model";

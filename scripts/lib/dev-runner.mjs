@@ -11,7 +11,7 @@ const APP_ROOT = path.join(ROOT, 'services', 'app');
 /**
  * Shared process plumbing for the co-hosted and app-only development CLIs.
  * The entrypoints retain policy; this helper keeps their port warning,
- * story-runtime prebuild, environment shaping, and child lifecycle identical.
+ * native HTML asset preparation, environment shaping, and child lifecycle identical.
  *
  * @param {{ appOnly: boolean, args?: string[] }} options
  */
@@ -67,10 +67,9 @@ export async function runDev({ appOnly, args = [] }) {
     run.once('error', reject);
     run.once('exit', (code) => resolve(code ?? 1));
   });
-  const [serverStatus, islandsStatus] = await Promise.all([build('scripts/build-server-reader.mjs'), build(ISLANDS_BUILD)]);
-  if (serverStatus !== 0 || islandsStatus !== 0) { process.exitCode = 1; return; }
+  const serverStatus = await build('scripts/build-server-reader.mjs');
+  if (serverStatus !== 0) { process.exitCode = 1; return; }
   watchAndRebuild({ label: 'server reader source changed — rebuilding server assets', dirs: RUNTIME_SOURCES, command: ['scripts/build-server-reader.mjs', '--cache'] });
-  watchAndRebuild({ label: 'island source changed — rebuilding public/islands', dirs: ISLAND_SOURCES, command: [ISLANDS_BUILD, '--cache'] });
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
     ? 'development'
@@ -85,7 +84,7 @@ export async function runDev({ appOnly, args = [] }) {
     // node_modules is excluded by name: Vite bundles its config into
     // node_modules/.vite-temp on every boot, and a watcher that sees that file
     // appear and vanish restarts forever.
-    ['tsx', 'watch', '--clear-screen=false', '--include', 'public/islands/manifest.json',
+    ['tsx', 'watch', '--clear-screen=false',
       '--exclude', path.join(ROOT, 'node_modules/**'), '--exclude', '**/.vite-temp/**',
       path.join(ROOT, 'server.ts'), ...(appOnly ? ['--app-only'] : args)],
     {
@@ -101,16 +100,7 @@ export async function runDev({ appOnly, args = [] }) {
  * The sources used by the server reader and the offline editor. Rebuild their assets
  * when one changes, then let tsx restart the server from the changed bundle.
  */
-const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/reader-chrome', 'lib/frame-edit', 'lib/edit-protocol', 'lib/page-store', 'lib/story-ui', 'lib/publish', 'lib/offline', 'lib/viz', 'lib/story-design', 'lib/story-edit'];
-
-/**
- * The compiled reader's shared island build (scripts/build/build-islands.mjs → public/islands): the island
- * runtime, the Solid kit and the behaviour chunks. A change under their sources rebuilds it, debounced
- * and serialised like the runtime above; the new manifest (a new compiler build id, so every stored
- * compile recompiles) restarts the server through tsx's watch list.
- */
-const ISLANDS_BUILD = path.join(ROOT, 'scripts/build/build-islands.mjs');
-const ISLAND_SOURCES = ['lib/islands'];
+const RUNTIME_SOURCES = ['lib/html-components', 'lib/libraries'];
 
 /**
  * Run `node <command>` whenever a source under `dirs` changes (tests excluded): debounced, and serialised, so a

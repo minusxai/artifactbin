@@ -5,7 +5,6 @@
  * field's own documentation — so they carry the rule, not just the type.
  */
 import { Type, type Static, type TSchema } from 'typebox';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/jsx/component-names';
 import { STORY_THEME_NAMES, type StoryDesignName } from './story-theme-names';
 import { STORY_SYSTEM_NAMES } from './story-system-names';
 
@@ -23,8 +22,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
  * (`./story-theme-names`) so the reader can name themes without loading
  * typebox; it is re-exported here for every schema-side caller.
  */
-export { STORY_THEME_NAMES };
-/** Everything a fence `theme` may name: the six themes, then the design systems (lib/story-design/story-systems). */
+/** Everything a fence `theme` may name: the six themes, then the design systems (lib/html-systems/story-systems). */
 export const STORY_DESIGN_NAMES: readonly StoryDesignName[] = [...STORY_THEME_NAMES, ...STORY_SYSTEM_NAMES];
 export type { StoryDesignName };
 
@@ -34,42 +32,6 @@ export type { StoryDesignName };
  * editorial and plan, present mode for a deck), orthogonal to the design.
  */
 export const STORY_TEMPLATE_NAMES = ['doc', 'editorial', 'deck', 'scrolly', 'dashboard', 'plan', 'app', 'landing'] as const;
-
-export const StoryContent = Type.Object({
-  description: Nullable(Type.String()),
-  story: NullableD(Type.String({ format: 'jsx' }),
-    'One self-contained, FLUID RESPONSIVE document rendered as a single scrolling story page. ' +
-    'STYLING — the built-in DESIGN SYSTEM: put `data-design="tw"` and the `@container` class on ' +
-    'your full-width root wrapper. Every Tailwind v4 utility works (arbitrary values included) — ' +
-    'the platform compiles exactly the classes you use at save time. Responsiveness: Tailwind ' +
-    'CONTAINER-QUERY variants (`@lg:`, `@2xl:` — NEVER viewport `md:`/`lg:`). COMPONENTS: the ' +
-    'body is STATIC JSX — plain HTML content tags styled with Tailwind (`className=`) plus the ' +
-    'registered shadcn/ui component set: ' + STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
-    'These are the ONLY Capitalized tags allowed. For prose columns/sidebars, prefer ' +
-    '<Grid mode="flow"><GridItem w={8}>…</GridItem><GridItem w={4}>…</GridItem></Grid>. ' +
-    'Flow stacks on phones, grows with content, and supports direct column manipulation. ' +
-    'Use w and optional minHeight (pixels), never x/y/h, in flow. POSITIONED DASHBOARDS — ' +
-    '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows.'),
-  format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
-    "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter" })),
-  theme: Type.Optional(Nullable(StringEnum(STORY_DESIGN_NAMES,
-    "Design theme for the story (format:'jsx' only) — picks the named design PERSONALITY (fonts, corner " +
-    'radius, chart palette, a light AND a dark token set) the story renders with. One of the six built-in ' +
-    'themes; omit/null for the neutral default. Components and utility classes are identical across themes ' +
-    'and modes, only the tokens change.'))),
-  template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
-    "Story template (format:'jsx' only) — the document's structural genre: 'doc' (simple notes and prose), 'editorial' (long-read magazine " +
-    "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
-    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones), ' +
-    "'app' (a tool people operate: state, actions, outcomes), 'landing' (one offering, one next action). " +
-    'METADATA ONLY: it records intent and drives ' +
-    'the structure YOU write; no automatic CSS or layout is applied.'))),
-  colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
-    "The AUTHOR'S DEFAULT mode for the story surface. Every theme carries both a light and a dark " +
-    "palette; omit/null to open in the theme's own default mode (light when unthemed). Readers can flip " +
-    'the rendered mode at view time regardless.'))),
-}, { title: 'StoryContent' });
-export type StoryContent = Static<typeof StoryContent>;
 
 const PivotValueConfig = Type.Object({
   column: Type.String({ description: 'column name for the measure' }),

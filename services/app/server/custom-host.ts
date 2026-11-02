@@ -49,7 +49,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { artifactIdFromSegment } from '@artifactbin/utils/artifact-reference';
 import { ACTOR_HEADER, BUILD_ASSET_PATH } from '@artifactbin/contracts';
 import { isBuildAssetPath } from '@artifactbin/utils';
-import { getArtifactById, declarationsForRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import { PUBLIC_BASE_URL } from '@/lib/platform';
 import { customHostCandidate, domainHomepage, domainPath, ownerForHost, servesDocument, servesEmbeddedArtifact, servesWebAsset } from '@/lib/custom-domains';
 import { DOMAIN_HOME_CSP, renderDomainHome, type ProfileListingData } from '@/lib/custom-domains';
@@ -202,12 +202,6 @@ async function documentRoute(request: Request, id: string, route: string, ownerI
       if (method === 'OPTIONS') return call(mutateOptions, await asGuest(request), id);
       if (method !== 'POST') return notFound();
       const body = await readBody(request);
-      const name = parseJson(body)?.mutation;
-      const declared = (await declarationsForRow(row))?.flow.mutations.find((m) => m.name === name);
-      // Only a local Mutation runs here: it writes the reader's own rows, never a dataset.
-      if (declared && 'import' in declared.target) {
-        return json({ error: 'dataset_read_only', detail: 'This page is read-only.' }, 403, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
-      }
       return call(mutatePost, await asGuest(request, body), id);
     }
     case 'events': return get ? call(eventsGet, await asGuest(request), id) : notFound();

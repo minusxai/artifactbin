@@ -3,7 +3,7 @@ import {createEffect,createSignal,on,onCleanup,type Accessor} from 'solid-js';
 import type {startReaderPresence} from './reader-presence-engine';
 import {readerPreferences} from '@/lib/html-presence/preferences';
 import type {PresenceFrame,PresenceViewer,ReaderPreferences} from '@/lib/html-presence';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 /** Presence starts only after the document bridge is ready; its geometry/session engine is an intentional lazy browser chunk. */
 export type ReaderPresenceLoader=()=>Promise<{startReaderPresence:typeof startReaderPresence}>;
 const loadReaderPresence:ReaderPresenceLoader=()=>import('./reader-presence-engine');

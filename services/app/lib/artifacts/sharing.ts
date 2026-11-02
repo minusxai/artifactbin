@@ -3,7 +3,6 @@ import { notifyArtifactSql } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
-import { findWritersFor } from './dependents';
 import { artifactQuery } from './document';
 import { catalogOf } from '@/lib/datasets';
 import { ALLOW_PUBLIC_VISIBILITY, getDb, actorSubject, emit } from '../platform';
@@ -50,7 +49,7 @@ export async function getSharingFor(actor: AccessActor, id: string): Promise<Sha
     shares: shares.rows,
     canPrivate: !!(row.user_id||row.group_id),
     ...(row.format === 'dataset'
-      ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
+      ? { access: row.access, policyVersion:grantsOf(row)?2:1, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: [] }
       : {}),
   };
 }

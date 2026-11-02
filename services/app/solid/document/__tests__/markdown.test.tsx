@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createSignal } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { StoryEditSelection } from '@/lib/edit-protocol';
+import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { CommentMarkdown } from '../CommentMarkdown';
 import { PersonMentionProvider } from '../PersonMention';

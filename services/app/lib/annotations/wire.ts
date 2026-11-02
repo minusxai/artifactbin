@@ -19,7 +19,7 @@ import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor,
  * second call and no second concept exist on the read side.
  */
 export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string, viewerId?:string|null) {
-  if (row.format !== 'markup' && row.format !== 'folder') return artifactToWire(row, base, 0);
+  if (row.format !== 'html') return artifactToWire(row, base, 0);
   // The count and the threads are independent reads.
   const [open, annotations] = await Promise.all([countOpenAnnotations(row.id), annotationsWireForRow(row,undefined,viewerId)]);
   return { ...await artifactToWire(row, base, open), annotations };
@@ -32,7 +32,7 @@ export async function artifactWireFor(row: ArtifactRow, base: string) {
 
 /** Only a document (markup or folder) has threads; a data tier is never counted. */
 const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
-  row.format === 'markup' || row.format === 'folder' ? countOpenAnnotations(row.id) : Promise.resolve(0);
+  row.format === 'html' ? countOpenAnnotations(row.id) : Promise.resolve(0);
 
 /** One artifact as the bearer read door answers it: the head this reader may see, its open threads, and their capabilities. */
 export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string) {

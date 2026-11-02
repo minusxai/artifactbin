@@ -1,4 +1,4 @@
-import { markScrollableTables } from '../islands/table-scroll';
+import { markScrollableTables } from './table-scroll-model';
 
 type TableScrollOwner = { dispose: () => void };
 const ownerKey = Symbol.for('artifactbin.native-html-table-scroll-owner');

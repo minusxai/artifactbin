@@ -17,24 +17,24 @@ import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from './conditional-request';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { servableDocument, UnservableDocument } from '@/lib/artifacts';
-import { createDocumentGraph } from '@/lib/document/document-graph';
+import {retiredGraph} from './retired-document-fixture';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const MARKED = { dataSyntax: 2 };
-const graph = (source: string) => createDocumentGraph(source, 1);
+const graph = (_source:string) => structuredClone(retiredGraph);
 
 describe('servableDocument', () => {
   const row = { format: 'markup', version: 3, meta: MARKED, source: '<p id="a1b2">x</p>', document: graph('<p id="a1b2">x</p>') };
 
-  it('passes a marked graph, and anything that is not markup', () => {
-    expect(servableDocument(row)).toBe(row);
+  it('refuses even a marked graph and preserves native data', () => {
+    expect(()=>servableDocument(row)).toThrow(UnservableDocument);
     expect(servableDocument({ format: 'dataset', version: 1, meta: {}, source: null, document: null }).format).toBe('dataset');
   });
 
   it('refuses an unmarked row as predating the data syntax', () => {
     expect(() => servableDocument({ ...row, meta: {} })).toThrow(UnservableDocument);
-    expect(() => servableDocument({ ...row, meta: {} })).toThrow(/Version 3 .*predates the current data syntax.*restore it from the backup/);
+    expect(() => servableDocument({ ...row, meta: {} })).toThrow(/Version 3 .*no longer reads.*restore it from the backup/);
   });
 
   it('refuses a row whose document is not a graph, or that decoded to no source', () => {

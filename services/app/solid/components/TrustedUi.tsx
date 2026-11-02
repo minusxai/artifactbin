@@ -8,7 +8,7 @@
  */
 import { onCleanup, onMount, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { createTrustedOverlayHost, type TrustedLayer } from '@/lib/islands/trusted-overlay-host';
+import { createTrustedOverlayHost, type TrustedLayer } from '@/lib/ui-runtime/trusted-overlay-host';
 
 export function TrustedUi(props: { overlay?: boolean; layer?: TrustedLayer; children: JSX.Element }): JSX.Element {
   const holder = document.createElement('div');

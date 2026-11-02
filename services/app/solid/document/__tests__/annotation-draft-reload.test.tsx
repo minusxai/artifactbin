@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/dom';
-import type { StoryEditSelection } from '@/lib/edit-protocol';
+import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import { cleanup, fireEvent } from '../../__tests__/helpers';
 import { flush, installAnnotationFetch, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';

@@ -3,7 +3,7 @@
 const QUIET_MINUTES = 15;
 /** One deployment-scoped monitor instruction for single-document read/write responses. */
 export function monitoringGuidance(base:string,id:string,format:string):Record<string,unknown>{
- if(format!=='markup'&&format!=='folder')return {};
+ if(format!=='html'&&format!=='folder')return {};
  const origin=base.replace(/\/$/,''),url=`${origin}/a/${id}`;
  return {monitoring:{artifact_url:url,guide:`${origin}/llms/html-operations#watch-for-comments`,
   http:`${origin}/api/artifacts/${id}/annotations/changes?after=now&wait=60`,

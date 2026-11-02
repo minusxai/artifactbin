@@ -123,7 +123,7 @@ From repo root.
   until a build input changes) and served as CI does.
   `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
 - CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
-- `npm run build:islands -w services/app` — the shared reader islands and manifest.
+- `npm run build:reader -w services/app` — the hosted native HTML components and server reader assets.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
   `generate:og`, `generate:design-systems` (runtime registry and agent
   references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).
@@ -143,7 +143,7 @@ From repo root.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations; public/unlisted
   link access is neither ownership nor dataset write access.
 - Rendering, editing and author scripts have separate trust boundaries. Read
-  [services/app/lib/story-ui/AGENTS.md](services/app/lib/story-ui/AGENTS.md) before markup changes.
+  [serving and security](docs/serving-and-security.md) before markup changes.
 - After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides
   a broken lockfile). Native packages/browser assets need build/image verification.
 

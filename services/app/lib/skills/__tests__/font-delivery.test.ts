@@ -8,8 +8,8 @@ import {GET} from '@/app/skills/artifactbin.zip/route';
 import {platformOrigin} from './platform-origin';
 import {skillZip} from '../package';
 import {planPublicationBundle} from '../../html-publication-bundle/plan';
-import {STORY_SYSTEM_SHEETS} from '@/lib/story-design/server';
-import { storyFontManifest as manifest } from '@/lib/story-design/story-fonts';
+import {HTML_SYSTEM_NAMES} from '@/lib/html-systems';
+import { storyFontManifest as manifest } from '@/lib/html-systems';
 
 it('packages no font members: the archive is text only',()=>{
  for(const name of ['fonts/example.12345678.woff2','fonts/../secret.woff2','fonts/dm-sans-latin-standard-normal.woff2'])expect(()=>skillZip({[name]:'x'})).toThrow('Unsupported skill member');
@@ -24,13 +24,20 @@ it('installs every theme on /af/fonts/ names and previews them through the selec
   execFileSync('unzip',['-t',zip],{stdio:'pipe'});execFileSync('unzip',['-q',zip,'-d',root]);
   const installed=path.join(root,'artifactbin');
   expect(existsSync(path.join(installed,'fonts'))).toBe(false);
-  const names=Object.keys(JSON.parse(readFileSync('lib/story-design/story-system-sheets.json','utf8')));
+  const names=HTML_SYSTEM_NAMES;
   for(const name of names){
    const css=readFileSync(path.join(installed,'design-systems',name+'.css'),'utf8');
    expect(css,name).not.toMatch(/url\(\s*["']?https?:|fonts\.gstatic|\.\.\/fonts\//);
    expect(css,name).toContain('[data-af-dark="true"]');
-   const retained=STORY_SYSTEM_SHEETS[name as keyof typeof STORY_SYSTEM_SHEETS].fontFaces.replace(/url\("\/fonts\/([a-z0-9-]+)\.[a-f0-9]{8}\.woff2"\)/g,'url("/af/fonts/$1.woff2")');
-   expect((css.match(/@font-face\s*\{[^}]*\}/g)??[]).join('\n'),name+' retained descriptors').toBe(retained);
+   for(const face of css.match(/@font-face\s*\{[^}]*\}/g)??[]){
+    const url=/src:\s*url\("([^"\n]+)"\)/.exec(face)![1]!;
+    const expected=Object.values(manifest.systems).flat().find(entry=>entry.url.replace(/\.[a-f0-9]{8}\.woff2$/,'.woff2')===url.replace('/af',''))!;
+    expect(expected,url).toBeTruthy();
+    expect(face).toContain(`font-family: "${expected.family}"`);
+    expect(face).toContain(`font-weight: ${expected.weight}`);
+    expect(face).toContain(`font-style: ${expected.style}`);
+    expect(face).toContain(`unicode-range: ${expected.unicodeRange}`);
+   }
    for(const [,url] of css.matchAll(/src:\s*url\("([^"\n]+)"\)/g))expect(url).toMatch(/^\/af\/fonts\/[a-z0-9-]+\.woff2$/);
   }
   const html='<html data-af-design-system="almanac" data-af-dark="true"><head><link data-af="design-system" rel="stylesheet" href="./design-systems/almanac.css"></head><body class="t-body">Portable type</body></html>';

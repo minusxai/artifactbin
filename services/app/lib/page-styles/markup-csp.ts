@@ -26,8 +26,7 @@
  * __tests__/raw-document.test.ts.
  */
 import { BASEMAP_PATH } from '@artifactbin/contracts';
-import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
-import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui';
+import { FONT_FILES, FONT_STYLES, MODULE_CDNS } from '@/lib/html-reader/document-sources';
 import { CSP_DIRECTIVES, EMPTY_CSP_EXTENSIONS, type CspDirective, type CspExtensions } from '@/lib/document';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
@@ -104,13 +103,6 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
 /**
- * …and the one it asks for its own stylesheet again at: the document's whole compiled Tailwind with the classes
- * it only names at runtime compiled in (app/a/[id]/css, lib/document-serving/runtime-css.server) — a `className` its rows
- * fill. Admitted on the same terms: path-exact, the same read ACL as the page, and its answer is CSS.
- */
-export const runtimeCssPath = (id: string): string => `/a/${id}/css`;
-
-/**
  * …and the one static directory: the boundary geometry the geo charts fetch
  * (`loadGeoFeatures` → `/geojson/<file>.json`, an allowlisted registry of
  * public files under `public/`). A trailing slash makes a CSP source a
@@ -122,13 +114,6 @@ export const runtimeCssPath = (id: string): string => `/a/${id}/css`;
 const GEOJSON_DIR_PATH = '/geojson/';
 
 /**
- * …and the island build directory, for the one file the runtime
- * FETCHES rather than imports: the page's SQLite wasm, content-addressed
- * there (StoryIslandData.sqliteWasm). Public build output, like /geojson/.
- */
-const ISLANDS_DIR_PATH = '/islands/';
-
-/**
  * …and the bundled font files (public/fonts, the manifest's faces): the kit
  * reads the files the page already loaded — from the HTTP cache — to put them
  * into its Mermaid drawings, which an `<img>` shows and which cannot reach the
@@ -137,34 +122,7 @@ const ISLANDS_DIR_PATH = '/islands/';
  */
 const FONTS_DIR_PATH = '/fonts/';
 
-/**
- * …and, on a COMPILED page only (lib/compiled-page, docs/phase2-architecture.md §9),
- * the viewer overlay door: what only this reader decides, fetched after paint
- * under the same read ACL as the query door (app/a/[id]/viewer).
- */
-const viewerPath = (id: string): string => `/a/${id}/viewer`;
-
-/**
- * …and, on a compiled page only, its STORY FRAGMENT (app/a/[id]/story): the document's newest version as
- * this very page is served it, which the live morph draws in place (lib/islands/morph/engine). The same
- * read ACL as the page and the same answer a reload would give, to someone already reading it.
- */
-
-/**
- * The compiled page's `script-src`: NO `'unsafe-inline'`. The compiled reader
- * emits no inline script at all — its code is the shared island chunks and the
- * per-document module, same-origin files — and its data is an
- * `application/json` island, which is not script. `'self'` leads, so the policy
- * says first what the page runs.
- */
-const COMPILED_SCRIPT_SRC = `script-src 'self' 'wasm-unsafe-eval' blob: ${MODULE_CDNS.join(' ')}`;
-
-interface MarkupCspOptions {
-  /** The response is the compiled reader's (x-mx-reader: compiled): no inline script is admitted. */
-  compiled?: boolean;
-}
-
-export function markupCsp(origin: string, id: string, assetOrigin?: string, options: MarkupCspOptions = {}): string {
+export function markupCsp(origin: string, id: string, assetOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
@@ -172,14 +130,12 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
-  const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${self}${runtimeCssPath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // The hosted library and component directories stay explicit for documents that
     // import them (`@afbin/<name>`). This grants neither API fetches nor navigation.
-    const script=options.compiled&&d.startsWith('script-src ')?COMPILED_SCRIPT_SRC:d;
-    const source=script.startsWith('script-src ')?script+` ${self}/libraries/ ${self}/af/components/`:script;
+    const source=d.startsWith('script-src ')?d+` ${self}/libraries/ ${self}/af/components/`:d;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';

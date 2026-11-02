@@ -3,7 +3,7 @@
 // (no authentication composition; human login and OAuth are deliberately absent — run
 // `npm run dev` for the whole thing in one process, or point a proxy of your
 // own at this port). Mirrors scripts/dev.mjs: .env → derived port → the
-// story-runtime prebuild → the spawned entry, with the app's package dir as
+// native HTML asset preparation → the spawned entry, with the app's package dir as
 // its cwd.
 //
 // dev:app's ONE contract of its own: the sql and browser services are LOCAL.

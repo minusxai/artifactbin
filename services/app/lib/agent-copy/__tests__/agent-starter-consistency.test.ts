@@ -219,7 +219,7 @@ describe('shared instructions after missing credentials and before publishing cl
 });
 
 it('links the monitoring guide to a served section that teaches the watch and its quiet stop', () => {
- const {guide} = (monitoringGuidance(BASE, 'abc123', 'markup') as {monitoring:{guide:string}}).monitoring;
+ const {guide} = (monitoringGuidance(BASE, 'abc123', 'html') as {monitoring:{guide:string}}).monitoring;
  const [, topic, anchor] = /\/llms\/([a-z-]+)#([a-z-]+)$/.exec(guide) ?? [];
  const text = publicGuideText(topic!, BASE);
  expect(text, guide).not.toBeNull();
@@ -229,7 +229,7 @@ it('links the monitoring guide to a served section that teaches the watch and it
 });
 
 it('keeps live comment tracking from blocking existing work or waiting for process termination', () => {
- const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
+ const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}};
  expect(hint.monitoring.instruction).toContain('background');
  expect(hint.monitoring.instruction).toContain('existing comments');
 });
@@ -240,7 +240,7 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  * not. Every surface that tells an agent to watch says so in harness-neutral words, with the bounded fallback.
  */
 it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
- const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}}).monitoring;
+ const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'html') as {monitoring:{instruction:string}}).monitoring;
  const surfaces = {instruction};
  for (const [name, text] of Object.entries(surfaces)) {
   expect(text, name).toContain('After the first successful save or local preview');

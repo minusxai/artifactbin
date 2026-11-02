@@ -15,7 +15,7 @@ import type { MermaidImage } from '../mermaid-images';
  * A stored image belongs to the current source; source/theme/font changes invalidate it. */
 export interface MermaidContract { code: string; title: string; colorMode: 'light' | 'dark' |
   'auto'; storedImage: MermaidImage | null; retry(): void }
-import { mermaidSourceError } from '../jsx/mermaid-source';
+import { mermaidSourceError } from '../html-component-specs/mermaid-source';
 /** Intentional lazy browser engine boundary; bundled from the pinned reader renderer,
  * never a CDN. */
 const draw = async (element:HTMLElement,code:string,dark:boolean,live:()=>boolean) => {

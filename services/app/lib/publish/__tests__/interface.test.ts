@@ -8,10 +8,9 @@ import {MAX_DOCUMENT_BYTES} from '@artifactbin/contracts';
 import {mintAccountToken,request,useAppHarness} from '@/__tests__/harness';
 import {identityForUser,type TokenHoldingActor} from '@/lib/accounts';
 import {artifactState,getArtifactById} from '@/lib/artifacts';
-import {MERMAID_RENDER_ENGINE} from '@/lib/mermaid-images';
 import {
- createArtifactFromBody,forkArtifact,forkDatasetPreview,forkRefusal,liveFrameFor,openDocumentEvents,parseContentInput,preflightPublication,
- preparePublicationBundle,refreshAssetsFor,replaceArtifactWithBody,startMermaidHarvester,
+ createArtifactFromBody,forkArtifact,forkRefusal,liveFrameFor,openDocumentEvents,parseContentInput,preflightPublication,
+ preparePublicationBundle,refreshAssetsFor,replaceArtifactWithBody,
 } from '..';
 
 const harness=useAppHarness();
@@ -174,7 +173,6 @@ describe('fork',()=>{
   const {body:{id}}=await created(owner,{html:page('Original ☕'),visibility:'public'});
   const source=(await getArtifactById(id))!;
   expect(forkRefusal(source)).toBeNull();
-  expect(await forkDatasetPreview(forker,source)).toEqual([]);
   const forked=await forkArtifact(forker,source,{title:'Mine'});
   if(forked instanceof Response)throw new Error(await forked.text());
   expect(forked.datasets).toEqual([]);
@@ -183,7 +181,6 @@ describe('fork',()=>{
   const folderId=(await created(owner,{format:'folder',title:'Folder'})).body.id;
   const folder=(await getArtifactById(folderId))!;
   expect(await errorOf(forkRefusal(folder)!)).toEqual([400,'not_forkable']);
-  expect(await forkDatasetPreview(forker,folder)).toEqual([]);
   const refused=await forkArtifact(forker,folder);
   expect(refused instanceof Response?await errorOf(refused):refused).toEqual([400,'not_forkable']);
   expect(await count()).toBe(3);
@@ -260,23 +257,5 @@ describe('the live frame and stream',()=>{
   const first=new TextDecoder().decode((await reader.read()).value);
   expect(first).toContain('data:');
   await reader.cancel();
- });
-});
-
-describe('startMermaidHarvester',()=>{
- it('drains due jobs when started, and runs none after it is stopped',async()=>{
-  const owner=await actor();
-  const db=await harness.db();
-  const first=(await created(owner,{html:page('Harvest one')})).body.id,second=(await created(owner,{html:page('Harvest two')})).body.id;
-  const job=(id:string)=>db.query('INSERT INTO mermaid_harvests(artifact_id,version,engine) VALUES($1,1,$2)',[id,MERMAID_RENDER_ENGINE]);
-  const state=async(id:string)=>(await db.query<{state:string}>('SELECT state FROM mermaid_harvests WHERE artifact_id=$1',[id])).rows[0]?.state;
-  await job(first);
-  const stop=startMermaidHarvester({intervalMs:60_000});
-  await stop();
-  // Not a mermaid-drawing document: claimed, then settled as superseded rather than retried.
-  expect(await state(first)).toBe('superseded');
-  await job(second);
-  await new Promise(resolve=>setTimeout(resolve,20));
-  expect(await state(second)).toBe('pending');
  });
 });

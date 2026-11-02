@@ -13,7 +13,7 @@
  *   supplied boundaries need no map service. No WebGL2 falls back to a plain deck.gl canvas.
  */
 import { registerComponent } from './register-component';
-import { validateDeckMap } from "../jsx/deck-spec";
+import { validateDeckMap } from "../html-component-specs/deck-spec";
 import { DeckGeneration, type DeckGLOptions } from "./deck-gl-model";
 export type { DeckGLOptions } from "./deck-gl-model";
 export interface DeckGLAdapter {

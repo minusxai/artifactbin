@@ -22,7 +22,6 @@
     "test:ui": "npm run test:ui -w services/app",
     "test:islands": "vitest run --project=islands",
     "test:gates": "node scripts/gates.mjs",
-    "generate-story-ui-classes": "npm run generate-story-ui-classes -w services/app",
     "generate:og": "npm run generate:og -w services/app",
     "eval": "node scripts/require-evals.mjs && tsx evals/run.ts",
     "eval:report": "node scripts/require-evals.mjs && tsx evals/report-cli.ts",
@@ -47,7 +46,6 @@
     "@artifactbin/runner": "0.1.0"
   },
   "devDependencies": {
-    "@babel/core": "7.29.7",
     "@rollup/plugin-yaml": "5.0.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "^22.13.0",
@@ -59,7 +57,6 @@
     "picomatch": "4.0.7",
     "playwright": "1.62.1",
     "sharp": "0.35.5",
-    "tailwindcss": "4.3.3",
     "tsx": "4.23.11",
     "typescript": "5.9.3",
     "vega-scenegraph": "5.3.0",

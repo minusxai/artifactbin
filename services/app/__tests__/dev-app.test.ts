@@ -196,7 +196,7 @@ describe('scripts/dev-app.mjs', () => {
    */
   const shimDir = mkdtempSync(path.join(os.tmpdir(), 'dev-app-shim-'));
   const shimOut = path.join(shimDir, 'spawned.json');
-  const manifest = path.join(APP_ROOT, 'public/islands/manifest.json');
+  const manifest = path.join(APP_ROOT, 'lib/build-assets/html-components-receipt.json');
   let manifestModified: number;
   let res: ReturnType<typeof spawnSync>;
   let spawned: { argv: string[]; cwd: string; env: Record<string, string | null> };
@@ -245,12 +245,15 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
     expect(res.error).toBeUndefined();
     expect(res.status).toBe(0);
     // `tsx watch`, so a server-side change restarts the server; node_modules
-    // is excluded (Vite bundles its config there on every boot) and the reader
-    // runtime's manifest is included (its rebuild restarts the server too).
+    // is excluded (Vite bundles its config there on every boot). Native reader
+    // sources have their own rebuild watcher; there is no islands manifest.
     expect(spawned.argv.slice(0, 2)).toEqual(['tsx', 'watch']);
     expect(spawned.argv.slice(-2)).toEqual([SERVER_TS, '--app-only']);
-    expect(spawned.argv).toContain('--include');
-    expect(spawned.argv).toContain('--exclude');
+    expect(spawned.argv).not.toContain('--include');
+    expect(spawned.argv.slice(2, -2)).toEqual([
+      '--clear-screen=false', '--exclude', path.join(ROOT, 'node_modules/**'),
+      '--exclude', '**/.vite-temp/**',
+    ]);
     expect(spawned.cwd).toBe(APP_ROOT);
     expect(spawned.env.APP__PORT).toBe('5221'); // the derived port reaches the child
     expect(spawned.env.APP__HMR_PORT).toBe('5222');

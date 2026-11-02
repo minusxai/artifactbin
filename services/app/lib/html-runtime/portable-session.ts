@@ -5,7 +5,7 @@ import type { PortableChromeHandle,PortableChromeState } from './portable-chrome
 import {compareSource} from './source-relationship';
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import type {HtmlJsonObject} from '@artifactbin/contracts';
-import type { FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
+import type { FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface PortableSessionOptions {
  win:Window;
  publishOrigin?:string;

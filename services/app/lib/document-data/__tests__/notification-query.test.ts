@@ -4,7 +4,7 @@ import type {MutationNotificationJobInput,TableResult} from '@artifactbin/contra
 import { evaluateNotificationQuery } from '@/lib/document-data';
 import { normalizeNotificationResult, type NotificationQueryDependencies } from '@/lib/document-data/notification-query';
 import {notificationContextSnapshot,notificationRuleSourceIds} from '@/lib/notifications';
-import { readerDataflow, type CompiledDataflow } from '@/lib/dataflow';
+import { type CompiledDataflow } from '@/lib/dataflow';
 const rule={name:'first',on:'save',engine:'sqlite' as const,sql:'select $recipient as "to", $_now || $_tz as message',params:['recipient','_now','_tz'],reads:{imports:[],queries:[],values:[],builtins:['_now' as const,'_tz' as const]},columns:[{name:'to',type:'user' as const},{name:'message',type:'string' as const}],start:0,end:1};
 const flow:CompiledDataflow={imports:[],values:[],queries:[],mutations:[],notifications:[rule]};
 const input=(compiled=flow):MutationNotificationJobInput=>({origin:{mutationRunId:'run',mutationName:'save',documentId:'Doc001',documentEditId:'edit',documentVersion:1},initiator:{principal:{kind:'user',id:'usr_actor'},execution:'human',agentLabel:null},rules:compiled.notifications!.map(({name,on,sql,source})=>({name,on,sql,...(source?{source}:{})})),bindings:{values:{recipient:'usr_recipient'},types:{recipient:'user'},userId:'usr_actor',now:'2026-01-01T00:00:00.000Z',tz:'Asia/Kolkata'},...notificationContextSnapshot(compiled)});
@@ -33,7 +33,6 @@ it('returns transitive and filter-only source IDs and excludes notifications fro
  const upstream={...query,name:'filter',reads:{...rule.reads,imports:['private_data']},source:'Connected1'};
  const compiled={...flow,imports:[{name:'private_data',ref:'Private001',tables:[]}],queries:[upstream],notifications:[{...rule,reads:{...rule.reads,queries:['filter']}}]};
  expect(notificationRuleSourceIds(input(compiled),'first')).toEqual(['Connected1','Private001']);
- expect(readerDataflow(compiled).notifications).toBeUndefined();
 });
 it('rejects truncated output and oversized messages',()=>{
  expect(()=>normalizeNotificationResult({...table('usr_a'),truncated:true})).toThrow('notification_capacity');

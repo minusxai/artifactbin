@@ -1,7 +1,7 @@
 import type { HtmlNodeAnchor } from '@artifactbin/contracts';
 import { withHtmlCommentView } from './comment-view-session';
 import { captureHtmlRange } from './range';
-import type { StoryEditSelection } from '../edit-protocol';
+import type { StoryEditSelection } from '../html-bridge/selection-contract';
 const elementOf = (node: Node | null): Element | null => node?.nodeType === 1 ? node as Element : node?.parentElement ?? null;
 const htmlNode = (node: Node | null): Element | null => elementOf(node)?.closest('[data-af-id]') ?? null;
 /** Stable authored identity is the path adapter the existing comments rail consumes. */

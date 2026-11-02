@@ -13,7 +13,7 @@ import { batch, createContext, createEffect, createSignal, For, onCleanup, Show,
 import { Dynamic } from 'solid-js/web';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
-import type { StoryEditRect } from '@/lib/edit-protocol';
+import type { StoryEditRect } from '@/lib/html-bridge/selection-contract';
 import Check from 'lucide-solid/icons/check';
 import PenLine from 'lucide-solid/icons/pen-line';
 import Reply from 'lucide-solid/icons/reply';
@@ -287,7 +287,7 @@ export function AnnotationPreview(props: {
       'border-radius': radius(),
     }}>
     {/* The card's stretched hit target: a content-less link-variant Button (h-auto, no border or fill) laid over the whole card; its focus ring is drawn inset because the card clips what falls outside it. */}
-    <Button type="button" variant="link" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`} 
+    <Button type="button" variant="link" aria-label={`Open annotation conversation by ${label()}, ${messages()} message${messages() === 1 ? '' : 's'}`}
       onPointerDown={(event) => { touched = event.pointerType === 'touch'; }}
       onClick={() => {
         if (touched && !props.pinned && props.onPin) { setRepliesExpanded(true); props.onHover(props.row.id); props.onPin(); return; }

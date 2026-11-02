@@ -421,7 +421,7 @@ export function writePages(slugs = ROSTER, dir = PAGES_DIR) {
   });
 }
 
-export const SKELETON_CSS = `
+const SKELETON_CSS = `
 .ds-X { font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
 .ds-X .ds-wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
 .ds-X .ds-cover { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: end; padding: 32px 20px 40px; background: var(--ds-cover-bg, var(--background)); color: var(--ds-cover-fg, var(--foreground)); }

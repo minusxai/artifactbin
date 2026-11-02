@@ -1,6 +1,6 @@
 /** The initial reader's transport. Authoring/comment modules compose this port when opened. */
 import {PRESENCE_EVENT,type PresenceFrame,type PresencePublication} from '@/lib/html-presence/contract';
-import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type ArtifactLiveEvent,type ArtifactVersionPing} from '@/lib/story-runtime/contract';
+import {STORY_ANNOTATIONS_EVENT,STORY_DATA_EVENT,type ArtifactDataEvent,type ArtifactLiveEvent,type ArtifactVersionPing} from '@/lib/html-reader/contract';
 import {openLiveStream} from '@/lib/http/live-stream';
 import {readAnnotationPages} from '@/lib/annotations/pages';
 import type {ArtifactHead,ReaderArtifactBackend} from './types';

@@ -4,7 +4,7 @@ import {cleanup,render,screen,fireEvent,waitFor,within} from '@solidjs/testing-l
 import {MemoryRouter,Route} from '@solidjs/router';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import type {LocalBrokerOptions} from '@/lib/local-connection/broker';
-import {STORY_READER_MODE_MESSAGE} from '@/lib/story-runtime/contract';
+import {STORY_READER_MODE_MESSAGE} from '@/lib/html-reader/contract';
 import {LocalDocumentPage} from '../LocalDocument';
 const broker=vi.hoisted(()=>({sourceChanged:vi.fn(),authorize:vi.fn(),signIn:vi.fn(),resize:vi.fn(),post:vi.fn(),disconnect:vi.fn(),retry:vi.fn(),dispose:vi.fn()}));
 const account=vi.hoisted(()=>({signedIn:false}));

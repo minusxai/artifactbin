@@ -2,7 +2,7 @@
 /**
  * MinusX BI chart theme constants — palettes, fonts, light/dark tokens.
  * Engine-free: consumed by the Vega theme (lib/viz/theme.ts) and the
- * story CSS builder (lib/story-design/story-css.server.ts).
+ * story CSS builder (lib/html-systems/story-css.server.ts).
  */
 
 // Reads the CSS variable so charts honor the same font override as the rest of the app
@@ -99,4 +99,3 @@ export const DARK_THEME = {
   borderDefault: '#30363D',
   borderMuted: '#21262D',
 }
-

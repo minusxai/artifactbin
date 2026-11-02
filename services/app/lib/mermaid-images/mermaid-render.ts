@@ -1,7 +1,7 @@
 // Intentional lazy browser engine boundary shared by both retained reader APIs.
 // Mermaid is the diagram syntax; Pele is the only drawing runtime.
 import {render} from 'pele';
-import {mermaidSourceError} from '@/lib/jsx/mermaid-source';
+import {mermaidSourceError} from '@/lib/html-component-specs/mermaid-source';
 
 /** The document's resolved theme colours and host typography for portable SVG images. */
 export interface MermaidPalette {

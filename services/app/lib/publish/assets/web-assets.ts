@@ -26,7 +26,7 @@ import { getDb, MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/pla
 import { objectKey, objectStore } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images';
 import { fetchWebResource, WebIngestError, sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest';
-import { assetUrlFor, canonicalAssetUrl, urlHash, collectExternalAssetUrls } from '@/lib/document';
+import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/document';
 import { docAssetImportRateLimited, webIngestRateLimited } from '@/lib/allowances';
 import { assetByteQuotaExceeded } from '@/lib/artifacts';
 
@@ -331,17 +331,6 @@ export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: W
       stored.small_object_key, stored.small_width, by.tokenId, by.userId],
   );
   return (await webAssetByHash(hash))!;
-}
-
-/**
- * The rows behind every external URL one document names — the ONE call every
- * serving path makes before it renders (the page, the live frame, a capture).
- * Empty for a document that names none, which is nearly all of them, and the
- * mapping then costs nothing.
- */
-export async function webAssetsForSource(source: string | null | undefined): Promise<Map<string, WebAssetRow>> {
-  if (!source) return new Map();
-  return lookupWebAssets(collectExternalAssetUrls(source).all);
 }
 
 /** A refusal an agent can act on: the code, the URL it was about, and what to do. */

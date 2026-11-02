@@ -113,7 +113,7 @@ describe('unlisted links admit conversation reads while keeping writes role-gate
     const r = await doors(w.docs[kind]);
     expect(r.page.status).toBe(200);
     expect(r.page.body.role).toBe('viewer');
-    expect(r.nodes.status).toBe(200);
+    expect(r.nodes).toEqual(NOT_FOUND);
     expect(r.framed.status).toBe(200);
     expect(r.members.status).toBe(200);
     expect(r.members.body).toMatchObject({ self: null, canManage: false, canInvite: false });
@@ -170,7 +170,7 @@ describe('a named share is honoured while it exists and refused on the very next
     const granted = await doors(w.docs.privatePersonal);
     expect(granted.page.status).toBe(200);
     expect(granted.page.body.role).toBe('commenter');
-    expect(granted.nodes.status).toBe(200);
+    expect(granted.nodes).toEqual(NOT_FOUND);
     expect(granted.framed.status).toBe(200);
     expect(granted.members.status).toBe(200);
     expect(granted.annotations).toEqual({ status: 200, body: { annotations: [], next_cursor: null } });

@@ -45,12 +45,7 @@ describe('artifactSummaryToWire', () => {
       format: 'markup',
       version: 3,
       views: 12,
-      meta: {
-        theme: 'industry',
-        template: 'deck',
-        colorMode: 'dark',
-        refs: [{ id: 'data1', kind: 'dataset' }],
-      },
+      meta: {},
     });
     for (const forbidden of [
       'content',

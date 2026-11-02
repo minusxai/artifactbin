@@ -6,8 +6,6 @@ import {nativeHtml} from '@/__tests__/native-html-fixture';
  * gets what it got before, a stream is never buffered, an encoded body is never
  * encoded twice.
  */
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
@@ -95,15 +93,13 @@ describe('the document page and its page data', () => {
     expect(identity).toContain('name="agents"');
     expect(identity).not.toContain('name="cli"');
   });
-  it('the content-addressed island reader is its build-time brotli sibling through the app', async () => {
-    const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string,string> };
-    const entry = manifest.manifest['@mx/boot']!;
-    const res = await app.request(entry, { headers: { 'accept-encoding': BROWSER } });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-encoding')).toBe('br');
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    expect(Buffer.compare(await bytes(res), readFileSync(path.join(process.cwd(), 'public', entry + '.br')))).toBe(0);
+  it('the native reader returns stable public bytes independent of encoding negotiation', async () => {
+    const plain=await app.request('/af/reader.js');
+    const encoded=await app.request('/af/reader.js',{headers:{'accept-encoding':BROWSER}});
+    expect(encoded.status).toBe(200);expect(encoded.headers.get('content-encoding')).toBeNull();
+    expect(encoded.headers.get('access-control-allow-origin')).toBe('*');
+    expect(encoded.headers.get('cache-control')).not.toContain('immutable');
+    expect(await encoded.text()).toBe(await plain.text());
   });
 });
 

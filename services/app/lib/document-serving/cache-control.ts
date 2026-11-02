@@ -23,11 +23,3 @@ export function storedBytesCacheControl(row: {visibility: string}, versioned: bo
   const scope = row.visibility === 'public' ? 'public' : 'private';
   return versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`;
 }
-
-/**
- * A runtime stylesheet's (./runtime-css.server): immutable for its URL when compiled in the environment that URL
- * names (public when `anyone` may read the document), otherwise this deploy's sheet, uncached.
- */
-export function runtimeCssCacheControl(current: boolean, anyone: boolean): string {
-  return current ? `${anyone ? 'public' : 'private'}, max-age=31536000, immutable` : 'private, no-cache';
-}

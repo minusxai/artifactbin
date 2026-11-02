@@ -2,8 +2,8 @@
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { PortableChrome } from '@/solid/document/PortableChrome';
-import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
-import { configureTrustedUiStyles } from '@/lib/islands/trusted-ui-styles';
+import { createTrustedOverlayHost } from '@/lib/ui-runtime/trusted-overlay-host';
+import { configureTrustedUiStyles } from '@/lib/ui-runtime/trusted-ui-styles';
 import type { PortableChromeHandle, PortableChromeOptions, PortableChromeUpdate } from '@/lib/html-runtime';
 
 /** Explicit mounting consumes bundled CSS and callbacks only. It never fetches or authenticates. */

@@ -12,7 +12,6 @@ import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotation
 import { GET as myListAnnotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { getDb, measureQueries } from '@/lib/platform';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { createDocumentGraph } from '@/lib/document';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -84,8 +83,9 @@ it('keeps native source GET independent of comment volume and exposes threads on
   });
   const one = await seed(1), ten = await seed(10);
   const small = await read(one), large = await read(ten);
-  expect(large.value).not.toHaveProperty('annotations');
-  expect(large.value).not.toHaveProperty('open_annotations');
+  expect(large.value.annotations.map(a=>a.id)).toEqual(ten.ids);
+  expect(large.value.open_annotations).toBe(10);
+  expect(small.value.open_annotations).toBe(1);
   const listed=await listAnnotationsRoute(request(`/api/artifacts/${ten.doc.id}/annotations`,{token:ten.t.token}),params({id:ten.doc.id}));
   expect((await listed.json()).annotations.map((a:{id:string})=>a.id)).toEqual(ten.ids);
   expect(large.stats.count).toBe(small.stats.count);
@@ -107,9 +107,9 @@ async function seedBig(threads: number) {
   const f = await seed(threads);
   if (bigStored === undefined) {
     const small = (await artifactQuery<{ source: string }>(f.db, 'SELECT document, source FROM artifacts WHERE id = $1', [f.doc.id])).rows[0]!.source;
-    bigStored = JSON.stringify(createDocumentGraph(small.replace(/^<!doctype html>/i, '').replace('</body>', `${BIG_FILLER}</body>`), 1, { preserveSource: true }));
+    bigStored = small.replace('</body>', `${BIG_FILLER}</body>`);
   }
-  await f.db.query('UPDATE artifacts SET document = $1::jsonb WHERE id = $2', [bigStored, f.doc.id]);
+  await f.db.query('UPDATE artifacts SET source = $1 WHERE id = $2', [bigStored, f.doc.id]);
   const actor = { credential: 'session' as const, userId: f.t.userId!, email: f.t.email!, emailVerified: true };
   return { t: f.t, doc: f.doc, actor, tokenActor: f.tokenActor };
 }

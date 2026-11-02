@@ -2,8 +2,8 @@
  * Internal: options, pose easing and per-path SVG paint for af-isometric.
  * Used by: isometric.ts.
  */
-import type { IsometricSpec } from "../jsx";
-import type { IsoDrawPath } from "../story-ui";
+import type { IsometricSpec } from "../html-component-specs/isometric-spec";
+import type { IsoDrawPath } from "./isometric-scene";
 export interface IsometricOptions extends Omit<
   IsometricSpec,
   "spread" | "angle" | "flow"

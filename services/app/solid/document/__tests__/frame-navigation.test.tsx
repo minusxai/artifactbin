@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/html-reader/contract';
 
 const FRAMED_ORIGIN = 'http://646f633132333435.lvh.me';
 let served: HTMLElement | null = null;

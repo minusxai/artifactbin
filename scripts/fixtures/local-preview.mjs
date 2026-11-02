@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
+import {installedFiles} from './component-baseline/publication.mjs';
 import {exerciseDirectVisualLibraries} from './direct-visual-libraries.mjs';
 import {launchChromium} from '../gates/lib/browser.mjs';
 import {readPortableDocument} from '../../services/app/lib/html-runtime/portable.ts';
@@ -15,14 +16,9 @@ try {
  const origin=process.argv[2]??'http://localhost:3030';
  const response=await fetch(new URL('/skills/artifactbin.zip',origin));assert.equal(response.status,200,'Actual HTTP author archive must be available');
  const archive=Buffer.from(await response.arrayBuffer());assert.ok(archive.length<128*1024*1024,'bounded author archive');
- // The product archive uses stored UTF-8 ZIP members. Validate every extracted
- // path; this is the actual HTTP response, never reconstructed source helpers.
- let offset=0;
- while(offset+30<=archive.length&&archive.readUInt32LE(offset)===0x04034b50){
-  assert.equal(archive.readUInt16LE(offset+8),0,'stored skill ZIP member');const size=archive.readUInt32LE(offset+18),nameBytes=archive.readUInt16LE(offset+26),extra=archive.readUInt16LE(offset+28),start=offset+30+nameBytes+extra,end=start+size;assert.ok(end<=archive.length,'complete skill member');
-  const member=archive.subarray(offset+30,offset+30+nameBytes).toString('utf8');assert.ok(member.startsWith('artifactbin/'),'skill root');const relative=member.slice('artifactbin/'.length);assert.ok(!relative.split('/').some(part=>part==='..'||part==='.'||!part),'safe archive member');
-  if(/^(?:scripts|components|references)\//.test(relative)){const target=join(skill,relative);await mkdir(dirname(target),{recursive:true});await writeFile(target,archive.subarray(start,end));}
-  offset=end;
+ // Decode and validate the complete HTTP archive before writing any member.
+ for(const [relative,bytes] of installedFiles(archive)){
+  if(/^(?:scripts|components|references)\//.test(relative)){const target=join(skill,relative);await mkdir(dirname(target),{recursive:true});await writeFile(target,bytes);}
  }
  const scripts=join(skill,'scripts');
  // The archive ships no library bundles: the installed preview fetches them from the selected server (D20).

@@ -13,17 +13,7 @@ interface MarkdownContent {
   errors: string[];
 }
 
-type MarkdownChild = { type: 'text'; value: string } | { type: 'expression'; value: { static: boolean; json?: unknown } } | { type: 'element' };
-export function markdownSource(node: { tag: string; children: readonly MarkdownChild[] }): string | null {
-  if (node.tag !== 'Markdown') return null;
-  const values: string[] = [];
-  for (const child of node.children) {
-    if (child.type === 'text') { if (child.value.trim()) values.push(child.value); }
-    else if (child.type === 'expression' && child.value.static && typeof child.value.json === 'string') values.push(child.value.json);
-    else return null;
-  }
-  return values.join('');
-}
+
 
 export function markdownHref(href: string): boolean {
   const clean = href.replace(/[\x00-\x20]/g, '');

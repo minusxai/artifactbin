@@ -7,9 +7,9 @@
 export function restoreReloadedReader(win: Window = window): Promise<void> {
   if (!/^mx:(?:doc|anchor):/.test(win.name)) return Promise.resolve();
   return Promise.all([
-    import('@/lib/story-runtime/anchor'),
-    import('@/lib/story-runtime/anchor-restore'),
-    import('@/lib/story-runtime/reader-mode'),
+    import('@/lib/html-reader/anchor'),
+    import('@/lib/html-reader/anchor-restore'),
+    import('@/lib/html-reader/reader-mode'),
   ]).then(([{ applyAnchor }, { holdAnchor }, { takeReloadAnchor }]) => {
     const kept = takeReloadAnchor(win);
     if (kept) holdAnchor(win, kept, applyAnchor);

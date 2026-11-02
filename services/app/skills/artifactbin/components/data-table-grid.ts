@@ -4,7 +4,7 @@
  * Used by: data-table-frame.ts.
  */
 import { gridGeometry, parseColumnSpecs, parseTableHeight, resolveColumns, sortRows }
-  from "@/lib/story-ui/data-table";
+  from "@/lib/html-components/table-values";
 import type { AfDataTable } from "./data-table";
 import { syncRowCells } from "./data-table-cells";
 import type { TableState } from "./data-table-frame";

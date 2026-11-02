@@ -133,7 +133,7 @@ describe('what is served', () => {
   it('retired shapes are refused by name, as a 410 at the door', async () => {
     expect(unservable({ format: 'html', version: 3, source: '  ' })).toMatchObject({ status: 410, reason: 'unreadable', version: 3 });
     expect(unservable({ format: 'html', version: 1, source: '<p>x</p>' })).toBeNull();
-    expect(unservable({ format: 'markup', version: 2, source: '<Doc/>', document: { kind: 'graph' }, meta: {} })).toMatchObject({ reason: 'data_syntax' });
+    expect(unservable({ format: 'markup', version: 2, source: '<Doc/>', document: { kind: 'graph' }, meta: {} })).toMatchObject({ reason: 'unreadable' });
     expect(unservable({ format: 'markup', version: 2, source: null })).toMatchObject({ reason: 'unreadable' });
     expect(unservable({ format: 'dataset', version: 1 })).toBeNull();
     const row = { format: 'image', version: 1 };

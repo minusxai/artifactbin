@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createEffect, onCleanup, onMount, type JSX } from 'solid-js';
-import { sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
-import { isEditFrameMessage, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/edit-protocol';
+import { sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
+import { isEditFrameMessage, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/html-bridge/selection-contract';
 
 interface SelectionActionsProps {
   runtimeRef: DocumentRuntimeRef; nonce: string | null; canAnnotate: boolean;

@@ -606,7 +606,7 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
       const restore = steps.findIndex(step => step.id === 'test-builds');
       expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
       expect(restore, name).toBeLessThan(steps.findIndex(step => (step.run ?? '').includes(runs)));
-      expect(steps[restore].with.path).toContain('node_modules/.cache/build-islands.json');
+      expect(steps[restore].with.path).toContain('services/app/lib/build-assets');
     }
     expect(jobs['warm-caches'].steps.some(step => (step.uses ?? '').startsWith('actions/cache/save') && step.with.key.startsWith('test-builds-v1-'))).toBe(true);
   });
@@ -630,7 +630,7 @@ describe('CI job shape', () => {
         // skips `npm ci`, and so the postinstall) would leave every document without its fonts.
         expect(cache.with.path).toContain('node_modules');
         expect(cache.with.path).toContain('services/app/public/fonts');
-        expect(cache.with.path).toContain('services/app/lib/story-design/story-font-manifest.json');
+        expect(cache.with.path).toContain('services/app/lib/html-systems/font-manifest.json');
         // Keyed on the lockfile, but not on the one line of it a release rewrites: the fingerprint
         // is that file with workspace versions normalised, written by the step just above.
         expect(cache.with.key).toMatch(/hashFiles\('(candidate\/package-lock\.json|\.ci-cache-key\/install\.json)'/);
@@ -770,11 +770,11 @@ describe('CI job shape', () => {
 
 describe('the build cache key covers every build input and nothing a build cannot read', () => {
   it('leaves out tests, gates, workflows and prose, and keeps sources, skills and the lockfile', () => {
-    for (const path of ['services/app/lib/story-ui/parse.ts', 'services/app/skills/artifactbin/SKILL.md', 'scripts/build/build-islands.mjs',
+    for (const path of ['services/app/lib/html-components/markdown.ts', 'services/app/skills/artifactbin/SKILL.md', 'services/app/scripts/build-server-reader.mjs',
       'scripts/build/build-server.mjs', 'package-lock.json', 'vite.config.mts', 'services/app/public/chat/install.sh']) {
       expect(isBuildInput(path), path).toBe(true);
     }
-    for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/lib/islands/__tests__/one-tree.ui.test.ts',
+    for (const path of ['services/app/__tests__/boot-env.test.ts', 'services/app/solid/document/__tests__/framed-nodes.test.ts',
       'scripts/gates/gate-editor-engine.mjs', 'scripts/gates.manifest.mjs', '.github/workflows/ci.yml', 'docs/agent-workflows.md', 'README.md',
       'scripts/ci/test-timings.json', 'scripts/ci/test-timings.mjs', 'scripts/lib/timed-sequencer.mjs']) {
       expect(isBuildInput(path), path).toBe(false);

@@ -18,8 +18,7 @@ export { throttlePublicMutation } from './policy/usage';
 export { validateDatasetPolicyForRow } from './policy/validation';
 export { placeholderSession, policySession, viewerMutationPolicy } from './policy/viewer-policy';
 export { discoverPostgres, queryPostgres } from './postgres';
-export { schemaLoaderFor } from './schema-loader';
-export type { ServerRef, ServerRefLoader } from './schema-loader';
+export type { ServerRefLoader } from './asset-reference';
 export { openDatasetSecret, sealDatasetSecret } from './secret-crypto';
 export { claimPendingDatasetSecret, createDatasetSecret, resolveDatasetConnection } from './secrets';
 export type {

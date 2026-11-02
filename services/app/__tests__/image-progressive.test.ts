@@ -17,7 +17,8 @@ import sharp from 'sharp';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { refDataForRow } from '@/lib/document-data';
+import {resolveImageReference} from '@/lib/artifact-wire';
+import {writerFor} from '@/lib/artifact-access';
 import { objectStore } from '@/lib/object-store';
 
 
@@ -65,8 +66,8 @@ describe('a stored blur reaches the reader', () => {
     // the feature silently disappearing again.
     expect(stored.placeholder).toMatch(/^data:image\/webp;base64,/);
 
-    const refData = await refDataForRow((await getArtifactById(doc))!);
-    expect(refData[img]).toMatchObject({ kind: 'image', blur: stored.placeholder });
+    const refData = await resolveImageReference(`ref:${img}`,writerFor((await getArtifactById(doc))!));
+    expect(refData).toMatchObject({ kind: 'image', blur: stored.placeholder });
   });
 
   it('preserves an authored placeholder while rewriting only the admitted image URL',async()=>{

@@ -15,8 +15,6 @@ import { publishDataset, publishVizRecipe, publishImage, publishPdf, publishFile
 
 import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
-import type { SourceRepair } from '@/lib/jsx';
-
 
 function tooLarge(value: string): Response | null {
   if (Buffer.byteLength(value, 'utf8') > MAX_DOCUMENT_BYTES) {
@@ -38,7 +36,6 @@ export interface ContentInputCtx {
   objects?: ContentObjects;
   prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
-  normalizeMarkup?: (source: string) => string | {source:string;repairs:SourceRepair[]};
   /**
    * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
    *

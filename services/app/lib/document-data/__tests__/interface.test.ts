@@ -7,44 +7,26 @@
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { ANONYMOUS_ACTOR, identityForUser } from '@/lib/accounts';
-import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform';
 import {
-  datasetResolverForActor, holdImport, nameablePeople, readFileRequest, refDataForRow, referencedArtifactForRow, registeredQueryImportForRow,
-  runDocumentMutation, uploadFileRequest,
+  datasetResolverForActor, nameablePeople, readFileRequest, referencedArtifactForRow, registeredQueryImportForRow,
+  uploadFileRequest,
 } from '@/lib/document-data';
 import { account, datasetFixture } from './dataset-fixture';
 
 useAppHarness();
 
 /** A stored markup document owned by `owner`, importing `datasetId` as `data`, with these refs. */
-async function documentImporting(owner: { id: string; tokenId: string }, datasetId: string, refs: Array<{ id: string; kind: string }> = []) {
+async function documentImporting(owner: { id: string; tokenId: string }, _datasetId: string, refs: Array<{ id: string; kind: string }> = []) {
   const id = `doc${Math.random().toString(36).slice(2, 8)}`;
-  const source = `<Helmet><Import name="data" src="ref:${datasetId}" /><Query name="all">{\`select * from data.rows\`}</Query></Helmet><p>Doc</p>`;
-  await (await getDb()).query("INSERT INTO artifacts (id, token_id, user_id, format, source, meta, visibility) VALUES ($1,$2,$3,'markup',$4,$5::jsonb,'public')",
+  const source = `<html><body>Doc</body></html>`;
+  await (await getDb()).query("INSERT INTO artifacts (id, token_id, user_id, format, source, meta, visibility) VALUES ($1,$2,$3,'html',$4,$5::jsonb,'public')",
     [id, owner.tokenId, owner.id, source, JSON.stringify({ refs })]);
   return (await getArtifactById(id))!;
 }
 
 describe('held imports', () => {
-  it('hands a public dataset\'s rows to anyone, and nothing for an import the document does not declare', async () => {
-    const f = await datasetFixture();
-    const doc = await documentImporting(f.owner, f.id);
-    expect(await holdImport(doc, 'data', null)).toEqual({ rows: { rows: [{ n: 1 }], columns: expect.any(Array) } });
-    expect(await holdImport(doc, 'missing', null)).toBeNull();
-  });
-
-  it('hands a private dataset only to a reader of it, and nothing once it is deleted', async () => {
-    const f = await datasetFixture({ visibility: 'private' });
-    const doc = await documentImporting(f.owner, f.id);
-    const stranger = await account('stranger');
-    expect(await holdImport(doc, 'data', null)).toBeNull();
-    expect(await holdImport(doc, 'data', stranger.actor)).toBeNull();
-    expect(await holdImport(doc, 'data', f.owner.actor)).toMatchObject({ rows: { rows: [{ n: 1 }] } });
-    await f.db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [f.id]);
-    expect(await holdImport(doc, 'data', f.owner.actor)).toBeNull();
-  });
-
   it('answers a registered query\'s dataset and catalog, and refuses a source that is not a readable dataset', async () => {
     const f = await datasetFixture();
     const doc = await documentImporting(f.owner, f.id);
@@ -64,7 +46,6 @@ describe('refs', () => {
     expect(await referencedArtifactForRow(doc, 'vizabc')).toMatchObject({ id: 'vizabc' });
     expect(await referencedArtifactForRow(doc, f.id)).toMatchObject({ id: f.id });
     expect(await referencedArtifactForRow(doc, 'undeclared')).toBeNull();
-    expect(await refDataForRow(doc)).toEqual({ vizabc: { kind: 'viz', recipe } });
   });
 });
 
@@ -87,16 +68,6 @@ describe('people a reader may see named', () => {
     expect(await nameablePeople(doc, reader.actor, ['someone-else'])).toEqual({});
     expect(await nameablePeople(doc, null)).toEqual({});
     expect(await nameablePeople(doc, identityForUser(null, reader.tokenId))).toEqual({});
-  });
-});
-
-describe('the mutation door', () => {
-  it('refuses a mutation the document does not declare, and any on a document that is not markup', async () => {
-    const f = await datasetFixture();
-    const doc = await documentImporting(f.owner, f.id);
-    expect(await runDocumentMutation(doc, { mutation: 'nope' } as never, f.owner.actor)).toEqual({ ok: false, reason: 'unknown_mutation' });
-    expect(await runDocumentMutation({ ...doc, format: 'html' } as ArtifactRow, { mutation: 'all' } as never)).toEqual({ ok: false, reason: 'unknown_mutation' });
-    expect(await runDocumentMutation({ ...doc, source: null } as ArtifactRow, { mutation: 'all' } as never)).toEqual({ ok: false, reason: 'unknown_mutation' });
   });
 });
 

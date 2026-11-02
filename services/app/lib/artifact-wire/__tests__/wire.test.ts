@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/platform';
 import { flushViews } from '@/lib/analytics';
-import { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, monitoringGuidance, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, recordArtifactView, replacedArtifactWire, resolveImageReference, sourceRepairsEcho, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
+import { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, monitoringGuidance, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, recordArtifactView, replacedArtifactWire, resolveImageReference, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
 import { artifactState, createArtifact, getArtifactFor, listArtifactPageFor, updateSharingFor, getVersionFor, replaceArtifactFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
 import { account, dataset, head, mine, page, sql } from '@/__tests__/artifact-fixtures';
@@ -45,12 +45,10 @@ describe('body parsers', () => {
     expect(parseShareEntries(undefined)).toBeUndefined();
     expect(parseShareEntries([{ email: 'a@example.test', role: 'viewer' }])).toEqual([{ email: 'a@example.test', role: 'viewer' }]);
     expect(await refusal(parseShareEntries([{ email: 'a@example.test', role: 'owner' }]))).toEqual([400, 'invalid_shares']);
-    expect(sourceRepairsEcho(undefined)).toEqual({});
-    expect(sourceRepairsEcho([{ kind: 'x' } as never])).toEqual({ source_repairs: [{ kind: 'x' }] });
     expect(committedOpenAnnotations({ open_annotations: 3 } as ArtifactRow)).toBe(3);
     expect(committedOpenAnnotations({} as ArtifactRow)).toBe(0);
     expect(monitoringGuidance('https://app.test/', 'Abc123', 'image')).toEqual({});
-    expect(monitoringGuidance('https://app.test/', 'Abc123', 'markup')).toMatchObject({ monitoring: { artifact_url: 'https://app.test/a/Abc123', guide: 'https://app.test/llms/html-operations#watch-for-comments', http: expect.stringContaining('/api/artifacts/Abc123/annotations/changes') } });
+    expect(monitoringGuidance('https://app.test/', 'Abc123', 'html')).toMatchObject({ monitoring: { artifact_url: 'https://app.test/a/Abc123', guide: 'https://app.test/llms/html-operations#watch-for-comments', http: expect.stringContaining('/api/artifacts/Abc123/annotations/changes') } });
   });
 
   it('placement from a wire parent: absent leaves it, a non-owner is refused, a folder files', async () => {

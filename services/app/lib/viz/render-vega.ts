@@ -23,7 +23,7 @@ import { parse, View } from 'vega';
 import type { Spec as VegaSpec } from 'vega';
 import { expressionInterpreter } from 'vega-interpreter';
 import { prepareVegaLiteSpec } from './prepare';
-import { annotationSplit } from './encoding-edit';
+import { annotationSplit } from './annotation-layers';
 import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
 import { createVegaTooltipHandler } from './vega-tooltip-handler';
 import { materializeRecipe } from './viz-templates';

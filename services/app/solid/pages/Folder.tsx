@@ -7,7 +7,7 @@ import type { GroupSummary } from '@artifactbin/contracts';
 import type { FolderPage as FolderData, AccountWorkspace } from '@/lib/workspace';
 import { type ArtifactRole, canEdit } from '@artifactbin/contracts';
 import { openLiveStream } from '@/lib/http/live-stream';
-import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { PAGE_COLUMN } from '../ui/ui';
 import { Button } from '../ui/Button';
@@ -63,4 +63,3 @@ export function FolderPage(props: FolderProps): JSX.Element {
 function ForTrail(props: { folder: FolderData }): JSX.Element {
   return <>{props.folder.trail.map(crumb => <span class="flex min-w-0 items-baseline gap-x-3"><ChevronRight size={14} aria-hidden="true" class="shrink-0 self-center text-faint" /><a {...artifactLink(crumb.url, 'folder')} class={`${NAME_TYPE} text-muted no-underline hover:text-accent`}>{crumb.title ?? crumb.id}</a></span>)}</>;
 }
-

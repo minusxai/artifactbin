@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASEMAP_PATH } from '@artifactbin/contracts';
-import { BASEMAP_WORKER_URL } from '@/lib/viz/basemap';
+import { BASEMAP_WORKER_URL } from '@/lib/viz';
 
 vi.mock('node:module', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:module')>();

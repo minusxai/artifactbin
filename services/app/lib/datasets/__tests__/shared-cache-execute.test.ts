@@ -6,12 +6,10 @@ overridePostgres({query:upstream.query});
 import {useAppHarness,request} from '@/__tests__/harness';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createArtifact, refLoaderForActor } from '@/lib/artifacts';
-import { runDocumentDataflow, datasetResolverForActor } from '@/lib/document-data';
+import { createArtifact } from '@/lib/artifacts';
 import {createDatasetSecret, type DatasetCatalog} from '@/lib/datasets';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {POST as tables} from '@/app/a/[id]/tables/route';
-import {POST as draftQuery} from '@/app/api/query/route';
 useAppHarness();
 beforeEach(()=>{upstream.query.mockReset().mockResolvedValue({rows:[{n:1}],columns:[{name:'n',type:'number'}]});});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
@@ -57,22 +55,9 @@ it('tables endpoint rechecks public visibility after a joined cache wait',async(
  await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[row.id]);done({rows:[{n:1}],columns:[{name:'n',type:'number'}]});
  expect((await first).status).toBe(404);expect((await second).status).toBe(404);
 });
-it('public document queries still use the authorized owner-bound source',async()=>{
- const {row,actor}=await setup();
- const source=`<Helmet><Query name="rows" source="ref:${row.id}">{\`select * from rows\`}</Query></Helmet><p>Hello</p>`;
- for(let i=0;i<2;i++)expect((await runDocumentDataflow(source,refLoaderForActor(actor),datasetResolverForActor(actor)))?.state.tables.rows!.rows).toEqual([{n:1}]);
- // A connected Postgres query keeps source= and its own SQL. Each draft run compiles it by probing the
- // database (one call per run); the query itself is filled once and then served from the shared cache.
- expect(upstream.query).toHaveBeenCalledTimes(3);
-});
 
-it('draft queries recheck bearer revocation after SQL starts',async()=>{
- const {row,token}=await setup();let finish!:(r:unknown)=>void,started!:()=>void;const begun=new Promise<void>(r=>{started=r;});
- upstream.query.mockImplementation(()=>{started();return new Promise(r=>{finish=r;});});
- const pending=draftQuery(request('/api/query',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="q" source="ref:${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`}}));
- await begun;await (await getDb()).query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);finish({rows:[{n:991991}],columns:[{name:'n',type:'number'}]});
- expect(await (await pending).text()).not.toContain('991991');
-});
+
+
 
 it('direct queries reject narrowed catalog exposure during SQL',async()=>{
  const {row}=await setup();let finish!:(r:unknown)=>void,started!:()=>void;const begun=new Promise<void>(r=>{started=r;});

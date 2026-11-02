@@ -13,7 +13,7 @@ import { sessionActor } from '@/lib/authentication';
 import {readableArtifactIdentity} from '@/lib/artifacts';
 import {baseUrl, parseCookie} from '@/lib/http';
 import {runWithRequest} from '@/lib/platform';
-import {THEME_KEY} from '@/lib/story-runtime/contract';
+import {THEME_KEY} from '@/lib/html-reader/contract';
 import {anonymousReader, renderCache, renderKey, SHELL_TTL_MS, type CachedRender} from './render-cache';
 
 /** What the caller knows of the request that the shell depends on and this module cannot see. */

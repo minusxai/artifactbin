@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/story-surface/bare-typography";
+import { STORY_BARE_TYPOGRAPHY_CSS } from "@/lib/html-components/markdown-typography";
 import { STORY_TABLE_CSS } from "@/lib/page-styles";
 import { AfDataTable } from "./data-table";
 import './data-table';

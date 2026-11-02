@@ -6,7 +6,7 @@ import { InstallArtifact, InstallArtifactLink } from '../InstallArtifact';
 import { DocumentSharing } from '../DocumentSharing';
 import { captureInstallPrompt, currentInstall } from '@/solid/lib/pwa-install';
 import { PwaSettingsPanel, PwaSharingSetting } from '../../editor/PwaSettingsPanel';
-import { readPwaSettings } from '@/lib/document/pwa-settings';
+import { readPwaSettings } from '@/lib/html-page/pwa-settings';
 
 afterEach(() => window.history.replaceState(null, '', '/'));
 it('links to a clean stable install page and prompts only on click', async () => {
@@ -70,7 +70,7 @@ it('captures a regular artifact prompt without suppressing the browser promotion
 
 it('offers an off-by-default Sharing switch that preserves existing PWA details', () => {
   const change = vi.fn();
-  render(() => <PwaSharingSetting source={'<Helmet><meta name="artifactbin:pwa-name" content="Saved name" /></Helmet><p>Hello</p>'} onChange={change} />);
+  render(() => <PwaSharingSetting source={'<html><head><meta name="artifactbin:pwa-name" content="Saved name" /></head><body><p>Hello</p>'} onChange={change} />);
   const toggle = screen.getByRole('switch', { name: 'Allow installation as a PWA' });
   expect(toggle).not.toBeChecked();
   fireEvent.click(toggle);

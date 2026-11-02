@@ -5,9 +5,6 @@ import yaml from '@rollup/plugin-yaml';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
 
-// The island tests (Solid, lib/islands): jsdom and the Solid JSX transform. Every other project
-// matches `lib/**/__tests__` too, so they exclude this glob.
-const ISLAND_TESTS = 'services/app/lib/islands/**/__tests__/**/*.test.{ts,tsx}';
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
 const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
@@ -46,15 +43,15 @@ const API_MOCKING = leaking(API_INCLUDE, API_EXCLUDE);
 
 const UI_INCLUDE = ['services/app/lib/**/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/__tests__/**/*.ui.test.{ts,tsx}', 'services/app/web/**/__tests__/**/*.ui.test.{ts,tsx}'];
 /**
- * The Solid tests (islands and the Solid app) share one module graph and one jsdom per worker, like
+ * The Solid app tests share one module graph and one jsdom per worker, like
  * `api`: re-importing the Solid app for every file was most of an affected `npm test`. Their files
  * that mock modules or rewrite the environment run in `ui`, which stays isolated (one fresh graph and
  * jsdom per file) — both names are what CI selects (`--project=ui --project=islands`).
  */
-const ISLANDS_MOCKING = leaking([ISLAND_TESTS, SOLID_TESTS], ['**/node_modules/**']);
-const ISLANDS_SHARED = globSync([ISLAND_TESTS, SOLID_TESTS], { cwd: import.meta.dirname, exclude: ['**/node_modules/**', ...ISLANDS_MOCKING] })
+const ISLANDS_MOCKING = leaking([SOLID_TESTS], ['**/node_modules/**']);
+const ISLANDS_SHARED = globSync([SOLID_TESTS], { cwd: import.meta.dirname, exclude: ['**/node_modules/**', ...ISLANDS_MOCKING] })
   .map((file) => file.split(path.sep).join('/'));
-// The Solid transform the island build uses (babel-preset-solid), remembered across runs
+// The Solid transform the app build uses (babel-preset-solid), remembered across runs
 // (scripts/lib/cached-solid.mjs). Tests render client-side (`hydratable` off); the build emits
 // hydratable code. Fresh plugin instances per project: each project has its own Vite server.
 const solidJsdom = () => ({
@@ -76,9 +73,7 @@ export default defineConfig({
     sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,
     hookTimeout: 45_000,
-    // The SSR'd document needs the prebuilt story runtime, which is a
-    // gitignored build artifact — so the suite builds it, rather than trusting
-    // whoever started it to have done so. See the module for what that cost.
+    // Native HTML tests use the hosted components and libraries built by this setup.
     globalSetup: ['./services/app/test/setup/build-runtime.global.ts'],
     env: {
       APP_PACKAGE_ROOT: path.resolve(import.meta.dirname, 'services/app'),
@@ -139,7 +134,6 @@ export default defineConfig({
           exclude: [
             '**/node_modules/**',
             '**/*.ui.test.{ts,tsx}',
-            ISLAND_TESTS,
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/app/lib/datasets/__tests__/postgres-routes.test.ts',

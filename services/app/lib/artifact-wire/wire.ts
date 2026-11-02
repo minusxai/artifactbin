@@ -14,11 +14,10 @@ import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
  */
 import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
-import { PARENT_REFUSED, artifactState, declarationsForRow, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
-import type { SourceRepair } from '@/lib/jsx';
-import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
+import { PARENT_REFUSED, artifactState, isParentRefusal, parentOf, resolveParent, type ArtifactRow, type ArtifactSummary, type ReplaceOpts, type VersionContent } from '@/lib/artifacts';
+import { rawUrl } from '@/lib/dataflow';
 import { ALLOW_PUBLIC_VISIBILITY, ID_RE } from '@/lib/platform';
-import { resolveStoredStoryDesign } from '@/lib/story-design';
+import { resolveStoredStoryDesign } from '@/lib/html-systems';
 import { json } from '@/lib/http';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
@@ -30,7 +29,6 @@ const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch {
  * object-store keys belong to an individual artifact read, not discovery.
  */
 export const SUMMARY_META_FIELDS = {
-  markup: ['theme', 'template', 'colorMode', 'refs'],
   dataset: ['columns', 'rowCount', 'totalRows', 'truncated'],
   viz: ['slots'],
   image: ['contentType', 'bytes', 'width', 'height'],
@@ -43,6 +41,7 @@ export const SUMMARY_META_FIELDS = {
   // an individual read's business. Present so the lookup is total over
   // ArtifactFormat rather than falling through to the `?? []`.
   folder: [],
+  markup: [],
   program: [],
   html: [],
 } as const;
@@ -107,21 +106,6 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
 }
 
 /**
- * SOURCE REPAIRS ride their own key: `warnings` already means the dependent
- * documents a dataset write broke, and one key holding two shapes is a wire
- * nobody can parse.
- *
- * A repair is not a warning: nothing is missing and nothing needs fixing — the
- * door already changed the document and it published. What the caller needs is
- * to know WHAT was changed, because the source it reads back will not be the
- * source it sent. That is the whole licence for repairing an agent's markup
- * instead of refusing it (lib/jsx/repair), so this key is the contract, not a
- * courtesy. Present only when something was repaired.
- */
-export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
-  (repairs?.length ? { source_repairs: repairs } : {});
-
-/**
  * The open-thread count a COMMITTED row carries: the commit counts it in the statement that writes the row
  * (store setMetadataFor). A row with no count is a data tier, which has no threads.
  */
@@ -155,7 +139,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
   const design = resolveStoredStoryDesign(m.theme, m.colorMode ?? null);
   // A FOLDER is a markup document whose source we wrote — it reads back, edits,
   // comments and echoes exactly like one.
-  const isDoc = format === 'markup' || format === 'folder';
+  const isDoc = format === 'html';
   return {
     ...rest,
     ...(format === 'dataset' ? { access } : {}),
@@ -173,19 +157,6 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
     ...(isDoc ? { open_annotations: openAnnotations } : {}),
-    // markup (story-engine) tier only: the source IS the artifact;
-    // template/colorMode ride meta.
-    ...(isDoc
-      ? {
-          template: m.template ?? null,
-          colorMode: design.colorMode,
-          refs: (meta as { refs?: unknown }).refs ?? [],
-          // Declared mutations by name, parameter and the dataset each writes, so a CLI can
-          // validate a `--name --write` call before it sends anything and name that dataset
-          // when a row action cannot run from a command line.
-          mutations: content ? await declaredDatasetMutations(row) : [],
-        }
-      : {}),
     theme: design.theme,
     ...(format === 'dataset'
       ? {
@@ -204,7 +175,6 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
         }
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(source ?? '') } : {}),
-    ...(format === 'program' && content ? {program:safeJson(source??'')} : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
     ...(format === 'file' ? { filename: (meta as { filename?: string }).filename, contentType: (meta as { contentType?: string }).contentType, bytes: (meta as { bytes?: number }).bytes } : {}),
     ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
@@ -344,7 +314,7 @@ export async function replacedArtifactWire(
   row: ArtifactRow,
   base: string,
   sentMarkup: unknown,
-  { affected, warnings, repairs, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; repairs?: SourceRepair[]; openAnnotations: number },
+  { affected, warnings, openAnnotations }: { affected: ArtifactRow[] | null; warnings: Array<{ id: string; title: string | null; details: string[] }>; openAnnotations: number },
 ): Promise<Record<string, unknown>> {
   return {
     ...monitoringGuidance(base,row.id,row.format),
@@ -364,9 +334,8 @@ export async function replacedArtifactWire(
     ...(row.format === 'dataset' ? { access: row.access } : {}),
     // Annotations are sidecar state a replace cannot touch — the count is the
     // echo's signal that feedback exists (the GET inlines the full set).
-    ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: openAnnotations } : {}),
+    ...(row.format === 'html' ? { open_annotations: openAnnotations } : {}),
     ...(warnings.length ? { warnings } : {}),
-    ...sourceRepairsEcho(repairs),
   };
 }
 
@@ -405,22 +374,6 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     ...(row.format === 'pdf' ? { rawUrl: rawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
 }
-
-/**
- * A document's DATASET mutations for a CLI: name, arguments, the row fields
- * and edited value its control supplies, and the dataset it writes — so a
- * `--name --arg` call is checked before it is sent, and a row action that
- * cannot run from a command line names its dataset.
- */
-async function declaredDatasetMutations(row: ArtifactRow): Promise<Array<{ name: string; args: Array<{ name: string; type: string | null }>; row: string[]; value: boolean; target: string }>> {
-  const flow = (await declarationsForRow(row))?.flow;
-  if (!flow) return [];
-  return flow.mutations.flatMap((m) => {
-    const target = mutationTargetRef(flow, m);
-    return target ? [{ name: m.name, args: m.args, row: m.reads.builtins.flatMap((b) => rowField(b) ?? []), value: m.reads.builtins.includes('_value'), target }] : [];
-  });
-}
-
 
 /** One archived version on the wire: an HTML page's bytes ride `html`, every other format's `markup`. */
 export function versionToWire(row: VersionContent): Record<string, unknown> {

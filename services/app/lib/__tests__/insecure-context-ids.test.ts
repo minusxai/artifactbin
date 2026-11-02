@@ -11,7 +11,7 @@ import { vi } from 'vitest';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 
 const APP = path.resolve(__dirname, '../..');
-const BROWSER_TREES = ['lib/editor-engine', 'lib/story-runtime', 'lib/reader-chrome', 'lib/frame-edit', 'lib/edit-protocol', 'lib/document', 'lib/islands', 'lib/capture', 'solid'];
+const BROWSER_TREES = ['lib/html-reader', 'lib/html-bridge', 'lib/html-presence', 'lib/ui-runtime', 'lib/document', 'lib/capture', 'solid'];
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

@@ -36,7 +36,7 @@ describe('email adoption of legacy ownership', () => {
       // Seed data saved by the old release; no new guest login is exercised.
       const guest = await createGuestOwner();
       const cli = await mintToken('legacy CLI', guest.userId);
-      const artifact = await createArtifact(guest.tokenId, guest.userId, { format: 'markup', source: '<h1 id="legacy">Legacy artifact</h1>', visibility: 'private', meta: {} });
+      const artifact = await createArtifact(guest.tokenId, guest.userId, { format: 'html', source: '<!doctype html><html><body><h1 id="legacy">Legacy artifact</h1></body></html>', visibility: 'private', meta: {} });
       const proof = await agentCookie([guest.tokenId]);
       const api = () => host.fetch(new Request(base + `/api/artifacts/${artifact.id}`, { headers: { authorization: `Bearer ${cli.token}` } }));
       expect((await api()).status).toBe(401);

@@ -7,7 +7,7 @@ vi.mock('../pages/ProfileAlias',()=>{loaded.alias++;return {ProfileAliasRoute:()
 vi.mock('../pages/Document',()=>({DocumentPage:()=> <p>Admitted document</p>}));
 import {App} from '../App';
 import {captureServedFrame,dropServedFrame} from '../lib/served-frame';
-import {STORY_FRAMED_ATTR} from '@/lib/islands/contract';
+import {STORY_FRAMED_ATTR} from '@/lib/html-reader/frame-markup';
 afterEach(async()=>{cleanup();await vi.dynamicImportSettled();dropServedFrame();vi.unstubAllGlobals();window.history.replaceState(null,'','/');});
 function mount(path:string,admitted:boolean){
  window.history.replaceState(null,'',path);

@@ -2,7 +2,7 @@
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import type { ImageChoice } from '@/lib/artifact-backend';
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
-import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/document/pwa-settings';
+import { readPwaSettings, writePwaSettings, type PwaSettings } from '@/lib/html-page/pwa-settings';
 import { InstallArtifactLink } from '../document/InstallArtifact';
 import { Button } from '../ui/Button';
 import { ColorField } from '../ui/ColorField';

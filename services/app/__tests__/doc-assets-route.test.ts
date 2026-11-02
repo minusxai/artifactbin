@@ -33,7 +33,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { setDocAssetImportCapForTests } from '@/lib/allowances';
-import { assetUrlFor, urlHash } from '@/lib/document/asset-url';
+import { assetUrlFor, urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform';
 import { mintExportKey } from '@/lib/export';
 

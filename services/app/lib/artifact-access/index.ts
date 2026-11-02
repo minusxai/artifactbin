@@ -19,4 +19,3 @@ export type { GrantDocument, ReadRow } from './grants';
 export { attestRegisteredHtmlMutation, verifyRegisteredHtmlMutation } from './registered-html-mutation';
 export { attestSavedHtmlUpload } from './saved-html-upload';
 export { can, capabilityRefusal, refusalFor } from './capabilities';
-export type { CapabilityRefusal } from './capabilities';

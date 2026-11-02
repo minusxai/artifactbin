@@ -11,7 +11,8 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as sessionCreate, GET as sessionList } from '@/app/api/my/artifacts/route';
 import { createArtifact, getArtifactById } from '@/lib/artifacts';
-import { refDataForRow } from '@/lib/document-data';
+import {resolveImageReference} from '@/lib/artifact-wire';
+import {writerFor} from '@/lib/artifact-access';
 import { storeImageContent } from '@/lib/datasets';
 
 
@@ -183,9 +184,9 @@ describe('session raw-body image upload', () => {
       meta: { refs: [{ id: img.id, kind: 'image' }] }, title: 'doc', description: null,
     });
 
-    const refData = await refDataForRow((await getArtifactById(doc.id))!);
-    expect(refData[img.id]).toBeDefined();
-    expect((refData[img.id] as { url: string }).url).toContain(`/a/${img.id}/raw`);
+    const refData = await resolveImageReference(`ref:${img.id}`,writerFor((await getArtifactById(doc.id))!));
+    expect(refData).toBeDefined();
+    expect((refData as { url: string }).url).toContain(`/a/${img.id}/raw`);
   });
 
   it('still accepts a JSON content body (session create twin)', async () => {

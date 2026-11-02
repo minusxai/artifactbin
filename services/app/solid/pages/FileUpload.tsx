@@ -11,7 +11,7 @@ import { Field, Input } from '../ui/Field';
 import { Panel } from '../ui/Panel';
 import { StatusMessage } from '../ui/StatusMessage';
 
-import { formatFileSize } from '@/lib/islands/file-display';
+import { formatFileSize } from '@/lib/ui-runtime/file-display';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@artifactbin/contracts';
 import { useSession } from '../lib/session';
 import { copyText } from '../lib/copy-text';
@@ -120,4 +120,3 @@ export function FileUploadPage(): JSX.Element {
     </main>
   }><Navigate href="/login?callbackUrl=%2Ffiles%2Fnew" /></Show>;
 }
-

@@ -1,6 +1,7 @@
 /** Shared fixtures for the dataset write tests: a published readwrite dataset, accounts, and saved documents. */
 import {expect} from 'vitest';
 import {mintAccountToken} from '@/__tests__/harness';
+import {attestRegisteredHtmlMutation} from '@/lib/artifact-access';
 import {getDb} from '@/lib/platform';
 import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import {getArtifactById,type ArtifactRow} from '@/lib/artifacts';
@@ -26,7 +27,7 @@ export async function datasetFixture(body:Record<string,unknown>={}){
 export const write=(dataset:ArtifactRow,actor:AccessActor,sql:string,guard:Parameters<typeof mutateDataset>[4]={})=>mutateDataset(dataset,actor,sql,{},guard);
 export const refusal=(result:Awaited<ReturnType<typeof mutateDataset>>)=>isMutationRefused(result)?result.reason:null;
 /** A saved document row owned by `owner`, public, at a known edit id. */
-export async function document(db:Db,id:string,owner:{id:string;tokenId:string},format='markup'){
+export async function document(db:Db,id:string,owner:{id:string;tokenId:string},format='html'){
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,edit_id) VALUES($1,$2,$3,$4,'public',$5)",[id,owner.tokenId,owner.id,format,`${id}-edit`]);
- return {id,editId:`${id}-edit`};
+ return {id,editId:`${id}-edit`,registeredHtml:attestRegisteredHtmlMutation(id,`${id}-edit`,async()=>{})};
 }

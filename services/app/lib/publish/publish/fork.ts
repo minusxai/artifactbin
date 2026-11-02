@@ -1,22 +1,12 @@
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
-import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
-import { grantsOf, grantsPermitRead } from '@/lib/artifact-access';
-import { artifactQuery } from '@/lib/artifacts/table';
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
+import { newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, createArtifact, unservable } from '@/lib/artifacts';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
-import { ANONYMOUS_ACTOR, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
-import { mutationTargetRef } from '@/lib/dataflow';
-import { collectRefUses } from '@/lib/dataflow/references';
-import { catalogOf, DatasetError, type ServerRefLoader } from '@/lib/datasets';
+import { identityForUser, type TokenHoldingActor } from '@/lib/accounts';
+import { catalogOf, DatasetError } from '@/lib/datasets';
 import { trackEvent } from '@/lib/analytics';
-import { sourceWithoutAnchors } from '@/lib/document';
-import { getDb } from '@/lib/platform';
-import { remapDatasetGrants } from '@artifactbin/utils';
-import { parseContentInput } from '../document/input';
 import { json } from '@/lib/http';
-import { resolveStoredStoryDesign } from '@/lib/story-design';
 
 /**
  * What a forker may change about the copy AS IT IS MADE — the three fields an
@@ -101,11 +91,7 @@ export async function forkArtifact(
   const retired = unservable(source);
   if (retired) return retired.response();
   const publicationOwner:TokenHoldingActor=destination.type==='group'?{...identityForUser(null,creator.tokenId),groupId:destination.id}:creator;
-  const copying = await writtenDatasetForkPlan(actor, source, publicationOwner);
-  // The page PLUS its dataset copies: one cap, counted against what this call
-  // will really create rather than against the page alone.
-  if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-  if (copying.length) return deepFork(actor, source, overrides, copying, creator);
+  if(await artifactQuotaExceeded(actor.tokenId,1))return json({error:'quota_exceeded'},403);
   const input = await forkInput(publicationOwner, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role, ...(source.format==='dataset'?{datasetPolicy:{policy:source.dataset_policy??null,revision:source.policy_revision??0}}:{}) });
@@ -129,7 +115,7 @@ export function forkRefusal(source: ArtifactRow): Response | null {
   if (source.format === 'folder') {
     return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
   }
-  return source.format === 'markup' ? null : postgresForkRefusal(source);
+  return postgresForkRefusal(source);
 }
 
 /** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
@@ -139,155 +125,11 @@ interface ForkResult {
   datasets: Array<{ id: string; forked_from: string }>;
 }
 
-/**
- * The datasets a fork by `actor` would COPY: every distinct dataset this page
- * declares a `<Mutation>` over that the forker could not write as it stands.
- *
- * In source order, which is the order the dry run reports and the order the
- * copies are created in. Four things are deliberately NOT planned, because each
- * one is an existing refusal that must keep its own words rather than become a
- * silent copy:
- *   - a dataset the forker already reaches through their own scope — the write
- *     is admitted exactly as it is, and re-copying it would fork their own data;
- *   - a `ref:` that does not resolve for them, or is not a dataset at all (a
- *     FOLDER's children are computed; there is nothing to copy);
- *   - a POSTGRES-backed dataset, whose credentials stay bound to the original
- *     (`postgresForkRefusal`), so the copy could not answer a single query.
- * Each falls through to `validateRefs`, which names it at the publish door.
- */
-async function writtenDatasetForkPlan(actor: AccessActor, source: ArtifactRow, owner: TokenHoldingActor): Promise<ArtifactRow[]> {
-  if (source.format !== 'markup' || !source.source) return [];
-  const uses = collectRefUses(sourceWithoutAnchors(source.source));
-  if (!uses) return [];
-  const plan: ArtifactRow[] = [];
-  const seen = new Set<string>();
-  const compiled = await compiledForRow(source);
-  const written = new Set((compiled?.mutations ?? []).flatMap((m) => mutationTargetRef(compiled!, m) ?? []));
-  for (const use of [...uses.filter(u=>written.has(u.id)),...uses.filter(u=>!written.has(u.id))]) {
-    if(seen.has(use.id))continue;
-    seen.add(use.id);
-    const candidate=await getArtifactById(use.id);
-    if(!candidate||candidate.format!=='dataset'||catalogOf(candidate)?.kind==='postgres')continue;
-    const policy=grantsOf(candidate);
-    if(policy){
-      if(!written.has(use.id)&&await grantsPermitRead(candidate,ANONYMOUS_ACTOR))continue;
-      if(!(await grantsPermitRead(candidate,actor,source)))continue;
-      plan.push(candidate);continue;
-    }
-    if(!written.has(use.id))continue;
-    const own = owner.groupId || owner.userId ? await getArtifactFor(owner, use.id) : await getArtifact(owner.tokenId, use.id);
-    if (own) continue;
-    const row = (owner.groupId || owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
-    if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
-    plan.push(row);
-  }
-  return plan;
-}
-
-/** What a fork of this page would copy, for the DRY RUN — the plan, as titles. */
-export async function forkDatasetPreview(actor: TokenHoldingActor, source: ArtifactRow, owner: TokenHoldingActor = actor): Promise<Array<{ id: string; title: string | null }>> {
-  if (source.format === 'folder') return [];
-  return (await writtenDatasetForkPlan(actor, source, owner)).map((row) => ({ id: row.id, title: row.title }));
-}
-
-/**
- * The app fork: the dataset copies and the page, in ONE transaction.
- *
- * Everything that can REFUSE happens before it opens — the ids are reserved,
- * the source is repointed and the whole document is re-validated against a
- * loader that answers for the copies as though they already existed. So the
- * transaction is inserts only, and a failure halfway leaves no orphan dataset
- * sitting in the forker's account under a page that was never created.
- */
-async function deepFork(actor: TokenHoldingActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenHoldingActor = actor): Promise<ForkResult | Response> {
-  // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
-  // reservation only for the actor creating the row, so reserving as the forker
-  // and inserting as its test user would refuse its own fork.
-  const ids = await reserveArtifactIds(owner, copying.length+1);
-  const documentId=ids[copying.length]!;
-  const policyRewrite={[source.id]:documentId};
-  const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
-  const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
-  const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
-  const publicationOwner:TokenHoldingActor=overrides.destination?.type==='group'?{...identityForUser(null,owner.tokenId),groupId:overrides.destination.id}:owner;
-  const loader = refLoaderForActor(publicationOwner);
-  const input = await forkInput(publicationOwner, source, overrides, {
-    source: repointRefs(sourceWithoutAnchors(source.source ?? ''), rewrite),
-    // A planned copy resolves as the forker's OWN dataset, with the original's
-    // columns, access and policy — which is what it will be a moment from now.
-    loadRef: async (id) => {
-      const original = planned.get(id);
-      return original ? { ...rowToResolvedRef(original, true), id } : loader(id);
-    },
-  });
-  if (input instanceof Response) return input;
-  const visibility = input.visibility ?? source.visibility;
-  let created: { artifact: ArtifactRow; datasets: ArtifactRow[] };
-  try {
-    created = await (await getDb()).transaction(async (tx) => {
-    await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[source.id,...copies.map(c=>c.row.id)]]);
-    const currentSource=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL}`,[source.id])).rows[0];
-    if(!currentSource||currentSource.edit_id!==source.edit_id)throw new DatasetError('The source changed; retry the fork',409);
-    for(const copy of copies){
-      if(!grantsOf(copy.row))continue;
-      const current=(await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL}`,[copy.row.id])).rows[0];
-      if(!current||current.edit_id!==copy.row.edit_id||current.policy_revision!==copy.row.policy_revision||!await grantsPermitRead(current,actor,currentSource,tx))throw new DatasetError('A dataset changed or is no longer readable; retry the fork',409);
-    }
-    const datasets: ArtifactRow[] = [];
-    for (const copy of copies) {
-      datasets.push(await createArtifact(owner.tokenId, owner.userId, {
-        destination:overrides.destination,
-        title: copy.row.title,
-        description: copy.row.description,
-        format: 'dataset',
-        // The same content and the same object key: dataset bytes are
-        // content-addressed, so a copy of a million rows re-uploads nothing.
-        source: copy.row.source,
-        meta: copy.row.meta,
-        // The copy is as reachable as the page that writes it — no more.
-        visibility: copy.row.visibility==='private'?'private':visibility,
-        access: copy.row.access,
-      }, {
-        tx,
-        reservedId: copy.id,
-        forkedFrom: copy.row.id,
-        linkRole: copy.row.link_role,
-        // The write policy travels WITH the dataset: a copy whose policy had to
-        // be set afterwards would be, for that moment, a writable dataset with
-        // no rules, and the fork would need a second call to be usable at all.
-        ...(copy.row.dataset_policy ? { datasetPolicy: { policy: grantsOf(copy.row)?remapDatasetGrants(grantsOf(copy.row)!,policyRewrite):copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
-      }));
-    }
-    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, reservedId:documentId, forkedFrom: source.id, linkRole: source.link_role }), datasets };
-    });
-  } catch (error) {
-    // A dataset rule refusing a copy is the forker's answer, never a 500.
-    if (error instanceof DatasetError) return json({ error: 'dataset_error', details: [error.message] }, error.status);
-    throw error;
-  }
-  // After the commit, never inside it (PGLite deadlock).
-  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, owner.userId);
-  void trackEvent('fork', source.id, { userId: actor.userId, forkId: created.artifact.id });
-  return { artifact: created.artifact, datasets: created.datasets.map((row) => ({ id: row.id, forked_from: row.forked_from! })) };
-}
-
-/**
- * EVERY `ref:<id>` occurrence of a copied dataset, repointed at its copy — one
- * pass, so a `<Query>` reading the same dataset the `<Mutation>` writes, a
- * `<Value source>` and any position added later all move together. A page that
- * kept one old id would read the original's rows and write its own copy.
- */
-function repointRefs(source: string, rewrite: Map<string, string>): string {
-  return source.replace(/ref:([A-Za-z0-9]{6,12})/g, (whole, id: string) => (rewrite.has(id) ? `ref:${rewrite.get(id)}` : whole));
-}
-
 /** The copy's stored state, as the forker would have published it. */
 async function forkInput(
   actor: TokenHoldingActor,
   source: ArtifactRow,
   overrides: ForkOverrides,
-  /** An APP fork: the repointed source and the loader that answers for its planned dataset copies. */
-  deep?: { source: string; loadRef: ServerRefLoader },
 ): Promise<ArtifactInput | Response> {
   // Everything the copy keeps that is not the content itself, with the
   // forker's overrides winning. `link_role` is carried too, but through
@@ -314,28 +156,9 @@ async function forkInput(
       throw error;
     }
   }
-  if (source.format !== 'markup') {
-    const refusal=postgresForkRefusal(source);
-    if(refusal)return refusal;
-    return { ...carried, format: source.format, source: source.source, meta: source.meta };
-  }
-  const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
-  // Publish the LIVE vocabulary, exactly as the wire echo does: a stored
-  // unknown theme would otherwise make an old document unforkable for a reason
-  // nobody could act on.
-  const design = resolveStoredStoryDesign(meta.theme, meta.colorMode ?? null);
-  const parsed = await parseContentInput({
-    markup: deep?.source ?? sourceWithoutAnchors(source.source ?? ''),
-    theme: design.theme,
-    template: meta.template ?? null,
-    colorMode: design.colorMode,
-  }, {
-    loadRef: deep?.loadRef ?? refLoaderForActor(actor),
-    overByteQuota: byteQuotaFor(actor.tokenId),
-  });
-  if (parsed instanceof Response) return parsed;
-  const { derivedTitle: _derived, ...stored } = parsed;
-  return { ...carried, ...stored };
+  const refusal=postgresForkRefusal(source);
+  if(refusal)return refusal;
+  return {...carried,format:source.format,source:source.source,meta:source.meta};
 }
 
 /** A live remote catalog cannot copy its dataset-bound secret to a new id. */

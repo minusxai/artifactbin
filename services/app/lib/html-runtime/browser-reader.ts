@@ -12,7 +12,8 @@ import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session'
 import type {HtmlCommentViewCommand} from '../html-bridge';
 import {startHtmlPresence} from '../html-bridge/presence';
 import type {PresencePaint} from '../html-presence';
-import {followAppLinks} from '@/lib/islands/frame-links';
+import {refuseFileNavigation} from './frame-file-drops';
+import {followAppLinks} from '@/lib/html-runtime/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
 import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from './live-morph-contract';
@@ -52,7 +53,7 @@ const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInv
 export function onBackendChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 /** The resolver name for {@link onBackendChange}; both stay exported. */
 export const onResolverChange = onBackendChange;
-import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
+import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
@@ -100,6 +101,7 @@ remote.execute = async (request) => {
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
 export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
+  const stopFileNavigation = refuseFileNavigation(win);
   const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
   let call = 0;
@@ -182,7 +184,6 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   return {
     receive(payload) {
       if(payload.kind==='upload-context'){updateUploadContext(payload.context);return;}
-      if (payload.kind === 'restored') post({ kind: 'restored', call: payload.call, ok: true });
       if (uploadSession.receive(payload))return;
       if (payload.kind === 'fetch-result') {
         const current = pending.get(payload.call);
@@ -207,6 +208,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     },
     dispose() {
       stopLinks();
+      stopFileNavigation();
       uploadSession.dispose();if(uploads===uploadSession){uploads=undefined;uploadContext.update({state:'unavailable',scope:nonce+':closed'});}
       relay = null;
       observation.dispose();

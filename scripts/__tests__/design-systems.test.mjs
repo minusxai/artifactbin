@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildPage, CATALOGUE, CONTRACT_KEYS, REPO, ROSTER, STATUS, loadSpec } from '../../design-systems/lib/pages.mjs';
 import { faces } from '../../design-systems/lib/fonts.mjs';
-import { DATA, NAMES, SHEETS, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
+import { DATA, NAMES, renderRuntime, varsMap } from '../../design-systems/lib/runtime.mjs';
 import { pickerSpecimen } from '../../design-systems/lib/picker.mjs';
 
 /**
@@ -52,32 +52,6 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
-  it('keeps Almanac band arches inside the mobile page surface while preserving the desktop tilt', () => {
-    const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
-    const mobile = css.match(/@container \(max-width: 440px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
-    expect(mobile).toMatch(/\.al-band\.al-arch\s*\{[^}]*transform:\s*none;/);
-    expect(mobile).toMatch(/\.al-band\.al-arch:hover\s*\{[^}]*transform:\s*none;/);
-    expect(css).toMatch(/@container \(min-width: 760px\) \{[\s\S]*?\.al-arch\s*\{\s*transform:\s*rotate\(-6deg\);/);
-  });
-
-  it('lets Almanac outcome cards shrink to their desktop grid tracks', () => {
-    const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
-    const outcomeRule = css.match(/\.al-outcome\s*\{([^}]*)\}/)?.[1];
-    expect(outcomeRule).toMatch(/\bmin-width:\s*0;/);
-    expect(outcomeRule).not.toMatch(/\bmin-width:\s*200px;/);
-    expect(css).toMatch(/\.al-outcomes\s*\{[^}]*grid-template-columns:\s*1fr 1fr 1fr;/);
-  });
-  it('lets Phosphor KPI cards fit their grid tracks while preserving desktop spacing and mobile sizing', () => {
-    const css = renderRuntime().entries.find((entry) => entry.name === 'phosphor').css;
-    const mobile = css.match(/@container \(max-width: 400px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
-    const card = css.match(/\.p-stat\s*\{([^}]*)\}/)?.[1] ?? '';
-    expect(card).toMatch(/\bmin-width:\s*0;/);
-    expect(card).toMatch(/padding:\s*18px 20px;/);
-    expect(css).not.toMatch(/\.p-stat\s*\{[^}]*min-width:\s*200px;/);
-    expect(mobile).toMatch(/\.p-stat\s*\{[^}]*padding-inline:\s*clamp\(4px, 1\.8cqw, 12px\);/);
-    expect(mobile).not.toMatch(/\.p-stat\s*\{[^}]*min-width:/);
-    expect(mobile).toMatch(/\.p-stat \.t-numeral\s*\{[^}]*font-size:\s*clamp\(18px, 10cqw, 40px\);/);
-  });
   it('retains cover grounds after comments and resolves every drawing token in both modes', () => {
     for (const slug of ROSTER) {
       const spec = loadSpec(slug);
@@ -100,10 +74,9 @@ describe('the committed outputs are what the generator emits now', () => {
     }
   });
   it('the runtime registry, its sheets and the names leaf', () => {
-    const { names, data, sheets } = renderRuntime();
+    const { names, data } = renderRuntime();
     expect(read(NAMES)).toBe(names);
     expect(read(DATA)).toBe(data);
-    expect(read(SHEETS)).toBe(sheets);
   });
 });
 

@@ -1,0 +1,268 @@
+import type {UploadContext} from '@artifactbin/contracts';
+/** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
+const loadUploadRelay=()=>import('./upload');
+/** Parent transport for the native HTML reader. Messages must come from the
+ * current iframe, expected origin and session key. The only HTTP relay is this
+ * page's GraphQL endpoint, pinned to the trusted shell's revision and read mode.
+ */
+import { runtimeId } from '@artifactbin/utils/runtime-id';
+import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/html-reader/contract';
+
+interface HtmlRelayContext { revision: string; readOnly: boolean; uploadSession?:{state:'loading'|'signed-out'|'signed-in'|'unavailable';subject?:string} }
+interface FrameBridgeParentOptions {
+  /** Set by the trusted HTML shell, never by a page message. */
+  htmlContext?: () => HtmlRelayContext;
+  win: Window;
+  frame: HTMLIFrameElement;
+  /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */
+  frameOrigin: string;
+  id: string;
+  /** The served version's source nodes (createIslandController `nodes`); a saved version sent by `update` replaces them. */
+  /** Read when attaching; later values go out through `setContext`. */
+  editId: () => string;
+  source: () => string | null;
+  /** How the page makes a relayed request (default: its own same-origin fetch, with its session). */
+  appFetch?: (path: string, init: RequestInit) => Promise<Response>;
+  /** The frame's controller runs and signs its events with `nonce` ('' while a reloaded frame's new controller starts). */
+  onReady?: (nonce: string) => void;
+  /** The framed document scrolled. */
+  onScroll?: (scroll: { x: number; y: number }) => void;
+  /** The bridge closed itself (the frame navigated away, or reported it cannot run the editor). */
+  onClosed?: (reason: string) => void;
+  /** The document's link moved: `search` is what the page's address's `$` params should now say (`''` at rest). */
+  onUrlValues?: (search: string) => void;
+  /** The reader first pressed, touched, typed or selected in a document attached without its tree (contract `pressed`). */
+  onPressed?: () => void;
+}
+
+export interface FrameBridgeParent extends IslandStoryController {
+  /** The editor's newer head pointer and source, which the frame's controller reads live. */
+  refreshUploadContext():void;
+  setContext(editId: string, source: string | null): void;
+  /**
+   * How far the page's bars reach over the frame's top edge (contract `inset`). Kept, and sent again to every
+   * controller that starts (a document that loads anew starts with none reserved).
+   */
+  setTopInset(px: number): void;
+  /**
+   * The tree for a bridge made without one (`nodes: []`): the running frame controller classifies against it from
+   * now on (contract `nodes`) — no new session, so a selection the reader already made gets its bubble — and a
+   * document that loads again is attached with it. Ignored once the bridge holds a tree.
+   */
+}
+
+/** The longest `$` query a document may hand the page's address. */
+const MAX_URL_VALUES = 8192;
+
+/** A document's `$` params as the page will take them (STORY_URL_VALUES_MESSAGE), or null: a bounded query, no hash or space. */
+export function urlValuesOf(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const { type, search } = data as { type?: unknown; search?: unknown };
+  if (type !== STORY_URL_VALUES_MESSAGE || typeof search !== 'string' || search.length > MAX_URL_VALUES) return null;
+  return /^\??[^#\s]*$/.test(search) ? search : null;
+}
+
+/** The response headers a relayed answer keeps: what the controller reads. */
+const KEPT_HEADERS = ['content-type', 'retry-after'];
+/** The request headers a relayed request may carry. */
+const SENT_HEADERS = ['content-type'];
+
+const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Promise<Response> =>
+  win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
+
+/** The relayed request, checked: this document's GraphQL path, on the page's own origin, or null. */
+export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }, htmlContext?: HtmlRelayContext): { path: string; init: RequestInit } | null {
+  if (typeof request.path !== 'string' || (request.method !== 'GET' && request.method !== 'POST')) return null;
+  let url: URL;
+  try { url = new URL(request.path, win.location.origin); } catch { return null; }
+  if (url.origin !== win.location.origin) return null;
+  const graphql = url.pathname === `/api/artifacts/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
+  if (!graphql) return null;
+  let graphqlBody: string | undefined;
+  if (graphql) {
+    if (!htmlContext?.revision || typeof request.body !== 'string' || request.body.length > 1_000_000) return null;
+    try {
+      const input: unknown = JSON.parse(request.body);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+      const body = input as Record<string, unknown>;
+      if (typeof body.query !== 'string' || !['query', 'mutation'].includes(String(body.operation)) || htmlContext.readOnly && body.operation !== 'query') return null;
+      graphqlBody = JSON.stringify({ ...body, revision: htmlContext.revision });
+    } catch { return null; }
+  }
+  const headers: Record<string, string> = {};
+  if (request.headers && typeof request.headers === 'object') {
+    for (const [name, value] of Object.entries(request.headers as Record<string, unknown>)) {
+      if (SENT_HEADERS.includes(name.toLowerCase()) && typeof value === 'string') headers[name] = value;
+    }
+  }
+  const body = graphqlBody ?? (request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined);
+  return { path: url.pathname + url.search, init: { method: request.method, headers, ...(body !== undefined ? { body } : {}) } };
+}
+
+export function createFrameBridgeParent(options: FrameBridgeParentOptions): FrameBridgeParent {
+  const { win, frame, frameOrigin, id } = options;
+  const appFetch = options.appFetch ?? sameOriginFetch(win);
+  const target = frameOrigin === 'null' ? '*' : frameOrigin;
+  let key = runtimeId();
+  let nonce = '';
+  let pendingUploads=0;
+  const uploadControllers=new Set<AbortController>();
+  let uploadSignature='',uploadContext:UploadContext={state:'unavailable',scope:runtimeId()};
+  const cancelUploads=()=>{for(const controller of uploadControllers)controller.abort();uploadControllers.clear();};
+  const readUploadContext=()=>{
+    const html=options.htmlContext?.(),session=html?.uploadSession;
+    const state:UploadContext['state']=!html?'unavailable':html.readOnly?'read-only':session?.state??'unavailable';
+    const signature=JSON.stringify([key,options.editId(),options.source(),html?.revision,state,session?.subject]);
+    if(signature!==uploadSignature){uploadSignature=signature;cancelUploads();uploadContext={state,scope:runtimeId()};}
+    return uploadContext;
+  };
+  /** The frame's controller answered `ready` under the current key: commands go straight out. */
+  let attached = false;
+  let closed = false;
+  let loads = 0;
+  /** Commands the page sent before the frame's controller ran: posted on `ready`, in order. */
+  const backlog: FrameBridgeParentPayload[] = [];
+  const listeners = new Set<(event: unknown) => void>();
+  /** The page's bars over the frame's top edge (setTopInset): every new frame controller is told on `ready`. */
+  let inset = 0;
+  /**
+   * The nodes of the newest saved version the page sent (`update` without a source), else the served ones: what a
+   * controller that starts — the first, or one in a document that loaded again — classifies selections against.
+   */
+
+  const envelope = (payload: FrameBridgeParentPayload) => {
+    try { frame.contentWindow?.postMessage({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload }, target); } catch { /* the frame went away */ }
+  };
+  const post = (payload: FrameBridgeParentPayload) => {
+    if (closed) return;
+    if (!attached) { backlog.push(payload); return; }
+    envelope(payload);
+  };
+  /** (Re)send this session's attach: the door starts the frame half on the first one and ignores a key it holds. */
+  const attach = () => {
+    if (attached || closed || !frame.contentWindow) return;
+    envelope({ kind: 'attach', id, editId: options.editId(), source: options.source(), ...(options.htmlContext?{uploadContext:readUploadContext()}:{}) });
+  };
+  /** A new document in the frame: its controller is gone, so a new session starts under a fresh key. */
+  const reattach = () => {
+    cancelUploads();
+    key = runtimeId();
+    nonce = '';
+    attached = false;
+    // What the page sent to the old document's controller does not carry over to the new one's.
+    backlog.length = 0;
+    options.onReady?.('');
+    attach();
+  };
+  const close = (reason: string) => {
+    if (closed) return;
+    try { frame.contentWindow?.postMessage({ type: STORY_FRAME_BRIDGE_MESSAGE, key, payload: { kind: 'detach' } }, target); } catch { /* gone */ }
+    cancelUploads();
+    closed = true;
+    key = '';
+    options.onClosed?.(reason);
+  };
+
+  const relay = async (payload: Extract<FrameBridgeFramePayload, { kind: 'fetch' }>) => {
+    const relayKey=key;
+    const reply=(answer:FrameBridgeParentPayload)=>{if(key===relayKey)post(answer);};
+    const request = relayedRequest(win, id, payload, options.htmlContext?.());
+    if (!request) {
+      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) reply({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
+      else reply({ kind: 'fetch-result', call: payload.call, error: 'refused' });
+      return;
+    }
+    try {
+      const response = await appFetch(request.path, request.init);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, name) => { if (KEPT_HEADERS.includes(name.toLowerCase())) headers[name.toLowerCase()] = value; });
+      reply({ kind: 'fetch-result', call: payload.call, status: response.status, headers, body: await response.text() });
+    } catch (error) {
+      reply({ kind: 'fetch-result', call: payload.call, error: String(error instanceof Error ? error.message : error) });
+    }
+  };
+
+  const onMessage = (event: MessageEvent) => {
+    if (closed || event.source !== frame.contentWindow || event.origin !== frameOrigin) return;
+    const values = urlValuesOf(event.data);
+    if (values !== null) { options.onUrlValues?.(values); return; }
+    if (!isFrameBridgeEnvelope(event.data)) return;
+    const data = event.data as { key?: unknown; payload: FrameBridgeFramePayload };
+    const payload = data.payload;
+    if (payload.kind === 'hello') {
+      // A door that opens after this session's controller ran is a new document (it reloaded).
+      if (attached && frameOrigin !== 'null') reattach(); else attach();
+      return;
+    }
+    if (data.key !== key) return;
+    switch (payload.kind) {
+      case 'ready':
+        if (typeof payload.nonce !== 'string' || !payload.nonce) return;
+        nonce = payload.nonce;
+        attached = true;
+        for (const queued of backlog.splice(0)) envelope(queued);
+        if (inset) envelope({ kind: 'inset', top: inset });
+        const values = urlValuesOf({ type: STORY_URL_VALUES_MESSAGE, search: payload.urlValues });
+        if (values !== null) options.onUrlValues?.(values);
+        options.onReady?.(nonce);
+        return;
+      case 'event':
+        for (const listener of [...listeners]) listener(payload.event);
+        return;
+      case 'upload-file': {
+        const current=readUploadContext();
+        const context=options.htmlContext?.();
+        if(current.state!=='signed-in'||!context||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
+        pendingUploads++;
+        const controller=new AbortController();uploadControllers.add(controller);
+        const uploadKey=key,uploadScope=current.scope;const reply=(answer:FrameBridgeParentPayload)=>{if(!closed&&key===uploadKey&&readUploadContext().scope===uploadScope)post(answer);};
+        const editId=options.editId();
+        void (async()=>{try{const {relayFileUpload}=await loadUploadRelay();if(controller.signal.aborted||closed||key!==uploadKey||readUploadContext().scope!==uploadScope)return;await relayFileUpload({documentId:id,editId,readOnly:context.readOnly,input:payload,signal:controller.signal,appFetch,reply});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;uploadControllers.delete(controller);}})();return;
+      }
+      case 'fetch': void relay(payload); return;
+      case 'pressed': options.onPressed?.(); return;
+      case 'scroll': options.onScroll?.({ x: Number(payload.scrollX) || 0, y: Number(payload.scrollY) || 0 }); return;
+      case 'error': console.error('[frame-bridge]', payload.message); return;
+      default: return;
+    }
+  };
+  const onLoad = () => {
+    loads++;
+    // A second document in the frame. On `/raw` its origin says nothing, so the bridge closes.
+    // On its own origin a new document's door says `hello` as it opens, which re-attaches; a load only re-sends.
+    if (loads > 1 && frameOrigin === 'null') { close('the framed document navigated'); return; }
+    attach();
+  };
+  win.addEventListener('message', onMessage);
+  frame.addEventListener('load', onLoad);
+  // The frame may already be there, its door open and its hello gone (the server drew it before this page ran).
+  attach();
+
+  const controller: FrameBridgeParent = {
+    get nonce() { return nonce; },
+    send(command: unknown) { post({ kind: 'send', command }); },
+    invalidate(datasets: string[]) { post({ kind: 'send', command: { type: STORY_DATA_MESSAGE, datasets } }); },
+    subscribe(listener: (event: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    /** The frame's viewport in this page's viewport: its content box, inside the iframe's border. */
+    getViewportRect() {
+      const box = frame.getBoundingClientRect();
+      return new DOMRect(box.left + frame.clientLeft, box.top + frame.clientTop, frame.clientWidth, frame.clientHeight);
+    },
+    refreshUploadContext(){if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()});},
+    setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source });if(options.htmlContext)post({kind:'upload-context',context:readUploadContext()}); },
+    setTopInset(px: number) {
+      const top = Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0;
+      if (top === inset) return;
+      inset = top;
+      // Not backlogged: `ready` sends the current one (a reloaded document's backlog is dropped, the inset is not).
+      if (attached && !closed) envelope({ kind: 'inset', top });
+    },
+    dispose() {
+      close('disposed');
+      listeners.clear();
+      win.removeEventListener('message', onMessage);
+      frame.removeEventListener('load', onLoad);
+    },
+  };
+  return controller;
+}

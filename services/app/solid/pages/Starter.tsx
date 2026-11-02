@@ -10,8 +10,8 @@
  */
 import { createEffect, createSignal, onMount, onCleanup, Show, type JSX } from 'solid-js';
 import { type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, isStartPlaceholder, type Visibility } from '@artifactbin/contracts';
-import { reloadKeepingPlace } from '@/lib/islands/live-update';
-import { chooseTheme } from '@/lib/story-runtime/reader-mode';
+import { reloadKeepingPlace } from '@/lib/html-reader/reload';
+import { chooseTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { initialViewWasReported } from '@/solid/lib/artifact-view-report';
@@ -27,6 +27,7 @@ import { DocumentChrome } from '../document/DocumentChrome';
 import { DocumentSharing } from '../document/DocumentSharing';
 import { ForkConfirm } from '../document/ForkArtifact';
 import { createLiveArtifact } from '../editor/create-live-artifact';
+import {artifactRequests} from '@/lib/artifact-backend/http';
 import { prepareBlankReport } from '../lib/blank-report';
 
 export interface StarterAnswer {
@@ -61,7 +62,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
       const backend = createHttpBackend(id);
       const head = await backend.load();
       if (!head) throw new Error('Could not open this artifact.');
-      const result = await backend.commitEdit(prepareBlankReport(head, surface.editId));
+      const result = await artifactRequests(id).htmlUpdate(prepareBlankReport(head, surface.editId));
       if (!result.ok) throw new Error(result.status === 409 ? 'This artifact has changed. Reload to see the latest version.' : 'Could not create the blank report. Please try again.');
       reloading = true; // The committed live frame must not race the reader navigation.
       replaceDocument(`/a/${id}`);

@@ -7,12 +7,11 @@
  */
 
 /** Reader runs (offline, publish/prepared, routes, runner, serving, export). */
-export { registeredQueryImportForRow, dataflowForRow, datasetResolverForActor, datasetsForDocument, holdImport, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow } from './dataflow';
+export { registeredQueryImportForRow, datasetResolverForActor, nameablePeople, referencedArtifactForRow } from './dataflow';
 
 /** Writes (the mutate route, operations, runner). */
-export { runDocumentMutation } from './dataflow';
 export { respondToMutate } from './mutate-http';
-export { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
+export { completeDocumentMutationReceipt, adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
 
 /** Dataset policies (the policy routes). */
 export { datasetPolicyRequest, readDatasetPolicy, writeDatasetPolicy } from './dataset-policy/http';

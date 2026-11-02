@@ -19,9 +19,9 @@
  */
 import { children as resolveChildren, createEffect, createSignal, createUniqueId, onCleanup, Show, type JSX } from 'solid-js';
 import { Dynamic, Portal } from 'solid-js/web';
-import type { Placed, Side } from '@/lib/islands/kit/popper';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
+import type { Placed, Side } from '@/lib/ui-runtime/popper';
+import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
+import { createTooltipTiming } from '@/lib/ui-runtime/tooltip-core';
 
 /** Trigger timing/ARIA stay eager; the floating positioning engine is interaction-only. */
 type Popup = typeof import('./TooltipPopper');

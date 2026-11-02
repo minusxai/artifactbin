@@ -3,7 +3,7 @@
  *   (scroll viewport, table, footer) that hands off to the grid or comparison renderer.
  * Used by: data-table.ts (state type also by data-table-grid/-cells/-compare/-measure.ts).
  */
-import { parseTableHeight, type SortSpec } from "@/lib/story-ui/data-table";
+import { parseTableHeight, type SortSpec } from "@/lib/html-components/table-values";
 import type { AfDataTable } from "./data-table";
 import { renderComparison } from "./data-table-compare";
 import { renderGrid } from "./data-table-grid";

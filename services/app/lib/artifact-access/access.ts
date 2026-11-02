@@ -109,7 +109,7 @@ async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: Access
  * sharing). Like the link, it lists nothing: a listing reads `roleWithoutLink`, which this is not part of.
  */
 export function documentEditorReaches(row: Partial<Pick<ArtifactRow, 'format' | 'visibility'>>, actor: Pick<AccessActor, 'documentEditor'>): boolean {
-  return actor.documentEditor && (row.format === 'markup' || row.format === 'html') && row.visibility !== undefined && row.visibility !== 'private';
+  return actor.documentEditor && row.format === 'html' && row.visibility !== undefined && row.visibility !== 'private';
 }
 
 /**

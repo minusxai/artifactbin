@@ -68,7 +68,7 @@ describe('replace and revert', () => {
     expect(kept.shares).toEqual([{ email: 'x@example.test', role: 'editor' }]);
     expect(await replaceArtifactFor(stranger, row.id, page('No'), { expectedVersion: 3 })).toBeNull();
     const markup = await replaceArtifactFor(owner, row.id, { format: 'markup', source: '<Doc/>', meta: {} }) as Response;
-    expect([markup.status, await markup.json()]).toEqual([400, { error: 'jsonb_operations_required' }]);
+    expect([markup.status, await markup.json()]).toEqual([400, { error: 'unsupported_format' }]);
     const invalid = await replaceArtifactFor(owner, row.id, { format: 'html', source: '<script>', meta: {} }, { expectedVersion: 3 });
     expect(isVersionConflict(invalid as ArtifactRow)).toBe(false);
   });
@@ -221,12 +221,6 @@ describe('quotas, state and after-commit', () => {
     emitDatasetCommitted('e');
     expect(heard).toEqual(['head:a:-:true', 'data:d']);
     expect(warn).toHaveBeenCalledTimes(1);
-    // A markup creation emits its head after commit.
-    const stop = onHeadCommitted(id => heard.push(`created:${id}`));
-    const owner = await account('owner@example.test');
-    const doc = await createArtifact(null, owner.userId, { format: 'markup', source: '<p>x</p>', meta: {}, title: 'M' });
-    stop();
-    expect(heard.at(-1)).toBe(`created:${doc.id}`);
     warn.mockRestore();
   });
 

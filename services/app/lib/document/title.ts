@@ -9,8 +9,6 @@
  * after the next edit.
  */
 
-import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
-import { markdownContent, markdownSource } from '@/lib/markdown';
 import { rowTitle } from './display-title';
 export { UNTITLED } from './display-title';
 
@@ -26,23 +24,6 @@ const HEADING = /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/i;
 
 /** The first heading's text in a story-JSX source, or null. */
 export function firstHeadingTitle(source: string | null | undefined): string | null {
-  if (source?.includes('<Markdown')) {
-    const parsed = parseJsx(source);
-    if (parsed.ok) {
-      const find = (nodes: JsxNode[]): string | null => {
-        for (const node of nodes) {
-          if (node.type !== 'element') continue;
-          if (node.tag === 'Markdown') {
-            const heading = markdownContent(markdownSource(node) ?? '').headings[0]?.title;
-            if (heading) return heading.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE);
-          } else if (/^h[1-6]$/.test(node.tag)) { const title = firstHeadingTitle(serializeJsx([node])); if (title) return title; }
-          else { const title = find(node.children); if (title) return title; }
-        }
-        return null;
-      };
-      return find(parsed.nodes);
-    }
-  }
   const inner = source?.match(HEADING)?.[2];
   if (inner === undefined) return null;
   const text = decode(stripTags(inner))
@@ -51,7 +32,6 @@ export function firstHeadingTitle(source: string | null | undefined): string | n
     .replace(/[<>]/g, '')
     // A `{expr}` heading is computed at render — there is no static text to
     // borrow, and the braces themselves are not a title.
-    .replace(/\{[\s\S]*?\}/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return text ? text.slice(0, MAX_TITLE) : null;

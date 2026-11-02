@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import { STORY_DATA_EVENT } from '@/lib/html-reader/contract';
 import { getArtifactById, childrenTableFor, updateSharingFor } from '@/lib/artifacts';
 import { subscribeChannel } from '@/lib/publish';
 import { artifactChannel } from '@artifactbin/contracts';

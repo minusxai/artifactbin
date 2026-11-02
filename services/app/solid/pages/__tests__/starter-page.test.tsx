@@ -11,11 +11,11 @@ import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
 import { existingPaste } from '@/lib/agent-copy/agent-copy';
-import { reloadKeepingPlace } from '@/lib/islands/live-update';
+import { reloadKeepingPlace } from '@/lib/html-reader/reload';
 import { replaceDocument } from '@/solid/lib/document-navigation';
 import { StarterPage, type StarterAnswer } from '@/solid/pages/Starter';
 
-vi.mock('@/lib/islands/live-update', () => ({ reloadKeepingPlace: vi.fn() }));
+vi.mock('@/lib/html-reader/reload', () => ({ reloadKeepingPlace: vi.fn() }));
 vi.mock('@/solid/lib/document-navigation', () => ({ replaceDocument: vi.fn() }));
 
 const streams: Array<{ url: string; onmessage: ((event: { data: string }) => void) | null }> = [];

@@ -4,7 +4,7 @@
  * settings out of the broken graph, and the frame's own door (/raw) answers the 410 by name.
  */
 import { describe, expect, it } from 'vitest';
-import {createDocumentGraph} from '@/lib/document/document-graph';
+import {retiredGraph} from '@/__tests__/retired-document-fixture';
 import { createAppServer } from '../app';
 import { useAppHarness, mintAccountToken as mintToken, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -32,7 +32,7 @@ describe.each(Object.entries(BROKEN))('a stored graph with %s', (_name, break_) 
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { html: '<h1>Fine</h1>', visibility: 'public' } }));
     const id = (await made.json() as { id: string }).id;
     const db = await harness.db();
-    const stored = createDocumentGraph('<h1>Fine</h1>',1) as unknown as Stored;
+    const stored = structuredClone(retiredGraph) as unknown as Stored;
     await db.query("UPDATE artifacts SET document=$2::jsonb, source=NULL,format='markup' WHERE id=$1", [id, JSON.stringify(break_(stored))]);
 
     for (const path of [`/a/${id}`, `/a/${id}/app/`]) {

@@ -20,7 +20,7 @@ import { canEdit, CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIEL
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation';
-import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish';
+import { createArtifactFromBody, forkArtifact, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish';
 import {DatasetError} from '@/lib/datasets';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 import { trackEvent } from '@/lib/analytics';
@@ -124,7 +124,6 @@ const CONTENT_FIELDS = {
   resolverSources:z.record(z.string(),z.string()).optional().describe('Named resolver TypeScript files, one per <link rel="af-resolver" data-af-name>, validated and published atomically with html.'),
   backendSources:z.record(z.string(),z.string()).optional().describe('Legacy alias of resolverSources; send one of them, never both.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
-  program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date', 'timestamp']), choices:z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(100).optional() })).optional().describe('dataset: declared column types (win over inference)'),
@@ -147,7 +146,7 @@ const CONTENT_FIELDS = {
   // A FOLDER IS AN ARTIFACT, so the create door's `format` takes exactly one
   // value: everything else is named by its content field, and only a folder
   // has none.
-  format: z.enum(['folder','program']).optional().describe("A folder has no content field. A program definition uses the program content field. Other artifact formats are selected by their content field."),
+  format: z.literal('folder').optional().describe("A folder has no content field. Other artifact formats are selected by their content field."),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
   shares: z.array(z.object({email:z.string(),role:z.enum(['viewer','commenter','editor'])})).max(100).optional().describe('Explicit sharing list; omission preserves it and an empty list clears it atomically with content.'),
   access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),
@@ -251,7 +250,7 @@ const getArtifactOp: Operation = {
   name: 'get_artifact',
   title: 'Read an artifact',
   http: { method: 'GET', path: '/api/artifacts/{id}' },
-  description: 'Read markup source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Markup reads inline OPEN annotations; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are inert; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
+  description: 'Read native HTML source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Annotations are returned separately from source; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are inert; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
   input: { id: z.string() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
@@ -266,7 +265,7 @@ const annotateOp: Operation = {
   name: 'annotate',
   title: 'Answer an annotation',
   http: { method: 'POST', path: '/api/artifacts/{id}/annotations/{annotation_id}' },
-  description: 'Answer an annotation on a document you own: reply, resolve, or reopen it. A reply may accompany one state transition; a plain reply never conflicts, and `expected_revision` only guards resolve/reopen (a stale one with a reply keeps the reply and answers `status_conflict:true`). Annotations arrive inlined on get_artifact — reply when you act on one, resolve when it is done.',
+  description: 'Answer an annotation on a document you own: reply, resolve, or reopen it. A reply may accompany one state transition; a plain reply never conflicts, and `expected_revision` only guards resolve/reopen (a stale one with a reply keeps the reply and answers `status_conflict:true`). Annotations arrive separately from source on get_artifact — reply when you act on one, resolve when it is done.',
   input: { id: z.string(), annotation_id: z.string(), expected_revision:z.number().int().nonnegative().optional(), reply: z.string().optional(), resolve: z.boolean().optional(), reopen: z.boolean().optional() },
   annotations: {},
   example: { input: { id: 'aB3xK9', annotation_id: 'ann_123', reply: 'done — tightened the intro', resolve: true } },
@@ -367,7 +366,7 @@ const getVersionOp: Operation = {
   name: 'get_version',
   title: 'Read one archived version',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions/{version}' },
-  description: 'Read one archived version of an artifact, content included (`markup` carries the source). A document version stored in a form this server no longer serves answers 410 unservable_document.',
+  description: 'Read one archived version of an artifact, content included (`html` carries native HTML source). A document version stored in a form this server no longer serves answers 410 unservable_document.',
   input: { id: z.string(), version: z.number() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', version: 2 } },
@@ -539,7 +538,7 @@ const exportArtifactOp: Operation = {
   name: 'export_artifact',
   title: 'Export an artifact as an image',
   http: { method: 'GET', path: '/api/artifacts/{id}/export' },
-  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the markup back with get_artifact). Set refresh:true to capture the current published page rather than reuse its stored image. For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
+  description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the HTML back with get_artifact). Set refresh:true to capture the current published page rather than reuse its stored image. For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
   input: {
     id: z.string(),
     slide: z.number().int().positive().optional().describe('one deck slide, 1-based; omit for the whole document'),
@@ -679,7 +678,7 @@ const forkArtifactOp: Operation = {
     if (input.dry_run === true) {
       const unforkable = forkRefusal(source);
       if (unforkable) return fromResponse(unforkable);
-      return { status: 200, body: { datasets: await forkDatasetPreview(forker, source, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) } };
+      return { status: 200, body: { datasets: [], ...(owner.testuser ? { owner: owner.testuser } : {}) } };
     }
 
     const copy = await forkArtifact(forker, source, overrides, owner.actor);
