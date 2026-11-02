@@ -14,10 +14,10 @@
   "dependencies": {
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
-    "pg": "8.17.1"
+    "pg": "8.23.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.23.1",
+    "@types/pg": "8.23.1",
     "vitest": "4.1.12"
   }
 }

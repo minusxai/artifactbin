@@ -13,7 +13,6 @@ const CONE = [
   'solid/editor/ContextPanel.tsx',
   'solid/editor/create-in-place-edit.ts',
   'solid/editor/create-live-artifact.ts',
-  'solid/editor/create-versions.ts',
   'solid/editor/panels/QueryNotebookPanel.tsx',
   'solid/editor/StoryFormatToolbar.tsx',
   'solid/lib/live-edits-core.ts',

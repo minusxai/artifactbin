@@ -2,9 +2,9 @@
 /** GitHub adapter for the pure CI planner. All CI environment reads live here;
  * path lists never become shell code. Missing diff evidence selects all jobs. */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { normalisedLock } from '../lib/lock-fingerprint.mjs';
+import { installFingerprint } from '../lib/lock-fingerprint.mjs';
 import { CI_JOBS, buildKey, checkCiResults, planCi } from '../lib/ci-plan.mjs';
 import { NATIVE_ROOT_BUILD_INFO } from '../lib/type-check.mjs';
 
@@ -255,10 +255,10 @@ if (mode === 'plan') {
   console.log(`tree ${tree} tested by run ${source}`);
 } else if (mode === 'lock-fingerprint') {
   // Why the versions are normalised: scripts/lib/lock-fingerprint.mjs.
-  const lock = normalisedLock(readFileSync('package-lock.json', 'utf8'));
+  const lock = installFingerprint();
   mkdirSync('.ci-cache-key', { recursive: true });
   writeFileSync('.ci-cache-key/install.json', lock);
-  console.log('Wrote .ci-cache-key/install.json (the lockfile with workspace versions normalised).');
+  console.log('Wrote .ci-cache-key/install.json (normalised lock, install configuration and postinstall inputs).');
 } else if (mode === 'build-key') {
   // The build cache's key (scripts/lib/ci-plan.mjs `buildKey`).
   const { key, inputs } = buildKey(execFileSync('git', ['ls-files', '-s'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));

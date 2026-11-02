@@ -9,7 +9,7 @@
 import { createSignal, getOwner, onCleanup } from 'solid-js';
 import { createLiveEditsCore, type LiveEditsOptions, type LiveEditState } from '@/solid/lib/live-edits-core';
 
-export type { LiveEditsOptions, LiveEditState, PendingChange } from '@/solid/lib/live-edits-core';
+export type { LiveEditsOptions, LiveEditState } from '@/solid/lib/live-edits-core';
 
 export function createLiveEdits(options: LiveEditsOptions) {
   const core = createLiveEditsCore(() => options);

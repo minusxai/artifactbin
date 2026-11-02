@@ -42,7 +42,7 @@ export interface LiveEditState {
   pending: boolean;
 }
 
-export interface PendingChange {
+interface PendingChange {
   annotationOps?: AnnotationOperation[];
   source?: string;
   title?: string | null;

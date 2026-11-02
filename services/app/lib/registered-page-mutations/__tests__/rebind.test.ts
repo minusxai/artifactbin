@@ -99,3 +99,37 @@ describe('planRegisteredMutationRepair', () => {
     expect(await planRegisteredMutationRepair(f.db, { ...head, meta: { htmlLinks: [plain, { kind: 'dataset' as const }] } })).toBeNull();
   });
 });
+
+
+describe('registered mutations transaction boundaries', () => {
+  it('refuses secret-bearing immutable registrations without creating a rebound version', async () => {
+    const f = await fixture();
+    await f.db.query("UPDATE html_backend_versions SET secret_bindings='[\"credential\"]'::jsonb WHERE backend_id=$1", [f.prepared.link.backendId]);
+    await expect(planRegisteredMutationRebinds(f.db, f.next, [f.prepared.link], f.owner.userId)).rejects.toMatchObject({ reason: 'mutation_registration_changed' });
+    expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
+  });
+
+  it('checks saved owner, version and source again at commit', async () => {
+    const f = await fixture();
+    const planned = await planRegisteredMutationRebinds(f.db, f.next, [f.prepared.link], f.owner.userId);
+    await f.save(planned.links);
+    await expect(commitRegisteredMutationRebinds(f.db, {...f.next, html: 'different'}, planned.rebinds)).rejects.toThrow('mutation_registration_changed');
+    await expect(commitRegisteredMutationRebinds(f.db, {...f.next, version: 3}, planned.rebinds)).rejects.toThrow('mutation_registration_changed');
+    await expect(commitRegisteredMutationRebinds(f.db, f.next, [{...planned.rebinds[0]!, ownerId: 'other'}])).rejects.toThrow('mutation_registration_changed');
+    expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
+  });
+
+  it('rolls back the new head and backend together after a successful insert', async () => {
+    const f = await fixture();
+    const before = (await f.db.query('SELECT version,source,meta FROM artifacts WHERE id=$1', [f.pageId])).rows;
+    await expect(f.db.transaction(async tx => {
+      const planned = await planRegisteredMutationRebinds(tx, f.next, [f.prepared.link], f.owner.userId);
+      await tx.query("UPDATE artifacts SET version=2,source=$2,meta=jsonb_set(meta,'{htmlLinks}',$3::jsonb) WHERE id=$1", [f.pageId, f.next.html, JSON.stringify(planned.links)]);
+      await commitRegisteredMutationRebinds(tx, f.next, planned.rebinds);
+      expect((await tx.query('SELECT version FROM html_backend_versions WHERE backend_id=$1', ['be_mutations'])).rows).toHaveLength(2);
+      throw Error('abort publication');
+    })).rejects.toThrow('abort publication');
+    expect((await f.db.query('SELECT version,source,meta FROM artifacts WHERE id=$1', [f.pageId])).rows).toEqual(before);
+    expect(await backendVersions(f.db)).toEqual([f.prepared.link.version]);
+  });
+});

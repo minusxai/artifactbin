@@ -61,7 +61,6 @@ import { createIslandController, holdChartDrawings } from '@/lib/islands/island-
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import { storyUpdateParts } from '@/lib/document/update-parts';
 import { STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
-import { createEditDraftSender, DRAFT_IDLE_MS } from '@/solid/editor/edit-draft';
 import { TYPING_QUIET_MS } from '@/lib/islands/island-controller';
 import type { StoryThemeName } from '@/lib/validation/story-theme-names';
 
@@ -258,7 +257,7 @@ describe('island controller editor drafts', () => {
     controller.dispose();
   });
 
-  it("sends the editor's current theme with every draft: a theme pick, then a text edit, compiles in that theme", async () => {
+  it("compiles each draft in its supplied theme and color mode, including an explicit null theme", async () => {
     engine.state.applied.length = 0;
     const root = document.createElement('div');
     root.setAttribute('data-mx-inline-story', '');
@@ -275,9 +274,9 @@ describe('island controller editor drafts', () => {
     });
     controller.send({ type: 'mx:edit-mode', on: true });
     await settle(() => editSession.mounts > 0);
-    // The editor's own state, as InPlaceEditor holds it: the picked theme lands in a signal, its save is debounced.
+    // Each incoming draft supplies its presentation state independently of stored metadata.
     let theme: StoryThemeName | null = null;
-    const show = createEditDraftSender({ current: controller }, { editId: () => 'e1', theme: () => theme, colorMode: () => 'dark' });
+    const show = (source: string) => controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: storyUpdateParts(source)!.nodes, source, editId: 'e1', theme, colorMode: 'dark' });
     theme = 'terminal';
     show('<p>v0</p>');
     // A text edit straight after, while the theme's metadata save is still pending.
@@ -436,37 +435,25 @@ describe('island controller editor drafts', () => {
     } finally { sheet.remove(); }
   });
 
-  it('typing: held until it pauses, then adopted by the live editor with NO compile, no morph and no remount', async () => {
+  it('adopts typed prose with NO compile, no morph and no remount, then draws a structural draft', async () => {
     editSession.reconcile = true;
     editSession.reconciled.length = 0;
     const { root, controller, fetch } = await editingController(compiled);
     const unmounts = editSession.unmounts;
-    const show = createEditDraftSender({ current: controller }, { editId: () => 'e1', theme: () => null, colorMode: () => 'light' });
-    const sent = vi.spyOn(controller, 'update');
-    for (const text of ['v0 t', 'v0 ty', 'v0 typ']) show(`<p>${text}</p>`, { typing: true });
-    expect(sent).not.toHaveBeenCalled();
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_IDLE_MS + 50));
-    expect(sent).toHaveBeenCalledTimes(1);
-    expect(sent.mock.calls[0]![0]).toMatchObject({ source: '<p>v0 typ</p>', typing: true });
+    const source = '<p>v0 typ</p>';
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: storyUpdateParts(source)!.nodes, source, editId: 'e1', theme: null, colorMode: 'light', typing: true });
     await settle(() => editSession.reconciled.length === 1);
     await tick();
-    // The editor adopted it in place (no compiled draft was even needed): the network and the page never moved.
     expect(editSession.reconciled).toEqual([null]);
     expect(fetch).not.toHaveBeenCalled();
     expect(editSession.unmounts).toBe(unmounts);
     expect(engine.state.applied).toEqual([]);
     expect(root.textContent).toBe('v0');
-    // Anything else is sent at once, and carries the typing held before it.
-    show('<p>held</p>', { typing: true });
-    show('<p>held and moved</p>');
-    expect(sent).toHaveBeenCalledTimes(2);
-    expect(sent.mock.calls[1]![0]).toMatchObject({ source: '<p>held and moved</p>' });
-    expect(sent.mock.calls[1]![0]).not.toHaveProperty('typing');
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_IDLE_MS + 50));
-    expect(sent).toHaveBeenCalledTimes(2);
     editSession.reconcile = false;
+    controller.update({ type: STORY_DOCUMENT_MESSAGE, nodes: storyUpdateParts('<p>held and moved</p>')!.nodes, source: '<p>held and moved</p>', editId: 'e1', theme: null, colorMode: 'light' });
     await settle(() => engine.state.releases.length > 0);
     while (engine.state.releases.length) { engine.state.releases.shift()!(); await tick(); }
+    expect(root.textContent).toBe('held and moved');
     controller.dispose();
   });
 

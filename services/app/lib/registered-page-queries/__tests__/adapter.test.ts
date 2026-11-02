@@ -57,6 +57,8 @@ const backend = {
   secretBindings: [],
 };
 it("pins page bytes/version/backend and refuses forged envelope or SDL", () => {
+  // Persisted before lifecycle extraction: includes exact source, compiled envelope and SDL bytes.
+  expect(prepared.link.version).toBe('581fd3f23407ad6b5a5957d13887d6bf3e1fc8cd26f7a255fc1fb84111ca763e');
   expect(
     registeredPlan(saved, prepared.link, backend)?.registration.pageVersion,
   ).toBe(3);
