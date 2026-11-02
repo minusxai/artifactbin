@@ -14,7 +14,9 @@ export { respondToMutate } from './mutate-http';
 export { completeDocumentMutationReceipt, adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
 
 /** Dataset policies (the policy routes). */
-export { datasetPolicyRequest, readDatasetPolicy, writeDatasetPolicy } from './dataset-policy/http';
+export { writeDatasetPolicy } from './dataset-policy/http';
+/** The stored policy migration (scripts/migrate-dataset-policies.mjs). */
+export { formatMigrationReport, migrateDatasetPolicies, type MigrationDb } from './dataset-policy/migrate';
 
 /** Dataset files and images (four routes). */
 export { readFileRequest, uploadFileRequest } from './dataset-files/file-upload-http';

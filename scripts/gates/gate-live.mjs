@@ -88,7 +88,10 @@ try {
     await watcher.frame.locator("#vote").click();
     const denied = await until(() => watcher.frame.locator("#receipt").textContent(), Boolean);
     check(/rejected|refused/i.test(denied), "page readability and readwrite access do not confer dataset write authority");
-    await api(owner.token, `/api/artifacts/${ds.id}/policy`, {expectedPolicyRevision: 0, policy: {version: 1, enforcement: 'enabled', tables: [{table: {schema: 'public', name: 'rows'}, insert_permissions: [{role: 'viewer', permission: {columns: ['choice'], check: {}}}]}]}}, 'PUT');
+    // Version 3 (the policy API refuses v1/v2): everyone reads, and every role may insert a choice.
+    const roles = ['viewer', 'signed_in', 'anonymous'];
+    const readAll = roles.map((role) => ({role, permission: {columns: '*', filter: {}, allow_aggregations: true}}));
+    await api(owner.token, `/api/artifacts/${ds.id}/policy`, {expectedPolicyRevision: 0, policy: {version: 3, tables: [{table: {schema: 'public', name: 'rows'}, select_permissions: readAll, insert_permissions: roles.map((role) => ({role, permission: {columns: ['choice'], check: {}}}))}]}}, 'PUT');
     await watcher.frame.locator("#refresh").click();
     await watcher.frame.locator("#vote").click();
     const publicReceipt = await until(() => watcher.frame.locator("#receipt").textContent(), Boolean);
@@ -98,7 +101,7 @@ try {
     watcher.frame = await documentFrame(watcher.page);
     await watcher.frame.locator('html[data-af-ready="yes"]').waitFor();
     check(await watcher.frame.locator("#choice").inputValue() === "tacos", "viewer choice survives reload");
-    await api(owner.token, `/api/artifacts/${ds.id}/policy`, {expectedPolicyRevision: 1, policy: {version: 1, enforcement: 'enabled', tables: [{table: {schema: 'public', name: 'rows'}, insert_permissions: []}]}}, 'PUT');
+    await api(owner.token, `/api/artifacts/${ds.id}/policy`, {expectedPolicyRevision: 1, policy: {version: 3, tables: [{table: {schema: 'public', name: 'rows'}, select_permissions: readAll}]}}, 'PUT');
     // Plan §249: the owner is admin-equivalent and never locked out, so the revocation is checked on the open anonymous writer.
     await watcher.frame.locator("#refresh").click();
     await until(() => rows(watcher.frame), (v) => v === "rows: 3");

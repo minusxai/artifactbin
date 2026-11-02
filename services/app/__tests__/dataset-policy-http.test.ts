@@ -100,9 +100,16 @@ it('dry-runs: every problem by path naming the role, table or column, and the re
   expect(dry.body.readBack).toContain('Signed-in link holders, signed-out link holders: no access.');
   expect(dry.body.warnings).toEqual([]);
   expect(await stored(f.id)).toEqual({ policy: null, revision: 0 });
-  // A dry run of a legacy body is refused: only version 3 is checked.
-  const legacy = await put(f.id, f.owner, { policy: { version: 1, enforcement: 'enabled', tables: [] }, dryRun: true });
-  expect(legacy).toMatchObject({ status: 400, body: { error: 'invalid_policy', errors: [{ path: 'version' }] } });
+  // Version 1 and 2 bodies, dry run or save, get the stored-migration refusal pointing at version 3; nothing is saved.
+  for (const policy of [{ version: 1, enforcement: 'enabled', tables: [] }, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }] }, { tables: [] }])
+    for (const extra of [{ dryRun: true }, { expectedPolicyRevision: 0 }]) {
+      const legacy = await put(f.id, f.owner, { policy, ...extra });
+      expect(legacy).toMatchObject({ status: 400, body: { error: 'invalid_policy', errors: [{ path: 'version' }] } });
+      expect(legacy.body.errors[0].message).toMatch(/^Version 1 and 2 dataset policies can no longer be set: send a version 3 policy/);
+    }
+  expect(await stored(f.id)).toEqual({ policy: null, revision: 0 });
+  // Below editor, a legacy body hears the uniform 404, not the refusal.
+  expect(await put(f.id, f.viewer, { policy: { version: 1, tables: [] }, dryRun: true })).toEqual({ status: 404, body: { error: 'not_found' } });
 });
 
 it('saves only at the current revision, answers the read-back, and refuses a stale revision with the current one', async () => {

@@ -8,7 +8,8 @@ import { loadDatasetRows } from '@/lib/datasets';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '@/lib/dataset-graphql/retained';
 import {createDatasetGraphql} from '@/lib/dataset-graphql';
 import {randomUUID} from 'node:crypto';
-import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
+// The policy API serves the app's editor and the read-only view since the old app policy route was retired.
+import { GET as readPolicy, PUT as writePolicy } from '@/app/api/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -29,18 +30,17 @@ async function fixture() {
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Rows</body></html>`});
+  // Version 3 (the door refuses v1/v2 since the stored migration): what the old v1 viewer-insert entry reads as.
   const policy = {
-    version: 1,
-    enforcement: 'enabled',
+    version: 3,
     tables: [
       {
         table: { schema: 'public', name: 'rows' },
-        insert_permissions: [
-          {
-            role: 'viewer',
-            permission: { columns: '*', check: { n: { _gt: 0 } } },
-          },
-        ],
+        select_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({ role, permission: { columns: '*', filter: {}, allow_aggregations: true } })),
+        insert_permissions: ['viewer', 'signed_in', 'anonymous'].map((role) => ({
+          role,
+          permission: { columns: '*', check: { n: { _gt: 0 } } },
+        })),
       },
     ],
   };
@@ -116,7 +116,7 @@ it('cannot evade active policy through ordinary file replacement', async () => {
   });
   const unchanged = (await getArtifactById(f.ds))!;
   expect(unchanged.version).toBe(1);
-  expect(unchanged.dataset_policy).toMatchObject({ enforcement: 'enabled' });
+  expect(unchanged.dataset_policy).toMatchObject({ version: 3 });
 });
 /**
  * THE DATA-LOSS CHECK. Viewers write rows into this dataset, so the owner's
@@ -173,7 +173,10 @@ async function sharedFixture(
     shares: [{ email: user.email, role }],
   });
   const write=()=>f.writeAs(identityForUser(user.id,token.id),'add',3);
-  return { ...f, actor, user, token, session, write };
+  // Private: the rules name shared viewers only (signed_in and anonymous page readers get nothing), as the v1 policy did.
+  const viewers = <E extends { role: string }>(entries: E[]) => entries.filter((e) => e.role === 'viewer');
+  const policy = { ...f.policy, tables: f.policy.tables.map((t) => ({ ...t, select_permissions: viewers(t.select_permissions), insert_permissions: viewers(t.insert_permissions) })) };
+  return { ...f, actor, user, token, session, write, policy };
 }
 it.each(['viewer', 'commenter', 'editor'] as const)(
   'lets a shared %s use the same policy without a separate grant',
@@ -204,12 +207,12 @@ it('lets editors open the visual policy editor', async () => {
   const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const response = await readPolicy(
-    request(`/api/my/artifacts/${f.ds}/policy`, { actor: f.session }),
+    request(`/api/artifacts/${f.ds}/policy`, { actor: f.session, origin: 'same' }),
     { params: Promise.resolve({ id: f.ds }) },
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    canManage: true,
+    source: 'v3',
     policy: f.policy,
   });
 });
@@ -220,7 +223,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
   async (role) => {
     const f = await sharedFixture(role);
     const save = (policy: unknown, revision: number) => writePolicy(
-      request(`/api/my/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session,
+      request(`/api/artifacts/${f.ds}/policy`, {method:'PUT', actor:f.session, origin:'same',
         json:{policy,expectedPolicyRevision:revision}}),
       {params:Promise.resolve({id:f.ds})},
     );
@@ -231,7 +234,7 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
       return;
     }
     expect((await save(f.policy, 0)).status).toBe(409);
-    const changed = {...f.policy, execution:{functions:{deny:['lower']}}};
+    const changed = {...f.policy, tables:[{...f.policy.tables[0]!, delete_permissions:[{role:'viewer',permission:{filter:{}}}]}]};
     expect((await save(changed, 1)).status).toBe(200);
     expect((await getArtifactById(f.ds))?.dataset_policy).toEqual(changed);
     expect((await save(null, 2)).status).toBe(200);

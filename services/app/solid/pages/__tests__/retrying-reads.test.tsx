@@ -93,8 +93,9 @@ describeRetryingRead('the welcome page\'s profile read', () => ({
 
 describeRetryingRead('the dataset\'s read-only data actions', () => ({
   start: () => mount(() => <DatasetActionsView id="ds123" canInspect />),
-  landed: () => text().includes('No data action rules are configured.'),
-}), { matches: (url) => url === '/api/my/artifacts/ds123/policy', ok: ok({ policy: null, writtenBy: [] }), abortable: true });
+  landed: () => text().includes('No rules are saved yet.'),
+  // The view reads the policy API's GET now that the old app policy route is retired.
+}), { matches: (url) => url === '/api/artifacts/ds123/policy', ok: ok({ source: 'none', report: [], readBackTables: [], warnings: [] }), abortable: true });
 
 describeRetryingRead('the dataset access policies', () => ({
   start: () => mount(() => <DatasetPolicies artifactId="ds123" expanded />),

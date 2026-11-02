@@ -27,16 +27,20 @@ const create = (token: string, body: Record<string, unknown>) =>
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
 
 describe('access on the bearer API', () => {
-  it('a dataset is born read-only, and says so on create, read-back and list', async () => {
+  // Dataset permissions v3: a new dataset is born with the read-only template and `readwrite` access (its owner and
+  // editors write; no rule lets anyone else), where it was born `read` with v2 grants that never read the column.
+  it('a dataset is born read-only for everyone but its owner and editors, and says so on create, read-back and list', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, { dataset: ROWS });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string; access: string };
-    expect(body.access).toBe('read');
+    expect(body.access).toBe('readwrite');
+    expect((await getArtifactById(body.id))!.dataset_policy).toMatchObject({ version: 3, tables: [{ table: { schema: 'public', name: 'rows' }, select_permissions: expect.any(Array) }] });
+    expect((await getArtifactById(body.id))!.dataset_policy).not.toHaveProperty('tables.0.insert_permissions');
     const read = (await (await getArtifactRoute(request(`/api/artifacts/${body.id}`, { token: t.token }), params({ id: body.id }))).json()) as { access: string };
-    expect(read.access).toBe('read');
+    expect(read.access).toBe('readwrite');
     const list = (await (await listRoute(request('/api/artifacts', { token: t.token }))).json()) as { artifacts: Array<{ id: string; access: string }> };
-    expect(list.artifacts.find((a) => a.id === body.id)?.access).toBe('read');
+    expect(list.artifacts.find((a) => a.id === body.id)?.access).toBe('readwrite');
   });
 
   it('access: readwrite on create is stored and echoed, with native GraphQL instructions in the usage hint', async () => {
@@ -144,7 +148,8 @@ describe('access on the browser surfaces', () => {
     const ds = ((await (await create(t.token, { dataset: ROWS, visibility: 'public' })).json()) as { id: string }).id;
     const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
     expect(got.status).toBe(200);
-    expect((await got.json()) as object).toMatchObject({ visibility: 'public', access: 'read', shares: [] });
+    // Born readwrite under the read-only template (v3 default).
+    expect((await got.json()) as object).toMatchObject({ visibility: 'public', access: 'readwrite', shares: [] });
     const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
     expect(rw.status).toBe(200);
     expect((await getArtifactById(ds))!).toMatchObject({ access: 'readwrite', visibility: 'unlisted' });

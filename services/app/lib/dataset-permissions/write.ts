@@ -11,8 +11,9 @@
  *    page whose owner holds owner or editor on the dataset. The engine refuses them otherwise.
  *  - A write carried by a document is that document's SQL: the document must be live at the attested edit,
  *    readable by the caller, and its owner must hold owner or editor on the dataset (provenance).
+ *  - A PRIVATE dataset admits signed_in and anonymous callers only through `backend_only` entries (privateCeiling).
  *  - The `access` column stays a ceiling for datasets without v2 grants, owner included (v2 grants never
- *    read it; the stored rewrite decides that column).
+ *    read it; the stored rewrite sets it to readwrite on every migrated v2 dataset, ./migrate).
  */
 import type { DatasetGrantContext, DatasetMutationPolicy, DatasetOperation, DatasetPermissions, DatasetRole, DatasetRuleRole, DatasetTablePermissions, Queryable, Scalar } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
@@ -87,7 +88,9 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
 }
 
 /**
- * COMPATIBILITY until the stored migration (PR 9) shares the dataset with each named person: a v2 write grant
+ * COMPATIBILITY until the stored migration (scripts/migrate-dataset-policies.ts) has been APPLIED everywhere: it shares
+ * the dataset with each named person (editor) and stores v3, after which no row reaches this. Remove it, the
+ * read-side twin in ./read and the harness's v1/v2 seeding then (docs/operations.md). Until then: a v2 write grant
  * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program, and through
  * a trusted program (as v2 did with accepted membership), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
  */
@@ -114,6 +117,28 @@ function namedUserPermissions(tables: readonly DatasetTablePermissions[], role: 
   };
 }
 
+/**
+ * THE PRIVATE CEILING (plan §3/§8: "dataset is private: signed_in and anonymous rules never apply"). On a private
+ * dataset a signed_in or anonymous caller (a page reader without a share) keeps only its `backend_only` entries,
+ * which already need a trusted program on a page whose owner administers the dataset. Stored v1 entries are
+ * viewer-only there already (./to-v3); for v2 and v3 this is the ceiling v2 grants always had.
+ */
+function privateCeiling(row: Pick<ArtifactRow, 'visibility'>, role: DatasetRuleRole, policy: DatasetPermissions): DatasetPermissions {
+  if (row.visibility !== 'private' || role === 'viewer') return policy;
+  return {
+    version: 3,
+    tables: policy.tables.map((table) => {
+      const out: DatasetTablePermissions = { ...table };
+      for (const op of MUTATIONS) {
+        const key = `${op}_permissions` as const;
+        const kept = table[key]?.filter((entry) => entry.role !== role || entry.permission.backend_only);
+        if (kept) (out as unknown as Record<string, unknown>)[key] = kept;
+      }
+      return out;
+    }),
+  };
+}
+
 /** The one write decision. `row` is the dataset head the caller read (its policy revision is part of the answer). */
 export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, options: DatasetWriteOptions = {}): Promise<DatasetWriteDecision> {
   const db = options.tx ?? await getDb();
@@ -133,7 +158,8 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
     const session: Record<string, Scalar> = { 'x-hasura-role': role, 'x-hasura-user-id': actor.userId! };
     return { allowed: true, admin: false, role, revision, permissions: namedUserPermissions(read.policy.tables, role, named), trusted: false, session, ...(read.execution ? { execution: read.execution } : {}) };
   }
-  const tables = read.policy.tables;
+  const policy = privateCeiling(row, role, read.policy);
+  const tables = policy.tables;
   const entries = tables.flatMap((table) => MUTATIONS.map((op) => entryFor(table, op, role)).filter((entry) => !!entry));
   if (!entries.length) return { allowed: false, role, revision, reason: 'no_rule' };
   const isTrusted = entries.some((entry) => entry.permission.backend_only) && await trusted(row, actor, options, db);
@@ -143,7 +169,7 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
     ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
-  return { allowed: true, admin: false, role, revision, permissions: read.policy, trusted: isTrusted, session, ...(read.execution ? { execution: read.execution } : {}) };
+  return { allowed: true, admin: false, role, revision, permissions: policy, trusted: isTrusted, session, ...(read.execution ? { execution: read.execution } : {}) };
 }
 
 /** Can this decision insert anything (the file and image doors, which name no table)? */

@@ -4,9 +4,8 @@
  * with it (scheduled inside the write, announced after it).
  */
 import {expect,it} from 'vitest';
-import {useAppHarness} from '@/__tests__/harness';
+import {setDatasetPolicy,useAppHarness} from '@/__tests__/harness';
 import { seedOwnerJoin } from '@/lib/social';
-import {writeDatasetPolicy} from '@/lib/document-data';
 import {account,datasetFixture as fixture,document,refusal,write} from './dataset-fixture';
 
 useAppHarness();
@@ -14,7 +13,8 @@ useAppHarness();
 it('honours a cross-document grant only for members acting through a trusted program of a dataset admin',async()=>{
  const f=await fixture(),member=await account('member'),granted=await document(f.db,'docGranted',f.owner),other=await document(f.db,'docOther',f.owner);
  const policy={version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:granted.id}}]};
- const saved=await writeDatasetPolicy(f.owner.actor,f.id,{policy,expectedPolicyRevision:0});expect(saved.status,await saved.clone().text()).toBe(200);
+ // A stored v2 policy (seeded: no door sets v1/v2 since the stored migration).
+ expect(await setDatasetPolicy(f.owner.actor,f.id,policy,0)).toMatchObject({revision:1});
  const target={schema:'public',table:'rows'},sql='insert into public.rows values (7)';
  expect(refusal(await write(await f.row(),member.actor,sql,{document:granted,target}))).toBe('dataset_read_only');
  await seedOwnerJoin(f.db,granted.id,member.id);await seedOwnerJoin(f.db,other.id,member.id);

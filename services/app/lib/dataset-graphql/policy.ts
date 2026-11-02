@@ -10,9 +10,10 @@
  * Write: a v3 body is validated against the dataset's own tables and columns, every problem by JSON path; a dry
  * run answers the read-back and saves nothing; a save is a compare-and-swap on the policy revision
  * (lib/artifacts `commitDatasetPolicy`, which also fences content and sharing). `configuration` names the API,
- * so it is server-owned: a body omits it (the stored one is kept) or sends it unchanged. A version 1/2 or null
- * body goes to the retained policy door unchanged (lib/document-data `writeDatasetPolicy`), whose refusal of
- * those versions is the one every policy door gives.
+ * so it is server-owned: a body omits it (the stored one is kept) or sends it unchanged. A version 1/2 body (any
+ * object that is not version 3), dry run or save, is refused with LEGACY_POLICY_REFUSED, the refusal every policy
+ * door gives; a null save clears the stored policy (read as the read-only template) through lib/document-data
+ * `writeDatasetPolicy`.
  *
  * Anyone below editor, and any non-dataset or Postgres-backed id, gets the uniform 404.
  */
@@ -29,7 +30,7 @@ import { datasetPermissionsTemplate, readBackDatasetPermissions, validateDataset
 import type { AccessActor } from '@/lib/accounts';
 import { commitDatasetPolicy, getArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { toV3 } from '@/lib/dataset-permissions';
-import { catalogOf, type DatasetTable } from '@/lib/datasets';
+import { catalogOf, LEGACY_POLICY_REFUSED, type DatasetTable } from '@/lib/datasets';
 import { writeDatasetPolicy } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
 import { hasuraNames, storedConfiguration } from './hasura-names';
@@ -105,7 +106,11 @@ function keepConfiguration(policy: DatasetPermissions, stored: unknown): { polic
 export async function writeDatasetPermissions(actor: AccessActor, id: string, body: Record<string, unknown>): Promise<PolicyReply> {
   const value = body.policy, dryRun = body.dryRun === true;
   const v3 = !!value && typeof value === 'object' && (value as { version?: unknown }).version === 3;
-  if (!v3 && !dryRun && Object.hasOwn(body, 'policy') && (value === null || typeof value === 'object')) {
+  if (!v3 && value && typeof value === 'object') {
+    if (!await editable(actor, id)) return NOT_FOUND;
+    return invalid([{ path: 'version', message: LEGACY_POLICY_REFUSED }]);
+  }
+  if (value === null && !dryRun && Object.hasOwn(body, 'policy')) {
     const response = await writeDatasetPolicy(actor, id, body);
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }

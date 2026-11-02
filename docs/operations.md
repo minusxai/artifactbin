@@ -83,6 +83,52 @@ See [runner configuration](../services/runner/README.md) and
 - Never run two processes against the same PGLite directory. External PostgreSQL
   supports separate processes; each still needs access to the same object store.
 
+## Dataset policy migration (stored v1/v2 → v3)
+
+Dataset permissions are version 3 (Hasura metadata shape). Every door already reads a stored
+version 1 or 2 policy as v3; `scripts/migrate-dataset-policies.ts` rewrites the stored rows so that
+compatibility can be removed. Nothing changes what any door enforces, except the cases it reports.
+
+1. **Dry run** (the default; one `READ ONLY` transaction, a read-only database role is enough):
+   `node --import tsx scripts/migrate-dataset-policies.ts --database "$URL" --json report.json`.
+   `--database` defaults to `DATABASE_URL` (`postgres://…`, or `pglite://<dir>` with the server
+   stopped). The script opens its own connection: no schema DDL or boot backfill runs. It prints
+   counts by stored shape, outcome and report code, then one line per dataset that needs a look;
+   `--json` writes the same report. IDs only (datasets, pages, accounts): no titles, emails or rows.
+2. **Review** the report, then **apply** with `--apply` (same flags). Each dataset is one
+   transaction under its row lock, re-planned inside it: the v3 policy, the `access` column and
+   the shares below, a bumped `policy_revision` and a `dataset_policy_audit` row with no actor
+   (`system`). Datasets with no report items go first; `--limit <n>` stops after n.
+3. **Rerun** to resume after a crash or a limit: v3 rows are skipped, so reruns are idempotent.
+   Exit 1 means a dataset was not rewritten (`invalid_policy`, `failed`); fix or ask its owner,
+   then rerun. No door stores version 1 or 2 anymore (every policy door refuses them), so one
+   complete run leaves nothing to migrate.
+
+What the rewrite decides beyond the plain mapping:
+
+- **Named people** in v2 grants (`from:{user:<id>}`) are **shared** on the dataset: `editor` for
+  a write grant (an editor can do everything, a widening the report names as
+  `write_named_user`), `viewer` for a read grant. An existing share is never lowered. A person
+  without an account or address, or whose address now belongs to another account, is
+  `share_unresolved` and keeps no access once the compatibility is removed.
+- **`access` column**: v2 grants never read it, v3 honours it as a ceiling on every write, so
+  each migrated v2 dataset gets `readwrite` (owners and editors keep writing; v2's own lock was
+  its grants, which carry over as rules). None and v1 datasets keep theirs.
+- **Page-scoped grants** become `backend_only` entries (`write_page_scoped`, with the pages and
+  owners): they work only through a trusted program whose page owner holds owner or editor on
+  the dataset. Page-scoped reads widen to viewers and signed-in link holders (`read_page_scoped`).
+- **Signed-out v1 writes** are kept for the anonymous role (`anonymous_write`); every
+  rule-admitted write is rate-limited per dataset (30 a minute). **Function lists** are dropped
+  (`functions_dropped`).
+- **Private datasets**: signed-in and signed-out page readers pass a private dataset's ceiling only
+  through a page its owner or an editor wrote (and write only through `backend_only` entries), for
+  every policy version. Stored v2 grants never let them past it at all, so a private v2 dataset
+  loses its signed-in and signed-out select rules.
+- Connected PostgreSQL datasets carry no stored policy and are skipped.
+
+After `--apply` has run everywhere, remove the named-user compatibility (`namedUserWrites` in
+`lib/dataset-permissions/write.ts`, the v2 branch in `read.ts`) and the harness's v1/v2 seeding.
+
 ## Verification
 
 Run `npm run validate` and `npm test` for affected checks. Full suites, browser
