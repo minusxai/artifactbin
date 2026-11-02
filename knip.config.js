@@ -85,6 +85,9 @@ export default {
         /^@fontsource(-variable)?\//,
         // Loaded through createRequire: the S3 presigner (lib/object-store) and HarfBuzz's wasm (lib/mermaid-images/fonts).
         '@aws-sdk/s3-request-presigner', 'harfbuzzjs',
+        // runner-page-boundary.test.ts bundles proposal .txt fixtures through esbuild.
+        // These runtime imports are inside retained source strings, not the application graph.
+        'preact', '@preact/signals',
         // Plugins of the root vite/vitest configs this workspace's build and test scripts run.
         '@rollup/plugin-yaml', '@tailwindcss/vite',
         // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.

@@ -214,8 +214,14 @@ it('keeps the proposal install separate and test-support owned by its test consu
   const readPkg = file => JSON.parse(readFileSync(path.join(REPO_ROOT, file), 'utf8'));
   expect(readPkg('package.json').workspaces).not.toContain('docs/proposals/runner-validation');
   const lock = readPkg('package-lock.json');
-  for (const key of ['docs/proposals/runner-validation', 'node_modules/artifactbin-runner-design-validation', 'node_modules/@preact/signals', 'node_modules/preact']) {
+  for (const key of ['docs/proposals/runner-validation', 'node_modules/artifactbin-runner-design-validation']) {
     expect(lock.packages, key).not.toHaveProperty(key);
+  }
+  // App boundary tests bundle the retained native-page fixture outside the proposal workflow.
+  const app = readPkg('services/app/package.json');
+  for (const name of ['preact', '@preact/signals']) {
+    expect(app.devDependencies[name]).toBe(readPkg('docs/proposals/runner-validation/package.json').dependencies[name]);
+    expect(app.dependencies).not.toHaveProperty(name);
   }
   for (const service of ['events', 'runner']) {
     const manifest = readPkg(`services/${service}/package.json`);
