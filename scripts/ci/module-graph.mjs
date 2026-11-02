@@ -355,10 +355,7 @@ export const DEEP_MODULES = {
   'lib/story-edit': { ...bundled('lib/story-edit'), serverOnly: [''] },
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
-  // Loaded by file path, outside the app's `@/` resolution: model from a target checkout
-  // (scripts/lib/native-migration-disposable-provider.ts), url by the plain-Node migration CLI.
-  'lib/native-identity-import': { entries: ['', 'model'] },
-  'lib/object-store': { entries: ['', 'url'] },
+  'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
 };

@@ -2,7 +2,8 @@ name: runner design validation
 on:
   pull_request:
     paths:
-      - 'docs/proposals/runner-validation/**'
+      - 'scripts/runner-os-boundary.mjs'
+      - 'services/test-support/src/runner-model.mjs'
       - 'services/runner/**'
       - 'services/app/**/runner*'
       - 'services/app/lib/runner/**'
@@ -45,24 +46,15 @@ jobs:
           node-version: 22.23.4
           cache: npm
       - run: npm ci
-      - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
-      - run: docker build -t runner-design-worker docs/proposals/runner-validation
+      - run: docker build -f services/runner/Dockerfile -t artifactbin-worker .
       - name: Retained page boundary and retired public execution doors
         env:
-          RUNNER_VALIDATION_DOCKER: runner-design-worker
+          RUNNER_TEST_IMAGE: artifactbin-worker
         run: npm test -- --files services/app/__tests__/runner-page-boundary.test.ts services/app/server/__tests__/retired-execution.test.ts
-      - run: docker build -f services/runner/Dockerfile -t artifactbin-worker .
       - name: Retained product worker isolation and operation authority
         env:
           RUNNER_TEST_IMAGE: artifactbin-worker
         run: npm test -- --files services/runner/__tests__/runner-service.test.ts services/runner/__tests__/runner-container-lifecycle.test.ts services/runner/__tests__/runner-orchestration.test.ts services/app/__tests__/page-graphql.test.ts services/app/lib/page-operations/__tests__/backend.test.ts services/app/lib/page-operations/__tests__/runtime.test.ts
-      - name: Prove OS restrictions independently of V8
-        run: node docs/proposals/runner-validation/os-boundary.mjs runner-design-worker
-      - name: Prove real PostgreSQL concurrency
-        env:
-          RUNNER_VALIDATION_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
-          RUNNER_VALIDATION_DOCKER: runner-design-worker
-        run: node docs/proposals/runner-validation/postgres-proof.mjs
       - name: Product transactions on PostgreSQL
         env:
           RUNNER_TEST_DATABASE: postgres://postgres:validation@127.0.0.1:5432/runner_validation
@@ -70,8 +62,6 @@ jobs:
         run: |
           node scripts/build/build-server.mjs dist/runner-proof.mjs services/runner/prove-postgres.ts
           node dist/runner-proof.mjs
-      - run: node docs/proposals/runner-validation/os-boundary.mjs artifactbin-worker
+      - run: node scripts/runner-os-boundary.mjs artifactbin-worker
       - name: Verify product worker cleanup
         run: test -z "$(docker ps -aq --filter label=artifactbin.runner=true)"
-      - name: Verify worker cleanup
-        run: test -z "$(docker ps -aq --filter label=artifactbin.runner-validation=true)"

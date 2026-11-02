@@ -13,7 +13,8 @@
     "./temp": "./src/temp.ts",
     "./db": "./src/db.ts",
     "./mail": "./src/mail.ts",
-    "./browser": "./src/browser.ts"
+    "./browser": "./src/browser.ts",
+    "./runner-model": "./src/runner-model.mjs"
   },
   "files": [
     "src"

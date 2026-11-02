@@ -20,7 +20,7 @@ export { placeholderSession, policySession, viewerMutationPolicy } from './polic
 export { discoverPostgres, queryPostgres } from './postgres';
 export { schemaLoaderFor } from './schema-loader';
 export type { ServerRef, ServerRefLoader } from './schema-loader';
-export { datasetSecretTargetHash, openDatasetSecret, sealDatasetSecret } from './secret-crypto';
+export { openDatasetSecret, sealDatasetSecret } from './secret-crypto';
 export { claimPendingDatasetSecret, createDatasetSecret, resolveDatasetConnection } from './secrets';
 export type {
   CatalogInput, DatasetCatalog, DatasetConnection, DatasetNotebook, DatasetTable, DiscoveredTable, NotebookCell,

@@ -1,2 +1,0 @@
-export interface LatestHeadUpdate {sourceId:string;version:number;canonical:{path:string;sha256:string;bytes?:number};sourceRowSha256:string;readOnlyProof:{path:string;sha256:string}}
-export interface LatestSelectionRefresh {originalPlan:{path:string;sha256:string};originalSelection:{path:string;sha256:string};policy:{path:string;sha256:string};identity:{path:string;sha256:string};digestModule:string;receiptRoot:string;output:string;updates:LatestHeadUpdate[]}
