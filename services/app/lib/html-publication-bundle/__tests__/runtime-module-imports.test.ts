@@ -72,7 +72,7 @@ it("uses the same closed-adapter proof in the Node-only snapshot helper", async 
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { prepareBundle } =
-    await import("../../../skills/artifactbin/scripts/publication-bundle.mjs");
+    await import("../../../skills/artifactbin/scripts/toolbox-publication-bundle.mjs");
   const root = await mkdtemp(join(tmpdir(), "runtime-module-urls-"));
   try {
     await writeFile(

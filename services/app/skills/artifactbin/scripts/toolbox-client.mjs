@@ -63,6 +63,19 @@ export async function safeParent(file){const parent=await realpath(path.dirname(
   file)));return path.join(parent,path.basename(file));}
 export function within(root,file){const relative=path.relative(root,file);return relative===''||
   relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative);}
+/** Shared origin-bound JSON transport. Callers own credential selection, retry and refusal policy. */
+function requestUrl(server,route){
+ const url=new URL(route,server);
+ if(url.origin!==server||!route.startsWith('/')||route.startsWith('//')||route.includes('\\'))
+  throw new ToolError('origin_mismatch','Refused a request outside the selected origin.',2);
+ return url;
+}
+export function originRequest(server,route,{method='GET',body,headers={},signal},fetcher=fetch){
+ const url=requestUrl(serverOrigin(server),route);
+ return fetcher(url.href,{method,redirect:'error',...(signal?{signal}:{}),
+  headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...headers},
+  ...(body===undefined?{}:{body:JSON.stringify(body)})});
+}
 export function makeClient(server,{env=process.env,fetcher=fetch,retryDelays=undefined}={}){
  server=serverOrigin(server);const root=credentialRoot(env);
  async function grant(){
@@ -81,20 +94,17 @@ if(saved.expiresAt&&saved.expiresAt<Date.now()+30000){try{saved=await shared.ref
  /** @param {string} route @param {any} options */
 async function request(route,{method='GET',body,headers={},unsafe=false,safeToRepeat=false,raw=
    false,timeoutMs=30000,authenticated=true,signal}={}){
-const url=new URL(route,server);if(url.origin!==server||!route.startsWith('/')||route.startsWith(
-    '//')||route.includes('\\'))throw new ToolError('origin_mismatch',
-    'Refused a request outside the selected origin.',2);
+requestUrl(server,route);
   let connection=authenticated?await grant():null;
   for(let attempt=0;attempt<2;attempt++){
    let response;
    // Transient outage (a deploy restart): the shared policy (lib/http/retry) retries network errors
    // and 502/503/504 — reads, declared-safe requests and keyed writes only, the same
    // Idempotency-Key every time; never 4xx.
-try{response=(await (await platform()).retryFetch(()=>fetcher(url,{method,redirect:'error',signal:
-     signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
+try{response=(await (await platform()).retryFetch(()=>originRequest(server,route,{method,body,
+     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),
      headers:{'X-Artifactbin-Protocol':'native-author-v1',Origin:server,...(connection?{
-     Authorization:'Bearer '+connection.token}:{}),...(body===undefined?{}:{'Content-Type':
-     'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),{
+     Authorization:'Bearer '+connection.token}:{}),...headers}},fetcher),{
      method,idempotencyKey:headers['Idempotency-Key'],safeToRepeat,signal,policy:retryDelays?{
      delaysMs:retryDelays}:undefined})).response;}
 catch{throw new ToolError(unsafe?'outcome_unknown':'network_unavailable',

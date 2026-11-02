@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import {readFile,realpath} from 'node:fs/promises';
-import {prepareBundle} from './publication-bundle.mjs';
+import {prepareBundle} from './toolbox-publication-bundle.mjs';
 import {finishPublication} from './toolbox-publish-finish.mjs';
 export {finishPublication};
 import {ToolError,makeClient,selectedServer,serverOrigin,positional,enumValue,jsonFile,optionalFile,

@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { mountRoutes } from '../api';
+import { createAppServer } from '../app';
 import { ROUTES } from '../routes.generated';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -60,4 +61,27 @@ describe('handlers through Hono', () => {
   it('decodes params before the handler sees them (an encoded id is the id)', async () => {
     expect((await app.request('/api/artifacts/%41b3xK9')).status).toBe(401); // reached the handler (bearer missing), not a 404 from routing
   });
+});
+
+// Exercise the full server: a missing explicit non-API route can reach the SPA shell.
+it('retired authoring routes preserve their HTTP refusal independently of credentials', async () => {
+  const app = createAppServer({indexHtml: async () => '<main>SPA shell</main>'});
+  const actor = await mintToken('retired-route');
+  const paths = [
+    ['/a/abc123/draft-preview', ['GET', 'POST']],
+    ['/a/abc123/viewer', ['GET']],
+    ...['/api/artifacts', '/api/my/artifacts'].flatMap(base =>
+      ['edits', 'prepare'].map(tail => [base + '/abc123/' + tail, ['POST']])),
+  ] as [string, string[]][];
+  for (const [path, methods] of paths) for (const method of methods) {
+    for (const authorization of [undefined, 'Bearer invalid', `Bearer ${actor.token}`]) {
+      const response = await app.request(path, {method, headers: {
+        accept: 'text/html', ...(authorization ? {authorization} : {}),
+      }});
+      expect(response.status, method + ' ' + path).toBe(404);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      expect(response.headers.get('cache-control')).toBeNull();
+      expect(await response.text()).toBe('{"error":"not_found"}');
+    }
+  }
 });
