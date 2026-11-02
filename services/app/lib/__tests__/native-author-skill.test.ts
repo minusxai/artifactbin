@@ -74,6 +74,7 @@ describe('one installable native HTML author skill',()=>{
   for(const name of ['components/tabs.ts','components/accordion-model.ts','scripts/preview-html.mjs','scripts/preview-datasets.mjs','scripts/toolbox-platform.mjs','scripts/preview-platform.mjs'])expect(members).toContain(name);
   expect(members.some(name=>/^components\/(?:deck-gl|mermaid)/.test(name))).toBe(false);
   // 1.6 MiB: the data-driven examples, their steps files and the generator are worth more to agents than the bytes.
+  process.stdout.write(`Stored native skill ZIP bytes: ${archive.byteLength}\n`);
   expect(archive.byteLength).toBeLessThan(1.6*1024*1024);
  });
  it('keeps public guides concise and every installed guide link within the actual archive',()=>{
@@ -98,7 +99,7 @@ describe('one installable native HTML author skill',()=>{
    execFileSync('unzip',['-q',zip,'-d',dir]);
    const installed=path.join(dir,'artifactbin');
    expect(readFileSync(path.join(installed,'SKILL.md'),'utf8')).toContain('normal HTML');
-   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview','autofix'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
+   for(const script of ['auth','serve','publish','read','export','check','graphql','comment','publication-bundle','preview','autofix','groups'])expect(execFileSync(process.execPath,[path.join(installed,'scripts',script+'.mjs'),'--help'],{cwd:dir,encoding:'utf8'}),script).toContain('Usage:');
    // The installed autofix runs standalone and edits only the selected file.
    const page=path.join(dir,'page.html');writeFileSync(page,'<!doctype html><html><head><title>T</title></head><body><p>x</p></body></html>');
    expect(execFileSync(process.execPath,[path.join(installed,'scripts/autofix.mjs'),page],{cwd:dir,encoding:'utf8'})).toMatch(/^autofix: 2 fixed — written to page\.html/);
@@ -128,7 +129,7 @@ describe('the shipped skill folder',()=>{
  it('contains exactly the intended reference guides, so new ones cannot creep in unnoticed',()=>{
   const files=skillPackageFiles(skillTree(),BASE);
   const refs=Object.keys(files).filter(name=>/^references\//.test(name)).sort();
-  expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/maps.md','references/runtime.md']);
+  expect(refs).toEqual(['references/backends.md','references/datasets.md','references/dataviz.md','references/diagrams.md','references/groups.md','references/maps.md','references/runtime.md']);
   // The design systems ship as self-documenting stylesheets, not guides.
   expect(Object.keys(files).filter(name=>/^design-systems\/[a-z0-9-]+\.css$/.test(name))).toHaveLength(13);
   // Direct-HTTP guides are served at /llms/TOPIC but never packed; the packed SKILL.md must not link them.

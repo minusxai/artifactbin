@@ -1,7 +1,7 @@
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {readFile} from 'node:fs/promises';
-import {build} from 'esbuild';
+import {build,transform} from 'esbuild';
 import { IS_DEV } from '@/lib/platform';
 /** The deployed app cwd owns skill/source paths, including after server relocation.
  * Production inputs are immutable. Development cache keys cover the local export
@@ -52,4 +52,14 @@ async function bundleToolboxPlatform():Promise<string>{
  }};
  const result=await build({entryPoints:[path.resolve('skills/artifactbin/scripts/toolbox-platform.mjs')],bundle:true,write:false,minify:true,legalComments:'none',format:'esm',platform:'node',target:'node22',plugins:[siblings]});
  const text=result.outputFiles?.[0]?.text;if(!text)throw Error('Toolbox platform build was empty');return text;
+}
+
+/** Preserve names, exports, imports and literals; remove only formatting from shipped scripts.
+ * Raw sources remain readable in the repository. This is code generation, not ZIP compression:
+ * stored members remain readable by every installed updater. */
+export async function compactSkillScript(source:string):Promise<string>{
+ // --help extracts DESCRIPTION from source with a formatting-sensitive installed reader.
+ // Keep command entry points verbatim; only implementation helpers need compaction.
+ if(/^export const DESCRIPTION = `/m.test(source))return source;
+ return (await transform(source,{loader:'js',minifyWhitespace:true,legalComments:'none',target:'node22'})).code;
 }

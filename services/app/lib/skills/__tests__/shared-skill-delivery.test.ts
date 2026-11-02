@@ -1,3 +1,4 @@
+import {compactSkillScript} from '../preview-assets.server';
 import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic,isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
@@ -73,7 +74,7 @@ describe('installable shared skill folder',()=>{
   try{
    const zip=path.join(dir,'artifactbin.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
    execFileSync('unzip',['-q','-n',zip,'-d',dir]);
-   for(const [name,text] of Object.entries(expected).filter(([name])=>!['scripts/preview-html.mjs','scripts/toolbox-config.mjs','scripts/toolbox-platform.mjs'].includes(name)))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   for(const [name,text] of Object.entries(expected).filter(([name])=>!['scripts/preview-html.mjs','scripts/toolbox-config.mjs','scripts/toolbox-platform.mjs'].includes(name)))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(name.startsWith('scripts/')?await compactSkillScript(text):text);
    const config=await import(pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-config.mjs')).href);
    expect(config.default).toBe(origin);
    const platform=await import(/* @vite-ignore */ pathToFileURL(path.join(dir,'artifactbin/scripts/toolbox-platform.mjs')).href);
@@ -220,4 +221,28 @@ it('keeps the served release within the unchanged installed updater limit',async
  expect(files['scripts/preview-runtime.mjs']).toBeUndefined();
  expect(files['scripts/preview-libraries.mjs']).toBeUndefined();
  console.log('Stored served skill ZIP bytes:',bytes.byteLength,'installed updater limit:',limit);
+});
+
+it('compacts script whitespace without changing exports, literals, ASI or executable hashbangs',async()=>{
+ const source = `#!/usr/bin/env node
+// packaging-only explanation
+export const preservedName = "literal  with // spaces";
+export function result(value) {
+ // Automatic semicolon insertion must survive packaging.
+ return
+ value;
+}
+`;
+ const compact=await compactSkillScript(source);
+ expect(compact.startsWith('#!/usr/bin/env node\n')).toBe(true);
+ expect(compact).not.toContain('packaging-only explanation');
+ expect(Buffer.byteLength(compact)).toBeLessThan(Buffer.byteLength(source));
+ const installed=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(compact.replace(/^#![^\n]*\n/,'')).toString('base64'));
+ expect(installed.preservedName).toBe('literal  with // spaces');
+ expect(installed.result(42)).toBeUndefined();
+});
+
+it('preserves source-readable command descriptions verbatim for installed help readers',async()=>{
+ const source='export const DESCRIPTION = `Usage: node scripts/command.mjs\n  --help`;\nexport const run = () => 42;\n';
+ expect(await compactSkillScript(source)).toBe(source);
 });
