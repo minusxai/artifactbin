@@ -11,7 +11,6 @@ import { GET as read,DELETE as remove,PUT as replace } from '@/app/api/artifacts
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
 import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as create,GET as list } from '@/app/api/artifacts/route';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { createArtifact,getArtifactById,updateSharingFor } from '@/lib/artifacts';
 import { ownedArtifactState } from '@/lib/workspace';
@@ -56,9 +55,9 @@ describe('cli-restore', () => {
 
   it('delete and restore stay owner-only, and a refused caller never claims the operation key',async()=>{
    const owner=await createUser({email:'mxmx_test_restore_owner@example.com'});
-   const ownerToken=await mintToken('mxmx_test_restore_owner', owner.id);await claimToken(owner.id,ownerToken.token);
+   const ownerToken=await mintToken('mxmx_test_restore_owner', owner.id);
    const editor=await createUser({email:'mxmx_test_restore_editor@example.com'});
-   const editorToken=await mintToken('mxmx_test_restore_editor', editor.id);await claimToken(editor.id,editorToken.token);
+   const editorToken=await mintToken('mxmx_test_restore_editor', editor.id);
    const created=await(await create(request('/api/artifacts',{method:'POST',token:ownerToken.token,json:{html:nativeSource('<p>Shared</p>')}}))).json();
    await updateSharingFor(identityForUser(owner.id, ownerToken.id),created.id,{shares:[{email:'mxmx_test_restore_editor@example.com',role:'editor'}]});
 

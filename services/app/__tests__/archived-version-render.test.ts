@@ -20,7 +20,6 @@ import {observedRequest} from './conditional-request';
 import { updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -88,7 +87,6 @@ describe('who may open an archived version', () => {
   const account = async (email: string) => {
     const user = await createUser({ email });
     const token = await mintToken(email, user.id);
-    await claimToken(user.id, token.token);
     return token;
   };
 

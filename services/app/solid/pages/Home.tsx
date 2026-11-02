@@ -13,7 +13,6 @@ import { homeBootstrapKey, type HomeBootstrap, type HomeCore, type HomeInsights 
 import { dropServedFrame } from '@/solid/lib/served-frame';
 import WorkspaceShell from '../components/WorkspaceShell';
 import GetStarted from '../components/GetStarted';
-import ClaimBanner from '../components/ClaimBanner';
 import SharedWithYou from '../components/SharedWithYou';
 import Shelf from '../components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '../components/WorkspaceLayout';
@@ -92,7 +91,6 @@ function PersonalHomePage(props:{core:PersonalCore}): JSX.Element {
     <Show when={account()} fallback={<main class={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}><Show when={failed()} fallback={<WorkspaceSkeleton />}><div role="alert"><p>Could not load your workspace.</p><Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={session() ? load : reload}>Try again</Button></div></Show></main>}>
       {workspace => <main class={HOME_WORKSPACE_COLUMN}>
         <Show when={empty()}><WorkspaceShell personal onCreated={load}><div class="workspace-page"><div class="mb-8 sm:mb-10"><h1 aria-label={greeting()} class="font-serif text-[clamp(1.6rem,3.4vw,2.25rem)] leading-[1.15] font-medium tracking-[-0.01em] text-fg">{greeting()}</h1><p class="mt-1.5 font-sans text-sm text-muted">Hand an agent the instruction below along with what artifact you want, and follow along.</p></div><div class="mb-6"><GetStarted destination={{type:'personal'}} /></div><a href="/datasets/new?personal=1" aria-label="Create dataset" class="inline-flex items-center gap-2 text-accent"><DatabasePlus size={15} />Create dataset</a></div></WorkspaceShell></Show>
-        <ClaimBanner />
         <Show when={failed()}><div role="alert">Could not refresh your workspace. <Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={load}>Try again</Button></div></Show>
         <Show when={!empty()}><WorkspaceLayout personal workspace={workspace()} insights={detail()} insightsError={Boolean(insights.error())} onCreated={load}>
           <WorkspaceHeading title="Artifacts"><span class="workspace-heading-meta">{workspace().artifacts.filter(row => row.format === 'html').length} artifacts</span></WorkspaceHeading>

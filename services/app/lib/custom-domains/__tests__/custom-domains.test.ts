@@ -22,7 +22,6 @@ import { parseCustomDomainsTarget } from '@/lib/platform';
 import { attachDomain, domainOf, domainResolver, isServable, setDomainResolver, startDomainRecheck, normalizeHostname, ownerForHost, recheckDomains, removeDomain, verifiedHostOf, verifyDomain, type CaaRecord, type DomainResolver } from '@/lib/custom-domains';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
 import { identityForUser, mintToken, createTestUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -255,9 +254,8 @@ describe('removing, serving and the flag', () => {
   });
 
   it('goes with the account: erasing a test user erases its domain', async () => {
-    const token = await mintToken('parent');
     const parent = await createUser({ email: 'parent@example.com' });
-    await claimToken(parent.id, token.token);
+    const token = await mintToken('parent', parent.id);
     const minted = await createTestUser(identityForUser(parent.id, token.id));
     if (!minted.ok) throw new Error(minted.message);
     const domain = await attached(minted.id, 'tester.example.org');

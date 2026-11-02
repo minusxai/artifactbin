@@ -31,7 +31,6 @@ import { listArtifactsFor } from '@/lib/artifacts/testing';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();
@@ -66,10 +65,8 @@ beforeEach(() => noSession());
 async function world(markup = PROSE, visibility: 'public' | 'private' = 'public') {
   const owner = await createUser({ email: 'owner@x.com' });
   const ta = await mintToken('a', owner.id);
-    await claimToken(owner.id, ta.token);
   const bob = await createUser({ email: 'bob@x.com' });
   const tb = await mintToken('b', bob.id);
-    await claimToken(bob.id, tb.token);
   // `anon` is a legacy anonymous token (no account); `independent` is a token with an account of its own.
   const anon = await mintToken('anon',null);
   const independent = await mintToken('independent-account');

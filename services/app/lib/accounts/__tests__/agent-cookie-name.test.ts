@@ -1,20 +1,4 @@
-/**
- * ONE COOKIE, ONE NAME — the app and the proxy must agree, or the browser
- * holds a session neither side can read.
- *
- * The proxy SETS this cookie and the app READS it, and they decided its name
- * from different questions: the app from `NODE_ENV`, the proxy from whether
- * the base URL is https. Over https in production they happen to agree. Over
- * HTTP in production they do not — the proxy writes `mx-agent-session` (a
- * `__Host-` cookie cannot exist without Secure) while the app looks for
- * `__Host-mx-agent-session` and finds nothing. That is the README's own
- * self-host default (`http://localhost:3030`), where it cost the whole claim
- * flow: a person published anonymously, signed up, and was never offered
- * their drafts — measured against the built image, silently, because the
- * endpoint answers an empty list rather than an error.
- *
- * The rule is the one the prefix itself imposes: the name follows SECURE.
- */
+/** Legacy cookie clearing follows the scheme so host-only secure cookies are removed correctly. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cookieName } from '@artifactbin/utils';
 
@@ -41,18 +25,10 @@ describe('the agent cookie is named by ONE rule', () => {
     expect(await appCookieName('development', 'http://localhost:3000')).toBe(cookieName(false));
   });
 
-  it('marks the cookie Secure exactly when its name demands it', async () => {
+  it('clears the cookie with host-only secure attributes when required', async () => {
     vi.resetModules();
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('APP__PUBLIC_BASE_URL', 'http://localhost:3030');
+    vi.stubEnv('APP__PUBLIC_BASE_URL', 'https://app.example.test');
     const mod = await import('@/lib/accounts/agent-session');
-    expect(mod.AGENT_COOKIE.startsWith('__Host-')).toBe(false);
-    expect(mod.agentCookieOptions().secure).toBe(false);
-
-    vi.resetModules();
-    vi.stubEnv('APP__PUBLIC_BASE_URL', 'https://artifactbin.dev');
-    const secure = await import('@/lib/accounts/agent-session');
-    expect(secure.AGENT_COOKIE.startsWith('__Host-')).toBe(true);
-    expect(secure.agentCookieOptions().secure).toBe(true);
+    expect(mod.agentSessionClearCookie()).toBe('__Host-mx-agent-session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure');
   });
 });

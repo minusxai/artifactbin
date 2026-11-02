@@ -5,7 +5,6 @@
  * The image, file and picture headers are media-headers.test.ts's rows.
  */
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/__tests__/harness';
@@ -28,7 +27,7 @@ const imageCount=async(datasetId:string)=>(await (await getDb()).query<{count:nu
 /** An owner's private dataset, a public document that imports it with an insert grant, and an approved reporter. */
 async function world(){
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
-  const token=await mintToken('feedback-images-owner', owner.id);await claimToken(owner.id,token.token);
+  const token=await mintToken('feedback-images-owner', owner.id);
   const ownerActor=identityForUser(owner.id, token.id);
   const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
@@ -39,7 +38,7 @@ async function world(){
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
   const pageActor:Session={credential:'session',userId:reporter.id,email:reporter.email!,emailVerified:true};
   const ownerSession:Session={credential:'session',userId:owner.id,email:owner.email!,emailVerified:true};
-  const reporterToken=await mintToken('dataset-file-reporter',reporter.id);await claimToken(reporter.id,reporterToken.token);
+  const reporterToken=await mintToken('dataset-file-reporter',reporter.id);
   const post=(body:Buffer,key='upload-operation-123')=>uploadImage(request(`/a/${document.id}/datasets/${dataset.id}/images`,{method:'POST',actor:pageActor,headers:{'Content-Type':'image/png','X-Edit-Id':document.edit_id,'Idempotency-Key':key},body:new Uint8Array(body)}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   const filePost=(filename='note.txt',body:BodyInit='hello',key='generic-upload-123',editId=document.edit_id,datasetId=dataset.id)=>uploadFile(request(`/api/artifacts/${document.id}/datasets/${datasetId}/files`,{method:'POST',token:reporterToken.token,headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(filename),'X-Edit-Id':editId,'Idempotency-Key':key},body}),{params:Promise.resolve({id:document.id,datasetId})});
   return {owner,reporter,ownerActor,make,dataset,document,pageActor,ownerSession,reporterToken,post,filePost};

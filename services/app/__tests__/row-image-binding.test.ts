@@ -9,8 +9,7 @@ import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import {artifactState} from '@/lib/artifacts';
 import { mintExportKey } from '@/lib/export';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
+import { identityForUser } from '@/lib/accounts';
 import {useAppHarness,request} from './harness';
 
 useAppHarness();
@@ -64,7 +63,6 @@ describe('dataset image references',()=>{
  });
  it('does not let a public document or its owner grant strangers access to private image bytes',async()=>{
   const {token,dataset}=await fixture();
-  const user=await createUser({email:'mxmx_test_row_images@example.com'});await claimToken(user.id,token.token);
   const bytes=await sharp({create:{width:8,height:8,channels:3,background:'red'}}).png().toBuffer();
   const image=await create(token.token,{image:`data:image/png;base64,${bytes.toString('base64')}`,visibility:'private'});
   const doc=await create(token.token,{html:html(dataset.id),visibility:'public'});

@@ -1,14 +1,13 @@
 /** Shared identity and login boundary. No proxy transport or rate policy. */
 import {CODE_DELIVERY_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, isInternalApiPath, parseAliasOrigins, type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream} from '@artifactbin/contracts';
 import type {Hono} from 'hono';
-import {BodyTooLargeError,readBody,assemble,cookieName,decodeAgentSession,readCookie,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
+import {BodyTooLargeError,readBody,assemble,buildAssetRequest,buildAssetResponse,attachActor,actorOf} from '@artifactbin/utils';
 import {acceptedOriginsOf,baseUrlOf,mountOAuthRoutes,AUTH_BODY_LIMIT,payloadTooLarge} from './routes/oauth';
 import {say} from './events';
 import {sessionAuthority} from './session-authority';
 import {createOAuthStore} from './identity/oauth';
 import {readEnv} from './env';
 import {usesDevOutbox} from './mail';
-import {createAgentBrowserSessions} from './auth/agent-browser-session';
 /** `setCookies`: Set-Cookie values the store wants sent back (a rolled-forward session cookie). */
 export interface SessionInfo {sessionId?:string;userId:string;email?:string;emailVerified?:boolean;setCookies?:string[]}
 export interface SessionStore {
@@ -33,7 +32,6 @@ export interface AuthOptions {
 }
 export type AuthEnv={Variables:{actor:Actor}};
 export type AuthApp=Hono<AuthEnv>;
-const agentBrowsers = new WeakMap<AuthOptions, ReturnType<typeof createAgentBrowserSessions>>();
 const aliasOrigins = new WeakMap<Pick<AuthOptions,'env'>, readonly string[]>();
 /** APP__ALIAS_ORIGINS, parsed once per options; a malformed value throws when the part mounts. */
 const aliasOriginsOf = (o:Pick<AuthOptions,'env'>):readonly string[] => {
@@ -41,13 +39,6 @@ const aliasOriginsOf = (o:Pick<AuthOptions,'env'>):readonly string[] => {
   if(!origins){origins=parseAliasOrigins(readEnv(o.env,'APP__ALIAS_ORIGINS'));aliasOrigins.set(o,origins);}
   return origins;
 };
-const agentBrowserOf = (o:AuthOptions) => {
-  if(!o.identityDb)return null;
-  let browser=agentBrowsers.get(o);
-  if(!browser){browser=createAgentBrowserSessions(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth');agentBrowsers.set(o,browser);}
-  return browser;
-};
-
 /** App-only composition: the auth owner admits bearers without mounting login or OAuth routes.
  * Trusted internal actors already on the request remain authoritative, including refusals. */
 type BearerAdmissionOptions=Pick<AuthOptions,'env'|'tokens'|'identityDb'|'appSchema'|'trustedHops'|'admitIdentity'>;
@@ -75,8 +66,6 @@ export function session(o: AuthOptions): Part<AuthEnv> {
         return new Response(JSON.stringify({error:'session_unavailable'}),{status:503,headers:{'content-type':'application/json','cache-control':'no-store'}});
       }
       if(admitted.userId&&o.admitIdentity&&!await o.admitIdentity({userId:admitted.userId,email:admitted.email,emailVerified:admitted.emailVerified}))return new Response(JSON.stringify({error:'deployment_admission_required'}),{status:403,headers:{'content-type':'application/json','cache-control':'no-store'}});
-      const heldOwners = admitted.credential === 'session' && admitted.emailVerified
-        ? await Promise.all((admitted.heldTokenIds ?? []).map(id => o.tokens.byId(id))) : [];
       c.set('actor', admitted);
       await next();
       // Better Auth extends the row; the browser's cookie only follows if we forward its re-issue.
@@ -84,9 +73,6 @@ export function session(o: AuthOptions): Part<AuthEnv> {
         const already=new Set(c.res.headers.getSetCookie().map(value=>value.split('=')[0]));
         for(const value of refresh) if(!already.has(value.split('=')[0]!)) c.res.headers.append('set-cookie',value);
       }
-      // The app can merge guest ownership after verified login. Clear cached
-      // CLI identities on this transition; subsequent requests see matching owners.
-      if (heldOwners.some(token => token?.userId && token.userId !== admitted.userId)) o.tokens.invalidate();
       if(c.res.headers.has(REVALIDATE_ACTOR_HEADER)) {
         const headers=new Headers(c.res.headers);headers.delete(REVALIDATE_ACTOR_HEADER);
         c.res=new Response(c.res.body,{status:c.res.status,statusText:c.res.statusText,headers});
@@ -111,20 +97,6 @@ export function session(o: AuthOptions): Part<AuthEnv> {
           }
         }
       }
-      const browser=agentBrowserOf(o);
-      if(!browser)return;
-      const name=cookieName(o.secure??false);
-      const previous=decodeAgentSession(readCookie(c.req.raw.headers.get('cookie'),name),o.cookieSecret);
-      const changes=c.res.headers.getSetCookie().filter(value=>value.startsWith(name+'='));
-      if(changes.length!==1)return;
-      const pair=changes[0]!.split(';')[0]!,value=pair.slice(name.length+1);
-      if(previous?.sessionId)await browser.revoke(previous.sessionId);
-      if(!value)return;
-      const nextSession=decodeAgentSession(value,o.cookieSecret),primary=nextSession?.tokenIds.at(-1);
-      if(!nextSession?.sessionId||!primary){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
-      o.tokens.invalidate(primary);
-      if(!await o.tokens.byId(primary)){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
-      await browser.issue(nextSession.sessionId,primary);
     }); },
   };
 }
@@ -252,11 +224,6 @@ async function resolveBearer(request:Request,o:BearerAdmissionOptions,sessions?:
 async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]): Promise<Actor> {
   const bearer=await resolveBearer(request,o,o.sessions);
   if(bearer)return bearer;
-  const secure = o.secure ?? false;
-  let held = decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
-  const browser=agentBrowserOf(o),heldPrimary=held?.tokenIds.at(-1);
-  if(browser&&(!held?.sessionId||!heldPrimary||!await browser.live(held.sessionId,heldPrimary)))held=null;
-  const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request);
   if (session?.userId && session.email && session.emailVerified === true) {
     if (session.setCookies) refresh?.push(...session.setCookies);
@@ -266,11 +233,9 @@ async function resolveActor(request: Request, o: AuthOptions, refresh?: string[]
       userId: session.userId,
       ...(session.email ? { email: session.email } : {}),
       ...(session.emailVerified !== undefined ? { emailVerified: session.emailVerified } : {}),
-      ...heldIds,
     };
   }
-  // Legacy ownership cookies are adoption proofs for an email session, never
-  // a second kind of login.
+  // Only a verified email session authenticates a browser.
   return ANONYMOUS;
 }
 

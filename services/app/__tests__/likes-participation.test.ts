@@ -5,7 +5,6 @@ import { POST as like } from '@/app/api/my/artifacts/[id]/like/route';
 import { nativeHtml } from './native-html-fixture';
 import { accountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { count, has, link } from '@/lib/social';
 import { request, useAppHarness } from './harness';
@@ -16,7 +15,6 @@ async function account(label: string) {
     email: `mxmx_test_likes_${label}@example.com`,
   });
   const token = await mintToken(label, user.id);
-  await claimToken(user.id, token.token);
   return { user, token };
 }
 async function publish(token: string, body: object) {
@@ -26,17 +24,16 @@ async function publish(token: string, body: object) {
   expect(response.status, await response.clone().text()).toBe(201);
   return (await response.json()).id as string;
 }
-it('creates and claims artifacts without automatically liking them', async () => {
+it('publishes across account tokens without automatically liking artifacts', async () => {
   const a = await account('owner');
   const id = await publish(a.token.token, { html: nativeHtml('<p>App</p>') });
   expect(await has(a.user.id, 'like', id)).toBe(false);
   expect(await count('like', id)).toBe(0);
-  const anonymous = await mintToken('unclaimed');
-  const claimed = await publish(anonymous.token, {
-    html: nativeHtml('<p>Claimed</p>'),
+  const additional = await mintToken('additional', a.user.id);
+  const second = await publish(additional.token, {
+    html: nativeHtml('<p>Second</p>'),
   });
-  await claimToken(a.user.id, anonymous.token);
-  expect(await has(a.user.id, 'like', claimed)).toBe(false);
+  expect(await has(a.user.id, 'like', second)).toBe(false);
   await link(a.user.id, 'like', id);
   expect(await count('like', id)).toBe(1);
   expect((await accountProfile(a.user.id))!.liked).toContain(id);

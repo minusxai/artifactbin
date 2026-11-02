@@ -5,13 +5,10 @@ import {POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById} from '@/lib/artifacts';
 import {createClient,createLocalStore,gql} from '@/lib/html-runtime';
 import {mintAccountToken,request,useAppHarness} from './harness';
-import { createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 useAppHarness();
 const html='<!doctype html><html><body><script data-af="state" type="application/json">{"count":0}</script><button>Increment</button></body></html>';
 async function fixture(visibility='unlisted'){
  const token=(await mintAccountToken('local-state-test')).token;
- if(visibility==='private')await claimToken((await createUser({email:'local-state-owner@example.test'})).id,token);
  const response=await createArtifact(request('/api/artifacts',{method:'POST',token,json:{html,visibility}}));expect(response.status).toBe(201);
  return {token,id:(await response.json()).id as string};
 }

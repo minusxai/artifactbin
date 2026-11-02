@@ -5,7 +5,6 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as headRead } from '@/app/api/my/artifacts/[id]/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 let account: { id: string; email: string } | null = null;
@@ -13,7 +12,7 @@ beforeEach(() => setSession(() => account ? { user: account } : null));
 it('retires the browser editor door while preserving authorized API source readback', async () => {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_reader@example.com' }));
   account = { id: owner.id, email: owner.email! };
-  const token = await mintAccountToken('reader', owner.id); await claimToken(owner.id, token.token);
+  const token = await mintAccountToken('reader', owner.id);
   const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { html:nativeHtml('<p id="body">Readable</p>'), visibility: 'public' } }));
   expect(made.status).toBe(201);
   const { id } = await made.json() as { id: string };

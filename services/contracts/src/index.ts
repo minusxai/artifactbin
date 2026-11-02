@@ -18,7 +18,7 @@ export { isLoopbackName } from './loopback-names';
 export { SERVER_IDENTITY_PATH, isLocalDevelopmentHost, normalizeOrigin, parseAliasOrigins, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';
 export * from './artifact-reference';
 export * from './sharing';
-export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
+export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore } from './identity';
 export type { Column, Index, Table } from './schema';
 export * from './dataset-policy';
 export * from './dataset-grants';

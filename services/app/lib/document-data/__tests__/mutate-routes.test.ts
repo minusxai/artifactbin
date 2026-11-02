@@ -26,7 +26,6 @@ import { setDatasetRowCap } from '@/lib/document-data/dataset-mutate';
 
 import { loadDatasetRows } from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { useAppHarness, request, type RequestOptions } from '@/__tests__/harness';
 
@@ -86,7 +85,7 @@ describe('retained SQL writes and native page boundary',()=>{
   expect(await getArtifactById(ds)).toEqual(before);
  });
  it('preserves private-page ACLs and CSRF before refusing retired declarations',async()=>{
-  const user=await createUser({email:'owner@example.test'}),t=await mintToken('t',user.id);await claimToken(user.id,t.token);
+  const user=await createUser({email:'owner@example.test'}),t=await mintToken('t',user.id);
   const ds=(await create(t.token,{dataset:ROWS,access:'readwrite'})).id,doc=(await create(t.token,{html:POLL(ds),visibility:'private'})).id;
   expect((await mutate(doc,{mutation:'vote',args:{}})).status).toBe(404);
   const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};

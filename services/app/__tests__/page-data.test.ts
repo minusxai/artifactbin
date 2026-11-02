@@ -18,7 +18,6 @@ import { link, unlink } from '@/lib/social';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
@@ -36,7 +35,7 @@ beforeEach(async () => {
 
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
-  const t = await mintToken('o', owner.id); await claimToken(owner.id, t.token);
+  const t = await mintToken('o', owner.id);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string; edit_id: string };
   const pub = await mk({ title: 'Public one', html: '<!doctype html><html><body><div><p>hello</p></div></body></html>', visibility: 'public' });
   const box = await mk({ format: 'folder', title: 'August' });

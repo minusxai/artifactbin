@@ -1,7 +1,6 @@
 /** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
 import { expect, it, vi } from 'vitest';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { changeMembership, getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets';
 import { observedRequest } from '@/__tests__/conditional-request';
@@ -52,7 +51,6 @@ it('refreshes membership and action permissions without publishing a version', a
       email: 'mxmx_test_member_stream@example.com',
     }),
     token = await mintAccountToken('members', owner.id);
-  await claimToken(owner.id, token.token);
   const made = await POST(
     request('/api/artifacts', {
       method: 'POST',

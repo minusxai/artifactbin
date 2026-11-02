@@ -11,7 +11,6 @@ import { getArtifactById } from '@/lib/artifacts';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, getUserById } from '@/lib/accounts';
 import { agentCookie, request, useAppHarness, setSession } from '@/__tests__/harness';
 
@@ -51,7 +50,6 @@ beforeEach(async () => {
 async function setup() {
   const user = await createUser({ email: 'owner@x.com' });
   const t = await mintToken('t', user.id);
-    await claimToken(user.id, t.token);
   const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
   const doc=await bind(t.token,ds,'private');
   return { t, user, ds, doc };

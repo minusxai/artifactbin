@@ -14,7 +14,6 @@ import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { resolveToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
@@ -25,7 +24,6 @@ const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as 
 async function owner() {
   const u = await createUser({ email: 'o@example.com' });
   const t = await mintToken('o', u.id);
-    await claimToken(u.id, t.token);
   const resolved = (await resolveToken(t.token))!;
   const actor: AccessActor = identityForUser(resolved.userId, resolved.id);
   return { token: t.token, actor };

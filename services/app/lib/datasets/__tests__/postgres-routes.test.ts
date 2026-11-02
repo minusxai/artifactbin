@@ -19,7 +19,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Actor } from '@artifactbin/contracts';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { POST as createSecret } from '@/app/api/my/secrets/route';
 import { POST as discover } from '@/app/api/my/datasets/discover/route';
 import { POST as datasetPreview } from '@/app/api/my/datasets/preview/route';
@@ -86,7 +85,6 @@ describe.skipIf(!dockerAvailable)('an external PostgreSQL source through the rea
     const ownerUser = await createUser({ email: 'mxmx_test_pg_routes_owner@example.com' });
     const recipientUser = await createUser({ email: 'mxmx_test_pg_routes_recipient@example.com' });
     const ownerToken = await mintAccountToken('pg-owner', ownerUser.id);
-    await claimToken(ownerUser.id, ownerToken.token);
     const owner = actorOf(ownerUser), recipient = actorOf(recipientUser);
     const target = { host: '127.0.0.1', port, database: 'postgres', username: 'dataset_reader', ssl: false };
     /** A connection behind a NEW secret: a secret belongs to the one dataset that claims it, as a person re-typing

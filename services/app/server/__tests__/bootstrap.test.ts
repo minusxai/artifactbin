@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintToken } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
 import { STORY_FAMILY_ASSETS } from '@/lib/html-systems';
@@ -35,7 +34,7 @@ const canonicalOf = async (server: { request: (path: string, init?: RequestInit)
 
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
-  const t = await mintToken('o'); await claimToken(owner.id, t.token);
+  const t = await mintToken('o', owner.id);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
   return { owner, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>hi</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret</p></div>'), visibility: 'private' }) };
 }

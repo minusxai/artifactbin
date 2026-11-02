@@ -9,7 +9,6 @@ import { GET,PATCH } from '@/app/api/account/profile/route';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
 import { GET as read,PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { POST as create,GET as list } from '@/app/api/artifacts/route';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
 import { has } from '@/lib/social';
 import { createArtifact,getArtifactById,getSharingFor,updateSharingFor } from '@/lib/artifacts';
@@ -22,7 +21,7 @@ useAppHarness();
 describe('cli-account-resources', () => {
   it('profile settings and personal relationship lists commit together and reject stale proposals',async()=>{
    const user=await createUser({email:'mxmx_test_account_profile@example.com'}),other=await createUser({email:'mxmx_test_account_follow@example.com'});
-   const token=await mintToken('mxmx_test_account_profile', user.id);await claimToken(user.id,token.token);
+   const token=await mintToken('mxmx_test_account_profile', user.id);
    const artifact=await createArtifact(token.id,user.id,{format:'html',source:nativeSource('<p>Like</p>'),meta:{},visibility:'private'});
    const read=await GET(request('/api/account/profile',{token:token.token}));expect(read.status).toBe(200);const profile=await read.json();expect(profile.type).toBe('profile');
    const body={...profile,username:'mxmx_test_profile_new',liked:[artifact.id],following:[other.id]};
@@ -77,7 +76,6 @@ describe('cli-readable', () => {
   it('viewer CLI reads follow the same private sharing ACL without exposing invitations or gaining write access',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_reader@example.com'});
    const owner = await mintToken('mxmx_test_owner',ownerUser.id),reader=await mintToken('mxmx_test_reader',readerUser.id),stranger=await mintToken('mxmx_test_stranger');
-    await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const created=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Private content</p>'),visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));
    expect(created.status).toBe(201);const doc=await created.json();const path=`/api/artifacts/${doc.id}`,params={params:Promise.resolve({id:doc.id})};
    const response=await read(request(path,{token:reader.token}),params);expect(response.status).toBe(200);
@@ -99,21 +97,19 @@ describe('cli-readable', () => {
   it('editing another invitation preserves an existing grant bound to an account after its email changes',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_sticky_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_old_address@example.com'});
    const owner = await mintToken('mxmx_test_sticky_owner',ownerUser.id),reader=await mintToken('mxmx_test_sticky_reader',readerUser.id);
-    await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const initial=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Account bound</p>'),visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));const doc=await initial.json();const context={params:Promise.resolve({id:doc.id})},path=`/api/artifacts/${doc.id}`;
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
    await (await getDb()).query('UPDATE users SET email=$2 WHERE id=$1',[readerUser.id,'mxmx_test_new_address@example.com']);
    const head=await (await read(request(path,{token:owner.token}),context)).json();
    const changed=await replace(request(path,{method:'PUT',token:owner.token,json:documentPublicationBody((await getArtifactById(doc.id))!,{html:head.html,shares:[{email:readerUser.email,role:'viewer'},{email:'mxmx_test_another@example.com',role:'viewer'}]},true)}),context);expect(changed.status).toBe(200);
    expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
-   const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email',newcomer.id);await claimToken(newcomer.id,token.token);
+   const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email',newcomer.id);
    expect((await read(request(path,{token:token.token}),context)).status).toBe(404);
   });
 
   it('native collections include explicit viewer shares and filter before paging without listing unrelated public resources',async()=>{
    const ownerUser=await createUser({email:'mxmx_test_collection_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_collection_reader@example.com'});
    const owner = await mintToken('mxmx_test_collection_owner',ownerUser.id),reader=await mintToken('mxmx_test_collection_reader',readerUser.id);
-    await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
    const shared=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],title:'Quarterly Sales',visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));expect(shared.status).toBe(201);const sharedId=(await shared.json()).id;
    await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:nativeSource('<p>Unrelated public</p>'),visibility:'public'}}));
    await create(request('/api/artifacts',{method:'POST',token:reader.token,json:{html:nativeSource('<p>Owned</p>'),title:'Owned'}}));

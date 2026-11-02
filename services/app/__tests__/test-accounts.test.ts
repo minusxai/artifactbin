@@ -6,7 +6,6 @@ import { expect, it } from 'vitest';
 import { useAppHarness, mintAccountToken } from './harness';
 import { can } from '@/lib/artifact-access';
 import { capabilityGuard, changeMembership, createArtifact } from '@/lib/artifacts';
-import { claimToken } from '@/lib/authentication';
 import { createUser, identityForUser, isTestAccount, shareTargetsRefusal, syncProfile } from '@/lib/accounts';
 import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/lib/groups';
 import { recordNotification } from '@/lib/notifications';
@@ -25,7 +24,6 @@ async function person(email: string) {
   const userId = `usr_td${++n}${Date.now().toString(36)}`;
   await syncProfile({ userId, email });
   const t = await mintAccountToken(`t${n}`, userId);
-  await claimToken(userId, t.token);
   return { ...identityForUser(userId, t.id), userId, tokenId: t.id };
 }
 const page = (owner: { userId: string; tokenId: string }) =>

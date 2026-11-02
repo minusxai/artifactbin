@@ -1,10 +1,8 @@
 /* @jsxImportSource solid-js */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import ClaimBanner from '@/solid/components/ClaimBanner';
+import { cleanup, fireEvent, render, screen } from '@solidjs/testing-library';
+import { afterEach, expect, it, vi } from 'vitest';
 import SharedWithYou from '@/solid/components/SharedWithYou';
-import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import type { WorkspaceSharedItem } from '@/lib/workspace';
 
 const shared = (id: string, role: WorkspaceSharedItem['role'] = 'viewer'): WorkspaceSharedItem => ({ id, title: `doc ${id}`, description: null, format: 'markup', role, version: 1, visibility: 'private', updated_at: '2026-08-01T00:00:00.000Z', owner_username: 'alice' });
@@ -41,49 +39,6 @@ it('names each recipient role and uses short artifact links even for untitled wo
   expect(screen.getByLabelText('Open shared artifact one')).toHaveAttribute('href', '/a/one');
   expect(screen.getByLabelText('Open shared artifact three')).toHaveAttribute('href', '/a/three');
   expect(screen.getByLabelText('Open shared artifact three')).toHaveTextContent('three');
-});
-
-const offers = [
-  { tokenId: 'tok_a', titles: ['Alpha draft'], artifacts: 1 },
-  { tokenId: 'tok_b', titles: ['Beta draft'], artifacts: 1 },
-];
-let rejected: string[];
-let claimed: string[];
-let failReject: boolean;
-beforeEach(() => {
-  rejected = []; claimed = []; failReject = false;
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/claimable')) return Response.json({ claimable: offers });
-    if (url.endsWith('/claim')) { claimed.push(JSON.parse(String(init?.body)).tokenId); return Response.json({ ok: true }); }
-    if (url.endsWith('/reject')) { rejected.push(JSON.parse(String(init?.body)).tokenId); return failReject ? Response.json({}, { status: 404 }) : new Response(null, { status: 204 }); }
-    return Response.json({});
-  }));
-});
-
-it('claims only selected browser drafts and refreshes the page', async () => {
-  const refreshed = vi.fn(); window.addEventListener(REFRESH_EVENT, refreshed);
-  render(() => <ClaimBanner />);
-  await screen.findByLabelText('Unclaimed drafts');
-  fireEvent.click(screen.getByLabelText('Claim Beta draft'));
-  fireEvent.click(screen.getByLabelText('Add to my account'));
-  await waitFor(() => expect(claimed).toEqual(['tok_a']));
-  await waitFor(() => expect(refreshed).toHaveBeenCalled());
-  window.removeEventListener(REFRESH_EVENT, refreshed);
-});
-
-it('confirms rejection, retains the offer on failure, then removes it on success', async () => {
-  failReject = true;
-  render(() => <ClaimBanner />);
-  await screen.findByText('Alpha draft');
-  fireEvent.click(screen.getByLabelText('Reject tok_a'));
-  expect(rejected).toEqual([]);
-  fireEvent.click(screen.getByLabelText('Confirm reject'));
-  await waitFor(() => expect(rejected).toEqual(['tok_a']));
-  expect(await screen.findByText(/Could not reject/i)).toBeInTheDocument();
-  expect(screen.getByText('Alpha draft')).toBeInTheDocument();
-  failReject = false;
-  fireEvent.click(screen.getByLabelText('Confirm reject'));
-  await waitFor(() => expect(screen.queryByText('Alpha draft')).toBeNull());
 });
 
 it('marks the active role and format filters as pressed and counts what remains', () => {

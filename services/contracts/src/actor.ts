@@ -1,6 +1,6 @@
 /**
- * WHO IS CALLING. Resolved once by the proxy from a bearer token, a session or the agent
- * cookie, and handed to the app with the request — in-process by reference (utils attachActor),
+ * WHO IS CALLING. Resolved from a bearer token, a human session or a document-bound Pages
+ * session, and handed to the app with the request — in-process by reference (utils attachActor),
  * across a network hop as a signed header (utils signActor). The app reads it with actorOf().
  */
 export const ACTOR_HEADER = 'x-mx-actor';
@@ -17,13 +17,6 @@ export interface Actor {
   emailVerified?: boolean;
   /** Non-secret identity row reference; never the session bearer token. */
   sessionId?: string;
-  /**
-   * Every token id the browser's agent cookie holds (the LAST is the primary),
-   * present whenever that cookie is — under a session too, which is how a
-   * sign-up can CLAIM what the browser minted before logging in. Ids only,
-   * never secrets; the app reads them for claim and claimable.
-   */
-  heldTokenIds?: string[];
   /** Runner-host attestation, absent from browser/token authentication. */
   runner?: { pageBackendOperation?: 'query' | 'mutation'; runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number };
 }

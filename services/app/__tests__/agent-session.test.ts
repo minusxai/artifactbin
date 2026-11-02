@@ -5,10 +5,8 @@ import { POST as exchangeRoute, DELETE as clearSession } from '@/app/api/session
 import { GET as listMine } from '@/app/api/my/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as events } from '@/app/a/[id]/events/route';
-import { AGENT_COOKIE, createUser, mintToken, resolveToken } from '@/lib/accounts';
+import { AGENT_COOKIE, createUser, mintToken } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
-import { claimTokenById } from '@/lib/authentication';
-import { claimableTokensById } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { agentCookie, request, setSession, useAppHarness, createGuestOwner } from './harness';
 
@@ -49,18 +47,6 @@ describe('legacy ownership proofs', () => {
     for (const [handler, path] of [[raw, `/a/${artifact.id}/raw`], [events, `/a/${artifact.id}/events`]] as const) {
       expect((await handler(request(path, { cookie }), params(artifact.id))).status).toBe(404);
     }
-  });
-  it('requires email login before claiming a cookie-held legacy token', async () => {
-    const old = await mintToken('legacy unclaimed');
-    const cookie = await agentCookie([old.id]);
-    expect(await claimableTokensById([old.id])).toHaveLength(1);
-    expect(await resolveToken(old.token)).toBeNull();
-    const account = await createUser({ email: 'mxmx_test_claim@example.com' });
-    setSession({ user: { id: account.id, email: account.email } });
-    expect(await claimTokenById(account.id, old.id)).toMatchObject({ tokenId: old.id });
-    expect(await resolveToken(old.token)).toMatchObject({ userId: account.id });
-    setSession(null);
-    expect(await sessionActor(request('/api/my/artifacts', { cookie }))).toMatchObject({ credential: 'none' });
   });
   it('an email account can read its private artifact after login', async () => {
     const account = await createUser({ email: 'mxmx_test_private_account@example.com' });

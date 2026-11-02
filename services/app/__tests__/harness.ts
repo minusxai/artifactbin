@@ -5,11 +5,11 @@
  * released at the end, and the typed request/actor/cookie helpers.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
-import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
+import { attachActor } from '@artifactbin/utils';
 import type { Actor, Credential } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
-import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
+import { AGENT_COOKIE } from '@/lib/accounts/agent-session';
 import { resetAllowances } from '@/lib/allowances';
 import { EVENTS_SCHEMA } from '@/lib/platform/config';
 import { overridePostgres } from '@/lib/datasets/postgres';
@@ -21,7 +21,7 @@ import { flushViews } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
 import { generateInternalId } from '@/lib/platform/ids';
 import type { PagesSite } from '@/lib/http';
@@ -32,7 +32,7 @@ const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
 });
 
 /** Authenticated route fixtures always belong to an email account. Explicit null
- * remains available for legacy-credential rejection and adoption tests. */
+ * remains available for legacy-credential rejection and historical alias tests. */
 export async function mintAccountToken(...args: Parameters<typeof mintRawToken>) {
   const [name, suppliedUserId, query, options] = args;
   if (suppliedUserId === null) return { ...await mintRawToken(name, null, query, options), userId: null, email: null };
@@ -85,43 +85,26 @@ export function request(path: string, opts: RequestOptions = {}): Request {
   return opts.actor ? attachActor(built, opts.actor) : built;
 }
 
-/** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
 /** A resolved request identity as a door hands it to a handler (lib/authentication request-identity). It grants nothing. */
 export function testIdentity(credential: Credential, ids: { userId?: string | null; tokenId?: string | null; email?: string | null; emailVerified?: boolean | null } = {}): RequestIdentity {
   return { ...identityForUser(ids.userId ?? null, ids.tokenId ?? null, ids.email ?? null), credential, emailVerified: ids.emailVerified ?? null };
 }
 
+/** Historical cookie input for rejection tests. No product encoder or credential issuance. */
 export async function agentCookie(tokenIds: string[]): Promise<string> {
-  const value = await encodeAgentSession({ tokenIds });
-  const cookie = `${AGENT_COOKIE}=${value}`;
-  await registerAgentCookieValue(value);
-  return cookie;
+  const payload = Buffer.from(JSON.stringify({ tokenIds, sessionId: 'h'.repeat(43) })).toString('base64url');
+  const signature = createHmac('sha256', `agent:${AUTH_SECRET}`).update(payload).digest('base64url');
+  return `${AGENT_COOKIE}=${payload}.${signature}`;
 }
 
-async function registerAgentCookieValue(value: string, previousValue?: string): Promise<void> {
-  const session = decodeAgentSessionEnvelope(value, AUTH_SECRET);
-  if (!session?.sessionId || !session.tokenIds.length) return;
-  const db = await getDb();
-  // The proxy owns this schema in production; route tests model only its
-  // browser-liveness row, without importing the proxy package into app.
-  await db.query('CREATE SCHEMA IF NOT EXISTS auth');
-  await db.query('CREATE TABLE IF NOT EXISTS auth.credentials (kind text NOT NULL, credential_hash text NOT NULL, subject_id text NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, deleted_at timestamptz)');
-  const previous = decodeAgentSessionEnvelope(previousValue, AUTH_SECRET);
-  if (previous?.sessionId) await db.query("UPDATE auth.credentials SET deleted_at=now() WHERE kind='agent-browser' AND credential_hash=$1 AND deleted_at IS NULL", [createHash('sha256').update(previous.sessionId).digest('hex')]);
-  await db.query(
-    "INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",
-    [createHash('sha256').update(session.sessionId).digest('hex'), session.tokenIds.at(-1)],
-  );
-}
-
-/** A legacy guest row (no login identity) with one token: no product code mints one any more, but adoption and the guest ceiling still meet them. */
+/** A legacy guest row (no login identity) with one token: no product code mints one any more, but historical references and rejection tests still meet them. */
 export async function createGuestOwner(options: { name?: string; tokenName?: string; expiresInMs?: number } = {}): Promise<{ userId: string; tokenId: string; cookie: string }> {
   const userId = 'usr_' + generateInternalId();
   const tokenId = await (await getDb()).transaction(async (tx) => {
     await tx.query("INSERT INTO users (id, email, kind, name) VALUES ($1, NULL, 'guest', $2)", [userId, options.name ?? null]);
     return (await mintRawToken(options.tokenName ?? 'guest-browser', userId, tx, { expiresInMs: options.expiresInMs ?? MAX_TOKEN_TTL_MS })).id;
   });
-  return { userId, tokenId, cookie: agentSessionSetCookie(await encodeAgentSession({ tokenIds: [tokenId] })) };
+  return { userId, tokenId, cookie: await agentCookie([tokenId]) };
 }
 
 /** Read one Set-Cookie from a response: its value (null when absent) and whether it CLEARS the cookie (Max-Age=0). */

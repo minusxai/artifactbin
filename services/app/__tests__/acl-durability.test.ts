@@ -18,7 +18,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
@@ -32,7 +31,6 @@ async function fixtures() {
   const owner = await ensureUsername(await createUser({ email: 'acl@example.com' }));
   await setUsername(owner.id, 'aclowner');
   const t = await mintToken('acl', owner.id);
-  await claimToken(owner.id, t.token);
   return { owner, token: t.token };
 }
 

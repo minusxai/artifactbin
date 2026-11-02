@@ -14,7 +14,6 @@ import { withTokenAuth } from '@/lib/authentication';
 import { profileWrites } from '@/lib/accounts/profiles';
 import { syncProfile } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -77,7 +76,6 @@ describe('profile sync at the bearer door', () => {
 
   it('writes the row for a bearer token whose proxy claims name its account', async () => {
     const token = await mintToken('cli', 'usr_cli0000000001');
-    await claimToken('usr_cli0000000001', token.token);
     const before = profileWrites();
 
     const response = await ok(cliRequest(token, { credential: 'bearer', tokenId: token.id, userId: 'usr_cli0000000001', email: 'CLI@Example.com', emailVerified: true }));
@@ -96,7 +94,6 @@ describe('profile sync at the bearer door', () => {
 
   it('writes nothing for claims that do not belong to the presented token', async () => {
     const token = await mintToken('cli', 'usr_cli0000000002');
-    await claimToken('usr_cli0000000002', token.token);
     const before = profileWrites();
 
     await ok(cliRequest(token, { credential: 'bearer', tokenId: 'tok_somethingelse', userId: 'usr_cli0000000002', email: 'other@example.com' }));
@@ -114,7 +111,6 @@ describe('profile sync at the bearer door', () => {
     const db = await harness.db();
     await db.query('INSERT INTO users (id, email, username) VALUES ($1, $2, $3)', ['usr_theotherone00', 'shared@example.com', 'shared_1234']);
     const token = await mintToken('cli', 'usr_cli0000000003');
-    await claimToken('usr_cli0000000003', token.token);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const claims = { credential: 'bearer', tokenId: token.id, userId: 'usr_cli0000000003', email: 'shared@example.com', emailVerified: true } as const;
@@ -143,7 +139,6 @@ describe('profile sync at the bearer door', () => {
    */
   it('lets an unrelated database failure out, rather than hiding it behind the reach the caller lost', async () => {
     const token = await mintToken('cli', 'usr_cli0000000009');
-    await claimToken('usr_cli0000000009', token.token);
     const db = await harness.db();
     const real = db.query.bind(db);
     const spy = vi.spyOn(db, 'query').mockImplementation(((text: string, params?: unknown[]) =>
@@ -166,7 +161,6 @@ describe('profile sync at the bearer door', () => {
    */
   it('writes nothing for an explicit dry-run GET, and writes on the ordinary one', async () => {
     const token = await mintToken('cli', 'usr_cli0000000004');
-    await claimToken('usr_cli0000000004', token.token);
     const claims = { credential: 'bearer', tokenId: token.id, userId: 'usr_cli0000000004', email: 'dry@example.com', emailVerified: true } as const;
     const before = profileWrites();
 
@@ -195,7 +189,6 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
   it('reaches a dataset shared with them as editor through /api/my/secrets, having never called another route', async () => {
     const owner = await createUser({ email: 'dataset-owner@example.com' });
     const ownerToken = await mintToken('owner', owner.id);
-    await claimToken(owner.id, ownerToken.token);
     const published = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: ownerToken.token, json: {
       dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }], rows: [{ id: 1 }] }] },
       visibility: 'private',
@@ -208,7 +201,6 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
 
     // An email account's first bearer request synchronizes the verified invitation address.
     const invitee = await mintToken('invitee', 'usr_cli0000000005');
-    await claimToken('usr_cli0000000005', invitee.token);
     expect((await db.query('SELECT email FROM users WHERE id = $1', ['usr_cli0000000005'])).rows).toEqual([{email:invitee.email}]);
 
     const response = await createSecretRoute(attachActor(
@@ -222,7 +214,6 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
   it('keeps the uniform 404 for an account nobody invited', async () => {
     const owner = await createUser({ email: 'dataset-owner2@example.com' });
     const ownerToken = await mintToken('owner2', owner.id);
-    await claimToken(owner.id, ownerToken.token);
     const published = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: ownerToken.token, json: {
       dataset: { kind: 'stored', tables: [{ schema: 'public', name: 'rows', columns: [{ name: 'id', type: 'number' }], rows: [{ id: 1 }] }] },
       visibility: 'private',
@@ -231,7 +222,6 @@ describe('a bearer-only invitee whose first call is not a withTokenAuth route', 
     const { id } = (await published.json()) as { id: string };
 
     const stranger = await mintToken('stranger', 'usr_cli0000000006');
-    await claimToken('usr_cli0000000006', stranger.token);
     const response = await createSecretRoute(attachActor(
       request('/api/my/secrets', { method: 'POST', token: stranger.token, json: { value: 'a-password', connection: TARGET, datasetId: id } }),
       { credential: 'bearer', tokenId: stranger.id, userId: 'usr_cli0000000006', email: 'stranger@invited.example', emailVerified: true },

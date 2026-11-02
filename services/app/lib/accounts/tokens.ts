@@ -282,27 +282,6 @@ export async function touchToken(id: string): Promise<void> {
   }
 }
 
-/**
- * REJECT: revoke a token the browser holds in its signed cookie. The capability is the cookie naming
- * the id (the claim-by-id precedent), so the caller passes only ids the cookie verifiably carries. Revokes
- * when the token is live AND (unclaimed OR owned by `userId`); a token claimed by someone else is not
- * touched. Returns false when nothing was revoked (unknown, already dead, or someone else's).
- */
-export async function revokeHeldToken(id: string, userId: string | null): Promise<boolean> {
-  const db = await getDb();
-  const r = await db.query<{ name: string | null }>(
-    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL AND (user_id IS NULL OR user_id = $2) RETURNING name',
-    [id, userId],
-  );
-  forgetRequestCredentials();
-  const row = r.rows[0];
-  if (!row) return false;
-  // The browser holding the cookie may have no account behind it; the token
-  // being revoked is the OBJECT here, so it is never also the subject.
-  await emit(userId ? { kind: 'user', id: userId } : null, 'revoked', { kind: 'token', id }, { name: row.name });
-  return true;
-}
-
 /** A token row as the account's token list shows it (GET /api/my/tokens). */
 export interface TokenRow {
   id: string;

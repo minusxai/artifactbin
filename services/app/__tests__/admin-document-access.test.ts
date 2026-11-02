@@ -5,7 +5,7 @@ import {createTokenReader,inProcess} from '@artifactbin/utils';
 import { getArtifactById, artifactState, selectChildren } from '@/lib/artifacts';
 import { readThrough } from '@/lib/artifact-access';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { claimToken, setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
+import { setDocumentEditorPolicy, sessionActor } from '@/lib/authentication';
 import {mintAccountToken as mintToken} from '@/__tests__/harness';
 import {GET,PUT,PATCH} from '@/app/api/artifacts/[id]/route';
 import {POST as prepare} from '@/app/api/artifacts/[id]/prepare/route';
@@ -48,7 +48,7 @@ const routed=<P extends Record<string,string>>(handler:(request:Request,context:
 
 beforeEach(async()=>{
  const user=await createUser({email:'admin@example.com'});userId=user.id;
- token=await mintToken('mxmx_test_admin_access',user.id);await claimToken(user.id,token.token);
+ token=await mintToken('mxmx_test_admin_access',user.id);
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  await db.query("INSERT INTO users(id,email,kind) VALUES ('usr_owner','owner@example.com','account') ON CONFLICT DO NOTHING");

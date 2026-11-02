@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
 import { USERNAME_RE, setUserEmail, usernameFromEmail } from '@/lib/accounts/users';
-import { authorHandle, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, ownerUsername, revokeToken, revokeUserToken, setUsername } from '@/lib/accounts';
+import { authorHandle, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, mintToken, revokeUserToken, ownerUsername, setUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 
 const harness = useAppHarness();
@@ -112,27 +112,7 @@ describe('accounts', () => {
   });
 });
 
-describe('claimable tokens', () => {
-  it('offers recent unclaimed tokens by id with their titles, and nothing else', async () => {
-    const user = await createUser({ email: 'claimer@example.test' });
-    const fresh = await mintToken('fresh', null), empty = await mintToken('empty', null), old = await mintToken('old', null);
-    const claimed = await mintToken('claimed', user.id);
-    const revoked = await mintToken('revoked', null);
-    await revokeToken(revoked.id);
-    for (let i = 0; i < 7; i++) await artifact(`art_${i}`, { token_id: fresh.id, title: `Title ${i}` });
-    await artifact('art_untitled', { token_id: fresh.id });
-    const db = await getDb();
-    await db.query("UPDATE tokens SET created_at = now() - interval '25 hours' WHERE id = $1", [old.id]);
-    expect(await claimableTokensById([])).toEqual([]);
-    const offered = await claimableTokensById([fresh.id, empty.id, old.id, claimed.id, revoked.id, 'tok_unknown']);
-    const byId = Object.fromEntries(offered.map((o) => [o.tokenId, o]));
-    expect(Object.keys(byId).sort()).toEqual([empty.id, fresh.id].sort());
-    expect(byId[fresh.id]!.artifacts).toBe(8);
-    expect(byId[fresh.id]!.titles).toHaveLength(5);
-    expect(byId[empty.id]).toEqual({ tokenId: empty.id, titles: [], artifacts: 0 });
-    expect(offered.every((o) => !('token' in o))).toBe(true);
-  });
-
+describe('account token revocation', () => {
   it('revokeUserToken revokes only the caller\'s own live token', async () => {
     const owner = await createUser({ email: 'owner@example.test' }), other = await createUser({ email: 'other@example.test' });
     const minted = await mintToken('cli', owner.id);

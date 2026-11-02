@@ -31,7 +31,6 @@ import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document';
-import { claimToken } from '@/lib/authentication';
 import { createUser, setUsername } from '@/lib/accounts';
 import { createRunner } from '@artifactbin/runner/local';
 import { localPageBackendCapability } from '@/lib/page-operations';
@@ -56,9 +55,8 @@ const agreeing = (hostname: string, token: string): DomainResolver => ({
 });
 
 async function owner(name: string) {
-  const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
-  await claimToken(u.id, t.token);
+  const t = await mintToken(name, u.id);
   await setUsername(u.id, name);
   return { token: t.token, userId: u.id };
 }

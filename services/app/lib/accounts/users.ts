@@ -1,12 +1,10 @@
 /**
- * Accounts + ownership. A user is the durable owner; tokens are machine
- * credentials that may be anonymous (user_id NULL) until claimed. Claiming a
- * token (lib/authentication ownership) backfills ownership onto everything it published.
+ * Accounts and profiles. A user is the durable owner of account-issued tokens.
  */
 import crypto from 'crypto';
 import type { UserKind } from '@artifactbin/contracts';
 import { getDb, type Queryable, emit, generateInternalId } from '../platform';
-import { forgetRequestCredentials, sha256 } from './tokens';
+import { forgetRequestCredentials } from './tokens';
 import { reserveHandle, isValidHandle } from './handles';
 
 /**
@@ -197,99 +195,6 @@ export async function getUserById(id: string,query?:Queryable,lock=false): Promi
   const db = query??await getDb();
   const r = await db.query<AnyUserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
   return r.rows[0] ?? null;
-}
-
-/**
- * The accounts half of a token claim (lib/authentication ownership), inside the caller's transaction: attach the
- * live token `by` names (its secret, or its id for a browser holding the signed agent-session cookie) to the
- * user, and move the comment images it uploaded. Uniform null for unknown, revoked and someone else's tokens;
- * re-claiming your own answers it again, because the caller's backfill is safe to repeat and must not be skipped.
- */
-export async function attachClaimedToken(
-  tx: Queryable,
-  userId: string,
-  by: { secret: string } | { id: string },
-): Promise<{ id: string; name: string | null } | null> {
-  const [where, value] = 'secret' in by ? ['token_hash = $1', sha256(by.secret)] : ['id = $1', by.id];
-  const token = (
-    await tx.query<{ id: string; user_id: string | null; name: string | null }>(
-      `SELECT id, user_id, name FROM tokens WHERE ${where} AND deleted_at IS NULL`,
-      [value],
-    )
-  ).rows[0];
-  if (!token) return null;
-  if (token.user_id && token.user_id !== userId) return null;
-  if (!token.user_id) {
-    await tx.query('UPDATE tokens SET user_id = $1 WHERE id = $2', [userId, token.id]);
-    forgetRequestCredentials();
-  }
-  await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL', [userId, token.id]);
-  return { id: token.id, name: token.name };
-}
-
-/**
- * How long after minting a token is still worth OFFERING to claim. A relevance
- * filter, not a security boundary: no window stops someone seeding a shared
- * browser (they need only get the victim to log in inside it) — the titles and
- * per-item checkboxes in the banner are what defend that. What this stops is a
- * draft from last month nagging someone who has moved on.
- */
-const CLAIM_OFFER_WINDOW_HOURS = 24;
-
-/** The most artifact titles worth naming in a banner; the count carries the rest. */
-const MAX_TITLES = 5;
-
-interface ClaimableToken {
-  /**
-   * Echoed back so a client holding the SECRET knows which token to claim.
-   * Absent for the id-keyed offer, whose caller holds no secret to match.
-   */
-  token?: string;
-  /** The token's id — what a cookie-held offer claims by. */
-  tokenId: string;
-  titles: string[];
-  artifacts: number;
-}
-
-/**
- * The same offer, keyed by token ID — for a browser whose cookie names its
- * tokens rather than carrying them. The wire answer omits the secret entirely
- * (there is none to echo), which is the point: after the exchange nothing
- * hands a token back to the page.
- */
-export async function claimableTokensById(ids: string[]): Promise<ClaimableToken[]> {
-  if (ids.length === 0) return [];
-  const rows = await offerableTokens('t.id', ids);
-  return rows.map((row) => ({ tokenId: row.id, titles: row.titles, artifacts: row.artifacts }));
-}
-
-/** The eligibility query both offers share; the column comes from this file, never a caller. */
-async function offerableTokens(
-  col: 't.token_hash' | 't.id',
-  values: string[],
-): Promise<Array<{ key: string; id: string; titles: string[]; artifacts: number }>> {
-  // Only an ID-keyed offer can be answered remotely: the SECRET never leaves
-  // the caller, and identity is the only side that could match its hash.
-  const db = await getDb();
-  const r = await db.query<{ token_hash: string; id: string; titles: string[] | null; artifacts: string | number }>(
-    `SELECT t.token_hash, t.id,
-            array_remove(array_agg(a.title ORDER BY a.updated_at DESC), NULL) AS titles,
-            count(a.id) AS artifacts
-       FROM tokens t
-       LEFT JOIN artifacts a ON a.token_id = t.id
-      WHERE ${col} = ANY($1)
-        AND t.deleted_at IS NULL
-        AND t.user_id IS NULL
-        AND t.created_at > now() - ($2::int * interval '1 hour')
-      GROUP BY t.token_hash, t.id`,
-    [values, CLAIM_OFFER_WINDOW_HOURS],
-  );
-  return r.rows.map((row) => ({
-    key: col === 't.id' ? row.id : row.token_hash,
-    id: row.id,
-    titles: (row.titles ?? []).slice(0, MAX_TITLES),
-    artifacts: Number(row.artifacts),
-  }));
 }
 
 /**

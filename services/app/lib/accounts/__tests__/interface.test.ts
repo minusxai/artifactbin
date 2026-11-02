@@ -6,12 +6,7 @@
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, mintAccountToken, useAppHarness } from '@/__tests__/harness';
-import {
-  ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, attachClaimedToken, closeTestUserSessions,
-  confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor,
-  identityForUser, lockMembershipUsers, lockMergeableGuests, matchesWorkspaceAccount, mintToken, noteTestUserSession, rememberTokenClient,
-  replaceUserImageKey, reserveHandle, resolveTestUser, retireGuest, revokeToken, setAutoAcceptMentions, syncProfile, testUserSessionCount, welcomePending,
-} from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, DuplicateProfileEmail, NO_IDENTITY, RESERVED_HANDLES, accountOf, answeredOnce, closeTestUserSessions, confirmWelcome, createTestUser, createUser, forgetTestUserSession, forwardedFor, getTestUserRow, hasAdminCredential, hostedCredentialDescriptor, identityForUser, lockMembershipUsers, matchesWorkspaceAccount, noteTestUserSession, rememberTokenClient, replaceUserImageKey, reserveHandle, resolveTestUser, revokeToken, setAutoAcceptMentions, syncProfile, testUserSessionCount, welcomePending } from '@/lib/accounts';
 import { forgetRequestCredentials, markRequestAuthority } from '@/lib/accounts/tokens';
 import { getDb, runWithRequest, services, setServices } from '@/lib/platform';
 
@@ -125,38 +120,18 @@ describe('hosted request authority', () => {
   });
 });
 
-describe('guests and claims', () => {
-  it('finds the guests a verified account\'s browser holds live tokens for, retires them into it, and accepts the old id as the account', async () => {
+describe('historical guest aliases', () => {
+  it('accepts a persisted merged guest alias as its account', async () => {
     const account = await createUser({ email: 'merger@example.test' });
-    const held = await createGuestOwner(), stale = await createGuestOwner(), other = await createGuestOwner();
-    await revokeToken(stale.tokenId);
+    const held = await createGuestOwner(), other = await createGuestOwner();
     const db = await getDb();
-    const guests = await db.transaction(tx => lockMergeableGuests(tx, account.id, [held.tokenId, stale.tokenId]));
-    expect(guests).toEqual([held.userId]);
-    expect(await db.transaction(tx => lockMergeableGuests(tx, held.userId, [other.tokenId]))).toEqual([]);
     expect(await matchesWorkspaceAccount(held.userId, account.id)).toBe(false);
-    await db.transaction(tx => retireGuest(tx, held.userId, account.id));
-    expect(await tokenRow(held.tokenId)).toMatchObject({ user_id: account.id });
+    await db.query('UPDATE users SET merged_into_user_id=$1 WHERE id=$2', [account.id, held.userId]);
     expect(await userRow(held.userId)).toMatchObject({ merged_into_user_id: account.id });
     expect(await matchesWorkspaceAccount(held.userId, account.id)).toBe(true);
     expect(await matchesWorkspaceAccount(account.id, account.id)).toBe(true);
     expect(await matchesWorkspaceAccount(other.userId, account.id)).toBe(false);
     await db.transaction(tx => lockMembershipUsers(tx, [account.id, account.id, other.userId, 'usr_missing']));
-  });
-
-  it('attaches an unowned token by secret or id, and never someone else\'s or a revoked one', async () => {
-    const claimer = await createUser({ email: 'claimer@example.test' }), owner = await createUser({ email: 'owner@example.test' });
-    const loose = await mintToken('loose', null), byId = await mintToken('by-id', null), owned = await mintToken('owned', owner.id), revoked = await mintToken('revoked', null);
-    await revokeToken(revoked.id);
-    const db = await getDb();
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { secret: loose.token }))).toEqual({ id: loose.id, name: 'loose' });
-    expect(await tokenRow(loose.id)).toMatchObject({ user_id: claimer.id });
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { secret: loose.token }))).toEqual({ id: loose.id, name: 'loose' });
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { id: byId.id }))).toEqual({ id: byId.id, name: 'by-id' });
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { id: owned.id }))).toBeNull();
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { secret: revoked.token }))).toBeNull();
-    expect(await db.transaction(tx => attachClaimedToken(tx, claimer.id, { secret: 'mx_not_a_token' }))).toBeNull();
-    expect(await tokenRow(owned.id)).toMatchObject({ user_id: owner.id });
   });
 });
 

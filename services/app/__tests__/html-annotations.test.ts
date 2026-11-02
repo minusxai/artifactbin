@@ -4,7 +4,6 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listAnnotations, POST as browserComment } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { POST as apiComment } from '@/app/api/artifacts/[id]/annotations/route';
 import { createUser, ensureUsername } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { htmlTextFingerprint } from '@artifactbin/contracts';
 const harness = useAppHarness();
 let account: { id: string; email: string } | null = null;
@@ -13,7 +12,7 @@ const html = '<!doctype html><html><body><p data-af-id="n1">same words</p><p dat
 async function page() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_html_comments@example.com' }));
   account = { id: owner.id, email: owner.email! };
-  const token = await mintAccountToken('html-comments', owner.id); await claimToken(owner.id, token.token);
+  const token = await mintAccountToken('html-comments', owner.id);
   const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { html, visibility: 'public' } }));
   expect(made.status).toBe(201);
   const { id } = await made.json() as { id: string };

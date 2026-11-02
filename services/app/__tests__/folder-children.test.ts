@@ -29,7 +29,6 @@ import { subscribeChannel } from '@/lib/publish';
 import { artifactChannel } from '@artifactbin/contracts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -37,7 +36,6 @@ const j = async (r: Response) => ({ status: r.status, body: (await r.json()) as 
 async function owner(name = 'owner') {
   const u = await createUser({ email: `${name}@example.com` });
   const t = await mintToken(name, u.id);
-    await claimToken(u.id, t.token);
   return { token: t.token, tokenId: t.id, userId: u.id, email: `${name}@example.com`, cookie: await agentCookie([t.id]) };
 }
 const create = async (token: string, body: Record<string, unknown>) => {

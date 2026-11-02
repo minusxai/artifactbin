@@ -13,7 +13,6 @@ import {createAuthHost} from '@artifactbin/auth';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 const harness=useAppHarness();
 const queries=new Map<string,string>();
 const queryDocument=(req:Request,ctx:{params:Promise<{id:string}>})=>ctx.params.then(({id})=>queryPrivateDocument(new Request(req.url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({revision:"1",query:queries.get(id)})}),ctx));
@@ -22,7 +21,6 @@ const deferred=<T,>()=>{let resolve!:(x:T)=>void;const promise=new Promise<T>(r=
 async function fixture(twoQueries=false){
   sourceRead.hold=null;
   const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner',user.id);
-  await claimToken(user.id,token.token);
   const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',dataset:[{n:314159265}]}}));
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
   const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset}"></head><body><p>Numbers</p></body></html>`}}));

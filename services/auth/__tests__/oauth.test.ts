@@ -1,7 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
-import { INTERNAL_MINT_PATH, INTERNAL_ARTIFACT_APPROVAL_PATH } from '@artifactbin/contracts';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { authParts, type AuthOptions } from '../src/parts';
@@ -32,7 +32,6 @@ const optionsOf = async (): Promise<AuthOptions> => {
       resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: session.emailVerified??true } : null,
     },
     upstream: async (request, actor) => {
-      if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json(actor.credential === 'session' ? { userId: actor.userId } : { userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
         const requested = await request.json() as { audience?: string; scope?: string; expiresInHours: number };
         const serial = String(++mintedCount);

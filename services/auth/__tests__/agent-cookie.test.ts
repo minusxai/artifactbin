@@ -1,6 +1,6 @@
 import {beforeEach,describe,expect,it} from 'vitest';
 import {createHash} from 'node:crypto';
-import {encodeAgentSession,setCookieHeader} from '@artifactbin/utils';
+import {encodeAgentSession,setCookieHeader} from './legacy-cookie-fixture';
 import {createAuthHost,type AuthOptions} from '../src/parts';
 import {ensureAuthSchema} from '../src/schema';
 import {testDb} from './helpers';
@@ -33,10 +33,10 @@ describe('the agent browser cookie',()=>{
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()-interval '1 second')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
     expect(await (await createAuthHost(options()).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
   });
-  it('offers live legacy ownership proofs only to a verified email session',async()=>{
+  it('ignores live legacy ownership proofs during verified email login',async()=>{
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
     const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:true})};
-    expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test',emailVerified:true,heldTokenIds:[token.id]});
+    expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test',emailVerified:true});
     configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:false})};
     expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
   });
@@ -45,26 +45,19 @@ describe('the agent browser cookie',()=>{
     const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test',emailVerified:true})};
     expect(await (await createAuthHost(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test',emailVerified:true});
   });
-  it('records and revokes legacy ownership proofs without granting browser authority',async()=>{
+  it('never issues legacy credentials when upstream rewrites or clears a cookie',async()=>{
     const issued=await cookie();
     let response:Response|null=new Response(null,{status:204,headers:{'set-cookie':issued+'; Path=/; HttpOnly; SameSite=Lax'}});
     const configured=options();configured.upstream=async(_request,actor)=>response??Response.json(actor);
     const proxy=createAuthHost(configured);
     await proxy.request('http://app.test/api/session/token',{method:'POST'});
     response=null;
-    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser' AND deleted_at IS NULL")).rows).toHaveLength(1);
+    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser' AND deleted_at IS NULL")).rows).toHaveLength(0);
     expect(await (await proxy.request('http://app.test/a/x',{headers:{cookie:issued}})).json()).toEqual({credential:'none'});
     response=new Response(null,{status:204,headers:{'set-cookie':'mx-agent-session=; Path=/; Max-Age=0'}});
     await proxy.request('http://app.test/api/session/token',{method:'DELETE',headers:{cookie:issued}});
     response=null;
-    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser' AND deleted_at IS NOT NULL")).rows).toHaveLength(1);
+    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser' AND deleted_at IS NOT NULL")).rows).toHaveLength(0);
     expect(await (await proxy.request('http://app.test/a/x',{headers:{cookie:issued}})).json()).toEqual({credential:'none'});
-  });
-  it('does not register a cookie whose primary token is no longer live',async()=>{
-    const deadValue=encodeAgentSession({tokenIds:['tok_dead'],sessionId},secret);
-    const configured=options();configured.upstream=async()=>new Response(null,{status:204,headers:{'set-cookie':`mx-agent-session=${deadValue}; Path=/`}});
-    const response=await createAuthHost(configured).request('http://app.test/api/session/token',{method:'POST'});
-    expect(response.headers.getSetCookie().at(-1)).toContain('Max-Age=0');
-    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser'")).rows).toHaveLength(0);
   });
 });

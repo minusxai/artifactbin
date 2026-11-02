@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest';
 import type { Actor } from '@artifactbin/contracts';
 import { request, setSession, useAppHarness, mintAccountToken } from '@/__tests__/harness';
 import { identityForUser, createUser, getUserById } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import { avatarVersion } from '@/lib/avatars';
 import { getArtifactById, updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/__tests__/harness';
@@ -63,7 +62,6 @@ async function datasetUploads() {
   const owner = await createUser({ email: 'mxmx_test_media_headers_owner@example.test' });
   const reporter = await createUser({ email: 'mxmx_test_media_headers_reporter@example.test' });
   const token = await mintAccountToken('media-headers-owner', owner.id);
-  await claimToken(owner.id, token.token);
   const ownerActor = identityForUser(owner.id, token.id);
   const make = async (body: object) => {
     const response = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: body }));
@@ -84,7 +82,6 @@ async function datasetUploads() {
   const policy=(await getArtifactById(dataset.id))!;
   await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{user:reporter.id}}]},policy.policy_revision??0);
   const reporterToken = await mintAccountToken('media-headers-reporter', reporter.id);
-  await claimToken(reporter.id, reporterToken.token);
   const params = { params: Promise.resolve({ id: document.id, datasetId: dataset.id }) };
   const bytes = await sharp({ create: { width: 40, height: 24, channels: 3, background: '#c0392b' } }).png().toBuffer();
   const file = async (filename: string, body: BodyInit, key: string) => {

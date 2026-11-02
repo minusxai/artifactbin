@@ -1,7 +1,7 @@
 /** Agent bearer tokens: mint, resolve, revoke, expiry, liveness and sampled usage stamps. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGuestOwner, useAppHarness } from '@/__tests__/harness';
-import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, createUser, ensureUserToken, identityForUser, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeHeldToken, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from '@/lib/accounts';
+import { DEFAULT_TOKEN_TTL_MS, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, createUser, ensureUserToken, identityForUser, listTokensByUser, mintToken, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from '@/lib/accounts';
 import { LIVE_TOKEN_SQL, TOUCH_INTERVAL_MS } from '@/lib/accounts/tokens';
 import { getDb } from '@/lib/platform';
 
@@ -153,19 +153,6 @@ describe('revoke', () => {
     expect(await revokeToken(minted.id)).toBe(false);
     expect(await revokeToken('tok_unknown')).toBe(false);
     expect((await tokenRow(minted.id)).deleted_at).not.toBeNull();
-  });
-
-  it('a held token is revoked when unclaimed or the caller\'s own, never when someone else owns it', async () => {
-    const owner = await account('owner@example.test'), other = await account('other@example.test');
-    const unclaimed = await mintToken('anon', null);
-    const own = await mintToken('own', owner.id);
-    const foreign = await mintToken('foreign', other.id);
-    expect(await revokeHeldToken(unclaimed.id, null)).toBe(true);
-    expect(await revokeHeldToken(own.id, owner.id)).toBe(true);
-    expect(await revokeHeldToken(own.id, owner.id)).toBe(false);
-    expect(await revokeHeldToken(foreign.id, owner.id)).toBe(false);
-    expect(await revokeHeldToken(foreign.id, null)).toBe(false);
-    expect((await tokenRow(foreign.id)).deleted_at).toBeNull();
   });
 });
 

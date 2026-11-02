@@ -8,6 +8,5 @@
 export { browserActor, refusesCrossSite, requestActor, withTokenAuth } from './doors';
 export { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from './request-identity';
 export { auth, overrideSession, type Session } from './session';
-export { claimToken, claimTokenById, mergeGuestUsers } from './ownership';
 export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';
 export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';

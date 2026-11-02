@@ -2,7 +2,6 @@ import { expect, it } from 'vitest';
 import { DELETE as deleteArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
-import { claimToken } from '@/lib/authentication';
 import { createUser, ensureUsername } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken } from './harness';
@@ -14,7 +13,6 @@ const params = <T,>(p: T) => ({ params: Promise.resolve(p) });
 it('lists only live public HTML pages, keeping private, deleted, and legacy markup rows out', async () => {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_native_profile@example.com' }));
   const account = await mintAccountToken('native-profile', owner.id);
-  await claimToken(owner.id, account.token);
   const create = async (html: string, visibility: 'public' | 'private') => {
     const response = await createArtifactRoute(request('/api/artifacts', {
       method: 'POST', token: account.token, json: { html, visibility },

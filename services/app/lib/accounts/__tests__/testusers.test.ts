@@ -15,7 +15,6 @@ import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getUserById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
 import { createUser } from '@/lib/accounts';
 import { TESTUSER_LIMITS } from '@artifactbin/contracts';
 
@@ -29,7 +28,7 @@ const jreq = (path: string, method: string, body?: unknown, token?: string, cook
   new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(cookie ? { Cookie: cookie, Origin: BASE } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
 
 async function account(name: string) {
-  const u = await createUser({ email: `mxmx_test_${name}@example.com` }); const t = await mintToken(name, u.id); await claimToken(u.id, t.token);
+  const u = await createUser({ email: `mxmx_test_${name}@example.com` }); const t = await mintToken(name, u.id);
   return { token: t.token, tokenId: t.id, user: u };
 }
 const mint = async (token: string) => { const r = await newTestUser(jreq('/api/testusers', 'POST', {}, token)); expect(r.status, await r.clone().text()).toBe(201); return (await r.json()) as { id: string; label: string; expires_at: string }; };

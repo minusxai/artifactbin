@@ -12,7 +12,6 @@ import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { testIdentity as baseIdentity, useAppHarness, request, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { claimToken } from '@/lib/authentication';
 import { createUser, exchangePagesTicket, issuePagesTicket, revokeToken } from '@/lib/accounts';
 import { pagesSessionActor } from '@/lib/accounts/pages-sessions';
 import { DELETE as clearSession } from '@/app/api/session/token/route';
@@ -42,7 +41,6 @@ const DOC = '<h1 data-af-id="plan" id="top">Private plan</h1><script type="appli
 async function world() {
   const user = await createUser({ email: 'pages-owner@example.com' });
   const t = await mintToken('pages-owner', user.id);
-    await claimToken(user.id, t.token);
   const publish = async (markup: string, visibility: string,head='') => {
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:`<!doctype html><html><head>${head}</head><body>${markup}</body></html>`, visibility } }));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -743,8 +741,6 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish('<h1>Weather</h1>','public',`<meta name="csp-connect" content="https://127.0.0.1:${port}"><meta name="csp-script" content="${PLOTLY}">`);
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
-    const t = await mintToken('pages-reader', user.id);
-    await claimToken(user.id, t.token);
     const reader: Actor = { credential: 'session', sessionId:'test-session', userId: user.id, email: 'mxmx_test_pages_reader@example.com', emailVerified: true };
     const self = pagesOriginFor(id, site);
     /** The reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */

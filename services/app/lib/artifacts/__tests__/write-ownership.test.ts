@@ -7,12 +7,9 @@
 import { describe, expect, it } from 'vitest';
 import { artifactChannel } from '@artifactbin/contracts';
 import { createGuestOwner, mintAccountToken, request, setDatasetPolicy, useAppHarness } from '@/__tests__/harness';
-import { nativeHtml } from '@/__tests__/native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
-import { claimToken, mergeGuestUsers } from '@/lib/authentication';
 import { createUser, identityForUser } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts/tokens';
-import { createArtifact, getArtifactById } from '@/lib/artifacts';
+import { getArtifactById } from '@/lib/artifacts';
 import { isMutationRefused, mutateDataset } from '@/lib/document-data';
 import { membershipInbox, updateMembershipInbox } from '@/lib/notifications';
 
@@ -84,33 +81,6 @@ describe('a dataset policy write', () => {
     expect(channel.payloads).toEqual([row.edit_id]);
     await channel.stop();
     expect((await getArtifactById(row.id))!.policy_revision).toBe(1);
-  });
-});
-
-describe('adoption on claim and on guest merge', () => {
-  const page = (title: string) => ({ format: 'html' as const, source: nativeHtml(`<p>${title}</p>`), meta: {}, title });
-  it('a claimed token brings its unowned, ungrouped artifacts and nothing else', async () => {
-    const user = await createUser({ email: 'claimer@example.test' });
-    const loose = await mintToken('loose', null);
-    const mine = await createArtifact(loose.id, null, page('Mine'));
-    const other = await createUser({ email: 'other@example.test' });
-    const theirs = await createArtifact(loose.id, other.id, page('Theirs'));
-    expect(await claimToken(user.id, loose.token)).toEqual({ tokenId: loose.id, claimedArtifacts: 1 });
-    expect((await getArtifactById(mine.id))!.user_id).toBe(user.id);
-    expect((await getArtifactById(theirs.id))!.user_id).toBe(other.id);
-    // Re-claiming one's own token is harmless and finds nothing more.
-    expect(await claimToken(user.id, loose.token)).toEqual({ tokenId: loose.id, claimedArtifacts: 0 });
-  });
-
-  it('a verified account merging a held guest takes its artifacts and tokens and marks the guest merged', async () => {
-    const guest = await createGuestOwner();
-    const made = await createArtifact(guest.tokenId, guest.userId, page('Guest draft'));
-    const account = await createUser({ email: 'merger@example.test' });
-    await mergeGuestUsers(account.id, [guest.tokenId]);
-    expect((await getArtifactById(made.id))!.user_id).toBe(account.id);
-    const db = await harness.db();
-    expect((await db.query('SELECT user_id FROM tokens WHERE id=$1', [guest.tokenId])).rows).toEqual([{ user_id: account.id }]);
-    expect((await db.query('SELECT merged_into_user_id FROM users WHERE id=$1', [guest.userId])).rows).toEqual([{ merged_into_user_id: account.id }]);
   });
 });
 

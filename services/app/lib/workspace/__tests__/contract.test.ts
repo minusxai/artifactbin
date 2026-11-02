@@ -5,13 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { nativeHtml } from '@/__tests__/native-html-fixture';
-import { createUser, identityForUser, revokeToken, type AccessActor } from '@/lib/accounts';
-import { mintToken } from '@/lib/accounts/tokens';
+import { createUser, identityForUser, type AccessActor } from '@/lib/accounts';
 import { createArtifact, getArtifactById, updateSharingFor, type ArtifactRow } from '@/lib/artifacts';
-import {
-  buildShelf, groupShelfByRecency, listArtifactsByUser, listDraftsByTokenIds, listPublicArtifactsByUser, listSharedWithEmail,
-  listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor,
-} from '@/lib/workspace';
+import { buildShelf, groupShelfByRecency, listArtifactsByUser, listPublicArtifactsByUser, listSharedWithEmail, listTrashFor, ownedArtifactState, restoreArtifactFor, trashArtifactFor } from '@/lib/workspace';
 
 const harness = useAppHarness();
 type Account = AccessActor & { userId: string };
@@ -122,15 +118,6 @@ describe('the listings', () => {
     await updateSharingFor(viewer, own.id, { shares: [{ email: 'viewer@example.test', role: 'editor' }] });
     await trashArtifactFor(owner, trashed.id);
     expect((await listSharedWithEmail(' Viewer@Example.test', viewer.userId)).map(row => [row.id, row.role])).toEqual([[shared.id, 'commenter']]);
-  });
-
-  it("a browser's drafts are its live tokens' unclaimed rows", async () => {
-    const live = await mintToken('live', null), revoked = await mintToken('revoked', null);
-    const draft = await createArtifact(live.id, null, { format: 'html', source: nativeHtml('<p>Draft</p>'), meta: {}, title: 'Draft' });
-    await createArtifact(revoked.id, null, { format: 'html', source: nativeHtml('<p>Old</p>'), meta: {}, title: 'Old' });
-    await revokeToken(revoked.id);
-    expect((await listDraftsByTokenIds([live.id, revoked.id])).map(row => row.id)).toEqual([draft.id]);
-    expect(await listDraftsByTokenIds([])).toEqual([]);
   });
 });
 

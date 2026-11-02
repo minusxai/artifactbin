@@ -19,14 +19,13 @@ import {POST as query} from '@/app/api/artifacts/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { claimToken } from '@/lib/authentication';
 import {request,useAppHarness} from '@/__tests__/harness';
 const harness=useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 const session=(user:{id:string;email:string|null})=>({credential:'session' as const,userId:user.id,email:user.email??'',emailVerified:true});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 async function pgFixture(){
- const owner=await createUser({email:'mxmx_test_pg_owner@example.com'});const ownerToken=await mintToken('owner', owner.id);await claimToken(owner.id,ownerToken.token);
+ const owner=await createUser({email:'mxmx_test_pg_owner@example.com'});const ownerToken=await mintToken('owner', owner.id);
  const friend=await createUser({email:'mxmx_test_pg_friend@example.com'});
  const secret=await createDatasetSecret(identityForUser(owner.id, ownerToken.id),'permissions-test-password',target);
  const connection={...target,passwordSecretId:secret.id};

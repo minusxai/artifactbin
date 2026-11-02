@@ -11,6 +11,7 @@ import {afterEach,beforeEach,describe,expect,it} from 'vitest';
 import type {Actor} from '@artifactbin/contracts';
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {nativeHtml} from './native-html-fixture';
+import { createArtifact } from '@/lib/artifacts';
 import { setDocumentEditorPolicy } from '@/lib/authentication';
 import {GET as list} from '@/app/api/artifacts/route';
 import {GET as read} from '@/app/api/artifacts/[id]/route';
@@ -90,6 +91,10 @@ describe('dry runs',()=>{
 });
 
 describe('the browser-session header',()=>{
+ it('cannot authenticate from client-supplied browser and actor headers',async()=>{
+  const forged=request('/api/page/session',{headers:{[BROWSER_SESSION_HEADER]:'1','x-mx-actor':JSON.stringify(verified(a.userId!,a.email!))}});
+  expect(await sessionActor(forged)).toMatchObject({credential:'none',userId:null,tokenId:null});
+ });
  it('suppresses the verified-email claim, so a host grant never reaches a scripted browser',async()=>{
   const db=await harness.db();
   await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('door02',$1,$2,'B unlisted',$3,'{}','html','unlisted','door-edit')`,[b.id,b.userId,nativeHtml('<p id="intro">B</p>')]);
@@ -121,11 +126,14 @@ describe('session side effects',()=>{
   await pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!)}));
   expect((await db.query("SELECT role FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toEqual([{role:'viewer'}]);
  });
- it('adopt held guest ownership only for a verified address',async()=>{
+ it('leaves legacy guest ownership unchanged after verified email login',async()=>{
   const guest=await createGuestOwner(),db=await harness.db();
-  const held=(emailVerified:boolean)=>pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!,{emailVerified,heldTokenIds:[guest.tokenId]})}));
+  const artifact=await createArtifact(guest.tokenId,guest.userId,{format:'html',source:nativeHtml('<p>Legacy draft</p>'),meta:{}});
+  const held=async(emailVerified:boolean)=>pageSession(request('/api/page/session',{cookie:guest.cookie,actor:verified(a.userId!,a.email!,{emailVerified,...{heldTokenIds:[guest.tokenId]}})}));
   const owner=async()=>(await db.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1',[guest.tokenId])).rows[0]!.user_id;
   await held(false);expect(await owner()).toBe(guest.userId);
-  await held(true);expect(await owner()).toBe(a.userId);
+  await held(true);expect(await owner()).toBe(guest.userId);
+  expect((await db.query('SELECT user_id FROM artifacts WHERE id=$1',[artifact.id])).rows).toEqual([{user_id:guest.userId}]);
+  expect((await db.query('SELECT merged_into_user_id FROM users WHERE id=$1',[guest.userId])).rows).toEqual([{merged_into_user_id:null}]);
  });
 });
