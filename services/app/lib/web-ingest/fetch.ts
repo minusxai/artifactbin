@@ -15,7 +15,7 @@
  * a hostile 50 GB response costs the cap, not the heap. One deadline covers
  * the whole chain, headers and body alike.
  */
-import { request as httpRequest } from 'node:http';
+import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import dns from 'node:dns';
 import type { LookupFunction } from 'node:net';
@@ -93,40 +93,40 @@ const guardedLookup = (policy: WebIngestPolicy): LookupFunction =>
     });
   }) as unknown as LookupFunction;
 
-const oneHop = (
-  url: URL,
-  opts: FetchWebResourceOpts,
-  policy: WebIngestPolicy,
-  deadline: number,
-): Promise<{ redirect: string } | WebResource> =>
+interface WebHopRequest {
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+  policy: WebIngestPolicy;
+  signal?: AbortSignal;
+  /** Epoch milliseconds; one deadline covers headers and body. */
+  deadline: number;
+  /** Hard cap on the body; the stream is destroyed the moment it is crossed. */
+  maxBytes: number;
+  /** Whether to keep this status's body. A skipped body is drained and the hop answers at once. */
+  readBody?: (status: number) => boolean;
+}
+interface WebHopResponse { status: number; headers: IncomingHttpHeaders; bytes: Buffer }
+
+/**
+ * ONE request to an already-vetted URL, any method and status, no redirect following: the caller decides
+ * whether a 3xx is followed and re-vets the next URL. The socket dials only addresses `guardedLookup` approved.
+ */
+export const requestWebHop = (url: URL, opts: WebHopRequest): Promise<WebHopResponse> =>
   new Promise((resolve, reject) => {
-    const remaining = deadline - Date.now();
+    const remaining = opts.deadline - Date.now();
     if (remaining <= 0) { reject(new WebIngestError('timeout', 'the fetch deadline passed')); return; }
-    if ((opts.allowHosts && !opts.allowHosts(url.hostname)) || (opts.allowUrl && !opts.allowUrl(url))) {
-      reject(new WebIngestError('forbidden_host', `"${url.hostname}" is not an allowed source for this import`));
-      return;
-    }
     const doRequest = url.protocol === 'https:' ? httpsRequest : httpRequest;
     const req = doRequest(url, {
-      method: 'GET',
+      method: opts.method,
       signal: opts.signal,
-      lookup: guardedLookup(policy),
-      headers: {
-        Accept: opts.accept ?? '*/*',
-        'User-Agent': opts.userAgent ?? 'artifactbin-ingest/1 (+https://artifactbin.dev)',
-        'Accept-Encoding': 'identity',
-      },
+      lookup: guardedLookup(opts.policy),
+      headers: opts.headers,
     }, (res) => {
       const status = res.statusCode ?? 0;
-      const location = res.headers.location;
-      if (status >= 300 && status < 400 && location) {
+      if (opts.readBody && !opts.readBody(status)) {
         res.resume(); // drain; the hop is over
-        resolve({ redirect: new URL(location, url).toString() });
-        return;
-      }
-      if (status !== 200) {
-        res.resume();
-        reject(new WebIngestError('bad_status', `"${url}" answered ${status}`));
+        resolve({ status, headers: res.headers, bytes: Buffer.alloc(0) });
         return;
       }
       const chunks: Buffer[] = [];
@@ -153,17 +153,43 @@ const oneHop = (
         }
         chunks.push(chunk);
       });
-      res.on('end', () => {
-        const contentType = (res.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
-        resolve({ bytes: Buffer.concat(chunks), contentType, finalUrl: url.toString() });
-      });
+      res.on('end', () => resolve({ status, headers: res.headers, bytes: Buffer.concat(chunks) }));
       res.on('error', (e) => reject(e instanceof WebIngestError ? e : new WebIngestError('fetch_failed', String(e))));
     });
     const timer = setTimeout(() => req.destroy(new WebIngestError('timeout', `"${url}" took too long`)), remaining);
     req.on('close', () => clearTimeout(timer));
     req.on('error', (e) => reject(e instanceof WebIngestError ? e : new WebIngestError('fetch_failed', `could not reach "${url.hostname}": ${(e as Error).message}`)));
-    req.end();
+    req.end(opts.body);
   });
+
+const oneHop = async (
+  url: URL,
+  opts: FetchWebResourceOpts,
+  policy: WebIngestPolicy,
+  deadline: number,
+): Promise<{ redirect: string } | WebResource> => {
+  if ((opts.allowHosts && !opts.allowHosts(url.hostname)) || (opts.allowUrl && !opts.allowUrl(url))) {
+    throw new WebIngestError('forbidden_host', `"${url.hostname}" is not an allowed source for this import`);
+  }
+  const res = await requestWebHop(url, {
+    method: 'GET',
+    signal: opts.signal,
+    policy,
+    deadline,
+    maxBytes: opts.maxBytes,
+    readBody: (status) => status === 200,
+    headers: {
+      Accept: opts.accept ?? '*/*',
+      'User-Agent': opts.userAgent ?? 'artifactbin-ingest/1 (+https://artifactbin.dev)',
+      'Accept-Encoding': 'identity',
+    },
+  });
+  const location = res.headers.location;
+  if (res.status >= 300 && res.status < 400 && location) return { redirect: new URL(location, url).toString() };
+  if (res.status !== 200) throw new WebIngestError('bad_status', `"${url}" answered ${res.status}`);
+  const contentType = (res.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  return { bytes: res.bytes, contentType, finalUrl: url.toString() };
+};
 
 /** Fetch a caller-supplied URL under the full guard. Throws WebIngestError. */
 export async function fetchWebResource(raw: string, opts: FetchWebResourceOpts): Promise<WebResource> {

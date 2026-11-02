@@ -7,6 +7,39 @@
 export type RunnerJson = null | boolean | number | string | RunnerJson[] | { [key: string]: RunnerJson };
 export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 
+/**
+ * One resolver call's size and time limits, as a single table: they move together. Raising the
+ * fetch response cap means raising every link after it (worker message, remote callback reply).
+ */
+export const RESOLVER_LIMITS = Object.freeze({
+  /** api 2 `caps.fetch` response body, before redaction. */
+  fetchResponseBytes: 2 * 1024 * 1024,
+  /** api 2 `caps.fetch` request body, after placeholders are filled. */
+  fetchRequestBodyBytes: 256 * 1024,
+  /** One `caps.fetch`, every redirect hop included. */
+  fetchTimeoutMs: 10_000,
+  /** One controller/worker line, and the app's reply to a remote capability callback. */
+  messageBytes: 4 * 1024 * 1024,
+  /** A resolver's own result. */
+  outputBytes: 1024 * 1024,
+  /** Resolver wall time in the runner. */
+  wallMs: 15_000,
+  /** How long the app waits for a run: wall time plus one second. */
+  appWaitMs: 16_000,
+  maxRequests: 32,
+});
+/** What a run receipt records for one `caps.fetch`: never a query string, header value or body. */
+export interface ResolverFetchReceipt {
+  method: string;
+  host: string;
+  /** The request path as written, `{{NAME}}` placeholders unfilled. */
+  path: string;
+  bytesIn: number;
+  bytesOut: number;
+  /** Names of the secrets the host filled in. */
+  secrets: string[];
+}
+
 export interface RunnerLimits {
   timeoutMs: number;
   /** Timeout per synchronous evaluation, NOT a cumulative CPU budget. */
@@ -61,11 +94,12 @@ export interface RunReceipt {
   cpuMs: number | null;
   peakMemoryBytes: number | null;
   requests: Array<{
-    service: 'artifactbin' | 'ai';
+    service: 'artifactbin' | 'ai' | 'fetch';
     operation: string;
     durationMs: number;
     status: number | null;
     requestId: string | null;
+    fetch?: ResolverFetchReceipt;
   }>;
   usage: Array<{ model: string; inputTokens: number | null; outputTokens: number | null }>;
   estimatedDollars: number | null;
