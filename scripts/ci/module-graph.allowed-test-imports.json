@@ -39,9 +39,6 @@
       "@/lib/accounts/pages-sessions",
       "@/lib/document-serving/native-html.server"
     ],
-    "services/app/lib/custom-domains/__tests__/custom-domains.test.ts": [
-      "@/lib/operations/testuser-erase"
-    ],
     "services/app/lib/datasets/__tests__/dataset-secret-boundary.test.ts": [
       "@/lib/operations/datasets"
     ],

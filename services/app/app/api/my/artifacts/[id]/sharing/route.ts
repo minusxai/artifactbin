@@ -1,3 +1,4 @@
+import {userPageUrl} from '@/lib/user-pages';
 /** Browser sharing uses edit access for named grants, link access and dataset writes.
  * Ownership is independent of the share list. Deletion/restoration retain their
  * owner-only routes. The domain transaction rechecks authorization under a lock.
@@ -17,7 +18,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const state = await getSharingFor(actor, id);
   if (!state) return json({ error: 'not_found' }, 404);
-  return json(state);
+  const row=await getArtifactFor(actor,id);
+  return json({...state,user_page_url:row?await userPageUrl(row):null});
 }
 
 export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -69,5 +71,6 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 
   const state = await updateSharingFor(actor, id, patch);
   if (!state) return json({ error: 'not_found' }, 404);
-  return json(state);
+  const row=await getArtifactFor(actor,id);
+  return json({...state,user_page_url:row?await userPageUrl(row):null});
 }

@@ -13,7 +13,7 @@ import { ToggleGroup } from '../ui/ToggleGroup';
 import { copyText } from '../lib/copy-text';
 import { apiFetch } from '../lib/api';
 interface SharingState {
-  visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; access?: DatasetAccess;
+  user_page_url?: string | null; visibility: Visibility; linkRole: ShareRole; shares: ShareEntry[]; access?: DatasetAccess;
   datasetKind?: DatasetCatalog['kind']; policyVersion?: number; canPrivate?: boolean;
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
 }
@@ -43,6 +43,7 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update sharing.'); return false; }
   };
   const copyLink = () => { void copyText(new URL(props.url ?? location.pathname, location.origin).href); setCopied(true); };
+  const copyPublicView = () => { const url=state()?.user_page_url; if(url)void copyText(url); };
   const postgres = () => props.format === 'dataset' && (props.datasetKind === 'postgres' || state()?.datasetKind === 'postgres');
   const showWrites = () => props.format === 'dataset' && state() && !postgres() && state()?.policyVersion !== 2;
   const close = () => { setOpen(false); props.onClose?.(); };
@@ -55,6 +56,7 @@ export default function ShareLink(props: { artifactId?: string; title?: string; 
       footer={<Button variant="secondary" aria-label="Close sharing" onClick={close}>Close</Button>}>
       <div class="space-y-4 text-sm">
         <Button variant="secondary" class="w-full" aria-label="Copy link" onClick={copyLink}>{copied() ? 'copied' : 'copy link'}</Button>
+        <Show when={state()?.user_page_url && state()?.visibility !== 'private'}><Button variant="secondary" class="w-full" aria-label="Copy public view" onClick={copyPublicView}>copy public view</Button></Show>
         <ToggleGroup label="Visibility" size="md" fill value={state()?.visibility ?? ''} onChange={visibility => void update({ visibility: visibility as Visibility })} options={visibilityOptions()} />
         <Input aria-label="Invite email" type="email" value={email()} onInput={event => setEmail(event.currentTarget.value)} placeholder="email@example.com" />
         <Show when={state()} fallback={<StatusMessage kind="loading">Loading sharing…</StatusMessage>}>{current => <>

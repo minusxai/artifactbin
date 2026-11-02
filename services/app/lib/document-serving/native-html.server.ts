@@ -31,7 +31,7 @@ export interface NativeHtmlRender {
   renderedHtml?: string;
   /** The platform script nonce; a cached render passes its placeholder (lib/document-serving/render-cache), else a fresh one is drawn. */
   platformScriptNonce?: string;
-  /** Served on a custom domain: the page reads its data from that host (html-runtime/domain-reads). */
+  /** Served on a anonymous owner host: the page reads its data from that host (html-runtime/domain-reads). */
   domainReads?: boolean;
 }
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
@@ -62,7 +62,7 @@ export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:s
     // The opaque raw reader may load only this page's admission-checked linked
     // stylesheets, the platform stylesheet and its hosted fonts (an opaque origin has no 'self'); do not grant the application's other paths as style sources.
     const assets=new URL(`/a/${id}/assets`,base).href,systems=new URL(PLATFORM_STYLES_PATH,base).href;
-    // On a custom domain the page reads its data from that host's page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
+    // On a anonymous owner host the page reads its data from that host's page GraphQL endpoint (html-runtime/domain-reads); nowhere else.
     const reads=options.domainReads?` ${new URL(`/api/artifacts/${encodeURIComponent(id)}/graphql`,base).href}`:'';
     return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined).replace(/style-src ([^;]+)/,`style-src $1 ${assets} ${systems}`).replace(/font-src ([^;]+)/,`font-src $1 ${new URL(PLATFORM_FONTS_PATH,base).href} ${new URL('/fonts/',base).href}`).replace(/connect-src ([^;]+)/,`connect-src $1${reads}`),extensions);
   }

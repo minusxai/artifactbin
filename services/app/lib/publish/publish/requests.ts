@@ -1,3 +1,4 @@
+import {documentOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {preparePublicationBundle} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
@@ -309,7 +310,8 @@ async function createArtifactFromBodyPrepared(
     if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, actor)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
     forkedFrom = source.id;
   }
-  let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
+  let receiptOwner:UserPagesOwner|null = null;
+  let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup,receiptOwner);
   let operation;
   try {operation = await creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}),request?.headers.get('X-Artifactbin-Account'));}
   catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
@@ -326,6 +328,7 @@ async function createArtifactFromBodyPrepared(
   const placement = (await placementFor(actor, parent, null)) ?? { ancestor_ids: [] };
   if (placement instanceof Response) return placement;
   try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
+  receiptOwner = await documentOwner({user_id:actor.userId,group_id:destination?.type==='group'?destination.id:null});
   // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
   const publicationActor:AccessActor=destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
   const sentMarkup=body.markup;
@@ -349,7 +352,7 @@ async function createArtifactFromBodyPrepared(
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
-  responseBody = row => ({...createdArtifactWire(row,base,sentMarkup)});
+  responseBody = row => ({...createdArtifactWire(row,base,sentMarkup,receiptOwner)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,

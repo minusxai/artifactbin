@@ -38,9 +38,9 @@ import { ROUTES } from './routes.generated';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, negotiateEncoding, precompressedStatic } from './content-encoding';
-import { customHostBoundary } from './custom-host';
+import { userHostBoundary } from './user-host';
 import { pagesHost } from './pages-host';
-import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/custom-domains';
+import { linkedStylesheets, canonicalDocumentUrl } from '@/lib/user-pages';
 import { THEME_BOOTSTRAP_HASH, APP_SHELL_FONT_PRELOADS, fontPreloadTags } from '@/lib/page-styles';
 
 /**
@@ -362,10 +362,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return (indexCache ??= readFileSync(path.join(webDir, 'solid-app.html'), 'utf8'));
   };
 
-  // A verified custom domain is answered by its own boundary before any app
-  // route can see it (server/custom-host); every other host passes straight on.
+  // An anonymous owner host is answered by its own boundary before any app
+  // route can see it (server/user-host); every other host passes straight on.
   // Its home page links the stylesheets THIS page links, read from the same shell.
-  app.use('*', customHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
+  app.use('*', userHostBoundary({ stylesheets: async (url) => linkedStylesheets(await index(url)) }));
   const assetsOrigin = ASSETS_ORIGIN;
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
@@ -430,7 +430,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const listing = listingPage(data);
     const fonted = withShellFonts(listing ? preloadListing(discovered, listing) : discovered);
     const shell = frame ? withDocumentFrame(fonted, frame) : withGenericSocial(fonted, baseUrl(c.req.raw));
-    // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
+    // The address search engines index a document under (lib/user-pages canonicalDocumentUrl).
     const linked = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
     // The build this page is (lib/http/app-build), which the page compares with what the server says later.
     const indexed = build ? linked.replace('</head>', () => `<meta name="${APP_BUILD_META}" content="${build}"></head>`) : linked;

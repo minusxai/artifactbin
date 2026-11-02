@@ -42,7 +42,7 @@ export function canonicalArtifactPath(
 }
 
 /**
- * A post's path on its owner's custom domain (lib/custom-domains): `/<id>-<slug>`,
+ * A post's path on its owner's anonymous owner host (lib/user-pages): `/<id>-<slug>`,
  * or `/<id>` for a title with no slug. The same id-and-slug as the owned form,
  * without the handle — the host already names whose it is.
  */

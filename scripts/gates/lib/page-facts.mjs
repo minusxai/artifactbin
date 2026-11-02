@@ -15,7 +15,7 @@ export const DOCUMENT_FRAME = 'iframe[data-mx-document-frame]';
 
 /**
  * The document's frame as a Playwright Frame: wait for the app page to attach it and for its document to load.
- * A page that IS the document (custom-domain post, /raw) has no frame and is returned as its own main frame.
+ * A page that IS the document (owner-host post, /raw) has no frame and is returned as its own main frame.
  * @param {import('playwright').Page} page
  * @param {{ timeout?: number }} [options]
  * @returns {Promise<import('playwright').Frame>}

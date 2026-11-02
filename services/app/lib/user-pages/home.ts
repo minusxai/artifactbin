@@ -1,27 +1,9 @@
-/**
- * THE HOME PAGE OF A CUSTOM DOMAIN — `/` on a verified host (server/custom-host).
- *
- * It IS the owner's profile listing: the same data the app's `/@handle` page
- * reads (the profile page route, asked as a guest), drawn as the same markup
- * the app's profile listing produces for `surface="domain"` — but hand-built
- * here rather than through a component, since this page ships no script at all
- * beyond the theme stamp (there is nothing left to hydrate, and the CSP
- * forbids any other script). Only the page around it is its own: the head
- * (title, description, unfurl tags, a self-canonical) and the "Made with
- * artifactbin" line a post ends with. Server-rendered once, with no script
- * beyond the theme stamp: a crawler and a reader without JavaScript get every
- * title and link in the first response.
- *
- * Keep this in parity with `solid/components/Shelf.tsx`'s `surface="domain"` branch — the
- * server test (`server/__tests__/custom-domain-host.test.ts`) checks the two
- * render the same markup, less the follow header and the toolbar (script the
- * domain page cannot run).
- */
+/** Public HTML home listing on an anonymous owner host. No authenticated controls or private rows. */
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
 import { personFaceBackground, personInitial } from '@/lib/ui-runtime/person-face';
-import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/workspace';
+import { buildShelf, groupShelfByRecency, type ShelfRow } from '@/lib/shelf';
 import { domainPostPath } from '@/lib/http';
 import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 
@@ -159,7 +141,7 @@ export function renderDomainHome(input: DomainHomeInput): string {
   const { hostname, owner, profile, stylesheets, footerHref } = input;
   const heading = owner.name?.trim() || (owner.username ? `@${owner.username}` : hostname);
   const description = `Writing by ${heading}.`;
-  const canonical = `https://${hostname}/`;
+  const canonical = footerHref;
   // The app listing's column — the column alone, with no app bar above it.
   const listing = `<main class="mx-auto max-w-4xl px-4 sm:px-6 pt-10 pb-24">${profile ? profileListingHtml(profile) : NOTHING_HERE_HTML}</main>`;
   return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'

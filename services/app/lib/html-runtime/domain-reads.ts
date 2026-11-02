@@ -1,7 +1,7 @@
 import {DOMAIN_READ_ONLY_MESSAGE} from '@artifactbin/contracts/domain-footer';
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
 /**
- * A page served on a custom domain (server/custom-host) is a top-level sandboxed page with no app frame, so the
+ * A page served on a anonymous owner host (server/user-host) is a top-level sandboxed page with no app frame, so the
  * frame relay never attaches. Its reads go straight to the same page GraphQL endpoint on the page's own host, as a
  * signed-out viewer: no credentials, and a text/plain body so the opaque origin sends no preflight. Writes never
  * leave the page; the host refuses them too.

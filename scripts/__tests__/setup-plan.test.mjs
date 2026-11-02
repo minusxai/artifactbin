@@ -241,3 +241,10 @@ describe('scripts/setup.mjs --no-next: no dev hint inside the installer', () => 
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+it('enables anonymous owner hosts only for local development setup',()=>{
+ const local=buildEnvFile({publicUrl:'http://app.lvh.me:7801',port:7801},{generated:gen});
+ expect(local).toContain('APP__USER_PAGES_HOST=u.lvh.me');
+ const hosted=buildEnvFile({publicUrl:'https://app.example.test'},{generated:gen});
+ expect(hosted).not.toMatch(/^APP__USER_PAGES_HOST=/m);
+});

@@ -4,10 +4,10 @@ import {DOMAIN_FOOTER_TEXT} from '@artifactbin/contracts/domain-footer';
 import {CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import type {ArtifactRow} from '@/lib/artifacts';
 import {PUBLIC_BASE_URL} from '@/lib/platform';
-import {canonicalDocumentUrl} from '@/lib/custom-domains';
+import {canonicalDocumentUrl} from '@/lib/user-pages';
 import {documentHeadTags} from './document-frame';
 import {nativeHtmlTitle} from './native-html.server';
-interface DomainPresentation {hostname:string;homepage?:boolean;path?:string}
+interface DomainPresentation {hostname:string}
 /** Render-time presentation only. Saved source and downloadable HTML never acquire platform attribution. */
 export async function nativeHtmlPresentation(html:string,row:ArtifactRow,domain?:DomainPresentation|null):Promise<string>{
  const document=parse(html),root=document.childNodes.find((node):node is DefaultTreeAdapterMap['element']=>node.nodeName==='html');

@@ -68,7 +68,7 @@ values and secrets. App and adjacent HMR ports must both be available.
 | Native browser scripts and hosted components | Ordinary HTML ES modules and hosted `@afbin/…` imports. Extra hosts need declared CSP consent. | [document format](document-format.md), `<origin>/llms/runtime` |
 | Shared TypeScript backends | Publish paired resolver files through `backendSources` and native `af-backend` links. Source dev registers its local runner; split hosts need their runner configuration. Backend stores and secret bindings retain separate authority checks. | `<origin>/llms/backends`, [runner configuration](../services/runner/README.md) |
 | Live browser sessions | Chromium and the browser worker's OS prerequisites. Linux server sessions require bubblewrap, user namespaces and delegated cgroup v2. `npm run dev` on macOS uses its documented development-only plain-process mode. | [browser sessions](mx-sessions.md), `.env.example` browser settings |
-| Google/OIDC, S3, external application PostgreSQL, custom domains and split services | Operator credentials/infrastructure. Source/custom compositions support these adapters; some compositions use a narrower configuration. | [operations](operations.md), `.env.example` |
+| Google/OIDC, S3, external application PostgreSQL, anonymous publishing hosts and split services | Operator credentials/infrastructure. Source/custom compositions support these adapters; some compositions use a narrower configuration. | [operations](operations.md), `.env.example` |
 
 ## Verify and troubleshoot
 

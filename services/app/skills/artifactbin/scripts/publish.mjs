@@ -37,7 +37,8 @@ Gotchas: publish adds data-af-id attributes to FILE, so exact-text edits written
   recovered source as a new page. Data and media identity lives only in the .af.json companion.
   The old --prepare/--send flags are deprecated.
 Exit: 0 ok; 1 failed; 2 invocation; 3 auth/access; 4 conflict; 5 unknown write outcome. Results
-  never contain credentials.`;
+  include user_page_url for eligible public/unlisted HTML when anonymous publishing hosts are enabled.
+  Results never contain credentials.`;
 
 /** Optional author-skill helper. Credentials never enter a page or saved publication request. */
 import {beforeCommand} from './toolbox-update.mjs';

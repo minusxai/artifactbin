@@ -1,7 +1,7 @@
 /**
  * THE ARTIFACTS TABLE'S SECOND DOOR (DEEP_MODULES['lib/artifacts'] in scripts/ci/module-graph.mjs), for callers outside
- * that still query the table themselves (workspace listings, trash and analytics, publish preparation and fork, custom
- * domains, document trust, annotations, the compiled-page backfill): the row codec and the statement helpers a write
+ * that still query the table themselves (workspace listings, trash and analytics, publish preparation and fork, anonymous
+ * hosts, document trust, annotations, the compiled-page backfill): the row codec and the statement helpers a write
  * spells in SQL. The row type, the scopes and the trash gate are the access rule's (@/lib/artifact-access).
  */
 export { artifactQuery } from './document';

@@ -47,7 +47,7 @@ pair; in a split deployment give both the same values.
 
 Rows the app creates for these addresses are marked `users.test_account`;
 existing rows are never marked. A test account works normally among test
-accounts but: cannot add a custom domain; shares only with addresses at
+accounts but: shares only with addresses at
 `TEST_DOMAIN`; invites only test accounts to artifacts and groups (group
 invitations by email only to `TEST_DOMAIN`); on an artifact that is not owned by
 a test account or by a group a test account created, can only read and fork (no comments, likes, shares or `$_me` writes); follows
@@ -98,3 +98,10 @@ Test accounts use the `mxmx_test_*` prefix and disposable state.
   reports and can be a required check. A `scope` job compares the PR with its merge base against the
   push trigger's paths; when none changed, the report job only writes "No relevant changes" to the
   step summary.
+
+Anonymous publishing hosts use optional `APP__USER_PAGES_HOST` (off by default). A live user or group
+handle maps underscores to hyphens in one host label. Public HTML appears on its public home; unlisted HTML
+is available only by ID and carries noindex and no-referrer. Copies retain app canonical URLs. Host
+requests are guests even if they carry cookies or bearer tokens; only read operations reach page GraphQL.
+The former custom-domain attachment, DNS verification and path override APIs have been removed.
+Enabling wildcard DNS and TLS is an operator deployment step; the product never provisions a hostname.

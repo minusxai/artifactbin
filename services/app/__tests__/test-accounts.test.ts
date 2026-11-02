@@ -9,7 +9,6 @@ import { capabilityGuard, changeMembership, createArtifact } from '@/lib/artifac
 import { createUser, identityForUser, isTestAccount, shareTargetsRefusal, syncProfile } from '@/lib/accounts';
 import { createGroup, GroupError, inviteGroupMember, setGroupMember } from '@/lib/groups';
 import { recordNotification } from '@/lib/notifications';
-import { attachDomain, verifyDomain } from '@/lib/custom-domains';
 import { overrideConfig } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform';
 
@@ -51,16 +50,6 @@ it('marks nothing while the feature is off', async () => {
   overrideConfig({ testDomain: undefined });
   const off = await person(`eval-off@${DOMAIN}`);
   expect(await isTestAccount(off.userId)).toBe(false);
-});
-
-it('refuses a custom domain to a test account', async () => {
-  on();
-  overrideConfig({ customDomainsTarget: 'domains.example.dev' });
-  const test = await person(`eval-domain@${DOMAIN}`);
-  expect(await attachDomain(test.userId, 'blog.example.org')).toEqual({ error: 'test_account_restricted' });
-  expect(await verifyDomain(test.userId, 'blog.example.org', { addresses: async () => [], txt: async () => [] } as never)).toEqual({ error: 'test_account_restricted' });
-  const real = await person('mxmx_test_domain_real@example.com');
-  expect(await attachDomain(real.userId, 'blog.example.org')).not.toEqual({ error: 'test_account_restricted' });
 });
 
 it('lets a test account share only with test-domain addresses', async () => {

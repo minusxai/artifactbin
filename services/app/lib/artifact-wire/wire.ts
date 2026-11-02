@@ -1,3 +1,4 @@
+import {userPageUrl,userPageUrlForOwner,type UserPagesOwner} from '@/lib/user-pages';
 import {monitoringGuidance} from './monitoring-guidance';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {catalogOf, datasetCreateFields, loadDatasetRows} from '@/lib/datasets';
@@ -147,6 +148,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     state: content ? artifactState(row) : '',
     format,
     url: `${base}/a/${row.id}`,
+    user_page_url: await userPageUrl(row),
     ...monitoringGuidance(base,row.id,format),
     // The trail rides in `...rest`; the parent is derived from it, and it is
     // the half a caller writes back.
@@ -319,7 +321,7 @@ export async function replacedArtifactWire(
   return {
     ...monitoringGuidance(base,row.id,row.format),
     ...artifactOwnershipWire(row),
-    id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
+    id: row.id, url: `${base}/a/${row.id}`, user_page_url: await userPageUrl(row), version: row.version, visibility: row.visibility,
     ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
     // can keep editing without a re-read. A FOLDER's metadata write moves
@@ -347,12 +349,12 @@ export async function replacedArtifactWire(
  * shape — a fork that answered its own vocabulary would make the copy a
  * second thing to learn.
  */
-export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
+export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown, owner: UserPagesOwner | null = null): Record<string, unknown> {
   const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number; filename?: string; contentType?: string };
   return {
     ...monitoringGuidance(base,row.id,row.format),
     ...artifactOwnershipWire(row),
-    id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
+    id: row.id, url: `${base}/a/${row.id}`, user_page_url: userPageUrlForOwner(row,owner), version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
     edit_id: row.edit_id, state: artifactState(row),...(row.document?{document:row.document}:{}),sharing_revision:row.sharing_revision??0,colorMode:row.meta.colorMode??null,...(row.shares!==undefined?{shares:row.shares}:{}),

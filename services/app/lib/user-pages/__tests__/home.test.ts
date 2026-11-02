@@ -1,12 +1,12 @@
 /**
- * THE HOME PAGE OF A CUSTOM DOMAIN, as a pure render: what `renderDomainHome` draws from the profile answer it is
+ * THE HOME PAGE OF AN ANONYMOUS OWNER HOST, as a pure render: what `renderDomainHome` draws from the profile answer it is
  * handed, which stylesheets `linkedStylesheets` carries over from the app shell, and the one policy the page ships
- * under. The route (server/custom-host) only adds the HTTP; server/__tests__/custom-domain-host keeps that boundary.
+ * under. The route (server/user-host) only adds the HTTP; server/__tests__/user-host keeps that boundary.
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { DOMAIN_FOOTER_TEXT } from '@artifactbin/contracts/domain-footer';
-import { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome, type ProfileListingData } from '@/lib/custom-domains';
+import { DOMAIN_HOME_CSP, linkedStylesheets, renderDomainHome, type ProfileListingData } from '@/lib/user-pages';
 import { THEME_BOOTSTRAP_HASH, THEME_BOOTSTRAP_SCRIPT } from '@/lib/page-styles';
 
 const NOW = new Date().toISOString();
@@ -27,8 +27,8 @@ describe('the page around the listing', () => {
     const anonymous = home({ owner: { username: null, name: null } });
     expect(anonymous).toContain('<title>blog.example.org</title>');
     expect(anonymous).toContain('<meta name="description" content="Writing by blog.example.org.">');
-    expect(home()).toContain('<link rel="canonical" href="https://blog.example.org/">');
-    expect(home()).toContain('<meta property="og:url" content="https://blog.example.org/">');
+    expect(home()).toContain('<link rel="canonical" href="https://app.example.test/@vivek">');
+    expect(home()).toContain('<meta property="og:url" content="https://app.example.test/@vivek">');
   });
 
   it('escapes what the owner controls: their name, the footer link and stylesheet addresses', () => {

@@ -2,7 +2,7 @@ import * as nativeHtml from '@/lib/document-serving/native-html.server';
 import { nativeHtmlStructuralWrapper } from '@/lib/document-serving/native-html-structural-wrapper';
 import * as artifacts from '@/lib/artifacts';
 import { HEAD as rawHead } from '@/app/a/[id]/raw/route';
-import { servesDocument } from '@/lib/custom-domains';
+import { servesDocument } from '@/lib/user-pages';
 import { getDb } from '@/lib/platform/db';
 import { afterEach, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
@@ -135,13 +135,13 @@ it('does not render or package retired JSX rows through a document door', async 
 });
 
 
-it('admits only native public posts owned by the custom-domain account', () => {
+it('admits only native public posts owned by the typed owner', () => {
  const post={user_id:'owner',visibility:'public' as const,format:'html' as const};
- expect(servesDocument('owner',post)).toBe(true);
- expect(servesDocument('stranger',post)).toBe(false);
- expect(servesDocument('owner',{...post,visibility:'private'})).toBe(false);
- expect(servesDocument('owner',{...post,deleted_at:new Date()})).toBe(false);
- expect(servesDocument('owner',{...post,format:'markup'})).toBe(false);
+ expect(servesDocument({kind:'user',id:'owner',handle:'owner'},post)).toBe(true);
+ expect(servesDocument({kind:'user',id:'stranger',handle:'stranger'},post)).toBe(false);
+ expect(servesDocument({kind:'user',id:'owner',handle:'owner'},{...post,visibility:'private'})).toBe(false);
+ expect(servesDocument({kind:'user',id:'owner',handle:'owner'},{...post,deleted_at:new Date()})).toBe(false);
+ expect(servesDocument({kind:'user',id:'owner',handle:'owner'},{...post,format:'markup'})).toBe(false);
 });
 
 
