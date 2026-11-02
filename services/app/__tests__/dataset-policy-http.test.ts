@@ -151,3 +151,22 @@ it('lists the three templates built for the dataset, with the read-back of each 
   expect((await templates(f.id, f.owner, '?ownerColumn=nope')).body.templates[1].errors[0].message).toContain('unknown column "nope"');
   expect(await templates(f.id, f.viewer)).toEqual({ status: 404, body: { error: 'not_found' } });
 });
+
+it('serves the app editor through the browser session: owners and editors read, dry-run, save and list templates; cross-site writes and strangers are refused', async () => {
+  const f = await fixture();
+  const session = (who: Person) => ({ credential: 'session' as const, userId: who.userId!, email: who.email!, emailVerified: true });
+  const browser = async (who: Person, method: 'GET' | 'PUT', json?: unknown, origin = 'same') => {
+    const r = await (method === 'GET' ? GET : PUT)(request(`/api/artifacts/${f.id}/policy`, { method, actor: session(who), origin, ...(json ? { json } : {}) }), params(f.id));
+    return { status: r.status, body: await r.json() };
+  };
+  expect(await browser(f.owner, 'GET')).toMatchObject({ status: 200, body: { source: 'none', revision: 0 } });
+  expect(await browser(f.editor, 'PUT', { policy: OWN_ROWS, dryRun: true })).toMatchObject({ status: 200, body: { dryRun: true, saved: false } });
+  expect(await browser(f.owner, 'PUT', { policy: OWN_ROWS, expectedPolicyRevision: 0 })).toMatchObject({ status: 200, body: { saved: true, revision: 1 } });
+  const listed = await TEMPLATES(request(`/api/artifacts/${f.id}/policy/templates?ownerColumn=created_by`, { actor: session(f.owner), origin: 'same' }), params(f.id));
+  expect(listed.status).toBe(200);
+  expect((await listed.json()).templates[1]).toMatchObject({ name: 'own-rows', ok: true });
+  expect((await browser(f.owner, 'PUT', { policy: OWN_ROWS, expectedPolicyRevision: 1 }, 'https://evil.example')).status).toBe(403);
+  for (const who of [f.viewer, f.stranger]) expect(await browser(who, 'GET')).toEqual({ status: 404, body: { error: 'not_found' } });
+  expect((await GET(request(`/api/artifacts/${f.id}/policy`), params(f.id))).status).toBe(401);
+  expect((await stored(f.id)).revision).toBe(1);
+});
