@@ -35,6 +35,7 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | `scripts/require-evals.mjs` | Stop `npm run eval` with the copy instruction when `evals/` is missing. | `npm run eval`, `npm run eval:report` |
 | `scripts/agent-worktree.mjs` | Give a delegated agent a worktree, a port block in `.env` and its brief. | the orchestrating agent |
 | `scripts/agent-dev-flow.mjs` | A disposable exercise of the agent check policy against fake remotes. | by hand |
+| `scripts/resolver-latency.ts` | Benchmark one trivial resolver call by stage (bundle, process, isolate, polling), cold and warm, through the runner, its HTTP client and the dev app's page GraphQL; never run by CI. Results: `docs/resolver-latency.md`. | by hand (`node --import tsx scripts/resolver-latency.ts`) |
 
 ## Local checks
 
