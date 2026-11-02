@@ -87,8 +87,8 @@ async function trusted(dataset: ArtifactRow, actor: AccessActor, options: Datase
 
 /**
  * COMPATIBILITY until the stored migration (PR 9) shares the dataset with each named person: a v2 write grant
- * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program
- * (as v2 did), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
+ * naming this account (`from:{user:<id>}`, no page) keeps admitting exactly its granted operations outside a program, and through
+ * a trusted program (as v2 did with accepted membership), unrestricted like v2, for this caller only. v3 has no slot for one person, so this lives here and nowhere else.
  */
 function namedUserWrites(policy: unknown, userId: string): DatasetOperation[] {
   const allow = (policy as { allow?: { actions?: unknown[]; from?: Record<string, unknown> }[] } | null)?.allow ?? [];
@@ -124,7 +124,10 @@ export async function datasetWriteAccess(row: ArtifactRow, actor: AccessActor, o
   if (options.document && !(await documentProvenance(row, actor, options.document, db))) return { allowed: false, role, revision, reason: 'document_changed' };
   if (role === 'owner' || role === 'editor') return { allowed: true, admin: true, role, revision };
   if (!role || !read) return { allowed: false, role, revision, reason: 'no_rule' };
-  const named = v2 && actor.userId && !options.document ? namedUserWrites(row.dataset_policy, actor.userId) : [];
+  // Outside a program as v2 did; through a program only when it is trusted (the caller's accepted page membership
+  // and saved-page proof, as v2's grant context required).
+  const granted = v2 && actor.userId ? namedUserWrites(row.dataset_policy, actor.userId) : [];
+  const named = granted.length && (!options.document || await trusted(row, actor, options, db)) ? granted : [];
   if (named.length) {
     const session: Record<string, Scalar> = { 'x-hasura-role': role, 'x-hasura-user-id': actor.userId! };
     return { allowed: true, admin: false, role, revision, permissions: namedUserPermissions(read.policy.tables, role, named), trusted: false, session, ...(read.execution ? { execution: read.execution } : {}) };
