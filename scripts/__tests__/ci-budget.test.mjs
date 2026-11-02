@@ -70,10 +70,11 @@ it('warns rather than fails when a PR consumer includes a long prerequisite wait
 });
 
 it('keys repository install caches on the shared font pipeline without removed vendored inputs',()=>{
- const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v4-'));
+ const caches=Object.values(workflow().jobs).flatMap(job=>job.steps??[]).filter(step=>step.with?.key?.startsWith('install-v5-'));
  expect(caches.length).toBeGreaterThan(0);
  for(const cache of caches){
-  expect(cache.with.key).toContain('services/app/scripts/system-font-packages.mjs');
+  expect(cache.with.key).toContain("hashFiles('.ci-cache-key/install.json')");
+  expect(cache.with['restore-keys']).toBeUndefined();
   expect(cache.with.key).not.toContain('design-systems/font-assets');
   expect(cache.with.key).not.toContain('design-systems/lib/font-assets.mjs');
  }

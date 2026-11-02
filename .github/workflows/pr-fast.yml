@@ -56,7 +56,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund
       # The root type check is incremental: start from the newest native build info any run of this repository

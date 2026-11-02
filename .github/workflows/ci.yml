@@ -97,18 +97,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
       # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
       # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
       # public/fonts and the manifest lib/story-design/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # serves every document with missing fonts. They derive from locked packages and postinstall inputs, so they
+      # belong in the same entry under the same install fingerprint; caching node_modules by itself is
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/story-design/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # The key is the lockfile with workspace versions normalised: a dependency that moved changes it,
-      # a workspace version bump does not.
+      # ci.mjs owns the normalised lock, manifests, npm configuration and postinstall inputs.
+      # A dependency or asset generator change invalidates; a workspace version bump does not.
       - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -118,7 +117,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # A WORKFLOW TYPO IS ONLY EXPENSIVE WHEN THE RUNNER FINDS IT. actionlint parses every workflow
@@ -152,7 +151,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -164,7 +162,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The test global setup builds the server reader and the islands behind content-verified
@@ -197,7 +195,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -209,7 +206,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -259,7 +256,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -271,7 +267,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The test global setup builds the server reader and the islands behind content-verified
@@ -305,7 +301,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -317,7 +312,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # THE SAME SOURCES BUILD THE SAME BYTES. The key hashes git's object ids for every build input
@@ -379,7 +374,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -391,7 +385,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The export tests drive real headless Chromium (lib/export.ts). The
@@ -457,7 +451,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
       # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci/ci.mjs lock-fingerprint
@@ -469,7 +462,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # A BUILD OF THESE EXACT SOURCES ALREADY CACHED (see the `build` job) means there is nothing to
@@ -620,7 +613,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
       - run: node scripts/ci/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -630,7 +622,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/story-design/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs') }}
+          key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The root type check's incremental build info, which pr-fast.yml's `types` job starts from so a pull

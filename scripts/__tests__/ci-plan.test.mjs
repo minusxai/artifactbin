@@ -442,6 +442,34 @@ describe('GitHub CI adapter', () => {
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
+  it('invalidates the install fingerprint on installed and generated inputs only', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-install-inputs-'));
+    const put = (file, text) => {
+      mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
+      writeFileSync(path.join(cwd, file), text);
+    };
+    const fingerprint = () => {
+      execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd });
+      return readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8');
+    };
+    try {
+      put('package-lock.json', JSON.stringify({ packages: { '': {}, 'services/app': {} } }));
+      for (const file of ['services/app/scripts/copy-assets.mjs', 'services/app/scripts/system-font-packages.mjs',
+        'package.json', 'services/app/package.json', '.npmrc']) {
+        put(file, file.endsWith('package.json') ? '{"version":"1.0.0","scripts":{"postinstall":"first"}}' : 'first');
+        const before = fingerprint();
+        put(file, file.endsWith('package.json') ? '{"version":"1.0.0","scripts":{"postinstall":"second"}}' : 'second');
+        expect(fingerprint(), file).not.toBe(before);
+      }
+      const before = fingerprint();
+      for (const file of ['design-systems/fonts.json', 'design-systems/font-assets/example.woff2',
+        'design-systems/lib/font-assets.mjs', 'README.md']) put(file, 'unused by postinstall');
+      expect(fingerprint()).toBe(before);
+      put('services/app/package.json', '{"version":"2.0.0","scripts":{"postinstall":"second"}}');
+      expect(fingerprint()).toBe(before);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
   it('runs the roll-up from GitHub-shaped results and refuses planner failure', () => {
     const plan = planCi(['README.md']);
     const needs = Object.fromEntries(CI_JOBS
