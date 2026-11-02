@@ -1,3 +1,4 @@
+import type { RegisteredRepair, RepairableHead } from '@/lib/registered-page-lifecycle';
 /**
  * One-off repairs for an HTML head saved before registered programs were re-bound on save: each registry
  * plans the re-binding (registered-page-queries/registry, registered-page-mutations/registry); this module
@@ -6,7 +7,7 @@
  */
 import type { Queryable } from '@artifactbin/contracts';
 import { planRegisteredMutationRepair } from '../registered-page-mutations';
-import { planRegisteredQueryRepair, type RegisteredRepair, type RepairableHead } from '../registered-page-queries';
+import { planRegisteredQueryRepair } from '../registered-page-queries';
 
 async function repairHead(tx: Queryable, pageId: string, plan: (tx: Queryable, head: RepairableHead) => Promise<RegisteredRepair | null>): Promise<string[]> {
   const head = (await tx.query<Omit<RepairableHead, 'source'> & { source: string | null; format: string }>(
