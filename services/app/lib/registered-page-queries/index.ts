@@ -7,6 +7,6 @@ export {
   RegisteredQueryRebindError, commitRegisteredQueryBackend, commitRegisteredQueryRebinds, pageSourceDigest, planRegisteredQueryRebinds,
   planRegisteredQueryRepair, prepareRegisteredQueryBackend, registeredPlan,
 } from './registry';
-export type { RegisteredQueryRebind, RegisteredRepair, RepairableHead } from './registry';
+export type { RegisteredQueryRebind } from './registry';
 export { createRegisteredPageQueries } from './service';
 export { registeredSourceCatalog } from './source-catalog';

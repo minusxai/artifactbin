@@ -73,6 +73,30 @@ describe('replace and revert', () => {
     expect(isVersionConflict(invalid as ArtifactRow)).toBe(false);
   });
 
+  it('rolls back head, archive and edit history when a replacement fails after its head write', async () => {
+    const owner = await account('owner@example.test');
+    const row = await mine(owner, 'Before');
+    const db = await harness.db();
+    const before = await sql('SELECT version,source,meta,edit_id FROM artifacts WHERE id=$1', [row.id]);
+    const edits = await sql('SELECT edit_id FROM artifact_edits WHERE artifact_id=$1', [row.id]);
+    const transaction = db.transaction.bind(db);
+    const fault = vi.spyOn(db, 'transaction').mockImplementationOnce(callback => transaction(tx => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key !== 'query') return Reflect.get(target, key);
+        return (statement: string, params: unknown[]) => {
+          if (statement.includes('INSERT INTO artifact_edits')) throw Error('write history unavailable');
+          return target.query(statement, params);
+        };
+      },
+    }))));
+    try {
+      await expect(replaceArtifactFor(owner, row.id, page('After'), { expectedVersion: row.version })).rejects.toThrow('write history unavailable');
+    } finally { fault.mockRestore(); }
+    expect(await sql('SELECT version,source,meta,edit_id FROM artifacts WHERE id=$1', [row.id])).toEqual(before);
+    expect(await sql('SELECT edit_id FROM artifact_edits WHERE artifact_id=$1', [row.id])).toEqual(edits);
+    expect(await sql('SELECT version FROM artifact_versions WHERE artifact_id=$1', [row.id])).toEqual([]);
+  });
+
   it('a governed dataset is its owner\'s to replace and nobody\'s to revert', async () => {
     const owner = await account('owner@example.test');
     const editor = await account('editor@example.test');
