@@ -1,9 +1,10 @@
 import { transform } from 'esbuild';
 import { randomUUID } from 'node:crypto';
-import { RESOLVER_LIMITS, type HtmlJson, type PageResolverFieldCall, type ResolverApi, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson } from '@artifactbin/contracts';
+import { RESOLVER_LIMITS, type HtmlJson, type PageResolverFieldCall, type ResolverApi, type ResolverSecretHosts, type RunnerService, type RunStart, type RunnerJson, type RunSnapshot } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema, resolverTestField } from './execution-policy';
-import {secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
+import {readPinnedBackendSecret,secretBindingNames,secretHostMap} from '@/lib/html-backend-secrets';
+import {resolverFailureDetail} from './redaction';
 import { FieldFailed, FieldNotExecuted } from './contracts';
 import type { ResolverFetcher } from './public-fetch';
 /** `secretBindings` lists every declared secret name; `secretHosts` binds api 2 names to hosts. */
@@ -63,6 +64,8 @@ async function admit(runner:RunnerService,request:RunStart,signal:AbortSignal|un
  if(BUSY.has(code))throw new FieldNotExecuted('Runner refused admission','retryable',`${code} after ${tries} attempts`);
  throw new FieldFailed('backend_unavailable',`runner start failed after ${tries} attempts`);
 }
+/** A terminal non-completed run; `receipt` carries the runner's (unredacted-for-encodings) reason and requests. */
+class RunFailed extends FieldFailed {readonly receipt:RunSnapshot['receipt'];constructor(receipt:RunSnapshot['receipt']|undefined){super('backend_failed');this.receipt=receipt??null;}}
 async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,delays:readonly number[]=START_RETRY_DELAYS_MS):Promise<RunnerJson>{
  const runId=await admit(runner,request,signal,delays);
  const lookup={runId,userId:request.userId};
@@ -71,7 +74,8 @@ async function run(runner:RunnerService,request:RunStart,signal?:AbortSignal,del
   if(signal?.aborted||Date.now()>deadline){await runner.cancel(lookup).catch(()=>{});throw new FieldFailed('deadline');}
   let snapshot;try{snapshot=await runner.getRun(lookup);}catch{throw new FieldFailed('backend_unavailable');}
   if(snapshot.status==='completed')return snapshot.output;
-  if(!['queued','running'].includes(snapshot.status))throw new FieldFailed('backend_failed');
+  // The reason stays raw here: the invoker redacts it against the pinned secrets before it becomes a detail.
+  if(!['queued','running'].includes(snapshot.status))throw new RunFailed(snapshot.receipt);
   await new Promise(resolve=>setTimeout(resolve,10));
  }
 }
@@ -88,10 +92,24 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
  return {compiled,typeDefs:result.typeDefs,secretBindings,secretHosts,api,test};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
-export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[]}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
+/** Every pinned secret value that can still be read; a missing or transferred one cannot be in the reason. */
+async function pinnedValues(backend:PageBackendRecord,read:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<string[]>{
+ const values=await Promise.all((backend.secretBindings??[]).map(name=>read(backend,name).catch(()=>'')));
+ return values.filter(Boolean);
+}
+/**
+ * A failed run surfaces as `backend_failed`; its `detail` (shown to the page owner only, by the executor) is the
+ * runner's reason made safe by `resolverFailureDetail`, redacted of the pinned secret values.
+ */
+export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,options:{startRetryDelaysMs?:readonly number[];readSecret?:(backend:PageBackendRecord,name:string)=>Promise<string>}={}){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
  if(!backend||backend.backendId!==call.fileId||backend.version!==call.version||backend.pageId!==call.principal.tenant)throw new FieldNotExecuted('Backend link mismatch','forbidden');
- return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);
+ try{return await runBackend(backend);}catch(error){
+  if(!(error instanceof RunFailed))throw error;
+  const reason=error.receipt?.reason;
+  throw new FieldFailed('backend_failed',reason?resolverFailureDetail(error.receipt,await pinnedValues(backend,options.readSecret??readPinnedBackendSecret)):undefined);
+ }
+ function runBackend(backend:PageBackendRecord){return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal,options.startRetryDelaysMs);}
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
 export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>,resolverFetch?:ResolverFetcher):Promise<RunnerJson>{
