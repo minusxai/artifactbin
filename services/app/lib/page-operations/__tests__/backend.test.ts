@@ -1,4 +1,4 @@
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,vi} from 'vitest';
 import type {RunStart,RunnerService} from '@artifactbin/contracts';
 import {pageBackendCapability,createBackendInvoker} from '../backend';
 import {FieldFailed,FieldNotExecuted} from '../contracts';
@@ -71,5 +71,40 @@ describe('backend run admission retries',()=>{
   const controller=new AbortController();const {runner,starts}=fakeRunner([()=>{controller.abort();return Error('queue_full');}]);
   const error=await invoker(runner)({...call,signal:controller.signal}).catch(e=>e);
   expect(error).toBeInstanceOf(FieldNotExecuted);expect(error.code).toBe('cancelled');expect(starts).toHaveLength(1);
+ });
+});
+
+describe('api 2 capabilities on the host',()=>{
+ const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
+ const v2={...record,api:2 as const,secretBindings:['KEY'],secretHosts:{KEY:'api.example.com'}};
+ it('refuses secret values and the store to api 2 code even when it reaches for them by another name',async()=>{
+  const read=async()=>'private-value';
+  await expect(pageBackendCapability(store,request,'artifactbin.pageBackend.secrets.get',{name:'KEY'},async()=>v2,undefined,read)).rejects.toThrow('backend_capability_forbidden');
+  await expect(pageBackendCapability(store,request,'artifactbin.pageBackend.store.get',{},async()=>v2)).rejects.toThrow('backend_capability_forbidden');
+  await expect(pageBackendCapability(store,request,'artifactbin.pageBackend.store.set',{value:1,expected:0},async()=>v2)).rejects.toThrow('backend_capability_forbidden');
+ });
+ it('sends api 2 fetches to the host-injecting fetcher with the pinned bindings, and api 1 fetches to the URL-only fetcher',async()=>{
+  const legacy=vi.fn(async(url:string)=>({status:200,url,contentType:'text/plain',body:'legacy'}));
+  const resolver=vi.fn(async()=>({status:201,url:'https://api.example.com/',headers:{},contentType:'',body:'v2',receipt:{method:'GET',host:'api.example.com',path:'/',bytesIn:2,bytesOut:0,secrets:[]}}));
+  const read=vi.fn(async()=>'value');const args={url:'https://api.example.com/?k={{KEY}}',method:'POST',body:'{}'};
+  expect(await pageBackendCapability(store,request,'artifactbin.pageBackend.fetch',args,async()=>v2,legacy,read,resolver)).toMatchObject({status:201,body:'v2'});
+  expect(legacy).not.toHaveBeenCalled();expect(resolver).toHaveBeenCalledWith(args,expect.objectContaining({hosts:{KEY:'api.example.com'}}));
+  await (resolver.mock.calls[0] as unknown as [unknown,{read(name:string):Promise<string>}])[1].read('KEY');expect(read).toHaveBeenCalledWith(v2,'KEY');
+  expect(await pageBackendCapability(store,request,'artifactbin.pageBackend.fetch',{url:'https://example.com/',headers:{Authorization:'never-forward'}},async()=>({...record,api:1 as const}),legacy,read,resolver)).toMatchObject({body:'legacy'});
+  expect(legacy).toHaveBeenCalledWith('https://example.com/');expect(resolver).toHaveBeenCalledTimes(1);
+ });
+});
+describe('resolver time limits',()=>{
+ const call={namespace:'budget',fileId:'backend1',version:'v1',operation:'query' as const,field:'targets',args:{},principal:{tenant:'page1',subject:'viewer1'},signal:new AbortController().signal};
+ it('gives the run 15 s of wall time and waits for it 16 s',async()=>{
+  vi.useFakeTimers();
+  try{
+   let limits:RunStart['limits'];let cancelled=0;
+   const runner={start:async(input:RunStart)=>{limits=input.limits;return {runId:'run1'};},getRun:async()=>({status:'running',output:null}),cancel:async()=>{cancelled++;}} as unknown as RunnerService;
+   const outcome=createBackendInvoker(runner,async()=>({...record,compiled:'bundle'}))(call).then(()=>'completed',(e:FieldFailed)=>e.code);
+   await vi.advanceTimersByTimeAsync(15_900);expect(cancelled).toBe(0);
+   await vi.advanceTimersByTimeAsync(200);expect(await outcome).toBe('deadline');expect(cancelled).toBe(1);
+   expect(limits).toMatchObject({timeoutMs:15_000,maxRequests:32,maxOutputBytes:1024*1024});
+  }finally{vi.useRealTimers();}
  });
 });
