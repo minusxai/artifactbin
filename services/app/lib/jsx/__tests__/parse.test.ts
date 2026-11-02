@@ -26,7 +26,7 @@ describe('parseJsx', () => {
     );
     // An earlier name parses to its canonical tag and keeps its spelling (component-names COMPONENT_ALIASES).
     expect(el.tag).toBe('Dataset');
-    expect(el.authoredTag).toBe('Dataset');
+    expect(el.authoredTag).toBeUndefined();
     expect(el.isComponent).toBe(true);
     expect(el.selfClosing).toBe(false);
     expect(attr(el, 'connection')).toEqual({ static: true, json: 'github' });

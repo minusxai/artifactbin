@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * THE FRAME'S APP LINKS (lib/islands/frame-links, installed by lib/islands/page in every framed document): a link to an app path inside a document framed on its
  * own origin asks the app page to follow it, and takes the top itself only when nobody answers. The frame's parent is

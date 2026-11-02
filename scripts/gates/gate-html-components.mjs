@@ -18,7 +18,7 @@ const families=['Tabs','Button','Switch','Progress','Collapsible','Dialog','Slid
 const sourceName=family=>family.replace(/[A-Z]/g,(letter,index)=>(index?'-':'')+letter.toLowerCase());
 const repo = path.resolve(import.meta.dirname,'../..');
 // These bytes are the real retained React capture, not a new expected DOM manufactured by this gate.
-const oracleBytes = await readFile(path.join(repo,'services/app/lib/islands/__tests__/fixtures/react-oracle.json'));
+const oracleBytes = await readFile(path.join(repo,'scripts/fixtures/component-react-oracle.json'));
 const oracleHash = createHash('sha256').update(oracleBytes).digest('hex');
 if (oracleHash !== 'fc56abeba44af903e616ed3172d5dddaad44c5c7b1afbc10ecf92078e10d468b') throw new Error('Recorded React reference changed: review and explicitly repin the capture');
 const oracle = JSON.parse(oracleBytes);

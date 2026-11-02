@@ -567,7 +567,7 @@ it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, nav
     expect(nodeFetches()).toBe(0);
     // Reads: the server's frame is the page's viewport, and the bridge attaches at once, with no tree.
     expect(screen.getByLabelText('Artifact viewport')).toContainElement(frame);
-    expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ kind: 'attach', nodes: [] }) })]);
+    expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ kind: 'attach', source: null }) })]);
     // The document's controller runs: its `$` values reach the address.
     frameReady(frame, attaches(posted)[0]!.key!, 'reader-nonce', '?$region=east');
     expect(window.location.search).toBe('?$region=east');
@@ -592,30 +592,13 @@ const framePressed = (frame: HTMLIFrameElement, key: string) => window.dispatchE
 }));
 const treesSent = (posted: Posted) => envelopes(posted).filter((message) => message.payload?.kind === 'nodes');
 
-it.each([
-  ['presses into the document (the page\'s window loses focus to the frame)', (frame: HTMLIFrameElement) => pressIntoDocument(frame)],
-  ['touches or selects in the document (the frame says so; no focus moves)', (frame: HTMLIFrameElement, key: string) => framePressed(frame, key)],
-])('asks for the tree once when a guest first %s, and hands it to the running frame controller', async (_how, press) => {
-  mockKind = 'anon'; mockRole = 'viewer'; servingTree();
-  const { frame, posted } = await mountReady();
-  doorOpens(frame);
-  await settle();
-  expect(nodeFetches()).toBe(0);
-  const key = attaches(posted)[0]!.key!;
-  frameReady(frame, key, 'guest-nonce');
-  press(frame, key);
-  await waitFor(() => expect(nodeFetches()).toBe(1));
-  await waitFor(() => expect(treesSent(posted)).toHaveLength(1));
-  // The same session: the controller that holds the reader's selection takes the tree; nothing detaches or re-attaches.
-  expect(treesSent(posted)[0]).toEqual(expect.objectContaining({ key, payload: { kind: 'nodes', nodes: TREE } }));
-  expect(envelopes(posted).map((message) => message.payload?.kind)).not.toContain('detach');
-  expect(new Set(attaches(posted).map((message) => message.key))).toEqual(new Set([key]));
-  frame.blur();
-  pressIntoDocument(frame);
-  framePressed(frame, key);
-  await settle();
-  expect(nodeFetches()).toBe(1);
-  expect(treesSent(posted)).toHaveLength(1);
+it('a guest keeps the same native bridge session after pressing and selecting without fetching a compiler tree',async()=>{
+ mockKind='anon';mockRole='viewer';const {frame,posted}=await mountReady();doorOpens(frame);await settle();
+ const key=attaches(posted)[0]!.key!;frameReady(frame,key,'guest-nonce');
+ pressIntoDocument(frame);framePressed(frame,key);await settle();
+ expect(nodeFetches()).toBe(0);expect(treesSent(posted)).toEqual([]);
+ expect(envelopes(posted).map(message=>message.payload?.kind)).not.toContain('detach');
+ expect(new Set(attaches(posted).map(message=>message.key))).toEqual(new Set([key]));
 });
 
 it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived version', 'anon', { version: 1, head: 2 }]] as const)('never asks for the tree for %s, pressing into the document included', async (_who, kind, archived) => {
@@ -626,16 +609,16 @@ it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived 
   framePressed(frame, attaches(posted)[0]!.key!);
   await settle();
   expect(nodeFetches()).toBe(0);
-  expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ nodes: [] }) })]);
+  expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ source: null }) })]);
   expect(treesSent(posted)).toEqual([]);
 });
 
-it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge attaches only with it', async (role) => {
+it.each(['commenter', 'owner'])('a %s attaches its native bridge without fetching a compiler tree', async (role) => {
   mockRole = role; servingTree();
   const { posted } = await mountReady(undefined, { fromStart: true });
   await waitFor(() => expect(attaches(posted)).toHaveLength(1));
-  expect(nodeFetches()).toBe(1);
-  expect(attaches(posted)[0]!.payload?.nodes).toEqual(TREE);
+  expect(nodeFetches()).toBe(0);
+  expect(attaches(posted)[0]!.payload).toMatchObject({kind:'attach',source:null});
 });
 
 it.each(['owner', 'editor'])('a %s visiting a legacy edit hash reads and comments without downloading editor source', async (role) => {
@@ -650,7 +633,7 @@ it.each(['owner', 'editor'])('a %s visiting a legacy edit hash reads and comment
   expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
 });
 
-it('opens independent PWA, context and file settings without entering a document editor', async () => {
+it('opens native PWA and file settings without entering a document editor', async () => {
   mockRole = 'owner';
   const existing = vi.mocked(fetch).getMockImplementation()!;
   vi.mocked(fetch).mockImplementation(async (input, init) => {
@@ -662,8 +645,7 @@ it('opens independent PWA, context and file settings without entering a document
   fireEvent.click(within(await controls()).getByRole('button', { name: 'Artifact settings' }));
   const settings = await trusted().findByRole('dialog', { name: 'Artifact settings' });
   await within(settings).findByLabelText('Allow installation as a PWA');
-  fireEvent.click(within(settings).getByRole('tab', { name: 'Context' }));
-  expect(await within(settings).findByRole('button', { name: 'Add context' })).toBeInTheDocument();
+  expect(within(settings).queryByRole('tab', { name: 'Context' })).toBeNull();
   fireEvent.click(within(settings).getByRole('tab', { name: 'Files' }));
   expect(within(settings).getByRole('link', { name: 'Reference image' })).toHaveAttribute('href', '/a/file1234');
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();

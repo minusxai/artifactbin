@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The trusted UI sheet (trusted-ui-styles): only the app's own compiled CSS, scoped to the trusted root and reset
  * against author variables; the shell's same-origin sheets stand in until their exact bytes arrive; and the overlay

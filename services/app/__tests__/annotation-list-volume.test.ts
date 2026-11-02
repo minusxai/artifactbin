@@ -83,8 +83,9 @@ it('keeps native source GET independent of comment volume and exposes threads on
   });
   const one = await seed(1), ten = await seed(10);
   const small = await read(one), large = await read(ten);
-  expect(large.value).not.toHaveProperty('annotations');
-  expect(large.value).not.toHaveProperty('open_annotations');
+  expect(large.value.annotations.map(a=>a.id)).toEqual(ten.ids);
+  expect(large.value.open_annotations).toBe(10);
+  expect(small.value.open_annotations).toBe(1);
   const listed=await listAnnotationsRoute(request(`/api/artifacts/${ten.doc.id}/annotations`,{token:ten.t.token}),params({id:ten.doc.id}));
   expect((await listed.json()).annotations.map((a:{id:string})=>a.id)).toEqual(ten.ids);
   expect(large.stats.count).toBe(small.stats.count);

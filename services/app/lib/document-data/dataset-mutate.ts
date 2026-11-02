@@ -108,6 +108,8 @@ export async function mutateDataset(
     statements?:readonly {sql:string;params:Record<string,Scalar>}[];
     rowIdentity?:{column:string;ids:readonly string[];tableId:string};
     nativePolicy?:boolean;
+    /** Trusted internal producer: effect and canonical receipt share only the winning dataset transaction. */
+    commitEffect?:(tx:Queryable,result:MutationApplied)=>Promise<void>;
   } = {},
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
@@ -224,6 +226,7 @@ export async function mutateDataset(
      const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
       policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:v2});
      if(committed){
+      await guard.commitEffect?.(tx,{row:committed,affected:out.affected,rowCount:out.rows.length});
       if(guard.receipt){
        if(guard.document)await completeDocumentMutationReceipt(tx,guard.receipt,{datasetId:committed.id,datasetEditId:committed.edit_id,version:committed.version,affected:out.affected,rowCount:out.rows.length});
        else await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
@@ -232,7 +235,7 @@ export async function mutateDataset(
      return committed;
     };
     let row;
-    try { row=v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { row=v2||guard.commitEffect||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) {
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
      throw error;

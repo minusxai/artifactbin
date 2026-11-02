@@ -4,8 +4,6 @@ import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
 import { POST as draftQueryRoute } from '@/app/api/query/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken } from '@/lib/authentication';
-import { createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();
@@ -14,70 +12,21 @@ const create = async (token: string, body: Record<string, unknown>) =>
   (await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { visibility: 'public', ...body } }))).json();
 
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
-const DOC = (ds: string) =>
-  '<Helmet><Value name="region" type="string" /><Value name="min" type="number" default={0} />' +
-  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where ($region is null or region = $region) and revenue >= $min group by 1 order by 1\`}</Query>` +
-  `<Import name="regions_data" src="ref:${ds}" /><Query name="regions">{\`select distinct region from regions_data.rows order by 1\`}</Query>` +
-  '</Helmet><div><select value="$region" options="$regions" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
-
-describe('POST /api/query (owner path — a draft)', () => {
-  it('runs a draft over the caller\'s own datasets, bearer-authed', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS })).id;
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: DOC(ds), values: { region: 'EU' } } }));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { tables: Record<string, { rows: unknown[] }>; errors: Record<string, string> };
-    expect(body.tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }]);
-  });
-
-  it('runs a draft under the owner\'s verified email browser session', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS })).id;
-    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', actor: actor, origin: BASE, json: { markup: DOC(ds), values: { region: 'EU' } } }));
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { tables: Record<string, { rows: unknown[] }> }).tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }]);
-  });
-
-  it('refuses a cross-site actor call, and never blocks a bearer agent', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS })).id;
-    const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', actor: actor, origin: 'https://evil.example', json: { markup: DOC(ds) } }))).status).toBe(403);
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: DOC(ds) } }))).status).toBe(200);
-  });
-
-  it('a PRIVATE dataset of another owner reads as a missing table — never as data', async () => {
-    // Public/unlisted foreign datasets resolve now (refs-readable.test.ts);
-    // private is the boundary that must hold in the draft path too.
-    const mine = await mintToken('mine');
-    const owner = await createUser({ email: 'query-owner@example.com' });
-    const theirs = await mintToken('theirs', owner.id);
-    await claimToken(owner.id, theirs.token);
-    const foreign = (await create(theirs.token, { dataset: ROWS, visibility: 'private' })).id;
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', token: mine.token, json: { markup: DOC(foreign) } }));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { tables: Record<string, unknown>; errors: Record<string, string> };
-    expect(body.tables.sales).toBeUndefined();
-    expect(body.errors.sales).toMatch(new RegExp(`ref:${foreign}`));
-  });
-
-  it('requires a credential and a markup body', async () => {
-    const t = await mintToken('t');
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', json: { markup: '<p>x</p>' } }))).status).toBe(401);
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: {} }))).status).toBe(400);
-  });
-
-  it('a draft that declares nothing answers empty; a draft whose Helmet is malformed answers 400 with the grammar errors', async () => {
-    const t = await mintToken('t');
-    const empty = await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: '<p>x</p>' } }));
-    expect(await empty.json()).toEqual({ tables: {}, errors: {}, flow: null });
-    const bad = await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: { markup: '<Helmet><Value name="n" type="number" default="lots" /></Helmet><p>x</p>' } }));
-    expect(bad.status).toBe(400);
-    expect(JSON.stringify(await bad.json())).toMatch(/default/);
-  });
+describe('retired draft compiler boundary', () => {
+ it('authenticates and enforces same-origin sessions before refusing legacy markup',async()=>{
+  const t=await mintToken('draft');
+  const call=(options:Parameters<typeof request>[1])=>draftQueryRoute(request('/api/query',{method:'POST',...options}));
+  expect((await call({json:{markup:'<p>x</p>'}})).status).toBe(401);
+  const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};
+  expect((await call({actor,origin:'https://evil.example',json:{markup:'<p>x</p>'}})).status).toBe(403);
+  for(const auth of [{token:t.token},{actor,origin:BASE}]){
+   const response=await call({...auth,json:{markup:'<Helmet><Query name="secret">select * from secret</Query></Helmet>'}});
+   expect(response.status).toBe(400);expect(await response.json()).toEqual({error:'native_html_required'});
+   expect(response.headers.get('cache-control')).toBe('no-store');
+  }
+  expect((await call({token:t.token,json:{}})).status).toBe(400);
+ });
 });
-
 
 // Saved JSX query/value/hold/people transports are retired. Saved pages execute
 // their declared dataset namespace through the native GraphQL boundary instead.

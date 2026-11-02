@@ -15,7 +15,7 @@ const params=(id:string,annId?:string)=>({params:Promise.resolve({id,annId:annId
 const source='<p data-af-id="intro">An intro paragraph.</p><div data-af-id="figure">Revenue grew 40% in Q3.</div>';
 async function fixture(){const t=await mintAccountToken('anchor');const made=await createPage(request('/api/artifacts',{method:'POST',token:t.token,json:{html:nativeHtml(source)}}));expect(made.status).toBe(201);const doc=await made.json(),actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};const post=()=>createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('figure'),body:'Check this figure'}}),params(doc.id));return{t,doc,actor,post};}
 type Fixture=Awaited<ReturnType<typeof fixture>>;
-const head=async(f:Fixture)=>{const r=await readPage(request(`/api/artifacts/${f.doc.id}`,{token:f.t.token}),params(f.doc.id));expect(r.status).toBe(200);return r.json();};
+const head=async(f:Fixture)=>{const r=await readPage(request(`/api/artifacts/${f.doc.id}`,{token:f.t.token}),params(f.doc.id));expect(r.status).toBe(200);const {annotations:_threads,open_annotations:_count,...saved}=await r.json();return saved;};
 const list=async(f:Fixture)=>{const r=await listComments(request(`/api/artifacts/${f.doc.id}/annotations`,{token:f.t.token}),params(f.doc.id));expect(r.status).toBe(200);return(await r.json()).annotations;};
 const put=(f:Fixture,html:string)=>updatePageRequest(f,{html:nativeHtml(html)});
 async function updatePageRequest(f:Fixture,json:Record<string,unknown>){return updatePage(await observedRequest(`/api/artifacts/${f.doc.id}`,{method:'PUT',token:f.t.token,json}),params(f.doc.id));}

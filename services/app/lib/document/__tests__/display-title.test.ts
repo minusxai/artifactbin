@@ -39,8 +39,8 @@ describe('firstHeadingTitle', () => {
   it('is null when there is no heading, or nothing usable in one', () => {
     expect(firstHeadingTitle('<p>No heading here</p>')).toBeNull();
     expect(firstHeadingTitle('<h1>   </h1>')).toBeNull();
-    // An interpolated heading has no static text to borrow.
-    expect(firstHeadingTitle('<h1>{data.name}</h1>')).toBeNull();
+    // Native HTML never evaluates author text as JSX.
+    expect(firstHeadingTitle('<h1>{data.name}</h1>')).toBe('{data.name}');
     expect(firstHeadingTitle(null)).toBeNull();
   });
 });

@@ -13,6 +13,8 @@ export default {
         'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
         // Produces optional browser modules installed in the HTML author skill.
         'scripts/build/build-html-components.mjs',
+        // Retained downstream build entry (downstream-script-paths.test.ts).
+        'scripts/build/build-islands.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
         // proofs spawned by their tests and the preview gate's build.

@@ -171,13 +171,13 @@ describe('the HTTP doors: respondToAnnotationAction, respondToAnnotationEdit, re
 describe('the artifact wire with annotations', () => {
   async function markup() {
     const t = await mintAccountToken('annotations-markup');
-    const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<p id="a1b2">Unique words here</p>', meta: {}, title: 'Doc', description: null, visibility: 'private' } as never);
+    const row = await createArtifact(t.id, t.userId, { format: 'html', source: '<html><body><p data-af-id="a1b2">Unique words here</p></body></html>', meta: {}, title: 'Doc', description: null, visibility: 'private' } as never);
     return { t, row, actor: identityForUser(t.userId!, t.id) };
   }
 
   it('inlines a markup document’s open threads and counts them; other formats carry neither', async () => {
     const m = await markup();
-    const open = await createAnnotationFor(m.actor, m.row.id, { body: 'On these', quote: 'Unique words' }, human) as Wire;
+    const open = await createAnnotationFor(m.actor, m.row.id, { anchor:anchor('a1b2'), body: 'On these' }, human) as Wire;
     expect(open.id).toMatch(/^ann_/);
     const row = (await getArtifactById(m.row.id))!;
     const wire = await artifactToWireWithAnnotations(row, BASE, m.actor.userId) as { annotations: Wire[]; open_annotations: number };
@@ -186,7 +186,7 @@ describe('the artifact wire with annotations', () => {
     expect(await artifactWireFor(row, BASE)).toMatchObject({ open_annotations: 1 });
     const f = await fixture();
     await f.comment('On a page');
-    const page = (await getArtifactById(f.doc.id))!;
+    const page = await createArtifact(f.token.id,f.token.userId,{format:'dataset',source:'[]',meta:{},title:'Data'});
     const pageWire = await artifactToWireWithAnnotations(page, BASE);
     expect(pageWire).not.toHaveProperty('annotations');
     expect(pageWire).not.toHaveProperty('open_annotations');

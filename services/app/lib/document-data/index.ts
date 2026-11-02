@@ -11,7 +11,7 @@ export { registeredQueryImportForRow, datasetResolverForActor, nameablePeople, r
 
 /** Writes (the mutate route, operations, runner). */
 export { respondToMutate } from './mutate-http';
-export { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
+export { completeDocumentMutationReceipt, adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from './mutation-operation';
 
 /** Dataset policies (the policy routes). */
 export { datasetPolicyRequest, readDatasetPolicy, writeDatasetPolicy } from './dataset-policy/http';

@@ -143,7 +143,7 @@ From repo root.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations; public/unlisted
   link access is neither ownership nor dataset write access.
 - Rendering, editing and author scripts have separate trust boundaries. Read
-  [services/app/lib/story-ui/AGENTS.md](services/app/lib/story-ui/AGENTS.md) before markup changes.
+  [serving and security](docs/serving-and-security.md) before markup changes.
 - After a lockfile merge, regenerate if needed and run `npm ci --dry-run` (a populated install hides
   a broken lockfile). Native packages/browser assets need build/image verification.
 

@@ -27,7 +27,7 @@ const precompressAssets = (): Plugin => {
     name: 'artifactbin-precompress',
     apply: 'build',
     configResolved(config) { writesFiles = config.build.write !== false; },
-    async closeBundle() {
+    async writeBundle() {
       if (!writesFiles) return;
       this.info(describePrecompression('dist/web/assets', await precompressTree(path.join(outDir, 'assets'))));
     },
@@ -41,7 +41,7 @@ const precompressAssets = (): Plugin => {
  * files a story names — rather than Vite /assets copies of those bytes, so a
  * document read inside the app fetches each face once.
  */
-const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/story-design/story-font-manifest.json');
+const FONT_MANIFEST = path.resolve(import.meta.dirname, 'services/app/lib/html-systems/font-manifest.json');
 const FONT_MARKER = '/* @app-font-faces */';
 const appFontFaces = (): Plugin => ({
   name: 'artifactbin-app-font-faces',

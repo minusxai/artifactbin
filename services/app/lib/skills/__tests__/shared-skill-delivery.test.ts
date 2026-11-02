@@ -1,3 +1,4 @@
+import {inflateRawSync} from 'node:zlib';
 import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic,isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
@@ -189,4 +190,15 @@ it('keeps credential recovery references consistent with direct HTTP authenticat
   expect(text).toContain('/llms/http-auth');
  }
  expect(publicGuideText('http-auth',origin)).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
+});
+
+it('compresses repeated UTF-8 skill text deterministically without changing member bytes',()=>{
+ const text='Native author contract ✓\n'.repeat(1000),files={'SKILL.md':text};
+ const archive=Buffer.from(skillZip(files));
+ expect(archive.equals(Buffer.from(skillZip(files)))).toBe(true);
+ expect(archive.readUInt16LE(8)).toBe(8);
+ const start=30+archive.readUInt16LE(26),size=archive.readUInt32LE(18);
+ expect(inflateRawSync(archive.subarray(start,start+size)).toString()).toBe(text);
+ expect(archive.readUInt32LE(22)).toBe(Buffer.byteLength(text));
+ expect(archive.byteLength).toBeLessThan(Buffer.byteLength(text)/2);
 });

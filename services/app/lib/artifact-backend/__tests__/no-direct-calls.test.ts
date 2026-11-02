@@ -10,18 +10,12 @@ import { describe, expect, it } from 'vitest';
 const APP = path.resolve(import.meta.dirname, '../../..');
 const CONE = [
   'solid/document/create-reader-presence.ts',
-  'solid/editor/ContextPanel.tsx',
-  'solid/editor/create-in-place-edit.ts',
   'solid/editor/create-live-artifact.ts',
-  'solid/editor/panels/QueryNotebookPanel.tsx',
-  'solid/editor/StoryFormatToolbar.tsx',
-  'solid/lib/live-edits-core.ts',
   'solid/document/AnnotationLayer.tsx',
   'solid/document/AnnotationThread.tsx',
   'solid/document/PersonMention.tsx',
   'solid/document/CommentCapture.ts',
   'solid/document/CommentMentionPicker.tsx',
-  'lib/document/document-authoring-client.ts',
   'lib/artifact-backend/browser-artifact-write.ts',
 ]
 const SERVER_CALL = /\bfetch\s*\(|new\s+EventSource\s*\(|readAnnotationPages\s*\(/;

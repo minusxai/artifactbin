@@ -1,77 +1,33 @@
-/**
- * `<DataTable>` — the pure half: what an author may declare per column, how
- * rows sort, how cells format and how conditional formatting maps a value to
- * a width or a color. No React, no DOM: the kit component renders what this
- * computes, and a node test can pin every rule.
- *
- * Authored surface (all JSON, so the markup stays data):
- *   <DataTable data="$sales" height="420px" sort={{"col":"revenue","dir":"desc"}}
- *     columns={[
- *       {"col":"region","title":"Region"},
- *       {"col":"revenue","title":"Revenue","fmt":"$,.0f","align":"right","bar":true},
- *       {"col":"growth","fmt":".1%","colorScale":"diverging"}
- *     ]} />
- * `columns` picks and orders the columns shown (absent = every column of the
- * table, inferred titles); `fmt` is a d3-format string; `bar` draws a
- * proportional bar behind a numeric cell; `colorScale` tints it (`sequential`
- * from the theme's chart color, `diverging` red↔green around zero).
- */
+/** Internal: Parse, sort, format and measure table cells. Used by af-data-table. */
 import { numberFormatter } from '@/lib/dataflow';
 import type { DatasetColumn, Row } from '@/lib/dataflow';
 
 type SortDir = 'asc' | 'desc';
-export interface SortSpec { col: string; dir: SortDir }
+export interface SortSpec {
+  col: string;
+  dir: SortDir;
+}
 
 interface DataTableColumnSpec {
   col: string;
   title?: string;
-  /** d3-format specifier (numbers only; a non-number renders as text). */
   fmt?: string;
   align?: 'left' | 'right' | 'center';
-  /** A proportional bar behind the value (numbers). `true` = the theme's chart color. */
   bar?: boolean | { color?: string };
-  /** A tint by value: 'sequential' (0 → max) or 'diverging' (min ↔ 0 ↔ max). */
   colorScale?: 'sequential' | 'diverging';
-  /** Fixed column width in px. */
   width?: number;
-  /**
-   * What the cell HOLDS, when it is not text. `image` renders the cell's URL
-   * as an `<img>` served from our own copy of it (lib/document/asset-url,
-   * imported on first view through the document's asset endpoint).
-   *
-   * Declared rather than sniffed, deliberately: a column of URLs is a column of
-   * links far more often than it is a column of pictures, and a table that
-   * decided for itself would turn a list of sources into a wall of logos the
-   * author never asked for.
-   */
   kind?: 'image';
 }
-
-/** A column as the table will render it — the spec resolved against the table's real columns. */
 interface ResolvedColumn extends DataTableColumnSpec {
   type: DatasetColumn['type'];
   title: string;
   align: 'left' | 'right' | 'center';
-  /** [min, max] over the loaded rows — what bars and scales are relative to. */
   range: [number, number] | null;
 }
 
 const ALIGNS = new Set(['left', 'right', 'center']);
 const SCALES = new Set(['sequential', 'diverging']);
-
-/** The default scroll-box ceiling in px, shared by the parser's fallback and the component's prop default. */
 const DEFAULT_TABLE_HEIGHT = 420;
-
-/**
- * Parse the authored `height` prop into a pixel CEILING.
- *
- * The docs teach `height="420px"`, so a string reaches a component whose prop
- * is a pixel count; concatenating a unit onto it emits `420pxpx`, a declaration
- * the browser drops. One parser, so the docs and the component agree on what a
- * height is: a positive number, a numeric string, or a `"<n>px"` string.
- * Anything else (absent, 0, negative, NaN, `"abc"`, a percentage or any other
- * unit) falls back — a length this component cannot honour is not a length.
- */
 export function parseTableHeight(raw: unknown, fallback: number = DEFAULT_TABLE_HEIGHT): number {
   if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : fallback;
   if (typeof raw !== 'string') return fallback;
@@ -80,8 +36,6 @@ export function parseTableHeight(raw: unknown, fallback: number = DEFAULT_TABLE_
   const n = Number(m[1]);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
-
-/** Parse the authored `columns` prop; unknown/malformed entries are dropped, and a spec naming a column the table lacks is kept (it renders empty and says so). */
 export function parseColumnSpecs(raw: unknown): DataTableColumnSpec[] | null {
   if (!Array.isArray(raw)) return null;
   const out: DataTableColumnSpec[] = [];
@@ -92,21 +46,22 @@ export function parseColumnSpecs(raw: unknown): DataTableColumnSpec[] | null {
     const spec: DataTableColumnSpec = { col: e.col };
     if (typeof e.title === 'string') spec.title = e.title;
     if (typeof e.fmt === 'string') spec.fmt = e.fmt;
-    if (typeof e.align === 'string' && ALIGNS.has(e.align)) spec.align = e.align as DataTableColumnSpec['align'];
+    if (typeof e.align === 'string' && ALIGNS.has(e.align))
+      spec.align = e.align as DataTableColumnSpec['align'];
     if (e.bar === true) spec.bar = true;
     else if (e.bar && typeof e.bar === 'object' && !Array.isArray(e.bar)) {
       const color = (e.bar as { color?: unknown }).color;
       spec.bar = typeof color === 'string' ? { color } : true;
     }
-    if (typeof e.colorScale === 'string' && SCALES.has(e.colorScale)) spec.colorScale = e.colorScale as DataTableColumnSpec['colorScale'];
-    if (typeof e.width === 'number' && Number.isFinite(e.width) && e.width > 0) spec.width = e.width;
+    if (typeof e.colorScale === 'string' && SCALES.has(e.colorScale))
+      spec.colorScale = e.colorScale as DataTableColumnSpec['colorScale'];
+    if (typeof e.width === 'number' && Number.isFinite(e.width) && e.width > 0)
+      spec.width = e.width;
     if (e.kind === 'image') spec.kind = 'image';
     out.push(spec);
   }
   return out;
 }
-
-/** Parse the authored `sort` prop. */
 export function parseSortSpec(raw: unknown): SortSpec | null {
   if (typeof raw === 'string' && raw) return { col: raw, dir: 'asc' };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -115,7 +70,8 @@ export function parseSortSpec(raw: unknown): SortSpec | null {
   return { col: r.col, dir: r.dir === 'desc' ? 'desc' : 'asc' };
 }
 
-const numeric = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const numeric = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null;
 
 function rangeOf(rows: Row[], col: string): [number, number] | null {
   let min = Infinity;
@@ -128,9 +84,11 @@ function rangeOf(rows: Row[], col: string): [number, number] | null {
   }
   return min <= max ? [min, max] : null;
 }
-
-/** Resolve the columns to render: the spec (or every table column), typed, titled, aligned, ranged. */
-export function resolveColumns(specs: DataTableColumnSpec[] | null, columns: DatasetColumn[], rows: Row[]): ResolvedColumn[] {
+export function resolveColumns(
+  specs: DataTableColumnSpec[] | null,
+  columns: DatasetColumn[],
+  rows: Row[],
+): ResolvedColumn[] {
   const byName = new Map(columns.map((c) => [c.name, c]));
   const list: DataTableColumnSpec[] = specs ?? columns.map((c) => ({ col: c.name }));
   return list.map((spec) => {
@@ -145,8 +103,6 @@ export function resolveColumns(specs: DataTableColumnSpec[] | null, columns: Dat
     };
   });
 }
-
-/** A stable sort by one column: numbers numerically, nulls last either way, strings by locale. */
 export function sortRows(rows: Row[], sort: SortSpec | null): Row[] {
   if (!sort) return rows;
   const dir = sort.dir === 'desc' ? -1 : 1;
@@ -171,8 +127,6 @@ export function sortRows(rows: Row[], sort: SortSpec | null): Row[] {
     })
     .map((x) => x.row);
 }
-
-/** Cell text: d3-format when `fmt` is set and the value is a number, else the value's plain text ('' for null). */
 export function formatCell(value: unknown, column: Pick<ResolvedColumn, 'fmt'>): string {
   if (value === null || value === undefined) return '';
   const n = numeric(value);
@@ -180,8 +134,6 @@ export function formatCell(value: unknown, column: Pick<ResolvedColumn, 'fmt'>):
   // An invalid `fmt` falls back to the default format (lib/dataflow/number-format) — never a throw.
   return numberFormatter(column.fmt)(n);
 }
-
-/** Bar width as a fraction 0..1 of the column's max (magnitude); null when not a bar column / not a number. */
 export function barFraction(value: unknown, column: ResolvedColumn): number | null {
   if (!column.bar || !column.range) return null;
   const n = numeric(value);
@@ -192,13 +144,6 @@ export function barFraction(value: unknown, column: ResolvedColumn): number | nu
 }
 
 const round = (x: number): number => Math.round(x * 100) / 100;
-
-/**
- * Cell tint for a color-scale column, as a CSS color string using the theme's
- * chart variables (`--chart-1` for sequential, `--chart-2`/`--chart-1` for the
- * negative/positive halves of diverging) with an alpha proportional to the
- * value's position in the range; null when not applicable.
- */
 export function cellTint(value: unknown, column: ResolvedColumn): string | null {
   if (!column.colorScale || !column.range) return null;
   const n = numeric(value);
@@ -213,28 +158,10 @@ export function cellTint(value: unknown, column: ResolvedColumn): string | null 
   const t = round(Math.min(1, Math.abs(n) / extent));
   return n < 0 ? `rgb(from var(--chart-2) r g b / ${t})` : `rgb(from var(--chart-1) r g b / ${t})`;
 }
-
-/** The virtual regime's row grid: one template shared by header and every row. */
 export interface GridGeometry {
-  /** `grid-template-columns` value. */
   template: string;
-  /** The grid's total minimum width in px, null when no column has a known minimum. */
   minWidth: number | null;
 }
-
-/**
- * The track template for the virtualized rows, from the authored widths and a
- * one-time measurement of the static table's header cells (auto table layout
- * already sized every column to its content — the browser did the measuring).
- *
- * `minmax(<measured>px, 1fr)` keeps content width as a floor while still
- * stretching on a wide viewport; `minWidth` is what lets the grid grow PAST a
- * narrow one so the scroll box scrolls sideways — without it the rows'
- * `width: 100%` clamped the grid to a phone's screen, the tracks collapsed to
- * slivers, and every nowrap cell painted over its neighbours. A measurement
- * from a different column count is ignored: columns can change after the
- * one-time measure, and a stale floor under the wrong column is worse than none.
- */
 export function gridGeometry(columns: ResolvedColumn[], measured: number[] | null): GridGeometry {
   const floors = measured && measured.length === columns.length ? measured : null;
   let minWidth = 0;

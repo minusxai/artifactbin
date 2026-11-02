@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * `IslandContext.trustedPortal()` (lib/islands/trusted-portal): the portal destination of the page's
  * first-party trusted UI (solid/components/TrustedUi — a `[data-trusted-ui]` host, an open shadow root,

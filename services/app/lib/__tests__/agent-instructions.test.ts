@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(import.meta.dirname, '../../../..');
-const scopes = ['', 'services/app/lib/jsx', 'services/app/lib/story-ui'];
+const scopes = ['', 'services/app/lib/jsx'];
 
 describe('agent instructions', () => {
   it.each(scopes)('%s gives both agents the same concise instructions', (scope) => {

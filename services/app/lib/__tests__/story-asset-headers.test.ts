@@ -1,39 +1,16 @@
-/**
- * The `/islands/*` assets — caching and CORS on ONE rule, both load-bearing.
- * A served document has an OPAQUE origin, so its `import()` of a lazy chunk is
- * a CORS request: without `Access-Control-Allow-Origin` every chart silently
- * fails to draw. The year-long immutable cache is safe only because each URL
- * is content-addressed — a new build is a new URL.
- */
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { createAppServer } from '@/server/app';
-
-const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
-
-describe('the island reader assets', () => {
-  it('are content-addressed, so a year-long immutable cache is safe', () => {
-    const manifest = JSON.parse(readFileSync('public/islands/manifest.json', 'utf8')) as { manifest: Record<string,string> };
-    for (const url of Object.values(manifest.manifest)) {
-      expect(url, url).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
-    }
-  });
-
-  it('serve the page\'s SQLite engine as application/wasm, immutable — streaming compilation needs the type', async () => {
-    const { sqliteWasm } = JSON.parse(readFileSync('public/islands/manifest.json', 'utf8')) as { sqliteWasm: string };
-    expect(sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
-    const res = await app.request(sqliteWasm);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('application/wasm');
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    expect(new Uint8Array(await res.arrayBuffer()).subarray(0, 4)).toEqual(new Uint8Array([0x00, 0x61, 0x73, 0x6d]));
-  });
-
-  it('are served immutable AND CORS-open — an opaque document imports its chunks in CORS mode', async () => {
-    const manifest = JSON.parse(readFileSync('public/islands/manifest.json', 'utf8')) as { manifest: Record<string,string> };
-    const res = await app.request(manifest.manifest['@mx/boot']!);
-    expect(res.headers.get('cache-control')).toContain('immutable');
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
-  });
+/** Native runtime code is public, CORS-open and revalidated across deployments. */
+import {describe,expect,it} from 'vitest';
+import {createAppServer} from '@/server/app';
+const app=createAppServer({indexHtml:async()=>'<html></html>'});
+describe('native runtime assets',()=>{
+ it.each(['/af/core.js','/af/reader.js','/af/apollo.js','/af/morph.js'])('%s is CORS-open and revalidates without a response body',async path=>{
+  const response=await app.request(path);expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toContain('javascript');
+  expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  expect(response.headers.get('cache-control')).not.toContain('immutable');
+  expect((await response.text()).length).toBeGreaterThan(100);
+  const tag=response.headers.get('etag');expect(tag).toBeTruthy();
+  const cached=await app.request(path,{headers:{'if-none-match':tag!}});
+  expect(cached.status).toBe(304);expect(await cached.text()).toBe('');
+ });
 });

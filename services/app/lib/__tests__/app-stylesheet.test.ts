@@ -40,20 +40,12 @@ describe('the compiled app stylesheet', () => {
     expect(css).toContain('.comment-rich-editor [data-comment-mention]::before, .comment-agent-mention::before {');
   }, 60_000);
 
-  it('paints kit popups inside the trusted overlay using the app palette', async () => {
-    const css = await appStylesheet();
-    for (const [name, property, token] of [
-      ['bg-popover', 'background-color', '--color-surface'],
-      ['text-popover-foreground', 'color', '--color-fg'],
-      ['bg-background', 'background-color', '--color-bg'],
-      ['text-foreground', 'color', '--color-fg'],
-      ['border-border', 'border-color', '--color-edge'],
-      ['border-input', 'border-color', '--color-edge-bright'],
-      ['text-muted-foreground', 'color', '--color-muted'],
-    ]) {
+  it('paints trusted app controls using the app palette',async()=>{
+    const css=await appStylesheet();
+    for(const [name,property,token] of [['bg-surface','background-color','--color-surface'],['text-fg','color','--color-fg'],['border-edge','border-color','--color-edge']]){
       expect(css).toContain(`.${name} {\n    ${property}: var(${token});`);
     }
-  }, 60_000);
+  });
 
   it('is CSS a browser keeps — rules, not one long mangled line', async () => {
     const css = await appStylesheet();

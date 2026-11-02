@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionCases, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/component-parity.mjs';
-const oracle = JSON.parse(readFileSync(new URL('../../services/app/lib/islands/__tests__/fixtures/react-oracle.json', import.meta.url),'utf8'));
+const oracle = JSON.parse(readFileSync(new URL('../fixtures/component-react-oracle.json', import.meta.url),'utf8'));
 const snapshot = html => semanticSnapshot(new JSDOM(html).window.document);
 describe('component semantic parity', () => {
   it('uses real recorded React fixtures for both retained Tabs variants', () => {

@@ -175,13 +175,13 @@ describe('creating (browser door, owner only)', () => {
 });
 
 describe('the wire — colocation on GET', () => {
-  it('dedicated comment GET lists open annotations while native source GET omits them', async () => {
+  it('native source GET and dedicated comment GET agree on open annotations', async () => {
     const { t, doc, actor } = await publish();
     const a = (await (await annotate(doc.id, actor, { anchor:nativeAnchor('findings'), edit_id: doc.edit_id, body: 'check this' })).json()) as AnnotationWire;
 
     const got = await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }));
     expect(got.status).toBe(200);
-    expect(await got.json()).not.toHaveProperty('annotations');
+    expect((await got.json()).annotations).toMatchObject([{id:a.id,status:'open'}]);
     const wire = await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, {token:t.token}),params({id:doc.id}))).json() as {annotations:AnnotationWire[]};
     expect(wire.annotations).toHaveLength(1);
     expect(wire.annotations[0]).toMatchObject({ id: a.id, status: 'open', snippet: expect.stringContaining('Revenue') });
@@ -229,7 +229,8 @@ describe('the wire — colocation on GET', () => {
       params({ id: folder.id }),
     );
     expect(put.status, await put.clone().text()).toBe(200);
-    expect(await put.json()).toMatchObject({ title: 'Again', open_annotations: 1 });
+    expect(await put.json()).toMatchObject({ title: 'Again' });
+    expect(await countOpenAnnotations(folder.id)).toBe(1);
   });
 
   it('the bearer list honours ?status=', async () => {
@@ -339,7 +340,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
       const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: actor }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const page = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
       const inline = (await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
-      expect(inline).not.toHaveProperty('annotations');
+      expect(inline.annotations).toEqual(page.annotations);
       for (const annotations of [my.annotations, page.annotations]) {
         const byBody = new Map(annotations.flatMap((a) => a.thread).map((c) => [c.body, c.author]));
         expect(byBody.get('from nobody')).toMatchObject({ user_id: user.id, image });
@@ -357,8 +358,8 @@ describe('reply / resolve — the agent\'s one mutation', () => {
       const pictureReads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes('image_key'));
       const authorReads = pictureReads.filter((sql) => /FROM annotations a LEFT JOIN users u ON u\.id = a\.author_user_id/.test(sql));
       const reactorReads = pictureReads.filter((sql) => /FROM comment_reactions r LEFT JOIN users u ON u\.id = r\.user_id/.test(sql));
-      expect(authorReads).toHaveLength(2 * 2);
-      expect(reactorReads).toHaveLength(2);
+      expect(authorReads).toHaveLength(3 * 2);
+      expect(reactorReads).toHaveLength(3);
       expect(pictureReads).toHaveLength(authorReads.length + reactorReads.length);
     } finally { query.mockRestore(); }
   });
@@ -496,7 +497,7 @@ it('keeps native source responses separate from the dedicated account-scoped com
  const {t,doc,actor}=await publish();
  expect((await annotate(doc.id,actor,{anchor:nativeAnchor('intro'),body:'Monitor this'})).status).toBe(201);
  const read=await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params({id:doc.id}));expect(read.status).toBe(200);
- expect(await read.json()).not.toHaveProperty('annotations');
+ expect((await read.json()).annotations).toHaveLength(1);
  const comments=await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`,{token:t.token}),params({id:doc.id}));expect(comments.status).toBe(200);expect((await comments.json()).annotations).toHaveLength(1);
 });
 
