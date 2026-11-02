@@ -105,6 +105,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
+| `scripts/build/build-islands.mjs` | Compatibility entry that prepares native server reader assets. | downstream asset preparation |
 | `scripts/build/build-html-components.mjs` | Build the HTML component module graph for the installed author skill. | by hand, when refreshing the skill bundle |
 | `scripts/build/build-gate-inputs.mjs` | Build what the browser gates run: the app and the server bundle. | `ci.yml`, `gate-container.mjs` |
 

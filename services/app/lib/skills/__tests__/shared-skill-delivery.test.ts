@@ -1,4 +1,3 @@
-import {inflateRawSync} from 'node:zlib';
 import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic,isShippedSkillTopic} from '../public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
@@ -192,13 +191,31 @@ it('keeps credential recovery references consistent with direct HTTP authenticat
  expect(publicGuideText('http-auth',origin)).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
 });
 
-it('compresses repeated UTF-8 skill text deterministically without changing member bytes',()=>{
+it('preserves deterministic stored UTF-8 members for already-installed updaters',async()=>{
  const text='Native author contract ✓\n'.repeat(1000),files={'SKILL.md':text};
  const archive=Buffer.from(skillZip(files));
  expect(archive.equals(Buffer.from(skillZip(files)))).toBe(true);
- expect(archive.readUInt16LE(8)).toBe(8);
+ expect(archive.readUInt16LE(8)).toBe(0);
  const start=30+archive.readUInt16LE(26),size=archive.readUInt32LE(18);
- expect(inflateRawSync(archive.subarray(start,start+size)).toString()).toBe(text);
- expect(archive.readUInt32LE(22)).toBe(Buffer.byteLength(text));
- expect(archive.byteLength).toBeLessThan(Buffer.byteLength(text)/2);
+ expect(archive.subarray(start,start+size).toString()).toBe(text);
+ expect(size).toBe(Buffer.byteLength(text));
+ const {skillRelease}=await import('../package');
+ // This is the unchanged stored-only decoder already shipped to installed clients.
+ const {decodeRelease}=await import('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs');
+ const release=skillRelease(files,'https://example.test');
+ expect(decodeRelease(Buffer.from(release.bytes),release.manifest)['SKILL.md']).toBe(text);
+});
+
+it('keeps the served release within the unchanged installed updater limit',async()=>{
+ const {archiveFor}=await import('..');
+ const {decodeRelease,limit}=await import('../../../skills/artifactbin/scripts/toolbox-update-archive.mjs');
+ const {bytes,manifest}=await archiveFor('https://installed.example');
+ expect(bytes.byteLength).toBeLessThanOrEqual(limit);
+ const files=decodeRelease(Buffer.from(bytes),manifest);
+ expect(files['scripts/toolbox-publication-bundle.mjs']).toBeTruthy();
+ expect(files['scripts/preview.mjs']).toBeTruthy();
+ expect(files['design-systems/almanac.css']).toBeTruthy();
+ expect(files['scripts/preview-runtime.mjs']).toBeUndefined();
+ expect(files['scripts/preview-libraries.mjs']).toBeUndefined();
+ console.log('Stored served skill ZIP bytes:',bytes.byteLength,'installed updater limit:',limit);
 });
