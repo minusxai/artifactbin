@@ -1,7 +1,7 @@
 import {ARTIFACT_FORMATS,TEXT_CONTENT_FIELDS} from '../src/artifact-format';
 import {describe,it,expect} from 'vitest';
 import {parseHtmlNodeAnchor} from '../src/html-annotation';
-import {pageResolverRole} from '../src/page-operation';
+import {datasetRoleFrom} from '../src/dataset-permissions';
 import {datasetRequestProblem,DATASET_GRAPHQL_SDL,datasetCellFromWire} from '../src/dataset-graphql';
 import {DATASET_READ_FIXTURE,DATASET_WRITE_FIXTURE} from './dataset-graphql-fixture';
 import type {HtmlDatasetLink} from '../src/html-page';
@@ -15,7 +15,8 @@ describe('HTML product contracts',()=>{
   expect(datasetCellFromWire({type:'JSON',json:{bad:NaN}})).toBeNull();
  });
  it('keeps annotation roles distinct from resolver write roles',()=>{
-  expect(['none','viewer','commenter','editor','owner'].map(r=>pageResolverRole(r as Parameters<typeof pageResolverRole>[0]))).toEqual([null,'VIEWER','VIEWER','EDITOR','OWNER']);
+  // Resolver roles are now the page role from datasetRoleFrom (the Hasura names); a commenter share is viewer.
+  expect((['none','viewer','commenter','editor','owner'] as const).map(held=>datasetRoleFrom({held,account:true,linkRole:'none',visibility:'private',throughPage:false}))).toEqual([null,'viewer','viewer','editor','owner']);
  });
  it('accepts explicit historical HTML anchors and refuses AST paths and invalid ranges',()=>{
   const anchor={kind:'html-node',v:1,revision:'revision-a',nodeId:'n12',quote:'selected',range:{start:1,end:4,length:7,fingerprint:'text-a'}};

@@ -3,8 +3,35 @@
 A backend exports `typeDefs` (GraphQL SDL) and a default object of field resolvers.
 Each resolver receives `(args, principal, caps)`. The trusted server derives
 `principal.tenant` from the page ID and `principal.subject` from its authenticated
-account; page variables cannot grant identity or authority. Original commenters
-have resolver role `VIEWER`.
+account; page variables cannot grant identity or authority.
+
+## Field authorization: `@auth`
+
+The caller's page role is the same derivation datasets use (`datasetRoleFrom` in
+`services/contracts`), applied to the page's own sharing by `pageRole`
+(`lib/dataset-permissions`): owner (group editors included), editor (a named editor
+share, the link's editor role or the host's document-editor grant, for an account),
+viewer (a named viewer or commenter share, or group viewer), signed_in (any other
+account reaching the page) and anonymous (no account: a visitor, a guest, a test user
+outside the sandbox). A caller who cannot read the page has no role and is refused.
+
+`@auth(role: …)` on a Query or Mutation field means **at least** that role, in the order
+anonymous < signed_in < viewer < editor < owner (`resolverFieldRefusal` in
+`namespaces.ts`, pinned by the role table in `__tests__/namespaces.test.ts`).
+Dataset rules differ: they match exactly one role per request, as in Hasura.
+
+| Directive | Who may call |
+| --- | --- |
+| none | anyone who can read the page (anonymous) |
+| `@auth(signedIn: true)`, `@auth(role: signed_in)` | at least signed_in |
+| `@auth(role: viewer)` | at least viewer |
+| `@auth(role: editor)`, legacy `@auth(role: EDITOR)` | at least editor |
+| `@auth(role: owner)`, legacy `@auth(role: OWNER)` | owner |
+| legacy `@auth(role: VIEWER)` | any reader, a guest on a public link included (anonymous) |
+
+The uppercase values exist only so immutable published code keeps its meaning.
+An anonymous caller refused a field that needs signed_in gets `Sign in required`;
+every other refusal is `Not allowed`.
 
 `caps.store.get()` returns `{value, version}`. `caps.store.set(value, {expected})`
 returns the new version or throws an error with `code: 'conflict'`. The store is

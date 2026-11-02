@@ -8,7 +8,7 @@ import type { AccessActor } from '@/lib/accounts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
 import { getArtifactHeaderById, accessMoved, readableArtifactHeader } from '@/lib/artifacts';
-import { effectiveRole } from '@/lib/artifact-access';
+import { pageRole } from '@/lib/dataset-permissions';
 import {readHtmlPage} from '@/lib/html-publication';
 import {createPageOperations,createBackendInvoker,pageOperationKind} from '@/lib/page-operations';
 import {createDatasetNamespaceInvoker, datasetNamespaceSources, createRetainedDatasetGraphql} from '@/lib/dataset-graphql';
@@ -35,7 +35,7 @@ function operations(actor:AccessActor,page:HtmlPageVersion,revalidateActor:()=>P
  const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
  // The page this request already read for this reader and revision is not read again (its source is the costly part).
  const readPage:typeof readHtmlPage=(reader,id,revision)=>reader===actor&&id===page.pageId&&revision===page.revision?Promise.resolve(page):readHtmlPage(reader,id,revision);
- return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:async call=>{
+ return createPageOperations({readPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?pageRole(row,a):null;},sources,invoke:async call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
   if(link.kind==='backend'){

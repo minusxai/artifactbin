@@ -2,9 +2,9 @@
  * THE DATASET ROLE of one caller: the dataset's own sharing, read through the access facts, decided by the
  * one total derivation in @artifactbin/contracts (`datasetRoleFrom`). Datasets and resolvers both ask here.
  */
-import { datasetRoleFrom, type DatasetRole } from '@artifactbin/contracts';
+import { datasetRoleFrom, maxRole, type DatasetRole } from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
-import { linkRoleOf, liveAccessFacts, reachesAsAccount, roleWithoutLink, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
+import { documentEditorReaches, linkRoleOf, liveAccessFacts, reachesAsAccount, roleWithoutLink, type AccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 
 /** The dataset columns a role decision reads. */
 export type DatasetRoleRow = Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow, 'group_id' | 'format'>>;
@@ -24,5 +24,15 @@ export async function datasetRole(row: DatasetRoleRow, actor: AccessActor, optio
   const facts = options.facts ?? liveAccessFacts(actor);
   const held = await roleWithoutLink(row, actor, facts);
   const account = held !== 'owner' && !!actor.userId && await reachesAsAccount(row, actor, facts);
-  return datasetRoleFrom({ held, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage });
+  // The host's document-editor grant reaches html pages only (never a dataset): it is the page's editor role.
+  const granted = account && documentEditorReaches(row, actor) ? maxRole(held, 'editor') : held;
+  return datasetRoleFrom({ held: granted, account, linkRole: linkRoleOf(row), visibility: row.visibility, throughPage: !!options.throughPage });
+}
+
+/**
+ * THE PAGE ROLE of one caller, which resolver `@auth` reads: the same derivation over the PAGE's own
+ * sharing (a page is reached directly, never through another page).
+ */
+export function pageRole(row: DatasetRoleRow, actor: AccessActor, options: Pick<DatasetRoleOptions, 'facts'> = {}): Promise<DatasetRole | null> {
+  return datasetRole(row, actor, { facts: options.facts });
 }

@@ -42,7 +42,7 @@ describe('backend run admission retries',()=>{
   const {runner,starts}=fakeRunner(Array.from({length:9},()=>()=>Error('queue_full')));
   const error=await invoker(runner)(call).catch(e=>e);
   expect(error).toBeInstanceOf(FieldNotExecuted);expect(error.code).toBe('retryable');expect(starts).toHaveLength(4);
-  const result=await executePageOperation({schema:composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'type Query { n:Int }'}]),request:{query:'{ budget { n } }'},caller:{pageId:'page1',subject:'viewer1',role:'VIEWER'},invoke:invoker(fakeRunner(Array.from({length:9},()=>()=>Error('queue_full'))).runner)});
+  const result=await executePageOperation({schema:composePageSchema([{name:'budget',fileId:'backend1',version:'v1',typeDefs:'type Query { n:Int }'}]),request:{query:'{ budget { n } }'},caller:{pageId:'page1',subject:'viewer1',role:'viewer'},invoke:invoker(fakeRunner(Array.from({length:9},()=>()=>Error('queue_full'))).runner)});
   expect(result.errors?.[0]?.message).toMatch(/retrying is safe/);expect(result.errors?.[0]?.extensions).toEqual({code:'retryable'});
  });
  it('never retries a permanent refusal',async()=>{
