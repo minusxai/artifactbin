@@ -54,6 +54,15 @@ it('resolves local backend TypeScript into the native atomic backend source cont
  expect(plan.backendSources).toEqual({jobs:source});expect(plan.backends).toEqual([{name:'jobs',path:'api.ts',bytes:Buffer.byteLength(source)}]);expect(plan.dependencies).toEqual([]);expect(plan.html).not.toContain('api.ts');expect(plan.html).toContain('data-af-name="jobs"');
 });
 
+it('resolves af-resolver files like the af-backend alias, and refuses one name under both rels',()=>{
+ const source='export const typeDefs="type Query { n:Int }"; export default {n:()=>1};';
+ const bundle={entryPath:'index.html',files:[file('budget.ts',source,'text/typescript')]};
+ const plan=planPublicationBundle('<link rel="af-resolver" data-af-name="budget" href="./budget.ts">',bundle);
+ expect(plan.backendSources).toEqual({budget:source});expect(plan.backends).toEqual([{name:'budget',path:'budget.ts',bytes:Buffer.byteLength(source)}]);expect(plan.html).not.toContain('budget.ts');
+ expect(()=>planPublicationBundle('<link rel="af-resolver" data-af-name="budget" href="./budget.ts"><link rel="af-backend" data-af-name="budget" href="./budget.ts">',bundle)).toThrow('duplicate');
+ expect(()=>planPublicationBundle('<link rel="af-resolver af-backend" data-af-name="budget" href="./budget.ts">',bundle)).toThrow('one namespace kind');
+});
+
 it('accepts atomically supplied backend namespaces but still rejects missing local files',()=>{
  const html='<link rel="af-backend" data-af-name="db" href="./garden.ts">';
  expect(planPublicationBundle(html,{entryPath:'index.html',files:[]},{resolvedBackendNames:['db']}).dependencies).toEqual([]);

@@ -144,6 +144,15 @@ describe('preparePublicationBundle',()=>{
    expect(result instanceof Response?await errorOf(result):result).toEqual([400,error]);
   }
  });
+ it('reads resolverSources as the resolver field and backendSources as its alias, refusing both at once',async()=>{
+  const owner=await actor();const html='<link rel="af-resolver" data-af-name="api" href="./api.ts">';
+  expect(await preparePublicationBundle({html,resolverSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,backendSources:{api:'source'}},receipts:[]});
+  expect(await preparePublicationBundle({html,backendSources:{api:'source'}},owner,BASE,undefined,unused,unused)).toEqual({body:{html,backendSources:{api:'source'}},receipts:[]});
+  const both=await preparePublicationBundle({html,resolverSources:{api:'source'},backendSources:{api:'source'}},owner,BASE,undefined,unused,unused);
+  expect(both instanceof Response?await errorOf(both):both).toEqual([400,'conflicting_resolver_sources']);
+  const bundled=await preparePublicationBundle({html,resolverSources:{api:'other'},publicationBundle:{entryPath:'index.html',files:[file('api.ts','source','text/plain')]}},owner,BASE,keyed('publish_interface_bundle_03'),unused,unused);
+  expect(bundled instanceof Response?await errorOf(bundled):bundled).toEqual([400,'conflicting_backend_sources']);
+ });
  it('creates each new file through the caller under a reserved id and rewrites the page to its address',async()=>{
   const owner=await actor();
   const writes:Array<Record<string,unknown>>=[];

@@ -10,8 +10,20 @@ export interface BackendSecretRepository {
 }
 export function secretBindingNames(value:unknown):string[]{
  if(value===undefined)return [];
- if(!Array.isArray(value)||value.length>32||value.some(name=>typeof name!=='string'||!/^[A-Z][A-Z0-9_]{0,63}$/.test(name))||new Set(value).size!==value.length)throw Error('invalid_secret_bindings');
+ if(!Array.isArray(value)||value.length>32||value.some(name=>typeof name!=='string'||!SECRET_NAME.test(name))||new Set(value).size!==value.length)throw Error('invalid_secret_bindings');
  return [...value].sort();
+}
+const SECRET_NAME=/^[A-Z][A-Z0-9_]{0,63}$/;
+const HOST_LABEL='[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+/** A DNS name with at least two labels and an alphabetic top label, optionally behind one `*.` label (so never `*.com`). */
+const SECRET_HOST=new RegExp(`^(?:\\*\\.)?(?:${HOST_LABEL}\\.)+[a-z][a-z0-9-]*[a-z0-9]$`);
+/** The resolver `secrets` export: each name bound to the one host that may receive it. Returned sorted by name. */
+export function secretHostMap(value:unknown):Record<string,string>{
+ if(value===undefined)return {};
+ if(!value||typeof value!=='object'||Array.isArray(value))throw Error('invalid_secrets');
+ const entries=Object.entries(value);
+ if(entries.length>32||entries.some(([name,host])=>!SECRET_NAME.test(name)||typeof host!=='string'||host.length>253||!SECRET_HOST.test(host)))throw Error('invalid_secrets');
+ return Object.fromEntries(entries.sort(([a],[b])=>a<b?-1:a>b?1:0));
 }
 export function createBackendSecrets(repository:BackendSecretRepository,cipher:BackendSecretCipher){
  return {

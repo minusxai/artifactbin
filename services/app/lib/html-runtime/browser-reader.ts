@@ -28,7 +28,7 @@ function sourceNamespaces(document:Document):{names:string[];bindings:Record<str
  const names:string[]=[],bindings:Record<string,string>={};
  for(const link of document.querySelectorAll('link[data-af-name]')){
   const rel=(link.getAttribute('rel')??'').split(/\s+/),name=link.getAttribute('data-af-name')??'';
-  if(!rel.some(value=>value==='af-backend'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
+  if(!rel.some(value=>value==='af-resolver'||value==='af-backend'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
   names.push(name);const id=/^ref:([A-Za-z0-9_-]+)$/.exec(link.getAttribute('href')??'')?.[1];if(id)bindings[name]=id;
  }
  return {names,bindings};
@@ -50,6 +50,8 @@ export const remote: RemotePort = {
 const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInvalidation) => void>();
 /** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
 export function onBackendChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
+/** The resolver name for {@link onBackendChange}; both stay exported. */
+export const onResolverChange = onBackendChange;
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }

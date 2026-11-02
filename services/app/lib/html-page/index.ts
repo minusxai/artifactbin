@@ -134,9 +134,10 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  for(const element of allElements(html).all){
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
-  const backend=rel.includes('af-backend'),dataset=rel.includes('af-dataset');
+  // af-backend is the permanent alias of af-resolver; one link names one kind, once.
+  const resolver=rel.includes('af-resolver'),legacy=rel.includes('af-backend'),backend=resolver||legacy,dataset=rel.includes('af-dataset');
   if(!backend&&!dataset)continue;
-  if(backend&&dataset)throw new Error('A link declares one namespace kind');
+  if(backend&&dataset||resolver&&legacy)throw new Error('A link declares one namespace kind');
   const name=attribute(element,'data-af-name');
   if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__'))throw new Error('Invalid namespace');
   if(names.has(name))throw new Error('Duplicate namespace');names.add(name);
