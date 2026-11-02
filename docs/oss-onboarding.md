@@ -59,15 +59,14 @@ values and secrets. App and adjacent HMR ports must both be available.
 
 | Feature | What a fresh OSS installation needs | Where to start |
 | --- | --- | --- |
-| Documents, themes, templates, browser editing, comments, sharing, history and restore | Default setup and a signed-in account. Share roles and artifact visibility still control access. | [editing](editing.md), [document format](document-format.md) |
-| CSV/JSON datasets, SQL queries, charts, Values and mutations | Register data through the author skill or HTTP API and reference it from the page. Mutations need the dataset's write policy. | `<origin>/llms/datasets`, `<origin>/llms/dataviz` |
-| Connected PostgreSQL datasets | A reachable PostgreSQL database and credentials in its dataset definition. Private network destinations require the self-host operator's `DATASET__ALLOW_PRIVATE_NETWORKS` setting. | `<origin>/llms/backends` |
+| Native HTML pages, design systems, comments, sharing, history and restore | Default setup and a signed-in account. Share roles and artifact visibility still control access. | [HTTP API](http-api.md), [document format](document-format.md) |
+| CSV/JSON datasets, GraphQL queries, charts and mutations | Register data through the author skill or HTTP API and reference it from the page. Mutations need the dataset's write policy. | `<origin>/llms/datasets`, `<origin>/llms/dataviz` |
+| Connected PostgreSQL datasets | A reachable PostgreSQL database and credentials in its dataset definition. Private network destinations require the self-host operator's `DATASET__ALLOW_PRIVATE_NETWORKS` setting. | `<origin>/llms/datasets` |
 | Images, PDFs, other files and URL imports | Uploaded files or permitted remote URLs. Remote imports need network access and respect size limits and blocked private destinations. | [file uploads](file-uploads.md) |
 | PNG/JPG exports | Chromium, prepared/downloaded when needed; exports run on the server. | [serving and security](serving-and-security.md) |
-| Offline HTML | A published head; download the HTML export. The result is one file that can open, edit and comment offline, within its size limit. | [editing](editing.md) |
-| Native author scripts and exported Solid components | One Helmet script; use `page` bindings and `solid-js`. Bare external npm imports use the ESM CDN and need network access. Extra hosts need declared CSP consent. | [document format](document-format.md), `<origin>/llms/html-operations` |
-| Lambdas and cron schedules | Source dev enables the local runner automatically. Hosts without the local runner need `RUNNER__SERVICE_URL` and matching `CONTRACT__ACTOR_SECRET`, plus a separate controller. Publish a Helmet script with a default-exported function. Schedules use authenticated HTTP APIs. | [runner setup and schedules](../services/runner/README.md) |
-| AI capabilities inside runner programs | Operator-selected OpenAI-compatible endpoint and model on the runner; optional provider key. No AI provider is needed for ordinary lambda/dataflow execution. | [runner configuration](../services/runner/README.md) |
+| Offline HTML | A published head; download the HTML export. Viewer-local state works offline; linked public reads are optional, and remote writes never queue. | [serving and security](serving-and-security.md) |
+| Native browser scripts and hosted components | Ordinary HTML ES modules and hosted `@afbin/…` imports. Extra hosts need declared CSP consent. | [document format](document-format.md), `<origin>/llms/runtime` |
+| Shared TypeScript backends | Publish paired resolver files through `backendSources` and native `af-backend` links. Source dev registers its local runner; split hosts need their runner configuration. Backend stores and secret bindings retain separate authority checks. | `<origin>/llms/backends`, [runner configuration](../services/runner/README.md) |
 | Live browser sessions | Chromium and the browser worker's OS prerequisites. Linux server sessions require bubblewrap, user namespaces and delegated cgroup v2. `npm run dev` on macOS uses its documented development-only plain-process mode. | [browser sessions](mx-sessions.md), `.env.example` browser settings |
 | Google/OIDC, S3, external application PostgreSQL, custom domains and split services | Operator credentials/infrastructure. Source/custom compositions support these adapters; some compositions use a narrower configuration. | [operations](operations.md), `.env.example` |
 
@@ -82,9 +81,9 @@ suite is not a pass. See [AGENTS.md](../AGENTS.md) for the check budget.
   DNS; use the public URL setup prints.
 - `runner_unavailable`: a host without a local runner needs the separate runner settings and
   controller. Source development should register its local runner at startup.
-- `not_executable` or `invalid_lambda`: publish a default-exported function with
-  supported headless imports. DOM/browser scripts do not become headless programs
-  automatically; put browser-only initialization behind a DOM availability check.
+- `invalid_backend`: check the paired backend's TypeScript exports and GraphQL schema.
+  A browser module is not a backend resolver, and a command-program artifact is
+  not an accepted publication format.
 - Exports or sessions cannot launch: check Chromium preparation and the server
   OS requirements. Image export and live-session sandboxing have different needs.
 

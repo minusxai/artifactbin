@@ -57,16 +57,16 @@ marking exists so that cleanup can select exactly these rows.
 
 See [serving and security](serving-and-security.md) for trust boundaries.
 
-The OSS host includes authentication, authorization, the reader/editor,
+The OSS host includes authentication, authorization, the native HTML reader,
 comments, sharing, query execution and export. It does not contain a request
 proxy or rate-limit policies. A deployment may put its own TLS proxy in front.
 Production service composition and deployment policy live in the downstream
 server repository.
 
-Source development (`npm run dev`) also registers a local Lambda runner.
+Source development (`npm run dev`) also registers a local runner for native backend resolvers.
 Hosts without the local runner require a separate one: set `RUNNER__SERVICE_URL`
 and a matching `CONTRACT__ACTOR_SECRET` in their server settings.
-See [runner setup and schedules](../services/runner/README.md) and
+See [runner configuration](../services/runner/README.md) and
 [the OSS feature setup guide](oss-onboarding.md) for prerequisites and availability.
 
 ## Health, storage and export

@@ -22,9 +22,9 @@ publisher persists facts in `events.events` and uses the delivery ledger for
 retryable subscribers. No new activity store, bus or activity-feed UI is added.
 Observational telemetry can still use best-effort `emit`.
 
-A human's own comment and membership actions stay silent. Mutation notifications
-include the actor when the Notify query selects them and they have explicitly
-joined with the required read access. Agent replies notify the human account even
+A human's own comment and membership actions stay silent. Existing stored mutation
+notification jobs retain their delivery and inspection paths; native HTML does not
+author `<Notify>` declarations. Agent replies notify the human account even
 when they share an identity. Replies notify the thread's participants and saved
 mention recipients, excluding blocks. Reply plus resolution is one source event
 and one conversation notification per recipient. Reopening is a new event.
@@ -60,15 +60,11 @@ Agent pulse/status reuses remote work and presence, with reduced-motion support.
 
 ## Production email
 
-OSS owns events, relations, inbox rules and UI. `artifactbin-server` owns email
-preferences/storage, scheduling, templates, provider delivery and link tracking.
-Invites are immediate; unread comment updates wait five minutes from the first
-update; likes/follows form a daily digest. Access, verified identity, preferences
-and unread eligibility are rechecked before sending.
-
-Delivery uses the existing events subscriber ledger and Resend transport. Retry
-payloads and idempotency keys are frozen; uncertain deliveries are held before
-the provider's dedupe window expires. Stored destination links cannot grant
-access, accept an invite or mark a notification read. Clicks are raw events,
-not proof of human engagement. Sending defaults off pending controlled delivery
-checks. Deployment and recovery instructions live in the server README.
+The product owns events, relations, inbox rules and UI. Optional deployment email
+integration supplies preferences, scheduling, templates, provider delivery and
+link tracking through the notification delivery boundary. This repository does
+not establish a deployment's provider or delivery configuration. Access, verified
+identity, preferences and unread eligibility must be rechecked before sending.
+Stored destination links cannot grant access, accept an invite or mark a
+notification read. Deployment-specific delivery and recovery instructions belong
+in the external server README, alongside the configured integration.

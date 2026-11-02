@@ -37,4 +37,4 @@ The local test wrapper runs affected tests within its file budget; broader suite
 
 The HTTP skill is the public authoring path. Standard OAuth, verified email login and account API-token access remain supported. The main branch release pipeline stays separate from this branch.
 
-[Source format](docs/document-format.md) · [Historical editing architecture](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md) · [Apache-2.0](LICENSE).
+[Source format](docs/document-format.md) · [HTTP API](docs/http-api.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md) · [Apache-2.0](LICENSE).
