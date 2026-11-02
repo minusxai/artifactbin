@@ -11,9 +11,11 @@ describe('reader tooling contracts', () => {
       expect(read(file), file).not.toContain('FLAG__COMPILED_READER');
     }
   });
-  it('AGENTS.md names the island build and the compiled hydration gate among the commands', () => {
+  it('the native reader build command resolves and the reader handover gate remains documented', () => {
     const agents = read('AGENTS.md');
-    expect(agents).toContain('build:islands');
+    const app = JSON.parse(read('services/app/package.json'));
+    expect(app.scripts['build:reader']).toBe('node scripts/build-server-reader.mjs');
+    expect(read('services/app/scripts/build-server-reader.mjs')).toContain('build-html-components.mjs');
     expect(agents).toContain('gate-container.mjs kit-and-fonts');
   });
   it('the page-speed lab enforces size targets', () => {

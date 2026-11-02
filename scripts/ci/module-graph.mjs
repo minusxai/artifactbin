@@ -41,23 +41,6 @@ const ENTRY_OR_UI = ['app/app', 'app/server', 'app/solid', 'app/web', 'app/scrip
 const PACKAGE_FLOOR = ['pkg/contracts', 'pkg/utils'];
 const PACKAGES = ['auth', 'browser', 'contracts', 'events', 'runner', 'sql', 'test-support', 'utils'];
 const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
-/**
- * Rule 4's lists for lib/islands. lib/islands is browser code with one server-safe index
- * (lib/islands/index.ts); browser-bundled code imports leaf files instead, because the island and app
- * bundlers cannot drop the rest of a barrel. A browser-side importer is a path prefix ending in `/` or
- * an exact file; a leaf is a path under lib/islands without its extension.
- */
-export const ISLANDS_BROWSER_IMPORTERS = [
-  'services/app/lib/html-runtime/browser-reader.ts',
-  // The native HTML live morph, its own lazy browser module (build.server `@afbin/morph`).
-  'services/app/lib/html-runtime/live-morph.ts',
-  'services/app/lib/html-runtime/table-scroll.ts',
-  'services/app/solid/',
-];
-const ISLANDS_BROWSER_LEAVES = [
-  'frame-links', 'contract', 'file-display', 'morph/dom', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'person-face', 'table-scroll', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
-];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
  * from this graph's own edges, so each is allowed only because it existed then. Entries may be imported
@@ -65,30 +48,9 @@ const ISLANDS_BROWSER_LEAVES = [
  * row's browser importers. Each hub row shrinks its lists toward its index (and a server entry).
  */
 /*
- * lib/story-runtime's doors: contract and story-fragment. It has no index: the compile-time reader chrome is
- * lib/reader-chrome's, whose index is serverOnly (the outline pulls in markdown), and the frame's edit chunks are
- * lib/frame-edit's. Re-export entries grow the island chunks (measured in row 40.2: esbuild reaches every file an
- * entry re-exports), so browser-bundled code imports values from the listed leaf files instead.
- */
-const STORY_RUNTIME_ENTRIES = ['contract', 'story-fragment'];
-const STORY_RUNTIME_BROWSER_IMPORTERS = [
-  'services/app/solid/',
-  'services/app/web/',
-  'services/app/lib/frame-edit/',
-  'services/app/lib/islands/',
-];
-const STORY_RUNTIME_BROWSER_LEAVES = [
-  'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'frame-bridge/parent', 'reader-mode',
-];
-/*
  * lib/page-store, the document's data store: its index for server and single-bundle code (the Lambda page runtime) and
  * type imports anywhere; browser-bundled code imports values from the listed leaf files, for the same reason.
  */
-const PAGE_STORE_BROWSER_IMPORTERS = [
-  'services/app/lib/islands/',
-  'services/app/lib/artifact-backend/http.ts',
-];
-const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport', 'page-bindings', 'page-engine', 'store'];
 /**
  * lib/dataflow's browser leaves. Both bundlers keep a barrel's re-exported files: the island build
  * (esbuild) splits by FILE reachability (row 40.1: +3.5 to +9.2 KB raw per kit closure, +6.9 KB on
@@ -98,44 +60,15 @@ const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport',
  */
 const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/document/asset-url.ts',
-  'services/app/lib/document/document-graph-selectors.ts',
-  'services/app/lib/document/helmet.ts',
-  'services/app/lib/document/local-validation.ts',
-  'services/app/lib/document/query-notebook.ts',
-  'services/app/lib/islands/frame-bridge.ts',
-  'services/app/lib/islands/kit/basic.tsx',
-  'services/app/lib/islands/kit/cells.tsx',
-  'services/app/lib/islands/kit/controls.tsx',
-  'services/app/lib/islands/kit/data.tsx',
-  'services/app/lib/islands/kit/dialog.tsx',
-  'services/app/lib/islands/kit/embed.tsx',
-  'services/app/lib/islands/kit/files.tsx',
-  'services/app/lib/islands/kit/image-map.ts',
-  'services/app/lib/islands/kit/image.tsx',
-  'services/app/lib/islands/kit/people.tsx',
-  'services/app/lib/islands/kit/select.tsx',
-  'services/app/lib/islands/kit/static/preview-controls.tsx',
-  'services/app/lib/islands/kit/upload/control.tsx',
-  'services/app/lib/islands/morph/engine.ts',
-  'services/app/lib/islands/url-sync.ts',
-  'services/app/lib/islands/viewer.ts',
-  'services/app/lib/page-store/authenticated-transport.ts',
-  'services/app/lib/page-store/dataflow-core.ts',
-  'services/app/lib/page-store/fetch-transport.ts',
-  'services/app/lib/page-store/page-engine.ts',
-  'services/app/lib/page-store/runtime-graph.ts',
-  'services/app/lib/page-store/store.ts',
-  'services/app/lib/story-edit/story-number.ts',
-  'services/app/lib/story-ui/data-table.ts',
-  'services/app/lib/story-ui/interpreter-primitives.ts',
-  'services/app/lib/viz/chart-envelope.ts',
+
+  'services/app/lib/html-components/table-values.ts',
+
   'services/app/solid/document/create-framed-story.ts',
-  'services/app/solid/editor/panels/ImageDialog.tsx',
+
   'services/app/solid/lib/format.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = [
-  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
-  'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
+   'number-format',  'url-values',
 ];
 /*
  * lib/document: server code enters through its index, `server` (node-only), or
@@ -148,17 +81,12 @@ const DATAFLOW_BROWSER_LEAVES = [
 const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions'];
 const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
-  'services/app/lib/editor-engine/',
-  'services/app/lib/islands/',
-  'services/app/lib/frame-edit/',
+
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'annotation-edits', 'annotation-range', 'asset-url', 'context', 'display-title', 'document-authoring-client', 'document-graph',
-  'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
-  'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
-];
+  'annotation-range', 'display-title', 'person-mentions', 'social-preview', ];
 /** lib/page-styles: retained server consumers use its public index. */
 const PAGE_STYLES_BROWSER_IMPORTERS = [];
 const PAGE_STYLES_BROWSER_LEAVES = [];
@@ -169,7 +97,7 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  * tree and image tools); the app's browser code imports these pure leaf files for values (the app address of an
  * installable artifact, the frame's sandbox, the agent paste and getting-started copy).
  */
-const DOCUMENT_SERVING_BROWSER_LEAVES = ['artifact-pwa', 'document-frame'];
+const DOCUMENT_SERVING_BROWSER_LEAVES = ['artifact-pwa', ];
 const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-installers'];
 /**
  * Every other lib module's browser leaves. A lib module without a DEEP_MODULES row is entered only through its index;
@@ -180,7 +108,7 @@ const AGENT_COPY_BROWSER_LEAVES = ['agent-copy', 'getting-started', 'setup-insta
  * use the index.
  */
 const BUNDLED_IMPORTERS = [
-  'services/app/solid/', 'services/app/web/', 'services/app/lib/islands/', 'services/app/lib/frame-edit/', 'services/app/lib/html-components/', 'services/app/skills/',
+  'services/app/solid/', 'services/app/web/',   'services/app/lib/html-components/', 'services/app/skills/',
   'services/app/lib/agent-copy/agent-copy.ts',
   'services/app/lib/agent-copy/getting-started.ts',
   'services/app/lib/annotations/markdown-lite.ts',
@@ -189,34 +117,14 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/artifact-backend/reader-http.ts',
   'services/app/lib/artifact-backend/retrying.ts',
   'services/app/lib/dataflow/image-source.ts',
-  'services/app/lib/dataflow/ref-name-uses.ts',
-  'services/app/lib/dataflow/refs.ts',
+
   'services/app/lib/dataset-graphql/local-files.ts',
   'services/app/lib/dataset-graphql/local-preview.ts',
   'services/app/lib/document-serving/document-frame.ts',
   'services/app/lib/document/annotation-range.ts',
-  'services/app/lib/document/document-graph-scope.ts',
-  'services/app/lib/document/document-graph-source.ts',
-  'services/app/lib/document/document-graph.ts',
-  'services/app/lib/document/document-node-codec.ts',
-  'services/app/lib/document/document-operation.ts',
-  'services/app/lib/document/document-update-client.ts',
-  'services/app/lib/document/edit-compose.ts',
-  'services/app/lib/document/local-validation.ts',
-  'services/app/lib/document/nesting.ts',
-  'services/app/lib/document/pwa-settings.ts',
-  'services/app/lib/document/query-notebook.ts',
-  'services/app/lib/document/source-changes.ts',
+
   'services/app/lib/document/splice.ts',
-  'services/app/lib/document/update-parts.ts',
-  'services/app/lib/editor-engine/block-edit.ts',
-  'services/app/lib/editor-engine/clipboard-ast.ts',
-  'services/app/lib/editor-engine/clipboard.ts',
-  'services/app/lib/editor-engine/indent.ts',
-  'services/app/lib/editor-engine/links.ts',
-  'services/app/lib/editor-engine/model.ts',
-  'services/app/lib/editor-engine/source-edit.ts',
-  'services/app/lib/editor-engine/source-edits.ts',
+
   'services/app/lib/html-autofix/index.ts',
   'services/app/lib/html-bridge/presence-selection.ts',
   'services/app/lib/html-bridge/presence.ts',
@@ -227,78 +135,57 @@ const BUNDLED_IMPORTERS = [
   'services/app/lib/html-runtime/portable-session.ts',
   'services/app/lib/html-runtime/portable-source.ts',
   'services/app/lib/html-systems/index.ts',
-  'services/app/lib/jsx/validate.ts',
+
   'services/app/lib/libraries/index.ts',
   'services/app/lib/local-connection/read-backend.ts',
   'services/app/lib/mermaid-images/mermaid-render.ts',
-  'services/app/lib/reader-chrome/outline.ts',
-  'services/app/lib/reader-chrome/script-mount.ts',
-  'services/app/lib/story-design/story-systems.ts',
-  'services/app/lib/story-design/story-themes.ts',
-  'services/app/lib/story-design/typography.ts',
-  'services/app/lib/story-edit/jsx-edit.ts',
-  'services/app/lib/story-runtime/anchor.ts',
-  'services/app/lib/story-ui/compare.ts',
-  'services/app/lib/story-ui/host-classify.ts',
-  'services/app/lib/story-ui/interpreter-primitives.ts',
+
+  'services/app/lib/html-systems/story-systems.ts',
+  'services/app/lib/html-systems/story-themes.ts',
+
+  'services/app/lib/html-components/table-comparison.ts',
+
   'services/app/lib/validation/atlas-schemas.ts',
   'services/app/lib/viz/deck-engine-core.ts',
   'services/app/lib/viz/geo-assets.ts',
   'services/app/lib/viz/theme.ts',
 ];
 const BUNDLED_LEAVES = {
+  'lib/html-component-specs': ['boundary-ids', 'comparison', 'deck-spec', 'isometric-spec', 'mermaid-source'],
+  'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
+  'lib/html-reader': ['anchor', 'anchor-restore', 'ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'frame-bridge/parent', 'frame-markup', 'reader-mode', 'reload'],
   'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'remote-reply'],
   'lib/artifact-backend': ['browser-artifact-write', 'errors', 'http', 'reader-http'],
-  'lib/author-script': ['contract'],
   'lib/capture': ['contract', 'png', 'screen'],
   'lib/chart': ['chart-theme'],
   'lib/data-ingest': ['coerce', 'csv', 'types'],
   'lib/datasets': ['dataset-usage', 'definition', 'types'],
-  'lib/editor-engine': [
-    'annotation-map', 'block-edit', 'block-selection', 'bookmark', 'clipboard', 'flow-view', 'history', 'links', 'model',
-    'node-chrome', 'selection-presentation', 'source-edit', 'source-edits',
-  ],
-  'lib/html-bridge': [
-    'annotations', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'selection',
-  ],
-  'lib/html-components': ['hosted.json'],
-  'lib/html-page': ['core-script', 'design-system', 'html-source'],
+  'lib/html-bridge': ['annotations', 'comment-actions-presentation', 'comment-view-session', 'imported-observation', 'observe', 'presence', 'reader', 'selection', 'selection-contract', ],
+  'lib/html-components': ['hosted.json', 'markdown-typography', 'row-identity', 'table-comparison', 'table-values'],
+  'lib/html-page': ['core-script', 'design-system', 'html-source', 'pwa-settings'],
   'lib/offline-dependencies': ['contracts'],
   'lib/html-presence': ['contract', 'model', 'preferences', 'reader-session'],
-  'lib/html-runtime': [
-    'browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source',
-    'source-relationship',
-  ],
+  'lib/html-runtime': ['browser-portable', 'live-morph-contract', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',
   ],
   'lib/jsx': [
-    'boundary-ids', 'comparison', 'component-names', 'components', 'deck-spec', 'immutable-set', 'isometric-spec',
-    'mermaid-source', 'parse', 'parse-shared', 'reactive', 'reactive-eval', 'repair', 'row-scope', 'serialize',
-    'spec-digest', 'syntax-error', 'template', 'template-attrs', 'url-attrs', 'validate',
-  ],
+    ],
   'lib/local-connection': ['broker', 'browser', 'contracts', 'read-backend'],
-  'lib/markdown': ['content', 'editor', 'styles'],
+  'lib/markdown': ['content', 'styles'],
   'lib/mermaid-images': ['reader-draw'],
   'lib/page-operations': ['namespaces'],
   'lib/remote': ['session-mentions'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
-  'lib/source-editor': ['codemirror'],
-  'lib/story-design': ['story-css', 'story-fonts', 'story-systems', 'story-themes', 'typography'],
-  'lib/story-edit': ['jsx-edit', 'link-edit', 'story-number'],
-  'lib/story-surface': ['bare-controls', 'bare-typography', 'task-checkbox-css'],
+  'lib/source-editor': [],
+  'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/story-ui': [
-    'ast-path', 'comment-target', 'compare', 'data-table', 'edit-bar', 'file-glyphs', 'grid-css', 'grid-layout',
-    'host-classify', 'icon-contract', 'isometric', 'node-names', 'question-height', 'recipe-classes', 'repeat-identity', 'row-key', 'scroll-anchor',
-  ],
-  'lib/validation': ['atlas-schemas', 'html-system-modes', 'story-system-names', 'story-theme-names'],
+    'comment-target', ],
+  'lib/validation': [ 'html-system-modes', 'story-system-names', 'story-theme-names'],
   'lib/viz': [
-    'basemap', 'chart-envelope', 'chart-tokens', 'deck-chrome', 'deck-engine-core', 'deck-height', 'encoding-edit',
-    'geo-assets', 'query-data', 'question-envelope', 'render-readiness', 'render-vega', 'spark-markup',
-    'vega-tooltip-handler',
-  ],
-  'lib/workspace': ['artifact-starters', 'breadcrumb', 'format-jsx-preview', 'shelf', 'visibility-icons'],
+    'deck-engine-core', ],
+  'lib/workspace': ['artifact-starters', 'breadcrumb', 'shelf', 'visibility-icons'],
 };
 // Declared leaves are reviewed public entries: any importer may use them (`leavesForAll`), so a light caller never has to
 // pull a module's whole index. BUNDLED_IMPORTERS still marks the browser-bundled code the serverOnly rule guards.
@@ -318,19 +205,14 @@ const bundled = module => ({ entries: [''], browserImporters: BUNDLED_IMPORTERS,
 export const DEEP_MODULES = {
   ...Object.fromEntries(Object.keys(BUNDLED_LEAVES).map(module => [module, bundled(module)])),
   'lib/html-publication-bundle': { entries: ['', 'plan', 'runtime-module-imports'], serverOnly: [''] },
-  'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ['', 'table'], downstream: ['mutation-invocation'], serverOnly: ['', 'table'], testOnly: ['testing'] },
   // The access rule below the store and the routes' wire above it: server code, like the store they stand beside.
   'lib/artifact-access': { entries: [''], serverOnly: [''] },
   'lib/artifact-wire': { entries: [''], serverOnly: [''] },
   'lib/document-data': { entries: [''], serverOnly: [''] },
-  'lib/story-runtime': { entries: STORY_RUNTIME_ENTRIES, browserImporters: STORY_RUNTIME_BROWSER_IMPORTERS, browserLeaves: STORY_RUNTIME_BROWSER_LEAVES },
-  'lib/reader-chrome': { entries: ['', 'outline-view', 'script-mount', 'slides'], serverOnly: [''] },
   // The frame's four lazy edit chunks, one door each and no index on purpose: an index would merge the chunks.
   // Inert shared comment chrome is also consumed by the native HTML reader.
-  'lib/frame-edit': { entries: ['annotate', 'comment-actions-presentation', 'comment-presentation', 'dom-mounter', 'selection-actions', 'session'] },
-  'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
-  'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
+  'lib/dataflow': { entries: ['', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
@@ -348,10 +230,9 @@ export const DEEP_MODULES = {
   'lib/datasets': { ...bundled('lib/datasets'), downstream: ['execute'] },
   'lib/operations': { entries: [''], downstream: ['http', 'registry'] },
   // Their indexes are in browser and skill-archive bundles, so node-only names have a server entry.
-  'lib/html-systems': { entries: ['', 'server'], serverOnly: ['server'] },
+  'lib/html-systems': { ...bundled('lib/html-systems'), entries: ['', 'server'], serverOnly: ['server'] },
   // A story's design vocabulary and its CSS compile (node, tailwind), and the edits to its JSX source: browser-bundled
   // code imports the leaves, because each index re-exports files a bundle would keep.
-  'lib/story-design': { ...bundled('lib/story-design'), entries: ['', 'server'], serverOnly: ['', 'server'] },
   'lib/story-edit': { ...bundled('lib/story-edit'), serverOnly: [''] },
   'lib/html-runtime': { ...bundled('lib/html-runtime'), entries: ['', 'server'], serverOnly: ['server'] },
   'lib/libraries': { entries: ['', 'server'], serverOnly: ['server'] },
@@ -454,8 +335,6 @@ function resolveImport(fromFile, specifier) {
   const base = importPath(fromFile, specifier);
   return base === null ? null : moduleOf(`${base}/index.ts`);
 }
-
-const ISLANDS_ENTRY = { importers: ISLANDS_BROWSER_IMPORTERS, leaves: ISLANDS_BROWSER_LEAVES };
 
 const matchesImporter = (importers, file) => importers.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));
 
@@ -608,8 +487,7 @@ const edgesWithin = (graph, members) => {
  * `islands` ({ importers, leaves }) checks rule 4 for lib/islands alone, with those lists;
  * `deepModules` replaces rule 4's whole table.
  */
-export function checkModuleGraph(graph, allowed, islands = ISLANDS_ENTRY, deepModules = islands === ISLANDS_ENTRY ? DEEP_MODULES
-  : { 'lib/islands': { ...DEEP_MODULES['lib/islands'], browserImporters: islands.importers, browserLeaves: islands.leaves } }) {
+export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModules = DEEP_MODULES) {
   const violations = [];
   const allowedEdges = new Set((allowed.cycles ?? []).flatMap(cycle => cycle.edges));
   const cyclicEdges = new Set();

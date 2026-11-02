@@ -2,11 +2,6 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import {BASEMAP_PATH} from '@artifactbin/contracts/basemap';
 import {BASEMAP_ALLOWED,BASEMAP_UPSTREAM,dailySeries,tileUpstreamUrl} from '..';
 import {BASEMAP_WORKER_URL,basemapStyleUrl,basemapTransformRequest} from '../basemap';
-import {deckGlHeight} from '../deck-height';
-import {ATTRIBUTION,MAP_CLASSES} from '../deck-chrome';
-import {inferVizColumnsFromRows} from '../query-data';
-import {beginChartRender,trackChartRender} from '../render-readiness';
-import {chartTokenRangeFromElement} from '../chart-tokens';
 afterEach(()=>vi.unstubAllGlobals());
 
 describe('basemap proxy',()=>{
@@ -42,42 +37,4 @@ describe('dailySeries',()=>{
   expect(dailySeries([],7,now).size).toBe(0);
   expect(dailySeries([{artifact_id:'a',day:'2026-10-29',n:1}],0,now).size).toBe(0);
  });
-});
-
-it('holds the authored DeckGL height, defaulting to 420 for anything unparseable',()=>{
- expect(deckGlHeight(300)).toBe(300);expect(deckGlHeight('250px')).toBe(250);
- for(const value of [undefined,null,'tall','',{}])expect(deckGlHeight(value)).toBe(420);
- expect(MAP_CLASSES.figure).toContain('relative');expect(ATTRIBUTION).toContain('OpenStreetMap');
-});
-
-it('infers each column kind from its first non-null value',()=>{
- expect(inferVizColumnsFromRows([])).toEqual([]);
- expect(inferVizColumnsFromRows([{n:null,d:'2024-01-01',t:'2024-01-01T00:00:00.000Z',s:'x',b:true,i:Infinity,o:{},w:new Date(0)},{n:4}])).toEqual([
-  {name:'n',kind:'quantitative'},{name:'d',kind:'temporal'},{name:'t',kind:'temporal'},{name:'s',kind:'nominal'},{name:'b',kind:'boolean'},{name:'i',kind:'unknown'},{name:'o',kind:'unknown'},{name:'w',kind:'temporal'},
- ]);
- expect(inferVizColumnsFromRows([{x:null},{x:null}])).toEqual([{name:'x',kind:'unknown'}]);
-});
-
-describe('chart render readiness',()=>{
- const element=()=>({dataset:{}} as unknown as HTMLElement);
- it('stays pending until every overlapping render settles, even when one throws',async()=>{
-  const chart=element();let release!:()=>void;
-  const slow=trackChartRender(chart,()=>new Promise<string>(r=>{release=()=>r('done');}));
-  expect(chart.dataset.mxChartState).toBe('pending');
-  await expect(trackChartRender(chart,async()=>{throw Error('build failed');})).rejects.toThrow('build failed');
-  expect(chart.dataset.mxChartState).toBe('pending');
-  release();expect(await slow).toBe('done');expect(chart.dataset.mxChartState).toBe('ready');
- });
- it('counts a finish once however often it is called',()=>{
-  const chart=element(),a=beginChartRender(chart),b=beginChartRender(chart);
-  a();a();expect(chart.dataset.mxChartState).toBe('pending');b();expect(chart.dataset.mxChartState).toBe('ready');
- });
-});
-
-it('reads chart tokens from an element in its own document view, null without one',()=>{
- const tokens:Record<string,string>={'--chart-1':'#111111','--chart-2':' #222222 ','--chart-3':''};
- const el={ownerDocument:{defaultView:{getComputedStyle:()=>({getPropertyValue:(name:string)=>tokens[name]??''})}}} as unknown as Element;
- expect(chartTokenRangeFromElement(el)).toEqual(['#111111','#222222']);
- expect(chartTokenRangeFromElement({ownerDocument:{defaultView:null}} as unknown as Element)).toBeNull();
- tokens['--chart-1']='';expect(chartTokenRangeFromElement(el)).toBeNull();
 });

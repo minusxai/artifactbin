@@ -1,5 +1,4 @@
 import { parseCommentViewState, type CommentViewState } from '../../../contracts/src/comment-view-state';
-import { markdownContent, markdownSource } from '@/lib/markdown';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {commentMentions} from './saved-mentions';
 import { MembershipError, completeMutationReceipt, type MutationReceipt, readableArtifactHeader, type ArtifactRow } from '@/lib/artifacts';
@@ -8,7 +7,6 @@ import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts';
-import type { CommentTarget } from '@/lib/story-ui';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -23,15 +21,11 @@ import type { CommentTarget } from '@/lib/story-ui';
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
 import type { AccessActor } from '@/lib/accounts';
-import {
-  anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
-  type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
-} from '@/lib/document';
+import { canonicalQuote, parseAnnotationRange, type AnnotationRange, isAreaRange } from '@/lib/document';
 import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable, actorSubject, generateInternalId, recordEvent } from '@/lib/platform';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
-import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
@@ -238,38 +232,6 @@ const reactorWire = (row: NonNullable<ReactionRowDb['reactors']>[number]): Comme
 
 // ── the quote and its range, answered against the CURRENT source ────────────
 
-/**
- * An element's visible text in the ONE canonical form the frame captured the
- * quote in. Concatenated with NO separator, because that is what the DOM's
- * `textContent` does: `a<b>x</b>c` reads `axc`, and a joiner here would make
- * every re-find across an inline element fail.
- */
-function canonicalTextOf(node: JsxNode): string {
-  const raw = (n: JsxNode): string =>
-    n.type === 'text' ? n.value : n.type === 'element' ? n.tag === 'Markdown' ? markdownContent(markdownSource(n) ?? '').text : n.children.map(raw).join('') : '';
-  return canonicalText(raw(node));
-}
-
-/** ELEMENT children only — `rel` counts elements, never the text between them. */
-const elementChildrenOf = (nodes: JsxNode[]): JsxElement[] =>
-  nodes.filter((n): n is JsxElement => n.type === 'element');
-
-/** Walk a part's `rel` from the anchored element to the node it names. */
-function nodeForRel(entry: AnchorEntry, rel: string): JsxElement | null {
-  const address = parseRel(rel);
-  if (!address) return null;
-  let node: JsxElement | undefined = entry.node;
-  if (address.sibling > 0) {
-    const siblings = elementChildrenOf(entry.siblings);
-    node = siblings[siblings.indexOf(entry.node) + address.sibling];
-  }
-  for (const step of address.steps) {
-    if (!node) return null;
-    node = elementChildrenOf(node.children)[step];
-  }
-  return node ?? null;
-}
-
 /** The stored JSON, or null — a row that cannot be parsed reads as no range, never a throw. */
 function storedRange(raw: string | null): AnnotationRange | null {
   if (!raw) return null;
@@ -280,43 +242,6 @@ function storedRange(raw: string | null): AnnotationRange | null {
   }
 }
 
-/**
- * Are the quoted words still there? Computed per read, like `orphaned`, and
- * never written back: the quote is what was selected, and this says whether
- * the document still says it. EVERY part, not any: half a quote is not the
- * words the person selected, and an agent reading `quote_found: true` must be
- * able to trust that what it is answering is still on the page. A quote with no
- * range can only be answered by whether the anchor survived — there is nothing
- * to look for.
- */
-function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range: AnnotationRange | null): boolean | null {
-  if (quote === null) return null;
-  if (!entry) return false;
-  if (isTargetRange(range)) return null;
-  // An area names no words — the door refuses a quote beside one — so with
-  // the anchor still here there is nothing more to look for.
-  if (!range || isAreaRange(range)) return true;
-  return range.parts.every((part) => {
-    const node = nodeForRel(entry, part.rel);
-    return !!node && canonicalTextOf(node).includes(part.text);
-  });
-}
-
-/** Validate source-owned identity while leaving dynamic identity to runtime resolution. */
-function targetBelongsTo(owner: JsxElement, target: CommentTarget): boolean {
-  const entries = new Map<string, JsxElement>();
-  const walk = (node: JsxNode) => { if (node.type !== 'element') return; const id = anchorKeyOf(node); if (id) entries.set(id, node); node.children.forEach(walk); };
-  walk(owner);
-  if (target.kind === 'table') return owner.tag === 'DataTable' && (!target.templateNodeId || entries.has(target.templateNodeId));
-  return owner.tag === 'For' && target.scopes[0].nodeId === anchorKeyOf(owner) && target.scopes.every((scope) => entries.get(scope.nodeId)?.tag === 'For') && entries.has(target.templateNodeId);
-}
-
-/**
- * Create an annotation on a node of the owner's document. When the node has
- * no annotation anchor yet, stamping one is a REAL EDIT against the base the
- * caller named — every protocol answer (stale head, node conflict) surfaces as the
- * `stale` refusal so the live page retries with fresh coordinates.
- */
 export async function createAnnotationFor(
   actor: AccessActor,
   artifactId: string,
@@ -336,11 +261,11 @@ export async function createAnnotationFor(
   const made = await db.transaction(async (tx): Promise<AnnotationWire | CreateAnnotationRefusal | null> => {
     const row = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
     if (!row) return null;
-    if (row.format !== 'markup' && row.format !== 'html') return { refused: 'not_markup' };
+    if (row.format !== 'html') return { refused: 'not_markup' };
     if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
     const source = row.source ?? '';
     let anchorKey: string | null = null;
-    let snippet: string;
+    let snippet = '';
     if (row.format === 'html') {
       const anchor = parseHtmlNodeAnchor(input.anchor);
       if (!anchor) return { refused: 'bad_path' };
@@ -353,24 +278,6 @@ export async function createAnnotationFor(
       if (input.range && (!isAreaRange(input.range) || anchor.quote || anchor.range)) return { refused: 'bad_path' };
       anchorKey = anchor.nodeId;
       snippet = (resolved.node?.text ?? anchor.quote).replace(/\s+/g, ' ').trim().slice(0, 240);
-    } else {
-      if (input.anchor) return { refused: 'bad_path' };
-      const parsed = parseJsx(source);
-      if (!parsed.ok) return { refused: 'bad_path' };
-      let node: JsxNode | undefined;
-      if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
-      else if (quote) {
-        const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
-        const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
-        if (!leaves.length) return { refused: 'quote_not_found' };
-        if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return { refused: 'ambiguous_quote' };
-        node = leaves[0].node;
-      }
-      if (!node || node.type !== 'element') return { refused: 'bad_path' };
-      anchorKey = anchorKeyOf(node);
-      if (!anchorKey) return { refused: 'bad_path' };
-      if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
-      snippet = snippetOf(source.slice(node.start, node.end));
     }
     if (input.attachmentId && (!input.baseEditId || !await consumeCommentImage(tx,actor,artifactId,input.attachmentId,id,row.edit_id))) return {refused:'invalid_attachment'};
     await tx.query(
@@ -454,15 +361,12 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
     byRoot.set(r.root_id!, list);
   }
 
-  const anchors = roots.some(root => !root.html_anchor) ? anchorIndex(source) : new Map<string, AnchorEntry>();
   const htmlNodes = roots.some(root => root.html_anchor) ? htmlCommentNodes(source) : null;
 
   return roots.map((root) => {
     const htmlAnchor = parseHtmlNodeAnchor(root.html_anchor);
     const htmlResolved = htmlAnchor && htmlNodes ? resolveHtmlCommentAnchor(htmlNodes, htmlAnchor) : null;
-    const found = !htmlAnchor && root.anchor_key ? anchors.get(root.anchor_key) : undefined;
-    const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
-    const anchored = htmlAnchor ? !!htmlResolved?.node : !!found && bodyPath !== null;
+    const anchored = !!htmlResolved?.node;
     const range = storedRange(root.range);
     const viewState = parseCommentViewState(root.view_state);
     return {
@@ -471,17 +375,15 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
       ...(viewState ? { view_state: viewState } : {}),
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
-      anchor: htmlAnchor ? htmlAnchor : anchored && found
-        ? { key: root.anchor_key!, nodeId: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }
-        : null,
+      anchor: htmlAnchor,
       orphaned: !anchored,
       anchor_version: root.anchor_version,
-      snippet: htmlAnchor ? htmlResolved?.node?.text.replace(/\s+/g, ' ').trim().slice(0, 240) ?? root.snippet : anchored && found ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
+      snippet: htmlAnchor ? htmlResolved?.node?.text.replace(/\s+/g, ' ').trim().slice(0, 240) ?? root.snippet : root.snippet,
       // Verbatim, both of them: what was selected does not change because the
       // document did — only `quote_found` moves.
       quote: root.quote,
       range,
-      quote_found: htmlResolved ? htmlResolved.quoteFound : quoteFound(anchored ? found : undefined, root.quote, range),
+      quote_found: htmlResolved ? htmlResolved.quoteFound : root.quote === null ? null : false,
       thread: [withReactions(root), ...(byRoot.get(root.id) ?? []).map(withReactions)],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
@@ -807,7 +709,7 @@ export async function setCommentReactionFor(actor:AccessActor,artifactId:string,
   const db=await getDb();
   return db.transaction(async tx=>{
     const row=await scopedRow(tx,reactionScope(actor),artifactId,true);
-    if(!row || (row.format!=='html'&&row.format!=='markup'))return null;
+    if(!row || row.format!=='html')return null;
     const target=(await tx.query<{id:string;root_id:string|null}>(`SELECT id,root_id FROM annotations WHERE id=$1 AND artifact_id=$2 AND ${LIVE_ANNOTATION_SQL}`,[commentId,artifactId])).rows[0];
     if(!target)return null;
     const rootId=target.root_id??target.id;

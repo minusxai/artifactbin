@@ -1,8 +1,6 @@
 import { requestOrSessionActor } from '@/lib/authentication';
-import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
-import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
+import { artifactState, readableArtifact } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {catalogOf, executeCatalog, DatasetError} from '../datasets';
 import {json, parseQueryRequest} from '../http';
@@ -44,21 +42,9 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
    await authorize();return json({results:[result(selected?`${selected.schema}.${selected.name}`:'result',table)]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   }
   if(body.sql!==undefined)return json({error:'invalid_query',hint:'Use --name for a declared document query; --input SQL applies to datasets.'},400);
-  if(row.format!=='markup'&&row.format!=='folder')return json({error:'not_queryable'},400);
-  const declared=await declarationsForRow(row),flow=declared?.flow;
-  // A document that cannot run still has its queries: each answers why (lib/artifacts unrunnableDataflow).
-  const names=declared?.state?Object.keys(declared.state.errors):flow?.queries.map(query=>query.name)??[];
-  if(body.name&&!names.includes(String(body.name)))return json({error:'unknown_query',names},400);
-  const invalid=validateQueryValues(flow??{values:[]},parsed.values??{});if(invalid)return json({error:invalid.code,names:invalid.names},400);
-  const selected=body.name?[String(body.name)]:names;
-  if(body.cursor&&selected.length!==1)return json({error:'invalid_cursor',hint:'Select one declared query with --name before paging.'},400);
-  const results=[];
-  for(const name of selected){
-   const outcome=await dataflowForRow(row,{values:parsed.values,only:[name],page:{name,limit:Number(limit)+1,offset},viewer:actor,authorize,signal});
-   const failure=outcome?.state.errors[name];if(failure)return json({error:'query_failed',name,detail:failure},400);
-   const table=outcome?.state.tables[name];if(table)results.push(result(name,table));
-  }
-  await authorize();return json({results},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
+  if(row.format!=='folder')return json({error:'not_queryable'},400);
+  if(body.name)return json({error:'unknown_query',names:[]},400);
+  await authorize();return json({results:[]},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
  }catch(error){
   // The SQL validator refuses a statement with a bare Error ("Dataset SQL: …"); that is the caller's
   // statement, not a server fault, and preflight already reports it as invalid_sql. Left to escape it

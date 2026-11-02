@@ -19,7 +19,7 @@ Paths another repository runs, copies or imports are a contract: move them only 
 there. artifactbin-server runs or sparse-checks-out `lib/ci-plan.mjs`, `lib/ci-artifact-wait.mjs`,
 `lib/ci-elapsed.mjs`, `ci/ci.mjs`, `ci/npm-provenance.mjs`, `ci/npm-driver.mjs`,
 `ci/link-npm-acceptance.mjs`, `ci/npm-acceptance/`, `gate-cli-conformance.mjs` and
-`build/build-islands.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
+`services/app/scripts/build-server-reader.mjs`; the evals repository imports `lib/dev-env.mjs`, `lib/shard.mjs` and
 `lib/{credential,env,slug}.ts`, and mirrors `lib/dev-runner.mjs`. Where each is used, and the check that
 fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 
@@ -106,7 +106,6 @@ Run one with `node scripts/gate-container.mjs <name>`.
 |---|---|---|
 | `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
 | `scripts/build/build-html-components.mjs` | Build the HTML component module graph for the installed author skill. | by hand, when refreshing the skill bundle |
-| `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
 | `scripts/build/build-gate-inputs.mjs` | Build what the browser gates run: the app and the server bundle. | `ci.yml`, `gate-container.mjs` |
 
 ## Page speed

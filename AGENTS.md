@@ -123,7 +123,7 @@ From repo root.
   until a build input changes) and served as CI does.
   `node scripts/gate-container.mjs kit-and-fonts` verifies the compiled reader handover (reader/islands changes).
 - CI-only, never a deferral bypass: `npm run test:all`, `test:{api,node,ui,islands,integration,gates}`, `build`.
-- `npm run build:islands -w services/app` — the shared reader islands and manifest.
+- `npm run build:reader -w services/app` — the hosted native HTML components and server reader assets.
 - Generated inputs: `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`,
   `generate:og`, `generate:design-systems` (runtime registry and agent
   references from `design-systems/specs`; `-- pages`: specimen pages into `tmp/`).

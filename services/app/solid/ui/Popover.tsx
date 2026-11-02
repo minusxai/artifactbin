@@ -14,9 +14,9 @@
  */
 import { createEffect, createSignal, createUniqueId, on, onCleanup, Show, untrack, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { placePopper, type Align, type Side } from '@/lib/islands/kit/popper';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
+import { placePopper, type Align, type Side } from '@/lib/ui-runtime/popper';
+import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
+import { popupDismiss } from '@/lib/ui-runtime/popup-dismiss';
 import { LAYER } from './layers';
 import { createAnchoredAppearance } from './theme';
 

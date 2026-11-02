@@ -4,81 +4,22 @@
  * kinds. Pure: no engine, no database.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, type JsxElement } from '@/lib/jsx';
 import { compiledSource } from '@/test/helpers/compiled';
 import {
-  bindMutationRequest, EMPTY_COMPILED_DATAFLOW, HOLD_MAX_BYTES, HOLD_MAX_ROWS, imageReferenceId, imageRefData, importRef,
-  initialValues, LocalStateInputError, localTableOverrides, mutationRequestFor, mutationTargetRef, NUMERIC_AGGS,
-  parseLocalTables, parseMutationRequest, platformValues, rawUrl, readerDataflow, readerZone, rowField, scalarMatches,
-  validateQueryValues, VIEWER, VIEWER_ID, type CompiledDataflow,
+  imageReferenceId, imageRefData, importRef,
+  EMPTY_COMPILED_DATAFLOW, initialValues, LocalStateInputError, localTableOverrides, mutationTargetRef, NUMERIC_AGGS,
+  parseLocalTables, parseMutationRequest, platformValues, rawUrl, readerZone, rowField, scalarMatches,
+  VIEWER, VIEWER_ID, type CompiledDataflow,
 } from '..';
-import {
-  ARGS_ATTR, controlOptions, DECL_NAME_RE, IMPORT_TAG, NOTIFY_TAG, parseDeclaration, parseNotifyDecl, QUERY_TAG, SET_ATTR,
-} from '../dataflow';
+
 import {
   BUILTIN_TABLES, builtinInput, CLOCK_FUNCTIONS, isBuiltinInput, isBuiltinTable, localZone, READ_ONLY_REF_ATTRS,
   reservedDeclarationName,
 } from '../builtins';
 import { checkedLocalRows } from '../local-tables';
-import { boundImageValue } from '../image-source';
 import { columnVizKind, inferColumns } from '../dataset-shape';
 
-const el = (source: string): JsxElement => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.nodes[0] as JsxElement;
-};
 const PLATFORM = { userId: 'u1', now: '2026-09-30T10:00:00.000Z', tz: 'UTC' };
-
-describe('declaration grammar', () => {
-  it('names the tags and attributes', () => {
-    expect([IMPORT_TAG, QUERY_TAG, NOTIFY_TAG, SET_ATTR, ARGS_ATTR]).toEqual(['Import', 'Query', 'Notify', 'set', 'args']);
-  });
-
-  it('a declared name is an identifier', () => {
-    for (const name of ['a', '_x', 'A1', 'snake_case']) expect(DECL_NAME_RE.test(name), name).toBe(true);
-    for (const name of ['', '1a', 'a-b', 'a.b', 'é', 'a b']) expect(DECL_NAME_RE.test(name), name).toBe(false);
-  });
-
-  it('parseDeclaration dispatches by tag, and declares nothing for other tags or plain elements', () => {
-    expect(parseDeclaration(el('<Query name="q">{`select 1 as a`}</Query>'))).toMatchObject({ kind: 'query', decl: { name: 'q' } });
-    expect(parseDeclaration(el('<Value name="n" type="number" default={2} />'))).toMatchObject({ kind: 'value', decl: { name: 'n' } });
-    expect(parseDeclaration(el('<Import name="b" src="ref:BookRows1" />'))).toMatchObject({ kind: 'import', decl: { name: 'b' } });
-    expect(parseDeclaration(el('<Card />'))).toBeNull();
-    expect(parseDeclaration(el('<query name="q" />'))).toBeNull();
-    expect(parseDeclaration(el('<Query>{`select 1`}</Query>'))).toHaveProperty('errors');
-  });
-
-  it('parseNotifyDecl reads name, on and its one static SQL child', () => {
-    const ok = parseNotifyDecl(el('<Notify name="ping" on="save">{`select 1 as to, \'hi\' as message`}</Notify>'));
-    expect(ok).toMatchObject({ ok: true, decl: { name: 'ping', on: 'save', sql: "select 1 as to, 'hi' as message" } });
-    expect(ok.ok && ok.decl).not.toHaveProperty('source');
-  });
-
-  it.each([
-    ['an unknown attribute', '<Notify name="p" on="save" to="x">{`select 1`}</Notify>', /takes only name=, on= and source=/],
-    ['no on=', '<Notify name="p">{`select 1`}</Notify>', /on= must name a declared persistent Mutation/],
-    ['a reserved on=', '<Notify name="p" on="_me">{`select 1`}</Notify>', /on= must name/],
-    ['an empty SQL child', '<Notify name="p" on="save">{`  `}</Notify>', /one non-empty static SQL/],
-    ['no child', '<Notify name="p" on="save" />', /one non-empty static SQL/],
-  ])('parseNotifyDecl refuses %s', (_label, source, message) => {
-    const result = parseNotifyDecl(el(source));
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.errors.map((e) => e.message).join('\n')).toMatch(message);
-  });
-
-  it('controlOptions reads literal options and a query table', () => {
-    expect(controlOptions(['a', 2, { value: 'v', label: 'L' }, { value: 'only' }, null])).toEqual([
-      { value: 'a', label: 'a' }, { value: '2', label: '2' }, { value: 'v', label: 'L' }, { value: 'only', label: 'only' }, { value: 'null', label: 'null' },
-    ]);
-    const table = { columns: [{ name: 'id', type: 'number' as const }, { name: 'name', type: 'string' as const }], rows: [{ id: 1, name: 'One' }, { id: 2, name: null }] };
-    expect(controlOptions('$opts', table)).toEqual([{ value: '1', label: 'One' }, { value: '2', label: '2' }]);
-    expect(controlOptions('$opts', { columns: [table.columns[0]!], rows: [{ id: 3 }] })).toEqual([{ value: '3', label: '3' }]);
-    expect(controlOptions('$opts')).toEqual([]);
-    expect(controlOptions('not a ref')).toEqual([]);
-    expect(controlOptions(undefined)).toEqual([]);
-  });
-});
 
 describe('built-ins', () => {
   it('names the viewer and the built-in tables', () => {
@@ -167,39 +108,12 @@ describe('the compiled record', () => {
     expect(mutationTargetRef(f, f.mutations.find((m) => m.name === 'local')!)).toBeNull();
   });
 
-  it('readerDataflow drops notification SQL, and leaves a record without any as is', async () => {
-    const f = await compiled();
-    expect(readerDataflow({ ...f, notifications: [{ name: 'x' }] as never })).toEqual(f);
-    expect(readerDataflow(f)).toEqual(f);
-    expect(EMPTY_COMPILED_DATAFLOW).toEqual({ imports: [], values: [], queries: [], mutations: [] });
-  });
-
   it('localTableOverrides replaces only declared inline tables, row by row checked', async () => {
     const f = await compiled();
     expect(localTableOverrides(f, { t: [{ a: 2 }, {}] })).toEqual({ t: { columns: f.values.find((v) => v.name === 't')!.kind === 'table' ? expect.any(Array) : [], rows: [{ a: 2 }, { a: null }] } });
     expect(localTableOverrides(f)).toEqual({});
     expect(() => localTableOverrides(f, { books: [] })).toThrow(LocalStateInputError);
     expect(() => localTableOverrides(f, { n: [] })).toThrow('"n" is not a declared inline table');
-  });
-
-  it('bindMutationRequest binds declared arguments and refuses what the signature does not take', async () => {
-    const f = await compiled();
-    const add = f.mutations.find((m) => m.name === 'add')!;
-    const ok = bindMutationRequest(f, add, { mutation: 'add', args: {} }, PLATFORM);
-    expect(ok.ok).toBe(true);
-    expect(bindMutationRequest(f, add, { mutation: 'add', args: { zzz: 1 } }, PLATFORM)).toMatchObject({ ok: false, reason: 'invalid_sql' });
-    expect(bindMutationRequest(f, add, { mutation: 'add', args: {}, row: { id: 1 } }, PLATFORM)).toMatchObject({ ok: false, reason: 'invalid_row', detail: 'this mutation does not read a row' });
-    expect(bindMutationRequest(f, add, { mutation: 'add', args: {}, value: 1 }, PLATFORM)).toMatchObject({ ok: false, detail: 'this mutation does not accept a value' });
-  });
-
-  it('mutationRequestFor builds the request a page sends, which the door then parses back', async () => {
-    const f = await compiled();
-    const add = f.mutations.find((m) => m.name === 'add')!;
-    const request = mutationRequestFor(add, { values: { n: 7 }, tz: 'Asia/Kolkata' });
-    expect(request).toMatchObject({ mutation: 'add', tz: 'Asia/Kolkata' });
-    expect(request).not.toHaveProperty('row');
-    expect(request).not.toHaveProperty('value');
-    expect(parseMutationRequest(JSON.parse(JSON.stringify(request)))).toEqual(request);
   });
 });
 
@@ -248,28 +162,8 @@ describe('reader local tables', () => {
   });
 });
 
-describe('validateQueryValues', () => {
-  const flow = { values: [
-    { kind: 'scalar', name: 'n', type: 'number', default: 0 }, { kind: 'scalar', name: 'd', type: 'date', default: null },
-    { kind: 'scalar', name: 'at', type: 'timestamp', default: null }, { kind: 'scalar', name: 'who', type: 'user', default: null },
-  ] } as unknown as CompiledDataflow;
-
-  it('accepts declared names of the declared type, and null for any', () => {
-    expect(validateQueryValues(flow, { n: 2, d: '2026-01-01', at: '2026-01-01T00:00:00.000Z', who: 'u' })).toBeNull();
-    expect(validateQueryValues(flow, { n: null, d: null })).toBeNull();
-    expect(validateQueryValues(flow, {})).toBeNull();
-  });
-
-  it('names unknown names first, then mistyped ones', () => {
-    expect(validateQueryValues(flow, { zz: 1, n: 'x' })).toEqual({ code: 'unknown_parameter', names: ['zz'] });
-    expect(validateQueryValues(flow, { n: '1', d: 'not a date', who: 3 })).toEqual({ code: 'invalid_parameter', names: ['n', 'd', 'who'] });
-  });
-});
-
-describe('placement and aggregates', () => {
-  it('pins the reader hold caps and the numeric aggregates', () => {
-    expect(HOLD_MAX_ROWS).toBe(50_000);
-    expect(HOLD_MAX_BYTES).toBe(5 * 1024 * 1024);
+describe('numeric aggregates', () => {
+  it('keeps the numeric aggregate vocabulary', () => {
     expect([...NUMERIC_AGGS].sort()).toEqual(['avg', 'max', 'median', 'min', 'sum']);
     expect(NUMERIC_AGGS.has('count' as never)).toBe(false);
   });
@@ -295,15 +189,7 @@ describe('reference media', () => {
     for (const value of ['ref:abc', 'ref:Abc123!', ' ref:Abc123', 'Abc123', 'ref:', null, 3, undefined]) expect(imageReferenceId(value), String(value)).toBeNull();
   });
 
-  it('boundImageValue resolves a row field or a value template, null for empty', () => {
-    expect(boundImageValue('$_row.pic', {}, { pic: 'ref:Abc123' })).toBe('ref:Abc123');
-    expect(boundImageValue('$_row.pic', {}, { pic: '' })).toBeNull();
-    expect(boundImageValue('$_row.pic', {})).toBeNull();
-    expect(boundImageValue('$img', { img: 'https://x.test/a.png' })).toBe('https://x.test/a.png');
-    expect(boundImageValue('$img', { img: 3 })).toBe('3');
-    expect(boundImageValue('$img', { img: '' })).toBeNull();
-    expect(boundImageValue('$img', {})).toBeNull();
-  });
+
 });
 
 describe('dataset shape', () => {

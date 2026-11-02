@@ -6,7 +6,6 @@ on:
       - 'services/test-support/src/runner-model.mjs'
       - 'services/runner/**'
       - 'services/app/**/runner*'
-      - 'services/app/lib/runner/**'
       - 'services/app/**/lambda*'
       - 'services/app/**/hosted*'
       - 'services/utils/src/runner-client.ts'

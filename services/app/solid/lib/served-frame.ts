@@ -4,7 +4,7 @@
  * adopts it — moved, never re-created, so its document keeps loading (solid/pages/Document). A route that leaves
  * the document takes the frame and its sheet off the page.
  */
-import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';
+import { STORY_FRAMED_ATTR } from '@/lib/html-reader/frame-markup';
 
 let servedFrame: HTMLElement | null = null;
 let servedPath = '';

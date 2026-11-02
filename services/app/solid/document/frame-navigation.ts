@@ -11,7 +11,7 @@
  *  · anything else — another document, whose frame only the server draws — by a full load (`location.assign`), so
  *    back and forward cross documents as the browser's own history entries.
  */
-import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from '@/lib/story-runtime/contract';
+import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE, type StoryNavigateMessage } from '@/lib/html-reader/contract';
 import { isAppPagePath } from '@/lib/http/app-pages';
 
 interface FrameNavigationOptions {

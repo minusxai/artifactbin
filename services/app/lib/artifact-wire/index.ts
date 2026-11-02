@@ -6,7 +6,7 @@
  */
 export {
   SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion,
-  parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, sourceRepairsEcho, versionToWire,
+  parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, versionToWire,
 } from './wire';
 export { updateMetadataFromBody } from './metadata-wire';
 export { monitoringGuidance } from './monitoring-guidance';

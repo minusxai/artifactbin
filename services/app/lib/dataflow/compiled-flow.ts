@@ -8,20 +8,11 @@
 import { paramSqlName, type ColumnType, type DatasetColumn, type MutationInput } from '@artifactbin/contracts';
 import { BUILTIN_TABLES, builtinInput, isBuiltinInput } from './builtins';
 import type { CompiledDataflow, CompiledMutation, CompiledQuery } from './compiled-dataflow';
-import type { DataflowState, Row, Scalar, TableResult } from './dataflow';
+import type { Row, Scalar, TableResult } from './dataflow';
 
 /** Every scalar at its declared default. */
 export function initialValues(flow: CompiledDataflow): Record<string, Scalar> {
   return Object.fromEntries(flow.values.flatMap((v) => (v.kind === 'scalar' ? [[v.name, v.default]] : [])));
-}
-
-/**
- * The tables a document already HAS: every inline `<Value type="table">`.
- * Their rows are written in the source, so they travel with the declarations
- * and a chart bound to one has its rows without anything running.
- */
-export function initialTables(flow: CompiledDataflow): DataflowState['tables'] {
-  return Object.fromEntries(flow.values.flatMap((v) => (v.kind === 'table' ? [[v.name, { rows: v.rows ?? [], columns: v.columns ?? [] }]] : [])));
 }
 
 /** The declared type of every scalar Value, by name. */

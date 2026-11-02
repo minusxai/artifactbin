@@ -7,7 +7,10 @@ import {POST as createArtifact} from '@/app/api/artifacts/route';
 import {POST as uploadFile} from '@/app/a/[id]/datasets/[datasetId]/files/route';
 import {GET as readFile} from '@/app/a/[id]/datasets/[datasetId]/files/[fileId]/route';
 import {createFileUploader,fileUploadResult} from '../upload';
-import {relayedFileUpload} from '@/lib/story-runtime/frame-bridge/upload';
+/** The native upload HTTP contract; relay admission is covered by html-reader's bridge tests. */
+function uploadRequest(documentId:string,editId:string,payload:{datasetId:string;contentType:string;filename:string;requestId:string;bytes:Uint8Array}){
+ return {path:`/a/${documentId}/datasets/${payload.datasetId}/files`,init:{headers:{'Content-Type':payload.contentType,'X-Filename':encodeURIComponent(payload.filename),'X-Edit-Id':editId,'Idempotency-Key':payload.requestId},body:new Uint8Array(payload.bytes)}};
+}
 import {getDb,generateInternalId} from '@/lib/platform';
 import {objectStore} from '@/lib/object-store';
 useAppHarness();
@@ -23,7 +26,7 @@ it.each(['legacy','grants','direct'])('the native upload port composes with real
  }
  let actor:Actor={credential:'session',userId:owner.id,email:owner.email??undefined,emailVerified:true},loseResponse=true;
  const uploader=createFileUploader({readOnly:()=>false,datasetId:name=>name==='attachments'?dataset.id:undefined,async send(payload){
-  const admitted=relayedFileUpload(document.id,document.edit_id,false,payload)!;
+  const admitted=uploadRequest(document.id,document.edit_id,payload);
   const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});const body=await response.json();
   if(!response.ok)throw Error(`Upload ${response.status}: ${body.detail??body.error}`);
   if(loseResponse){loseResponse=false;throw Error('successful response lost');}return fileUploadResult(body);
@@ -52,7 +55,7 @@ it.each(['source','policy','membership'])('rechecks saved HTML upload authority 
   else await db.query(`UPDATE artifacts SET dataset_policy='{"version":2,"allow":[]}'::jsonb,policy_revision=policy_revision+1 WHERE id=$1`,[dataset.id]);
  });
  try{
-  const payload={datasetId:dataset.id,filename:'fence.txt',contentType:'text/plain',requestId:'upload-fence-request',bytes:new TextEncoder().encode('fenced')},admitted=relayedFileUpload(document.id,document.edit_id,false,payload)!;
+  const payload={datasetId:dataset.id,filename:'fence.txt',contentType:'text/plain',requestId:'upload-fence-request',bytes:new TextEncoder().encode('fenced')},admitted=uploadRequest(document.id,document.edit_id,payload);
   const response=await uploadFile(request(admitted.path,{method:'POST',actor,headers:Object.fromEntries(new Headers(admitted.init.headers)),body:admitted.init.body??undefined}),{params:Promise.resolve({id:document.id,datasetId:dataset.id})});
   expect(hook).toHaveBeenCalledOnce();expect(response.status).toBe(revoke==='source'?404:403);
   expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM dataset_images WHERE dataset_id=$1',[dataset.id])).rows[0]?.count).toBe(0);

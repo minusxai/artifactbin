@@ -9,10 +9,9 @@
 export const VIZ_DATASET_MAIN = 'main';
 
 /** Inferred visualization kind for a query-result column (from its SQL type). */
-export type VizColumnKind = 'quantitative' | 'temporal' | 'nominal' | 'boolean' | 'unknown';
+type VizColumnKind = 'quantitative' | 'temporal' | 'nominal' | 'boolean' | 'unknown';
 
 export interface VizResultColumn {
   name: string;
   kind: VizColumnKind;
 }
-

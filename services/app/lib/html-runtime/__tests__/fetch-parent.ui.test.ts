@@ -1,12 +1,12 @@
 import {expect,it,vi} from 'vitest';
-import {createFrameBridgeParent} from '../../story-runtime/frame-bridge/parent';
+import {createFrameBridgeParent} from '../../html-reader/frame-bridge/parent';
 it.each(['response','transport-error','body-error'] as const)('a stale GraphQL %s cannot satisfy a replacement frame call',async outcome=>{
  const frame=document.createElement('iframe');document.body.append(frame);const messages:any[]=[];
  vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(message=>messages.push(message));
  const jobs:Array<{resolve:(response:Response)=>void;reject:(error:Error)=>void}>=[];
  const appFetch=vi.fn((_path:string,_init:RequestInit)=>new Promise<Response>((resolve,reject)=>jobs.push({resolve,reject})));
  let revision='1';
- const parent=createFrameBridgeParent({win:window,frame,frameOrigin:'https://runner.example',id:'Page123',nodes:[],editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision,readOnly:false}),appFetch});
+ const parent=createFrameBridgeParent({win:window,frame,frameOrigin:'https://runner.example',id:'Page123',editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision,readOnly:false}),appFetch});
  const send=(key:string,payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:'https://runner.example',source:frame.contentWindow}));
  const query={kind:'fetch',call:1,path:'/api/artifacts/Page123/graphql',method:'POST',headers:{authorization:'Bearer forged'},body:JSON.stringify({operation:'query',query:'{records{value}}',revision:'forged'})};
  try{

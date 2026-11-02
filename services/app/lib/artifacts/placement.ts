@@ -41,7 +41,7 @@ const MAX_FOLDER_DEPTH = 6;
 const SPARKLINE_DAYS = 14;
 
 /** The fixed shape of a folder's children table: `<import>.rows` of an `<Import src="ref:<folderId>">`. */
-export const CHILDREN_COLUMNS: DatasetColumn[] = [
+const CHILDREN_COLUMNS: DatasetColumn[] = [
   { name: 'id', type: 'string' }, { name: 'title', type: 'string' }, { name: 'format', type: 'string' },
   { name: 'level', type: 'number' }, { name: 'visibility', type: 'string' }, { name: 'updated_at', type: 'string' },
   { name: 'url', type: 'string' }, { name: 'thumbnail', type: 'string' }, { name: 'views', type: 'number' }, { name: 'sparkline', type: 'string' },

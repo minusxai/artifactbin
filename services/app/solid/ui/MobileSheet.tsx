@@ -9,8 +9,8 @@
  */
 import { createSignal, onCleanup, onMount, Show, type Accessor, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
+import { trustedPortalOf } from '@/lib/ui-runtime/trusted-portal';
+import { createDialogShell } from '@/lib/ui-runtime/dialog-shell';
 import { LAYER } from './layers';
 import { createPlacedAppearance } from './theme';
 

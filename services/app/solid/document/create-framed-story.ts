@@ -1,23 +1,8 @@
-/**
- * THE FRAMED DOCUMENT'S MOUNT — the document page's one way to hold its document.
- *
- * The document runs in an iframe on its own origin (APP__PAGES_HOST, lib/http/pages-origin); this page reaches it
- * only through the bridge (lib/story-runtime/frame-bridge/parent). It answers `{ controller, nonce }`, so the page's
- * runtimeRef, edit lifecycle, annotation layer, selection actions and editor use the bridge's stand-in for the
- * document's controller. `nonce` stays null until the frame's controller runs (and again while a reloaded frame's
- * new controller starts).
- *
- * THE FRAME CONDITION is `framedDocumentFor`: the server drew one frame into the page (lib/document-serving/document-frame,
- * `iframe[data-mx-document-frame]`) and named the document's own origin in the page data (`surface.framedOrigin`).
- * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
- * one; the page owns its layout.
- */
-import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
-import type { JsxNode } from '@/lib/jsx';
-import { retryingFetch } from '@/lib/http/retry-lazily';
-import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
+
+import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
+import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/html-reader/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
-import { STORY_DOCUMENT_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_BRIDGE_MESSAGE, type IslandStoryController } from '@/lib/html-reader/contract';
 
 // The frame's light helpers live in ./frame-src, which the document page and the consent bar import without this module.
 import { framedDocumentFor, freshFrameSrc, DOCUMENT_FRAME_SELECTOR, type FramedDocument } from './frame-src';
@@ -135,63 +120,15 @@ export function followFramedValues(win: Window, values: string): void {
  * `search` carries an archived version's `?version=N`, so the tree is that version's. A restart is ridden out by the shared
  * policy (lib/http/retry-lazily); a refusal is not. Null when it never arrives: the frame then has no edit controller, and says so nowhere.
  */
-export async function fetchFrameNodes(id: string, search: string, signal?: AbortSignal): Promise<JsxNode[] | null> {
-  const version = new URLSearchParams(search).get('version');
-  const url = `/api/page/artifact/${encodeURIComponent(id)}?part=nodes${version ? `&version=${encodeURIComponent(version)}` : ''}`;
-  try {
-    const response = await retryingFetch(url, { credentials: 'same-origin', signal });
-    if (!response.ok) return null;
-    const part = await response.json() as { nodes?: unknown };
-    return Array.isArray(part.nodes) ? part.nodes as JsxNode[] : null;
-  } catch { return null; }
-}
-
-/**
- * The reader's first press into the framed document (a click, a tap, a selection starting there): all a page sees of a
- * frame on another origin is its own window losing focus to that frame. `act` runs once; the returned stop drops it.
- */
-export function onFirstPressInto(frame: HTMLIFrameElement, act: () => void): () => void {
-  const win = frame.ownerDocument.defaultView ?? window;
-  let timer = 0;
-  const stop = () => { win.removeEventListener('blur', onBlur); win.clearTimeout(timer); };
-  // Where the focus went is settled a task after the window's blur in every browser.
-  const onBlur = () => {
-    win.clearTimeout(timer);
-    timer = win.setTimeout(() => { if (frame.ownerDocument.activeElement === frame) { stop(); act(); } }, 0);
-  };
-  win.addEventListener('blur', onBlur);
-  return stop;
-}
-
 interface FramedStoryOptions {
   id: string;
   framed: FramedDocument;
-  /**
-   * The version's SOURCE nodes, which comments and selections are classified against: at hand, or on their way
-   * (fetchFrameNodes). The bridge attaches to the frame when they are here; until then the controller is null and
-   * nothing the page draws waits (the frame draws itself), and one that never arrives leaves the bridge unmade.
-   * `[]` for a reader the page gives no selection action yet: the bridge attaches at once without the tree (reading,
-   * the mode pick and the `$` values need none of it), and `attachTree` brings it when an action can use it.
-   */
-  nodes: JsxNode[] | Promise<JsxNode[] | null>;
-  /**
-   * A bridge made without the tree: the frame reports the reader's first press, touch, key or selection in the
-   * document (contract `pressed`), which a page that can use the tree answers with `attachTree`.
-   */
-  onPressed?: () => void;
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
   /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
   htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
-  /**
-   * The newest saved version the page's own stream delivered (createLiveArtifact's frame), and whether the page is
-   * reading. The framed document draws that version itself, from its own stream; only its NODES — which comments,
-   * the selection bubble and the document menu are classified against — come from here. Without them every path
-   * the new version moved describes the first version's node, and the document's selection actions fall silent.
-   */
-  version?: Accessor<{ editId: string; nodes?: JsxNode[] } | null>;
-  reading?: Accessor<boolean>;
+
 }
 
 export interface FramedStory {
@@ -202,53 +139,33 @@ export interface FramedStory {
   frame: HTMLIFrameElement;
   /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
   setTopInset(px: number): void;
-  /**
-   * The tree for a bridge made without one (`nodes: []`), asked for once: when it arrives it goes to the running
-   * frame controller (bridge `setNodes`) — the same session, so a selection the reader made while it was on its way
-   * is described again and gets its bubble. Ignored for a bridge given its tree, and for one that never arrives.
-   */
-  attachTree(nodes: Promise<JsxNode[] | null>): void;
+
 }
 
 export function createFramedStory(options: FramedStoryOptions): FramedStory {
   const { frame, origin } = options.framed;
   const [nonce, setNonce] = createSignal<string | null>(null);
   const [current, setCurrent] = createSignal<FrameBridgeParent | null>(null);
-  const owner = getOwner();
-  let disposed = false;
   /** The bars' reach over the frame's top edge, kept for a bridge made after it was set. */
   let inset = 0;
-  /** The bridge was made without the tree, and it has not been asked for yet. */
-  let bare = Array.isArray(options.nodes) && options.nodes.length === 0;
-  const start = (nodes: JsxNode[]) => {
-    if (disposed || current()) return;
+  const start = () => {
     const bridge = createFrameBridgeParent({
-      win: window, frame, frameOrigin: origin, id: options.id, nodes,
+      win: window, frame, frameOrigin: origin, id: options.id,
       editId: options.editId, source: options.source, htmlContext: options.htmlContext,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values) => followFramedValues(window, values),
-      onPressed: () => { if (bare) options.onPressed?.(); },
     });
     setCurrent(bridge);
     if (inset) bridge.setTopInset(inset);
     if(options.htmlContext)createEffect(()=>{options.htmlContext!();bridge.refreshUploadContext();});
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
-    // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
-    let forwarded: string | null = null;
-    createEffect(() => {
-      const version = options.version?.();
-      if (!version?.nodes || !(options.reading?.() ?? true) || version.editId === forwarded) return;
-      forwarded = version.editId;
-      bridge.update({ type: STORY_DOCUMENT_MESSAGE, nodes: version.nodes });
-    });
+
   };
   // A frame whose session ran out (or that a redirect took off its origin) gets a fresh ticket (keepFrameSession).
   onCleanup(keepFrameSession({ win: window, frame, origin, id: options.id }));
-  if (Array.isArray(options.nodes)) start(options.nodes);
-  else void options.nodes.then((nodes) => { if (nodes && !disposed) runWithOwner(owner, () => start(nodes)); });
+  start();
   onCleanup(() => {
-    disposed = true;
     const bridge = current();
     setCurrent(null);
     setNonce(null);
@@ -257,10 +174,6 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   return {
     controller: current, nonce, frame,
     setTopInset: (px) => { inset = px; current()?.setTopInset(px); },
-    attachTree: (nodes) => {
-      if (!bare || disposed) return;
-      bare = false;
-      void nodes.then((tree) => { if (tree && !disposed) current()?.setNodes(tree); });
-    },
+
   };
 }

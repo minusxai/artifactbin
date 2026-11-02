@@ -1,33 +1,11 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {questionEnvelope} from '../chart-envelope';
-import {annotationSplit,isBlankSpec,zonesForVizType} from '../encoding-edit';
+import {annotationSplit} from '../annotation-layers';
 import {GEO_BOUNDARY_DATASET,loadGeoFeatures,resolveGeoAsset} from '../geo-assets';
 import {injectNamedAssets,resizeVegaView,resolveEnvelopeSpec} from '../render-vega';
 import type {VizEnvelope} from '@/lib/validation';
 afterEach(()=>vi.unstubAllGlobals());
 
-describe('questionEnvelope',()=>{
- const columns=[{name:'a',type:'number'}] as never;
- it('wraps native specs and inline recipes in a version 2 envelope with no bindings or assets',()=>{
-  expect(questionEnvelope({kind:'vega-lite',spec:{mark:'bar'}},columns)).toEqual({version:2,source:{kind:'vega-lite',grammar:'vega-lite@6',spec:{mark:'bar'}},dataBindings:null,viewParams:null,interactions:null,assets:null});
-  expect(questionEnvelope({kind:'vega',spec:[1]},columns)).toMatchObject({source:{kind:'vega',grammar:'vega@6',spec:{}}});
-  expect(questionEnvelope({kind:'recipe',recipe:'minusx/funnel@1',bindings:{stage:'s'}},columns)).toMatchObject({source:{kind:'recipe',recipe:'minusx/funnel@1',bindings:{stage:'s'},params:null,columnFormats:null}});
- });
- it('materializes a referenced recipe file, and refuses a missing or broken one',()=>{
-  const recipe={description:'bars',engine:'vega-lite',bindings:[{name:'x'}],template:{mark:'bar',encoding:{x:{field:'{{x}}',type:'{{x:kind}}'}}}};
-  expect(questionEnvelope({kind:'recipe',recipe:'ref:r1',bindings:{x:'a'}},columns,{r1:{kind:'viz',recipe}} as never)).toMatchObject({source:{kind:'vega-lite',spec:{mark:'bar',encoding:{x:{field:'a',type:'quantitative'}}}}});
-  expect(questionEnvelope({kind:'recipe',recipe:'ref:r1',bindings:{x:'a'}},columns,{r1:{kind:'viz',recipe:{...recipe,engine:'vega'}}} as never)).toMatchObject({source:{kind:'vega',grammar:'vega@6'}});
-  expect(questionEnvelope({kind:'recipe',recipe:'ref:gone'},columns,{})).toEqual({error:'recipe unavailable — falling back'});
-  expect(questionEnvelope({kind:'recipe',recipe:'ref:r1',bindings:{}},columns,{r1:{kind:'viz',recipe}} as never)).toEqual({error:'recipe error: missing binding: x'});
-  expect(questionEnvelope({kind:'table'},columns)).toEqual({error:'unknown viz kind "table"'});
- });
-});
-
-describe('encoding edit helpers',()=>{
- it('calls a spec blank only without a mark, an encoded channel or a composition',()=>{
-  expect(isBlankSpec({})).toBe(true);expect(isBlankSpec({encoding:{}})).toBe(true);
-  for(const spec of [{mark:'bar'},{encoding:{x:{field:'a'}}},{layer:[]},{hconcat:[]},{facet:{}}])expect(isBlankSpec(spec)).toBe(false);
- });
+describe('native annotation layers',()=>{
  it('splits an annotated unit into its base chart and datum-only rule/rect/text layers',()=>{
   const unit={mark:'line',encoding:{x:{field:'d'},y:{field:'n'}}};
   expect(annotationSplit(unit)).toEqual({unit,annotations:[]});
@@ -36,13 +14,7 @@ describe('encoding edit helpers',()=>{
   // A field-encoded or non-annotation layer keeps the spec custom; so does any other composition or a lone layer.
   for(const spec of [{layer:[unit,{mark:'rule',encoding:{y:{field:'n'}}}]},{layer:[unit,{mark:'bar',encoding:{y:{datum:1}}}]},{layer:[unit,{mark:'rule'}]},{layer:[unit,{mark:'rule',encoding:{y:null}}]},{layer:[unit]},{layer:[unit,rule],hconcat:[]}])expect(annotationSplit(spec)).toBeNull();
  });
- it('offers each viz type only the drop zones it draws',()=>{
-  expect(zonesForVizType('pie').map(z=>z.channel)).toEqual(['color','theta']);
-  expect(zonesForVizType('heatmap').map(z=>z.label)).toEqual(['X-Axis','Y-Axis','Value']);
-  expect(zonesForVizType('histogram').map(z=>z.channel)).toEqual(['x','color']);
-  expect(zonesForVizType(null)).toEqual(zonesForVizType('bar'));
-  expect(zonesForVizType('bar').map(z=>z.channel)).toEqual(['x','y','color']);
- });
+
 });
 
 describe('geo boundaries',()=>{

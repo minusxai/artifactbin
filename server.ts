@@ -200,14 +200,6 @@ async function main(): Promise<void> {
 
   }
 
-  /*
-   * THE MERMAID HARVESTER (lib/mermaid-images): published diagrams are drawn to
-   * stored SVG in the background, through whichever browser was registered
-   * above. Started here, by the root, never on import — publishing never waits
-   * on it, and a browser that is down only means readers draw with the engine.
-   */
-  const { startMermaidHarvester } = await import('@/lib/publish');
-  const stopHarvester = startMermaidHarvester();
   // All process entry points start the same durable jobs/outbox lifecycle.
   // This import stays after env + service initialization, as do the other app imports.
   const { startAppBackgroundTasks } = await import('@/lib/runtime');
@@ -282,7 +274,6 @@ async function main(): Promise<void> {
   installShutdown({ steps: [
     closeRunner,
     stopBackgroundTasks,
-    stopHarvester,
     () => services().events.close?.() ?? Promise.resolve(),
     () => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())),
     async () => { await vite?.close(); },

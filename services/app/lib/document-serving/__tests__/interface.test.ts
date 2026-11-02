@@ -10,7 +10,7 @@ import { markPagesRequest, pagesSite } from '@/lib/http';
 import { getDb } from '@/lib/platform';
 import {
   DOCUMENT_FRAME_CSS, cachedShell, componentModuleResponse, documentFrameFallback, documentFrameHtml, documentHeadTags, nativeHtmlApolloResponse,
-  nativeHtmlCoreResponse, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlTitle, parseRuntimeCssRequest, runtimeCssAnswer, serveRawDocument,
+  nativeHtmlCoreResponse, nativeHtmlModuleResponse, nativeHtmlReaderResponse, nativeHtmlTitle, serveRawDocument,
 } from '@/lib/document-serving';
 import { FRAME_ALLOW, FRAME_SANDBOX } from '@/lib/document-serving/document-frame';
 
@@ -66,25 +66,6 @@ describe('the raw document door', () => {
   });
 });
 
-describe('the runtime stylesheet', () => {
-  it('reads a version and a bounded set of runtime classes', () => {
-    const url = (q: string) => new URL(`https://x/a/doc/runtime.css?${q}`);
-    expect(parseRuntimeCssRequest(url('v=3&k=abc&x=p-4%20flex%20flex'))).toEqual({ version: 3, compile: 'abc', extras: ['flex', 'p-4'] });
-    expect(parseRuntimeCssRequest(url('v=1'))).toEqual({ version: 1, compile: null, extras: [] });
-    for (const bad of ['', 'v=0', 'v=1.5', 'v=x']) expect(parseRuntimeCssRequest(url(bad)), bad).toEqual({ error: 'invalid_version' });
-    expect(parseRuntimeCssRequest(url(`v=1&x=${Array.from({ length: 501 }, (_, i) => `c${i}`).join('%20')}`))).toEqual({ error: 'invalid_classes' });
-    expect(parseRuntimeCssRequest(url(`v=1&x=${'a'.repeat(121)}`))).toEqual({ error: 'invalid_classes' });
-  });
-
-  it('caches the current compile for a year, publicly only when anyone may read, and revalidates a stale one', async () => {
-    const row = { id: 'doc1', version: 2, source: '<div class="p-4"></div>' };
-    const stale = await runtimeCssAnswer(row, { version: 2, compile: 'old', extras: [] }, true);
-    expect(stale.cacheControl).toBe('private, no-cache');
-    expect(stale.etag).toMatch(/^"[\w-]{22}"$/);
-    const again = await runtimeCssAnswer(row, { version: 2, compile: 'old', extras: ['flex'] }, true);
-    expect(again.etag).not.toBe(stale.etag);
-  });
-});
 
 describe('the native runtime\'s public code', () => {
   it('serves the core and each module revalidated, and the retained alias only for a digest it holds', async () => {

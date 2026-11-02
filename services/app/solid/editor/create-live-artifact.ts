@@ -26,7 +26,7 @@ import type {PresenceFrame} from '@/lib/html-presence';
 import { createEffect, createSignal, on, onCleanup, type Accessor } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ReaderArtifactBackend } from '@/lib/artifact-backend';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/html-reader/contract';
 import { liveBackoffDelay } from '@/lib/http/live-stream';
 
 interface LiveArtifactOptions {

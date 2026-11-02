@@ -14,7 +14,7 @@
  */
 import type { Feature, FeatureCollection } from 'geojson';
 import { feature as topojsonFeature } from 'topojson-client';
-import { BOUNDARY_IDS } from '@/lib/jsx/boundary-ids';
+import { BOUNDARY_IDS } from '@/lib/html-component-specs/boundary-ids';
 
 /**
  * The reserved dataset name a geo recipe's boundary layer references

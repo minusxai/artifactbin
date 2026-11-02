@@ -14,7 +14,7 @@ import {
   GET as myListAnnotationsRoute,
   POST as myCreateAnnotationRoute,
 } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { STORY_ANNOTATIONS_EVENT } from '@/lib/story-runtime/contract';
+import { STORY_ANNOTATIONS_EVENT } from '@/lib/html-reader/contract';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';

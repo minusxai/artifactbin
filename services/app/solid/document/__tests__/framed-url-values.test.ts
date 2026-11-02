@@ -6,7 +6,7 @@
  */
 import { createRoot } from 'solid-js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { STORY_URL_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_URL_VALUES_MESSAGE } from '@/lib/html-reader/contract';
 import { createFramedStory, followFramedValues } from '../create-framed-story';
 
 const PAGES = 'https://6869.pages.test';
@@ -19,7 +19,7 @@ function framedPage() {
   frame.setAttribute('data-mx-document-frame', '');
   document.body.append(frame);
   createRoot((dispose) => {
-    createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, nodes: [], editId: () => 'e1', source: () => null });
+    createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, editId: () => 'e1', source: () => null });
     cleanups.push(dispose);
   });
   const fromFrame = (search: unknown, origin = PAGES, source: Window | null = frame.contentWindow) =>

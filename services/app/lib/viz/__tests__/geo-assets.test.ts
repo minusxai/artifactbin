@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { BOUNDARY_IDS, isBoundary } from '@/lib/jsx/boundary-ids';
+import { BOUNDARY_IDS, isBoundary } from '@/lib/html-component-specs/boundary-ids';
 import { assetFeatures, boundaryFile, GENERATED_BOUNDARIES, GEO_ASSETS } from '../geo-assets';
 
 const read = (file: string) =>

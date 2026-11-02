@@ -12,7 +12,7 @@ import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session'
 import type {HtmlCommentViewCommand} from '../html-bridge';
 import {startHtmlPresence} from '../html-bridge/presence';
 import type {PresencePaint} from '../html-presence';
-import {followAppLinks} from '@/lib/islands/frame-links';
+import {followAppLinks} from '@/lib/html-runtime/frame-links';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import type {HtmlRuntimeConfig} from './contract';
 import {HTML_VERSION_APPLIED,HTML_VERSION_MESSAGE,HTML_VERSION_REFUSED} from './live-morph-contract';
@@ -50,7 +50,7 @@ export const remote: RemotePort = {
 const invalidationListeners = new Set<(names: readonly string[],reason?:QueryInvalidation) => void>();
 /** An invalidation contains names, never rows or authority. Backend watches re-query through the same trusted relay. */
 export function onBackendChange(listener: (names: readonly string[],reason?:QueryInvalidation) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
-import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
+import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../html-reader/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import {observeHtmlDom,observeSourceAnnotations} from '../html-bridge/observe';
@@ -180,7 +180,6 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   return {
     receive(payload) {
       if(payload.kind==='upload-context'){updateUploadContext(payload.context);return;}
-      if (payload.kind === 'restored') post({ kind: 'restored', call: payload.call, ok: true });
       if (uploadSession.receive(payload))return;
       if (payload.kind === 'fetch-result') {
         const current = pending.get(payload.call);

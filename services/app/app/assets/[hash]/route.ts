@@ -29,7 +29,7 @@
  */
 import { objectStore, pdfFilename } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images';
-import { fileNameFromUrl } from '@/lib/islands';
+import { fileNameFromUrl } from '@/lib/ui-runtime/file-display';
 import { webAssetByHash } from '@/lib/publish';
 
 /** Every asset response carries these, whatever the asset turns out to be. */

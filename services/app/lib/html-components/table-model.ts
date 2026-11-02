@@ -5,8 +5,8 @@
  *   data-table-compare.ts.
  */
 import type { DatasetColumn, Row } from "@/lib/dataflow";
-import { keyedRowsError } from "@/lib/story-ui/row-key";
-import type { SortSpec } from "@/lib/story-ui";
+import { keyedRowsError } from "@/lib/html-components/row-identity";
+import type { SortSpec } from "@/lib/html-components/table-values";
 export interface TableData {
   rows: Row[];
   columns: DatasetColumn[];

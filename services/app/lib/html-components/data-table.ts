@@ -18,7 +18,7 @@
  *   Replacing data keeps keyed DOM but remeasures geometry. Light DOM, styled by injected CSS.
  */
 import { registerComponent } from './register-component';
-import { parseSortSpec, type SortSpec } from "@/lib/story-ui/data-table";
+import { parseSortSpec, type SortSpec } from "@/lib/html-components/table-values";
 import {
   createTableState, dataTableStyles, emptyTable, loadTableRows, renderTable,
 } from "./data-table-frame";

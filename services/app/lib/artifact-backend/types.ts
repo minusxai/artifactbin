@@ -1,29 +1,7 @@
 import type {PresenceFrame,PresencePublication} from '@/lib/html-presence';
-/**
- * THE ARTIFACT BACKEND — every server call the document surface makes while
- * reading, editing and commenting, behind one interface.
- *
- * Two implementations keep one set of components:
- *  - `createHttpBackend(id)` (./http.ts): today's routes, unchanged behaviour.
- *  - the offline file's backend (lib/offline/file-backend.ts): answers from
- *    the ArtifactFile, reports what it cannot do through `unavailable()`.
- *
- * Components never call `fetch`/`EventSource` for these routes themselves
- * (guarded by lib/artifact-backend/__tests__/no-direct-calls.test.ts); they
- * read the backend from ArtifactBackendProvider (./context.tsx). Hooks take
- * the backend as a parameter (the page calls some of them above the provider
- * it renders). A control whose feature is unavailable renders disabled with
- * the returned reason, never hidden
- * without saying why and never enabled only to fail.
- *
- * Every type here is the shape the call site already read before the move.
- * The module is types only: importing it adds nothing to a bundle.
- */
-import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
+import type { CommentReactionInput, AnnotationCommentWire, DocumentGraph, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { DataflowState } from '@/lib/dataflow';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import type { QueryTransport } from '@/lib/page-store';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/html-reader/contract';
 
 /** Features a backend may not offer. Online, every one is available. */
 export type BackendFeature =
@@ -126,16 +104,6 @@ export interface ChosenImage {
 /** A door's answer: the image, or the sentence to show next to what caused the refusal. */
 export type ImageChoice = { ok: true; image: ChosenImage } | { ok: false; error: string };
 
-/** A draft's query results (POST /api/query). */
-/** A draft's rows, and its compiled declarations (null when the draft does not compile yet). */
-export type DraftQueryResult = Pick<DataflowState, 'tables' | 'errors'> & { flow?: import('@/lib/dataflow').CompiledDataflow | null };
-
-/** One window of a dataset's rows (POST /a/<ref>/tables), as the notebook reads it. */
-export interface DatasetTableRead {
-  columns?: Array<{ name: string }>;
-  totalRows?: number;
-}
-
 /** A person the @mention pickers offer. */
 export interface MemberPerson { user_id: string; username: string; name: string | null }
 /** GET /members: `people` answers a `query`; `mentions` is the saved mentions' statuses. */
@@ -178,16 +146,6 @@ export interface ArtifactBackend {
   load(): Promise<ArtifactHead | null>;
   /** Fresh, access-checked frame URL for another document; null when unavailable. */
   documentFrame(ref: string): Promise<string | null>;
-  /** Commit one edit batch (POST /edits). Resolves with the same answer shape use-live-edits reads today. */
-  commitEdit(input: { edit_id: string; document_update: DocumentUpdate }): Promise<EditAnswer>;
-  /** Server authoring context for edits that need it (POST /prepare). Rejects with the server's diagnostics. */
-  prepare(source: string): Promise<DocumentResourcePreparation>;
-  /** Compiled CSS for a draft (POST /api/preview). Rejects when there is no sheet to show. */
-  previewCss(markup: string): Promise<{ css: string }>;
-  /** Query results for a draft (POST /api/query). Null when refused. */
-  previewQueries(markup: string): Promise<DraftQueryResult | null>;
-  /** The query notebook's table read (POST /a/<ref>/tables). Rejects with a BackendRequestError naming the refusal. */
-  queryTable(ref: string, body: { sql: string; limit: number; offset: number }): Promise<DatasetTableRead>;
   /** Image upload or web-image import from the editor. Refusals resolve as `{ok:false,error}`. */
   importImage(input: { imageUrl: string } | { file: Blob; name: string }): Promise<ImageChoice>;
   /** History rows (GET /versions). Null when refused. */
@@ -207,7 +165,6 @@ export interface ArtifactBackend {
   /** The complete document a ping announced (GET /a/<id>/events/frame). Null when refused. */
   liveFrame(): Promise<ArtifactLiveEvent | null>;
   /** The runtime's data transport (authenticated online, snapshot offline). */
-  queryTransport(): QueryTransport & { dispose(): void };
 
   // ── comments ──────────────────────────────────────────────────────────────
   /** Every page of annotations with this status; OPEN when `status` is omitted (the server's default). */

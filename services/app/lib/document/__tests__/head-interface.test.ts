@@ -4,60 +4,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  canonicalAssetUrl, CSP_DIRECTIVES, cspOriginMatches, dataflowOf, declarationsOf, displayTitle, emptyCspExtensions,
+  canonicalAssetUrl, CSP_DIRECTIVES, cspOriginMatches, displayTitle, emptyCspExtensions,
   EMPTY_CSP_EXTENSIONS, firstHeadingTitle, hasCspExtensions, mergeCspExtensions, parseCspOrigin, socialPreviewImage,
   socialPreviewImageValue, SOCIAL_PREVIEW_OVERVIEW_GENERATION, subtractCspExtensions, urlHash, assetUrlFor,
 } from '..';
-import { CONTEXT_TAG, contextRefOf, declaresMutations, EMPTY_HELMET_CONTENT, HELMET_TAG } from '../helmet';
 import { rowTitle, UNTITLED } from '../display-title';
 import {
   clampImageCrop, defaultImageCrop, imageCropMaxWidth, SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_MIN_CROP_WIDTH,
   SOCIAL_PREVIEW_WIDTH, writeSocialPreviewImage,
 } from '../social-preview';
-import { externalCssUrls, isWebUrl, mapExternalCssUrls } from '../asset-url';
-
-describe('Helmet declarations', () => {
-  const source = '<Helmet><Value name="n" type="number" default={1} /><Query name="q">{`select $n as v`}</Query>'
-    + '<Mutation name="m">{`update t set v = 1`}</Mutation></Helmet><p>{$n}</p>';
-
-  it('names the two Helmet tags and an empty content with every list present', () => {
-    expect(HELMET_TAG).toBe('Helmet');
-    expect(CONTEXT_TAG).toBe('Context');
-    expect(EMPTY_HELMET_CONTENT).toEqual({ title: null, style: null, script: null, meta: [], imports: [], values: [], queries: [], mutations: [] });
-  });
-
-  it('reads the data declarations of a source, and null when it does not parse', () => {
-    const flow = declarationsOf(source)!;
-    expect(flow.values.map((v) => v.name)).toEqual(['n']);
-    expect(flow.queries.map((q) => q.name)).toEqual(['q']);
-    expect(flow.mutations.map((m) => m.name)).toEqual(['m']);
-    expect(flow).not.toHaveProperty('notifications');
-    expect(declarationsOf('<Helmet><Value')).toBeNull();
-    expect(declarationsOf('<p>plain</p>')).toEqual({ imports: [], values: [], queries: [], mutations: [] });
-  });
-
-  it('dataflowOf carries notifications only when there are some', () => {
-    expect(dataflowOf(EMPTY_HELMET_CONTENT)).toEqual({ imports: [], values: [], queries: [], mutations: [] });
-    const notify = { name: 'n', on: 'm', sql: 'select 1', start: 0, end: 1 };
-    expect(dataflowOf({ ...EMPTY_HELMET_CONTENT, notifications: [notify] })).toMatchObject({ notifications: [notify] });
-    expect(dataflowOf({ ...EMPTY_HELMET_CONTENT, notifications: [] })).not.toHaveProperty('notifications');
-  });
-
-  it('declaresMutations answers for a declared <Mutation> only', () => {
-    expect(declaresMutations(source)).toBe(true);
-    expect(declaresMutations('<Helmet><Query name="q">{`select 1`}</Query></Helmet>')).toBe(false);
-    expect(declaresMutations('<Helmet><Mutation')).toBe(false);
-    expect(declaresMutations('')).toBe(false);
-    expect(declaresMutations(null)).toBe(false);
-    expect(declaresMutations(undefined)).toBe(false);
-  });
-
-  it('contextRefOf reads the companion document, and nothing from a malformed draft', () => {
-    expect(contextRefOf('<Helmet><Context src="ref:abc123" /></Helmet><p>x</p>')).toBe('abc123');
-    expect(contextRefOf('<Helmet><title>t</title></Helmet><p>x</p>')).toBeNull();
-    expect(contextRefOf('<Helmet><Context src="ref:abc123" />')).toBeNull();
-  });
-});
 
 describe('titles', () => {
   it('firstHeadingTitle reads the first heading as text: entities decoded, tags and brackets out', () => {
@@ -66,13 +21,8 @@ describe('titles', () => {
     expect(firstHeadingTitle('<h1>Héllo 👋 wörld</h1>')).toBe('Héllo 👋 wörld');
   });
 
-  it('a computed heading has no title, and its static text survives', () => {
-    expect(firstHeadingTitle('<h1>{$name}</h1>')).toBeNull();
-    expect(firstHeadingTitle('<h1>Report {$year}</h1>')).toBe('Report');
-  });
 
   it('reads a Markdown heading, and null without any heading', () => {
-    expect(firstHeadingTitle('<Markdown id="m">{`intro\n\n## From **Markdown**`}</Markdown>')).toBe('From Markdown');
     expect(firstHeadingTitle('<p>no heading</p>')).toBeNull();
     expect(firstHeadingTitle('')).toBeNull();
     expect(firstHeadingTitle(null)).toBeNull();
@@ -208,23 +158,6 @@ describe('asset URLs', () => {
     expect(assetUrlFor('https://x.test/a.png')).toBe(`/assets/${urlHash('https://x.test/a.png')}`);
   });
 
-  it('isWebUrl is true for an absolute http(s) source only', () => {
-    expect(isWebUrl('https://x.test')).toBe(true);
-    expect(isWebUrl('HTTP://x.test')).toBe(true);
-    for (const value of ['//x.test', '/a.png', 'ref:abc', 'data:image/png;base64,AA', 'ftp://x.test', '']) expect(isWebUrl(value), value).toBe(false);
-  });
 
-  it('externalCssUrls reads each absolute url() once, in order, any quoting', () => {
-    const css = `a{background:url(https://x.test/a.png)} b{background:url("https://x.test/b.png")} c{src:url( 'https://x.test/a.png' )} d{background:url(/local.png)} e{background:url(data:x)}`;
-    expect(externalCssUrls(css)).toEqual(['https://x.test/a.png', 'https://x.test/b.png']);
-    expect(externalCssUrls('')).toEqual([]);
-  });
 
-  it('mapExternalCssUrls rewrites only what the lookup holds, keeping the quote', () => {
-    const css = `a{background:url("https://x.test/a.png")} b{background:url(https://x.test/b.png)}`;
-    const mapped = mapExternalCssUrls(css, (url) => url.endsWith('a.png'));
-    expect(mapped).toBe(`a{background:url("${assetUrlFor('https://x.test/a.png')}")} b{background:url(https://x.test/b.png)}`);
-    expect(mapExternalCssUrls(css, () => null)).toBe(css);
-    expect(externalCssUrls(mapped)).toEqual(['https://x.test/b.png']);
-  });
 });

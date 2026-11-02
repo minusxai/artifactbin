@@ -50,7 +50,7 @@ async function savedGrantContext(dataset:GrantDataset,actor:AccessActor,document
  if(identity?.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[dataset.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
  if(!document){if(!identity&&!ownsArtifact(dataset,actor))throw new DatasetError('Sign in to change data',403);return context;}
  const doc=(await db.query<GrantDataset&{edit_id:string}>(`SELECT ${ACCESS_COLUMNS} FROM artifacts WHERE id=$1 AND deleted_at IS NULL`,[document.id])).rows[0];
- if(!doc||(doc.format!=='markup'&&!(doc.format==='html'&&await verifyHtml?.(db)))||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
+ if(!doc||!(doc.format==='html'&&await verifyHtml?.(db))||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
  const tokenCreator=!doc.group_id&&!doc.user_id&&ownsArtifact(doc,actor);
  if(!tokenCreator){
   if(!identity||identity.kind==='guest')throw new DatasetError('Sign in and join this artifact to use its actions',403);

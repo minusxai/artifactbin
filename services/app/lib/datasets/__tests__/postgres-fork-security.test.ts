@@ -7,8 +7,6 @@ import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as forkRoute} from '@/app/api/my/artifacts/[id]/fork/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
-import {type ArtifactRow} from '@/lib/artifacts';
-import {forkDatasetPreview} from '@/lib/publish';
 import {createDatasetSecret} from '@/lib/datasets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
@@ -49,10 +47,8 @@ it('refuses a shared editor fork and copying the dataset-bound secret into a new
 });
 /** Native GraphQL bindings accept stored datasets only; refusal must not copy a credential-bound catalog. */
 it('refuses an unsupported Postgres page binding without creating a page or copying its secret',async()=>{
- const owner=await user('pg-writer'),forker=await user('pg-forker'),{id,definition}=await postgresDataset(owner),db=await harness.db();
- const actor=identityForUser(forker.account.id, forker.token.id);
+ const owner=await user('pg-writer'),{id,definition}=await postgresDataset(owner),db=await harness.db();
  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}"></head><body>Live rows</body></html>`;
- expect(await forkDatasetPreview(actor,{format:'html',source:html} as ArtifactRow)).toEqual([]);
  const count=async()=>Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n);
  const before=await count();
  const page=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{visibility:'public',title:'Live rows',html}}));

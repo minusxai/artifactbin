@@ -22,9 +22,9 @@ import { archivedVersionFor, servedRow, UnservableDocument, canReadArtifact, acc
 import { holdsCreatingToken, effectiveRole } from '@/lib/artifact-access';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { folderPageFor, accountWorkspaceFor } from '@/lib/workspace';
-import { resolveStoredStoryDesign } from '@/lib/story-design';
+import { resolveStoredStoryDesign } from '@/lib/html-systems';
 import { verifyExportKey } from '@/lib/export';
-import { baseUrl, json, parseCookie, canonicalArtifactPath, etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http';
+import { baseUrl, json, parseCookie, canonicalArtifactPath, notModified, revalidationHeaders } from '@/lib/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform';
 import { avatarUrl } from '@/lib/avatars';
@@ -35,7 +35,7 @@ import {ARTIFACT_FORMATS, type ArtifactFormat, CARD_RENDER_GENERATION} from '@ar
 import {getGroupById} from '@/lib/groups';
 import type { StoryDesignName } from '@/lib/validation';
 import { captureColor } from '@/lib/mermaid-images';
-import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
+import { THEME_KEY, withReaderMode } from '@/lib/html-reader/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http';
 import {storedCspExtensions} from '@/lib/document';
 import { carriedTrust,cspRequestFor } from '@/lib/trust';
@@ -77,7 +77,7 @@ const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_f
  * document's own origin; the rest of the served runtime (sheets, overrides, author script, reader data) never
  * reaches this page, and the tree is the nodes door's.
  */
-export interface FramedRuntime { title: string; data: Pick<StoryIslandData, 'dataflow'> }
+export interface FramedRuntime { title: string; data: Record<string,never> }
 
 /**
  * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a
@@ -223,13 +223,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    * frame loads — it is not the reader payload because nothing the page DRAWS depends on it. Admitted exactly as the
    * page is (above); a version asked for is that version's tree (archivedVersionFor already refused whoever may not).
    */
-  if (search.get('part') === 'nodes') {
-    if (!isDoc || exporting) return notFound();
-    const etag = nodesEtag(artifact, role, at);
-    const held = matchingTag(request.headers.get('if-none-match'), etag);
-    if (held) return { status: 304, body: null, etag: held };
-    return { status: 200, etag, body: { editId: artifact.edit_id, version: at?.version ?? artifact.version, nodes: [] } };
-  }
+  if(search.get('part')==='nodes')return notFound();
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise. A document's comes
@@ -408,6 +402,3 @@ export async function artifactPageResponse(request: Request, id: string): Promis
  * The validator of a node answer: what determines the bytes is the version and edit it reads, the role that was
  * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
  */
-function nodesEtag(artifact: ArtifactRow, role: string, at: { version: number } | null): string {
-  return etagOf({ part: 'nodes', id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, role, at: at?.version ?? null });
-}

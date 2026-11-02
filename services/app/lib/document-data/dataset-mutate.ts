@@ -4,8 +4,6 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifact-access';
 import {validateUserWrites, DatasetError, throttlePublicMutation, catalogOf, importedTables, loadDatasetRows, storeDatasetRows} from '@/lib/datasets';
 import {completeDocumentMutationReceipt} from './mutation-operation';
-import {NotificationExecutionError,lockNotificationExecution,notificationJobStore} from '@/lib/notifications';
-import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import { canWriteDataset, mutationPolicy, recheckMutation, canUseDataPolicy } from './dataset-policy';
 import {SIGN_IN_REQUIRED} from '@artifactbin/contracts';
 import {loadSqlite} from '@artifactbin/sql/core';
@@ -82,7 +80,7 @@ interface MutationApplied {
   affected: number;
   /** Rows the dataset holds afterwards. */
   rowCount: number;
-  mutationRunId?: string;
+
 }
 
 export const isMutationRefused = (r: MutationApplied | MutationRefused): r is MutationRefused => 'reason' in r;
@@ -105,7 +103,7 @@ export async function mutateDataset(
   actor: AccessActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput;
+  guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;
     /** Native dataset API: all statements and identity metadata commit in the existing pointer CAS. */
     statements?:readonly {sql:string;params:Record<string,Scalar>}[];
     rowIdentity?:{column:string;ids:readonly string[];tableId:string};
@@ -114,8 +112,6 @@ export async function mutateDataset(
 ): Promise<MutationApplied | MutationRefused> {
   if(Object.hasOwn(params,paramSqlName('_me.id'))&&!actor.userId)return {reason:'policy_denied',detail:'$_me.id requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
-  const jobs=guard.notificationJob?await notificationJobStore():null;
-  const mutationRunId=guard.notificationJob?.origin.mutationRunId;
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{
     if(guard.nativePolicy){const current=await getArtifactById(dataset.id);if(!current||(current.policy_revision??0)!==(dataset.policy_revision??0)||await canWriteDataset(current,actor,true)||!await canUseDataPolicy(current,actor))throw new DatasetError('Dataset policy access changed',403);}
     else await recheckMutation(dataset,actor,guard.document);
@@ -214,8 +210,6 @@ export async function mutateDataset(
     // and wake every document reading this dataset.
     const v2=!!grantsOf(current);
     const commit=async(tx:Queryable)=>{
-     const notificationInput=guard.notificationJob;
-     if(notificationInput)await lockNotificationExecution(tx,notificationInput);
      if(guard.document?.registeredHtml){
       // Same transaction/row lock as the dataset CAS: no page/source change can race it.
       await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',[[...new Set([current.id,guard.document.id])]]);
@@ -230,18 +224,16 @@ export async function mutateDataset(
      const committed=await commitDatasetWrite(tx,{current,actor,meta,...(guard.document?{document:{id:guard.document.id,editId:guard.document.editId}}:{}),
       policyRole:policy?.role??null,policyDeclared:(!!guard.document||!!guard.nativePolicy)&&!!policy,granted:v2});
      if(committed){
-      if(jobs)await jobs.enqueue(tx,guard.notificationJob!);
       if(guard.receipt){
-       if(guard.document)await completeDocumentMutationReceipt(tx,guard.receipt,{datasetId:committed.id,datasetEditId:committed.edit_id,version:committed.version,affected:out.affected,rowCount:out.rows.length,...(mutationRunId?{mutationRunId}:{})});
+       if(guard.document)await completeDocumentMutationReceipt(tx,guard.receipt,{datasetId:committed.id,datasetEditId:committed.edit_id,version:committed.version,affected:out.affected,rowCount:out.rows.length});
        else await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
       }
      }
      return committed;
     };
     let row;
-    try { row=jobs||v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    try { row=v2||guard.receipt||guard.document?.registeredHtml||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) {
-     if(error instanceof NotificationExecutionError && error.code==='notification_access_revoked')return {reason:'policy_denied',detail:'Your access changed before the action could be saved.'};
      if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message};
      throw error;
     }
@@ -252,7 +244,7 @@ export async function mutateDataset(
       // revalidation (lib/publish/prepared/commit-hooks.server). Beside the NOTIFY, never awaited, never failing
       // the write — freshness is decided on read by the marks, this only lets a head revalidate before anyone asks.
       emitDatasetCommitted(row.id);
-      return { row, affected: out.affected, rowCount: out.rows.length,...(mutationRunId?{mutationRunId}:{}) };
+      return { row, affected: out.affected, rowCount: out.rows.length };
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML
     // that is the same statement, not a merge.

@@ -55,7 +55,7 @@ jobs:
             node_modules
             services/*/node_modules
             services/app/public/fonts
-            services/app/lib/story-design/story-font-manifest.json
+            services/app/lib/html-systems/font-manifest.json
           key: install-v5-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund

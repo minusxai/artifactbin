@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkModuleGraph, DEEP_MODULES, ISLANDS_BROWSER_IMPORTERS, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
+import { checkModuleGraph, DEEP_MODULES, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'ci', 'module-graph.mjs');
@@ -114,50 +114,6 @@ describe('module graph', () => {
     expect(violations).toContain('pkg/auth -> pkg/sql');
     expect(violations).toContain('pkg/auth -> lib/publish');
     expect(violations).not.toMatch(/-> pkg\/(contracts|utils)/);
-  });
-
-  describe('lib/islands entry (rule 4)', () => {
-    const islands = { importers: ['services/app/solid/', 'services/app/lib/offline/solid-entry.tsx'], leaves: ['trusted-portal'] };
-    const check = files => checkModuleGraph(scanModuleGraph(tree({ 'services/app/lib/islands/index.ts': '', ...files })), allowList([]), islands).violations.join('\n');
-
-    it('passes server code through the index and listed browser code through a listed leaf', () => {
-      expect(check({
-        'services/app/lib/compiled-page/compiler.ts': "import { RECIPES } from '@/lib/islands';\n",
-        'services/app/scripts/gen.ts': "import { FAMILIES } from '../lib/islands/index';\n",
-        'services/app/solid/Popover.tsx': "import { trustedPortalOf } from '@/lib/islands/trusted-portal';\n",
-        'services/app/lib/offline/solid-entry.tsx': "import '../islands/trusted-portal.ts';\n",
-      })).toBe('');
-    });
-
-    it('refuses a leaf from server code, naming the rule and the import', () => {
-      const violations = check({
-        'services/app/solid/Popover.tsx': "import '@/lib/islands/trusted-portal';\n",
-        'services/app/lib/serving/frame.ts': "import { STORY_FRAMED_ATTR } from '@/lib/islands/contract';\n",
-        'services/app/lib/offline/assemble.server.ts': "import type { X } from '../islands/trusted-portal';\n",
-      });
-      expect(violations).toContain('ISLANDS_BROWSER_IMPORTERS, ISLANDS_BROWSER_LEAVES in scripts/ci/module-graph.mjs');
-      expect(violations).toContain('services/app/lib/serving/frame.ts imports @/lib/islands/contract (server code imports @/lib/islands)');
-      expect(violations).toContain('services/app/lib/offline/assemble.server.ts imports ../islands/trusted-portal (server code imports @/lib/islands)');
-    });
-
-    it('refuses an unlisted leaf and the index from browser code', () => {
-      const violations = check({
-        'services/app/solid/Popover.tsx': "import '@/lib/islands/trusted-portal';\nimport { placePopper } from '@/lib/islands/kit/popper';\n",
-        'services/app/solid/Chart.tsx': "export const c = await import('@/lib/islands');\n",
-      });
-      expect(violations).toContain('services/app/solid/Popover.tsx imports @/lib/islands/kit/popper (kit/popper is not in ISLANDS_BROWSER_LEAVES)');
-      expect(violations).toContain('services/app/solid/Chart.tsx imports @/lib/islands (browser-bundled code imports a leaf file, not the index)');
-    });
-
-    it('fails a listed leaf nothing imports any more, so the list only shrinks', () => {
-      expect(check({ 'services/app/lib/compiled-page/compiler.ts': "import '@/lib/islands';\n" })).toMatch(/no browser-bundled code imports any more[\s\S]*trusted-portal/);
-    });
-
-    it('ignores imports inside lib/islands and lists only real browser-side importers', () => {
-      expect(check({ 'services/app/solid/Popover.tsx': "import '@/lib/islands/trusted-portal';\n", 'services/app/lib/islands/kit/popper.ts': "import '../contract';\n" })).toBe('');
-      expect(ISLANDS_BROWSER_IMPORTERS.filter(entry => !entry.endsWith('/'))).toEqual(['services/app/lib/html-runtime/browser-reader.ts', 'services/app/lib/html-runtime/live-morph.ts', 'services/app/lib/html-runtime/table-scroll.ts']);
-      expect(ISLANDS_BROWSER_IMPORTERS.some(entry => entry === 'services/app/lib/offline/')).toBe(false);
-    });
   });
 
   describe('deep-module entries (rule 4, DEEP_MODULES)', () => {
@@ -284,7 +240,7 @@ describe('module graph', () => {
   });
 
   describe('lib/document row (rule 4, DEEP_MODULES)', () => {
-    const base = { 'services/app/lib/document/index.ts': '', 'services/app/lib/document/server.ts': '', 'services/app/lib/document/helmet.ts': '', 'services/app/lib/document/splice.ts': '' };
+    const base = { 'services/app/lib/document/index.ts': '', 'services/app/lib/document/server.ts': '', 'services/app/lib/document/annotation-range.ts': '', 'services/app/lib/document/splice.ts': '' };
     const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([])).violations.join('\n');
     const refusal = /lib\/document is entered through @\/lib\/document from server code/;
 
@@ -292,21 +248,21 @@ describe('module graph', () => {
       expect(check({
         'services/app/lib/publish/a.ts': "import { splitHelmet } from '@/lib/document';\nimport { COMPILED_DATAFLOW } from '../document/server';\n",
         'services/app/lib/serving/split.ts': "export { splitHelmet } from '../document';\n",
-        'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/helmet';\n",
-        'services/app/lib/editor-engine/annotation-map.ts': "import type { AnnotationOperation } from '../document/annotation-edits';\n",
-        'services/app/solid/document/Native.tsx': "import { declarationsOf } from '@/lib/document/helmet';\n",
+        'services/app/solid/editor/Panel.tsx': "import { splitHelmet } from '@/lib/document/annotation-range';\n",
+        'services/app/lib/html-bridge/range.ts': "import type { AnnotationRange } from '../document';\n",
+        'services/app/solid/document/Native.tsx': "import { declarationsOf } from '@/lib/document/annotation-range';\n",
       })).not.toMatch(refusal);
     });
 
     it('refuses a leaf from server code, the index from browser code and a leaf from an unlisted file, naming each', () => {
       const violations = check({
-        'services/app/lib/trust/document-trust.ts': "import { splitHelmet } from '@/lib/document/helmet';\n",
+        'services/app/lib/trust/document-trust.ts': "import { splitHelmet } from '@/lib/document/annotation-range';\n",
         'services/app/solid/pages/Document.tsx': "import { cspRequestOf } from '@/lib/document';\n",
-        'services/app/lib/offline/hosted-connect.ts': "import { graphSource } from '../document/helmet';\n",
+        'services/app/lib/offline/hosted-connect.ts': "import { graphSource } from '../document/annotation-range';\n",
       });
-      expect(violations).toContain('services/app/lib/trust/document-trust.ts imports @/lib/document/helmet (server code imports @/lib/document)');
+      expect(violations).toContain('services/app/lib/trust/document-trust.ts imports @/lib/document/annotation-range (server code imports @/lib/document)');
       expect(violations).toContain('services/app/solid/pages/Document.tsx imports @/lib/document (browser-bundled code imports a leaf file, not the index)');
-      expect(violations).toContain('services/app/lib/offline/hosted-connect.ts imports ../document/helmet (server code imports @/lib/document)');
+      expect(violations).toContain('services/app/lib/offline/hosted-connect.ts imports ../document/annotation-range (server code imports @/lib/document)');
     });
 
     it('passes a type-only import of an entry from browser-bundled code, and still refuses a mixed or unlisted one', () => {
@@ -327,7 +283,7 @@ describe('module graph', () => {
     });
 
     it('fails a listed browser leaf nothing imports any more', () => {
-      expect(check({ 'services/app/solid/editor/Panel.tsx': "import '@/lib/document/helmet';\n" })).toMatch(/lib\/document leaves no browser-bundled code imports any more[\s\S]*\n  query-notebook\n/);
+      expect(check({ 'services/app/solid/editor/Panel.tsx': "import '@/lib/document/annotation-range';\n" })).toMatch(/lib\/document leaves no browser-bundled code imports any more[\s\S]*\n  social-preview(?:\n|$)/);
     });
   });
 
@@ -364,16 +320,7 @@ describe('module graph', () => {
       expect(violations).not.toContain('compiler.ts');
     });
 
-    it('holds the shipped lib/reader-chrome index server-only', () => {
-      const shipped = files => checkModuleGraph(scanModuleGraph(tree({ 'services/app/lib/reader-chrome/index.ts': '', ...files })), allowList([]), undefined,
-        // lib/story-runtime's row only lends its browser importers: a serverOnly entry is refused to every row's.
-        { 'lib/reader-chrome': DEEP_MODULES['lib/reader-chrome'], 'lib/story-runtime': { entries: [], browserImporters: DEEP_MODULES['lib/story-runtime'].browserImporters } }).violations.join('\n');
-      const entries = DEEP_MODULES['lib/reader-chrome'].entries.filter(entry => entry !== '').map(entry => [`services/app/lib/reader-chrome/${entry}.ts`, '']);
-      const used = Object.fromEntries([...entries, ['services/app/lib/compiled-page/assembler.ts', DEEP_MODULES['lib/reader-chrome'].entries.filter(entry => entry !== '').map(entry => `import '@/lib/reader-chrome/${entry}';`).join('\n')]]);
-      expect(shipped({ ...used, 'services/app/web/outline.ts': "import type { OutlineEntry } from '@/lib/reader-chrome';\n" })).toBe('');
-      expect(shipped({ ...used, 'services/app/web/outline.ts': "import { discoverOutline } from '@/lib/reader-chrome';\n" }))
-        .toContain('services/app/web/outline.ts imports @/lib/reader-chrome (the index is server-only)');
-    });
+
   });
 
 

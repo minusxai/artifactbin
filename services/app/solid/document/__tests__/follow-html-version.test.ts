@@ -42,12 +42,11 @@ describe('followPublication',()=>{
   const listeners=new Set<(event:unknown)=>void>();
   const controller={update:vi.fn(),subscribe:(listener:(event:unknown)=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
    send:vi.fn((command:{version:number})=>{answers.push(()=>listeners.forEach(listener=>listener({type:HTML_VERSION_APPLIED,revision:String(command.version)})));})};
-  const tree=vi.fn(async()=>undefined);
-  const five=followPublication({version:5,editId:'five',frame:controller,tree,show,reload});
+  const five=followPublication({version:5,editId:'five',frame:controller,show,reload});
   await vi.waitFor(()=>expect(answers).toHaveLength(1));
   // Announced while 5 is being drawn: 6 is overtaken by 7 before its turn.
-  const six=followPublication({version:6,editId:'six',frame:controller,tree,show,reload});
-  const seven=followPublication({version:7,editId:'seven',frame:controller,tree,show,reload});
+  const six=followPublication({version:6,editId:'six',frame:controller,show,reload});
+  const seven=followPublication({version:7,editId:'seven',frame:controller,show,reload});
   answers[0]!();await five;
   await vi.waitFor(()=>expect(answers).toHaveLength(2));answers[1]!();await Promise.all([six,seven]);
   expect(controller.send.mock.calls.map(call=>call[0].version)).toEqual([5,7]);

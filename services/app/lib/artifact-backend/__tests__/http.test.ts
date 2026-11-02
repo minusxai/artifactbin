@@ -4,7 +4,7 @@
  * credentials and body — and hands back what those call sites read.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { artifactRequests, createHttpBackend } from '../http';
+import { createHttpBackend } from '../http';
 import { RETRY_TUNING } from '../retrying';
 import { BackendRequestError } from '../errors';
 
@@ -70,66 +70,6 @@ describe('createHttpBackend', () => {
       await expect(backend.documentFrame('Doc123')).resolves.toBeNull();
       expect(offline).toHaveLength(2);
     } finally { delete RETRY_TUNING.policy; }
-  });
-
-  it('commits an edit batch and answers with status and body, {} when the body is not JSON', async () => {
-    const calls = stubFetch(json({ edit_id: 'e2', version: 4, markup: 'x' }));
-    const update = { schema: 1 } as never;
-    await expect(backend.commitEdit({ edit_id: 'e1', document_update: update }))
-      .resolves.toEqual({ ok: true, status: 200, body: { edit_id: 'e2', version: 4, markup: 'x' } });
-    expect(calls[0]).toEqual({
-      url: '/api/my/artifacts/AbC123/edits',
-      init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edit_id: 'e1', document_update: update }) },
-    });
-    stubFetch(() => new Response('<html>', { status: 502 }));
-    await expect(backend.commitEdit({ edit_id: 'e1', document_update: update })).resolves.toEqual({ ok: false, status: 502, body: {} });
-    stubFetch(json({ error: 'doc_changed', detail: 'identical' }, 409));
-    await expect(backend.commitEdit({ edit_id: 'e1', document_update: update })).resolves.toMatchObject({ ok: false, status: 409, body: { detail: 'identical' } });
-    stubFetch(new TypeError('offline'));
-    await expect(backend.commitEdit({ edit_id: 'e1', document_update: update })).rejects.toThrow('offline');
-  });
-
-  it('prepares resources on the encoded /prepare door and rejects with the diagnostics', async () => {
-    const calls = stubFetch(json({ warnings: [] }));
-    await expect(backend.prepare('<p/>')).resolves.toEqual({ warnings: [] });
-    expect(calls[0]).toEqual({
-      url: '/api/my/artifacts/AbC123/prepare',
-      init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source: '<p/>' }) },
-    });
-    stubFetch(json({ error: 'invalid', details: ['first', { message: 'second' }] }, 400));
-    await expect(backend.prepare('<p/>')).rejects.toThrow('first\nsecond');
-    stubFetch(json({}, 500));
-    await expect(backend.prepare('<p/>')).rejects.toThrow('Unable to prepare document resources');
-  });
-
-  it('compiles draft CSS and runs draft queries', async () => {
-    const calls = stubFetch(json({ css: '.a{}' }));
-    await expect(backend.previewCss('<p/>')).resolves.toEqual({ css: '.a{}' });
-    expect(calls[0]).toEqual({ url: '/api/preview', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markup: '<p/>' }) } });
-    stubFetch(json({ css: null }));
-    await expect(backend.previewCss('<p/>')).rejects.toBeInstanceOf(BackendRequestError);
-    stubFetch(json({}, 500));
-    await expect(backend.previewCss('<p/>')).rejects.toBeInstanceOf(BackendRequestError);
-
-    const q = stubFetch(json({ tables: { t: { rows: [] } }, errors: {} }));
-    await expect(backend.previewQueries('<Query/>')).resolves.toEqual({ tables: { t: { rows: [] } }, errors: {} });
-    expect(q[0]).toEqual({ url: '/api/query', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markup: '<Query/>' }) } });
-    stubFetch(json({}, 400));
-    await expect(backend.previewQueries('<Query/>')).resolves.toBeNull();
-  });
-
-  it('reads a dataset table window, naming the refusal', async () => {
-    const calls = stubFetch(json({ columns: [{ name: 'a' }], totalRows: 7 }));
-    const body = { sql: 'select * from public.rows', limit: 1, offset: 0 };
-    await expect(backend.queryTable('Ds 1', body)).resolves.toEqual({ columns: [{ name: 'a' }], totalRows: 7 });
-    expect(calls[0]).toEqual({
-      url: '/a/Ds%201/tables',
-      init: { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-    });
-    stubFetch(json({ error: 'forbidden', details: ['no read access'] }, 403));
-    await expect(backend.queryTable('Ds1', body)).rejects.toMatchObject({ message: 'no read access', status: 403 });
-    stubFetch(json({ error: 'forbidden' }, 403));
-    await expect(backend.queryTable('Ds1', body)).rejects.toThrow('forbidden');
   });
 
   it('imports a web image and uploads a file through the unlisted door, with each door\'s refusals', async () => {
@@ -297,14 +237,7 @@ describe('createHttpBackend', () => {
     await expect(backend.members('x')).resolves.toBeNull();
   });
 
-  it('hands the runtime the authenticated transport', async () => {
-    const calls = stubFetch(json({ tables: {}, errors: {} }));
-    const transport = backend.queryTransport();
-    await transport.run({}, ['q']);
-    expect(calls[0]!.url).toBe('/a/AbC123/query');
-    expect(calls[0]!.init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
-    transport.dispose();
-  });
+
 });
 
 it('publishes ephemeral reader geometry through the online backend only',async()=>{
@@ -363,25 +296,4 @@ describe('comment writes through a restart', () => {
   });
 
 describe('artifactRequests', () => {
-  it('issues the authoring doors as raw Responses on the encoded id, retrying only the reads', async () => {
-    RETRY_TUNING.policy = { delaysMs: [0], jitter: 0 };
-    try {
-      const requests = artifactRequests('a/b');
-      const reads = stubFetch(json({}, 502), json({ version: 1 }));
-      expect((await requests.head()).status).toBe(200);
-      expect(reads.map((c) => c.url)).toEqual(['/api/my/artifacts/a%2Fb', '/api/my/artifacts/a%2Fb']);
-      stubFetch(json({}, 502), json({ version: 2 }));
-      expect((await requests.version(2)).status).toBe(200);
-      for (const [send, url, method] of [
-        [() => requests.edits({ a: 1 }), '/api/my/artifacts/a%2Fb/edits', 'POST'],
-        [() => requests.htmlUpdate({ a: 1 }), '/api/my/artifacts/a%2Fb', 'PUT'],
-        [() => requests.patch({ a: 1 }), '/api/my/artifacts/a%2Fb', 'PATCH'],
-        [() => requests.revert({ a: 1 }), '/api/my/artifacts/a%2Fb/revert', 'POST'],
-      ] as const) {
-        const calls = stubFetch(json({ error: 'bad_gateway' }, 502));
-        expect((await send()).status).toBe(502);
-        expect(calls).toEqual([{ url, init: { method, headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' } }]);
-      }
-    } finally { delete RETRY_TUNING.policy; }
-  });
 });

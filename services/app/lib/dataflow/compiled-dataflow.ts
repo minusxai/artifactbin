@@ -22,7 +22,7 @@ export type BuiltinInput = '_me.id' | '_me.role' | '_now' | '_tz' | '_value' | `
 /** Built-in tables. `_me` is the reader as a one-row table; `_members` the artifact's accepted members. */
 export type BuiltinTable = '_me' | '_members';
 
-export interface CompiledImport {
+interface CompiledImport {
   /** The schema name SQL reads it by: `<Import name="bookings">` → `bookings.rows`. */
   name: string;
   /** Dataset artifact id. */
@@ -30,7 +30,7 @@ export interface CompiledImport {
   tables: Array<{ name: string; columns: DatasetColumn[] }>;
 }
 
-export interface CompiledValue {
+interface CompiledValue {
   name: string;
   kind: 'scalar' | 'table';
   type: ColumnType | 'table';
@@ -47,7 +47,7 @@ export interface CompiledValue {
 }
 
 /** What a query or mutation depends on, by kind. Every name is declared or built in. */
-export interface CompiledReads {
+interface CompiledReads {
   imports: string[];
   queries: string[];
   /** Scalar and table values, by name. */
@@ -116,9 +116,3 @@ export interface CompiledDataflow {
 }
 
 export const EMPTY_COMPILED_DATAFLOW: CompiledDataflow = { imports: [], values: [], queries: [], mutations: [] };
-
-/** Reader bundles never carry notification SQL. */
-export function readerDataflow(flow: CompiledDataflow): CompiledDataflow {
-  const {notifications: _notifications, ...reader} = flow;
-  return reader;
-}

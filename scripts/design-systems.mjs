@@ -4,7 +4,7 @@
  *
  * One source, design-systems/specs/<slug>.json and design-systems/catalogue.json; three outputs:
  *
- *   runtime   services/app/lib/validation/story-system-names.ts and lib/story-design/story-systems.json —
+ *   runtime   services/app/lib/validation/story-system-names.ts and lib/html-systems/story-systems.json —
  *             what the server serves a system from (committed; scripts/__tests__ fails on drift)
  *   skill     the HTML author skill's design-system stylesheets and the HTML platform
  *             stylesheet data lib/html-systems/html-systems.ts + lib/validation/html-system-modes.ts —
@@ -28,7 +28,7 @@ const rel = (p) => path.relative(REPO, p);
 const report = (written) => { for (const { path: p, bytes } of written) console.log(`wrote ${rel(p)} ${bytes.toLocaleString('en-US')} bytes`); };
 
 switch (mode) {
-  case 'runtime': { const { files, entries } = writeRuntime(); report(files); for (const e of entries) console.log(`  ${e.name.padEnd(11)} vars ${String(Object.keys(e.cssVars).length).padStart(3)} fonts ${String(e.fontFaces.length).padStart(6)} css ${String(e.css.length).padStart(6)}`); break; }
+  case 'runtime': { const { files, entries } = writeRuntime(); report(files); for (const e of entries) console.log(`  ${e.name.padEnd(11)} vars ${String(Object.keys(e.cssVars).length).padStart(3)}`); break; }
   case 'skill': report(writeNativeSkill(slugs)); report(writeHtmlSystems()); break;
   case 'pages': report(writePages(slugs)); report([writeIndex()]); break;
   case 'index': report([writeIndex()]); break;

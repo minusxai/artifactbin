@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createSignal} from 'solid-js';
 import { expect, it, vi } from 'vitest';
-import type { StoryController } from '@/lib/story-runtime/contract';
+import type { StoryController } from '@/lib/html-reader/contract';
 import { render } from '../../__tests__/helpers';
 import { SelectionActions } from '../SelectionActions';
 

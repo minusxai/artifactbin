@@ -21,30 +21,13 @@ import esbuild from 'esbuild';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
 import { copyRunnerAssets } from './copy-runner-assets.mjs';
 import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
 
-/*
- * Requires the bundle names but never reaches, so no image installs them: @babel/core (the
- * publish-time compiler's Solid transform, lib/compiled-page/bundle.server) asks for
- * @babel/preset-typescript only when a `.cts` Babel config fails to load, and the compiler loads
- * no config file at all (`configFile: false`, `babelrc: false`).
- */
-const BUNDLE_ONLY_EXTERNALS = ['@babel/preset-typescript'];
-
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
 mkdirSync(dirname(out), { recursive: true });
-const require = createRequire(import.meta.url);
-const tailwindDir = dirname(require.resolve('tailwindcss/index.css'));
-const tailwindDefine = Object.fromEntries([
-  ['__MX_TAILWIND_INDEX_CSS__', 'index.css'],
-  ['__MX_TAILWIND_THEME_CSS__', 'theme.css'],
-  ['__MX_TAILWIND_PREFLIGHT_CSS__', 'preflight.css'],
-  ['__MX_TAILWIND_UTILITIES_CSS__', 'utilities.css'],
-].map(([symbol, file]) => [symbol, JSON.stringify(readFileSync(`${tailwindDir}/${file}`, 'utf8'))]));
 await esbuild.build({
   entryPoints: [entry],
   bundle: true,
@@ -52,8 +35,7 @@ await esbuild.build({
   format: 'esm',
   target: 'node22',
   outfile: out,
-  external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
-  define: tailwindDefine,
+  external: [...EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
   plugins: [prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url))),prebuiltPreviewAssets(fileURLToPath(new URL('../../',import.meta.url)))],
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/object-store, lib/mermaid-images/fonts
@@ -80,11 +62,3 @@ console.log(`build-server: ${entry} → ${out}`);
 
 // Only compositions owning local execution launch these workers. Packaged CLI hosts use HTTP.
 await copyRunnerAssets(dirname(out),{remoteRunner:process.argv.includes('--remote-runner')});
-
-// A Lambda module bundles this DOM-free page runtime; production carries no TypeScript source tree.
-await esbuild.build({
-  entryPoints: [fileURLToPath(new URL('../../services/app/lib/runner/runtime.ts', import.meta.url))],
-  bundle: true, platform: 'browser', conditions: ['browser'], format: 'iife', globalName: 'LambdaPageRuntime',
-  target: 'es2022', minify: true, logLevel: 'warning',
-  outfile: join(dirname(out), 'lambda-page-runtime.js'),
-});

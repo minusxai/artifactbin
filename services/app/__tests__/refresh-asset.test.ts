@@ -23,7 +23,7 @@ import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { webAssetByHash } from '@/lib/publish';
-import { urlHash } from '@/lib/document/asset-url';
+import { urlHash } from '@/lib/document';
 
 useAppHarness();
 

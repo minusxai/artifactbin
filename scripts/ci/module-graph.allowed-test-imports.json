@@ -14,10 +14,6 @@
     "services/app/__tests__/annotation-changes.test.ts": [
       "@/lib/publish/realtime/live"
     ],
-    "services/app/__tests__/document-operations.test.ts": [
-      "@/lib/document/document-node-codec",
-      "@/lib/document/document-patch"
-    ],
     "services/app/__tests__/document-serving-headers.test.ts": [
       "@/lib/object-store/image-store",
       "@/lib/object-store/pdf-store"
@@ -32,9 +28,6 @@
     ],
     "services/app/__tests__/identity-workflow.test.ts": [
       "@/lib/platform/ids"
-    ],
-    "services/app/__tests__/lambda-operations.test.ts": [
-      "@/lib/runner/operations"
     ],
     "services/app/__tests__/live-events-open-race.test.ts": [
       "@/lib/authentication/request-identity"
@@ -55,17 +48,8 @@
     "services/app/lib/document-data/__tests__/dataset-policies.test.ts": [
       "@/lib/dataset-graphql/retained"
     ],
-    "services/app/lib/document-data/__tests__/speedup-metadata-reuse.test.ts": [
-      "@/lib/document/parsed-artifact-metadata"
-    ],
     "services/app/lib/html-runtime/__tests__/bridge.ui.test.ts": [
       "../../html-components/file-upload"
-    ],
-    "services/app/lib/html-runtime/__tests__/native-file-upload.test.ts": [
-      "@/lib/story-runtime/frame-bridge/upload"
-    ],
-    "services/app/lib/islands/__tests__/kit-mermaid.test.tsx": [
-      "@/lib/mermaid-images/mermaid-render"
     ],
     "services/app/lib/markdown/__tests__/code-block-browser.ui.test.ts": [
       "../../html-components/markdown"
@@ -82,14 +66,8 @@
     "services/app/lib/skills/__tests__/production-image.test.ts": [
       "../../libraries/components.server"
     ],
-    "services/app/lib/story-runtime/__tests__/anchor-entry-scroll.ui.test.ts": [
-      "@/lib/islands/page"
-    ],
     "services/app/server/__tests__/public-assets-host.test.ts": [
       "@/lib/export/assets"
-    ],
-    "services/app/solid/__tests__/live-edits.test.tsx": [
-      "@/lib/document/document-graph-patch"
     ],
     "services/app/solid/document/__tests__/annotation-composer.test.tsx": [
       "@/lib/artifact-backend/retrying"

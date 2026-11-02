@@ -1,8 +1,8 @@
 /* @jsxImportSource solid-js */
 /** Positioning and painted tooltip content load only when a trigger is used. */
 import {createEffect,onCleanup,type JSX} from 'solid-js';
-import {placePopper,type Placed,type Side} from '@/lib/islands/kit/popper';
-import {ARROW_ORIGIN,ARROW_TRANSFORM} from '@/lib/islands/kit/tooltip-core';
+import {placePopper,type Placed,type Side} from '@/lib/ui-runtime/popper';
+import {ARROW_ORIGIN,ARROW_TRANSFORM} from '@/lib/ui-runtime/tooltip-core';
 import {appearanceOf} from './theme';
 import {LAYER} from './layers';
 export interface TooltipPopperProps { anchor: HTMLElement | undefined; id: string; side: Side; placed: () => Placed | undefined; setPlaced: (placed: Placed | undefined) => void; children: JSX.Element }

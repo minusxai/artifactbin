@@ -1,7 +1,7 @@
 import {createEffect,createMemo,createSignal,on,onCleanup,type Accessor} from 'solid-js';
 import type {AnnotationWire} from '@/lib/annotations';
 import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 import {createLocalReadBackend} from '@/lib/local-connection/read-backend';
 import {createLiveArtifact} from '../editor/create-live-artifact';
 import {createReaderPresence} from './create-reader-presence';

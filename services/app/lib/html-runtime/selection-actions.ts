@@ -1,5 +1,5 @@
-import { COMMENT_ACTIONS_CSS } from "../frame-edit/comment-actions-presentation";
-import type { StoryEditSelection } from "../edit-protocol";
+import { COMMENT_ACTIONS_CSS } from "../html-bridge/comment-actions-presentation";
+import type { StoryEditSelection } from "../html-bridge/selection-contract";
 
 /** Native reader chrome only offers actions explicitly granted by the parent. */
 export interface HtmlSelectionActions {

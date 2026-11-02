@@ -2,33 +2,30 @@
  * The `--cache` marker for build-server-reader.mjs, checkable WITHOUT importing the builders: the test
  * global setup asks `serverReaderFresh()` in-process and skips the build process entirely on a hit.
  *
- * The marker records the build's tools, every repository input the last build read (the prepared-page
- * graph, Tailwind-scanned files, the library
- * wrappers), the set of files under the Tailwind @source folders (a NEW file can add classes without
- * changing a recorded input), and the outputs. size+mtime short-circuits a content hash. Any error is
- * a miss.
+ * The marker records tools, hosted component and library input graphs, their
+ * entry sets, and produced assets. Size and mtime short-circuit content hashing;
+ * any missing input or output is a miss.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const VERSION = 2;
+const VERSION = 3;
 const APP = path.resolve(import.meta.dirname, '..');
 const REPO = path.resolve(APP, '../..');
 const MARKER = path.join(APP, 'lib/build-assets/.server-reader-cache.json');
 const TOOLS = ['services/app/scripts/build-server-reader.mjs', 'services/app/scripts/server-reader-cache.mjs',
   'services/app/scripts/build-libraries.mjs', 'scripts/build/build-html-components.mjs', 'scripts/lib/html-components-build.mjs',
-  'services/app/scripts/lucide-icons.mjs', 'services/app/scripts/precompress.mjs',
+  'services/app/scripts/precompress.mjs',
   'package-lock.json', 'services/app/package.json', 'services/app/lib/libraries/registry.json'];
-// Mirrors app/globals.css: @source ../web ../solid ../lib, minus their __tests__ (solid's stay).
-const SOURCE_DIRS = ['web', 'solid', 'lib'];
-const SKIPPED = /^(?:web|lib)\/(?:.*\/)?__tests__\//;
+// Discover additions to the component and hosted-library entry sets.
+const SOURCE_DIRS = ['lib/html-components', 'lib/libraries'];
 
 const sha = (buffer) => createHash('sha256').update(buffer).digest('hex');
 
 function sourceList() {
-  return sha(sourceFiles().filter((file) => !SKIPPED.test(file)).sort().join('\0'));
+  return sha(sourceFiles().sort().join('\0'));
 }
 
 // The gate container builds from a copy of the tree with no repository, so git is a fast path, not a requirement.

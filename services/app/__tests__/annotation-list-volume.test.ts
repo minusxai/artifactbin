@@ -12,7 +12,6 @@ import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotation
 import { GET as myListAnnotationsRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { getDb, measureQueries } from '@/lib/platform';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { createDocumentGraph } from '@/lib/document';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -107,9 +106,9 @@ async function seedBig(threads: number) {
   const f = await seed(threads);
   if (bigStored === undefined) {
     const small = (await artifactQuery<{ source: string }>(f.db, 'SELECT document, source FROM artifacts WHERE id = $1', [f.doc.id])).rows[0]!.source;
-    bigStored = JSON.stringify(createDocumentGraph(small.replace(/^<!doctype html>/i, '').replace('</body>', `${BIG_FILLER}</body>`), 1, { preserveSource: true }));
+    bigStored = small.replace('</body>', `${BIG_FILLER}</body>`);
   }
-  await f.db.query('UPDATE artifacts SET document = $1::jsonb WHERE id = $2', [bigStored, f.doc.id]);
+  await f.db.query('UPDATE artifacts SET source = $1 WHERE id = $2', [bigStored, f.doc.id]);
   const actor = { credential: 'session' as const, userId: f.t.userId!, email: f.t.email!, emailVerified: true };
   return { t: f.t, doc: f.doc, actor, tokenActor: f.tokenActor };
 }

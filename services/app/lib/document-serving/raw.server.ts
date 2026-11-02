@@ -29,7 +29,6 @@ import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows, serveStoredFile, catalogOf, publicCatalogOf } from '@/lib/datasets';
 import { ObjectUnavailable, loadImage, loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store';
 import { Readable } from 'node:stream';
-import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { servesDocument } from '@/lib/custom-domains';
 import { NO_STORE, REVALIDATE, storedBytesCacheControl } from './cache-control';
 import { nativeHtmlPresentation } from './native-html-presentation.server';
@@ -71,10 +70,9 @@ const unavailable = () => new Response('asset unavailable', { status: 503, heade
  * same compiled inputs, same sandbox; never a view, never a fallback renderer (a fallback is an answer the
  * page reloads on), and readable from the `/raw` copy's opaque origin by an anonymous reader.
  */
-export interface StoryFragmentRequest { surface: StorySurface }
 
 /** What a request for `/a/:id/raw` asks: the document, and the mode only the router's callers can set. */
-export interface RawDocumentRequest { id: string; domain?: DomainPost; fragment?: StoryFragmentRequest }
+export interface RawDocumentRequest { id: string; domain?: DomainPost; fragment?: true }
 
 /** A stored shape the current code no longer serves answers its 410 (lib/artifacts/servable), after the ACL below. */
 export function serveRawDocument(request: Request, asked: RawDocumentRequest): Promise<Response> {
@@ -328,4 +326,3 @@ async function serveRaw(request: Request, ctx: RawDocumentRequest): Promise<Resp
 function sameRevision(header: ArtifactHeader, row: ArtifactRow): boolean {
   return header.version === row.version && header.edit_id === row.edit_id && String(header.updated_at) === String(row.updated_at);
 }
-

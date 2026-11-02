@@ -34,7 +34,7 @@ export { setMutationInvocation } from './mutation-invocation';
 export type { MutationInvocationFactory } from './mutation-invocation';
 
 /** A row compiled (publish, offline, runner, operations, routes), and what depends on a row. */
-export { compiledForRow, declarationsForRow, refLoaderForActor, rowToResolvedRef } from './row-compile';
+export { refLoaderForActor } from './reference-loader';
 export { findDependentsFor } from './dependents';
 
 /** Sharing, membership and placement. */
@@ -63,5 +63,4 @@ export { pinMutationContext } from './mutation-receipt';
 export type { MutationReply } from './mutation-receipt';
 export { mutationInvocation } from './mutation-invocation';
 export { emitDatasetCommitted } from './after-commit';
-export { compileErrorText, compileResultForRow } from './row-compile';
 export { childrenTableFor } from './placement';

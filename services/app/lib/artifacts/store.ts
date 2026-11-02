@@ -14,20 +14,16 @@ import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, 
 import { headBumpSql } from './table';
 import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { queueMermaidHarvest } from '../mermaid-images';
 import {
-  sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId,
-  nodeIndex, stampNodeIds,
+  newEditId,
 } from '../document';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/social';
-import { documentMentions } from './membership/document-mentions';
 import { claimArtifactId } from './identities';
 import { parseDatasetDefinition, serializeDatasetDefinition, validateUserContent, retainUserScope, resolveUserColumnScope, catalogOf, claimPendingDatasetSecret, resolveDatasetConnection, DatasetError, loadDatasetRows } from '@/lib/datasets';
 import { userKindOf } from '@/lib/user-kinds';
 import { reserveCreation, completeCreation, type CreationOperation } from './creation-ledger';
 import { artifactState } from './state';
-import type { AnnotationOperation } from '../editor-engine';
 import { trackEvent } from '../analytics';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN, getDb, type Queryable, actorSubject, emit, generateFileId } from '../platform';
 import { assetByteQuotaExceeded } from './asset-quota';
@@ -36,9 +32,6 @@ import { defaultDatasetGrants } from '@artifactbin/utils';
 import { validateDatasetPolicyForRow } from '../datasets';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json, thrownMessage } from '../http';
-import { finalizeArtifactMetadata } from '@/lib/document/server';
-import { emitHeadCommitted } from './after-commit';
-import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { DatasetColumn } from '@/lib/dataflow';
@@ -115,7 +108,7 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
 async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
- if(document.format!=='html'&&document.format!=='markup')return;
+ if(document.format!=='html')return;
  const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
  const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
@@ -170,19 +163,13 @@ export async function createArtifact(
   if (!userId && !tokenId) throw new Error("Artifact creation requires a user or token");
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
-  if (input.format === 'markup' && input.source) {
-    input = { ...input, source: stampNodeIds(input.source).source };
-  }
   if(input.format==='html'&&input.source){
     const page=canonicalizeHtmlPage(input.source);
     input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger,htmlScriptFingerprint:scriptFingerprint(page.html),htmlLibraries:libraryVersions()}};
   }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
-  input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
+  input = { ...input, meta: { ...input.meta } };
   let sourceIds: string[] = [];
-  if(input.format==='markup'&&input.source) {
-    sourceIds=[...nodeIndex(input.source).keys()];
-  }
   if(input.format==='html'&&input.source)sourceIds=[...canonicalizeHtmlPage(input.source).nodeIds];
   // INSIDE THE CALLER'S TRANSACTION: no retry (a PK violation has already
   // poisoned it — the ids are reserved beforehand instead) and no post-commit
@@ -210,9 +197,7 @@ export async function createArtifact(
 export async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
   void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
   // The first reader of a new document finds it prepared (story's listener, lib/publish/prepared/commit-hooks.server).
-  if (row.format === 'markup') emitHeadCommitted(row.id);
   // Its diagrams are drawn to stored SVG in the background; nothing waits on it.
-  void queueMermaidHarvest(row);
   // A child arriving wakes the folder it landed in, so an open listing
   // re-runs its own query with no reload.
   await notifyParent(parentOf(row));
@@ -321,8 +306,7 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  if(atCreation.seedOwnerParticipation!==false&&(input.format==='markup'||input.format==='html')&&userId)await seedOwnerJoin(tx,id,userId);
-  if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],creator);
+  if(atCreation.seedOwnerParticipation!==false&&input.format==='html'&&userId)await seedOwnerJoin(tx,id,userId);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
 }
@@ -402,15 +386,13 @@ export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Pr
  * Both paths wake live readers.
  * Callers must already hold the row inside `tx`.
  */
-async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: ArtifactRow, nodeScoped=false): Promise<void> {
+async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: ArtifactRow, _nodeScoped=false): Promise<void> {
   const oldText = before.source ?? '';
   const newText = after.source ?? '';
-  const changes=nodeScoped&&before.format==='markup'&&after.format==='markup'?sourceChanges(oldText,newText):null;
-  if(changes&&!changes.length)changes.push({splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}});
   await tx.query(
     `INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, changes)
      VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
-    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
+    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, null],
   );
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
@@ -460,8 +442,8 @@ async function lockArtifactWrite(tx: Queryable, actor: AccessActor, id: string) 
 
 /** Restore only reactivates known IDs; replace also reserves newly authored ones. */
 async function reconcileSourceIds(tx: Queryable, updated: ArtifactRow, mode: 'restore' | 'replace'): Promise<void> {
-  if (!['markup', 'html'].includes(updated.format) || !updated.source) return;
-  const ids = updated.format === 'html' ? [...canonicalizeHtmlPage(updated.source).nodeIds] : [...nodeIndex(updated.source).keys()];
+  if (updated.format!=='html' || !updated.source) return;
+  const ids = [...canonicalizeHtmlPage(updated.source).nodeIds];
   const restore = () => tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [updated.id, ids]);
   if (mode === 'replace') await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
     SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [updated.id, updated.version, JSON.stringify(ids)]);
@@ -555,7 +537,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
   let target = (await artifactQuery<Pick<ArtifactRow, 'title' | 'description' | 'format' | 'source' | 'document' | 'meta'>>(db,'SELECT title,description,format,source,document,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
-  if(target.format==='markup')return {notArchived:true,refusal:json({error:'jsonb_operations_required',hint:'Read the archived version and submit a client-validated whole JSONB replacement.'},400)};
+  if(target.format==='markup')return {notArchived:true,refusal:json({error:'unsupported_format'},400)};
 
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
@@ -586,7 +568,7 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
     await reconcileSourceIds(tx, updated, 'restore');
     return updated;
   });
-  if (result && !isVersionNotArchived(result)) { void trackEvent('revert', result.id, { userId: result.user_id }); void queueMermaidHarvest(result); }
+  if (result && !isVersionNotArchived(result)) { void trackEvent('revert', result.id, { userId: result.user_id }); }
   return result;
 }
 
@@ -610,7 +592,7 @@ export interface ReplaceOpts {
   mutationReply?:(row:ArtifactRow)=>Promise<MutationReply>;
   expectedPolicyRevision?:number;
   shares?:ShareEntry[];
-  annotationOps?: AnnotationOperation[];
+
   expectedState?: string;
   /** When set, the replace applies only if it still names the head version. */
   expectedVersion?: number;
@@ -628,7 +610,7 @@ async function replaceScoped(
   opts: ReplaceOpts = {},
 ): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
-  if(input.format==='markup')return json({error:'jsonb_operations_required'},400);
+  if(input.format==='markup')return json({error:'unsupported_format'},400);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
@@ -708,40 +690,21 @@ async function replaceScoped(
     }
     await write.validateContent(input);
 
-    const replacementIdentity = input.format === 'markup' && input.source
-      ? stampNodeIds(input.source, {
-          previousSource: current.source,
-          reservedIds: (await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id),
-        })
-      : null;
-
-    const operations=opts.annotationOps??[];
-    const annotationRows=operations.length?(await tx.query<AnnotationRecord>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL FOR UPDATE',[id])).rows:[];
-    const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(row=>row.annotation_changes??[]):[];
-    if(operations.some(op=>op.kind==='undo'&&!receipts.some(receipt=>receipt.operationId===op.id&&receipt.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
-    const effects=operations.length?annotationEffects(current.source??'',replacementIdentity?.source??input.source??'',operations,annotationRows,receipts):{updates:[],receipts:[]};
-    const source = replacementIdentity?.source ?? input.source;
+    const source = input.source;
     const updated = await write.publish({
-      ...input, source, meta: finalizeArtifactMetadata(input.format, source, input.meta),
+      ...input, source, meta: input.meta,
     }, rebinds);
     if(opts.shares!==undefined)Object.assign(updated,await writeShares(tx,id,opts.shares));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     await bindCurrentUserScopes(tx,updated);
-    await documentMentions(tx,updated,actor,current.source??'');
     await logWholeDocumentWrite(tx, current, updated,true);
-    const movedAnnotations=new Set<string>();
-    for(const change of effects.updates){
-      const applied=await tx.query<{id:string}>('UPDATE annotations SET anchor_key=$3,range=$4 WHERE artifact_id=$1 AND id=$2 AND anchor_key=$5 AND range IS NOT DISTINCT FROM $6 RETURNING id',[id,change.annotationId,change.after.anchor,change.after.range,change.before.anchor,change.before.range]);
-      for(const row of applied.rows)movedAnnotations.add(row.id);
-    }
-    if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
     await reconcileSourceIds(tx, updated, 'replace');
     if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated));
     moved = { from: parentOf(current), to: parentOf(updated) };
     return updated;
   });
   const written = result && !unchanged && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
-  if (written) { void trackEvent('update', written.id, { userId: written.user_id }); void queueMermaidHarvest(written); }
+  if (written) { void trackEvent('update', written.id, { userId: written.user_id }); }
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
   if (written) sayMoved(actor, written.id, moved);
@@ -760,7 +723,7 @@ function isUnchangedHtmlRepublish(current: ArtifactRow, input: ArtifactInput, op
   if (input.description !== undefined && input.description !== current.description) return false;
   if (input.visibility !== undefined || input.access !== undefined || input.ancestor_ids !== undefined || input.link_role !== undefined) return false;
   if (input.htmlBackends?.length || input.htmlDatasets?.length || input.destination) return false;
-  if (opts.shares !== undefined || opts.expectedPolicyRevision !== undefined || opts.annotationOps?.length) return false;
+  if (opts.shares !== undefined || opts.expectedPolicyRevision !== undefined) return false;
   return Object.entries(input.meta).every(([key, value]) => value === undefined || key === 'htmlIdentity' || key === 'htmlIdentityCarry' || isDeepStrictEqual(value, current.meta[key]));
 }
 
@@ -818,7 +781,7 @@ export async function listArtifactPageFor(actor: AccessActor, limit: number, cur
   const predicates=[LIVE_ARTIFACT_SQL,`(${reach})`];
   const bind=(value:unknown)=>{values.push(value);return '$'+values.length;};
   if(cursor)predicates.push(`(created_at,id)<(${bind(cursor.created)}::timestamptz,${bind(cursor.id)})`);
-  if(filters.type)predicates.push(`format=ANY(${bind(filters.type==='file'?['image','pdf','file']:[filters.type==='artifact'?'markup':filters.type])}::text[])`);
+  if(filters.type)predicates.push(`format=ANY(${bind(filters.type==='file'?['image','pdf','file']:[filters.type==='artifact'?'html':filters.type])}::text[])`);
   if(filters.visibility)predicates.push(`visibility=${bind(filters.visibility)}`);
   if(filters.search)predicates.push(`position(lower(${bind(filters.search)}) in lower(COALESCE(title,'')))>0`);
   if(filters.parent_id)predicates.push(`ancestor_ids[array_length(ancestor_ids,1)]=${bind(filters.parent_id)}`);

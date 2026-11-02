@@ -1,33 +1,15 @@
-/**
- * A COMPILED DATAFLOW FOR A TEST, made the way publish makes one: the real
- * compiler (lib/dataflow/compile-dataflow) over the Helmet children given, with
- * each imported artifact's shape supplied here instead of loaded. A test that
- * needs a store, a runtime or a server run starts from what the compiler
- * would have stored, never from a hand-built record.
- */
-import type { DatasetColumn } from '@artifactbin/contracts';
-import { parseJsx } from '@/lib/jsx';
-import { dataflowOf, splitHelmet } from '@/lib/document';
-import { compileDataflow, prepareCompile, type ImportSource } from '@/lib/dataflow/server';
-import type { CompiledDataflow } from '@/lib/dataflow';
-
-/** An import's shape: its `rows` columns, or a full source (a folder, a catalog, a connected database). */
-export type TestSource = DatasetColumn[] | ImportSource;
-
-const sourceOf = (s: TestSource): ImportSource => (Array.isArray(s) ? { kind: 'dataset', tables: [{ name: 'rows', columns: s }] } : s);
-
-/** Compile a whole markup source (Helmet and body); throws the compiler's own messages. */
-export async function compiledSource(source: string, sources: Record<string, TestSource> = {}, opts: { bindings?: boolean } = {}): Promise<CompiledDataflow> {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(`the test document does not parse: ${parsed.error}`);
-  const { content, body } = splitHelmet(parsed.nodes);
-  const flow = dataflowOf(content);
-  const ctx = await prepareCompile(flow, async (ref) => (Object.hasOwn(sources, ref) ? sourceOf(sources[ref]!) : null));
-  const result = compileDataflow(flow, { ...ctx, now: '2026-09-30T10:00:00.000Z' }, opts.bindings === false ? undefined : body);
-  if (!result.ok) throw new Error(result.errors.map((e) => e.message).join('\n'));
-  return result.compiled;
+/** Persisted dataflow snapshots captured before compiler retirement. These are inputs to
+ * the supported stored-flow evaluator; this helper performs no source compilation. */
+import {createHash} from 'node:crypto';
+import type {DatasetColumn, Scalar, ColumnType} from '@artifactbin/contracts';
+import type {CompiledDataflow} from '@/lib/dataflow';
+import fixtures from './stored-dataflows.json';
+type ImportSource = {kind:'dataset'|'folder'|'postgres';tables:Array<{name:string;columns:DatasetColumn[]}>;probe?:(sql:string,params:Record<string,Scalar>,types:Record<string,ColumnType>)=>Promise<{columns:DatasetColumn[];params:string[]}>};
+export type TestSource=DatasetColumn[]|ImportSource;
+export async function compiledSource(source:string,sources:Record<string,TestSource>={},opts:{bindings?:boolean}={}):Promise<CompiledDataflow>{
+ const key=createHash('sha256').update(JSON.stringify([source,sources,opts])).digest('hex');
+ const flow=(fixtures as unknown as Record<string,CompiledDataflow>)[key];
+ if(!flow)throw new Error(`Missing persisted dataflow fixture: ${key}`);
+ return structuredClone(flow);
 }
-
-/** Compile `<Helmet>` children alone: declarations only, so the markup that would bind them is not checked. */
-export const compiledOf = (helmetChildren: string, sources: Record<string, TestSource> = {}): Promise<CompiledDataflow> =>
-  compiledSource(`<Helmet>${helmetChildren}</Helmet>`, sources, { bindings: false });
+export const compiledOf=(children:string,sources:Record<string,TestSource>={}):Promise<CompiledDataflow>=>compiledSource(`<Helmet>${children}</Helmet>`,sources,{bindings:false});

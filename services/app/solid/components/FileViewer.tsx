@@ -13,7 +13,7 @@ import { Dynamic } from 'solid-js/web';
 import { Box, Download, File as FileIcon, FileArchive, FileSpreadsheet } from 'lucide-solid';
 import ModelPreview from './ModelPreview';
 import { Button } from '../ui/Button';
-import { formatFileSize } from '@/lib/islands/file-display';
+import { formatFileSize } from '@/lib/ui-runtime/file-display';
 
 type FileKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'font' | 'model' | 'other';
 const KIND_BY_EXTENSION: Record<string, FileKind> = {

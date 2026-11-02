@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { keepFrameSession } from '@/solid/document/create-framed-story';
-import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_FRAME_BRIDGE_MESSAGE } from '@/lib/html-reader/contract';
 
 const PAGES = 'https://6869.pages.test';
 let win: EventTarget;

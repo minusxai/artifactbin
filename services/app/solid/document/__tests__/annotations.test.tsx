@@ -12,7 +12,7 @@ import { RETRY_TUNING } from '@/lib/artifact-backend/retrying';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { createMemoryHistory, MemoryRouter, Route } from '@solidjs/router';
 import { AnnotationLayer } from '../AnnotationLayer';
-import { personHue } from '@/lib/islands/person-face';
+import { personHue } from '@/lib/ui-runtime/person-face';
 import { Avatar } from '../../ui/Avatar';
 import { fireEvent, render } from '../../__tests__/helpers';
 import { AuthorIdentity, positionedComments } from '../AnnotationPreview';

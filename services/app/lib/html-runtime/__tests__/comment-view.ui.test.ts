@@ -11,7 +11,7 @@ it('captures opt-in UI state, restores before target layout, and returns the pri
  expect(saved?.viewState).toEqual({v:2,state:{$html:{version:'one',fields:{screen:'detail'}}}});
  await runtime.client.updateQuery({query},()=>({screen:'home',draft:'my new draft'}));
  const events:unknown[]=[];
- const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'comment-view-test',nodes:[],editId:'1',source:null}});
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'comment-view-test',editId:'1',source:null}});
  bridge.receive({kind:'send',command:{type:'mx:selection-actions',annotate:true}});
  const target=document.querySelector('p')!;
  target.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));

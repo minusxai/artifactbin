@@ -6,8 +6,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { mintAccountToken, setSession, useAppHarness, testPagesSite as pagesSiteFor } from '@/__tests__/harness';
-import { createArtifact, setMetadataFor } from '@/lib/artifacts';
-import { createUser, identityForUser } from '@/lib/accounts';
+import { createArtifact } from '@/lib/artifacts';
+import { createUser } from '@/lib/accounts';
 import { GUEST_TICKET, PAGES_TICKET_PARAM, pagesOriginFor } from '@/lib/http';
 import { artifactPageAnswer, artifactPageResponse, readableApp } from '@/lib/document-serving';
 
@@ -180,39 +180,11 @@ describe('the JSON door\'s caching', () => {
     expect(await refused.json()).toEqual({ error: 'not_found' });
   });
 
-  it('revalidates the nodes door: a matching tag is an empty 304, and a metadata edit or another role is a new tag', async () => {
-    const w = await world();
-    const row = await w.make('public');
-    const nodes = (headers: Record<string, string> = {}) => artifactPageResponse(ask(row.id, '?part=nodes', headers), row.id);
-    const first = await nodes();
-    expect(first.status).toBe(200);
-    const etag = first.headers.get('etag')!;
-    expect(etag).toMatch(/^"[\w-]+"$/);
-    expect(first.headers.get('cache-control')).not.toBe('no-store');
-    expect(await first.json()).toMatchObject({ editId: row.edit_id, version: 1, nodes: [] });
-    expect((await nodes()).headers.get('etag')).toBe(etag);
-
-    const held = await nodes({ 'if-none-match': etag });
-    expect(held.status).toBe(304);
-    expect(await held.text()).toBe('');
-    expect(held.headers.get('etag')).toBe(etag);
-
-    session = w.owner;
-    const owners = (await nodes()).headers.get('etag');
-    expect(owners).not.toBe(etag);
-    expect((await nodes({ 'if-none-match': etag })).status).toBe(200);
-
-    await setMetadataFor(identityForUser(w.owner), row.id, { title: 'Renamed' });
-    const edited = await nodes({ 'if-none-match': owners! });
-    expect(edited.status).toBe(200);
-    expect(edited.headers.get('etag')).not.toBe(owners);
-  });
-
   it('refuses the nodes door to a reader who may not read the document, whatever validator they hold', async () => {
     const w = await world();
     const row = await w.make('private');
     session = w.owner;
-    const etag = (await artifactPageResponse(ask(row.id, '?part=nodes'), row.id)).headers.get('etag')!;
+    const etag = '"retired-node-tree"';
     session = null;
     const refused = await artifactPageResponse(ask(row.id, '?part=nodes', { 'if-none-match': etag }), row.id);
     expect(refused.status).toBe(404);

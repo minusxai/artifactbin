@@ -67,9 +67,9 @@ const SCANS: Scan[] = [
     label: 'no retired theme name is used as a value (the alias table is gone too)',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`, 'scripts'],
     extensions: /\.(tsx?|mjs)$/,
-    // broadsheet and nocturne returned as design systems (lib/story-design/story-systems) on 3 Oct 2026.
+    // broadsheet and nocturne returned as design systems (lib/html-systems/story-systems) on 3 Oct 2026.
     pattern: /['"](classical)['"]/,
-    proof: { atLeast: 50, contains: `${APP}/lib/story-design/story-themes.ts` },
+    proof: { atLeast: 50, contains: `${APP}/lib/html-systems/story-themes.ts` },
   },
   {
     // Two generations of docs addresses answer 404 with no alias: the pre-tree pages and the
@@ -156,7 +156,7 @@ describe('retired names are dead names', () => {
  */
 describe('the surviving vocabulary', () => {
   it('is exactly six themes, and no theme guide teaches them any more', async () => {
-    const { STORY_THEME_NAMES } = await import('@/lib/validation/atlas-schemas');
+    const { STORY_THEME_NAMES } = await import('@/lib/validation/story-theme-names');
     expect([...STORY_THEME_NAMES]).toEqual(['modernist', 'organic', 'industry', 'terminal', 'manuscript', 'pop']);
     const { readdirSync } = await import('node:fs');
     const documented = readdirSync(path.join(APP_ROOT, 'skills/artifactbin/references'))

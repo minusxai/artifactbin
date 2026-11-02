@@ -30,7 +30,7 @@ import { setAssetByteQuotaForTests } from '@/lib/artifacts/testing';
 import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '../assets/web-assets';
 import { WEB_ASSET_KINDS, importForDocument } from '..';
 import { assetBytesForToken } from '@/lib/artifacts/testing';
-import { assetUrlFor } from '@/lib/document/asset-url';
+import { assetUrlFor } from '@/lib/document';
 import { webIngestRateLimited } from '@/lib/allowances';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/platform';
 

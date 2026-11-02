@@ -3,16 +3,6 @@
  * Entries are the real ways code is reached when no import names it: node/tsx scripts, gates, servers,
  * build entry lists and assets loaded by path. Each list names where the path comes from.
  */
-const ISLANDS = 'lib/islands';
-/** Island chunks a compiled page or a downloaded file imports (scripts/build/build-islands.mjs ENTRIES,
- * STANDALONE_LAZY, FRAME_EDITOR, OFFLINE_LAZY): their exports are the compiled-page ABI. */
-const ISLAND_ENTRIES = [
-  `${ISLANDS}/{rt,boot,deck,row-class,page,page-runtime,frame-editor,sqlite-engine,url-sync,chart-controller}.{ts,tsx}`,
-  `${ISLANDS}/kit/{image,basic,tabs,accordion,dialog,disclosure,controls,upload,data,files,people,mermaid,isometric,isometric-server,embed,cells,static}.tsx`,
-  `${ISLANDS}/kit/image-map.ts`, `${ISLANDS}/kit/templates.ts`, `${ISLANDS}/morph/engine.ts`, `${ISLANDS}/vendor/*.ts`,
-
-];
-
 /** @type {import('knip').KnipConfig} */
 export default {
   workspaces: {
@@ -54,16 +44,14 @@ export default {
       entry: [
         // Route modules: server/routes.generated.ts mounts each as a namespace.
         'app/**/route.ts',
-        // Island chunks (build-islands), library bundles
+        // Hosted native HTML and library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
-        ...ISLAND_ENTRIES,
         // Native HTML core bundles this module by URL; its exports are the author ABI.
         'lib/html-runtime/{browser-client,build.server,index}.ts',
         // Public custom-element API, bundled by build-html-components.
         'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider,input,textarea,text-control,avatar,segmented,popover,tooltip,floating-position,date-picker,date-calendar,select,select-model,icon,icon-glyphs,floating-geometry,accordion,accordion-model,file-upload,file-upload-model,data-table,table-model,markdown,mermaid,slide-deck,slide-navigation,deck-gl,deck-gl-engine,deck-gl-model,isometric,isometric-model,user,user-model,avatar-model,segmented-model,dialog-model,popover-model,date-picker-styles,tooltip-model,slide-deck-parts,data-table-frame,data-table-grid,data-table-cells,data-table-compare,data-table-measure}.ts',
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
-        'lib/runner/runtime.ts',
         // Build and generator scripts run by path (scripts/lib/dev-runner.mjs, CI).
         'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
@@ -71,10 +59,9 @@ export default {
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
-        // and an `import('./managed-assets')` type in an interface method (lib/page-store/store.ts).
-        'lib/mermaid-images/mermaid-render.ts', 'lib/page-store/managed-assets.ts',
+        // Native browser assets are reached through explicit build and HTTP entry points.
+        'lib/mermaid-images/mermaid-render.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.
-        'lib/islands/__tests__/fixtures/*.{ts,tsx}',
       ],
       project: ['**/*.{ts,tsx,mjs,js,jsx,css}', '!public/**', '!skills/artifactbin/components/*.ts'],
       ignoreDependencies: [
@@ -85,7 +72,7 @@ export default {
         // Plugins of the root vite/vitest configs this workspace's build and test scripts run.
         '@rollup/plugin-yaml', '@tailwindcss/vite',
         // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.
-        'mdast', 'hast', 'rolldown',
+        'mdast', 'rolldown',
       ],
       // The test scripts' `--config ../../vitest.config.ts`, named so its paths resolve from the repository root.
       vitest: { config: ['../../vitest.config.ts'] },

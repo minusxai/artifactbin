@@ -46,7 +46,6 @@ export type { RunnerJson, RunStatus, RunnerLimits, RunStart, RunLookup, RunEvent
 
 export type {RunnerCapabilities,RunnerTerminal} from './runner';
 export * from './schedules';
-export {parseProgramDefinition,type ProgramDefinition} from './program';
 export * from './preview-connect';
 
 // Runtime snapshot parsing is imported directly by comment consumers; re-exporting it here

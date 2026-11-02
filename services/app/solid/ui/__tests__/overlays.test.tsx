@@ -4,9 +4,9 @@ import { expect, it, vi } from 'vitest';
 import { createSignal, Show } from 'solid-js';
 import { screen } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
-import { createDialogShell } from '@/lib/islands/kit/dialog-shell';
+import { createDialogShell } from '@/lib/ui-runtime/dialog-shell';
 import { Popover } from '../Popover';
-import { popupDismiss } from '@/lib/islands/kit/popup-dismiss';
+import { popupDismiss } from '@/lib/ui-runtime/popup-dismiss';
 
 function Dialog(props: { name: string; onClose: () => void; lock?: boolean }) {
   let panel!: HTMLDivElement;

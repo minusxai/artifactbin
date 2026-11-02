@@ -1,39 +1,10 @@
-/**
- * THE STORED DOCUMENT, browser-safe: the one entry for code outside this module that is not
- * browser-bundled. Every name below is one a caller outside imports, grouped by what callers use it for.
- * The node-only half (the stored compiled-dataflow record: node:crypto, zod) is `./server`.
- *
- * Browser-bundled code imports the leaf files directly instead: the island and app bundlers cannot drop
- * the rest of a barrel. `scripts/ci/module-graph.mjs` (DEEP_MODULES['lib/document']) refuses any other
- * outside path, so a new name is a reviewed line here.
- */
-
-// ---- Model: the stored node graph, node ids, the source form and its checks.
-export type { DocumentGraph } from './document-graph';
-export { createDocumentGraph } from './document-graph';
-export type { StoredDocument } from './document-codec';
-export { decodeDocument } from './document-codec';
-export { nodeIndex, normalizeNodeIds, stampNodeIds } from './node-ids';
+/** Native document metadata, asset addresses, CSP and durable annotation ranges. */
 export type { StoredContent } from './stored-content';
-export { storyBodyFor } from './body';
-export { canonicalizeMarkup } from './canonical-source';
 
-// ---- Edits: splices, edit batches, source changes and prepared updates.
-export type { EditRecord } from './splice';
 export { newEditId } from './splice';
-export { sourcePathToBodyPath } from './edit-compose';
-export { sourceChanges } from './source-changes';
 
-export { storyUpdateParts } from './update-parts';
+export { assetUrlFor, canonicalAssetUrl, urlHash } from './asset-url';
 
-// ---- Assets: asset URLs, external images and the lazy code a page loads.
-
-export { assetLookupFrom, assetUrlFor, canonicalAssetUrl, urlHash } from './asset-url';
-export { collectExternalAssetUrls } from './external-images';
-
-// ---- Head: the <Helmet> split and its checks, the title, PWA settings, social preview and CSP origins.
-export type { HelmetContent } from './helmet';
-export { dataflowOf, declarationsOf, splitHelmet, validateHelmet } from './helmet';
 export { displayTitle, firstHeadingTitle } from './title';
 export type { SocialPreviewCrop } from './social-preview';
 export { parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, socialPreviewImageValue, clampImageCrop, savedSocialPreviewImageCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
@@ -43,14 +14,9 @@ export {
   mergeCspExtensions, parseCspOrigin, storedCspExtensions, subtractCspExtensions,
 } from './csp-extensions';
 
-// ---- Comments: where a comment points (range, anchors), how edits move it, and mentions in its text.
 export type { AnnotationRange } from './annotation-range';
 export { canonicalQuote, canonicalText, isAreaRange, isTargetRange, parseAnnotationRange, parseRel, refinementRange } from './annotation-range';
-export type { AnchorEntry } from './anchors';
-export { anchorIndex, anchorKeyOf, snippetOf, sourceWithoutAnchors } from './anchors';
-export type { AnnotationReceipt, AnnotationRecord } from './annotation-edits';
-export { annotationEffects, parseAnnotationOperations } from './annotation-edits';
+
 export { isPersonMentionHref, personMentions } from './person-mentions';
 
-// ---- Capabilities: what an author may write, for the capabilities route.
 export { authoringCapabilities } from './authoring-capabilities';

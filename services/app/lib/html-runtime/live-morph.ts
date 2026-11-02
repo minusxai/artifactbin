@@ -16,7 +16,7 @@
  * deferred scripts ran) against the new served HTML, so script-made DOM never reads as an edit. Elements the source
  * does not name (platform overlays, script-made nodes) are left where they are.
  */
-import {heldNodes,morphChildren,type MorphContext} from '../islands/morph/dom';
+import {heldNodes,morphChildren,type MorphContext} from './morph/dom';
 import {LIVE_VERSION_HEADER} from './live-morph-contract';
 /** server/pages-host's one-time ticket parameter (lib/http/pages-origin PAGES_TICKET_PARAM), never part of the document's address. */
 const PAGES_TICKET='_pt';

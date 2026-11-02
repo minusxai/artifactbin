@@ -44,9 +44,9 @@ export default function Dashboard(props: Props): JSX.Element {
   const periodViews = createMemo(() => views().reduce((sum, value) => sum + value, 0));
   const periodLikes = createMemo(() => likes().reduce((sum, value) => sum + value, 0));
   const metrics = createMemo(() => [
-    { label: 'artifacts', value: props.stats?.artifacts ?? props.rows.filter(row => row.format === 'markup').length, Icon: FileText },
-    { label: 'assets', value: props.stats?.assets ?? props.rows.filter(row => row.format !== 'markup' && row.format !== 'folder').length, Icon: Database },
-    { label: 'views', value: props.stats?.views ?? props.rows.filter(row => row.format === 'markup').reduce((sum, row) => sum + (row.views ?? 0), 0), Icon: Eye },
+    { label: 'artifacts', value: props.stats?.artifacts ?? props.rows.filter(row => row.format === 'html').length, Icon: FileText },
+    { label: 'assets', value: props.stats?.assets ?? props.rows.filter(row => row.format !== 'html' && row.format !== 'folder').length, Icon: Database },
+    { label: 'views', value: props.stats?.views ?? props.rows.filter(row => row.format === 'html').reduce((sum, row) => sum + (row.views ?? 0), 0), Icon: Eye },
     { label: 'likes', value: props.likes ?? 0, Icon: Heart },
     { label: 'followers', value: props.followers ?? 0, Icon: Users },
     { label: 'forks', value: props.forks ?? 0, Icon: GitFork },

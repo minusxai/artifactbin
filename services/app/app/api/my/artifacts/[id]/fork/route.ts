@@ -1,6 +1,6 @@
 import { getArtifactById, capabilityGuard } from '@/lib/artifacts';
 import { effectiveRole } from '@/lib/artifact-access';
-import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish';
+import { forkArtifact, forkRefusal } from '@/lib/publish';
 import { forkOwner } from '@/lib/operations';
 import { browserActor } from '@/lib/authentication';
 import { canRead } from '@artifactbin/contracts';
@@ -62,7 +62,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (body?.dry_run === true) {
     const unforkable = forkRefusal(row);
     if (unforkable) return unforkable;
-    return json({ datasets: await forkDatasetPreview(forker, row, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) }, 200);
+    return json({ datasets: [], ...(owner.testuser ? { owner: owner.testuser } : {}) }, 200);
   }
 
   const copy = await forkArtifact(forker, row, {}, owner.actor);

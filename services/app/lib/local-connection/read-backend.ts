@@ -9,7 +9,7 @@ export function createLocalReadBackend(id:string):ArtifactBackend {
   mode:'online',unavailable:feature=>feature==='live'?null:'Downloaded files are read-only. Open original to make changes.',
   canEditLocalComment:()=>false,canDeleteLocalAnnotation:()=>false,
   setCommentReaction:refuse,createAnnotation:refuse,actOnAnnotation:refuse,editAnnotation:refuse,deleteAnnotation:refuse,uploadCommentImage:refuse,
-  documentFrame:refuse,commitEdit:refuse,prepare:refuse,previewCss:refuse,previewQueries:refuse,queryTable:refuse,
-  importImage:refuse,versions:refuse,version:refuse,revert:refuse,queryTransport:denied,members:async()=>null,
+  documentFrame:refuse,
+  importImage:refuse,versions:refuse,version:refuse,revert:refuse,members:async()=>null,
  };
 }

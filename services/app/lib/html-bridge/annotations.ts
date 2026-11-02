@@ -1,4 +1,4 @@
-import {COMMENT_PRESENTATION} from '../frame-edit/comment-presentation';
+import {COMMENT_PRESENTATION} from './comment-presentation';
 import type { AnnotationRange } from '../document';
 import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
 import { resolveHtmlRange } from './range';

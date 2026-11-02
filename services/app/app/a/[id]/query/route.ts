@@ -1,11 +1,10 @@
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { dataflowForRow, holdImport, nameablePeople } from '@/lib/document-data';
+import { nameablePeople } from '@/lib/document-data';
 import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import { sessionActor } from '@/lib/authentication';
 import { ID_RE } from '@/lib/platform';
 import { json, readJson, parseQueryRequest, type QueryRequest } from '@/lib/http';
-import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
-import { LocalStateInputError } from '@/lib/dataflow';
+import { QUERY_REQUEST_PARAM } from '@/lib/html-reader/contract';
 import {DatasetError} from '@/lib/datasets';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -99,37 +98,17 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  * document's own (its <Query> may name only what its owner may read); this is
  * WHICH ROWS come back.
  */
-async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: AccessActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
+async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: AccessActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,_signal?:AbortSignal): Promise<Response> {
   if (parsed.hold !== undefined) return held(artifact, parsed.hold, viewer, extra, authorize);
   if (parsed.people !== undefined) return named(artifact, parsed.people, viewer, extra, authorize);
-  if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
-  let flow;
-  try {
-    flow = await dataflowForRow(artifact, { ...parsed, viewer,authorize,signal });
-    await authorize?.();
-  }
-  catch (error) {
-    if (error instanceof LocalStateInputError) return json({error: 'invalid_local_state', detail: error.message}, 400, extra);
-    if (error instanceof DatasetError) return json({error:'not_found'},404,{...extra,'Cache-Control':'no-store'});
-    throw error;
-  }
-  return json({...(flow?.state.userOptions?{userOptions:flow.state.userOptions,people:flow.state.people}:{}), tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
+  await authorize?.();
+  return json({tables:{},errors:{}},200,{...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
 }
 
-/**
- * `{hold}` — every row of one import the document declares, for a reader's
- * page that runs its queries itself (lib/dataflow/placement). Decided for THIS
- * door's viewer on every request (lib/document-data holdImport): the island's
- * `hold` is only a hint. Anything else — an undeclared name, a ref, a dataset
- * the viewer may not read, a connected database, past the cap — is one answer,
- * so a refusal says nothing about why.
- */
-async function held(artifact: ArtifactRow, name: string, viewer: AccessActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
-  const refused = () => json({ error: 'not_holdable' }, 404, { ...extra, 'Cache-Control': 'no-store' });
-  if (artifact.format !== 'markup') return refused();
-  const tables = await holdImport(artifact, name, viewer);
-  try { await authorize?.(); } catch (error) { if (error instanceof DatasetError) return refused(); throw error; }
-  return tables ? json({ tables }, 200, { ...extra, 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' }) : refused();
+/** Retired declaration imports cannot expose dataset rows. */
+async function held(_artifact:ArtifactRow,_name:string,_viewer:AccessActor|null,extra:Record<string,string>,authorize?:()=>Promise<void>):Promise<Response>{
+ try {await authorize?.();}catch(error){if(!(error instanceof DatasetError))throw error;}
+ return json({error:'not_holdable'},404,{...extra,'Cache-Control':'no-store'});
 }
 
 /**

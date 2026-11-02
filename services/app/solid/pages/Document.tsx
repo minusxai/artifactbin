@@ -4,15 +4,14 @@ import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { artifactAppPath } from '@/lib/document-serving/artifact-pwa';
 import { createEffect, createSignal, getOwner, lazy, on, onCleanup, onMount, runWithOwner, Show, Suspense, type JSX } from 'solid-js';
-import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
+import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/html-reader/edit-bar';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
-import { chooseTheme, storedTheme } from '@/lib/story-runtime/reader-mode';
+import { chooseTheme, storedTheme } from '@/lib/html-reader/reader-mode';
 import { rowTitle } from '@/lib/document/display-title';
-import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story-runtime/contract';
-import type { StoryEditSelection } from '@/lib/edit-protocol';
-import type { JsxNode } from '@/lib/jsx';
-import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/html-reader/contract';
+import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
+import type { DocumentRuntimeRef } from '@/lib/html-reader/document-endpoint';
 import type { FramedRuntime } from '@/lib/document-serving';
 import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
@@ -154,7 +153,6 @@ export function DocumentPage(): JSX.Element {
    */
   const [htmlHead, setHtmlHead] = createSignal({ version: page?.surface?.version ?? 0, editId: page?.surface?.editId ?? '' });
   /** The drawn version's tree, fetched again once the frame holds one (set when the frame is adopted). */
-  let refreshTree = (): Promise<JsxNode[] | null | undefined> => Promise.resolve(undefined);
   const reload = () => replaceDocument(window.location.href);
   const readerPresence = createReaderPresence({id: id!, revision: () => String(page?.archived?.version ?? (htmlHead().version || 1)), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
@@ -201,11 +199,10 @@ export function DocumentPage(): JSX.Element {
     // the original server shell and its ticketed frame together, while viewer state stays in browser storage.
     // Loaded when a version arrives: the app shell before the frame is ready stays within its size budget.
     onPublication: page.surface.format === 'html' ? (version, editId) => import('../document/follow-html-version').then(({ followPublication }) => followPublication({
-      version, editId, frame: archivedNow() ? null : runtimeRef.current, tree: () => refreshTree(), show: setHtmlHead, reload,
+      version, editId, frame: archivedNow() ? null : runtimeRef.current, show: setHtmlHead, reload,
     }), reload) : undefined,
     onAnnotations: setLiveAnnotations,
     onPresence: readerPresence.receive,
-    since: page.surface.runtime?.data.dataflow?.results?.since,
   }) : () => null;
 
   const railInset = () => railOpen() && !phone() ? RIGHT_RAIL_W : 0;
@@ -261,28 +258,9 @@ export function DocumentPage(): JSX.Element {
     onCleanup(() => { unmounted = true; runtimeRef.current = null; served.remove(); });
     // The document is on screen: one view (a prerendered page counts when it is shown).
     reportArtifactView(window, id);
-    void import('../document/create-framed-story').then(({ createFramedStory, fetchFrameNodes, onFirstPressInto }) => { if (!unmounted) runWithOwner(owner, () => {
-      // The tree the frame's controller classifies comments, selections and edits against is its own request (not in the
-      // page's data), and on a large document most of the page's bytes. A commenter or editor asks for it now, while the
-      // frame loads, and the bridge attaches when it is here. Every other reader's bridge attaches at once without it
-      // (reading, the mode pick and the `$` values need none of it): a guest's selection bubble (Comment → sign-in) is
-      // the one use left, so a guest asks for it on the first press into the document — the frame reports a press,
-      // touch, key or selection itself (a touch may never move focus), and the page's window losing focus to the frame
-      // is a second signal — and the tree goes to the running frame controller, which shows the bubble for a selection
-      // made while it was on its way. A signed-in viewer and an archived version never ask.
-      const nodes = new AbortController();
-      onCleanup(() => nodes.abort());
-      const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
-      const treeOnLoad = annotatable();
-      let treeAsked = treeOnLoad;
-      refreshTree = () => treeAsked ? fetchFrameNodes(id, window.location.search, nodes.signal) : Promise.resolve(undefined);
-      const askTreeOnPress = () => {
-        if (treeAsked || !story || !canStartComment()) return;
-        treeAsked = true;
-        story.attachTree(askTree());
-      };
+    void import('../document/create-framed-story').then(({ createFramedStory }) => { if (!unmounted) runWithOwner(owner, () => {
       story = createFramedStory({
-        id, framed, nodes: treeOnLoad ? askTree() : [],
+        id, framed,
         editId: () => htmlHead().editId,
         source: () => null,
         htmlContext: page.surface?.format === 'html' ? () => ({
@@ -290,10 +268,7 @@ export function DocumentPage(): JSX.Element {
           readOnly: !!page.archived,
           uploadSession: sessionError()?{state:'unavailable' as const}:!session()?{state:'loading' as const}:session()?.kind==='account'&&session()?.user?{state:'signed-in' as const,subject:session()!.user!.id}:{state:'signed-out' as const},
         }) : undefined,
-        version: live, reading: () => true,
-        onPressed: askTreeOnPress,
       });
-      if (!treeOnLoad && !archivedNow()) onCleanup(onFirstPressInto(framed.frame, askTreeOnPress));
       // The document's links to app paths take this page (another document by a full load, an app page by the router).
       const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
       const framedStory = story;

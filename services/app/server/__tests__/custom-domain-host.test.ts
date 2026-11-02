@@ -30,7 +30,7 @@ import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type Domai
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/document/asset-url';
+import { urlHash } from '@/lib/document';
 import { claimToken } from '@/lib/authentication';
 import { createUser, setUsername } from '@/lib/accounts';
 import { createRunner } from '@artifactbin/runner/local';

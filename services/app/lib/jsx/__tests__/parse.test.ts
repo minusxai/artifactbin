@@ -22,11 +22,11 @@ function attr(el: JsxElement, name: string) {
 describe('parseJsx', () => {
   it('parses a component with string + JSON-object + number attributes and a text child', () => {
     const el = firstElement(
-      `<Question connection="github" viz={{"type":"bar","xCols":["actor_login"]}} limit={5}>SELECT 1</Question>`,
+      `<Dataset connection="github" viz={{"type":"bar","xCols":["actor_login"]}} limit={5}>SELECT 1</Dataset>`,
     );
     // An earlier name parses to its canonical tag and keeps its spelling (component-names COMPONENT_ALIASES).
-    expect(el.tag).toBe('Chart');
-    expect(el.authoredTag).toBe('Question');
+    expect(el.tag).toBe('Dataset');
+    expect(el.authoredTag).toBe('Dataset');
     expect(el.isComponent).toBe(true);
     expect(el.selfClosing).toBe(false);
     expect(attr(el, 'connection')).toEqual({ static: true, json: 'github' });
@@ -37,12 +37,12 @@ describe('parseJsx', () => {
   });
 
   it('accepts unquoted object keys in JSON attributes', () => {
-    const el = firstElement(`<Question viz={{type:"line",yCols:["count"]}}>x</Question>`);
+    const el = firstElement(`<Dataset viz={{type:"line",yCols:["count"]}}>x</Dataset>`);
     expect(attr(el, 'viz')).toEqual({ static: true, json: { type: 'line', yCols: ['count'] } });
   });
 
   it('parses a self-closing component with a number prop', () => {
-    const el = firstElement(`<Question id={1090} />`);
+    const el = firstElement(`<Dataset id={1090} />`);
     expect(el.selfClosing).toBe(true);
     expect(el.children).toHaveLength(0);
     expect(attr(el, 'id')).toEqual({ static: true, json: 1090 });
@@ -63,26 +63,26 @@ describe('parseJsx', () => {
   });
 
   it('records a non-static attribute expression as static:false (does not throw)', () => {
-    const el = firstElement(`<Question viz={computeViz()} />`);
+    const el = firstElement(`<Dataset viz={computeViz()} />`);
     const v = attr(el, 'viz');
     expect(v.static).toBe(false);
     if (!v.static) expect(v.exprType).toBe('CallExpression');
   });
 
   it('supports multiple root nodes (implicit fragment)', () => {
-    const r = parseJsx(`<Question id={1} /><Question id={2} />`);
+    const r = parseJsx(`<Dataset id={1} /><Dataset id={2} />`);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.nodes.filter((n) => n.type === 'element')).toHaveLength(2);
   });
 
   it('maps source spans back to the original (offset-corrected)', () => {
-    const src = `<Question id={7} />`;
+    const src = `<Dataset id={7} />`;
     const el = firstElement(src);
-    expect(src.slice(el.start, el.end)).toBe(`<Question id={7} />`);
+    expect(src.slice(el.start, el.end)).toBe(`<Dataset id={7} />`);
   });
 
   it('returns { ok:false } on a syntax error instead of throwing', () => {
-    const r = parseJsx(`<Question oops=>`);
+    const r = parseJsx(`<Dataset oops=>`);
     expect(r.ok).toBe(false);
   });
 
@@ -121,4 +121,3 @@ describe('a syntax error carries its position', () => {
     if (!r.ok) expect(r.pos === undefined || r.pos >= 0).toBe(true);
   });
 });
-

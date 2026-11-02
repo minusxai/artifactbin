@@ -6,10 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { identityForUser } from '@/lib/accounts';
-import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
-import { commitDatasetPolicy, commitDatasetWrite, compileErrorText, compileResultForRow, compiledForRow, createArtifact, declarationsForRow, findDependentsFor, getArtifactById, getSharingFor, refLoaderForActor, rowToResolvedRef, updateSharingFor } from '@/lib/artifacts';
+import { commitDatasetPolicy, commitDatasetWrite, getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifact-access';
-import { account, head, mine } from '@/__tests__/artifact-fixtures';
+import { account, head } from '@/__tests__/artifact-fixtures';
 
 const harness = useAppHarness();
 
@@ -20,8 +19,6 @@ async function storedDataset(access: 'read' | 'readwrite' = 'readwrite') {
   const { id } = await reply.json() as { id: string };
   return { actor: identityForUser(owner.userId, owner.id) as ReturnType<typeof identityForUser> & { userId: string }, row: (await getArtifactById(id))! };
 }
-const markup = (actor: { userId: string }, source: string, refs: string[] = []) =>
-  createArtifact(null, actor.userId, { format: 'markup', source, meta: { ...DATA_SYNTAX_META, refs: refs.map(id => ({ id })) }, title: 'Doc' });
 const commit = (row: ArtifactRow, actor: ReturnType<typeof identityForUser>, extra: Partial<Parameters<typeof commitDatasetWrite>[1]> = {}) =>
   harness.db().then(db => commitDatasetWrite(db, { current: row, actor, meta: { ...row.meta, rowCount: 2 }, policyRole: null, policyDeclared: false, granted: false, ...extra }));
 
@@ -53,41 +50,5 @@ describe('dataset commits', () => {
     await updateSharingFor(actor, row.id, { shares: [{ email: 'x@example.test', role: 'viewer' }] });
     expect(await commitDatasetPolicy(db, actor, row, policy, 2)).toBeNull();
     expect(await commitDatasetPolicy(db, actor, await head(row.id), policy, 2)).toBe(3);
-  });
-});
-
-describe('a row compiled', () => {
-  it('resolves refs by reach then by link, compiles under the author, and names what writes a dataset', async () => {
-    const { row: data, actor } = await storedDataset();
-    const stranger = await account('stranger@example.test');
-    expect(rowToResolvedRef(data, true)).toMatchObject({ id: data.id, format: 'dataset', owned: true, access: 'readwrite', validationState: { id: data.id, version: data.version } });
-    expect(rowToResolvedRef({ ...data, format: 'folder' }).columns!.map(c => c.name)).toContain('thumbnail');
-    expect(await refLoaderForActor(actor)(data.id)).toMatchObject({ owned: true });
-    expect(await refLoaderForActor(stranger)(data.id)).toMatchObject({ owned: false });
-    expect(await refLoaderForActor(identityForUser(null, 'nobody'))('missing')).toBeNull();
-    const source = `<Helmet><Import name="d" src="ref:${data.id}" /><Query name="q">{\`select * from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows (n) values (2)\`}</Mutation></Helmet><p>Live</p>`;
-    const doc = await markup(actor, source, [data.id]);
-    expect((await compiledForRow(doc))!.queries.map(q => q.name)).toEqual(['q']);
-    expect((await declarationsForRow(doc))!.flow.mutations.map(m => m.name)).toEqual(['add']);
-    expect(await compileResultForRow({ ...doc, source: null })).toBeNull();
-    expect(await declarationsForRow({ ...doc, source: '<p>No data</p>' })).toBeNull();
-    expect((await findDependentsFor(actor, data.id)).map(r => r.id)).toEqual([doc.id]);
-    expect(await findDependentsFor(stranger, data.id)).toEqual([]);
-    expect((await getSharingFor(actor, data.id))!.writtenBy).toEqual([{ id: doc.id, title: 'Doc', mutations: ['add'] }]);
-  });
-
-  it('a document whose data no longer compiles runs as answered errors, never silently', async () => {
-    const owner = await account('owner@example.test');
-    const broken = `<Helmet><Import name="d" src="ref:Missing1" /><Query name="q">{\`select * from d.rows\`}</Query></Helmet><p>x</p>`;
-    const doc = await mine(owner);
-    const row = { ...doc, format: 'markup' as const, source: broken, meta: { ...DATA_SYNTAX_META } };
-    const result = (await compileResultForRow(row))!;
-    expect(result.ok).toBe(false);
-    expect(await compiledForRow(row)).toBeNull();
-    const errors = result.ok ? [] : result.errors;
-    expect(compileErrorText(errors)).toBe(errors.map(e => e.message).join('\n'));
-    const ran = (await declarationsForRow(row)) as { state?: { errors: Record<string, string> } };
-    expect(Object.keys(ran.state!.errors)).toEqual(['q']);
-    expect(ran.state!.errors.q).toContain('ref:Missing1');
   });
 });

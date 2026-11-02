@@ -10,7 +10,7 @@ import { WebMercatorViewport, type MapViewState, type PickingInfo } from '@deck.
 import { ScatterplotLayer, ArcLayer, GeoJsonLayer, ColumnLayer, PolygonLayer } from '@deck.gl/layers';
 import { HexagonLayer, HeatmapLayer, GridLayer } from '@deck.gl/aggregation-layers';
 import { cellToBoundary, cellToLatLng, isValidCell } from 'h3-js';
-import { colorScales, compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type ColorScale, type DeckPalette } from '@/lib/jsx/deck-spec';
+import { colorScales, compileAccessor, layerBoundary, GEOMETRY_COLUMN, DECK_LAYERS, type ColorScale, type DeckPalette } from '@/lib/html-component-specs/deck-spec';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
 export type Row = Record<string, unknown>;

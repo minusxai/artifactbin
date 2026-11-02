@@ -6,7 +6,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import {nativeHtml} from './native-html-fixture';
 import {DELETE as remove} from '@/app/api/artifacts/[id]/route';
 import { getDb } from '@/lib/platform';
-import { assetUrlFor } from '@/lib/document/asset-url';
+import { assetUrlFor } from '@/lib/document';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { allowLocalWebIngest, restoreWebIngestPolicy } from '@/test/helpers/web-ingest';
 import { request, useAppHarness } from '@/__tests__/harness';

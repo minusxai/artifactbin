@@ -1,21 +1,4 @@
-/**
- * A STORED DOCUMENT THE CURRENT CODE STILL SERVES — or the one refusal for one it no longer does.
- *
- * Two stored shapes are retired, and nothing converts them any more:
- *  - a markup row without `meta.dataSyntax: 2` (lib/dataflow/data-syntax): written for the
- *    previous query engine, whose converter was deleted once production had run it;
- *  - a markup row whose stored document is not a graph this code decodes. lib/artifacts/document
- *    hands such a row back with `source: null` beside the `document` it could not read; a row with
- *    only the retired `source` column and no graph is the same case.
- *
- * Neither is guessed at, converted on the fly or rendered stale. Every read path that serves a
- * document's content (the render doors, the version read-back, the editor's read, a restore) passes
- * the row through {@link servableDocument}, which throws {@link UnservableDocument}; the door answers
- * it through {@link refusingUnservable}. On production such rows survive only in archived versions and
- * trashed heads, and the database dump taken before the backfills holds their bytes.
- */
 import { json } from '../http';
-import { hasCurrentDataSyntax } from '@/lib/dataflow/server';
 
 const STATUS = 410;
 const CODE = 'unservable_document';
@@ -45,17 +28,11 @@ interface StoredRow {
   document?: unknown;
 }
 
-const isGraph = (document: unknown): boolean =>
-  !!document && typeof document === 'object' && (document as { kind?: unknown }).kind === 'graph';
-
-/** Native HTML requires source bytes; legacy markup additionally requires its stored graph and syntax marker. */
+/** Native HTML requires source bytes. Retired markup is never rendered or converted. */
 export function unservable(row: StoredRow): UnservableDocument | null {
-  if (row.format === 'html') return typeof row.source === 'string' && row.source.trim() ? null : new UnservableDocument(row.version, 'unreadable');
-  if (row.format !== 'markup') return null;
-  // A row read without its `document` column is judged by the source it decoded to.
-  if (('document' in row && !isGraph(row.document)) || typeof row.source !== 'string') return new UnservableDocument(row.version, 'unreadable');
-  if (!hasCurrentDataSyntax(row.meta)) return new UnservableDocument(row.version, 'data_syntax');
-  return null;
+ if(row.format==='markup'||row.format==='program')return new UnservableDocument(row.version,'unreadable');
+ if(row.format==='html'&&!(typeof row.source==='string'&&row.source.trim()))return new UnservableDocument(row.version,'unreadable');
+ return null;
 }
 
 /** THE CHECK the read paths call: the row unchanged when the current code serves it, else {@link UnservableDocument} thrown. */

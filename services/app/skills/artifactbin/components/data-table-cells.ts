@@ -3,7 +3,7 @@
  *   (ids scoped per cell) or formatted text with bar/image/time decorations.
  * Used by: data-table-grid.ts.
  */
-import { barFraction, cellTint, formatCell, resolveColumns } from "@/lib/story-ui/data-table";
+import { barFraction, cellTint, formatCell, resolveColumns } from "@/lib/html-components/table-values";
 import type { AfDataTable } from "./data-table";
 import type { TableState } from "./data-table-frame";
 import { DATA_TABLE_CLASSES, tableIdentity, type TableData } from "./table-model";

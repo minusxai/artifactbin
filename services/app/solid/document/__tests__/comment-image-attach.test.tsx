@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
-import type { StoryEditSelection } from '@/lib/edit-protocol';
+import type { StoryEditSelection } from '@/lib/html-bridge/selection-contract';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { COMMENT_IMAGE_LIMITS } from '../../../../contracts/src/comment-image';
 import { fireEvent } from '../../__tests__/helpers';
@@ -370,4 +370,3 @@ describe('an attached image when the document moved', () => {
     expect(screen.getByLabelText('Screenshot editor')).toBeTruthy();
   });
 });
-

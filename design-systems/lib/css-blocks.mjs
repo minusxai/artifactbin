@@ -7,7 +7,7 @@
  */
 
 /** Selectors that style the specimen PAGE, not the system: dropped from the component css. */
-export const PAGE_CHROME = ['.ds-section', '.ds-chip', '.ds-cover', '.ds-wrap', '.ds-toc', '.ds-two', '.ds-three', '.ds-note', '.ds-comp', '.ds-stats',
+const PAGE_CHROME = ['.ds-section', '.ds-chip', '.ds-cover', '.ds-wrap', '.ds-toc', '.ds-two', '.ds-three', '.ds-note', '.ds-comp', '.ds-stats',
   '.ds-swatch', '.ds-type', '.ds-kv', '.ds-principle', '.ds-voice', '.ds-hand', '.ds-motif', '.ds-foot', '.ds-code', '.ds-map',
   '.ds-rules', '.ds-sample', '.ds-lede', '.ds-eyebrow', '.ds-series', '.ds-borrow', '.ds-devices', '.ds-hex', '.ds-group',
   '-sample', '.ds-tpls', '.ds-tpl-block', '.ds-tpl-head', '.ds-progress', '.ds-fields', '.ds-callouts', '.ds-swatch-chip'];
@@ -15,7 +15,7 @@ export const PAGE_CHROME = ['.ds-section', '.ds-chip', '.ds-cover', '.ds-wrap', 
 /** The skeleton lines that are the page-type KIT (served by the runtime), not the specimen page's own chrome. */
 const KIT_SELECTORS = ['.h-', '.ds-row', '.ds-tpl'];
 
-export const selectorOf = (line) => line.split('{')[0];
+const selectorOf = (line) => line.split('{')[0];
 export const isChrome = (line) => PAGE_CHROME.some((c) => selectorOf(line).includes(c));
 export const isKit = (line) => KIT_SELECTORS.some((w) => selectorOf(line).includes(w));
 

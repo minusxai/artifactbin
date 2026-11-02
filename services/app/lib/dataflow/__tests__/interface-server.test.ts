@@ -8,13 +8,8 @@ import type { RunInput, SqlService } from '@artifactbin/contracts';
 import { compiledSource } from '@/test/helpers/compiled';
 import { DataflowResultError, evaluateDataflow, evaluateDataflowMany, type CompiledDataflow } from '..';
 import {
-  bindParameters, compileWithLoader, DATA_SYNTAX_META, datasetSqlParams, hasCurrentDataSyntax, refId, validateRecipeUse,
-  validateVizAgainstColumns, writeRefusal,
+  bindParameters, datasetSqlParams,
 } from '../server';
-import { findBrokenEmbeds } from '../references';
-import { parseJsx, type JsxElement } from '@/lib/jsx';
-import { EMPTY_DATAFLOW, type Dataflow } from '..';
-import { parseDeclaration } from '../dataflow';
 
 describe('the $name lexer', () => {
   it('binds each $name outside strings and comments', () => {
@@ -34,102 +29,6 @@ describe('the $name lexer', () => {
   it('datasetSqlParams lists names once, in first-appearance order', () => {
     expect(datasetSqlParams('select $b, $a, $b from t')).toEqual(['b', 'a']);
     expect(datasetSqlParams("select '$x' -- $y")).toEqual([]);
-  });
-});
-
-describe('references and write refusals', () => {
-  it('refId reads an exact reference id', () => {
-    expect(refId('ref:Abc123')).toBe('Abc123');
-    for (const v of ['ref:ab', 'ref:Abc123/x', 'Abc123', null, 7, undefined, 'ref:Abcdefghijklm']) expect(refId(v), String(v)).toBeNull();
-  });
-
-  it('writeRefusal: own writable datasets pass; folders, others and read-only ones are refused by name', () => {
-    expect(writeRefusal({ id: 'D1', format: 'dataset', owned: true, access: 'readwrite' } as never)).toBeNull();
-    expect(writeRefusal({ id: 'D1', format: 'folder', owned: true, access: 'readwrite' } as never)).toMatch(/not yours to write/);
-    expect(writeRefusal({ id: 'D1', format: 'dataset', owned: false, access: 'readwrite' } as never)).toMatch(/not yours to write/);
-    expect(writeRefusal({ id: 'D1', format: 'dataset', owned: true, access: 'read' } as never)).toMatch(/ref:D1 is read-only/);
-    expect(writeRefusal({ id: 'D1', format: 'dataset', owned: false, access: 'read', datasetPolicy: { version: 2 } } as never)).toBeNull();
-  });
-});
-
-describe('recipe and encoding checks', () => {
-  const recipe = { bindings: [
-    { name: 'x', accepts: ['temporal'] }, { name: 'y', accepts: ['quantitative'] }, { name: 'color', accepts: ['nominal'], optional: true },
-  ] } as never;
-  const columns = [{ name: 'day', type: 'date' }, { name: 'total', type: 'number' }, { name: 'label', type: 'string' }] as never;
-
-  it('accepts a fully bound recipe, and skips column checks without columns', () => {
-    expect(validateRecipeUse({ bindings: { x: 'day', y: 'total' } }, recipe, columns, 'r')).toEqual([]);
-    expect(validateRecipeUse({ bindings: { x: 'nope', y: 'gone' } }, recipe, null, 'r')).toEqual([]);
-  });
-
-  it('names an unbound slot, an array on a single slot, an unknown slot, a missing column and a wrong kind', () => {
-    const errors = validateRecipeUse({ bindings: { y: ['total'], extra: 'day', color: 'missing' } }, recipe, columns, 'minusx/trend@1');
-    expect(errors).toEqual(expect.arrayContaining([
-      'recipe minusx/trend@1 slot "x" is not bound',
-      expect.stringContaining('slot "y" takes a single column, not an array'),
-      'recipe minusx/trend@1 has no slot "extra"',
-      expect.stringContaining('binds "missing" — not a dataset column'),
-    ]));
-    expect(validateRecipeUse({ bindings: { x: 'label', y: 'total' } }, recipe, columns, 'r')[0]).toMatch(/accepts temporal but "label" is nominal/);
-  });
-
-  it('validateVizAgainstColumns checks vega encodings only, and skips transforms', () => {
-    const spec = { mark: 'bar', encoding: { x: { field: 'day' }, y: { field: 'nope' } } };
-    expect(validateVizAgainstColumns({ kind: 'vega-lite', spec }, [{ name: 'day' }], '$q')).toEqual(['encoding field "nope" is not a column of $q (columns: day)']);
-    expect(validateVizAgainstColumns({ kind: 'vega-lite', spec }, [{ name: 'day' }, { name: 'nope' }], '$q')).toEqual([]);
-    expect(validateVizAgainstColumns({ kind: 'recipe', spec }, [], '$q')).toEqual([]);
-    expect(validateVizAgainstColumns({ kind: 'vega-lite' }, [], '$q')).toEqual([]);
-    expect(validateVizAgainstColumns({ kind: 'vega-lite', spec: { ...spec, transform: [{ calculate: '1', as: 'nope' }] } }, [{ name: 'day' }], '$q')).toEqual([]);
-  });
-});
-
-describe('findBrokenEmbeds', () => {
-  it('names an embed missing the prop that carries its data, and an unknown aggregate', () => {
-    const errors = findBrokenEmbeds('<Chart source="ref:Abc123" question="x" /><Number data="$q" agg="mean" />');
-    expect(errors.some((e) => e.tag === 'Chart')).toBe(true);
-    expect(errors.find((e) => e.attr === 'agg')?.message).toMatch(/^<Number agg>: expected one of .*"mean" is avg/);
-  });
-
-  it('answers nothing for sound or unparseable source', () => {
-    expect(findBrokenEmbeds('<Cell data="$q" agg="sum" />')).toEqual([]);
-    expect(findBrokenEmbeds('<p>no embeds</p>')).toEqual([]);
-    expect(findBrokenEmbeds('<Chart')).toEqual([]);
-  });
-});
-
-describe('the data-syntax marker', () => {
-  it('is current only for exactly the marker the write merges in', () => {
-    expect(hasCurrentDataSyntax(DATA_SYNTAX_META)).toBe(true);
-    expect(hasCurrentDataSyntax({ ...DATA_SYNTAX_META, other: 1 })).toBe(true);
-    expect(hasCurrentDataSyntax(JSON.parse(JSON.stringify(DATA_SYNTAX_META)))).toBe(true);
-    for (const meta of [null, undefined, {}, { dataSyntax: 1 }, { dataSyntax: String(DATA_SYNTAX_META.dataSyntax) }, 'x']) {
-      expect(hasCurrentDataSyntax(meta), JSON.stringify(meta)).toBe(false);
-    }
-  });
-});
-
-/** A Helmet's declarations, read with this module's own grammar (lib/document's split is above this module). */
-const declarations = (helmet: string): Dataflow => {
-  const parsed = parseJsx(`<Helmet>${helmet}</Helmet>`);
-  if (!parsed.ok) throw new Error(parsed.error);
-  const flow: Dataflow = { ...EMPTY_DATAFLOW, imports: [], values: [], queries: [], mutations: [] };
-  for (const child of (parsed.nodes[0] as JsxElement).children) {
-    const d = child.type === 'element' ? parseDeclaration(child) : null;
-    if (d && 'kind' in d) (flow[({ import: 'imports', value: 'values', query: 'queries', mutation: 'mutations' } as const)[d.kind as 'import']] as unknown[]).push(d.decl);
-  }
-  return flow;
-};
-
-describe('compileWithLoader', () => {
-  it('compiles with nothing but the loader, and names an import the loader cannot find', async () => {
-    const flow = declarations('<Import name="b" src="ref:BookRows1" /><Query name="q">{`select id from b.rows`}</Query>');
-    const load = vi.fn(async (ref: string) => ref === 'BookRows1' ? { kind: 'dataset' as const, tables: [{ name: 'rows', columns: [{ name: 'id', type: 'number' as const }] }] } : null);
-    const ok = await compileWithLoader(flow, load);
-    expect(ok.ok && ok.compiled.queries[0]?.columns).toEqual([{ name: 'id', type: 'number' }]);
-    expect(load).toHaveBeenCalledWith('BookRows1');
-    const missing = await compileWithLoader(flow, async () => null);
-    expect(missing.ok).toBe(false);
   });
 });
 

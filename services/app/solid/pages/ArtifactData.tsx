@@ -17,7 +17,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } f
 import { type ArtifactRole, canEdit as canEditRole, canGovern } from '@artifactbin/contracts';
 import type { DatasetCatalog } from '@/lib/datasets';
 import { datasetQuerySnippet } from '@/lib/datasets/dataset-usage';
-import { formatFileSize } from '@/lib/islands/file-display';
+import { formatFileSize } from '@/lib/ui-runtime/file-display';
 import { rowTitle } from '@/lib/document/display-title';
 import type { ReaderForkedFrom } from '@/lib/document-serving';
 import { createHttpBackend } from '@/lib/artifact-backend/http';

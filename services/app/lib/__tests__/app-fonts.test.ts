@@ -5,8 +5,7 @@ import path from 'node:path';
 import type { RolldownOutput } from 'rolldown';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
-import { getStoryFontCss } from '@/lib/story-design';
-import { STORY_THEMES } from '@/lib/story-design/story-themes';
+import {storyFontFaceCss,STORY_FAMILY_ASSETS} from '@/lib/html-systems';
 
 interface Built { css: string; assets: Map<string, Uint8Array> }
 let built: Promise<Built> | undefined;
@@ -94,7 +93,7 @@ describe('the app stylesheet', () => {
  * the property is: one URL per file, and one file per face.
  */
 describe('the shell and the story name one file per face', () => {
-  const storyCss = () => [getStoryFontCss('neutral'), ...STORY_THEMES.map((t) => getStoryFontCss(t.name))].join('\n');
+  const storyCss = () => storyFontFaceCss(Object.values(STORY_FAMILY_ASSETS).flat());
 
   it('the shell names its faces at /fonts — the content-addressed files the story is served', async () => {
     const shell = facesOf(await appStylesheet(), 'shell');

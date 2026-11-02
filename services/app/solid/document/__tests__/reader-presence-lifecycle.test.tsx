@@ -4,7 +4,7 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {waitFor} from '@testing-library/dom';
 import {render} from '../../__tests__/helpers';
 import {createReaderPresence} from '../create-reader-presence';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import type {DocumentRuntimeRef} from '@/lib/html-reader/document-endpoint';
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 it('hides on pagehide and resumes a mounted session on BFCache pageshow',async()=>{
  let disconnected=0;
