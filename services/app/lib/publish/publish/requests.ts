@@ -3,10 +3,10 @@ import {preparePublicationBundle} from './bundle';
 import { getSharingFor, durableMutation, type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, createArtifact, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, refLoaderForActor, replaceArtifactFor, setMetadataFor } from '@/lib/artifacts';
 import { ownsArtifact, writerFor } from '@/lib/artifact-access';
 import { committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire } from '@/lib/artifact-wire';
-import {htmlAssetLinks, htmlBackendNames, htmlPageDeclarations} from '@/lib/html-page';
+import {htmlAssetLinks, htmlBackendNames, htmlPageDeclarations, resolveDatasetApis} from '@/lib/html-page';
 import { trackEvent } from '@/lib/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
-import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError,pageDatasetRoots} from '@/lib/dataset-graphql';
 import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
@@ -34,16 +34,36 @@ async function updateBundleDependency(actor:TokenHoldingActor,base:string,id:str
  });return json(saved.body,saved.status);
 }
 
-async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor,previous:readonly HtmlPageLink[]=[]):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
  if(typeof body.html!=='string')return undefined;
  try{
-  const {datasets}=htmlPageDeclarations(body.html);
-  await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
+  const {backends,datasets:declared}=htmlPageDeclarations(body.html);
+  await Promise.all(declared.map(binding=>authorizeDatasetBinding(actor,binding)));
+  // The API each link mounts, as the save will record it (explicit, inherited from the head, else the generated API).
+  const datasets=resolveDatasetApis(declared,previous);
+  const collision=await graphqlRootCollision(actor,backends,datasets);
+  if(collision)return json({error:'graphql_root_collision',details:[collision]},400);
   return datasets;
  }catch(error){
   if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
   return json({error:'invalid_dataset_binding'},400);
  }
+}
+
+/**
+ * A generated-API link mounts its roots flat at the top of the page schema: one equal to another link's name or to
+ * another link's generated root or type refuses the page, naming both links.
+ */
+async function graphqlRootCollision(actor:AccessActor,backends:readonly string[],datasets:readonly HtmlDatasetLink[]):Promise<string|null>{
+ const owner=new Map<string,string>([...backends,...datasets.map(link=>link.name)].map(name=>[name,name]));
+ for(const link of datasets.filter(link=>link.api==='hasura')){
+  for(const name of await pageDatasetRoots(actor,link)){
+   const other=owner.get(name);
+   if(other!==undefined&&!(other===link.name&&name===link.name))return `link "${link.name}" generates ${name}, which link "${other}" also names; rename one link`;
+   owner.set(name,link.name);
+  }
+ }
+ return null;
 }
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
@@ -206,7 +226,7 @@ export async function replaceArtifactWithBody(
   if (expected.expectedVersion !== undefined && expected.expectedVersion !== current.version || expected.expectedState !== undefined && expected.expectedState !== artifactState(current)) {
     return json({error:expected.expectedVersion !== undefined && expected.expectedVersion !== current.version?'version_conflict':'state_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
   }
-  const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
+  const htmlDatasets=await prepareHtmlDatasets(body,owner,(current.meta.htmlLinks??[]) as HtmlPageLink[]);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);

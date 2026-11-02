@@ -116,7 +116,9 @@ describe('installable shared skill folder',()=>{
    } finally {await preview.close();await server.close();}
    const project=path.join(dir,'project');mkdirSync(project);
    writeFileSync(path.join(project,'sales.csv'),'amount\n2\n');
-   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Local data</h1>');
+   // index.html keeps the generic namespace (data-af-api="legacy"); generated.html previews the generated API, a new link's default.
+   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" data-af-api="legacy" href="./sales.csv"><h1>Local data</h1>');
+   writeFileSync(path.join(project,'generated.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Generated API</h1>');
    const local=await startPreview({root:project,revisionIntervalMs:0});
    try {
     const html=await (await fetch(local.url)).text();
@@ -132,6 +134,15 @@ describe('installable shared skill folder',()=>{
     const exported=await (await fetch(endpoint+'/export/sales')).json();expect(exported.tables[0].rows).toHaveLength(2);
     expect(readFileSync(path.join(project,'sales.csv'),'utf8')).toBe('amount\n2\n');
     expect((await fetch(endpoint+'/export/other')).status).toBe(404);
+    const generated=JSON.parse((await (await fetch(new URL('generated.html',local.url))).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+    expect(generated.datasets).toEqual(['sales']);expect(generated.localPreview.schema.sdl).toContain('insert_sales_one');
+    const flat=new URL(generated.localPreview.endpoint,local.url);
+    const run=async(query:string,key?:string)=>await (await fetch(flat,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json',...(key?{'idempotency-key':key}:{})},body:JSON.stringify({query})})).json();
+    const added=await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789');
+    expect(added.data.insert_sales_one.amount).toBe(7);expect(added.extensions.outcomes).toEqual({insert_sales_one:'committed'});
+    expect(await run('mutation { insert_sales_one(object: {amount: 7}) { _id amount } }','preview_key_0123456789')).toEqual(added);
+    expect((await run('{ sales_aggregate { aggregate { count sum { amount } } } }')).data).toEqual({sales_aggregate:{aggregate:{count:2,sum:{amount:9}}}});
+    expect((await (await fetch(flat+'/export/sales')).json()).tables[0].rows).toEqual([{amount:2},{amount:7}]);
     const fresh=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
     expect(fresh.localPreview.endpoint).toBe(config.localPreview.endpoint);
     writeFileSync(path.join(project,'sales.csv'),'amount\n4\n');

@@ -6,6 +6,12 @@
  * mounts the file's roots as `Query.<name>` / `Mutation.<name>`. The composed
  * SDL is self-describing: each namespace field carries
  * `@backend(file, version)`, so execution needs nothing but the SDL.
+ *
+ * A dataset link on the generated API (`dataset-hasura` source) is the
+ * exception: its roots mount flat on Query/Mutation with
+ * `@dataset(link, file, version, table, field)`, its types keep their names
+ * (the shared prelude once), and they execute through the request's dataset
+ * port (lib/dataset-graphql `loadPageDatasets`), a mutation whole.
  */
 import {
   execute,
@@ -22,6 +28,10 @@ import {
   validate,
   visit,
   type DocumentNode,
+  type FieldNode,
+  type FragmentDefinitionNode,
+  type OperationDefinitionNode,
+  type SelectionSetNode,
   type GraphQLDirective,
   type GraphQLField,
   type GraphQLFieldResolver,
@@ -52,6 +62,9 @@ const SHARED_TYPES = new Set([
 ]);
 const BACKEND_DIRECTIVE =
   "directive @backend(file: String!, version: String!) on FIELD_DEFINITION\n";
+/** A generated dataset root's mount (the counterpart of @backend): its link, dataset, version, table root and kind. */
+const DATASET_DIRECTIVE =
+  "directive @dataset(link: String!, file: String!, version: String!, table: String!, field: String!) on FIELD_DEFINITION\n";
 /**
  * Legacy uppercase `@auth(role:)` values keep their original meaning for immutable published code:
  * `VIEWER` was any reader of the page (a guest on a public link included), so it is `anonymous`.
@@ -114,6 +127,9 @@ interface Compiled {
   query: Map<string, Mounted>;
   mutation: Map<string, Mounted>;
   namespaces: string[];
+  /** Generated dataset roots (flat), by field name → their link. */
+  datasetQuery: Map<string, string>;
+  datasetMutation: Map<string, string>;
 }
 const compiledSchemas = new WeakMap<PageSchema, Compiled>();
 
@@ -165,7 +181,9 @@ export function composePageSchema(
   const parts = [BACKEND_PLATFORM_SDL, BACKEND_DIRECTIVE];
   const query: string[] = [];
   const mutation: string[] = [];
+  const generated = sources.filter((source) => source?.kind === "dataset-hasura");
   for (const source of sources) {
+    if (source?.kind === "dataset-hasura") continue;
     const name = source?.name;
     const label = JSON.stringify(String(name));
     if (
@@ -207,6 +225,10 @@ export function composePageSchema(
     if (fileSchema.getMutationType())
       mutation.push(`  ${name}: ${name}${SEPARATOR}Mutation! ${mount}`);
   }
+  if (generated.length) {
+    parts.splice(2, 0, DATASET_DIRECTIVE);
+    mountDatasets(generated, names, owners, parts, query, mutation);
+  }
   // A schema needs a Query type; `_` stands in when no backend has queries.
   parts.push(
     `type Query {\n${query.length ? query.join("\n") : "  _: Boolean"}\n}`,
@@ -221,6 +243,71 @@ export function composePageSchema(
   });
   compiledSchemas.set(schema, compile(sdl));
   return schema;
+}
+
+/**
+ * Mount the generated dataset sources flat: each root on Query/Mutation, nullable (one failure stays local), with
+ * `@dataset`; each type once under its own name (the shared prelude repeats identically across links). A root
+ * equal to a backend or legacy link's name, or another link's root, refuses the page: `graphql_root_collision`.
+ */
+function mountDatasets(
+  sources: readonly NamespaceSource[],
+  names: string[],
+  owners: Map<string, string>,
+  parts: string[],
+  query: string[],
+  mutation: string[],
+): void {
+  const rootOwner = new Map<string, string>(names.map((name) => [name, name]));
+  const types = new Map<string, string>();
+  for (const source of sources) {
+    const name = source.name;
+    const label = JSON.stringify(String(name));
+    if (typeof name !== "string" || !GRAPHQL_NAME.test(name) || name.startsWith(SEPARATOR))
+      throw Error(`Dataset name ${label} is not a GraphQL name`);
+    if (names.includes(name)) throw Error(`Backend name ${label} is used more than once`);
+    if (typeof source.fileId !== "string" || !FILE_ID_PATTERN.test(source.fileId))
+      throw Error(`Dataset ${name} has an invalid file ID`);
+    if (typeof source.version !== "string" || !source.version)
+      throw Error(`Dataset ${name} has no version`);
+    names.push(name);
+    let document: DocumentNode;
+    try { document = parse(source.typeDefs); } catch (error) {
+      throw Error(`Dataset ${name} has an invalid schema: ${messageOf(error)}`);
+    }
+    // Roots first, so a collision names the link that owns the name.
+    const isRoot = (definition: DocumentNode["definitions"][number]) => definition.kind === Kind.OBJECT_TYPE_DEFINITION && (definition.name.value === "Query" || definition.name.value === "Mutation");
+    for (const definition of [...document.definitions.filter(isRoot), ...document.definitions.filter((d) => !isRoot(d))]) {
+      if (definition.kind === Kind.OBJECT_TYPE_DEFINITION && (definition.name.value === "Query" || definition.name.value === "Mutation")) {
+        for (const field of definition.fields ?? []) {
+          const root = field.name.value;
+          if (root === "no_queries_available") continue;
+          const other = rootOwner.get(root);
+          if (other !== undefined)
+            throw Error(`graphql_root_collision: link ${name} generates ${root}, which link ${other} also names`);
+          rootOwner.set(root, name);
+          const meta = source.roots?.[root];
+          const mount = `@dataset(link: ${JSON.stringify(name)}, file: ${JSON.stringify(source.fileId)}, version: ${JSON.stringify(source.version)}, table: ${JSON.stringify(meta?.table ?? root)}, field: ${JSON.stringify(meta?.field ?? root)})`;
+          const nullable = field.type.kind === Kind.NON_NULL_TYPE ? { ...field, type: field.type.type } : field;
+          (definition.name.value === "Query" ? query : mutation).push(`  ${print(nullable)} ${mount}`);
+        }
+        continue;
+      }
+      if (!TYPE_DEFINITIONS.has(definition.kind) || !("name" in definition) || !definition.name)
+        throw Error(`Dataset ${name} has an invalid schema`);
+      const type = definition.name.value;
+      const printed = print(definition);
+      const prior = types.get(type);
+      if (prior === printed) continue;
+      const claimed = rootOwner.get(type);
+      if (claimed !== undefined && claimed !== name)
+        throw Error(`graphql_root_collision: link ${name} generates ${type}, which link ${claimed} also names`);
+      if (prior !== undefined || owners.has(type) || SHARED_TYPES.has(type))
+        throw Error(`graphql_root_collision: link ${name} generates the type ${type}, which another link also names`);
+      types.set(type, printed);
+      parts.push(printed);
+    }
+  }
 }
 
 function compile(sdl: string): Compiled {
@@ -250,7 +337,17 @@ function compile(sdl: string): Compiled {
   const query = mounts(schema.getQueryType());
   const mutation = mounts(schema.getMutationType());
   const namespaces = [...new Set([...query.keys(), ...mutation.keys()])];
-  return { schema, auth, query, mutation, namespaces };
+  const dataset = schema.getDirective("dataset");
+  const datasetMounts = (root: GraphQLObjectType | null | undefined) => {
+    const mounted = new Map<string, string>();
+    if (!dataset) return mounted;
+    for (const field of Object.values(root?.getFields() ?? {})) {
+      const meta = field.astNode ? getDirectiveValues(dataset, field.astNode) : undefined;
+      if (meta) mounted.set(field.name, String(meta.link));
+    }
+    return mounted;
+  };
+  return { schema, auth, query, mutation, namespaces, datasetQuery: datasetMounts(schema.getQueryType()), datasetMutation: datasetMounts(schema.getMutationType()) };
 }
 
 const json = <T>(value: unknown): T =>
@@ -434,6 +531,20 @@ export async function executePageOperation(
   for (const [name, mounted] of roots)
     rootValue[name] = namespaceValue(mounted);
 
+  // A mutation naming a generated dataset root goes whole through the dataset door: one dataset, one atomic step.
+  const touched = mutating ? topLevelFields(document, operation).filter((field) => field.name.value !== "__typename") : [];
+  if (touched.some((field) => compiled.datasetMutation.has(field.name.value))) {
+    if (!touched.every((field) => compiled.datasetMutation.has(field.name.value)))
+      return failure("A mutation that writes a linked dataset names only that dataset's fields");
+    return datasetMutation(options, touched.map((field) => (field.alias ?? field.name).value));
+  }
+  for (const name of mutating ? [] : compiled.datasetQuery.keys())
+    rootValue[name] = (args: unknown, context: unknown, info: unknown) => {
+      if (!options.datasets) throw new GraphQLError("The linked dataset is unavailable");
+      const resolve = options.datasets.queryRoots()[name];
+      return typeof resolve === "function" ? resolve(args, context, info) : null;
+    };
+
   // Only own data properties (and our own resolver functions) are read; never inherited ones.
   const fieldResolver: GraphQLFieldResolver<unknown, unknown> = (
     source,
@@ -493,6 +604,43 @@ export async function executePageOperation(
   const response: RemoteResponse = { data };
   if (errors?.length) response.errors = errors;
   if (mutating) response.extensions = { outcomes };
+  return response;
+}
+
+/** The operation's top-level fields, through inline fragments and fragment spreads. */
+function topLevelFields(document: DocumentNode, operation: OperationDefinitionNode): FieldNode[] {
+  const fragments = new Map(document.definitions.filter((node): node is FragmentDefinitionNode => node.kind === Kind.FRAGMENT_DEFINITION).map((node) => [node.name.value, node]));
+  const walk = (set: SelectionSetNode, seen: ReadonlySet<string>): FieldNode[] => set.selections.flatMap((node) => {
+    if (node.kind === Kind.FIELD) return [node];
+    if (node.kind === Kind.INLINE_FRAGMENT) return walk(node.selectionSet, seen);
+    const fragment = seen.has(node.name.value) ? undefined : fragments.get(node.name.value);
+    return fragment ? walk(fragment.selectionSet, new Set([...seen, node.name.value])) : [];
+  });
+  return walk(operation.selectionSet, new Set());
+}
+
+/**
+ * A mutation over generated dataset roots: the dataset door writes it as one step (validated, judged under the
+ * caller's rules, idempotent under the request's key). Every field shares the step's outcome: committed when it
+ * applied, unknown when its reply was lost, rejected otherwise.
+ */
+async function datasetMutation(options: ExecuteOptions, keys: readonly string[]): Promise<RemoteResponse> {
+  if (!options.datasets) return failure("The linked dataset is unavailable");
+  const reply = await options.datasets.mutate(options.request);
+  const errors: RemoteError[] = (reply.errors ?? []).map((e) => ({
+    message: e.message,
+    ...(e.path ? { path: [...e.path] } : {}),
+    ...(FIELD_ERROR_CODE.test(e.extensions.code) ? { extensions: { code: e.extensions.code } } : {}),
+  }));
+  let data = (reply.data === undefined ? null : json(reply.data)) as AfJsonObject | null;
+  const outcome: Outcome = errors.some((e) => e.extensions?.code === "outcome_unknown") ? "unknown"
+    : !errors.length || (data && Object.values(data).some((value) => value !== null)) ? "committed" : "rejected";
+  if (data && new TextEncoder().encode(JSON.stringify(data)).length > PAGE_OPERATION_RESULT_BYTES) {
+    data = null;
+    errors.splice(0, errors.length, { message: "The selected result is larger than 4 MiB" });
+  }
+  const response: RemoteResponse = { data, extensions: { outcomes: Object.fromEntries(keys.map((key) => [key, outcome])) } };
+  if (errors.length) response.errors = errors;
   return response;
 }
 

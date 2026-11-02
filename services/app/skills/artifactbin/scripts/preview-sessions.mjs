@@ -29,7 +29,7 @@ const origin='http://preview.invalid',documentUrl=new URL(pathname,origin),{link
     previewDatasetLinks(source);
 let base;try{base=new URL(baseHref??documentUrl.href,documentUrl);}catch{throw failure(400,
     'Invalid local preview base URL');}
-  const grouped=new Map();
+  const grouped=new Map(),legacyNames=new Set();
   for(const link of links){
    if(!link.href||/^[a-z][a-z0-9+.-]*:/i.test(link.href)||link.href.startsWith('//'))continue;
    const url=new URL(link.href,base);if(url.origin!==origin)continue;
@@ -40,18 +40,22 @@ if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(link.name))throw failure(400,
    const table=link.table??filename.replace(/\.(csv|json)$/i,'');
 const files=grouped.get(link.name)??[];files.push({path,table,...(link.schema?{schema:link.schema}:{
      })});grouped.set(link.name,files);
+   // data-af-api="legacy" keeps the generic namespace; otherwise the generated API, as publishing a new link.
+   if(link.api==='legacy')legacyNames.add(link.name);
   }
   if(!grouped.size)return undefined;
 if(grouped.size>16)throw failure(413,
     'Preview supports at most 16 local dataset namespaces per page.');
-  const declarations=[...grouped].map(([name,files])=>({name,files}));
+  const declarations=[...grouped].map(([name,files])=>({name,files,api:legacyNames.has(name)?
+    'legacy':'hasura'}));
+  const datasets=declarations.filter(d=>d.api==='hasura').map(d=>d.name);
 const key=createHash('sha256').update(pathname).update('\0').update(revision).update('\0').update(
     JSON.stringify(declarations)).digest('hex');
   prune();for(const [id,session] of sessions){
 if(session.key===key){session.expires=now()+ttlMs;return {id,schema:session.adapter.schema,names:[
-     ...session.names]};}
+     ...session.names],datasets};}
 if(session.pathname===pathname&&(session.dirty||session.active)){session.conflict=true;return {id,
-     schema:session.adapter.schema,names:[...session.names],conflict:true};}
+     schema:session.adapter.schema,names:[...session.names],datasets,conflict:true};}
   }
   if(pending.has(key))return pending.get(key);
   if(pending.size>=4)throw failure(429,'Too many local dataset sessions are loading; retry '+
@@ -87,7 +91,7 @@ const adapter=await createLocalPreviewDatasets(root,declarations,{readText:async
    for(const session of sessions.values())if(session.pathname===pathname)session.obsolete=true;
 sessions.set(id,{adapter,key,pathname,expires:now()+ttlMs,names:new Set(grouped.keys()),bytes,
      operations:0,active:0,dirty:false,conflict:false});
-   return {id,schema:adapter.schema,names:[...grouped.keys()]};
+   return {id,schema:adapter.schema,names:[...grouped.keys()],datasets};
   });
 sequence=work.catch(()=>{});pending.set(key,work);try{return await work;}finally{pending.delete(
     key);}

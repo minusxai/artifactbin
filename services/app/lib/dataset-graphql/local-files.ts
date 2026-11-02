@@ -27,6 +27,10 @@ async function boundedText(target:string):Promise<string>{
 export interface LocalDatasetFile {path:string;table:string;schema?:string;columns?:DatasetColumn[]}
 /** Only explicitly declared files under root are admitted; symlinks cannot escape root. */
 export async function loadLocalDataset(root:string,namespace:string,files:readonly LocalDatasetFile[],options:LocalDatasetFileOptions={}):Promise<LocalDataset>{
+ return createLocalDataset(namespace,await loadLocalTables(root,files,options));
+}
+/** The declared files' tables (rows coerced to their columns), for either local engine. */
+export async function loadLocalTables(root:string,files:readonly LocalDatasetFile[],options:LocalDatasetFileOptions={}):Promise<LocalDatasetTable[]>{
  if(files.length>64)throw new Error('local_dataset_too_many_files');
  const base=await realpath(root),tables:LocalDatasetTable[]=[];let totalBytes=0;
  for(const file of files){
@@ -47,5 +51,5 @@ export async function loadLocalDataset(root:string,namespace:string,files:readon
  tables.push({schema:file.schema??'main',name:file.table,columns,rows});
  }
  if(new Set(tables.map(t=>JSON.stringify([t.schema,t.name]))).size!==tables.length)throw new Error('local_dataset_duplicate_table');
- return createLocalDataset(namespace,tables);
+ return tables;
 }

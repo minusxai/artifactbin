@@ -1,6 +1,6 @@
 import { escapeSourceAttribute } from '@artifactbin/utils/escape';
 import {isRuntimeCoreSrc,RUNTIME_CORE_PATH} from './core-script.ts';
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source.ts';
@@ -129,8 +129,15 @@ function carryForwardIds(previous:Parsed,next:Parsed,taken:ReadonlySet<string>):
  return carried;
 }
 /** Namespaces are declarations, never inferred from arbitrary network URLs. */
+/**
+ * Field shapes only the legacy dataset API has (`schema{revision|tables…}`, `rows(tableId…)`, `writeRows(…)`).
+ * A new link on a page written against them keeps that API: installed skills that predate the generated API (and
+ * stale manual installs) still write these queries and name no `data-af-api`.
+ */
+const LEGACY_DATASET_QUERY=/\bschema\s*\{\s*(?:revision|tables)\b|\brows\s*\(\s*tableId\b|\bwriteRows\s*\(/;
 export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const names=new Set<string>();
+ const legacyQueries=LEGACY_DATASET_QUERY.test(html);
  for(const element of allElements(html).all){
   if(element.tagName!=='link')continue;
   const rel=(attribute(element,'rel')??'').split(/\s+/);
@@ -147,13 +154,29 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
   if(!match)throw new Error('Dataset href must name an artifact as ref:<id>');
   const mode=attribute(element,'data-af-mode')??'live';
   const revision=attribute(element,'data-af-revision');
-  if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'live'});
-  else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
+  // data-af-api names the dataset API explicitly; absent, publishing decides (lib/artifacts resolveDatasetApis).
+  const declaredApi=attribute(element,'data-af-api');
+  if(declaredApi!==null&&declaredApi!=='hasura'&&declaredApi!=='legacy')throw new Error('Dataset link data-af-api must be hasura or legacy');
+  const api=declaredApi!==null?{api:declaredApi as 'hasura'|'legacy'}:legacyQueries?{api:'legacy' as const}:{};
+  if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,...api,mode:'live'});
+  else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,...api,mode:'pinned',revision});
   else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
  return {backends,datasets};
 }
 export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
+/**
+ * THE API EACH SAVED DATASET LINK MOUNTS. An explicit `data-af-api` wins. Otherwise a link the previous head saved
+ * under the same name and dataset keeps its API (a stored link without one is legacy), so read → edit → publish never
+ * silently moves a page to another API; any other link is new and gets the generated API. Every result names it.
+ */
+export function resolveDatasetApis(declared:readonly HtmlDatasetLink[],previous:readonly HtmlPageLink[]=[]):HtmlDatasetLink[]{
+ return declared.map(link=>{
+  if(link.api)return link;
+  const prior=previous.find((p):p is HtmlDatasetLink=>p.kind==='dataset'&&p.name===link.name&&p.datasetId===link.datasetId);
+  return {...link,api:prior?(prior.api==='hasura'?'hasura':'legacy'):'hasura'};
+ });
+}
 
 /** The native head supplies listing and share metadata; body content is never executed. */
 export function htmlPageMetadata(html:string):HtmlPageMetadata{

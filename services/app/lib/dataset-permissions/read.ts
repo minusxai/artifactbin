@@ -41,6 +41,8 @@ export interface DatasetReadOptions {
   throughPage?: boolean;
   /** The saved document carrying the read (registered queries, notifications, images); implies `throughPage`. */
   document?: ReadRow;
+  /** The page whose GraphQL carries the read (its `X-Hasura-Page-Id`); implies `throughPage`. */
+  pageId?: string;
   /** Decide inside this transaction, with its facts. */
   tx?: Queryable;
   facts?: AccessFacts;
@@ -88,13 +90,13 @@ function admitted(row: DatasetReadRow, role: DatasetRole, tables: TableSelect[],
 export async function datasetReadAccess(row: DatasetReadRow, actor: AccessActor, options: DatasetReadOptions = {}): Promise<DatasetReadDecision> {
   if (row.format !== 'dataset') return { allowed: false, role: null };
   const facts = options.facts ?? liveAccessFacts(actor, options.tx);
-  const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.document });
+  const role = await datasetRole(row, actor, { facts, throughPage: !!options.throughPage || !!options.document || !!options.pageId });
   if (!role) return { allowed: false, role };
   const all = tablesOf(row).map((t) => ({ ...t, permission: READ_ALL }));
   const session: Record<string, Scalar> = {
     'x-hasura-role': role,
     ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
-    ...(options.document ? { 'x-hasura-page-id': options.document.id } : {}),
+    ...(options.document ? { 'x-hasura-page-id': options.document.id } : options.pageId ? { 'x-hasura-page-id': options.pageId } : {}),
   };
   if (role === 'owner' || role === 'editor') return admitted(row, role, all, session, true);
   const read = permissionsOf(row);

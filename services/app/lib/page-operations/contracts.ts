@@ -2,7 +2,15 @@ import type { PageCaller, PageSchema, PageOperationRequest, PageOperationRespons
 /** Maximum serialized selected GraphQL data; independent of schema, variables and backend execution budgets. */
 export const PAGE_OPERATION_RESULT_BYTES = 4 * 1024 * 1024;
 export type RemoteError = NonNullable<PageOperationResponse['errors']>[number];
-export interface ExecuteOptions { schema:PageSchema; request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>; caller:PageCaller; invoke(call:PageResolverFieldCall):Promise<HtmlJson>; signal?:AbortSignal }
+/**
+ * The page's dataset links on the generated API (lib/dataset-graphql `loadPageDatasets`), for this caller and request:
+ * resolvers for their flat query roots, and the door a mutation naming only their roots goes through whole.
+ */
+export interface PageDatasetPort {
+  queryRoots():Record<string,unknown>;
+  mutate(request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>):Promise<{data?:Record<string,unknown>|null;errors?:ReadonlyArray<{message:string;path?:readonly (string|number)[];extensions:{code:string}}>}>;
+}
+export interface ExecuteOptions { schema:PageSchema; request:Pick<PageOperationRequest,'query'|'variables'|'operationName'>; caller:PageCaller; invoke(call:PageResolverFieldCall):Promise<HtmlJson>; signal?:AbortSignal; datasets?:PageDatasetPort }
 export function boundedDetail(text:unknown):string|undefined { if(typeof text!=='string')return; return text.split(/\r?\n/,1)[0]!.replace(/\p{Cc}/gu,' ').trim().slice(0,200).trim()||undefined; }
 export const FIELD_ERROR_CODE = /^[a-z][a-z_]{0,63}$/;
 

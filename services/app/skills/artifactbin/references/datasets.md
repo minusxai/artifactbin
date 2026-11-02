@@ -13,7 +13,7 @@ Create a dataset through the retained artifact API, then link it from the page. 
 Send this JSON to `POST [[ base ]]/api/artifacts` with a durable `Idempotency-Key`; save its returned dataset `id`. `dataset` also accepts an array of row objects. `node scripts/publish.mjs rows.csv --type dataset --title T` does this (`.json`: a bare row array). These are sample figures, not measured results. Page source contains only the dataset reference:
 
 ```html
-<link rel="af-dataset" data-af-name="repairs" href="ref:DATASET_ID" data-af-mode="live">
+<link rel="af-dataset" data-af-name="repairs" data-af-api="legacy" href="ref:DATASET_ID" data-af-mode="live">
 ```
 
 Replace `DATASET_ID` with the returned ID before publication. `data-af-name` is unique across dataset and backend links. `live` is the default: a historical page with a live binding continues reading live data. A pinned binding uses `data-af-mode="pinned" data-af-revision="2"`, where revision is a positive original dataset version. A pinned dataset is read-only. Keep the original dataset’s read/write policy; page readability grants no dataset writes.

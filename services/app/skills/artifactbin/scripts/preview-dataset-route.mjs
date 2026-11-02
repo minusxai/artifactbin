@@ -37,6 +37,9 @@ if(session.operations>=512)return end(429,JSON.stringify({error:
 const request=await readJsonBody(req);const controller=new AbortController();
        const timer=setTimeout(
        ()=>controller.abort(Error('Local operation timed out')),operationTimeoutMs);
+// A mutation's Idempotency-Key replays its local receipt, as the platform's does.
+       const key=req.headers['idempotency-key'];if(typeof key==='string'&&/^[A-Za-z0-9_-]{16,128}$/.test(
+       key))request.idempotencyKey=key;
 try {const result=await session.adapter.execute(request,controller.signal);return end(200,
        JSON.stringify(result));}finally{clearTimeout(timer);}
     }finally{session.active--;await sessions.status(route[1]);}

@@ -36,6 +36,42 @@ describe('HTML page client', () => {
     expect(state.read()).toEqual({ tab: 'all' });
   });
 
+  it('treats a generated-API dataset link\'s flat roots as remote fields and keys their outcomes by root', async () => {
+    const sent: Array<{ query: string; operation: string; idempotencyKey?: string }> = [];
+    const remote: RemotePort = { online: () => true, execute: async (request): ReturnType<RemotePort['execute']> => {
+      sent.push(request);
+      return request.operation === 'query'
+        ? { data: { orders: [{ _id: 'r1' }], orders_aggregate: { aggregate: { count: 1 } } } }
+        : { data: { insert_orders_one: { _id: 'r2' } }, extensions: { outcomes: { insert_orders_one: 'committed' } } };
+    } };
+    const state = createLocalStore({ orders_filter: 'west', ordersheet: 1 });
+    const client = createClient({ backends: ['orders'], datasets: ['orders'], state, remote, idempotencyKey: () => 'key_0123456789abcdef' });
+    const read = await client.query({ query: gql`{ orders_filter ordersheet orders { _id } orders_aggregate { aggregate { count } } }` });
+    // `orders_filter` is a remote root of the generated link; `ordersheet` (no underscore) stays local.
+    expect(read.data).toEqual({ orders_filter: null, ordersheet: 1, orders: [{ _id: 'r1' }], orders_aggregate: { aggregate: { count: 1 } } });
+    expect(sent[0]!.query).toContain('orders_aggregate');
+    const written = await client.mutate({ mutation: gql`mutation { insert_orders_one(object: {}) { _id } }` });
+    expect(written.extensions?.outcomes).toEqual({ insert_orders_one: 'committed' });
+    expect(sent[1]).toMatchObject({ operation: 'mutation', idempotencyKey: 'key_0123456789abcdef' });
+    // A lost reply leaves the root's own outcome unknown (not a child path).
+    remote.execute = async () => { throw new Error('connection lost'); };
+    expect((await client.mutate({ mutation: gql`mutation { delete_orders_by_pk(_id: "r1") { _id } }` })).extensions?.outcomes).toEqual({ delete_orders_by_pk: 'unknown' });
+  });
+
+  it('sends one fresh Idempotency-Key per client.mutate; legacy namespaces keep their shape', async () => {
+    const keys: Array<string | undefined> = [];
+    const remote: RemotePort = { online: () => true, execute: async (request) => { keys.push(request.idempotencyKey); return { data: { inventory: { reserve: 1 } } }; } };
+    const client = createClient({ backends: ['inventory'], state: createLocalStore({ inventory_note: 'x' }), remote });
+    const mutation = gql`mutation { inventory { reserve } }`;
+    await client.mutate({ mutation });
+    await client.mutate({ mutation });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    expect(keys[1]).not.toBe(keys[0]);
+    // Without generated links nothing new is remote: a local field sharing a namespace prefix stays local.
+    expect((await client.query({ query: gql`{ inventory_note }` })).data).toEqual({ inventory_note: 'x' });
+  });
+
   it('does not retry a mutation whose reply was lost; offline sends nothing', async () => {
     let sends = 0;
     const remote: RemotePort = { online: () => true, execute: async () => { sends++; throw new Error('connection lost'); } };

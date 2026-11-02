@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native publication grants read bindings; dataset write authority stays with the dataset. */
 import {expect,it} from 'vitest';
 import {POST as create} from '@/app/api/artifacts/route';
@@ -11,7 +12,7 @@ import {loadDatasetRows} from '@/lib/datasets';
 import {mintAccountToken,request,useAppHarness} from './harness';
 useAppHarness();
 const signal=new AbortController().signal,ctx=(id:string)=>({params:Promise.resolve({id})});
-const html=(id:string,extra='')=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="votes" href="ref:${id}">${extra}</head><body>Votes</body></html>`;
+const html=(id:string,extra='')=>`<!doctype html><html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="votes" href="ref:${id}">${extra}</head><body>Votes</body></html>`;
 async function fixture(access='readwrite'){
  const token=await mintAccountToken('native-mutation-publication'),actor=await requestOrSessionActor(request('/',{token:token.token}));
  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{choice:'ramen',who:'seed'}],access,visibility:'public'}}));expect(made.status).toBe(201);
@@ -22,7 +23,7 @@ async function fixture(access='readwrite'){
 }
 it('persists the native dataset binding without adding page-level write authority',async()=>{
  const f=await fixture(),response=await f.publish();expect(response.status).toBe(201);const row=(await getArtifactById((await response.json()).id))!;
- expect(row.meta.htmlLinks).toEqual([f.binding]);expect((await getArtifactById(f.id))!.version).toBe(1);
+ expect(row.meta.htmlLinks).toEqual([{...f.binding,api:'legacy'}]);expect((await getArtifactById(f.id))!.version).toBe(1);
 });
 it('allows a read-only binding but refuses its dataset write',async()=>{
  const f=await fixture('read');expect((await f.publish()).status).toBe(201);expect((await f.update()).outcome).toBe('rejected');expect((await getArtifactById(f.id))!.version).toBe(1);
@@ -36,7 +37,7 @@ it('never compiles SQL-looking native page text at publication',async()=>{
  expect((await f.publish(body)).status).toBe(201);expect(await getArtifactById(f.id)).toEqual(before);
 });
 it('refuses ambiguous duplicate namespace declarations',async()=>{
- const f=await fixture();expect((await f.publish(html(f.id,`<link rel="af-dataset" data-af-name="votes" href="ref:${f.id}">`))).status).toBe(400);
+ const f=await fixture();expect((await f.publish(html(f.id,`<link rel="af-dataset" data-af-api="legacy" data-af-name="votes" href="ref:${f.id}">`))).status).toBe(400);
 });
 it('refuses publication that references a private dataset the publisher cannot read',async()=>{
  const f=await fixture(),other=await mintAccountToken('native-private-link');

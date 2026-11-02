@@ -3,7 +3,7 @@ import { pageHtml } from "../../fixtures/page-speed/native.mjs";
 import { readDataset } from "./native-dataset-page.mjs";
 export function editableDatasetPageHtml(datasetId) {
   return pageHtml("Editable native dataset", `
-<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}"><h1>Editable native dataset</h1>
+<link rel="af-dataset" data-af-name="data" data-af-api="legacy" href="ref:${datasetId}"><h1>Editable native dataset</h1>
 <button id="discard">Discard drafts and reload</button><output id="receipt" role="status"></output><p id="total"></p>
 <div style="max-width:100%;overflow:auto"><table><thead></thead><tbody></tbody></table></div>`, `
 import {onBackendChange} from '@afbin/apollo';const readDataset=${readDataset.toString()};

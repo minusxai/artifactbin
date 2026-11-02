@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
@@ -33,7 +34,7 @@ describe('retired draft compiler boundary', () => {
 describe('native saved-page dataset queries',()=>{
  async function fixture(visibility='public'){
   const owner=await mintToken('native-query');const ds=await create(owner.token,{dataset:ROWS,visibility});
-  const page=await create(owner.token,{html:`<html><head><link rel="af-dataset" data-af-name="sales" href="ref:${ds.id}"></head><body>Sales</body></html>`,visibility});
+  const page=await create(owner.token,{html:`<html><head><link rel="af-dataset" data-af-api="legacy" data-af-name="sales" href="ref:${ds.id}"></head><body>Sales</body></html>`,visibility});
   const call=async(query:string,variables={},token?:string)=>await(await graphql(request(`/api/artifacts/${page.id}/graphql`,{method:'POST',token,json:{revision:'1',query,variables}}),params({id:page.id}))).json();
   const result=await call('{sales{schema{revision tables{id columns{id label}}}}}',{},owner.token);
   return {owner,call,page,table:result.data.sales.schema.tables[0]};

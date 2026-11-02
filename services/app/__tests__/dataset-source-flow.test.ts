@@ -1,3 +1,4 @@
+// Pages here exercise the frozen generic dataset API: their links opt in with data-af-api="legacy" (new links default to the generated API, Hasura PR 6).
 /** Native dataset namespaces replace JSX Import/Query chains; direct catalog SQL remains separate. */
 import { expect, it } from "vitest";
 import { request, useAppHarness, mintAccountToken } from "./harness";
@@ -24,7 +25,7 @@ async function fixture(dataset: unknown) {
   });
   const page = await publish({
     html: nativeHtml(
-      `<link rel="af-dataset" data-af-name="data" href="ref:${id}"><h1>Dataset</h1>`,
+      `<link rel="af-dataset" data-af-api="legacy" data-af-name="data" href="ref:${id}"><h1>Dataset</h1>`,
     ),
     visibility: "public",
   });
@@ -144,7 +145,7 @@ it("does not admit folder projections as dataset namespaces", async () => {
       token: f.owner.token,
       json: {
         html: nativeHtml(
-          `<link rel="af-dataset" data-af-name="children" href="ref:${folder}"><p>Folder</p>`,
+          `<link rel="af-dataset" data-af-api="legacy" data-af-name="children" href="ref:${folder}"><p>Folder</p>`,
         ),
       },
     }),

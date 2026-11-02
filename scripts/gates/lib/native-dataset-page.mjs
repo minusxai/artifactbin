@@ -22,7 +22,7 @@ export async function readDataset(query) {
   return { revision: schema.revision, table, rows, source };
 }
 export function datasetPageHtml(datasetId, { title = "Live data", mode = "live", revision, writable = true } = {}) {
-  const body = `<link rel="af-dataset" data-af-name="data" href="ref:${datasetId}" data-af-mode="${mode}"${revision ? ` data-af-revision="${revision}"` : ""}>
+  const body = `<link rel="af-dataset" data-af-name="data" data-af-api="legacy" href="ref:${datasetId}" data-af-mode="${mode}"${revision ? ` data-af-revision="${revision}"` : ""}>
 <h1 id="heading">${title}</h1><label>Choice <select id="choice"><option>ramen</option><option>tacos</option><option>salad</option></select></label>
 <button id="vote"${writable ? "" : " disabled"}>Vote</button><button id="refresh">Refresh</button><output id="receipt" role="status"></output><p id="total"></p><p id="source"></p><div id="tally"></div><svg id="chart" role="img" aria-label="Numeric data" viewBox="0 0 500 220"></svg><table><thead></thead><tbody></tbody></table>`;
   return pageHtml(title, body, `import {onBackendChange} from '@afbin/apollo';

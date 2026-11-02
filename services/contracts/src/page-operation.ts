@@ -20,8 +20,17 @@ export interface PageResolverFieldCall {
   reportOutcome?(outcome:Exclude<PageMutationOutcome,'offline'>):void;
 }
 export interface PageResolverInvoker { invoke(call:PageResolverFieldCall):Promise<HtmlJson> }
-/** Schemas are composed with names private to each link, so duplicate backend type names are safe. */
-export interface PageNamespaceSource { name:string; fileId:string; version:string; typeDefs:string }
+/**
+ * Schemas are composed with names private to each link, so duplicate backend type names are safe. A
+ * `dataset-hasura` source (a dataset link on the generated API) is the role's generated SDL instead: its roots
+ * mount flat on Query/Mutation with `@dataset`, its types keep their names (the shared prelude once).
+ */
+export interface PageNamespaceSource {
+  name:string; fileId:string; version:string; typeDefs:string;
+  kind?:'dataset-hasura';
+  /** dataset-hasura: root field → the table root it serves and its kind. */
+  roots?:Readonly<Record<string,{table:string;field:string}>>;
+}
 /** `role` is the caller's page role (`datasetRoleFrom` over the page's sharing); null cannot read the page. */
 export interface PageCaller { pageId:string; subject:string|null; role:DatasetRole|null }
 export interface PageSchema { sdl:string; namespaces:readonly string[] }

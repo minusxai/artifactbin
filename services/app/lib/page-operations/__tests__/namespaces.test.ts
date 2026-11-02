@@ -112,3 +112,45 @@ describe('resolver @auth: page role x directive',()=>{
   expect((await run('signed_in')).calls).toEqual(['setTarget','legacy']);
  });
 });
+
+describe('generated dataset roots (dataset-hasura sources)', () => {
+  const generated = (name: string, root = name) => ({
+    name, fileId: `ds_${name}`, version: 'live', kind: 'dataset-hasura' as const,
+    typeDefs: `enum order_by { asc desc }\ninput String_comparison_exp { _eq: String }\ntype ${root} { _id: ID! region: String }\ninput ${root}_bool_exp { region: String_comparison_exp }\ntype ${root}_mutation_response { affected_rows: Int! }\ntype Query {\n  ${root}(where: ${root}_bool_exp): [${root}!]!\n}\ntype Mutation {\n  delete_${root}(where: ${root}_bool_exp!): ${root}_mutation_response\n}\n`,
+    roots: { [root]: { table: root, field: 'select' }, [`delete_${root}`]: { table: root, field: 'delete' } },
+  });
+  it('mounts roots flat with @dataset, nullable, and the shared prelude once', () => {
+    const { sdl } = composePageSchema([...sources, generated('orders'), generated('notes')]);
+    expect(sdl).toContain('orders(where: orders_bool_exp): [orders!] @dataset(link: "orders", file: "ds_orders", version: "live", table: "orders", field: "select")');
+    expect(sdl).toContain('delete_notes(where: notes_bool_exp!): notes_mutation_response @dataset(link: "notes"');
+    expect(sdl.match(/input String_comparison_exp/g)).toHaveLength(1);
+    expect(sdl).toContain('tasks: tasks__Query!');
+  });
+  it('refuses a root equal to another link\'s name or root (graphql_root_collision)', () => {
+    expect(() => composePageSchema([{ ...sources[0]!, name: 'orders_meta' }, generated('orders', 'orders_meta')])).toThrow(/graphql_root_collision: link orders generates orders_meta, which link orders_meta also names/);
+    expect(() => composePageSchema([generated('a', 'orders'), generated('b', 'orders')])).toThrow(/graphql_root_collision/);
+  });
+  it('leaves a page without generated links byte-identical (no @dataset directive)', () => {
+    const legacy = [{ name: 'staff', fileId: 'ds1', version: 'live', typeDefs: 'type Query { rows: Int } type Mutation { writeRows: Int }' }];
+    expect(composePageSchema(legacy).sdl).not.toContain('@dataset');
+    expect(composePageSchema(legacy).sdl).toBe(composePageSchema(legacy.map((s) => ({ ...s }))).sdl);
+  });
+  it('reads flat roots through the dataset port and sends a dataset mutation whole, keyed by root', async () => {
+    const schema = composePageSchema([...sources, generated('orders')]);
+    const calls: unknown[] = [];
+    const datasets = {
+      queryRoots: () => ({ orders: async (args: { where?: unknown }) => [{ _id: 'r1', region: JSON.stringify(args.where ?? null) }] }),
+      mutate: async (request: unknown) => { calls.push(request); return { data: { gone: { affected_rows: 2 } } }; },
+    };
+    const caller = { pageId: 'page1', subject: 'u1', role: 'viewer' as const };
+    const read = await executePageOperation({ schema, request: { query: '{ orders(where: {region: {_eq: "w"}}) { _id region } tasks { value } }' }, caller, signal, invoke: async () => 5, datasets });
+    expect(read.data).toEqual({ orders: [{ _id: 'r1', region: '{"region":{"_eq":"w"}}' }], tasks: { value: 5 } });
+    const write = await executePageOperation({ schema, request: { query: 'mutation { gone: delete_orders(where: {}) { affected_rows } }' }, caller, signal, invoke: async () => null, datasets });
+    expect(write).toEqual({ data: { gone: { affected_rows: 2 } }, extensions: { outcomes: { gone: 'committed' } } });
+    expect(calls).toEqual([{ query: 'mutation { gone: delete_orders(where: {}) { affected_rows } }' }]);
+    const mixed = await executePageOperation({ schema, request: { query: 'mutation { delete_orders(where: {}) { affected_rows } tasks { save(n: 1) } }' }, caller: { ...caller, role: 'editor' }, signal, invoke: async () => 1, datasets });
+    expect(mixed.errors?.[0]?.message).toMatch(/names only that dataset's fields/);
+    const refused = await executePageOperation({ schema, request: { query: 'mutation { delete_orders(where: {}) { affected_rows } }' }, caller, signal, invoke: async () => null, datasets: { ...datasets, mutate: async () => ({ data: null, errors: [{ message: 'no', extensions: { code: 'permission_denied' } }] }) } });
+    expect(refused).toEqual({ data: null, errors: [{ message: 'no', extensions: { code: 'permission_denied' } }], extensions: { outcomes: { delete_orders: 'rejected' } } });
+  });
+});

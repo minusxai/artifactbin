@@ -25,16 +25,18 @@ declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
 /** Portable remote access stays read-only regardless of connection state; local preview datasets are separate. */
 export const remoteReadOnly=config.offline===true&&!config.localPreview;
-function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>}{
- const names:string[]=[],bindings:Record<string,string>={};
+function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>;datasets:string[]}{
+ const names:string[]=[],bindings:Record<string,string>={},datasets:string[]=[];
  for(const link of document.querySelectorAll('link[data-af-name]')){
   const rel=(link.getAttribute('rel')??'').split(/\s+/),name=link.getAttribute('data-af-name')??'';
   if(!rel.some(value=>value==='af-resolver'||value==='af-backend'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
   names.push(name);const id=/^ref:([A-Za-z0-9_-]+)$/.exec(link.getAttribute('href')??'')?.[1];if(id)bindings[name]=id;
+  // A source link names its API; without data-af-api it publishes on the generated API (lib/html-page resolveDatasetApis).
+  if(rel.includes('af-dataset')&&link.getAttribute('data-af-api')!=='legacy')datasets.push(name);
  }
- return {names,bindings};
+ return {names,bindings,datasets};
 }
-if(!config.backends.length)config.backends=sourceNamespaces(document).names;
+if(!config.backends.length){const declared=sourceNamespaces(document);config.backends=declared.names;if(declared.datasets.length&&!config.datasets)config.datasets=declared.datasets;}
 const domain=config.domainReads&&window.parent===window?createDomainReadTransport(config,location,fetch.bind(window)):undefined;
 const preview=config.localPreview?createLocalDatasetTransport({privatePreview:document.documentElement.hasAttribute('data-af-private-preview'),endpoint:config.localPreview.endpoint},location,fetch):undefined;
 function pendingPortableConnection():boolean {
@@ -140,7 +142,8 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
   relay = (request) => new Promise((resolve, reject) => {
     const id = ++call;
     pending.set(id, { resolve, reject });
-    post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
+    const {idempotencyKey,...body}=request;
+    post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json', ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) }, body: JSON.stringify(body) });
   });
   for (const ready of [...relayWaiters]) ready();
   const attachedRelay=relay;

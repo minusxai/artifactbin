@@ -38,8 +38,8 @@ export type DatasetGraphqlErrorCode =
   | 'check_violation'
   | 'too_many_rows'
   | 'outcome_unknown'
-  /** A resolver's caps.query asked for a mutation before generated mutations are served to resolvers. */
-  | 'mutations_unavailable'
+  /** One mutation operation writes one dataset (the plan's atomic step): its fields named two. */
+  | 'one_dataset_per_mutation'
   | 'unexpected';
 
 export interface DatasetGraphqlError {

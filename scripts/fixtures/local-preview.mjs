@@ -53,7 +53,7 @@ try {
  await writeFile(join(root,'next.html'),html.replace('Add one','Increment'));await rename(join(root,'next.html'),join(root,'index.html'));
  await chromeStatus.filter({hasText:'File changed on disk'}).waitFor();await chrome.getByRole('button',{name:'Reload file',exact:true}).click();await page.getByRole('button',{name:'Increment',exact:true}).waitFor();
  await writeFile(join(root,'sales.csv'),'amount\n2\n');
- const datasetHtml=`<!doctype html><html><head><link rel="af-dataset" data-af-name="sales" href="./sales.csv"><script src="/af/core.js" data-af="core"></script></head><body><button id="insert">Insert local row</button><output id="rows"></output><output id="receipt"></output><script type="module">
+ const datasetHtml=`<!doctype html><html><head><link rel="af-dataset" data-af-name="sales" data-af-api="legacy" href="./sales.csv"><script src="/af/core.js" data-af="core"></script></head><body><button id="insert">Insert local row</button><output id="rows"></output><output id="receipt"></output><script type="module">
  import {client,gql} from '@afbin/apollo';
  const discovered=await client.query({query:gql\`{sales{schema{revision tables{id columns{id}}}}}\`});if(discovered.errors)throw Error(JSON.stringify(discovered.errors));
  const schema=discovered.data.sales.schema,table=schema.tables[0];let revision=schema.revision;
