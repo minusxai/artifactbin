@@ -22,3 +22,47 @@ it('executes a compiled immutable backend through the retained isolated runner',
   expect(await invoke({...call,operation:'query',field:'secretReady'})).toBe(true);
  }finally{await runner.close();await db.close();}
 },20000);
+it('api 2: the host fills secrets, the resolver never sees a value, and a 2 MiB response crosses every link',async()=>{
+ const {withHttpServer}=await import('@artifactbin/test-support/net');
+ const {useLoopbackLookup}=await import('@artifactbin/utils/node/loopback-lookup');
+ const {createResolverFetch}=await import('../public-fetch');
+ const {RESOLVER_LIMITS}=await import('@artifactbin/contracts');
+ useLoopbackLookup();
+ const KEY='s3cr3t/+&value',received:string[]=[];
+ const server=await withHttpServer((req,res)=>{const chunks:Buffer[]=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{
+  received.push(`${req.headers.authorization} ${req.url} ${Buffer.concat(chunks)}`);
+  if(req.url==='/fits'){res.writeHead(200);res.end('x'.repeat(RESOLVER_LIMITS.fetchResponseBytes));return;}
+  res.writeHead(200,{'content-type':'application/json','x-echo':String(req.headers.authorization)});res.end(JSON.stringify({url:req.url,authorization:req.headers.authorization}));
+ });});
+ const db=new PGlite();let record:PageBackendRecord;
+ const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})};
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db,capabilities:async(context,operation,args)=>pageBackendCapability(store,context.request,operation,args,async()=>record,undefined,async(_backend,name)=>name==='KEY'?KEY:Promise.reject(Error('backend_secret_unavailable')),createResolverFetch({policy:{allowPrivate:true,allowHttp:true}}))});
+ try{
+  const base=`http://api.localhost:${server.port}`;
+  const source=`export const secrets={KEY:"api.localhost"}; export const typeDefs="type Query { probe: String! size: Int! }"; export default {
+   probe: async(args,principal,caps)=>{
+    const seen={keys:Object.keys(caps),named:typeof caps["sec"+"rets"]};
+    const host=globalThis.__capabilities.artifactbin;
+    seen.direct=await host.call(["pageBackend","secrets","get"].join("."),{name:"KEY"}).then(v=>"leaked "+v,e=>e.message);
+    seen.store=await host.call(["pageBackend","store","get"].join("."),{}).then(()=>"open",e=>e.message);
+    const r=await caps.fetch("${base}/echo?k={{KEY}}",{method:"POST",headers:{authorization:"Bearer {{KEY}}"},body:"{{KEY}}"});
+    seen.response={ok:r.ok,status:r.status,url:r.url,headers:r.headers,text:await r.text()};
+    seen.refused=await caps.fetch("https://other.example.com/?k={{KEY}}").then(()=>"sent",e=>e.message);
+    return JSON.stringify(seen);
+   },
+   size: async(args,principal,caps)=>(await (await caps.fetch("${base}/fits")).text()).length };`;
+  record={...(await createBackendCompiler(runner)(source)),source,backendId:'backend2',pageId:'page1',version:'v1',ownerId:'owner1'};
+  expect(record).toMatchObject({api:2,secretHosts:{KEY:'api.localhost'}});
+  const invoke=createBackendInvoker(runner,async()=>record);
+  const call={namespace:'conn',fileId:'backend2',version:'v1',operation:'query' as const,field:'probe',args:{},principal:{tenant:'page1',subject:'viewer1'},signal:new AbortController().signal};
+  const output=String(await invoke(call));
+  for(const form of [KEY,encodeURIComponent(KEY)])expect(output).not.toContain(form);
+  expect(received[0]).toBe(`Bearer ${KEY} /echo?k=${encodeURIComponent(KEY)} ${KEY}`);
+  expect(JSON.parse(output)).toEqual({keys:['fetch'],named:'undefined',direct:'backend_capability_forbidden',store:'backend_capability_forbidden',
+   response:{ok:true,status:200,url:`${base}/echo?k=[redacted]`,headers:expect.objectContaining({'x-echo':'Bearer [redacted]'}),text:JSON.stringify({url:'/echo?k=[redacted]',authorization:'Bearer [redacted]'})},refused:'secret_host_forbidden: KEY'});
+  expect(await invoke({...call,field:'size'})).toBe(RESOLVER_LIMITS.fetchResponseBytes);
+  const receipts=(await db.query<{receipt:import('@artifactbin/contracts').RunReceipt}>('SELECT receipt FROM runner_runs')).rows.flatMap(row=>row.receipt?.requests??[]).filter(r=>r.service==='fetch');
+  expect(receipts).toContainEqual(expect.objectContaining({status:200,fetch:{method:'POST',host:'api.localhost',path:'/echo',bytesIn:expect.any(Number),bytesOut:Buffer.byteLength(KEY),secrets:['KEY']}}));
+  expect(JSON.stringify(receipts)).not.toMatch(/k=|Bearer|s3cr3t/);
+ }finally{await runner.close();await db.close();await server.close();}
+},30000);

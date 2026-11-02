@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
-import type { RunStart, RunLookup, RunReceipt, RunnerJson, RunnerLimits, RunnerService, RunEvent, RunSnapshot } from '@artifactbin/contracts';
+import { RESOLVER_LIMITS, type RunStart, type RunLookup, type RunReceipt, type RunnerJson, type RunnerLimits, type RunnerService, type RunEvent, type RunSnapshot, type ResolverFetchReceipt } from '@artifactbin/contracts';
 import {redactRunSecrets} from './secret-redaction';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
@@ -51,6 +51,16 @@ interface Active {
 }
 function json(value: unknown, max: number): string { const s = JSON.stringify(value); if (s === undefined || Buffer.byteLength(s) > max)
     throw Error('size_limit'); return s; }
+/** The app's fetch observation belongs in the receipt, not in what resolver code receives. */
+function takeFetchReceipt(value: RunnerJson, durationMs: number, requests: RunReceipt['requests']): RunnerJson {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !value.receipt || typeof value.receipt !== 'object' || Array.isArray(value.receipt))
+        return value;
+    const { receipt, ...rest } = value;
+    const r = receipt as Record<string, RunnerJson>;
+    const fetch: ResolverFetchReceipt = { method: String(r.method), host: String(r.host), path: String(r.path), bytesIn: Number(r.bytesIn), bytesOut: Number(r.bytesOut), secrets: Array.isArray(r.secrets) ? r.secrets.map(String) : [] };
+    requests.push({ service: 'fetch', operation: 'artifactbin.pageBackend.fetch', durationMs, status: typeof rest.status === 'number' ? rest.status : null, requestId: null, fetch });
+    return rest;
+}
 function canonical(v: unknown): string { if (Array.isArray(v))
     return '[' + v.map(canonical).join(',') + ']'; if (v && typeof v === 'object')
     return '{' + Object.entries(v).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => JSON.stringify(k) + ':' + canonical(v)).join(',') + '}'; return JSON.stringify(v); }
@@ -183,11 +193,14 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 if (msg.operation !== 'ai.next' && ++r.requestCount > r.limits.maxRequests)
                     throw Error('request_limit');
                 if(msg.operation==='artifactbin.pageBackend.store.set'&&JSON.stringify(redactRunSecrets(msg.args??null,r.secrets))!==JSON.stringify(msg.args??null))throw Error('backend_secret_export_forbidden');
+                const started = Date.now();
                 value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
+                if (msg.operation === 'artifactbin.pageBackend.fetch')
+                    value = takeFetchReceipt(value, Date.now() - started, r.requests);
                 if(msg.operation==='artifactbin.pageBackend.secrets.get'&&typeof value==='string'&&value.length)r.secrets.add(value);
             }
             if (!r.finishing)
-                r.child!.stdin.write(json({ type: 'response', id: callId, value }, 2 * 1024 * 1024) + '\n');
+                r.child!.stdin.write(json({ type: 'response', id: callId, value }, RESOLVER_LIMITS.messageBytes) + '\n');
         }
         catch (e) {
             if (!r.finishing)
@@ -223,7 +236,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         const decoder = new StringDecoder('utf8');
         let buffered = '';
         let stderrBytes = 0;
-        child.stdout.on('data', (b: Buffer) => { buffered += decoder.write(b); if (Buffer.byteLength(buffered) > 2 * 1024 * 1024) {
+        child.stdout.on('data', (b: Buffer) => { buffered += decoder.write(b); if (Buffer.byteLength(buffered) > RESOLVER_LIMITS.messageBytes) {
             fail(id, Error('ipc_limit'));
             return;
         } let end; while ((end = buffered.indexOf('\n')) >= 0) {
