@@ -71,7 +71,7 @@ describe('the role lattice', () => {
     const owner = await account('owner@example.test');
     const viewer = await account('viewer@example.test');
     const stranger = await account('stranger@example.test');
-    const group = await createGroup(owner.userId, { handle: 'access-team', name: 'Access team' });
+    const group = await createGroup(owner.userId, { handle: 'access_team', name: 'Access team' });
     await setGroupMember(owner.userId, group.id, viewer.userId, 'viewer');
     const row = await mine(owner, 'Team', { destination: { type: 'group', id: group.id } });
     expect(await effectiveRole(row, owner)).toBe('owner');
@@ -146,7 +146,7 @@ describe('the rule\'s parts', () => {
     await sql('UPDATE artifacts SET deleted_at=NULL, visibility=$2 WHERE id=$1', [row.id, 'private']);
     expect(await where(policyReaderSql('$2', '$3'), [viewer.userId, null])).toBe(true);
     expect(await where(policyReaderSql('$2', '$3'), [stranger.userId, null])).toBe(false);
-    const group = await createGroup(owner.userId, { handle: 'parts-team', name: 'Parts' });
+    const group = await createGroup(owner.userId, { handle: 'parts_team', name: 'Parts' });
     const team = await mine(owner, 'Team', { destination: { type: 'group', id: group.id } });
     const member = async (user: string, role?: 'editor') => (await sql('SELECT id FROM artifacts WHERE id=$1 AND ' + groupMemberPredicate('$2', role), [team.id, user])).length === 1;
     expect([await member(owner.userId, 'editor'), await member(stranger.userId)]).toEqual([true, false]);
@@ -176,7 +176,7 @@ describe('access facts', () => {
     expect(await facts.userKind(friend.userId)).toBe('account');
     expect(await facts.userKind(null)).toBeNull();
     expect(await liveAccessFacts(identityForUser(null, null)).editorGroupIds()).toEqual([]);
-    const group = await createGroup(friend.userId, { handle: 'facts-team', name: 'Facts' });
+    const group = await createGroup(friend.userId, { handle: 'facts_team', name: 'Facts' });
     expect(await live.editorGroupIds()).toEqual([group.id]);
     expect(await live.groupRole(group.id)).toBe('editor');
     expect(await facts.groupRole(group.id)).toBeNull();

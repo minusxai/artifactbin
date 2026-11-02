@@ -1,3 +1,4 @@
+import {isValidHandle} from '../accounts/handles';
 import {normalizeOrigin} from '@artifactbin/contracts';
 
 export interface SetupInstructionOptions {serverOrigin:string;groupHandle?:string;setDefault?:boolean;}
@@ -5,7 +6,7 @@ export interface SetupInstructionOptions {serverOrigin:string;groupHandle?:strin
 export function buildSetupInstructions(options:SetupInstructionOptions):string{
  const origin=normalizeOrigin(options.serverOrigin);
  if(!origin)throw new Error('Setup instructions require a server origin.');
- if(options.groupHandle&&!/^[a-z0-9][a-z0-9_-]*$/i.test(options.groupHandle))throw new Error('Setup instructions require a group handle.');
+ if(options.groupHandle&&!isValidHandle(options.groupHandle))throw new Error('Setup instructions require a group handle.');
  const group=options.groupHandle;
  const selectDefault=options.setDefault??!!group;
  return `Set up artifactbin for ${origin}${group?` and group ${group}`:''}. Read ${origin}/llms.txt and use the artifactbin author skill for this origin; reuse existing origin-scoped credentials. Check the installed skill’s origin and release before reusing it. Install with the three lines in https://artifactbin.dev/install.sh, using ${origin}/skills/artifactbin.zip as the archive URL; ${origin}/getting-started.md covers updates. Reload the harness after installing or updating.

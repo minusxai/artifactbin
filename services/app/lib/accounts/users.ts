@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import type { UserKind } from '@artifactbin/contracts';
 import { getDb, type Queryable, emit, generateInternalId } from '../platform';
 import { forgetRequestCredentials, sha256 } from './tokens';
-import { reserveHandle, RESERVED_HANDLES } from './handles';
+import { reserveHandle, isValidHandle } from './handles';
 
 /**
  * AN ACCOUNT ROW: a person with a login identity. The KIND is on every row now
@@ -53,14 +53,8 @@ const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, 
 
 // ── Usernames ────────────────────────────────────────────────────────────────
 
-/** Lowercase, underscores only (no hyphens — they delimit <id>-<title> in URLs elsewhere, and one separator is enough). */
-export const USERNAME_RE = /^[a-z0-9_]{3,32}$/;
-
-/**
- * Impersonation hygiene, not route protection — the /@ prefix already keeps
- * user pages out of the app's namespace. Deliberately tiny.
- */
-const RESERVED_USERNAMES = RESERVED_HANDLES;
+/** Shared user/group handle format, retained as the username API. */
+export { HANDLE_RE as USERNAME_RE } from './handles';
 
 const USERNAME_BASE_MAX = 20;
 const SUFFIX_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -133,7 +127,7 @@ export async function setUsername(
   query?:Queryable,
 ): Promise<{ ok: true; username: string } | { error: 'invalid' | 'taken' }> {
   const username = requested.toLowerCase().trim();
-  if (!USERNAME_RE.test(username) || RESERVED_USERNAMES.has(username)) return { error: 'invalid' };
+  if (!isValidHandle(username)) return { error: 'invalid' };
   try {
     const rename=async(tx:Queryable)=>{
       if(!await getUserById(userId,tx,true))return {error:'invalid'} as const;

@@ -32,7 +32,7 @@ async function world() {
   const member = await createUser({ email: 'mxmx_test_home_member@example.com' });
   const outsider = await createUser({ email: 'mxmx_test_home_outsider@example.com' });
   const memberToken = await mintAccountToken('member', member.id);
-  const group = await createGroup(member.id, { handle: 'home-team', name: 'Home Team' });
+  const group = await createGroup(member.id, { handle: 'home_team', name: 'Home Team' });
   const publish = async (title: string, destination: object) => {
     const response = await createArtifact(request('/api/artifacts', { method: 'POST', token: memberToken.token, json: { html: nativeHtml(`<h1>${title}</h1>`), title, destination } }));
     expect(response.status, await response.clone().text()).toBe(201);
@@ -55,7 +55,7 @@ describe('GET /api/page/home?part=bootstrap', () => {
       signedIn: true, accountId: w.member.id,
       deployment: { mode: 'public' },
       preferences: { default_destination: { type: 'group', id: w.group.id } },
-      destination: { kind: 'group', groupId: w.group.id, detail: { group: { id: w.group.id, handle: 'home-team', role: 'editor' } } },
+      destination: { kind: 'group', groupId: w.group.id, detail: { group: { id: w.group.id, handle: 'home_team', role: 'editor' } } },
     });
     expect(body.destination.core.artifacts.map((row: { id: string }) => row.id)).toEqual([w.groupArtifactId]);
     expect(JSON.stringify(body)).not.toContain('Personal secret');
@@ -119,7 +119,7 @@ describe('GET /api/page/home?part=bootstrap', () => {
     w.as(w.outsider);
     const refused = await read(await bootstrap());
     expect(refused.destination).toEqual({ kind: 'unavailable', groupId: w.group.id });
-    expect(JSON.stringify(refused)).not.toMatch(/Home Team|Team plan|home-team|Personal secret/);
+    expect(JSON.stringify(refused)).not.toMatch(/Home Team|Team plan|home_team|Personal secret/);
     await (await getDb()).query("UPDATE groups SET deleted_at=now() WHERE id=$1", [w.group.id]);
     w.as(w.member);
     await (await getDb()).query("INSERT INTO account_preferences(user_id,default_destination) VALUES($1,$2::jsonb)", [w.member.id, JSON.stringify({ type: 'group', id: w.group.id })]);

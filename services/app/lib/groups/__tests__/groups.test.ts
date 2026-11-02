@@ -6,9 +6,23 @@ import {createGroup,getGroupDetail,getGroupRole,setGroupMember,removeGroupMember
 useAppHarness();
 const account=async(name:string)=>createUser({email:`mxmx_test_${name}@example.com`});
 describe('independent group owner contracts',()=>{
+ it('uses the same handle rules for users and groups after case and trim normalization',async()=>{
+  const owner=await account('rules');
+  for(const handle of ['a-b','_ab','ab_','___','ab','a'.repeat(33)]){
+   expect(await setUsername(owner.id,handle),handle).toEqual({error:'invalid'});
+   await expect(createGroup(owner.id,{handle,name:'Rules'}),handle).rejects.toMatchObject({code:'invalid_group'});
+  }
+  for(const handle of ['a_b','abc','a1'.repeat(16)]){
+   expect(await setUsername(owner.id,`  ${handle.toUpperCase()} `)).toEqual({ok:true,username:handle});
+   await expect(createGroup(owner.id,{handle,name:'Taken'})).rejects.toMatchObject({code:'handle_taken'});
+   expect(await setUsername(owner.id,'released')).toEqual({ok:true,username:'released'});
+   expect(await createGroup(owner.id,{handle:`  ${handle.toUpperCase()} `,name:'Rules'})).toMatchObject({handle});
+   expect(await setUsername(owner.id,handle)).toEqual({error:'taken'});
+  }
+ });
  it('creates a group and its first editor without inventing an account or artifact',async()=>{
-  const owner=await account('owner');const group=await createGroup(owner.id,{handle:'acme-team',name:'Acme'});
-  expect(group).toMatchObject({handle:'acme-team',name:'Acme',role:'editor'});
+  const owner=await account('owner');const group=await createGroup(owner.id,{handle:'acme_team',name:'Acme'});
+  expect(group).toMatchObject({handle:'acme_team',name:'Acme',role:'editor'});
   expect(await getGroupRole(owner.id,group.id)).toBe('editor');
   const db=await getDb();
   expect((await db.query('SELECT id FROM users WHERE id=$1',[group.id])).rows).toEqual([]);
@@ -43,7 +57,7 @@ describe('independent group owner contracts',()=>{
   expect(await setAccountPreferences(member.id,{type:'personal'})).toEqual({default_destination:{type:'personal'}});
  });
  it('serializes competing last-editor removals',async()=>{
-  const first=await account('first'),second=await account('second');const group=await createGroup(first.id,{handle:'race-team',name:'Race'});
+  const first=await account('first'),second=await account('second');const group=await createGroup(first.id,{handle:'race_team',name:'Race'});
   await setGroupMember(first.id,group.id,second.id,'editor');
   const results=await Promise.allSettled([removeGroupMember(first.id,group.id,first.id),removeGroupMember(second.id,group.id,second.id)]);
   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
@@ -59,7 +73,7 @@ describe('independent group owner contracts',()=>{
   await expect(createGroup(owner.id,{handle:'legacy',name:'Legacy'})).rejects.toThrow('handle_taken');
  });
  it('accepts only verified account invitations, preserves roles, and exposes no members to outsiders',async()=>{
-  const owner=await account('owner'),invited=await account('invited'),outsider=await account('outsider');const group=await createGroup(owner.id,{handle:'invite-team',name:'Invites'});
+  const owner=await account('owner'),invited=await account('invited'),outsider=await account('outsider');const group=await createGroup(owner.id,{handle:'invite_team',name:'Invites'});
   await inviteGroupMember(owner.id,group.id,invited.email,'viewer');
   expect(await getGroupDetail(outsider.id,group.id)).toBeNull();
   await expect(acceptGroupInvitations(outsider.id,invited.email)).rejects.toThrow('verified_email_mismatch');
@@ -69,7 +83,7 @@ describe('independent group owner contracts',()=>{
   expect((await getGroupDetail(owner.id,group.id))?.invitations).toEqual([]);
  });
  it('links groups for navigation without inheriting membership',async()=>{
-  const owner=await account('owner'),viewer=await account('viewer');const first=await createGroup(owner.id,{handle:'first-team',name:'First'}),second=await createGroup(owner.id,{handle:'second-team',name:'Second'});
+  const owner=await account('owner'),viewer=await account('viewer');const first=await createGroup(owner.id,{handle:'first_team',name:'First'}),second=await createGroup(owner.id,{handle:'second_team',name:'Second'});
   await setGroupMember(owner.id,first.id,viewer.id,'viewer');await setGroupLink(owner.id,first.id,second.id,true);
   expect((await getGroupDetail(viewer.id,first.id))?.linked_groups).toMatchObject([{id:second.id,role:null}]);
   expect(await getGroupRole(viewer.id,second.id)).toBeNull();expect(await getGroupDetail(viewer.id,second.id)).toBeNull();
