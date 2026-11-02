@@ -6,7 +6,7 @@ import { Field, Input } from '../ui/Field';
 import { StatusMessage } from '../ui/StatusMessage';
 import { apiFetch } from '../lib/api';
 
-const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)' };
+const HANDLE_REFUSALS: Record<string, string> = { username_taken: 'that handle is taken — pick another', invalid_username: '3–32 characters: lowercase letters, numbers, internal underscores (no hyphens)' };
 
 export function UsernameCard(props: { username: string | null }): JSX.Element {
   const [value, setValue] = createSignal('');

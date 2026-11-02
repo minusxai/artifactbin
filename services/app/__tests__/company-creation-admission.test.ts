@@ -18,7 +18,7 @@ describe('company creation admission',()=>{
  it('lets the designated browser owner confirm setup without a CLI token and preserves CSRF protection',async()=>{
   company();const owner=await createUser({email:'mxmx_test_company_owner@example.com'});
   await admitDeploymentIdentity({userId:owner.id,email:owner.email!,emailVerified:true});
-  const group=await createGroup(owner.id,{handle:'company-test',name:'Company'});
+  const group=await createGroup(owner.id,{handle:'company_test',name:'Company'});
   const actor={credential:'session' as const,userId:owner.id,email:owner.email!,emailVerified:true};
   const body={group_id:group.id};
   expect((await confirmSetup(request('/api/deployment/setup',{method:'POST',actor,origin:'https://stranger.example',json:body}))).status).toBe(403);
@@ -48,7 +48,7 @@ describe('company creation admission',()=>{
   };
   await check();
   await admitDeploymentIdentity({userId:owner.id,email:owner.email!,emailVerified:true});
-  const group=await createGroup(owner.id,{handle:'company-test',name:'Company'});await setupDeployment(owner.id,group.id);
+  const group=await createGroup(owner.id,{handle:'company_test',name:'Company'});await setupDeployment(owner.id,group.id);
   await check();
  });
  it('refuses start auth fallback for an account that has never been admitted',async()=>{

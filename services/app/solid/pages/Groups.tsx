@@ -18,7 +18,7 @@ export function CreateGroup(props:{created:(group:GroupSummary)=>void}):JSX.Elem
  return <form class="group-create-form" onSubmit={async e=>{e.preventDefault();if(busy())return;setBusy(true);setError('');try{const result=await apiRequest<GroupDetail|GroupSummary>('/api/groups','POST',{name:name(),handle:handle()});props.created('group' in result?result.group:result);}catch(err){setError(err instanceof Error?err.message:'Could not create group.');}finally{setBusy(false);}}}>
   <div><SectionHeading>Create a group</SectionHeading><p class="mt-2 text-sm leading-relaxed text-muted">A shared place for your team’s files, folders and people.</p></div>
   <Field label="Group name"><Input required placeholder="e.g. Design team" value={name()} onInput={e=>setName(e.currentTarget.value)}/></Field>
-  <Field label="Group handle" hint={<span class="break-all">Your group’s address: /@{handle()||'group-handle'}</span>}><Input required placeholder="e.g. design-team" value={handle()} onInput={e=>setHandle(e.currentTarget.value)}/></Field>
+  <Field label="Group handle" hint={<span class="break-all">Your group’s address: /@{handle()||'group_handle'}</span>}><Input required placeholder="e.g. design_team" value={handle()} onInput={e=>setHandle(e.currentTarget.value)}/></Field>
   <Show when={error()}><StatusMessage kind="error">{error()}</StatusMessage></Show>
   <Button type="submit" disabled={busy()}><Plus size={16} aria-hidden="true"/>{busy()?'Creating…':'Create group'}</Button>
  </form>;

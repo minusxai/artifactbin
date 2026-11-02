@@ -80,7 +80,7 @@ describe('ownership', () => {
     // A user's row is not its creating token's: the token alone reaches nothing once an account owns it.
     expect(ownsArtifact({ ...byUser, token_id: loose.id }, tokenActor)).toBe(false);
 
-    const group = await createGroup(owner.userId, { handle: 'contract-team', name: 'Contract team' });
+    const group = await createGroup(owner.userId, { handle: 'contract_team', name: 'Contract team' });
     const byGroup = await createArtifact(null, owner.userId, page('Team doc', { destination: { type: 'group', id: group.id } }));
     expect(byGroup.group_id).toBe(group.id);
     expect(ownsArtifact(byGroup, owner)).toBe(false);

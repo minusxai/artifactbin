@@ -19,8 +19,8 @@ describe('GroupError', () => {
 describe('getGroupById', () => {
   it('reads a live group and refuses unknown or deleted ones', async () => {
     const owner = await account('byid');
-    const group = await createGroup(owner.id, { handle: 'by-id', name: 'By id' });
-    expect(await getGroupById(group.id)).toMatchObject({ id: group.id, handle: 'by-id', name: 'By id', created_by: owner.id, deleted_at: null });
+    const group = await createGroup(owner.id, { handle: 'by_id', name: 'By id' });
+    expect(await getGroupById(group.id)).toMatchObject({ id: group.id, handle: 'by_id', name: 'By id', created_by: owner.id, deleted_at: null });
     expect(await getGroupById('grp_missing')).toBeNull();
     await (await getDb()).query('UPDATE groups SET deleted_at = now() WHERE id = $1', [group.id]);
     expect(await getGroupById(group.id)).toBeNull();
@@ -30,8 +30,8 @@ describe('getGroupById', () => {
 describe('createGroup input', () => {
   it('normalizes handle case and whitespace, and refuses malformed input before writing', async () => {
     const owner = await account('create');
-    expect(await createGroup(owner.id, { handle: '  MiXeD-Case ', name: ' Spaced ' })).toMatchObject({ handle: 'mixed-case', name: 'Spaced', description: '' });
-    for (const input of [{ handle: 'ab', name: 'Short' }, { handle: '-lead', name: 'x' }, { handle: 'ok-handle', name: '   ' }, { handle: 'ok-handle', name: 'x'.repeat(121) }, { handle: 'ok-handle', name: 'x', description: 'd'.repeat(2001) }, { handle: 'émoji', name: 'x' }, null])
+    expect(await createGroup(owner.id, { handle: '  MiXeD_Case ', name: ' Spaced ' })).toMatchObject({ handle: 'mixed_case', name: 'Spaced', description: '' });
+    for (const input of [{ handle: 'ab', name: 'Short' }, { handle: '-lead', name: 'x' }, { handle: 'ok_handle', name: '   ' }, { handle: 'ok_handle', name: 'x'.repeat(121) }, { handle: 'ok_handle', name: 'x', description: 'd'.repeat(2001) }, { handle: 'émoji', name: 'x' }, null])
       await expect(createGroup(owner.id, input as never)).rejects.toMatchObject({ code: 'invalid_group' });
     expect(await listGroups(owner.id)).toHaveLength(1);
   });
@@ -73,7 +73,7 @@ describe('searchGroupMembers', () => {
 
   it('answers not_found to anyone outside the group', async () => {
     const owner = await account('search-private'), stranger = await account('search-stranger');
-    const group = await createGroup(owner.id, { handle: 'private-search', name: 'Private' });
+    const group = await createGroup(owner.id, { handle: 'private_search', name: 'Private' });
     await expect(searchGroupMembers(stranger.id, group.id, '')).rejects.toMatchObject({ code: 'not_found', status: 404 });
   });
 });

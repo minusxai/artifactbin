@@ -16,7 +16,7 @@ import { StatusMessage } from '../ui/StatusMessage';
 
 const HANDLE_REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
-  invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)',
+  invalid_username: '3–32 characters: lowercase letters, numbers, internal underscores (no hyphens)',
 };
 
 export function WelcomePage(): JSX.Element {

@@ -16,14 +16,14 @@ describe('groups authenticated HTTP boundary',()=>{
    expect((await list(request('/api/groups',{actor:{...actor,tokenId:owner.id},headers:{authorization}}))).status).toBe(401);
    expect((await create(request('/api/groups',{actor:{...actor,tokenId:owner.id},method:'POST',origin:'same',headers:{authorization},json:{handle:'invalid-header',name:'Refused'}}))).status).toBe(401);
   }
-  expect((await create(request('/api/groups',{actor,method:'POST',origin:'same',json:{handle:'browser-team',name:'Browser'}}))).status).toBe(201);
+  expect((await create(request('/api/groups',{actor,method:'POST',origin:'same',json:{handle:'browser_team',name:'Browser'}}))).status).toBe(201);
   expect((await create(request('/api/groups',{actor,method:'POST',origin:'https://other.test',json:{handle:'cross-site',name:'Cross site'}}))).status).toBe(403);
  });
  it('creates, lists and resolves group handles, protecting private detail and editor writes',async()=>{
   const owner=await mintAccountToken('owner'),viewer=await mintAccountToken('viewer'),outsider=await mintAccountToken('outsider');
-  const created=await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'api-team',name:'API'}}));expect(created.status).toBe(201);const group=await created.json();
+  const created=await create(request('/api/groups',{method:'POST',token:owner.token,json:{handle:'api_team',name:'API'}}));expect(created.status).toBe(201);const group=await created.json();
   expect((await (await list(request('/api/groups',{token:owner.token}))).json()).groups).toMatchObject([{id:group.id}]);
-  expect((await detail(request('/api/groups/@api-team',{token:owner.token}),context({id:'@api-team'}))).status).toBe(200);
+  expect((await detail(request('/api/groups/@api_team',{token:owner.token}),context({id:'@api_team'}))).status).toBe(200);
   expect((await detail(request('/api/groups/'+group.id,{token:outsider.token}),context({id:group.id}))).status).toBe(404);
   expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(200);
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'editor'}}),context({id:group.id}))).status).toBe(403);

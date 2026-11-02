@@ -1,6 +1,9 @@
 /** One reservation boundary shared by account and group identity. Call inside the owning transaction. */
 import type { Queryable } from '../platform';
+/** 3–32 lowercase letters/digits, with underscores only inside the handle. */
+export const HANDLE_RE = /^[a-z0-9][a-z0-9_]{1,30}[a-z0-9]$/;
 export const RESERVED_HANDLES=new Set(['admin','root','support','help','about','settings','security','artifactbin','artifact_bin','api','docs','mcp','oauth','a','login','tokens']);
+export const isValidHandle = (handle:string):boolean => HANDLE_RE.test(handle) && !RESERVED_HANDLES.has(handle);
 export async function reserveHandle(query:Queryable,handle:string,kind:'user'|'group',id:string):Promise<void>{
  // Backfill legacy account handles before any new claim. Existing names always win.
  await query.query("INSERT INTO handle_reservations(handle,kind,subject_id) SELECT username,'user',id FROM users WHERE username=$1 ON CONFLICT DO NOTHING",[handle]);

@@ -2,7 +2,7 @@
 import type {AccountPreferences,CreateGroupInput,DefaultDestination,GroupDetail,GroupInvitation,GroupMember,GroupRole,GroupSummary,Queryable as ContractQueryable} from '@artifactbin/contracts';
 import {isTestDomainEmail} from '@artifactbin/contracts';
 import { TEST_DOMAIN, getDb, type Queryable, generateInternalId } from '../platform';
-import { reserveHandle, RESERVED_HANDLES } from '../accounts';
+import { reserveHandle, isValidHandle } from '../accounts';
 export interface GroupRecord {id:string;handle:string;name:string;description:string;created_by:string;deleted_at:string|null;}
 export class GroupError extends Error {constructor(public code:string,public status=400){super(code);}}
 const roleValid=(role:unknown):role is GroupRole=>role==='editor'||role==='viewer';
@@ -19,7 +19,7 @@ async function requireEditor(tx:Queryable,actor:string,id:string){
 export async function createGroup(userId:string,input:CreateGroupInput):Promise<GroupSummary>{
  if(typeof input?.handle!=='string'||typeof input?.name!=='string'||(input.description!==undefined&&typeof input.description!=='string'))throw new GroupError('invalid_group');
  const handle=input.handle.toLowerCase().trim(),name=input.name.trim(),description=input.description?.trim()??'';
- if(!/^[a-z0-9][a-z0-9_-]{2,31}$/.test(handle)||RESERVED_HANDLES.has(handle)||!name||name.length>120||description.length>2000)throw new GroupError('invalid_group');
+ if(!isValidHandle(handle)||!name||name.length>120||description.length>2000)throw new GroupError('invalid_group');
  const db=await getDb();return db.transaction(async tx=>{
  if(!(await tx.query("SELECT id FROM users WHERE id=$1 AND kind='account'",[userId])).rows.length)throw new GroupError('account_required',403);
  const id='grp_'+generateInternalId();

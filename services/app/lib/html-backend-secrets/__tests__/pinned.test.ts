@@ -37,7 +37,7 @@ describe('readPinnedBackendSecret', () => {
     await db.query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [f.page]);
     await expect(readPinnedBackendSecret(f.pinned, 'API_TOKEN')).rejects.toThrow('backend_secret_unavailable');
     f = await fixture();
-    await db.query("INSERT INTO groups (id, handle, name, created_by) VALUES ('grp_secret', 'secret-group', 'Group', $1)", [f.owner.userId]);
+    await db.query("INSERT INTO groups (id, handle, name, created_by) VALUES ('grp_secret', 'secret_group', 'Group', $1)", [f.owner.userId]);
     await db.query("UPDATE artifacts SET group_id = 'grp_secret' WHERE id = $1", [f.page]);
     await expect(readPinnedBackendSecret(f.pinned, 'API_TOKEN')).rejects.toThrow('backend_secret_unavailable');
   });
