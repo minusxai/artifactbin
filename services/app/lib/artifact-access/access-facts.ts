@@ -17,6 +17,7 @@ import type { AccessActor } from '@/lib/accounts';
 
 export interface AccessFacts {
   /** The actor's role in a live group, or null (always null without an account). */
+  groupShareRole(artifactId:string):Promise<ArtifactRole>;
   groupRole(groupId: string): Promise<GroupRole | null>;
   /** What a user is; null for no id or no row. */
   userKind(userId: string | null | undefined): Promise<UserKind | null>;
@@ -41,6 +42,11 @@ const sessionEmail = (actor: AccessActor) => actor.email?.toLowerCase().trim() ?
 export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFacts {
   const db = async () => query ?? await getDb();
   return {
+    async groupShareRole(artifactId){
+      if(!actor.userId)return 'none';
+      const rows=await (await db()).query<{role:ArtifactRole}>("SELECT s.role FROM artifact_group_shares s JOIN group_members m ON m.group_id=s.group_id JOIN groups g ON g.id=m.group_id JOIN users u ON u.id=m.user_id WHERE s.artifact_id=$1 AND m.user_id=$2 AND g.deleted_at IS NULL AND u.kind='account'",[artifactId,actor.userId]);
+      return maxRole(...rows.rows.map(row=>row.role));
+    },
     groupRole: (groupId) => getGroupRole(actor.userId, groupId, query),
     userKind: (userId) => userKindOf(userId, query),
     async sharedWith(artifactId) {
@@ -77,7 +83,7 @@ export interface PreloadedAccessFacts extends AccessFacts {
 interface ShareFact { artifact_id: string; user_id: string | null; email: string; role: ArtifactRole }
 
 /**
- * The facts for deciding `rows` for `actor`, in at most four statements however many rows there
+ * The facts for deciding `rows` for `actor`, in at most five statements however many rows there
  * are. A fact about anything outside `rows` falls back to the live query, so a decision is never
  * answered from a partial preload.
  */
@@ -99,11 +105,14 @@ export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows
       for (const share of found.rows) shares.set(share.artifact_id, [...shares.get(share.artifact_id) ?? [], share]);
     }
   }
+  const groupShares=new Map<string,ArtifactRole>();
+  if(actor.userId&&ids.length)for(const share of (await db.query<{artifact_id:string;role:ArtifactRole}>("SELECT s.artifact_id,s.role FROM artifact_group_shares s JOIN group_members m ON m.group_id=s.group_id JOIN groups g ON g.id=m.group_id JOIN users u ON u.id=m.user_id WHERE s.artifact_id=ANY($1::text[]) AND m.user_id=$2 AND g.deleted_at IS NULL AND u.kind='account'",[ids,actor.userId])).rows)groupShares.set(share.artifact_id,maxRole(groupShares.get(share.artifact_id)??'none',share.role));
   const accountEmail = actor.userId ? users.get(actor.userId)?.email ?? null : null;
   const namesAccount = (share: ShareFact) => share.user_id === actor.userId || (share.user_id === null && accountEmail !== null && share.email === accountEmail);
   const resolving = new Set<string>();
   let editorGroups: Promise<string[]> | undefined;
   return {
+    async groupShareRole(id){return preloaded.has(id)?groupShares.get(id)??'none':live.groupShareRole(id);},
     async groupRole(groupId) { return actor.userId ? groups.get(groupId) ?? null : null; },
     async userKind(userId) {
       if (!userId) return null;

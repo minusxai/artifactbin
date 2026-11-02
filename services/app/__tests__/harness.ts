@@ -1,3 +1,4 @@
+import {inviteGroupMember,acceptGroupInvitations} from '@/lib/groups';
 /**
  * THE APP TEST HARNESS. One deep module behind every route-level test: one PGLite per FILE,
  * every table wiped before each test (FK-safe order derived from the schema, never a hand-written list), the
@@ -258,4 +259,11 @@ export async function setDatasetPolicy(actor: AccessActor, id: string, policy: u
   if (response.status === 409) return { conflict: true };
   if (response.status !== 200) throw new Error(body.detail ?? `policy refused (${response.status})`);
   return body;
+}
+
+/** Admit fixtures through verified-email acceptance, never role PUT. */
+export async function admitGroupMember(actorId:string,groupId:string,userId:string,role:import('@artifactbin/contracts').GroupRole):Promise<void>{
+ const email=(await (await getDb()).query<{email:string}>('SELECT email FROM users WHERE id=$1',[userId])).rows[0]?.email;
+ if(!email)throw Error('Fixture member requires an email account');
+ await inviteGroupMember(actorId,groupId,email,role);await acceptGroupInvitations(userId,email);
 }

@@ -136,3 +136,11 @@ describe('renaming a schema', () => {
     });
   });
 });
+
+it('installs named checks on existing tables and repeats safely',async()=>{
+ const table:Table={name:'checked_roles',columns:[{name:'id',type:'TEXT'},{name:'role',type:'TEXT'}],primaryKey:['id'],checks:[{name:'checked_roles_role',expression:"role IN ('viewer','editor')"}]};
+ await pg.exec('CREATE TABLE app.checked_roles(id TEXT PRIMARY KEY,role TEXT)');
+ for(let boot=0;boot<2;boot++)for(const statement of renderSchema([table],{schema:'app'}))await pg.exec(statement);
+ await expect(pg.exec("INSERT INTO app.checked_roles VALUES ('bad','owner')")).rejects.toThrow();
+ await pg.exec("INSERT INTO app.checked_roles VALUES ('good','viewer')");
+});

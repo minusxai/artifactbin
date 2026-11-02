@@ -37,7 +37,7 @@ export { refLoaderForActor } from './reference-loader';
 export { findDependentsFor } from './dependents';
 
 /** Sharing, membership and placement. */
-export { getSharingFor, updateSharingFor } from './sharing';
+export { getSharingFor, updateSharingFor,setArtifactGroupShare } from './sharing';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { PARENT_REFUSED, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';

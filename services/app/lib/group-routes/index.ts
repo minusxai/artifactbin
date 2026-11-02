@@ -1,7 +1,8 @@
+import {runOperation} from '../operations';
 /** HTTP identity adapter; group persistence never imports authentication modules. */
 import { browserActor, withTokenAuth } from '@/lib/authentication';
 import { type RequestIdentity } from '@/lib/accounts';
-import {json} from '../http';
+import {json,readJson} from '../http';
 import {GroupError} from '../groups';
 export function groupRoute(handler:(request:Request,userId:string,params:Record<string,string>,actor:RequestIdentity)=>Promise<Response>,readOnly=false){
  const run=async(request:Request,actor:RequestIdentity,params:Record<string,string>)=>{
@@ -17,3 +18,10 @@ export function groupRoute(handler:(request:Request,userId:string,params:Record<
   return run(request,actor,context?await context.params:{});
  };
 }
+
+/** HTTP input collection only; group protocol lives in the operation registry. */
+export function groupOperation(name:string,readOnly=false){return groupRoute(async(request,_user,params,actor)=>{
+ const input:Record<string,unknown>={...Object.fromEntries(new URL(request.url).searchParams)};
+ if(!['GET','HEAD'].includes(request.method)){const body=await readJson(request,{allowEmpty:true});if(!body)return json({error:'invalid_json'},400);Object.assign(input,body);}
+ return runOperation(name,request,actor,{...input,...params});
+},readOnly);}

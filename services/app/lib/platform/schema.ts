@@ -1049,6 +1049,22 @@ const GROUPS:Table={name:'groups',columns:[
  {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
  {name:'deleted_at',type:'TIMESTAMPTZ'},
 ],primaryKey:['id'],indexes:[{name:'idx_groups_handle',columns:['handle'],unique:true}]};
+const GROUP_MAIL_OUTBOX:Table={name:'group_mail_outbox',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'email',type:'TEXT',notNull:true},{name:'recipient_id',type:'TEXT'},
+ {name:'group_id',type:'TEXT',notNull:true},{name:'group_name',type:'TEXT',notNull:true},{name:'handle',type:'TEXT',notNull:true},
+ {name:'action',type:'TEXT',notNull:true},{name:'sender_id',type:'TEXT',notNull:true},
+ {name:'lease_until',type:'TIMESTAMPTZ'},{name:'sent_at',type:'TIMESTAMPTZ'},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id'],indexes:[{name:'idx_group_mail_pending',columns:['created_at'],where:'sent_at IS NULL'}]};
+const GROUP_QUOTAS:Table={name:'group_quotas',columns:[{name:'user_id',type:'TEXT',notNull:true},{name:'action',type:'TEXT',notNull:true},{name:'window_start',type:'BIGINT',notNull:true},{name:'used',type:'INTEGER',notNull:true}],primaryKey:['user_id','action']};
+const GROUP_AUDIT:Table={name:'group_audit',columns:[
+ {name:'id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},{name:'actor_user_id',type:'TEXT',notNull:true},{name:'actor_token_id',type:'TEXT'},{name:'client_harness',type:'TEXT'},
+ {name:'action',type:'TEXT',notNull:true},{name:'details',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['id'],indexes:[{name:'idx_group_audit_group',columns:['group_id','created_at']}]};
+const ARTIFACT_GROUP_SHARES:Table={name:'artifact_group_shares',columns:[
+ {name:'artifact_id',type:'TEXT',notNull:true},{name:'group_id',type:'TEXT',notNull:true},
+ {name:'role',type:'TEXT',notNull:true},
+ {name:'created_by',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+],primaryKey:['artifact_id','group_id'],checks:[{name:'artifact_group_share_role',expression:"role IN ('viewer','commenter','editor')"}],indexes:[{name:'idx_artifact_group_shares_group',columns:['group_id','artifact_id']}]};
 const GROUP_MEMBERS:Table={name:'group_members',columns:[
  {name:'group_id',type:'TEXT',notNull:true},{name:'user_id',type:'TEXT',notNull:true},
  {name:'role',type:'TEXT',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
@@ -1113,7 +1129,7 @@ const NATIVE_IDENTITY_IMPORTS:Table={name:'native_identity_imports',columns:[
  {name:'original_state',type:'JSONB',notNull:true},{name:'created_at',type:'TIMESTAMPTZ',notNull:true},
 ],primaryKey:['source_namespace','kind','source_id'],indexes:[{name:'idx_native_identity_imports_target',columns:['kind','target_id']}]};
 
-export const TABLES: Table[] = [NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [GROUP_MAIL_OUTBOX,GROUP_QUOTAS,GROUP_AUDIT,ARTIFACT_GROUP_SHARES,NATIVE_IDENTITY_IMPORTS,HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, COMMENT_REACTIONS, COMMENT_REACTION_EVENTS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

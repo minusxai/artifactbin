@@ -1,8 +1,9 @@
+import {admitGroupMember} from '@/__tests__/harness';
 import {nativeHtml} from './native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
 import { identityForUser, createUser } from '@/lib/accounts';
-import { createGroup, setAccountPreferences, setGroupMember } from '@/lib/groups';
+import { createGroup, setAccountPreferences, } from '@/lib/groups';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { POST as publish } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
@@ -37,7 +38,7 @@ async function world() {
   const stranger = await createUser({ email: STRANGER_EMAIL });
   const member = await createUser({ email: MEMBER_EMAIL });
   const group = await createGroup(owner.id, { handle: 'payload_access', name: 'Payload access' });
-  await setGroupMember(owner.id, group.id, member.id, 'viewer');
+  await admitGroupMember(owner.id, group.id, member.id, 'viewer');
   const make = async (visibility: 'private' | 'unlisted', grouped: boolean) => {
     await setAccountPreferences(owner.id, grouped ? { type: 'group', id: group.id } : { type: 'personal' });
     const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, html: nativeHtml('<h1 id="t">Hello</h1><p data-af-id="p">Body</p>'), ...(grouped ? {} : { destination: { type: 'personal' } }) } }));

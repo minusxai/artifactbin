@@ -12,6 +12,8 @@ import { createAppServer } from '../app';
 import { ROUTES } from '../routes.generated';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {createGroup} from '@/lib/groups';
+import {admitGroupMember} from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -57,6 +59,13 @@ describe('handlers through Hono', () => {
     const raw = await app.request(`/a/${id}/raw`);
     expect(raw.status).toBe(200);
     expect(raw.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+  it('dispatches viewer self-leave to the static me route before the member ID route',async()=>{
+    const owner=await mintToken('route-owner'),viewer=await mintToken('route-viewer');
+    const group=await createGroup(owner.userId!,{handle:'static_leave',name:'Leave'});
+    await admitGroupMember(owner.userId!,group.id,viewer.userId!,'viewer');
+    const response=await app.request(`/api/groups/${group.id}/members/me`,{method:'DELETE',headers:{authorization:`Bearer ${viewer.token}`}});
+    expect(response.status).toBe(200);
   });
   it('decodes params before the handler sees them (an encoded id is the id)', async () => {
     expect((await app.request('/api/artifacts/%41b3xK9')).status).toBe(401); // reached the handler (bearer missing), not a 404 from routing

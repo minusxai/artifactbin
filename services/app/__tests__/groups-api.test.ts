@@ -1,3 +1,4 @@
+import {acceptGroupInvitations} from '@/lib/groups';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import {POST as create,GET as list} from '@/app/api/groups/route';
@@ -25,7 +26,9 @@ describe('groups authenticated HTTP boundary',()=>{
   expect((await (await list(request('/api/groups',{token:owner.token}))).json()).groups).toMatchObject([{id:group.id}]);
   expect((await detail(request('/api/groups/@api_team',{token:owner.token}),context({id:'@api_team'}))).status).toBe(200);
   expect((await detail(request('/api/groups/'+group.id,{token:outsider.token}),context({id:group.id}))).status).toBe(404);
-  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(200);
+  expect((await member(request('/api/groups/'+group.id+'/members/'+viewer.userId,{method:'PUT',token:owner.token,json:{role:'viewer'}}),context({id:group.id,userId:viewer.userId!}))).status).toBe(404);
+  expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:owner.token,json:{email:viewer.email,role:'viewer'}}),context({id:group.id}))).status).toBe(201);
+  await acceptGroupInvitations(viewer.userId!,viewer.email!);
   expect((await invite(request('/api/groups/'+group.id+'/invitations',{method:'POST',token:viewer.token,json:{email:'mxmx_test_new@example.com',role:'editor'}}),context({id:group.id}))).status).toBe(403);
   const viewed=await (await detail(request('/api/groups/'+group.id,{token:viewer.token}),context({id:group.id}))).json();expect(viewed.invitations).toBeUndefined();expect(viewed.members[0]).not.toHaveProperty('email');
  });

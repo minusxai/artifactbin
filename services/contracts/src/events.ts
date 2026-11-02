@@ -15,7 +15,7 @@
  * use transactional outbox publication. Payloads carry ids and state, never content or secrets.
  */
 export type SubjectKind = 'user' | 'token' | 'visitor';
-export type ObjectKind = 'artifact' | 'user' | 'token' | 'door' | 'route';
+export type ObjectKind = 'group' | 'artifact' | 'user' | 'token' | 'door' | 'route';
 export type EventSource = 'app' | 'auth' | 'proxy';
 
 /** Nothing to say beyond the sentence itself. */
@@ -40,6 +40,7 @@ interface TokenPayload { name?: string | null }
  * below is the same list at runtime, so a test can walk every one.
  */
 interface EventVerbs {
+  group:{changed:{action:string;audit_id:string;recipients:string[];invitation_id?:string}};
   artifact: {
     created: ArtifactCreatedPayload;
     updated: ArtifactActorPayload;
@@ -107,6 +108,7 @@ export type EventPayload<K extends ObjectKind, V extends EventVerb<K>> = EventVe
 
 /** The catalogue at runtime. Complete by construction: a verb missing from a list fails to type-check. */
 export const EVENT_VERBS = {
+  group:['changed'],
   artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened', 'annotation_edited'],
   user: ['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed'],
   token: ['minted', 'claimed', 'revoked'],

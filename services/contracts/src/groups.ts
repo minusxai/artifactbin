@@ -5,7 +5,7 @@ export type DefaultDestination = ArtifactDestination | {type:'inherit'};
 export interface AccountPreferences {default_destination:DefaultDestination;}
 export interface GroupSummary {id:string;handle:string;name:string;description:string;role:GroupRole|null;}
 export interface GroupMember {user_id:string;username:string|null;name:string|null;role:GroupRole;}
-export interface GroupInvitation {id:string;email:string;role:GroupRole;created_at:string;}
+export interface GroupInvitation {id:string;email:string;role:GroupRole;created_at:string;invited_by:string;changed?:boolean;}
 export interface GroupDetail {group:GroupSummary;members:GroupMember[];linked_groups:GroupSummary[];invitations?:GroupInvitation[];}
 export interface DeploymentState {mode:'public'|'company';setup_complete:boolean;is_owner:boolean;default_group:GroupSummary|null;}
 export interface CreateGroupInput {handle:string;name:string;description?:string;}
@@ -15,3 +15,7 @@ export interface NewArtifactDestinationContext {
  preference?:DefaultDestination;
  deployment_default?:ArtifactDestination;
 }
+
+export interface UpdateGroupInput {name?:string;description?:string;}
+export type GroupShareRole = 'viewer' | 'commenter' | 'editor';
+export interface GroupShare {group:GroupSummary;role:GroupShareRole;}

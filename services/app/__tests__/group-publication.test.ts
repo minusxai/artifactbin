@@ -1,8 +1,9 @@
+import {admitGroupMember} from '@/__tests__/harness';
 import {nativeHtml} from './native-html-fixture';
 import {describe,expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import { createUser } from '@/lib/accounts';
-import {createGroup,setGroupMember,removeGroupMember,setAccountPreferences} from '@/lib/groups';
+import {createGroup,removeGroupMember,setAccountPreferences} from '@/lib/groups';
 import {getDb} from '@/lib/platform/db';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {POST as start} from '@/app/api/start/route';
@@ -64,7 +65,7 @@ describe('publication uses shared account destination through the real HTTP hand
  });
  it('lets viewers choose a default but refuses publication and never falls back after membership removal',async()=>{
   const a=await account('owner'),b=await account('member');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
-  await setGroupMember(a.user.id,group.id,b.user.id,'viewer');
+  await admitGroupMember(a.user.id,group.id,b.user.id,'viewer');
   await setAccountPreferences(b.user.id,{type:'group',id:group.id});
   const denied=await create(b.token,{html:nativeHtml('<p id="intro">Viewer cannot publish</p>')});
   expect(denied.status).toBeGreaterThanOrEqual(400);expect(denied.status).toBeLessThan(500);

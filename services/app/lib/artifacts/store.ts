@@ -42,7 +42,7 @@ const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annota
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
@@ -70,7 +70,7 @@ export interface ArtifactInput {
   link_role?: ShareRole;
 }
 
-const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, access, ancestor_ids, created_at, updated_at';
+const SUMMARY_COLS = 'id, user_id, group_id, title, description, format, meta, version, visibility, access, ancestor_ids, created_at, updated_at';
 
 // ── Per-token quota ──────────────────────────────────────────────────────────
 
@@ -771,7 +771,7 @@ export function byteQuotaFor(tokenId: string | null, ownerUserId?: string | null
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
-interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
+interface ArtifactCollectionFilters {group_id?:string;type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
 export async function listArtifactPageFor(actor: AccessActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
   const owner=ownerPredicate(actor);const values:unknown[]=[owner.val,limit+1];
   // Membership is a discovery relationship even when it grants read access only.
@@ -780,6 +780,7 @@ export async function listArtifactPageFor(actor: AccessActor, limit: number, cur
   const reach=relationship==='owned'?owner.where('$1'):relationship==='shared'?`(${shared} AND NOT (${owner.where('$1')}))`:`(${owner.where('$1')} OR ${shared})`;
   const predicates=[LIVE_ARTIFACT_SQL,`(${reach})`];
   const bind=(value:unknown)=>{values.push(value);return '$'+values.length;};
+  if(filters.group_id){const group=bind(filters.group_id);const user=bind(actor.userId);predicates.push(`EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${group} AND gm.user_id=${user} AND g.deleted_at IS NULL)`);predicates.push(`(artifacts.group_id=${group} OR EXISTS (SELECT 1 FROM artifact_group_shares gs WHERE gs.artifact_id=artifacts.id AND gs.group_id=${group}))`);}
   if(cursor)predicates.push(`(created_at,id)<(${bind(cursor.created)}::timestamptz,${bind(cursor.id)})`);
   if(filters.type)predicates.push(`format=ANY(${bind(filters.type==='file'?['image','pdf','file']:[filters.type==='artifact'?'html':filters.type])}::text[])`);
   if(filters.visibility)predicates.push(`visibility=${bind(filters.visibility)}`);

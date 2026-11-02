@@ -178,13 +178,15 @@ export async function cliConformance({ base: BASE, check, stamp, sink, context }
         assert.ok(otherAccount?.token,'Separate verified colleague account is required');
         const otherCookie=credentialSource?otherAccount.cookie:connectionBrowserCookie(BASE,otherAccount.token);
         const session=await fetch(`${BASE}/api/auth/get-session`,{headers:{cookie:otherCookie}});
-        assert.equal(session.status,200);const userId=(await session.json())?.user?.id;assert.ok(userId);
+        assert.equal(session.status,200);const verifiedUser=(await session.json())?.user;const userId=verifiedUser?.id;assert.ok(userId);assert.ok(verifiedUser.email);
         const handle=`mxmx_test_list_${stamp.slice(-12)}`;
         const created=await api('/api/groups',token,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'mxmx_test_cli_group',handle})});
         assert.equal(created.status,201);const group=(await created.json());assert.ok(group.id);
         const memberPath=`/api/groups/${group.id}/members/${userId}`;
-        const joined=await api(memberPath,token,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({role:'viewer'})});
-        assert.equal(joined.status,200);
+        const invited=await api(`/api/groups/${group.id}/invitations`,token,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:verifiedUser.email,role:'viewer'})});
+        assert.equal(invited.status,201);
+        // An ordinary request by the verified colleague accepts their invitation.
+        assert.equal((await api(`/api/groups/${group.id}`,other)).status,200);
         try{
           await writeFile(join(workspace,'group-review.jsx'),'---\ntitle: mxmx_test_group_review\nvisibility: private\n---\n<p id="finding">Group viewer review</p>');
           const pushed=await invoke(['push','group-review.jsx','--group',handle]);

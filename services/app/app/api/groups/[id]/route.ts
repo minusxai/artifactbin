@@ -1,4 +1,4 @@
-import {groupRoute} from '@/lib/group-routes';
-import {getGroupDetail} from '@/lib/groups';
-import {json} from '@/lib/http';
-export const GET=groupRoute(async(_request,userId,{id})=>{const detail=await getGroupDetail(userId,id);return detail?json(detail):json({error:'not_found'},404);},true);
+import {groupOperation} from '@/lib/group-routes';
+export const GET=groupOperation('get_group',true);
+export const PATCH=groupOperation('update_group');
+export const DELETE=groupOperation('delete_group');

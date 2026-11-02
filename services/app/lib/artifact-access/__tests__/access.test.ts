@@ -1,3 +1,4 @@
+import {admitGroupMember} from '@/__tests__/harness';
 /**
  * THE ACCESS RULE through the interface: the role lattice (ownership by token, user and group, named shares, the
  * link and its anonymous ceiling, the host's document-editor grant), the facts it reads and its SQL mirror (the
@@ -6,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { identityForUser, mintToken, type AccessActor } from '@/lib/accounts';
-import { createGroup, setGroupMember } from '@/lib/groups';
+import { createGroup, } from '@/lib/groups';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, linkRoleOf, ownerPredicate, ownerScope, policyReaderSql, roleWithoutLink, annotationScope, commentMonitorScope, documentEditorReaches, editorScope, effectiveRole, holdsCreatingToken, liveAccessFacts, ownsArtifact, preloadAccessFacts, reactionScope, writerFor, type Scope } from '@/lib/artifact-access';
 import { canReadArtifact } from '@/lib/artifacts';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
@@ -72,7 +73,7 @@ describe('the role lattice', () => {
     const viewer = await account('viewer@example.test');
     const stranger = await account('stranger@example.test');
     const group = await createGroup(owner.userId, { handle: 'access_team', name: 'Access team' });
-    await setGroupMember(owner.userId, group.id, viewer.userId, 'viewer');
+    await admitGroupMember(owner.userId, group.id, viewer.userId, 'viewer');
     const row = await mine(owner, 'Team', { destination: { type: 'group', id: group.id } });
     expect(await effectiveRole(row, owner)).toBe('owner');
     expect(await effectiveRole(row, viewer)).toBe('viewer');

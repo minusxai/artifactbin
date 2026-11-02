@@ -4,6 +4,7 @@ import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, g
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
 import { notificationJobStore } from '@/lib/notifications';
+import {GROUP_OPERATIONS} from './groups';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
@@ -321,7 +322,7 @@ const listArtifactsOp: Operation = {
   title: 'List your artifacts',
   http: { method: 'GET', path: '/api/artifacts' },
   description: 'List your artifacts (newest first): id, title, format, version, url, parent_id, ancestor_ids — no content. Folders are artifacts too — a title and a place, with no content of their own — so they list here beside documents; filter by parent_id (or an empty ancestor_ids for your root) to see one folder\'s contents. A claimed token lists the whole account.',
-  input: { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(),type:z.enum(['artifact','folder','dataset','file']).optional(),visibility:z.enum(['private','unlisted','public']).optional(),relationship:z.enum(['all','owned','shared']).optional(),search:z.string().optional(),parent_id:z.string().optional() },
+  input: { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(),group_id:z.string().optional(),type:z.enum(['artifact','folder','dataset','file']).optional(),visibility:z.enum(['private','unlisted','public']).optional(),relationship:z.enum(['all','owned','shared']).optional(),search:z.string().optional(),parent_id:z.string().optional() },
   annotations: { readOnly: true },
   example: { input: {} },
   errors: [],
@@ -331,7 +332,7 @@ const listArtifactsOp: Operation = {
     for(const [key,allowed] of Object.entries({type:['artifact','folder','dataset','file'],visibility:['private','unlisted','public'],relationship:['all','owned','shared']}))if(input[key]!==undefined&&!allowed.includes(String(input[key])))return reply({error:'invalid_filter',field:key},400);
     if(input.parent_id!==undefined&&(typeof input.parent_id!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(input.parent_id)))return reply({error:'invalid_container'},400);
     if(input.search!==undefined&&(typeof input.search!=='string'||input.search.length>1000))return reply({error:'invalid_filter',field:'search'},400);
-    const filters={...(input.type?{type:input.type as 'artifact'|'folder'|'dataset'|'file'}:{}),...(input.visibility?{visibility:input.visibility as 'private'|'unlisted'|'public'}:{}),relationship:(input.relationship??'all') as 'all'|'owned'|'shared',...(input.search?{search:String(input.search)}:{}),...(input.parent_id?{parent_id:String(input.parent_id)}:{})};
+    const filters={...(input.group_id?{group_id:String(input.group_id)}:{}),...(input.type?{type:input.type as 'artifact'|'folder'|'dataset'|'file'}:{}),...(input.visibility?{visibility:input.visibility as 'private'|'unlisted'|'public'}:{}),relationship:(input.relationship??'all') as 'all'|'owned'|'shared',...(input.search?{search:String(input.search)}:{}),...(input.parent_id?{parent_id:String(input.parent_id)}:{})};
     const scope=createHash('sha256').update(JSON.stringify([ctx.actor.userId??ctx.actor.tokenId,filters])).digest('hex');
     if(page.cursor&&page.cursor.scope!==scope)return reply({error:'invalid_cursor',hint:'Restart this collection without cursor; the filters changed.'},400);
     const result = await listArtifactPageFor(ctx.actor, page.limit, page.cursor as {created: string; id: string} | undefined,filters);
@@ -735,7 +736,7 @@ const queryResourceOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
+  ...GROUP_OPERATIONS,...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
   createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, reactCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

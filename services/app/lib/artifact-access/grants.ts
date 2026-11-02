@@ -31,7 +31,7 @@ export async function readThrough(tx:Queryable,row:ReadRow,actor:AccessActor,fac
  if(row.group_id&&await facts.groupRole(row.group_id))return true;
  if(ownsArtifact(row,actor)||row.visibility!=='private')return true;
  if(!actor.userId)return false;
- return facts.sharedWith(row.id);
+ return await facts.sharedWith(row.id)||await facts.groupShareRole(row.id)!=='none';
 }
 /** A saved, readable document plus accepted membership supplies artifact context for writes. */
 export async function grantContext(dataset:GrantDataset,actor:AccessActor,document?:GrantDocument,tx?:Queryable):Promise<DatasetGrantContext>{

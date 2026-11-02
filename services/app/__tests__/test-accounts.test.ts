@@ -1,3 +1,4 @@
+import {admitGroupMember} from '@/__tests__/harness';
 /**
  * TEST ACCOUNTS (lib/accounts/test-accounts): rows created for a test-domain address while the feature
  * is on are marked, existing rows never are, and a marked account stays among test accounts.
@@ -108,6 +109,7 @@ it('invites and adds only test accounts to artifacts and groups', async () => {
   await expect(inviteGroupMember(test.userId, group.id, 'someone@example.com', 'viewer')).rejects.toMatchObject({ code: 'test_account_restricted', status: 403 });
   await expect(inviteGroupMember(test.userId, group.id, `person@${DOMAIN}`, 'viewer')).resolves.toMatchObject({ email: `person@${DOMAIN}` });
   await expect(setGroupMember(test.userId, group.id, real.userId, 'viewer')).rejects.toBeInstanceOf(GroupError);
+  await admitGroupMember(test.userId,group.id,other.userId,'viewer');
   await expect(setGroupMember(test.userId, group.id, other.userId, 'viewer')).resolves.toBeUndefined();
 });
 
