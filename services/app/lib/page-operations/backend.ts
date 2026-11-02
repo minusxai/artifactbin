@@ -102,7 +102,7 @@ export async function pageBackendCapability(store:PageBackendStore,request:RunSt
  // api 2 code may reach any host operation by name; only fetch is offered, and values stay on the host.
  if(backend.api===2){
   if(operation!=='artifactbin.pageBackend.fetch'||!resolverFetch||!secretReader)throw Error('backend_capability_forbidden');
-  return {...await resolverFetch(args,{hosts:backend.secretHosts??{},read:name=>secretReader(backend,name)})} as unknown as RunnerJson;
+  return {...await resolverFetch(args,{owner:backend.ownerId,resolver:backend.backendId,hosts:backend.secretHosts??{},read:name=>secretReader(backend,name)})} as unknown as RunnerJson;
  }
  if(operation==='artifactbin.pageBackend.secrets.get'){
   if(!secretReader||!args||typeof args!=='object'||Array.isArray(args)||typeof args.name!=='string'||!backend.secretBindings?.includes(args.name))throw Error('backend_secret_forbidden');

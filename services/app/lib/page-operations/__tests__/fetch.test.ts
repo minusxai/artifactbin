@@ -54,7 +54,7 @@ beforeAll(async()=>{
 });
 afterAll(()=>server.close());
 const lax=createResolverFetch({policy:{allowPrivate:true,allowHttp:true}});
-const secrets=(read=vi.fn(async(name:string)=>{if(name==='KEY')return KEY;throw Error('backend_secret_unavailable');}))=>({hosts,read});
+const secrets=(read=vi.fn(async(name:string)=>{if(name==='KEY')return KEY;throw Error('backend_secret_unavailable');}))=>({owner:'owner1',resolver:'backend1',hosts,read});
 const code=(p:Promise<unknown>)=>p.then(()=>'resolved',(e:Error&{code?:string})=>e.code??e.message);
 const leaks=(value:unknown)=>forms.filter(form=>JSON.stringify(value).includes(form)||JSON.stringify(value).includes(JSON.stringify(form).slice(1,-1)));
 describe('api 2 caps.fetch',()=>{
@@ -77,7 +77,7 @@ describe('api 2 caps.fetch',()=>{
   expect(await code(lax({url:`http://{{KEY}}.localhost:${server.port}/echo`},s))).toBe('secret_host_forbidden');
   expect(await code(lax({url:`http://u:{{KEY}}@api.localhost:${server.port}/echo`},s))).toBe('secret_host_forbidden');
   expect(seen).toEqual([]);expect(s.read).not.toHaveBeenCalled();
-  expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{ELSEWHERE}}'}},{hosts:{...hosts,ELSEWHERE:'api.localhost'},read:s.read}))).toBe('secret_unavailable');
+  expect(await code(lax({url:`${base}/echo`,headers:{authorization:'{{ELSEWHERE}}'}},{...s,hosts:{...hosts,ELSEWHERE:'api.localhost'}}))).toBe('secret_unavailable');
   expect(seen).toEqual([]);
  });
  it('matches exact hosts and any subdomain under one leading wildcard, never the apex',()=>{
@@ -104,14 +104,15 @@ describe('api 2 caps.fetch',()=>{
   expect(got.body).toBe('[redacted] | [redacted] | [redacted] | [redacted]');expect(leaks(got)).toEqual([]);
   expect(got.receipt).toMatchObject({path:'/encoded',secrets:['KEY']});expect(JSON.stringify(got.receipt)).not.toContain('k=');
  });
- it('validates the request: methods, forbidden headers, body cap, unknown options and google auth (a later helper)',async()=>{
+ it('validates the request: methods, forbidden headers, body cap, unknown options and malformed google auth',async()=>{
   seen.length=0;const s=secrets();
   for(const name of ['host','Cookie','content-length','transfer-encoding','connection','proxy-authorization','te','upgrade'])expect(await code(lax({url:`${base}/echo`,headers:{[name]:'x'}},s)),name).toBe('invalid_request');
   expect(await code(lax({url:`${base}/echo`,method:'CONNECT'},s))).toBe('invalid_request');
   expect(await code(lax({url:`${base}/echo`,body:'x'},s))).toBe('invalid_request');
   expect(await code(lax({url:`${base}/echo`,method:'POST',body:'x'.repeat(RESOLVER_LIMITS.fetchRequestBodyBytes+1)},s))).toBe('request_limit');
   expect(await code(lax({url:`${base}/echo`,cache:'no-store'} as unknown as RunnerJson,s))).toBe('invalid_request');
-  expect(await code(lax({url:`${base}/echo`,auth:{type:'google',secret:'KEY',scopes:[]}},s))).toBe('auth_unavailable');
+  // Plan PR 4 replaced the blanket `auth_unavailable` refusal; google-auth.test.ts covers the helper itself.
+  expect(await code(lax({url:`${base}/echo`,auth:{type:'google',secret:'KEY',scopes:[]}},s))).toBe('invalid_request');
   expect(seen).toEqual([]);
   await lax({url:`${base}/echo`,method:'POST',body:'x'.repeat(RESOLVER_LIMITS.fetchRequestBodyBytes)},s);expect(seen).toHaveLength(1);
  });
