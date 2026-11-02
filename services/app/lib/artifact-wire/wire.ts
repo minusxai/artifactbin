@@ -64,6 +64,8 @@ export function artifactSummaryToWire(
     format: row.format,
     version: row.version,
     visibility: row.visibility,
+    owner: row.group_id ? { type: 'group', id: row.group_id } : { type: 'personal' },
+    group_id: row.group_id ?? null,
     // The dataset write ACL, on a dataset only (see artifactToWire).
     ...(row.format === 'dataset' && row.access ? { access: row.access } : {}),
     /*

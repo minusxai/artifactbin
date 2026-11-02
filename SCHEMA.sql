@@ -973,41 +973,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON app.users (username);
 
 CREATE INDEX IF NOT EXISTS idx_users_parent ON app.users (parent_user_id);
 
-CREATE TABLE IF NOT EXISTS app.custom_domains (
-  user_id TEXT NOT NULL,
-  hostname TEXT NOT NULL,
-  token TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  verified_at TIMESTAMPTZ,
-  missing_since TIMESTAMPTZ,
-  homepage_artifact_id TEXT,
-  path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (user_id)
-);
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS hostname TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS token TEXT NOT NULL;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS missing_since TIMESTAMPTZ;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS homepage_artifact_id TEXT;
-
-ALTER TABLE app.custom_domains ADD COLUMN IF NOT EXISTS path_overrides JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_verified_host ON app.custom_domains (hostname) WHERE status = 'verified';
-
-CREATE INDEX IF NOT EXISTS idx_custom_domains_host ON app.custom_domains (hostname);
-
 CREATE TABLE IF NOT EXISTS app.tokens (
   id TEXT NOT NULL,
   name TEXT,

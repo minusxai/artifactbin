@@ -1,3 +1,4 @@
+import {documentOwner} from '@/lib/user-pages';
 import {notificationJobOperations} from './notification-jobs';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
 import { canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
@@ -683,7 +684,7 @@ const forkArtifactOp: Operation = {
 
     const copy = await forkArtifact(forker, source, overrides, owner.actor);
     if (copy instanceof Response) return fromResponse(copy);
-    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
+    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined, await documentOwner(copy.artifact)), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
   },
 };
 
